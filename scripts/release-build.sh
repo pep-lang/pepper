@@ -255,11 +255,11 @@ export PEPPER_RUNTIME="$repo_root/runtime"
 # pep-package's output (which package, and git's error) is in the log when
 # a fetch fails. The fetch uses a pep-package stage 0 builds from this
 # checkout, with its runtime: stage 0's own may predate a runtime fix it
-# needs (#804: on glibc before 2.29 it could not start git in a folder).
+# needs (on glibc before 2.29 it could not start git in a folder).
 # pep-build fetches only what is missing, so the builds below fetch nothing.
 # shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
 # runtime's number extensions that declare `Comparable` when it checks
-# a compilation unit again (#950), so it builds without compilation
+# a compilation unit again, so it builds without compilation
 # units. Drop the variable once the published stage 0 is 0.10.0-dev or
 # later.
 export PEPC_NO_COMPILATION_UNITS=1

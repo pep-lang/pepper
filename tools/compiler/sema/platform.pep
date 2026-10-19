@@ -13,7 +13,7 @@ import [display_name] from "names";
 ## The attribute that marks a unit test: `[Test]`.
 const _TEST_ATTRIBUTE = "Test";
 
-## The attribute that keeps a function out of line (#640): a function rarely
+## The attribute that keeps a function out of line: a function rarely
 ## called, such as a slow path, gets LLVM's `cold` and `noinline`
 ## (`Generator.mark_cold`), so its callers' fast paths stay small.
 export const COLD_ATTRIBUTE = "Cold";

@@ -235,7 +235,7 @@ builds_move_a_checkout_pep_lock_has_moved_past() {
     var hosts = Hosts("build_stale");
     var project = Project("build_stale", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
-    # A checkout from before pep.lock moved to 1.1.0 (#845): the build
+    # A checkout from before pep.lock moved to 1.1.0: the build
     # moves it to the locked commit.
     var geometry = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("geometry");
     git(geometry, ["checkout", "--quiet", "--detach", "v1.0.0"]);
@@ -251,7 +251,7 @@ builds_side_by_side_fetch_once() {
     var project = Project("parallel_fetch", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
     Directory.remove_all(project.dir.join(".pep"));
-    # `pepper test` builds its test programs at once (#653): each build
+    # `pepper test` builds its test programs at once: each build
     # fetches what `.pep/deps` lacks, and none trips over another's
     # checkout.
     var children = Array<process.Child>();
@@ -283,7 +283,7 @@ fetches_start_no_fsmonitor_daemon() {
     if (!has_git()) {
         return;
     }
-    # As with `core.fsmonitor = true` in a user's git config (#843), where
+    # As with `core.fsmonitor = true` in a user's git config, where
     # every checkout would start a daemon that outlives the command.
     var hosts = Hosts("fsmonitor");
     var project = Project("fsmonitor", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");

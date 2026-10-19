@@ -1,4 +1,4 @@
-## Empty Arrays are null (#652): the `[__Lazy]` half of code generation. An
+## Empty Arrays are null: the `[__Lazy]` half of code generation. An
 ## object of a `[__Lazy]`
 ## struct (`Array<T>`) is null while it is empty, until a place holding it
 ## is written through or shared. This file finds the reads that may leave

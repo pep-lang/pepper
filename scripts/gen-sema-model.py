@@ -543,7 +543,7 @@ footer='''
 ## The one key of the object `unsigned_json` makes for a value too large
 ## for `JsonValue.Integer`; `canonical_json` writes that object as the
 ## value's digits. A key, not a string prefix: the model's strings hold
-## the program's text, but its keys are field names and identifiers (#821).
+## the program's text, but its keys are field names and identifiers.
 export const UNSIGNED_MARK = "\\u{1}unsigned";
 
 ## Returns `value` as JSON: an integer, or for one past `long`'s range (a

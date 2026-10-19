@@ -314,7 +314,7 @@ g_parts_each_verify_after_the_split() {
     # Each part is kept in a copy of the whole module made after the parts
     # before it deleted their copies' bodies, as a build compiling its
     # parts in one process does: no deleted body's debug records may turn
-    # up in a later copy's functions (#835).
+    # up in a later copy's functions.
     var folder = TempFolder("debug_parts");
     var program = _load(folder.path, _PROGRAM);
     var module = sema.merge(program);

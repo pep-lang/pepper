@@ -399,7 +399,7 @@ prunes_neither_reused_nor_recent_keys() {
 # Pruning a unit's keys leaves the units named below it alone: unit
 # `process` (`process.pep`) beside units `process/test/...` (the files of
 # `process/test/`) once removed their folders whole, objects a build was
-# about to link among them (#851).
+# about to link among them.
 [Test]
 prunes_no_other_units_keys() {
     var folder = TempFolder("prune_nested");
@@ -435,7 +435,7 @@ prunes_no_other_units_keys() {
 }
 
 # A build with debug info whose every unit is a hit still defines `main`,
-# which only the entry part, compiled every build, holds (#827); and the
+# which only the entry part, compiled every build, holds; and the
 # hits' parts count as just reused, so a build storing newer keys of them
 # does not prune them while this one links them.
 [Test]

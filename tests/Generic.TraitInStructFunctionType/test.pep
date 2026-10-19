@@ -1,7 +1,7 @@
 # A generic struct whose members name its parameters inside a function
 # type that returns a trait (`(T) => Iterator<U>`) compiles, also when
 # unused, and a closure whose body names no parameter, so its struct result
-# is known first, still returns the slot's trait (#949).
+# is known first, still returns the slot's trait.
 
 # Never used: its members alone used to fail with "unknown type name 'U'".
 struct Unused<T, U> {

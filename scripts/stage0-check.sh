@@ -3,7 +3,7 @@
 # checkout, as main's CI and the release build do: it builds the compiler
 # (tools/compiler) and runs the runtime's tests against this checkout's
 # runtime/. The branch's own compiler can hide a runtime change that needs
-# a compiler fix stage 0 does not have yet (#1004, the `char` compare
+# a compiler fix stage 0 does not have yet (the `char` compare
 # break), so a PR that changes tools/compiler runs this before it merges.
 #
 #   scripts/stage0-check.sh [--version <version>] [pep-test options...]

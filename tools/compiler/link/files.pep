@@ -54,7 +54,7 @@ export canonical_path(path: Path): io.IoResult<Path> {
 
 ## Returns `path` joined onto the working directory when it is relative.
 ## Canonicalize only absolute paths: on macOS `realpath` of a relative path
-## lists every folder above the working directory to find its name (#819).
+## lists every folder above the working directory to find its name.
 ##
 ## @param path the path
 ## @returns the absolute path, or `path` when the working directory is unknown

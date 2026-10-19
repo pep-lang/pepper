@@ -74,7 +74,7 @@ export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<
 }
 
 # ── Small block allocator ───────────────────────────────────────────────────
-# The small block allocator behind `_pep_malloc` (#600).
+# The small block allocator behind `_pep_malloc`.
 #
 # A block of up to `_pep_small_limit` bytes comes from a size class instead
 # of from C's calloc. The limit is 128 bytes unless the environment variable
@@ -90,7 +90,7 @@ export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<
 # time, and spans are never returned to the operating system.
 #
 # Each span has one owner, a thread's cache (a `[ThreadLocal]` pointer), and
-# its own free list (#634). A thread allocates a class's blocks from one
+# its own free list. A thread allocates a class's blocks from one
 # current span, from its free list and then from its never-used end, so
 # blocks handed out one after another lie close together, and a free on the
 # owner's thread pushes the block onto its span's list: neither takes a lock
@@ -948,7 +948,7 @@ export _pep_malloc(size: ulong): __ptr<void> {
 # `_pep_malloc` without the zeroing: the block's bytes are whatever they
 # were. Codegen calls it for an allocation of a constant size and zeroes the
 # block itself with an inline `memset`, which LLVM shortens or deletes where
-# the stores after it overwrite it (#635).
+# the stores after it overwrite it.
 [Unsafe("overflow")]
 export _pep_malloc_uninit(size: ulong): __ptr<void> {
     if (size <= _pep_small_limit && size != 0) {
@@ -978,7 +978,7 @@ export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<vo
 }
 
 # `_pep_realloc` without zeroing the bytes past `prev_size`, for a buffer
-# whose unused capacity is never read and holds no references (#925).
+# whose unused capacity is never read and holds no references.
 [Unsafe("overflow")]
 export _pep_realloc_uninit(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
     return _pep_resize(p, prev_size, new_size, false);
@@ -1250,7 +1250,7 @@ export _pep_utf8_compare(a: __ptr<char>, a_size: ulong, b: __ptr<char>, b_size: 
 # The offset of the first byte from `i` up to (not including) `end` at `data`
 # that is not ASCII (has its high bit set), or `end` when there is none.
 # It tests sixteen bytes per step with a vector compare, whose bit mask's
-# `trailing_zeros` is the first such byte (#517). It calls the intrinsics
+# `trailing_zeros` is the first such byte. It calls the intrinsics
 # under `simd.Vector` directly: at `-O0` the vector's methods, even inlined,
 # leave the loop several times slower than these few instructions.
 _pep_ascii_end(data: __ptr<void>, i: ulong, end: ulong): ulong {
@@ -1279,7 +1279,7 @@ _pep_ascii_end(data: __ptr<void>, i: ulong, end: ulong): ulong {
 # code points before it. So the bytes are valid UTF-8 exactly when the offset
 # is `size` (with `chars` at least `size`). Every UTF-8 count and check goes
 # through this one loop, with the decoding written out in it: a call per
-# code point made CJK text about half again slower (#522). A run of eight
+# code point made CJK text about half again slower. A run of eight
 # ASCII bytes or more is handed to `_pep_ascii_end`, which skips it sixteen
 # bytes at a time; shorter runs stay in the loop.
 export _pep_utf8_scan(data: __ptr<void>, size: ulong, chars: ulong): (ulong, ulong) {
@@ -1414,7 +1414,7 @@ export _pep_utf8_search(haystack: __ptr<void>, haystack_size: ulong, needle: __p
 # The byte offset of the first `needle` in the haystack, or -1. The needle
 # must be valid UTF-8, and so must the haystack before the match. Only the
 # bytes before the match are checked, once each, so repeated searches from
-# successive offsets stay linear (#511); and a valid prefix ends on a code
+# successive offsets stay linear; and a valid prefix ends on a code
 # point boundary, so a match is only ever found at one.
 export _pep_utf8_find(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): long {
     if (needle_size > 0 && !_pep_utf8_valid(needle, needle_size)) { return -1; }

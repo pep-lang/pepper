@@ -237,7 +237,7 @@ _end_crashes_at_once() {}
 # However the program ends (the test returns, panics, crashes or times
 # out), the processes the test started end with it: one left running holds
 # pep-test's pipes to the program's output open, and pep-test, reading them
-# to their end, waits for it forever (#842, #852). The program starts its
+# to their end, waits for it forever. The program starts its
 # own process tree before the test runs, and ends that tree as it ends.
 #
 # On Windows the tree is a job object that ends every process in it when

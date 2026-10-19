@@ -18,7 +18,7 @@
 ##         return 0;
 ##     }
 
-# LLVM intrinsics (#344); see "LLVM intrinsics" in
+# LLVM intrinsics; see "LLVM intrinsics" in
 # docs/src/language/c-interop.md.
 [Link(name = "llvm.expect")]
 extern bool _expect(bool value, bool expected);

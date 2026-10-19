@@ -20,7 +20,7 @@ import "internals";
 # _version other than the one it started with, so modifying an Array while a
 # `for` loop iterates it is a panic rather than skipped or repeated elements.
 #
-# `[__Lazy]` (#652): an empty Array is a null reference until it is written
+# `[__Lazy]`: an empty Array is a null reference until it is written
 # or shared. `Array<T>()` is null; codegen allocates the object (this
 # constructor with capacity 0) when a place holding null is read for anything
 # but a `[__Reads]` method's receiver or a field read, and a field read

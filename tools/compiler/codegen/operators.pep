@@ -322,7 +322,7 @@ extend Generator {
         var result_ty = binary_result_type(state, op, lhs_name, rhs_name);
         # In `p + n` and `p - n`, the offset widens to 64 bits by its own
         # signedness: coercing it to the pointer's type cut it to 32 bits
-        # (#524).
+        #.
         bool pointer_arithmetic = (op == BinaryOp.Add or op == BinaryOp.Sub)
             and sema.is_pointer_name(lhs_name) != sema.is_pointer_name(rhs_name);
         var lhs_operand_ty = pointer_arithmetic and !sema.is_pointer_name(lhs_name) ? "long" : result_ty;

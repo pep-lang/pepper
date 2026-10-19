@@ -176,7 +176,7 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
 }
 
 ## Whether `dir`, a checkout of `package`, is at another commit than
-## pep.lock's (#845): a detached git checkout's HEAD, or an unpacked
+## pep.lock's: a detached git checkout's HEAD, or an unpacked
 ## archive's `.pep-commit`. A checkout on a branch is someone's work, so it
 ## stays as it is.
 _is_stale(dir: Path, package: link.LockedPackage): bool {

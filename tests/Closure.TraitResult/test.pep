@@ -1,6 +1,6 @@
 # A closure whose body returns a struct is accepted where the function type
 # returns a trait the struct declares, also when the trait's type arguments
-# are inferred from that struct (#992).
+# are inferred from that struct.
 
 struct Numbers {
     Array<int> items;

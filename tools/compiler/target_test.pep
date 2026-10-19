@@ -257,7 +257,7 @@ links_libpthread_and_libdl_only_before_glibc_2_34() {
     expect_false(driver.glibc_before_2_34("2.39"));
 }
 
-# `[Cold]` (#640) keeps a function out of line: LLVM's `cold` and
+# `[Cold]` keeps a function out of line: LLVM's `cold` and
 # `noinline` on it, and on nothing else.
 [Test]
 a_cold_function_is_cold_and_never_inlined() {
@@ -294,7 +294,7 @@ _attributes_of(ir: String, name: String): String {
 }
 
 # A build for another platform after a native one, in one cache, checks the
-# runtime again for its own target (#994): the native build's record of the
+# runtime again for its own target: the native build's record of the
 # runtime has the other platform's `[Target(...)]` declarations filtered out
 # (`_debug_sys_symbolize` is defined once for each OS).
 [Test]

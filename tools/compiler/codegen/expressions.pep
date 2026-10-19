@@ -46,7 +46,7 @@ const _RMW_XOR: int = 6;
 
 ## Whether `ty` is `bool`'s `i1`, which LLVM's atomic instructions reject
 ## (they need a byte-sized type): an atomic on a `bool` slot accesses its
-## byte instead, widening the operands and narrowing the result (#962).
+## byte instead, widening the operands and narrowing the result.
 _is_bit(ty: llvm.Type): bool {
     return ty.kind() == llvm.TypeKind.Integer and ty.int_width() == 1;
 }
@@ -780,7 +780,7 @@ extend Generator {
     ## An operand of an `__atomic_*<T>` intrinsic (the stored, expected,
     ## desired or added value) converted to a numeric `T`, as an argument to
     ## a `T` parameter is: a literal is an `int` or `double` until then, so
-    ## `__atomic_store<ulong>(p, 0)` would store only 4 bytes (#639).
+    ## `__atomic_store<ulong>(p, 0)` would store only 4 bytes.
     atomic_operand(expr: Expression, value: llvm.Value, ty_name: String): llvm.Value {
         var kind = value.value_type().kind();
         bool numeric_value = kind == llvm.TypeKind.Integer

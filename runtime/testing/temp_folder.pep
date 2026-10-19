@@ -36,7 +36,7 @@ export struct TempFolder {
         var base = $"pepper_test_{name}_{process.id()}";
         var fresh = io.Directory.temp().join(base);
         # A run that crashed, or whose cleanup failed, left it; a folder
-        # already holding files would break the test that gets it (#724).
+        # already holding files would break the test that gets it.
         io.Directory.remove_all(fresh);
         ulong number = 1;
         while (fresh.exists()) {

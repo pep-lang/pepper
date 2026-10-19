@@ -1,6 +1,6 @@
 # A generic call taking an array literal, or another generic call's result,
 # and a closure infers its type arguments from the elements, as it does
-# from an array variable (#996).
+# from an array variable.
 
 apply<T, U>(items: T[], f: (T) => U): U[] {
     var out = Array<U>();

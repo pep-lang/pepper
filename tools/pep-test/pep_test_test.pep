@@ -184,7 +184,7 @@ reports_test_files_of_a_module_that_clash() {
 [Test]
 removes_what_tests_leave_in_the_temporary_folder() {
     # Neither test's TempFolder is removed by its destructor: one panics,
-    # the other times out (#818).
+    # the other times out.
     var folder = TempFolder("pep_test_temp");
     write_file(
         folder.path.join("leak_test.pep"),
@@ -235,7 +235,7 @@ _hang_source(): String {
 [Test]
 ends_what_a_test_that_times_out_started() {
     # The child holds pep-test's pipes to the test's output open: unless
-    # the timeout ends it too, pep-test never finishes (#842).
+    # the timeout ends it too, pep-test never finishes.
     var folder = TempFolder("pep_test_tree");
     write_file(
         folder.path.join("tree_test.pep"),
@@ -253,7 +253,7 @@ ends_what_a_test_that_times_out_started() {
 [Test]
 ends_what_a_test_that_panics_or_returns_started() {
     # As for a timeout: the children of a test that panics or returns end
-    # with it, or pep-test never finishes (#852). No timeout: the watchdog
+    # with it, or pep-test never finishes. No timeout: the watchdog
     # is not what ends them.
     var folder = TempFolder("pep_test_tree");
     write_file(
@@ -273,7 +273,7 @@ ends_what_a_test_that_panics_or_returns_started() {
 
 [Test]
 warns_of_a_test_near_its_timeout() {
-    # 2.7 s of a 4 s timeout is over the 60% that warns (#1001); 0 s is not.
+    # 2.7 s of a 4 s timeout is over the 60% that warns; 0 s is not.
     var folder = TempFolder("pep_test_slow");
     write_file(
         folder.path.join("slow_test.pep"),

@@ -1,4 +1,4 @@
-# simd.Vector and simd.Mask (#517): every operation, at each lane type.
+# simd.Vector and simd.Mask: every operation, at each lane type.
 # The corpus runs it natively and, under wasmtime, on WebAssembly without
 # simd128 (the scalar fallback); simd_tests.rs runs it at -O2 and with
 # -msimd128.

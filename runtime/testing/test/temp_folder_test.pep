@@ -7,7 +7,7 @@ import "../temp_folder";
 
 [Test]
 starts_empty_when_an_earlier_run_left_its_folder() {
-    # What a crashed run with this process id would have left (#724).
+    # What a crashed run with this process id would have left.
     var stale = io.Directory.temp().join($"pepper_test_left_behind_{process.id()}");
     io.Directory.create_all(stale.join("modes").join("bin"));
     io.File.write_text(stale.join("modes").join("bin").join("run.sh"), "old");

@@ -37,7 +37,7 @@
 extern double strtod(char* text, char** end);
 extern float strtof(char* text, char** end);
 
-# LLVM intrinsics (#344): each extern below is the instruction it names,
+# LLVM intrinsics: each extern below is the instruction it names,
 # overloaded on the width its prototype gives (see "LLVM intrinsics" in
 # docs/src/language/c-interop.md).
 

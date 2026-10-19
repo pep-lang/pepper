@@ -171,7 +171,7 @@ jobs:
         shell: bash
         run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
 
-      # The published build of main, as CI installs it (#713); its pep-build's
+      # The published build of main, as CI installs it; its pep-build's
       # folder lands in PEPPER_COMPILER_DIR.
       - name: Install the toolchain
         timeout-minutes: 5

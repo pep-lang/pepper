@@ -24,7 +24,7 @@
 #
 #   a merge into main that changes the compiler, the runtime or the tools
 #                 (CI's `changes` job decides, and CI runs this workflow
-#                 before its tests) publishes the build of main (#713):
+#                 before its tests) publishes the build of main:
 #                 the version main holds, a prerelease such as 0.4.0-dev,
 #                 on the prerelease v0.4.0-dev, whose tag moves to the merge
 #                 and whose assets are replaced. CI and the workers install

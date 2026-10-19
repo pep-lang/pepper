@@ -1,5 +1,5 @@
 # `parse.parse_recovering` reads on past syntax errors: on every source
-# file of the repository, intact and broken the three ways step 1 of #225
+# file of the repository, intact and broken the three ways step 1 of the self-hosting cutover
 # measured (the last `}` removed, a `;` in the second half removed, the
 # rest of a line after ` = ` in the second half removed), it returns, and
 # its first error is the one `parse` reports. Hand-written cases check the

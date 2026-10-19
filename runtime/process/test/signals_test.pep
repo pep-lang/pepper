@@ -87,7 +87,7 @@ terminate_and_hangup_arrive_on_the_channels_that_name_them() {
 }
 
 # Subscribing, getting a signal and closing, over and over, leaves nothing
-# behind and frees nothing twice (#1006).
+# behind and frees nothing twice.
 [Target(!OS(Wasi))]
 [Test]
 closes_and_subscribes_again_100_times() {

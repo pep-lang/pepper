@@ -95,7 +95,7 @@ jobs:
           fi
 
       # pep-doc is a Pepper program, built against this checkout's runtime
-      # with the newest published build of main (#713), also for a release
+      # with the newest published build of main, also for a release
       # tag, whose own release may not be published yet.
       - name: Install the toolchain
         env:

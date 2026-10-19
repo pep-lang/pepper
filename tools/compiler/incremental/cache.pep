@@ -19,7 +19,7 @@
 ## kept regardless, since another build may be linking it. A unit's
 ## folder spells its name's `/` as `.` (`process.command`), so it holds only
 ## its own keys: nested, unit `process` would prune the folders of units
-## `process/test/...` beside its keys (#851).
+## `process/test/...` beside its keys.
 
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;

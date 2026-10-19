@@ -1,4 +1,4 @@
-# The small block allocator behind `_pep_malloc` (#600, #634): zeroed,
+# The small block allocator behind `_pep_malloc`: zeroed,
 # aligned blocks of every size, realloc across classes and past the limit,
 # blocks freed on another thread than the one that allocated them and handed
 # out again, threads that exit and the spans they leave, and

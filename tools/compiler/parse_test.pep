@@ -1,5 +1,5 @@
 # The compiler's parser parses every source file in the repository. Until
-# #225's cutover it was held to build the same syntax tree as the Rust
+# the self-hosting cutover it was held to build the same syntax tree as the Rust
 # parser; the curated programs of link_test, sema_test and passes_test
 # now hold the compiler to its diagnostics.
 

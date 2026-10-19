@@ -65,7 +65,7 @@ the author.
   or `tools/compiler/link/` also runs `scripts/ci-cross-link.sh build
   <pep-build> <output-dir>` before it merges: it builds for the host and
   `--target` the other two systems, which only main's CI does otherwise
-  (#994). It needs the system roots `scripts/ci-provision-cross.sh` sets
+ . It needs the system roots `scripts/ci-provision-cross.sh` sets
   up.
 - `runtime/` and `tools/` stay formatted with `pep-fmt`:
   `tools/pep-fmt/repository_test.pep` fails on a file that is not
@@ -82,7 +82,7 @@ by building any program with stage 0 and `PEPPER_RUNTIME=runtime`.
 A PR that changes `tools/compiler/` or `runtime/` runs `scripts/stage0-check.sh`
 before it merges: stage 0 builds the compiler and runs the runtime's tests,
 which `scripts/pepper-tests.sh` with the branch's compiler cannot show.
-#1002 broke main this way (`FlatMapIterator`'s `(T) => Iterator<U>` field).
+A change once broke main this way (`FlatMapIterator`'s `(T) => Iterator<U>` field).
 
 ## Response style
 

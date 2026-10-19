@@ -44,7 +44,7 @@ echo "=== building tools/compiler with $("$stage0/pep-build$exe" --version)"
 "$stage0/pep-package$exe" -C tools/compiler fetch
 # shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
 # runtime's number extensions that declare `Comparable` when it checks
-# a compilation unit again (#950), so it builds without compilation
+# a compilation unit again, so it builds without compilation
 # units. Drop the variable once the published stage 0 is 0.10.0-dev or
 # later.
 PEPC_NO_COMPILATION_UNITS=1 "$stage0/pep-build$exe" -O tools/compiler/main.pep \

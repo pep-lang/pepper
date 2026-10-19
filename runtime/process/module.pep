@@ -60,6 +60,6 @@ export is_executable;
 export Signal;
 export signals;
 # Declared under other names while the deprecated prelude functions keep
-# these (top-level exports are unique program-wide until #244).
+# these (top-level exports are unique program-wide until).
 export _process_arguments as arguments;
 export _process_exit as exit;

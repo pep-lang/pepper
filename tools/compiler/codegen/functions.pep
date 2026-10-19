@@ -356,7 +356,7 @@ extend Generator {
         return Optional<llvm.Attribute>.Value(context.attribute(kind));
     }
 
-    ## Gives a `[Cold]` function (#640) LLVM's `cold` and `noinline`, so it
+    ## Gives a `[Cold]` function LLVM's `cold` and `noinline`, so it
     ## stays out of line however small or rarely called.
     mark_cold(function: llvm.Value, attributes: ast.Attribute[]) {
         if (!ast.has_attribute(attributes, sema.COLD_ATTRIBUTE)) {
@@ -455,7 +455,7 @@ extend Generator {
 
     # Gives a constructor's `__alloc_size`, and the `this =
     # _pep_malloc(size)` allocation, the struct's size as a literal, so
-    # `call_function_result` sees a constant size (#635).
+    # `call_function_result` sees a constant size.
     _patch_allocation(var_def: VariableDef, struct_size: long) {
         if (var_def.name == "__alloc_size") {
             var_def.default = Optional<Expression>.Value(Expression.IntLiteral(struct_size));

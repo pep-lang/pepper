@@ -129,7 +129,7 @@ append_grows_capacity() {
 
 [Test]
 appends_empty_to_a_string_without_a_buffer() {
-    # A substring of no bytes, and String(), hold no buffer (#692).
+    # A substring of no bytes, and String(), hold no buffer.
     var empty = "export f()".substr_bytes(0, 0);
     expect_equal(empty + "", "");
     expect_equal(empty + empty, "");
@@ -348,7 +348,7 @@ utf8_scans_across_word_boundaries() {
     expect_equal("é,ü,".replace(",", ""), "éü");
 }
 
-# #511: `find` re-checked that the whole rest of the String was valid UTF-8
+# `find` re-checked that the whole rest of the String was valid UTF-8
 # on every call, so `split`, `replace` and a `find(_, from)` loop were
 # quadratic. Linear, they take milliseconds; quadratic, this 240 KB text
 # takes about two minutes, past the runner's timeout.

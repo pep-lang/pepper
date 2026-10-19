@@ -1,4 +1,4 @@
-## Incremental checking for the Pepper compiler written in Pepper (#225): the
+## Incremental checking for the Pepper compiler written in Pepper: the
 ## build cache (`Cache`, `Keys`), the program's compilation units and their
 ## records (`compilation_units`, `store_checked`, `find_checked`), and checking
 ## a program one compilation unit at a time on them (`check_compilation_units`),

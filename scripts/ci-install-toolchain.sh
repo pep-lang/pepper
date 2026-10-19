@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gives a CI job the Pepper toolchain to build and test with (#713), and
+# Gives a CI job the Pepper toolchain to build and test with, and
 # names the folder of its `pep-build` in PEPPER_COMPILER_DIR (through
 # $GITHUB_ENV when it is set, else on standard output).
 #
@@ -22,7 +22,7 @@
 # (default: target/); PEPPER_TARGET_DIR, the folder target/ stands for;
 # PEPPER_EXPECT_COMMIT, the commit a -dev toolchain must be the build of:
 # CI sets it to the merge once its own release has published that build,
-# so a job that installs the build before it fails instead (#989).
+# so a job that installs the build before it fails instead.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -54,7 +54,7 @@ if [ -z "$version" ]; then
     releases="$(curl -fsSL "$url")"
   fi
   # The highest version, a release sorting after its own -dev: the -dev tag
-  # goes stale whenever main holds a release's version (#950).
+  # goes stale whenever main holds a release's version.
   version="$(sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*\(-dev\)\{0,1\}\)".*/\1/p' <<< "$releases" \
     | awk -F'[.-]' '{ print $1, $2, $3, ($4 == "dev" ? 0 : 1), $0 }' \
     | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -d' ' -f5)"

@@ -6,7 +6,7 @@
 # timed-out job fails the gate like a failed one. Every job uses LLVM 20, the
 # one the compiler binds (scripts/setup-llvm.sh).
 #
-# Every job tests with the published build of main (#713): the toolchain
+# Every job tests with the published build of main: the toolchain
 # release.yml builds on each merge, installed with the install scripts as a
 # user installs it (scripts/ci-install-toolchain.sh). On a push, this
 # workflow runs Release itself (`release`) and the jobs that install the
@@ -193,7 +193,7 @@ jobs:
         run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts (#713).
+      # with the install scripts.
       - name: Install the toolchain
         shell: bash
         env:
@@ -260,7 +260,7 @@ jobs:
           find "$TMPDIR" -maxdepth 1 \( -name 'pepper_*' -o -name 'pep-test-*' \) -mmin +1440 -exec rm -rf {} +
 
       # The digest tests link Homebrew's libcrypto under `-D USE_LIBCRYPTO`
-      # (#370, scripts/pepper-tests.sh); zlib comes with macOS.
+      # (scripts/pepper-tests.sh); zlib comes with macOS.
       - name: Provision libcrypto
         shell: bash
         run: |
@@ -268,7 +268,7 @@ jobs:
           brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts (#713).
+      # with the install scripts.
       - name: Install the toolchain
         shell: bash
         env:
@@ -324,7 +324,7 @@ jobs:
         run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       # The digest and compress tests also run with `-D USE_LIBCRYPTO` and
-      # `-D USE_ZLIB` (#370, scripts/pepper-tests.sh), which link libcrypto
+      # `-D USE_ZLIB` (scripts/pepper-tests.sh), which link libcrypto
       # and zlib.
       - name: Provision libcrypto and zlib
         shell: bash
@@ -339,7 +339,7 @@ jobs:
         run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts (#713).
+      # with the install scripts.
       - name: Install the toolchain
         shell: bash
         env:
@@ -393,7 +393,7 @@ jobs:
           "$compiler" --target aarch64-unknown-linux-gnu tests/Simd.Basic/test.pep -o "$out/simd-arm64" --build "$out/build"
           test "$(qemu-aarch64 -L /usr/aarch64-linux-gnu "$out/simd-arm64")" = "simd ok"
 
-  # Cross-linking for the other operating systems (#485): each host builds a
+  # Cross-linking for the other operating systems: each host builds a
   # few examples for the other two, with `--target` and their system roots,
   # and each host runs what the others built for it and compares the output
   # with its own native build's. These do not gate merging.

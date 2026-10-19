@@ -246,7 +246,7 @@ reports_check_errors_and_warnings() {
             "lib.pep",
             "export struct Lib { var n: int; }\nextend Lib { secret(): int { return 1; } extra(): int { return 2; } }\nextend Lib with Named { name(): int { return 3; } }\nprivate_fn(): int { return 4; }\nexport const PUBLIC = 5;\n"
         ],
-        # Declarations named like built-in types (#719).
+        # Declarations named like built-in types.
         [
             "main.pep",
             "# expect: main.pep:5:7: error: 'double' is the name of a built-in type; choose another name\n# expect: main.pep:6:8: error: 'short' is the name of a built-in type; choose another name\n# expect: lib.pep:1:8: error: 'float' is the name of a built-in type; choose another name\nimport \"lib\";\nconst double = (x: int): int => x * 2;\nstruct short {}\nmain(): int { return 0; }\n",

@@ -215,7 +215,7 @@ contention() {
 
 # A literal operand of an `__atomic_*<T>` intrinsic takes the type `T`, as an
 # argument to a `T` parameter does, so it writes and compares all 8 bytes of
-# a `ulong` (#639).
+# a `ulong`.
 [Test]
 intrinsic_literals_take_the_type_argument() {
     __ptr<ulong> p = _pep_malloc(8);
