@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9edc053e.js";
+            window.path_to_searchindex_js = "searchindex-497e68c2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8b7d02da.js"></script>
@@ -201,6 +201,9 @@ main(): int {
     print("Hello, world!");
     return 0;
 }
+
+# Output:
+# Hello, world!
 </code></pre>
 <h2 id="how-pepper-manages-memory"><a class="header" href="#how-pepper-manages-memory">How Pepper manages memory</a></h2>
 <p>Every struct value in Pepper is a reference to an object on the heap, and the
@@ -359,6 +362,9 @@ main(): int {
     print("Hello, world!");
     return 0;
 }
+
+# Output:
+# Hello, world!
 </code></pre>
 <p>Every program starts at <code>main</code>, which here takes no arguments and returns an
 <code>int</code> (it can also take the command-line arguments; see
@@ -569,6 +575,10 @@ main(): int {
     print($"{sum_to(100)}");
     return 0;
 }
+
+# Output:
+# Hello, Pepper!
+# 5050
 </code></pre>
 <p>A few things to notice:</p>
 <ul>
@@ -754,6 +764,9 @@ main(): int {
     assert(parse_number("").ok_or(-1) == -1, "ok_or supplies a fallback");
     return 0;
 }
+
+# Output:
+# 'x' is not a digit
 </code></pre>
 <ul>
 <li><code>Result&lt;int&gt;</code> holds either an <code>int</code> or an <code>Error</code>. Build one with
@@ -1039,6 +1052,9 @@ main(): int {
     print($"{letter}");   # 97
     return 0;
 }
+
+# Output:
+# 97
 </code></pre>
 <p>The escapes are the same as a string’s (see the table under
 <a href="#strings">Strings</a>), plus <code>\xHH</code> for any byte, <code>'\xFF'</code> included. A
@@ -1098,6 +1114,9 @@ main(): int {
     print($"{words} words, {digits} digits");   # 7 words, 8 digits
     return 0;
 }
+
+# Output:
+# 7 words, 8 digits
 </code></pre>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
@@ -1132,6 +1151,9 @@ main(): int {
     print(message);
     return 0;
 }
+
+# Output:
+# Hello, Pepper!
 </code></pre>
 <p>A <code>String</code> is a reference type: <code>var alias = message;</code> makes a second reference
 to the same object rather than a copy, so a change made with <code>append</code> shows
@@ -1196,6 +1218,9 @@ main(): int {
     assert(also == name, "same text");
     return 0;
 }
+
+# Output:
+# HELLO!
 </code></pre>
 <ul>
 <li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
@@ -2131,6 +2156,9 @@ main(): int {
     print("{0} at {1:.1}", point, price);   # (3, north) at 4.5
     return 0;
 }
+
+# Output:
+# (3, north) at 4.5
 </code></pre>
 <p>Runtime types such as <code>String</code>, <code>StringBuilder</code>, <code>io.Path</code>, <code>Uri</code> and
 <code>regex.Match</code> implement <code>ToString</code>. An enum is
@@ -2733,6 +2761,15 @@ main(): int {
     # }
     return 0;
 }
+
+# Output:
+# {
+#   // Spaces per level.
+#   "tab_size": 2,
+#   "font": "Mono", // the editor's
+#   // Wrap long lines.
+#   "wrap": true
+# }
 </code></pre>
 <ul>
 <li><code>document.root</code> is the <code>JsonValue</code>; change it as any other.</li>
@@ -3521,6 +3558,9 @@ main(): int {
     assert(!starts_high, "an empty array does not start high");
     return 0;
 }
+
+# Output:
+# not hot
 </code></pre>
 <p>The condition is usually a <code>bool</code>, but a number also works: any value other
 than zero counts as true, as in C. A raw pointer (<code>__ptr&lt;T&gt;</code>) or a function
@@ -3785,6 +3825,10 @@ main(): int {
 is_even(n: int): bool {
     return n % 2 == 0;
 }
+
+# Output:
+# log: starting
+# log: done
 </code></pre>
 <ul>
 <li>
@@ -4013,6 +4057,14 @@ main(): int {
     print("{braces} alone print as written");
     return 0;
 }
+
+# Output:
+# Hello, world!
+# 42
+# (1.5, true)
+# Pepper has 42 items
+# 3 + 4 = 7
+# {braces} alone print as written
 </code></pre>
 <ul>
 <li>With a string literal and <strong>no other arguments</strong>, the text prints as
@@ -4337,6 +4389,10 @@ yields <code>(key, value)</code> tuples:</p>
     }
     return 0;
 }
+
+# Output:
+# x: 1
+# y: 2
 </code></pre>
 <ul>
 <li><code>==</code> and <code>!=</code> compare element by element. Each element compares the way it
@@ -6534,6 +6590,9 @@ main(): int {
     assert(label !== __null, "now there is one");
     return 0;
 }
+
+# Output:
+# budget used up
 </code></pre>
 <p>These are the boolean contexts. In each, a struct value <code>x</code> becomes <code>x.!!()</code>:</p>
 <ul>
@@ -57783,7 +57842,7 @@ WASI_SDK_PATH=/opt/wasi-sdk WASMTIME=/opt/wasmtime/wasmtime scripts/pepper-tests
 and runs them under <a href="https://wasmtime.dev">wasmtime</a>, except those that
 need threads, tasks, sockets or processes; without a
 <a href="https://github.com/WebAssembly/wasi-sdk">wasi-sdk</a> those tests say they
-skipped and pass. <a href="#testing-the-runtime-and-the-compiler">Testing the runtime and the compiler</a> says
+skipped and pass, except under CI on Linux, which provisions both. <a href="#testing-the-runtime-and-the-compiler">Testing the runtime and the compiler</a> says
 what runs and where new tests go. Before a pull request, also run what CI
 checks:</p>
 <pre><code class="language-bash">target/pepper-tests/bin/pep-doc check        # the reference and the tools' pages are current
@@ -57919,7 +57978,11 @@ mdBook’s include syntax, so the text on the page is the file that was tested:<
 </code></pre>
 <p><code>tools/pep-doc/examples_test.pep</code>, which <code>scripts/pepper-tests.sh</code> runs,
 builds and runs every example; each must return 0 from <code>main</code> and uses
-<code>assert</code> to check what it shows. <code>PEPPER_DOCS_EXAMPLE=structs</code> limits it to
+<code>assert</code> to check what it shows. An example that prints ends with an
+<code># Output:</code> block, a <code># </code> line for each line it prints (<code>#</code> alone for an
+empty one), and must print exactly that; leave it out where the output
+differs between runs or platforms. A failure is printed as it happens.
+<code>PEPPER_DOCS_EXAMPLE=structs</code> limits it to
 the examples whose name starts with <code>structs</code>. A sample of the examples is
 also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
@@ -58090,13 +58153,13 @@ output and exit status as a user would see them.</p>
 <tr><th>Test</th><th>What it runs</th></tr>
 </thead>
 <tbody>
-<tr><td><code>tools/compiler/corpus_test.pep</code></td><td><code>pep-build -I tests</code> on each <code>tests/&lt;Name&gt;/test.pep</code>, then the program from the repository’s root, which must exit with 0. With <code>WASI_SDK_PATH</code> set and wasmtime on the PATH (or <code>WASMTIME</code> naming it), each again for <code>wasm32-wasip1</code> under wasmtime; it says it skipped otherwise. A new <code>tests/&lt;Name&gt;/test.pep</code> joins the run.</td></tr>
+<tr><td><code>tools/compiler/corpus_test.pep</code></td><td><code>pep-build -I tests</code> on each <code>tests/&lt;Name&gt;/test.pep</code>, then the program from the repository’s root, which must exit with 0. With <code>WASI_SDK_PATH</code> set and wasmtime on the PATH (or <code>WASMTIME</code> naming it), each again for <code>wasm32-wasip1</code> under wasmtime; it says it skipped otherwise, except under CI on Linux, which provisions both (<code>scripts/ci-provision-wasi.sh</code>) and where it fails without them. A new <code>tests/&lt;Name&gt;/test.pep</code> joins the run.</td></tr>
 <tr><td><code>tools/compiler/programs_test.pep</code></td><td><code>pep-build</code> on the programs of <code>tools/compiler/testdata/</code>, each run with the arguments and environment it needs: <code>cli</code>’s <code>parse</code> and an <code>add_options</code> error, <code>os</code>’s environment and host, <code>time</code>’s zones (TZif files under <code>TZDIR</code>, <code>TZ</code>, the system’s database), and <code>process</code>’s arguments, <code>exit</code>, <code>main</code>’s arguments, children that are copies of the program, and <code>exec</code>.</td></tr>
 <tr><td><code>tools/pep-doc/examples_test.pep</code></td><td><code>pep-build</code> on every example of the book, then the example (see <a href="#building-this-documentation">Building this documentation</a>).</td></tr>
 <tr><td><code>tools/pep-fmt/repository_test.pep</code></td><td><code>format_source</code> in the test itself on every <code>.pep</code> file under <code>runtime/</code>, <code>tools/</code>, <code>tests/</code> and <code>docs/examples/</code>: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of <code>runtime/</code> and <code>tools/</code> are already formatted (<code>pep-fmt -w</code> fixes one that is not).</td></tr>
 <tr><td><code>tools/pep-fmt/cli_test.pep</code></td><td><code>pep-fmt</code> on standard input and on files and folders (<code>--check</code>, <code>-w</code>), its syntax errors and usage errors.</td></tr>
 <tr><td><code>tools/pepper/pepper_test.pep</code></td><td><code>pepper</code>, copied beside stand-in tools built from <code>tools/pepper/testdata/</code>; and every tool’s <code>--version</code> against the version in each <code>tools/*/main.pep</code> (and pep-lsp’s <code>tools/pep-lsp/arguments.pep</code>).</td></tr>
-<tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes, from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite’s own run skips them).</td></tr>
+<tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes (tests that pass, fail, time out, leak an allocation or release one too many), from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite’s own run skips them).</td></tr>
 <tr><td><code>tools/pep-package/package_test.pep</code></td><td><code>pep-package</code> and <code>pep-build</code> on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under <code>.pep/fetch.lock</code>; skipped without git.</td></tr>
 <tr><td><code>tools/pep-run/pep_run_test.pep</code></td><td><code>pep-run</code> building and running the programs in <code>tools/pep-run/testdata/</code> with a Pepper home of its own: arguments, exit status, working folder, the up-to-date rerun, compile errors and the options it refuses.</td></tr>
 <tr><td><code>tools/pep-profile/profile_test.pep</code></td><td><code>pep-profile</code> on the recordings in <code>tools/pep-profile/testdata/</code>, and on a real program when samply or a working perf is installed (skipped otherwise).</td></tr>
