@@ -3490,8 +3490,8 @@ real with the `platform-test` workflow (`.agents/skills/platform-test`).
 
 ## 11. CI
 
-Every job in every workflow runs on a GitHub-hosted runner:
-**`windows-2025`** and **`ubuntu-24.04`** (x64), and **`macos-15`**
+Every job in every workflow but `llvm-package.yml` runs on a GitHub-hosted
+runner: **`windows-2025`** and **`ubuntu-24.04`** (x64), and **`macos-15`**
 (arm64). A new job picks one of those labels. Every job
 installs the published build of main (`scripts/ci-install-toolchain.sh`)
 and builds and tests with it, except where the compiler changed: a merge
@@ -3571,7 +3571,9 @@ checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
   run by `ci.yml`'s `docs` job after its `release` job; `X.Y.Z/` on tags),
   with `pep-doc` built by the build of main.
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped
-  Windows LLVM 20 package that CI installs.
+  Windows LLVM 20 package that CI installs. It is the one self-hosted
+  workflow (`pepper-linux`, `pepper-macos`, `pepper-windows`), and runs
+  only by hand.
 
 ---
 
