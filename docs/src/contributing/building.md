@@ -161,7 +161,7 @@ The last also builds the docs examples and the corpus for `wasm32-wasip1`
 and runs them under [wasmtime](https://wasmtime.dev), except those that
 need threads, tasks, sockets or processes; without a
 [wasi-sdk](https://github.com/WebAssembly/wasi-sdk) those tests say they
-skipped and pass. [Testing the runtime and the compiler](tests.md) says
+skipped and pass, except under CI on Linux, which provisions both. [Testing the runtime and the compiler](tests.md) says
 what runs and where new tests go. Before a pull request, also run what CI
 checks:
 

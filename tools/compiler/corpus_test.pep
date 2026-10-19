@@ -3,6 +3,8 @@
 # `-I tests`, and that must exit with 0 when run from the repository's
 # root. Under wasmtime too, built for `wasm32-wasip1`, when `WASI_SDK_PATH`
 # names a wasi-sdk and wasmtime is on the PATH (or `WASMTIME` names it).
+# Without them it skips, except under CI on Linux, which provisions them
+# (scripts/ci-provision-wasi.sh): there it fails.
 
 import [Directory, Path] from io;
 import os;
@@ -112,7 +114,11 @@ _runs_under_wasmtime(part: ulong) {
         works = version.is_ok() and version.value().status.success();
     }
     if (!works) {
-        print("skipped: set WASI_SDK_PATH and put wasmtime on the PATH (or set WASMTIME) to run it");
+        var how = "set WASI_SDK_PATH and put wasmtime on the PATH (or set WASMTIME) to run it";
+        if (_wasi_provisioned()) {
+            panic($"CI provisions wasi-sdk and wasmtime on Linux: {how}");
+        }
+        print($"skipped: {how}");
         return;
     }
     var names = _corpus();
@@ -138,12 +144,14 @@ _runs_under_wasmtime(part: ulong) {
             continue;
         }
         # The host's temporary folder is the program's `/tmp`, which
-        # `Directory.temp()` names on WASI.
+        # `Directory.temp()` names on WASI. `inherit-env` would pass the
+        # host's TMPDIR (pep-test sets one for each test) over `--env`'s.
         var ran = run(
             process
                 .Command(wasmtime)
                 .arguments(["run", "--dir", ".", "--dir", $"{Directory.temp()}::/tmp", "-S", "inherit-env"])
                 .arguments(["--env", "TMPDIR=/tmp", module.to_string()])
+                .remove_environment("TMPDIR")
                 .working_directory(folder.path)
         );
         if (!ran.status.success()) {
@@ -151,6 +159,18 @@ _runs_under_wasmtime(part: ulong) {
         }
     }
     _report(failures);
+}
+
+# Whether this machine should have a wasi-sdk and wasmtime: CI's Linux
+# runners provision them.
+[Target(OS(Linux))]
+_wasi_provisioned(): bool {
+    return os.environment("CI").is_value();
+}
+
+[Target(!OS(Linux))]
+_wasi_provisioned(): bool {
+    return false;
 }
 
 # Prints each of `failures` and fails the test when there is one.

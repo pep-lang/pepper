@@ -350,6 +350,12 @@ jobs:
           set -euxo pipefail
           dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
 
+      # The corpus also runs under wasmtime, built for wasm32-wasip1
+      # (tools/compiler/corpus_test.pep), which fails here without them.
+      - name: Provision wasi-sdk and wasmtime
+        shell: bash
+        run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
+
       # The toolchain to test with: the published build of main, installed
       # with the install scripts (#713).
       - name: Install the toolchain

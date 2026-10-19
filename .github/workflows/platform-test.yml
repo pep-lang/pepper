@@ -166,6 +166,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci-provision-llvm.sh
 
+      # Under CI on Linux the corpus test fails without them, as in ci.yml.
+      - name: Provision wasi-sdk and wasmtime
+        if: runner.os == 'Linux' && inputs.provision != 'false'
+        timeout-minutes: 5
+        shell: bash
+        run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
+
       # The published build of main, as CI installs it (#713); its pep-build's
       # folder lands in PEPPER_COMPILER_DIR.
       - name: Install the toolchain
