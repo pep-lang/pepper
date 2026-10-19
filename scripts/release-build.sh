@@ -5,7 +5,7 @@
 #   scripts/release-build.sh <target> <version> <output-dir> [<stage0-dir>]
 #
 # <stage0-dir> holds the stage 0 pep-build (default: $PEPPER_COMPILER_DIR,
-# else, with PEPPER_STAGE0_INSTALL=1, the newest build of main, installed,
+# else, with PEPPER_STAGE0_INSTALL=1, the newest published toolchain, installed,
 # else the installed toolchain's, the one `pepper install which` names).
 #
 # <target> is one of:
@@ -79,42 +79,16 @@ echo "=== provision ($target)"
 case "$target" in
   linux-x64)
     # The manylinux_2_28 image is AlmaLinux 8. clang is the smoke test's
-    # link driver, as it is a user's. openssh-clients: git fetches pepc's
-    # pepper-llvm package over SSH.
-    dnf install -y clang libffi-devel libzstd-devel zlib-devel libxml2-devel git openssh-clients xz
-    # LLVM is the major pepper-llvm binds, built here from source: dnf
-    # serves only AlmaLinux's current LLVM (21 since 2026-10), whose C API
-    # dropped functions pepper-llvm calls, and upstream's Linux binaries need
-    # a newer glibc than this image's. Only what the builds link: the
-    # libraries with the X86, AArch64 and WebAssembly backends (the targets
-    # pepc's --target names; it registers the host's), the headers and
-    # llvm-config. Built once, kept beside the runner's workspace, which
-    # outlives the container.
+    # link driver, as it is a user's. git fetches pepc's pepper-llvm
+    # package over HTTPS.
+    dnf install -y clang libffi-devel libzstd-devel zlib-devel libxml2-devel git xz
+    # LLVM is the major pepper-llvm binds, built from source
+    # (build-llvm-manylinux.sh says why). Built once, kept beside the
+    # runner's workspace, which outlives the container.
     llvm_major=$(sed -nE 's/^LLVM_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
     llvm_version=$(sed -nE "s/^ *$llvm_major\) echo \"([0-9.]+)\" ;;.*/\1/p" scripts/setup-llvm.sh | head -1)
     llvm_prefix="${RUNNER_WORKSPACE:-$output}/pepper-data/llvm-$llvm_version-manylinux_2_28"
-    if [ ! -x "$llvm_prefix/bin/llvm-config" ]; then
-      python_bin=$(ls -d /opt/python/cp312-*/bin | head -1)
-      "$python_bin/python" -m pip install --quiet cmake ninja
-      llvm_src="$output/llvm-project-$llvm_version.src"
-      rm -rf "$llvm_src" "$output/llvm-build" "$llvm_prefix.partial"
-      curl -fsSL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm_version/llvm-project-$llvm_version.src.tar.xz" \
-        | tar -xJ -C "$output" "llvm-project-$llvm_version.src/llvm" "llvm-project-$llvm_version.src/cmake" "llvm-project-$llvm_version.src/third-party"
-      "$python_bin/cmake" -G Ninja -S "$llvm_src/llvm" -B "$output/llvm-build" \
-        -DCMAKE_MAKE_PROGRAM="$python_bin/ninja" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_INSTALL_PREFIX="$llvm_prefix.partial" \
-        -DLLVM_TARGETS_TO_BUILD="X86;AArch64;WebAssembly" \
-        -DLLVM_ENABLE_PROJECTS="" \
-        -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_DOCS=OFF \
-        -DLLVM_INCLUDE_UTILS=OFF \
-        -DLLVM_ENABLE_ZLIB=FORCE_ON -DLLVM_ENABLE_ZSTD=FORCE_ON \
-        -DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_LIBEDIT=OFF \
-        -DLLVM_DISTRIBUTION_COMPONENTS="llvm-config;llvm-headers;llvm-libraries"
-      "$python_bin/ninja" -C "$output/llvm-build" install-distribution
-      mv "$llvm_prefix.partial" "$llvm_prefix"
-      rm -rf "$llvm_src" "$output/llvm-build"
-    fi
+    bash scripts/build-llvm-manylinux.sh "$llvm_version" "$llvm_prefix" "$output"
     llvm_config="$llvm_prefix/bin/llvm-config"
     collect_static "/usr/lib64 /usr/lib" zstd ffi xml2 z
     if [ ! -f "$static_dir/libzstd.a" ]; then
@@ -169,8 +143,9 @@ fi
 
 # Stage 0, the compiler that builds pepc: the previously published
 # toolchain's pep-build, from <stage0-dir>, else $PEPPER_COMPILER_DIR; else,
-# with PEPPER_STAGE0_INSTALL=1 (release.yml), the newest build of main
-# (the newest vX.Y.Z-dev prerelease, whatever VERSION holds) installed here
+# with PEPPER_STAGE0_INSTALL=1 (release.yml), the newest published
+# toolchain (the build of main, or a newer release, whatever VERSION
+# holds) installed here
 # by scripts/ci-install-toolchain.sh, now that the provisioning above has
 # put clang on the PATH (the install builds a program to check itself);
 # else the installed toolchain's.
@@ -250,12 +225,18 @@ mkdir -p "$pepc_build"
 # Stage 1: pepc built by stage 0. Stage 2, which ships: pepc built by
 # stage 1. Both with the runtime of this checkout.
 export PEPPER_RUNTIME="$repo_root/runtime"
-# The private packages pepc and pep-lsp depend on, fetched up front, so
+# The packages pepc and pep-lsp depend on, fetched up front, so
 # pep-package's output (which package, and git's error) is in the log when
 # a fetch fails. The fetch uses a pep-package stage 0 builds from this
 # checkout, with its runtime: stage 0's own may predate a runtime fix it
-# needs (#804: on glibc before 2.29 it could not start git in a folder).
+# needs (on glibc before 2.29 it could not start git in a folder).
 # pep-build fetches only what is missing, so the builds below fetch nothing.
+# shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
+# runtime's number extensions that declare `Comparable` when it checks
+# a compilation unit again, so it builds without compilation
+# units. Drop the variable once the published stage 0 is 0.10.0-dev or
+# later.
+export PEPC_NO_COMPILATION_UNITS=1
 "$stage0/pep-build$exe" -O tools/pep-package/main.pep \
   -o "$pepc_build/pep-package$exe" --build "$pepc_build/pep-package-build"
 for project in tools/compiler tools/pep-lsp; do
@@ -264,13 +245,13 @@ done
 "$stage0/pep-build$exe" -O tools/compiler/main.pep \
   -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"
 [ "$target" = windows-x64 ] && cp "$stage/bin/LLVM-C.dll" "$pepc_build/"
+unset PEPC_NO_COMPILATION_UNITS
 "$pepc_build/pepc-stage1$exe" -O --lto=full tools/compiler/main.pep \
   -o "$stage/bin/pep-build$exe" --build "$pepc_build/stage2" --no-cache "${llvm_link[@]}"
 "$stage/bin/pep-build$exe" --version
 
 echo "=== build the Pepper tools"
-# With the pep-build that ships. pep-lsp depends on the private pepper-lsp
-# package (scripts/ci-package-auth.sh).
+# With the pep-build that ships.
 for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
   "$stage/bin/pep-build$exe" -O --lto=full "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done

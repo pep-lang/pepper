@@ -3,25 +3,18 @@
     Installs Pepper on Windows from a release's prebuilt archive.
 
 .DESCRIPTION
-    Downloads pepper-<version>-windows-x64.zip (the newest release that has
-    one, or -Version's), checks it against its .sha256, unpacks it into
-    %LOCALAPPDATA%\pepper\toolchains\<version>, makes it the default, puts
-    the entry point pepper.exe and pep-install.exe in %LOCALAPPDATA%\pepper\bin,
-    and adds that folder to the user's PATH. Other toolchains stay installed
-    (pepper install manages them), and an install from before toolchains
-    (bin\ and runtime\ in %LOCALAPPDATA%\pepper) moves into toolchains\
-    first. A release from before toolchains, which has no pep-install,
-    installs into %LOCALAPPDATA%\pepper itself as it used to, unless the
-    home already holds toolchains. -Uninstall removes the home and the PATH
-    entry.
-
-    Linking a program needs clang and the MSVC libraries and Windows SDK.
-    When there is no clang it offers to install LLVM with Scoop, winget or
-    Chocolatey, whichever is present, else with LLVM's own installer from
-    its GitHub release; when there are no MSVC build tools it offers to
-    install the Visual Studio Build Tools' C++ workload with winget. It asks
-    first unless -Yes is given. Last, it builds and runs a small program to
-    show the install works, and fails if it cannot.
+    Only bootstraps: downloads pepper-<version>-windows-x64.zip and the
+    installer archive beside it, pepper-install-<version>-windows-x64.zip,
+    from the newest release that has both (or -Version's), checks the
+    installer against its .sha256, unpacks its pep-install.exe into a
+    temporary folder and runs `pep-install setup --archive <toolchain
+    archive>` with the options given. pep-install checks the toolchain
+    archive, installs it into %LOCALAPPDATA%\pepper\toolchains\<version>,
+    makes it the default, puts pepper.exe and pep-install.exe in
+    %LOCALAPPDATA%\pepper\bin, adds that folder to the user's PATH, offers
+    to install LLVM and the Visual Studio Build Tools' C++ workload, and
+    builds a program to check (see docs/src/tools/pep-install.md).
+    -Uninstall runs `pep-install uninstall`.
 
     Piped into PowerShell (irm ... | iex) it takes no parameters; set
     PEPPER_VERSION and PEPPER_HOME instead. GITHUB_TOKEN or GH_TOKEN, when
@@ -32,14 +25,15 @@
 
 .PARAMETER Archive
     Install this downloaded archive instead of downloading one; it is
-    checked against <Archive>.sha256 beside it.
+    checked against <Archive>.sha256 beside it, and the installer archive
+    pepper-install-<version>-windows-x64.zip must be beside it too.
 
 .PARAMETER Prefix
     Install into this folder instead of $env:PEPPER_HOME, else
     %LOCALAPPDATA%\pepper.
 
 .PARAMETER Yes
-    Install missing prerequisites and change the PATH without asking.
+    Install missing prerequisites without asking.
 
 .PARAMETER NoModifyPath
     Leave the user's PATH alone.
@@ -51,7 +45,7 @@
     Remove the install and its PATH entry.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+    irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Version 0.4.0
@@ -73,22 +67,13 @@ $ProgressPreference = 'SilentlyContinue'
 # PowerShell 5.1 offers TLS 1.0 by default, which GitHub refuses.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$Repo = 'justinboswell/pepper'
+$Repo = 'pep-lang/pepper'
 $Target = 'windows-x64'
-# The LLVM installer to fall back on: the major pep-build is built against.
-$LlvmVersion = '20.1.8'
 $Token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $env:GH_TOKEN }
 
 function Say([string]$Message) { Write-Host "pepper-install: $Message" }
 function Warn([string]$Message) { Write-Warning "pepper-install: $Message" }
 function Fail([string]$Message) { throw "pepper-install: $Message" }
-
-# Asks a yes/no question; yes with -Yes.
-function Ask([string]$Question) {
-    if ($Yes) { return $true }
-    $answer = Read-Host "pepper-install: $Question [Y/n]"
-    return ($answer -eq '' -or $answer -match '^(y|yes)$')
-}
 
 # Downloads $Uri to $OutFile, with the token when there is one; the API
 # serves a release asset's bytes for Accept: application/octet-stream.
@@ -99,7 +84,8 @@ function Get-Url([string]$Uri, [string]$OutFile, [string]$Accept = '*/*') {
 }
 
 # The release to install: the newest v<x.y.z> one, or -Version's, with this
-# target's archive. The repository also has vsix-* and llvm-* releases.
+# target's toolchain and installer archives. The repository also has
+# vsix-* and llvm-* releases.
 function Find-Release([string]$Work) {
     $list = Join-Path $Work 'releases.json'
     try {
@@ -108,271 +94,107 @@ function Find-Release([string]$Work) {
         if (-not $Token) { Warn 'while the repository is private, set GITHUB_TOKEN to a token that can read it' }
         Fail "cannot list the releases of ${Repo}: $_"
     }
+    $wanted = if ($Version) { "v$($Version.TrimStart('v'))" } else { '' }
     $releases = Get-Content -Raw $list | ConvertFrom-Json
     foreach ($release in $releases) {
         if ($release.tag_name -notmatch '^v\d+\.\d+\.\d+') { continue }
         # A prerelease (v0.4.0-dev, the build of main) only when -Version names it.
-        if ($release.tag_name.Contains('-') -and $release.tag_name -ne "v$($Version.TrimStart('v'))") { continue }
-        if ($Version -and $release.tag_name -ne "v$($Version.TrimStart('v'))") { continue }
-        $name = "pepper-$($release.tag_name.Substring(1))-$Target.zip"
-        $archive = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
-        if (-not $archive) { continue }
-        $checksum = $release.assets | Where-Object { $_.name -eq "$name.sha256" } | Select-Object -First 1
-        if (-not $checksum) { Fail "release $($release.tag_name) has no $name.sha256 to check the download against" }
-        return [pscustomobject]@{ Tag = $release.tag_name; Name = $name; Archive = $archive; Checksum = $checksum }
-    }
-    if ($Version) { Fail "release v$($Version.TrimStart('v')) has no pepper-$($Version.TrimStart('v'))-$Target.zip" }
-    Fail "no release of $Repo has a prebuilt Pepper for $Target yet"
-}
-
-# Downloads a release asset: through the API with a token (a private
-# repository's download links need one), else from its download link.
-function Get-Asset($Asset, [string]$OutFile) {
-    if ($Token) { Get-Url $Asset.url $OutFile 'application/octet-stream' }
-    else { Get-Url $Asset.browser_download_url $OutFile }
-}
-
-function Get-UserPath { [Environment]::GetEnvironmentVariable('Path', 'User') }
-
-function Set-UserPath([string]$Value) {
-    [Environment]::SetEnvironmentVariable('Path', $Value, 'User')
-}
-
-function Test-OnPath([string]$Path, [string]$Folder) {
-    return @($Path -split ';' | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') }).Count -gt 0
-}
-
-# A clang where pep-build looks for one (tools/compiler/driver/linker.pep):
-# on the PATH, or in the folders LLVM's installers use.
-function Find-Clang {
-    $command = Get-Command clang.exe -ErrorAction SilentlyContinue
-    if ($command) { return $command.Source }
-    foreach ($folder in @($env:ProgramFiles, $env:ProgramW6432, (Join-Path $env:USERPROFILE 'scoop\apps\llvm\current'))) {
-        if (-not $folder) { continue }
-        $candidate = if ($folder -like '*scoop*') { Join-Path $folder 'bin\clang.exe' } else { Join-Path $folder 'LLVM\bin\clang.exe' }
-        if (Test-Path $candidate) { return $candidate }
-    }
-    return $null
-}
-
-# Installs LLVM with the first package manager present, else with LLVM's
-# own installer from its GitHub release.
-function Install-Llvm([string]$Work) {
-    if (Get-Command scoop -ErrorAction SilentlyContinue) {
-        if (Ask 'Install LLVM with "scoop install llvm"?') { scoop install llvm; return }
-    } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
-        if (Ask 'Install LLVM with "winget install LLVM.LLVM"?') {
-            winget install --id LLVM.LLVM --exact --accept-package-agreements --accept-source-agreements
-            return
+        if ($release.tag_name.Contains('-') -and $release.tag_name -ne $wanted) { continue }
+        if ($wanted -and $release.tag_name -ne $wanted) { continue }
+        $number = $release.tag_name.Substring(1)
+        $names = @("pepper-$number-$Target.zip", "pepper-install-$number-$Target.zip")
+        $assets = @{}
+        foreach ($name in $names + ($names | ForEach-Object { "$_.sha256" })) {
+            $asset = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+            if ($asset) { $assets[$name] = $asset }
         }
-    } elseif (Get-Command choco -ErrorAction SilentlyContinue) {
-        if (Ask 'Install LLVM with "choco install llvm" (as administrator)?') {
-            Start-Process choco -ArgumentList 'install', 'llvm', '-y' -Verb RunAs -Wait
-            return
-        }
+        if (-not ($assets[$names[0]] -and $assets[$names[1]])) { continue }
+        return [pscustomobject]@{ Tag = $release.tag_name; Names = $names; Assets = $assets }
+    }
+    if ($Version) { Fail "release $wanted has no pepper-$($wanted.Substring(1))-$Target.zip and pepper-install-$($wanted.Substring(1))-$Target.zip" }
+    Fail "no release of $Repo has a prebuilt Pepper and its installer for $Target yet"
+}
+
+# Downloads the asset $Name of $Release, and its .sha256, into $Work:
+# through the API with a token (a private repository's download links need
+# one), else from its download link.
+function Get-Asset($Release, [string]$Name, [string]$Work) {
+    foreach ($file in $Name, "$Name.sha256") {
+        $asset = $Release.Assets[$file]
+        if (-not $asset) { Fail "release $($Release.Tag) has no $file" }
+        $path = Join-Path $Work $file
+        if ($Token) { Get-Url $asset.url $path 'application/octet-stream' }
+        else { Get-Url $asset.browser_download_url $path }
+    }
+    return Join-Path $Work $Name
+}
+
+# Checks the installer archive against its .sha256 and unpacks its
+# pep-install.exe into $Work\installer; returns its path.
+function Expand-Installer([string]$Zip, [string]$Work) {
+    if (-not (Test-Path "$Zip.sha256")) { Fail "no $Zip.sha256 to check the installer against" }
+    $expected = ((Get-Content -Raw "$Zip.sha256").Trim() -split '\s+')[0]
+    $actual = (Get-FileHash -Algorithm SHA256 $Zip).Hash
+    if ($expected -ine $actual) { Fail "$(Split-Path -Leaf $Zip) does not match its checksum (expected $expected, got $actual)" }
+    $folder = Join-Path $Work 'installer'
+    Expand-Archive -Path $Zip -DestinationPath $folder
+    $installer = Join-Path $folder 'pep-install.exe'
+    if (-not (Test-Path $installer)) { Fail "$(Split-Path -Leaf $Zip) holds no pep-install.exe" }
+    # Files from the internet carry a mark that makes SmartScreen ask
+    # before each one runs.
+    Unblock-File $installer
+    return $installer
+}
+
+function Invoke-Installer([string]$Installer, [string[]]$Arguments) {
+    & $Installer @Arguments
+    if ($LASTEXITCODE -ne 0) { Fail "pep-install $($Arguments[0]) failed; see the error above" }
+}
+
+$env:PEPPER_HOME = $Prefix
+
+# A home set up by pep-install uninstalls itself.
+$homeInstaller = Join-Path $Prefix 'bin\pep-install.exe'
+$knowsUninstall = $false
+if ($Uninstall -and (Test-Path $homeInstaller)) {
+    # An older pep-install has no uninstall; its error on stderr throws here.
+    try { & $homeInstaller uninstall --help *> $null; $knowsUninstall = ($LASTEXITCODE -eq 0) } catch { }
+}
+if ($knowsUninstall) {
+    # Copied out first: a running program cannot remove its own file.
+    $copy = Join-Path ([IO.Path]::GetTempPath()) ("pep-install-" + [Guid]::NewGuid() + '.exe')
+    Copy-Item $homeInstaller $copy
+    try { Invoke-Installer $copy @('uninstall') } finally { Remove-Item -Force $copy -ErrorAction SilentlyContinue }
+    return
+}
+
+if ([Environment]::Is64BitOperatingSystem -eq $false -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+    Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"
+}
+$work = Join-Path ([IO.Path]::GetTempPath()) ("pepper-install-" + [Guid]::NewGuid())
+New-Item -ItemType Directory -Path $work | Out-Null
+try {
+    if ($Archive) {
+        if (-not (Test-Path $Archive)) { Fail "no archive at $Archive" }
+        $toolchain = (Resolve-Path $Archive).Path
+        $installerZip = Join-Path (Split-Path -Parent $toolchain) ((Split-Path -Leaf $toolchain) -replace '^pepper-', 'pepper-install-')
+        if (-not (Test-Path $installerZip)) { Fail "no installer archive $installerZip beside $toolchain" }
     } else {
-        $installer = "LLVM-$LlvmVersion-win64.exe"
-        $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/$installer"
-        if (Ask "No Scoop, winget or Chocolatey found. Download and run LLVM's installer ($url)?") {
-            $path = Join-Path $Work $installer
-            Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $path
-            # /S installs silently into Program Files; it asks for elevation.
-            Start-Process $path -ArgumentList '/S' -Verb RunAs -Wait
-            return
-        }
+        $release = Find-Release $work
+        Say "downloading Pepper $($release.Tag.Substring(1)) ($Target)"
+        $installerZip = Get-Asset $release $release.Names[1] $work
+        if (-not $Uninstall) { $toolchain = Get-Asset $release $release.Names[0] $work }
     }
-    Warn 'install LLVM before building a program: winget install LLVM.LLVM (or scoop install llvm, or choco install llvm)'
-}
-
-# Whether a Visual Studio or Build Tools install has the MSVC x64 tools,
-# which carry the libraries (and with them the Windows SDK) clang links with.
-function Test-MsvcTools {
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    if (-not (Test-Path $vswhere)) { return $false }
-    $found = & $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    return [bool]$found
-}
-
-function Install-MsvcTools {
-    $workload = '--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended'
-    if ((Get-Command winget -ErrorAction SilentlyContinue) -and
-        (Ask 'Linking needs the MSVC libraries and Windows SDK. Install the Visual Studio Build Tools C++ workload with winget?')) {
-        winget install --id Microsoft.VisualStudio.2022.BuildTools --exact --accept-package-agreements --accept-source-agreements --override $workload
+    $installer = Expand-Installer $installerZip $work
+    if ($Uninstall) {
+        Invoke-Installer $installer @('uninstall')
         return
     }
-    Warn 'install the Visual Studio Build Tools with the "Desktop development with C++" workload before building a program: https://visualstudio.microsoft.com/visual-cpp-build-tools/'
+    $arguments = @('setup', '--archive', $toolchain)
+    if ($Yes) { $arguments += '--yes' }
+    if ($NoModifyPath) { $arguments += '--no-modify-path' }
+    if ($NoPrerequisites) { $arguments += '--no-prerequisites' }
+    Invoke-Installer $installer $arguments
+} finally {
+    Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
-
-function Uninstall-Pepper {
-    if (Test-Path $Prefix) {
-        if (-not (Test-Path (Join-Path $Prefix 'bin\pep-build.exe')) -and -not (Test-Path (Join-Path $Prefix 'toolchains'))) {
-            Fail "$Prefix does not look like a Pepper install (no bin\pep-build.exe or toolchains); remove it yourself"
-        }
-        Remove-Item -Recurse -Force $Prefix
-        Say "removed $Prefix"
-    } else {
-        Say "nothing installed at $Prefix"
-    }
-    $bin = Join-Path $Prefix 'bin'
-    $userPath = Get-UserPath
-    if ($userPath -and (Test-OnPath $userPath $bin)) {
-        Set-UserPath ((($userPath -split ';') | Where-Object { $_ -and $_.TrimEnd('\') -ine $bin.TrimEnd('\') }) -join ';')
-        Say "removed $bin from your PATH"
-    }
-}
-
-# Installs the unpacked toolchain as $Prefix\toolchains\<version>, beside
-# any others, and makes it the default; the home's bin holds the entry
-# point and pep-install, which run the toolchains (see pep-install). A flat
-# install from before toolchains moves into toolchains\ first.
-function Install-Toolchain([string]$Unpacked, [string]$ToolchainVersion) {
-    # An archive named for no release (a `dev` build) is installed under
-    # the version its compiler reports, which pep-install can read.
-    if ($ToolchainVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
-        $reported = (& (Join-Path $Unpacked 'bin\pep-build.exe') --version 2>$null | Select-Object -First 1)
-        if ($reported -notmatch '^pep-build (\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?)$') { Fail "cannot tell the version of $Unpacked\bin\pep-build.exe" }
-        $ToolchainVersion = $Matches[1]
-    }
-    Move-FlatInstall
-    $toolchains = Join-Path $Prefix 'toolchains'
-    $bin = Join-Path $Prefix 'bin'
-    New-Item -ItemType Directory -Force -Path $toolchains, $bin | Out-Null
-    $destination = Join-Path $toolchains $ToolchainVersion
-    if (Test-Path $destination) { Remove-Item -Recurse -Force $destination }
-    Move-Item $Unpacked $destination
-    # A release from before toolchains has no entry point that runs them;
-    # the home keeps its own.
-    if (Test-Path (Join-Path $destination 'bin\pep-install.exe')) {
-        foreach ($tool in 'pepper.exe', 'pep-install.exe') {
-            $entryPoint = Join-Path $bin $tool
-            # A running program can be renamed but not overwritten.
-            if (Test-Path "$entryPoint.old") { Remove-Item -Force "$entryPoint.old" -ErrorAction SilentlyContinue }
-            if (Test-Path $entryPoint) { Move-Item -Force $entryPoint "$entryPoint.old" }
-            Copy-Item (Join-Path $destination "bin\$tool") $entryPoint
-            Remove-Item -Force "$entryPoint.old" -ErrorAction SilentlyContinue
-        }
-    }
-    Set-Content -Path (Join-Path $Prefix 'default-toolchain') -Value $ToolchainVersion
-}
-
-# Moves an install from before toolchains (bin\pep-build.exe and runtime\
-# in $Prefix itself) into toolchains\<its version>, so it stays installed.
-function Move-FlatInstall {
-    $compiler = Join-Path $Prefix 'bin\pep-build.exe'
-    if (-not (Test-Path $compiler)) { return }
-    $reported = (& $compiler --version 2>$null | Select-Object -First 1)
-    $old = if ($reported -match '^pep-build (\d+\.\d+\.\d+)$') { $Matches[1] } else { '' }
-    $destination = Join-Path $Prefix "toolchains\$old"
-    if (-not $old -or (Test-Path $destination)) {
-        foreach ($entry in 'bin', 'runtime', 'LICENSE.md') {
-            $path = Join-Path $Prefix $entry
-            if (Test-Path $path) { Remove-Item -Recurse -Force $path }
-        }
-        return
-    }
-    New-Item -ItemType Directory -Force -Path $destination | Out-Null
-    foreach ($entry in 'bin', 'runtime', 'LICENSE.md') {
-        $path = Join-Path $Prefix $entry
-        if (Test-Path $path) { Move-Item $path (Join-Path $destination $entry) }
-    }
-    Say "moved the earlier install, Pepper $old, into $destination"
-}
-
-# Installs a release from before toolchains, which has no pep-install, as
-# releases did then: bin\ and runtime\ in $Prefix itself, replacing it.
-function Install-Flat([string]$Unpacked) {
-    foreach ($entry in Get-ChildItem $Unpacked) {
-        $destination = Join-Path $Prefix $entry.Name
-        if (Test-Path $destination) { Remove-Item -Recurse -Force $destination }
-        Move-Item $entry.FullName $destination
-    }
-}
-
-function Install-Pepper {
-    if ([Environment]::Is64BitOperatingSystem -eq $false -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
-        Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
-    }
-    $work = Join-Path ([IO.Path]::GetTempPath()) ("pepper-install-" + [Guid]::NewGuid())
-    New-Item -ItemType Directory -Path $work | Out-Null
-    try {
-        if ($Archive) {
-            if (-not (Test-Path $Archive)) { Fail "no archive at $Archive" }
-            if (-not (Test-Path "$Archive.sha256")) { Fail "no $Archive.sha256 to check the archive against" }
-            $name = Split-Path -Leaf $Archive
-            $release = [pscustomobject]@{ Name = $name }
-            $zip = Join-Path $work $name
-            $sum = "$zip.sha256"
-            Copy-Item $Archive $zip
-            Copy-Item "$Archive.sha256" $sum
-            Say "installing $name into $Prefix"
-        } else {
-            $release = Find-Release $work
-            Say "installing Pepper $($release.Tag.Substring(1)) ($Target) into $Prefix"
-            $zip = Join-Path $work $release.Name
-            $sum = "$zip.sha256"
-            Get-Asset $release.Archive $zip
-            Get-Asset $release.Checksum $sum
-        }
-        $expected = ((Get-Content -Raw $sum).Trim() -split '\s+')[0]
-        $actual = (Get-FileHash -Algorithm SHA256 $zip).Hash
-        if ($expected -ine $actual) { Fail "$($release.Name) does not match its checksum (expected $expected, got $actual)" }
-
-        Expand-Archive -Path $zip -DestinationPath $work
-        $unpacked = Join-Path $work ([IO.Path]::GetFileNameWithoutExtension($release.Name))
-        if (-not (Test-Path (Join-Path $unpacked 'bin\pep-build.exe'))) { Fail "$($release.Name) does not hold bin\pep-build.exe" }
-        New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
-        $installedVersion = ([IO.Path]::GetFileNameWithoutExtension($release.Name)) -replace '^pepper-', '' -replace "-$Target$", ''
-        if ((Test-Path (Join-Path $unpacked 'bin\pep-install.exe')) -or (Test-Path (Join-Path $Prefix 'bin\pep-install.exe'))) {
-            Install-Toolchain $unpacked $installedVersion
-        } else {
-            Install-Flat $unpacked
-        }
-        # Files from the internet carry a mark that makes SmartScreen ask
-        # before each one runs.
-        Get-ChildItem -Recurse $Prefix | Unblock-File
-        $bin = Join-Path $Prefix 'bin'
-        Say "installed $(& (Join-Path $bin 'pepper.exe') --version)"
-
-        if (-not (Test-OnPath $env:Path $bin)) {
-            $userPath = Get-UserPath
-            if ($NoModifyPath) {
-                Say "add $bin to your PATH to run pepper"
-            } elseif (Test-OnPath $userPath $bin) {
-                Say 'open a new terminal to run pepper'
-            } elseif (Ask "Add $bin to your PATH?") {
-                Set-UserPath ((@($userPath -split ';' | Where-Object { $_ }) + $bin) -join ';')
-                Say "added $bin to your PATH; open a new terminal to run pepper"
-            } else {
-                Say "add $bin to your PATH to run pepper"
-            }
-            $env:Path = "$env:Path;$bin"
-        }
-
-        if (-not $NoPrerequisites) {
-            if (-not (Find-Clang)) {
-                Say 'Linking programs needs clang (LLVM), which is not installed.'
-                Install-Llvm $work
-            }
-            if (-not (Test-MsvcTools)) {
-                Install-MsvcTools
-            }
-        }
-
-        # Builds and runs a program with the new install, from an empty folder.
-        $hello = Join-Path $work 'hello'
-        New-Item -ItemType Directory -Path $hello | Out-Null
-        Set-Content -Path (Join-Path $hello 'hello.pep') -Value "main(): int {`n    print(`"Pepper is installed.`");`n    return 0;`n}"
-        Push-Location $hello
-        try {
-            & (Join-Path $bin 'pepper.exe') build hello.pep -o hello.exe
-            if ($LASTEXITCODE -ne 0) { Fail "Pepper is installed in $Prefix, but could not build a program; see the error above" }
-            & .\hello.exe
-        } finally {
-            Pop-Location
-        }
-    } finally {
-        Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
-    }
-}
-
-if ($Uninstall) { Uninstall-Pepper } else { Install-Pepper }
