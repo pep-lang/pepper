@@ -13,8 +13,8 @@ const counter = async.Atomic<int>(7);
 const name = Label("pepper");
 
 main(): int {
-    # Read a global.
-    if (LIMIT != 7 || counter.load() != 7) { return -1; }
+    # Read a global: the constant and the atomic's start agree.
+    if (counter.load() != LIMIT) { return -1; }
 
     # Change state through a global, then read it back.
     counter.fetch_add(3);

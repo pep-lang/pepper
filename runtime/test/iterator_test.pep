@@ -194,8 +194,8 @@ take_while_and_skip_while_split_at_the_first_failure() {
 [Test]
 step_by_yields_the_first_then_every_step() {
     var stepped = (0..10).step_by(3).to_array();
-    expect_equal(stepped.count, 4);
-    expect_equal(stepped[3], 9);
+    expect_true(stepped == [0, 3, 6, 9]);
+    expect_true((1..>10).step_by(4).to_array() == [1, 5, 9]);
     expect_equal((0..3).step_by(1).count(), 3);
 }
 

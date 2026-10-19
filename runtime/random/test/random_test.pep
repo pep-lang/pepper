@@ -34,8 +34,16 @@ next_int_covers_the_range_and_no_more() {
         expect_true(s);
     }
     expect_equal(g.next_int(5..>5), 5);
-    var wide = g.next_int(-2147483648..>2147483647);
-    expect_true(wide >= -2147483648);
+    # The whole of int's range is reached: both far ends turn up.
+    var low_seen = false;
+    var high_seen = false;
+    for (var i in 0..200) {
+        var wide = g.next_int(-2147483648..>2147483647);
+        low_seen = low_seen || wide < -1000000000;
+        high_seen = high_seen || wide > 1000000000;
+    }
+    expect_true(low_seen);
+    expect_true(high_seen);
 }
 
 [Test]
@@ -70,6 +78,7 @@ shuffle_keeps_every_element() {
     expect_true(choice >= 0 && choice < 50);
     var empty = Array<int>();
     g.shuffle(empty);
+    expect_equal(empty.count, 0 as ulong);
 }
 
 [Test]
@@ -84,7 +93,13 @@ thread_generator_and_entropy() {
     random.shuffle(names);
     expect_equal(names.count, 2 as ulong);
     expect_true(random.next_ulong() != random.next_ulong());
-    random.next_bool();
+    var trues = 0;
+    for (var i in 0..200) {
+        if (random.next_bool()) {
+            trues += 1;
+        }
+    }
+    expect_true(trues > 0 && trues < 200);
 
     var key = random.bytes(300);
     expect_equal(key.count, 300 as ulong);

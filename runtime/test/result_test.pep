@@ -41,10 +41,12 @@ check_good(good: bool): Result<void> {
 # `Result<int, Error>` is the same specialization shape as `Result<int>`.
 [Test]
 explicit_terror_matches_default() {
-    var a = Result<int>.ok(1);
-    var b = Result<int, Error>.err(Error("x"));
+    Result<int, Error> a = Result<int>.ok(1);
+    Result<int> b = Result<int, Error>.err(Error("x"));
     expect_true(a.is_ok());
+    expect_equal(a.value(), 1);
     expect_true(b.is_err());
+    expect_equal(b.error().message, "x");
 }
 
 [Test]
@@ -108,5 +110,5 @@ void_value() {
     ok.value();
     var err = check_good(false);
     expect_true(err.is_err());
-    expect_equal(err.error().message.length, 3);
+    expect_equal(err.error().message, "bad");
 }

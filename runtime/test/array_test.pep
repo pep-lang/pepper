@@ -32,7 +32,9 @@ append_and_count() {
     a.append(2);
     a.append(3);
     expect_equal(a.count, 3);
-    expect_equal(a[0] + a[1] + a[2], 6);
+    expect_equal(a[0], 1);
+    expect_equal(a[1], 2);
+    expect_equal(a[2], 3);
 }
 
 [Test]
@@ -179,7 +181,8 @@ array_of_structs() {
     p.y = 4;
     points.append(p);
     var q = points[0];
-    expect_equal(q.x + q.y, 7);
+    expect_equal(q.x, 3);
+    expect_equal(q.y, 4);
 }
 
 [Test]
