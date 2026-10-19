@@ -88,6 +88,30 @@ reports_a_file_that_does_not_build() {
 }
 
 [Test]
+reports_a_test_that_leaks_or_over_releases() {
+    # The runner counts live allocations around each test body
+    # (runtime/testing/runner.pep): one left behind, or one freed that the
+    # test did not allocate (from C's calloc, uncounted), fails the test.
+    var folder = TempFolder("pep_test_leaks");
+    write_file(
+        folder.path.join("leak_test.pep"),
+        "extern void* calloc(ulong count, ulong size);\n\n"
+            + "[Test]\nleaks() {\n    _pep_malloc(1024);\n}\n\n"
+            + "[Test]\nover_releases() {\n    _pep_free(calloc(1, 1024));\n}\n\n"
+            + "[Test]\nbalances() {\n    _pep_free(_pep_malloc(1024));\n}\n"
+    );
+    var ran = pep_test(folder.path, Array<String>());
+    expect_exit(ran, 1);
+    var text = ran.stdout + ran.stderr;
+    expect_contains(text, "test leaks ... FAILED (");
+    expect_contains(text, "test over_releases ... FAILED (");
+    expect_contains(text, "test balances ... ok (");
+    expect_contains(text, "error: test 'leaks' left 1 allocation behind\n");
+    expect_contains(text, "error: test 'over_releases' released 1 allocation too many\n");
+    expect_ends_with(ran.stdout, "1 passed, 2 failed\n");
+}
+
+[Test]
 reports_test_files_of_a_module_that_clash() {
     # The test files of a module's folder see each other's names (their
     # tests' included), so two `helper`s clash in their folder's program;
