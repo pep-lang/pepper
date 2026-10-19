@@ -19,15 +19,14 @@
 # builds it with the installed pep-build (scripts/ci-build-compiler.sh, the
 # release's stage 1), and every later step uses it.
 #
-# Every job runs on a self-hosted runner: pepper-windows and pepper-linux (a
-# Windows service and a WSL systemd service on the maintainer's machine) and
-# pepper-macos (a launchd service on an arm64 Mac, with Homebrew llvm@20).
-# The Linux runner has LLVM 20 preinstalled and may `sudo apt-get` to add
-# packages.
+# Every job runs on a GitHub-hosted runner: windows-2025, ubuntu-24.04 and
+# macos-15 (arm64). Hosted runners start clean, so each job provisions LLVM
+# (apt, Homebrew, or the llvm-package archive on Windows) and builds from
+# scratch.
 #
 # CI runs on each push to main (a merge) and by hand (workflow_dispatch),
-# not on pull requests: the runners share the maintainer's machine, and a run
-# per PR push queued behind itself. Test a PR before merging it with the
+# not on pull requests yet (the self-hosted runners it used to run on
+# could not take a run per PR push). Test a PR before merging it with the
 # pre-merge checks, or run CI on its branch from the Actions tab ("Run
 # workflow", pick the branch) or `gh workflow run ci.yml --ref <branch>`.
 #
@@ -56,7 +55,7 @@ jobs:
   # skills under .agents/ and .claude/) skips every test job below.
   # docs/examples/ is code: tools/pep-doc/examples_test.pep builds and runs it.
   changes:
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     # It takes seconds. A run cancelled while this job is being handed to a
     # runner has hung here until the timeout, holding the next run (same
     # concurrency group) behind it, so keep the timeout short.
@@ -149,13 +148,13 @@ jobs:
     uses: ./.github/workflows/docs.yml
 
   test-windows:
-    runs-on: pepper-windows
+    runs-on: windows-2025
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # Provisioning LLVM costs ~5 minutes on a cold cache. 45 leaves room for
-    # a slow download without hanging forever.
-    timeout-minutes: 45
+    # Hosted runners have 4 cores: the suite took 16-22 min on the
+    # self-hosted 32-core PC, and provisioning LLVM ~5 more on a cold cache.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v7
@@ -229,12 +228,12 @@ jobs:
   # The suite on macOS against the default LLVM, from Homebrew. Required,
   # through `test` (see the top of this file).
   test-macos:
-    runs-on: pepper-macos
+    runs-on: macos-15
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
     # 10 more for building a changed compiler.
-    timeout-minutes: 40
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v7
@@ -290,21 +289,21 @@ jobs:
       - name: Pepper tests
         shell: bash
         env:
-          # The macOS runner has 16 GB. Uncapped, 8 tests at once each
-          # checking 8 compilation units at once ran it out of memory and
-          # kernel-panicked it (214 pep-build processes).
+          # The hosted macOS runner has 7 GB. Uncapped, 8 tests at once each
+          # checking 8 compilation units at once ran a 16 GB Mac out of
+          # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 4
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
 
   # The suite on Linux. Required: `test` gates on it.
   test-linux:
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
     # 10 more for building a changed compiler.
-    timeout-minutes: 35
+    timeout-minutes: 90
     # build_cache_tests verify the cache (`--verify-cache`) on every
     # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
     # the other tests make too, which doubles the cost of each warm build.
@@ -410,9 +409,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: pepper-linux
+          - runner: ubuntu-24.04
             os: linux
-          - runner: pepper-macos
+          - runner: macos-15
             os: macos
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
@@ -438,11 +437,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: pepper-linux
+          - runner: ubuntu-24.04
             os: linux
-          - runner: pepper-macos
+          - runner: macos-15
             os: macos
-          - runner: pepper-windows
+          - runner: windows-2025
             os: windows
     runs-on: ${{ matrix.runner }}
     # A cold runner downloads the Windows SDK (or, on Windows, LLVM's
@@ -529,7 +528,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [pepper-linux, pepper-macos, pepper-windows]
+        runner: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 5
     steps:
@@ -549,12 +548,11 @@ jobs:
   # The gate. It always runs, even when the run is cancelled, so it can never
   # report the success a skipped job does: it passes only when test-windows,
   # test-linux and test-macos passed on this commit, or the commit changes
-  # only prose. It runs on pepper-linux like the rest, never on a
-  # GitHub-hosted runner, whose Actions quota the account spends in days.
+  # only prose.
   test:
     if: always()
     needs: [changes, test-windows, test-linux, test-macos]
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read

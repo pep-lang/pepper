@@ -17,14 +17,13 @@
 #
 # It runs only when dispatched: by release.yml on a vX.Y.Z tag once that
 # release's archives are published, or by hand (`gh workflow run vsix.yml`).
-# A tag push does not start it: its legs would wait for the release's
-# toolchain on the same self-hosted runners the release builds on, and hold
-# them, so neither could finish.
+# A tag push does not start it: its legs would wait for a release
+# toolchain not yet published.
 # A release tag or a dispatch on main publishes; a dispatch on any other
 # branch uploads the vsix as a run artifact instead, so a branch can be
 # tested without replacing the released extension.
 #
-# Every leg runs on a self-hosted runner and must pass. There is no arm64
+# Every leg runs on a GitHub-hosted runner and must pass. There is no arm64
 # Windows or Linux runner, so the vsix bundles no server for win32-arm64 or
 # linux-arm64; on those platforms (and any other without a bundled server) the
 # extension still highlights and tells the user how to point `pepper.lspPath`
@@ -47,15 +46,15 @@ jobs:
       fail-fast: false
       matrix:
         # One native runner per target, except macOS: both darwin legs run
-        # on the self-hosted arm64 pepper-macos runner, and the x64 one names
+        # on the arm64 macos-15 runner, and the x64 one names
         # its target triple explicitly. Apple's toolchain links either arch
         # without extra setup, and Rosetta runs the x64 binary for the smoke
         # test. `triple` empty means the host.
         include:
-          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", triple: "" }
-          - { target: linux-x64, runs-on: pepper-linux, exe: "", triple: "" }
-          - { target: darwin-x64, runs-on: pepper-macos, exe: "", triple: x86_64-apple-darwin }
-          - { target: darwin-arm64, runs-on: pepper-macos, exe: "", triple: "" }
+          - { target: win32-x64, runs-on: windows-2025, exe: ".exe", triple: "" }
+          - { target: linux-x64, runs-on: ubuntu-24.04, exe: "", triple: "" }
+          - { target: darwin-x64, runs-on: macos-15, exe: "", triple: x86_64-apple-darwin }
+          - { target: darwin-arm64, runs-on: macos-15, exe: "", triple: "" }
     runs-on: ${{ matrix.runs-on }}
     # Installing the toolchain and an optimized build of pep-lsp; a tag also
     # waits for release.yml to publish that toolchain.
@@ -64,7 +63,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Hosted images ship node; the self-hosted runners may not.
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
@@ -123,7 +121,7 @@ jobs:
           retention-days: 1
 
   package:
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     needs: build

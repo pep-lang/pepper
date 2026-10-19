@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   prepare:
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
@@ -83,9 +83,9 @@ jobs:
           runners=''
           for platform in $(printf '%s' "$PLATFORMS" | tr ',' ' '); do
             case "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
-              linux|ubuntu)  runner=pepper-linux ;;
-              macos|mac|osx) runner=pepper-macos ;;
-              windows|win)   runner=pepper-windows ;;
+              linux|ubuntu)  runner=ubuntu-24.04 ;;
+              macos|mac|osx) runner=macos-15 ;;
+              windows|win)   runner=windows-2025 ;;
               '')            continue ;;
               *) echo "::error::unknown platform '$platform'"; exit 1 ;;
             esac
@@ -175,7 +175,7 @@ jobs:
 
       # --no-packages stops the Unix leg from *installing* an apt/brew LLVM to
       # package; it does not stop one already on the image from being adopted
-      # (the pepper-macos runner has Homebrew llvm@20), which is what the version
+      # (the macos-15 runner has Homebrew llvm@20), which is what the version
       # assertion in the next step is for.
       - name: Provision full LLVM (Windows)
         if: runner.os == 'Windows'
@@ -216,7 +216,7 @@ jobs:
 
           # The asset is named from the pinned version, but the prefix is
           # whatever provisioning settled on, and those can differ: an
-          # installed LLVM 20 of another patch release (the pepper-macos
+          # installed LLVM 20 of another patch release (the macos-15
           # runner has Homebrew llvm@20 preinstalled) is adopted as is.
           # Publishing it under the pinned version would be undetectable
           # afterwards, so compare before packaging.

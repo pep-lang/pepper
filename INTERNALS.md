@@ -3490,18 +3490,17 @@ real with the `platform-test` workflow (`.agents/skills/platform-test`).
 
 ## 11. CI
 
-Every job in every workflow runs on a self-hosted runner, never a
-GitHub-hosted one: **`pepper-windows`** and **`pepper-linux`** (x64), and
-**`pepper-macos`** (arm64). A new job picks one of those labels. Every job
+Every job in every workflow runs on a GitHub-hosted runner:
+**`windows-2025`** and **`ubuntu-24.04`** (x64), and **`macos-15`**
+(arm64). A new job picks one of those labels. Every job
 installs the published build of main (`scripts/ci-install-toolchain.sh`,
 #713) and builds and tests with it, except where the compiler changed: a merge
 that changes `tools/compiler/` (`changes` classifies it), or a dispatch on
 a branch, has each test and
 cross-link job build that compiler with the installed one first
 (`scripts/ci-build-compiler.sh`, the release's stage 1), and every later
-step uses it, so the whole suite tests the changed compiler. `ci.yml` jobs build into a folder beside the checkout
-(`PEPPER_TARGET_DIR`) on a self-hosted runner, and into `target/` on a
-GitHub-hosted one.
+step uses it, so the whole suite tests the changed compiler. The macOS and Linux jobs of `ci.yml` build into a folder beside the
+checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
 
 - **`ci.yml`** (pushes to main, and dispatch; not pull requests, so test a
   PR with the pre-merge checks or dispatch CI on its branch):
@@ -3509,14 +3508,14 @@ GitHub-hosted one.
     skipped, since a skipped job counts as passing) and passes only when
     `test-windows`, `test-linux` and `test-macos` succeeded or the commit
     is prose only. It fails on a cancelled run.
-  - `test-windows` (**`pepper-windows`**): provision LLVM 20
+  - `test-windows` (**`windows-2025`**): provision LLVM 20
     (`ci-provision-llvm.sh`, cached; the compiler's tests link it through
     pepper-llvm), install the newest published toolchain (the `x.y.z-dev`
     prerelease `release.yml` publishes on each merge, or a release with a
     higher version, through `install.sh` / `install.ps1`), build `tools/compiler` with it when it changed
     (`ci-build-compiler.sh`), run `scripts/pepper-tests.sh`, and `pep-doc
     check`.
-  - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
+  - `test-macos` (**`macos-15`**) and `test-linux` (**`ubuntu-24.04`**)
     do the same; `test-linux` also cross-compiles a few examples for Linux
     arm64 and runs them under qemu. Both are required, through `test`,
     which fails on a cancelled or timed-out job as on a failed one.
@@ -3557,8 +3556,8 @@ GitHub-hosted one.
   then its `bump` job opens a pull request setting main to the next minor's
   `-dev` (when main still holds the released version). Either way it builds
   the toolchain for linux-x64 (in a `manylinux_2_28` container on
-  `pepper-linux`, for glibc 2.28, with LLVM 20 built from source and
-  cached), macos-arm64 (`pepper-macos`) and windows-x64 (`pepper-windows`)
+  `ubuntu-24.04`, for glibc 2.28, with LLVM 20 built from source and
+  cached), macos-arm64 (`macos-15`) and windows-x64 (`windows-2025`)
   with `scripts/release-build.sh`: it provisions LLVM and clang, installs
   stage 0 (the newest published toolchain, whatever `VERSION` holds,
   as CI installs it), builds pepc with
