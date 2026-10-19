@@ -3,12 +3,24 @@
 
 import process;
 
+[Target(OS(Linux) || OS(Mac))]
+_forks(): bool {
+    return true;
+}
+
+[Target(!OS(Linux) && !OS(Mac))]
+_forks(): bool {
+    return false;
+}
+
 [Test]
 fork_starts_a_copy_the_parent_waits_for() {
     var value = 41;
     var forked = process.fork();
     if (forked.is_err()) {
-        # Windows and WASI start processes only from a program.
+        # Windows and WASI start processes only from a program; Linux and
+        # macOS fork.
+        expect_false(_forks());
         return;
     }
     if (!forked.value().is_value()) {

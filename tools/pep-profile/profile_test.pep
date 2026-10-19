@@ -126,6 +126,11 @@ working_profiler(): String? {
     return Optional<String>.Empty;
 }
 
+# Whether this machine must have a profiler: CI's Linux runner has perf.
+_profiler_provisioned(): bool {
+    return os.system_os() == os.OperatingSystem.Linux and os.environment("CI").is_value();
+}
+
 # Whether `command` starts and succeeds.
 works(command: process.Command): bool {
     var ran = command.run();
@@ -136,6 +141,8 @@ works(command: process.Command): bool {
 a_program_profiles_end_to_end_when_a_profiler_is_installed() {
     var profiler = working_profiler();
     if (profiler.is_empty()) {
+        # CI's Linux runner has perf.
+        expect_false(_profiler_provisioned());
         print("skipped: no samply, and no perf that can record here");
         return;
     }

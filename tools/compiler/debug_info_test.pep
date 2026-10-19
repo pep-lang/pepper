@@ -445,6 +445,8 @@ debug_static_expanded_writes_and_steps_through_the_expanded_source() {
 debug_static_takes_source_or_expanded_with_g() {
     var compiler = process.find_companion("pep-build");
     if (!compiler.is_value()) {
+        # CI always builds the pep-build the tests run.
+        expect_false(os.environment("CI").is_value());
         return;
     }
     var folder = TempFolder("debug_static_option");
