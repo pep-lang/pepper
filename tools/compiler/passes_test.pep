@@ -841,7 +841,14 @@ error_programs(): String[] {
         # 'Cold' takes no arguments
         "# expect: main.pep:2:2: error: 'Cold' takes no arguments\n[Cold(\"rarely\")]\nf(): int {\n    return 1;\n}\n\nmain(): int {\n    return f();\n}\n",
         # 'Cold' applies only to a function, method or constructor
-        "# expect: main.pep:2:2: error: 'Cold' applies only to a function, method or constructor\n[Cold]\nstruct S {}\n\nmain(): int {\n    return 0;\n}\n"
+        "# expect: main.pep:2:2: error: 'Cold' applies only to a function, method or constructor\n[Cold]\nstruct S {}\n\nmain(): int {\n    return 0;\n}\n",
+        # A closure whose struct does not conform to the trait its slot's
+        # function type returns: a plain function, a generic one, a
+        # constructor argument, and a struct with a method of the wrong type.
+        "# expect: main.pep:12:24: error: 'Plain' does not conform to trait 'Source'\ntrait Source {\n    next(): int;\n}\nstruct Plain {\n    construct() {}\n}\ntake(make: (int) => Source): int {\n    return 0;\n}\nmain(): int {\n    return take((n) => Plain());\n}\n",
+        "# expect: main.pep:12:37: error: 'Plain' does not conform to trait 'Source<int>'\ntrait Source<T> {\n    next(): T;\n}\nstruct Plain {\n    construct() {}\n}\ntake<T, U>(item: T, make: (T) => Source<U>): int {\n    return 0;\n}\nmain(): int {\n    return take<int, int>(1, (n) => Plain());\n}\n",
+        "# expect: main.pep:15:27: error: 'Plain' does not conform to trait 'Source'\ntrait Source {\n    next(): int;\n}\nstruct Plain {\n    construct() {}\n}\nstruct Holder {\n    (int) => Source make;\n    construct(make: (int) => Source) {\n        this.make = make;\n    }\n}\nmain(): int {\n    var h = Holder((n) => Plain());\n    return 0;\n}\n",
+        "# expect: main.pep:15:24: error: 'Wrong' does not conform to trait 'Source'\ntrait Source {\n    next(): int;\n}\nstruct Wrong {\n    construct() {}\n    next(): bool {\n        return true;\n    }\n}\ntake(make: (int) => Source): int {\n    return 0;\n}\nmain(): int {\n    return take((n) => Wrong());\n}\n"
     ];
 }
 
