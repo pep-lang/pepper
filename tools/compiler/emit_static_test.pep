@@ -207,8 +207,8 @@ an_error_in_a_block_stops_it_as_it_stops_a_build() {
 
 # Emits and builds every `reflection-*` docs example whose index in the
 # listing is `part` modulo `parts`, and requires the expanded copy to print
-# what the original prints. Split in parts, since each example builds twice
-# and a slow runner would pass the test timeout with all of them in one.
+# what the original prints. Split one part per example, since each builds
+# twice and a loaded runner took up to 300 s for three in one test.
 _reflection_examples_round_trip(part: ulong, parts: ulong) {
     var examples = Path("../docs/examples");
     var programs = Array<Path>();
@@ -249,15 +249,45 @@ _reflection_examples_round_trip(part: ulong, parts: ulong) {
 
 [Test]
 reflection_examples_round_trip_part_1() {
-    _reflection_examples_round_trip(0, 3);
+    _reflection_examples_round_trip(0, 9);
 }
 
 [Test]
 reflection_examples_round_trip_part_2() {
-    _reflection_examples_round_trip(1, 3);
+    _reflection_examples_round_trip(1, 9);
 }
 
 [Test]
 reflection_examples_round_trip_part_3() {
-    _reflection_examples_round_trip(2, 3);
+    _reflection_examples_round_trip(2, 9);
+}
+
+[Test]
+reflection_examples_round_trip_part_4() {
+    _reflection_examples_round_trip(3, 9);
+}
+
+[Test]
+reflection_examples_round_trip_part_5() {
+    _reflection_examples_round_trip(4, 9);
+}
+
+[Test]
+reflection_examples_round_trip_part_6() {
+    _reflection_examples_round_trip(5, 9);
+}
+
+[Test]
+reflection_examples_round_trip_part_7() {
+    _reflection_examples_round_trip(6, 9);
+}
+
+[Test]
+reflection_examples_round_trip_part_8() {
+    _reflection_examples_round_trip(7, 9);
+}
+
+[Test]
+reflection_examples_round_trip_part_9() {
+    _reflection_examples_round_trip(8, 9);
 }
