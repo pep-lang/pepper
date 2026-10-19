@@ -20,7 +20,7 @@
 # $PEPPER_TARGET_DIR when it is set), beside a link to the `pep-build`, so
 # `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
 # `pep-doc check` finds every tool's `--help` there. Further arguments go
-# to every `pepper test` (`-f name`, `-j 1`, ...).
+# to every `pepper test` (`-f name`, `-j 1`, `--shard 2/4`, ...).
 #
 # Besides the plain run, the compress tests run again with `-D USE_ZLIB`
 # and the digest tests with `-D USE_LIBCRYPTO`, which link the system's

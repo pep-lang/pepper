@@ -80,6 +80,15 @@ pepper test json/test             # one module's
 pepper test -f parses test        # by name
 ```
 
+Further arguments to `scripts/pepper-tests.sh` go to each of its `pepper
+test` runs. `--shard I/N` splits every run into `N` parts and takes the
+`I`th, so the `N` runs from `1/N` to `N/N`, on as many machines, run the
+whole suite between them:
+
+```bash
+scripts/pepper-tests.sh target/compiler --shard 2/4
+```
+
 Tests run with `runtime/` as the current folder, so a test reads data
 files kept beside it by a path from there (`archive/test/gnu.tar.gz`).
 The builds go to `runtime/.pep/`, which git ignores. A test that writes

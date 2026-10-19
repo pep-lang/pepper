@@ -5,6 +5,7 @@
 #     pep-test src/math_test.pep        # the tests of one file
 #     pep-test -f parse src             # only tests whose name contains "parse"
 #     pep-test --list src               # list them without running them
+#     pep-test --shard 2/4 src          # the second of four parts of them
 #
 # The files holding `[Test]` functions in one folder are built together
 # with `pep-build --test` into one test program, which lists their tests
@@ -56,6 +57,11 @@ main(args: String[]): int {
         value_name = "SECONDS",
         default_value = DEFAULT_TIMEOUT
     );
+    var shard = parser.option(
+        "shard",
+        help = "run only the Ith of N parts of the tests, so the N runs from 1/N to N/N run each test once",
+        value_name = "I/N"
+    );
     var imports = parser.multiple("import-path", "I", "a directory pep-build searches for imports", value_name = "DIR");
     var library_dirs = parser.multiple(
         "library-path", "L", "a directory the linker searches for libraries", value_name = "DIR"
@@ -89,6 +95,9 @@ main(args: String[]): int {
     }
     if (options.jobs == 0) {
         options.jobs = 1;
+    }
+    if (shard.value_or("") != "" and !parse_shard(shard.value(), options)) {
+        return usage_error(parser, $"'--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard.value()}'");
     }
 
     var roots = paths.values();
@@ -129,6 +138,10 @@ struct Options {
     var defines: Array<String> = __null;
     var jobs: ulong = 1;
     var timeout: ulong = 60;
+    # `--shard I/N`: the run takes every test whose position in the list
+    # leaves `shard_index` (I - 1) when divided by `shard_count` (N).
+    var shard_index: ulong = 0;
+    var shard_count: ulong = 1;
 
     construct() {
         this.filters = Array<String>();
@@ -237,11 +250,18 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
         }
         index += 1;
     }
+    # Every N-th test, not a run of consecutive ones: a file's slow tests
+    # sit together (the docs examples' parts), and so spread over shards.
     var selected = Array<Test>();
+    ulong matched = 0;
     for (var test in tests) {
-        if (matches(test.name, options.filters)) {
+        if (!matches(test.name, options.filters)) {
+            continue;
+        }
+        if (matched % options.shard_count == options.shard_index) {
             selected.append(test);
         }
+        matched += 1;
     }
     var qualify = files.count > 1;
 
@@ -290,8 +310,11 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
         print("");
     }
     var summary = $"{passed} passed, {failed.count} failed";
-    if (selected.count < tests.count) {
-        summary += $", {tests.count - selected.count} filtered out";
+    if (matched < tests.count) {
+        summary += $", {tests.count - matched} filtered out";
+    }
+    if (selected.count < matched) {
+        summary += $", {matched - selected.count} in other shards";
     }
     if (broken > 0) {
         summary += $"; {broken} {plural(broken, "test program", "test programs")} did not build";
@@ -568,6 +591,22 @@ declares_tests(path: Path): bool {
         }
     }
     return false;
+}
+
+# Reads `--shard`'s `I/N` into `options`, returning whether it is one.
+parse_shard(text: String, options: Options): bool {
+    var parts = text.split("/");
+    if (parts.count != 2) {
+        return false;
+    }
+    var index = ulong.parse(parts[0]);
+    var count = ulong.parse(parts[1]);
+    if (index.is_empty() or count.is_empty() or index.value() == 0 or index.value() > count.value()) {
+        return false;
+    }
+    options.shard_index = index.value() - 1;
+    options.shard_count = count.value();
+    return true;
 }
 
 # Whether `name` contains one of `filters`, or there are none.

@@ -9,6 +9,7 @@ pepper test                          # every test under the current folder
 pepper test src/words_test.pep       # the tests of one file
 pepper test -f words src             # only tests whose name contains "words"
 pepper test --list src               # list them without running them
+pepper test --shard 2/4 src          # the second of four parts of them
 pepper test -I . geometry/tests      # tests that import the module geometry
 ```
 
@@ -40,6 +41,7 @@ pep-test [options] [path]...
 | `-f <text>`, `--filter <text>` | Run only the tests whose name contains the text; repeated, any of them | every test |
 | `-l`, `--list` | List the tests instead of running them | |
 | `-j <count>`, `--jobs <count>` | How many tests run at once | one per logical CPU |
+| `--shard <i>/<n>` | Run only the `i`th of `n` parts of the tests (`1` to `n`), so the `n` runs `1/n` to `n/n` run each test once | every test |
 | `-t <seconds>`, `--timeout <seconds>` | Fail a test still running after this long; `0` for no limit | 60 |
 | `-I <dir>`, `--import-path <dir>` | A folder `pep-build` searches for imports; repeatable | |
 | `-L <dir>`, `--library-path <dir>` | A folder the linker searches for libraries, for `pep-build`; repeatable | |
@@ -66,7 +68,11 @@ error.
    does not build is reported with the compiler's errors, and the other
    folders' tests still run.
 3. **Lists each program's tests** with `--list` and keeps those that match
-   `--filter`. With `--list` it prints them and stops: the test's name, or
+   `--filter`. With `--shard I/N` it keeps every `N`th of those, starting
+   with the `I`th: tests next to each other in the list, such as one
+   file's slow ones, land in different shards, and every test is in
+   exactly one, as long as the `N` runs see the same files. With `--list`
+   it prints them and stops: the test's name, or
    `file::name` when the tests come from more than one file.
 4. **Runs each test** as `program --run FILE::NAME --timeout SECONDS`,
    each in its own process, up to
@@ -81,8 +87,10 @@ error.
    process panics with a message that contains the attribute's text.
 5. **Reports the failures,** each with what the test printed (the panic's
    message and location) and why it failed, then a summary:
-   `2 passed, 1 failed`, with the number of tests `--filter` left out and of
-   test programs that did not build when there are any.
+   `2 passed, 1 failed`, with the number of tests `--filter` left out, of
+   tests left to other shards, and of test programs that did not build
+   when there are any. Each shard builds every test program: only the
+   tests' runs are split.
 
 The test programs are built in a temporary folder that is removed at the
 end. A test runs in the current folder, with `PEPPER_BACKTRACE=0` unless
