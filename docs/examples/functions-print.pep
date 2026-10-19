@@ -10,3 +10,11 @@ main(): int {
     print("{braces} alone print as written");
     return 0;
 }
+
+# Output:
+# Hello, world!
+# 42
+# (1.5, true)
+# Pepper has 42 items
+# 3 + 4 = 7
+# {braces} alone print as written

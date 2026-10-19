@@ -49,3 +49,7 @@ main(): int {
     print($"{sum_to(100)}");
     return 0;
 }
+
+# Output:
+# Hello, Pepper!
+# 5050

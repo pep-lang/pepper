@@ -34,3 +34,6 @@ main(): int {
     print($"{words} words, {digits} digits");   # 7 words, 8 digits
     return 0;
 }
+
+# Output:
+# 7 words, 8 digits

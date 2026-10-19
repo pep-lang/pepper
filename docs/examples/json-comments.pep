@@ -25,3 +25,12 @@ main(): int {
     # }
     return 0;
 }
+
+# Output:
+# {
+#   // Spaces per level.
+#   "tab_size": 2,
+#   "font": "Mono", // the editor's
+#   // Wrap long lines.
+#   "wrap": true
+# }

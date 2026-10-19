@@ -45,3 +45,7 @@ main(): int {
 is_even(n: int): bool {
     return n % 2 == 0;
 }
+
+# Output:
+# log: starting
+# log: done

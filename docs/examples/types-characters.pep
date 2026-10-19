@@ -21,3 +21,6 @@ main(): int {
     print($"{letter}");   # 97
     return 0;
 }
+
+# Output:
+# 97

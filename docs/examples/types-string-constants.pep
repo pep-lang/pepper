@@ -32,3 +32,6 @@ main(): int {
     assert(also == name, "same text");
     return 0;
 }
+
+# Output:
+# HELLO!

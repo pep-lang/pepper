@@ -14,3 +14,6 @@ main(): int {
     print("{0} at {1:.1}", point, price);   # (3, north) at 4.5
     return 0;
 }
+
+# Output:
+# (3, north) at 4.5

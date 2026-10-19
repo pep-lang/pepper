@@ -45,3 +45,6 @@ main(): int {
     assert(label !== __null, "now there is one");
     return 0;
 }
+
+# Output:
+# budget used up

@@ -42,7 +42,11 @@ mdBook's include syntax, so the text on the page is the file that was tested:
 
 `tools/pep-doc/examples_test.pep`, which `scripts/pepper-tests.sh` runs,
 builds and runs every example; each must return 0 from `main` and uses
-`assert` to check what it shows. `PEPPER_DOCS_EXAMPLE=structs` limits it to
+`assert` to check what it shows. An example that prints ends with an
+`# Output:` block, a `# ` line for each line it prints (`#` alone for an
+empty one), and must print exactly that; leave it out where the output
+differs between runs or platforms. A failure is printed as it happens.
+`PEPPER_DOCS_EXAMPLE=structs` limits it to
 the examples whose name starts with `structs`. A sample of the examples is
 also built at `-O2 -g`, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.

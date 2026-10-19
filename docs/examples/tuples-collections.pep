@@ -28,3 +28,7 @@ main(): int {
     }
     return 0;
 }
+
+# Output:
+# x: 1
+# y: 2

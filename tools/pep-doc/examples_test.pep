@@ -4,6 +4,9 @@
 # examples of several files, such as modules). The book includes the files
 # verbatim, so what a reader sees is what was tested here.
 #
+# An example that ends with an `# Output:` comment block must also print
+# exactly that: each following `# ` line is a line of its standard output.
+#
 # Every example is built unoptimized, as `pepper build` builds by default.
 # A sample that reaches most of the compiler and the runtime is built again
 # optimized and with debug info, where LLVM's verifier checks the debug info
@@ -12,7 +15,7 @@
 # `PEPPER_DOCS_EXAMPLE=structs` runs only the examples whose name starts
 # with `structs`.
 
-import [Directory, Path] from io;
+import [Directory, File, Path] from io;
 import os;
 import process;
 import [TempFolder] from testing;
@@ -199,7 +202,7 @@ builds_and_runs_optimized(part: ulong) {
             }
         }
         if (!found and only().is_empty) {
-            failures.append($"docs/examples has no '{name}'; update sample()");
+            fail(failures, $"docs/examples has no '{name}'; update sample()");
         }
     }
     var index = part;
@@ -210,12 +213,46 @@ builds_and_runs_optimized(part: ulong) {
     report(failures);
 }
 
-# Prints each of `failures` and fails the test when there is one.
+# Prints `failure` now, so a part that later hangs still shows it, and adds
+# it to `failures`.
+fail(failures: Array<String>, failure: String) {
+    print(failure);
+    failures.append(failure);
+}
+
+# Fails the test when there is a failure; each was printed as it happened.
 report(failures: Array<String>) {
-    for (var failure in failures) {
-        print(failure);
-    }
     expect_equal(failures.count, 0 as ulong);
+}
+
+# The standard output `entry` says it prints in its `# Output:` block, or
+# empty when it has none.
+expected_output(entry: Path): String? {
+    var text = File.read_to_string(entry);
+    expect_true(text.is_ok());
+    if (text.is_err()) {
+        return Optional<String>.Empty;
+    }
+    var lines = text.value().replace("\r", "").split("\n");
+    var start = 0 as ulong;
+    while (start < lines.count and lines[start] != "# Output:") {
+        start += 1;
+    }
+    if (start == lines.count) {
+        return Optional<String>.Empty;
+    }
+    var output = "";
+    for (var line in lines.slice(start + 1, lines.count)) {
+        if (line == "#") {
+            output += "\n";
+            continue;
+        }
+        if (!line.starts_with("# ")) {
+            break;
+        }
+        output += line.substr_bytes(2, line.size - 2) + "\n";
+    }
+    return Optional<String>.Value(output);
 }
 
 # The prefix `PEPPER_DOCS_EXAMPLE` limits the examples to; empty for all.
@@ -257,7 +294,7 @@ all_examples(): Array<Example> {
 check(example: Example, options: Array<String>, failures: Array<String>) {
     var compiler = process.find_companion("pep-build");
     if (compiler.is_empty()) {
-        failures.append("cannot find pep-build beside pep-test or on the PATH");
+        fail(failures, "cannot find pep-build beside pep-test or on the PATH");
         return;
     }
     var label = options.is_empty ? example.name : $"{example.name} ({" ".join(options)})";
@@ -275,11 +312,11 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         .stderr(process.Stream.Pipe)
         .run();
     if (build.is_err()) {
-        failures.append($"docs/examples/{label}: cannot run pep-build: {build.error().message}");
+        fail(failures, $"docs/examples/{label}: cannot run pep-build: {build.error().message}");
         return;
     }
     if (!build.value().status.success()) {
-        failures.append($"docs/examples/{label}: does not build:\n{build.value().stdout}{build.value().stderr}");
+        fail(failures, $"docs/examples/{label}: does not build:\n{build.value().stdout}{build.value().stderr}");
         return;
     }
     # Its own temporary folder: an example that writes under
@@ -299,13 +336,22 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         .run();
     Directory.remove_all(temp);
     if (ran.is_err()) {
-        failures.append($"docs/examples/{label}: cannot run it: {ran.error().message}");
+        fail(failures, $"docs/examples/{label}: cannot run it: {ran.error().message}");
         return;
     }
-    if (!ran.value().status.success()) {
-        var output = ran.value();
-        failures.append(
+    var output = ran.value();
+    if (!output.status.success()) {
+        fail(
+            failures,
             $"docs/examples/{label}: exited with {output.status.to_string()}\nstdout:\n{output.stdout}\nstderr:\n{output.stderr}"
+        );
+        return;
+    }
+    var expected = expected_output(example.entry);
+    if (expected.is_value() and output.stdout.replace("\r", "") != expected.value()) {
+        fail(
+            failures,
+            $"docs/examples/{label}: printed what its '# Output:' block does not say\nexpected:\n{expected.value()}\nprinted:\n{output.stdout}"
         );
     }
 }

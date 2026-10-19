@@ -42,3 +42,6 @@ main(): int {
     assert(!starts_high, "an empty array does not start high");
     return 0;
 }
+
+# Output:
+# not hot

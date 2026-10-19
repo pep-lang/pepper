@@ -27,3 +27,6 @@ main(): int {
     assert(parse_number("").ok_or(-1) == -1, "ok_or supplies a fallback");
     return 0;
 }
+
+# Output:
+# 'x' is not a digit

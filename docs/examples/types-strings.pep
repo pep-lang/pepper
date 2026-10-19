@@ -22,3 +22,6 @@ main(): int {
     print(message);
     return 0;
 }
+
+# Output:
+# Hello, Pepper!
