@@ -326,6 +326,25 @@ keeps_a_settled_summary_right_when_its_function_moves() {
 }
 
 [Test]
+moves_objects_by_copying_where_a_rename_cannot() {
+    var folder = TempFolder("store_across_drives");
+    var root = folder.path;
+    var built = root.join(Path("built"));
+    Directory.create_all(built.join(Path("nested")));
+    File.write_text(built.join(Path("0.o")), "object");
+    File.write_text(built.join(Path("nested")).join(Path("1.o")), "nested");
+    var target = root.join(Path("cache")).join(Path("key"));
+    Directory.create_all(target.parent().value());
+
+    expect_true(incremental._move_across_drives(built, target).is_ok());
+    expect_equal(File.read_to_string(target.join(Path("0.o"))).value(), "object");
+    expect_equal(File.read_to_string(target.join(Path("nested")).join(Path("1.o"))).value(), "nested");
+    expect_false(built.metadata().is_ok());
+    # Only the key's folder is left beside it: no staging copy.
+    expect_equal(Directory.open(target.parent().value()).value().entries().value().count, 1 as ulong);
+}
+
+[Test]
 keeps_the_objects_another_build_stored_first() {
     var folder = TempFolder("store_twice");
     var root = folder.path;
