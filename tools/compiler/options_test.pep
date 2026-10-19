@@ -198,8 +198,7 @@ emit_llvm_writes_the_ir_optimized_at_the_level() {
 [Test]
 constructors_zero_their_object_inline() {
     # A constructor's allocation has a constant size, so it skips the
-    # runtime's zeroing and zeroes the object inline, where LLVM can see it
-    #.
+    # runtime's zeroing and zeroes the object inline, where LLVM can see it.
     var folder = _program(
         "options_zeroing",
         "struct Point {\n    var x: long;\n    var y: long;\n\n    construct(x: long, y: long) {\n        this.x = x;\n        this.y = y;\n    }\n}\n\nmain(): int {\n    var p = Point(3, 4);\n    return (p.x + p.y - 7) as int;\n}\n"
@@ -406,8 +405,7 @@ verify_cache_finds_a_cached_object_that_differs() {
 # An entry file in a module's folder (a package's example) brings in the
 # module's files, which come before it in namespace order. Built from the
 # cache, cold and warm, its compilation unit is still the program's own,
-# defining `main`, and the module's files it never reads are not linked
-#.
+# defining `main`, and the module's files it never reads are not linked.
 [Test]
 builds_an_entry_inside_a_modules_folder_with_the_cache() {
     var folder = TempFolder("options_module_entry");

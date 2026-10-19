@@ -118,15 +118,16 @@ missing symbol, not "the macos job failed".
 A dispatch costs minutes, and **GitHub serves no partial log for a step that
 is still running** — a hung job looks exactly like a working one. So the
 workflow runs the requested command under `bash -euxo pipefail`, caps the job
-at 60 minutes (provision 10, toolchain install 5, script 40 — the step caps
+at 150 minutes (provision 10, toolchain install 5, script 120 — the step caps
 must sum to less than the job cap, or the job is cancelled before any fires
 and a cancelled job reports nothing), and dumps a diagnostics block on
 failure *or cancellation*: the installed `pep-build`, host, the LLVM the
 setup recorded with `--targets-built`, which `clang` answered, and the built
 tools.
 
-A probe that needs longer than 40 minutes should be split across dispatches
-rather than raised — smaller questions come back sooner.
+The script's 120 minutes fit the default, the whole suite in one job on a
+4-core hosted runner. A probe that needs longer should be split across
+dispatches rather than raised — smaller questions come back sooner.
 
 Two traps that each cost a run here:
 

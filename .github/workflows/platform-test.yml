@@ -118,7 +118,7 @@ jobs:
     # before either of them fires: a cancelled job reports neither which phase
     # stalled nor the diagnostics below, since `failure()` is false under
     # cancellation.
-    timeout-minutes: 60
+    timeout-minutes: 150
 
     steps:
       - uses: actions/checkout@v7
@@ -190,8 +190,10 @@ jobs:
       # indication of which command produced it. Both cost investigation
       # rounds. A script that genuinely needs to continue past a failure can
       # say so with `|| true`.
+      # The default script is the whole suite in one job, which takes far
+      # longer on a 4-core hosted runner than CI's four shards do.
       - name: Run requested script
-        timeout-minutes: 40
+        timeout-minutes: 120
         shell: bash
         env:
           SCRIPT: ${{ inputs.script }}

@@ -1609,8 +1609,7 @@ a_program_checked_whole_passes_or_finds_its_error() {
 
 [Test]
 an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
-    # What an analysis does while a `--fill-cache` child fills the cache
-    #.
+    # What an analysis does while a `--fill-cache` child fills the cache.
     var folder = Directory.temp().join(Path("pep-lsp-test-recheck-whole-cache"));
     Directory.remove_all(folder);
     var cache = incremental.Cache(folder);

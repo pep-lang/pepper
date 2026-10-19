@@ -79,9 +79,9 @@ echo "=== provision ($target)"
 case "$target" in
   linux-x64)
     # The manylinux_2_28 image is AlmaLinux 8. clang is the smoke test's
-    # link driver, as it is a user's. openssh-clients: git fetches pepc's
-    # pepper-llvm package over SSH.
-    dnf install -y clang libffi-devel libzstd-devel zlib-devel libxml2-devel git openssh-clients xz
+    # link driver, as it is a user's. git fetches pepc's pepper-llvm
+    # package over HTTPS.
+    dnf install -y clang libffi-devel libzstd-devel zlib-devel libxml2-devel git xz
     # LLVM is the major pepper-llvm binds, built from source
     # (build-llvm-manylinux.sh says why). Built once, kept beside the
     # runner's workspace, which outlives the container.
