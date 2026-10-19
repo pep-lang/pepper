@@ -4,12 +4,13 @@
 ## program built, so an unchanged program is not built again.
 ##
 ## A unit is compiled as one part or more, and each part's object is kept on
-## its own, `<cache>/v2/units/<unit>#<n>/<key>/0.o`, under a key of its
+## its own, `<cache>/v3/u/<unit>#<n>/<key>/0.o`, under a key of its
 ## file's text and the interfaces of everything else it reads
 ## (`Keys.part`): like a C file's object, which depends on its text and its
 ## headers, so a body edit in one file compiles that file's parts again,
-## and no other file's. A unit's own key (`<cache>/v2/units/<unit>/<key>/`) keeps what a later build needs to
-## skip its bodies, and the list of its parts' objects (`parts`). Each is
+## and no other file's. A unit's own key (`<cache>/v3/u/<unit>/<key>/`) keeps what a later build needs to
+## skip its bodies, and the list of its parts' objects (`parts`). A
+## compilation unit's objects are kept the same way, as unit `+<name>`. Each is
 ## written to a folder of the build and moved into place as one, and never
 ## changed after, since the same key gives the same objects. So builds share the cache with no lock, and link
 ## the objects where they are. Each unit keeps its newest few keys
@@ -20,11 +21,17 @@
 ## folder spells its name's `/` as `.` (`process.command`), so it holds only
 ## its own keys: nested, unit `process` would prune the folders of units
 ## `process/test/...` beside its keys.
+##
+## Paths in the cache stay short, since it sits in the project's folder and
+## Windows tools fail on a path over 260 characters: one-letter
+## folders, a unit's folder cut to `_NAME_SIZE` characters
+## (`_unit_folder`), and a key's to `_KEY_SIZE` (`_key_name`), so no path
+## adds more than about 70 characters to the cache's own.
 
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
 import digest;
-import [Directory, File, Path] from io;
+import [Directory, File, IoResult, Path] from io;
 import compiler.link;
 import os;
 import process;
@@ -32,7 +39,12 @@ import compiler.sema;
 import "interface";
 
 ## The cache layout's version: a new layout gets a new folder.
-const _VERSION = "v2";
+const _VERSION = "v3";
+## How many hexadecimal digits of a key name its folder: 80 bits, so two
+## keys of one unit never share one.
+const _KEY_SIZE: ulong = 20;
+## The most characters of a unit's name its folder keeps.
+const _NAME_SIZE: ulong = 20;
 ## How many keys' objects each unit keeps.
 const _KEEP = 8;
 ## How long a key's objects are kept after they were stored or last reused,
@@ -42,7 +54,7 @@ const _GRACE: long = 600000000000;
 
 ## A build cache.
 export struct Cache {
-    ## The folder holding this layout's files (`<cache>/v1`).
+    ## The folder holding this layout's files (`<cache>/v3`).
     var dir: Path;
 
     construct(dir: Path) {
@@ -55,8 +67,7 @@ export struct Cache {
     ## @param key its key
     ## @returns the folder, which need not exist
     objects(unit: String, key: String): Path {
-        # A namespace never holds `.`, so no two units share a folder.
-        return dir.join(Path("units")).join(Path(unit.replace("/", "."))).join(Path(key));
+        return dir.join(Path("u")).join(Path(_unit_folder(unit))).join(Path(_key_name(key)));
     }
 
     ## Returns the folder of the object of part `n` of `unit` built under
@@ -99,6 +110,12 @@ export struct Cache {
             return Result<Path, String>.err($"cannot create {folder}: {created.error().message}");
         }
         var moved = File.rename(built, target);
+        if (moved.is_err() and !target.metadata().is_ok()) {
+            # A rename cannot cross drives, and the build folder can sit on
+            # another one than the cache (a temp folder on C: and the
+            # checkout on D:, as on a hosted Windows runner).
+            moved = _move_across_drives(built, target);
+        }
         if (moved.is_err()) {
             if (!target.metadata().is_ok()) {
                 return Result<Path, String>.err($"cannot move {built} to {target}: {moved.error().message}");
@@ -111,7 +128,7 @@ export struct Cache {
 
     ## Returns where the record of the program that writes `output` is.
     _record(output: Path): Path {
-        return dir.join(Path("programs")).join(Path(digest.to_hex(digest.blake3(output.to_string()))));
+        return dir.join(Path("p")).join(Path(_key_name(digest.to_hex(digest.blake3(output.to_string())))));
     }
 
     ## Returns whether `output` is what the program keyed `key` last built
@@ -160,6 +177,25 @@ export struct Cache {
             File.remove(partial);
         }
     }
+}
+
+## The name of the folder of `unit`'s keys: its name with `/` as `.` and `:`
+## as `_` (Windows forbids `:`), and when that is longer than `_NAME_SIZE`
+## characters, its start and a hash of the whole, so no two units share a
+## folder. A namespace never holds `.`.
+_unit_folder(unit: String): String {
+    var name = unit.replace("/", ".").replace(":", "_");
+    if (name.length <= _NAME_SIZE) {
+        return name;
+    }
+    var hash = digest.to_hex(digest.blake3(unit)).substr(0, 8);
+    return $"{name.substr(0, _NAME_SIZE - 9)}~{hash}";
+}
+
+## The name of the folder or file of `key`, a hexadecimal hash: its first
+## `_KEY_SIZE` digits.
+_key_name(key: String): String {
+    return key.substr(0, _KEY_SIZE);
 }
 
 ## Returns the cache a build uses: `$PEPPER_CACHE_DIR` when set, else
@@ -727,4 +763,54 @@ export write_record(
         text.append($"{program.files[loc.file as ulong].namespace}\t{loc.span.start}\t{loc.span.end}\t{summary}\n");
     }
     File.write_text(folder.join(Path(_SUMMARIES)), text.to_string());
+}
+
+# Moves the folder `built` to `target` where a rename cannot: copies it to a
+# folder beside `target`, on the cache's own drive, and renames that, so a
+# key's folder still only ever appears whole. `built` goes once the copy is
+# in place.
+export _move_across_drives(built: Path, target: Path): IoResult<void> {
+    var staged = Path($"{target}.{digest.to_hex(digest.blake3(built.to_string())).substr(0, 12)}");
+    Directory.remove_all(staged);
+    var copied = _copy_folder(built, staged);
+    if (copied.is_ok()) {
+        copied = File.rename(staged, target);
+    }
+    if (copied.is_err()) {
+        Directory.remove_all(staged);
+        return copied;
+    }
+    Directory.remove_all(built);
+    return IoResult<void>.ok();
+}
+
+# Copies the folder `from`, with every file and folder in it, to `to`.
+_copy_folder(from: Path, to: Path): IoResult<void> {
+    var created = Directory.create_all(to);
+    if (created.is_err()) {
+        return created;
+    }
+    var listing = Directory.open(from);
+    if (listing.is_err()) {
+        return IoResult<void>.err(listing.error());
+    }
+    var entries = listing.value().entries();
+    if (entries.is_err()) {
+        return IoResult<void>.err(entries.error());
+    }
+    for (var entry in entries.value()) {
+        var into = to.join(Path(entry.name));
+        if (entry.is_directory) {
+            var r = _copy_folder(entry.path, into);
+            if (r.is_err()) {
+                return r;
+            }
+            continue;
+        }
+        var c = File.copy(entry.path, into);
+        if (c.is_err()) {
+            return IoResult<void>.err(c.error());
+        }
+    }
+    return IoResult<void>.ok();
 }

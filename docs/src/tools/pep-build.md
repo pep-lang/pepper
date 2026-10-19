@@ -578,6 +578,12 @@ Keeps the build cache in `<dir>`. Without it, the folder named by
 current folder, or in the project's folder when building a project with no
 file.
 
+No path in the cache adds more than 72 characters to `<dir>`'s, so a
+project folder can sit deep without the cache passing Windows'
+260-character path limit. The folder holds one subfolder per layout
+version (`v3`); a build ignores the others, so an old version's folder can
+be deleted.
+
 ### `--verify-cache`, `--no-verify-cache`
 
 `--verify-cache` checks the cache, for testing the compiler: every file the

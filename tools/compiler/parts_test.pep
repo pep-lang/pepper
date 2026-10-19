@@ -57,11 +57,11 @@ reuses_the_object_of_a_part_whose_code_is_the_same() {
     var cache = incremental.Cache(folder.path.join(Path("cache")));
     var object = folder.path.join(Path("value.o"));
     _compile(cache, object, 7);
-    var keys = Directory.open(cache.dir.join(Path("units")).join(Path("part#0")));
+    var keys = Directory.open(cache.dir.join(Path("u")).join(Path("part#0")));
     expect_true(keys.is_ok());
     var listed = keys.value().entries();
     expect_true(listed.is_ok() and listed.value().count == 1);
-    var kept = cache.dir.join(Path("units")).join(Path("part#0")).join(Path(listed.value()[0].name));
+    var kept = cache.dir.join(Path("u")).join(Path("part#0")).join(Path(listed.value()[0].name));
     # Stands in for the object, to tell a copy from a compile.
     expect_true(File.write_text(kept.join(Path("object")), "kept").is_ok());
 

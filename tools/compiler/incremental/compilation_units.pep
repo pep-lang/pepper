@@ -25,7 +25,7 @@ import "cache";
 import [file_names] from "interface";
 
 ## The record format's version: a new format gets a new folder.
-const _RECORDS_FOLDER = "checked16";
+const _RECORDS_FOLDER = "c16";
 ## How many keys' records each compilation unit keeps.
 const _KEEP_RECORDS = 4;
 
@@ -648,13 +648,8 @@ _compare(a: String, b: String): int {
 ## @param unit the compilation unit
 ## @returns the record's path, which need not exist
 export record_path(cache: Cache, unit: CompilationUnit): Path {
-    return cache.dir.join(Path(_RECORDS_FOLDER)).join(Path(_record_folder(unit.name))).join(Path($"{unit.key}.rec"));
-}
-
-# A compilation unit's name as a folder name: its namespace's separators kept as
-# folders, anything else plain.
-_record_folder(name: String): String {
-    return name.replace(":", "_").replace("#", "_");
+    var folder = cache.dir.join(Path(_RECORDS_FOLDER)).join(Path(_unit_folder(unit.name)));
+    return folder.join(Path($"{_key_name(unit.key)}.rec"));
 }
 
 ## Writes `checked_unit`'s record, the record of `unit`: a delta on the module

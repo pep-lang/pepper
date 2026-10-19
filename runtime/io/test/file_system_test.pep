@@ -406,6 +406,30 @@ remove_all_removes_a_tree_but_not_what_links_point_to() {
     expect_true(Directory.remove_all(base.join("absent")).error().is_not_found());
 }
 
+# A path over Windows' 260-character limit works like any other: on
+# Windows, io gives it the `\\?\` prefix.
+[Test]
+a_path_over_260_characters_works() {
+    var folder = TempFolder("a_path_over_260_characters_works");
+    var top = folder.path.join("long");
+    var deep = top;
+    for (var _ in 0..6) {
+        deep = deep.join("a_folder_whose_name_is_fifty_characters_long_00000");
+    }
+    expect_true(deep.to_string().size > 300);
+    expect_true(Directory.create_all(deep).is_ok());
+    var file = deep.join("f.txt");
+    expect_true(File.write_text(file, "deep").is_ok());
+    expect_equal(text(file), "deep");
+    expect_true(file.metadata().value().is_file);
+    expect_true(has_entry(Directory.open(deep).value().entries().value(), "f.txt"));
+    var moved = deep.join("g.txt");
+    expect_true(File.rename(file, moved).is_ok());
+    expect_true(moved.is_file() && !file.exists());
+    expect_true(Directory.remove_all(top).is_ok());
+    expect_false(top.exists());
+}
+
 # set_permissions, set_read_only, set_executable, set_modified and
 # set_accessed on Path and File, OpenOptions.mode, Directory.create with a
 # mode, and symlinks made and read back.
