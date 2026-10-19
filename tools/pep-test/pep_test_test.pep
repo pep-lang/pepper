@@ -95,29 +95,22 @@ five() {}
     # Every second test of the list, starting with the first or the second.
     var first = pep_test(folder.path, ["--list", "--shard", "1/2"]);
     expect_exit(first, 0);
-    expect_equal(first.stdout, $"a_test.pep::one
-a_test.pep::three
-{b}::five
-");
+    expect_equal(first.stdout, $"a_test.pep::one\na_test.pep::three\n{b}::five\n");
     var second = pep_test(folder.path, ["--list", "--shard", "2/2"]);
     expect_exit(second, 0);
-    expect_equal(second.stdout, $"a_test.pep::two
-{b}::four
-");
+    expect_equal(second.stdout, $"a_test.pep::two\n{b}::four\n");
 
     # The shard is taken from the tests the filter keeps.
     var ran = pep_test(folder.path, ["--shard", "2/2", "-f", "o"]);
     expect_exit(ran, 0);
     expect_contains(ran.stdout, "test a_test.pep::two ... ok (");
-    expect_ends_with(ran.stdout, "1 passed, 0 failed, 2 filtered out, 2 in other shards
-");
+    expect_ends_with(ran.stdout, "1 passed, 0 failed, 2 filtered out, 2 in other shards\n");
 
     for (var shard in ["0/2", "3/2", "2", "1/0", "a/b"]) {
         var wrong = pep_test(folder.path, ["--shard", shard]);
         expect_exit(wrong, 2);
         expect_contains(
-            wrong.stderr, $"pep-test: error: '--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard}'
-"
+            wrong.stderr, $"pep-test: error: '--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard}'\n"
         );
     }
 }
