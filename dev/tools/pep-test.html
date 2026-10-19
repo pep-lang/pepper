@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-477dbf43.js";
+            window.path_to_searchindex_js = "../searchindex-9edc053e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8b7d02da.js"></script>
@@ -249,7 +249,10 @@ each in its own process, up to
 <code>--jobs</code> at once, and prints <code>test NAME ... ok (TIME)</code> or
 <code>... FAILED (TIME)</code> as each ends (in order with <code>--jobs 1</code>). TIME is
 how long the test’s process ran: whole milliseconds (<code>12 ms</code>), or
-seconds with two decimals from one second up (<code>1.25 s</code>). A test passes
+seconds with two decimals from one second up (<code>1.25 s</code>). A test that
+passes after more than 60% of its timeout is followed by
+<code>warning: test NAME took TIME, over 60% of its N s timeout</code>: it will
+time out once its machine is busier. A test passes
 when its process exits with 0; a <code>[ShouldPanic]</code> test passes when its
 process panics with a message that contains the attribute’s text.</li>
 <li><strong>Reports the failures,</strong> each with what the test printed (the panic’s
