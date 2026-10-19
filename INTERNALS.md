@@ -3329,7 +3329,7 @@ The tests are Pepper `[Test]` functions, run by `pepper test`
 with the `pep-build` it is given (default: the installed build of main)
 into `target/pepper-tests/bin`, puts that folder on the `PATH`, then runs
 the runtime's tests in `runtime/` and the tools' in `tools/` (at
-`-O1`, 300 s a test). A test fails when it leaks: the `TestRunner` compares
+`-O1`, 600 s a test). A test fails when it leaks: the `TestRunner` compares
 `_pep_live_allocs` before and after it.
 
 | Kind | Where | Notes |
