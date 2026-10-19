@@ -3,7 +3,7 @@ name = "compiler"
 version = "0.1.0"
 description = "The Pepper compiler written in Pepper (#225), built as `pepc`"
 license = "MIT"
-repository = "https://github.com/justinboswell/pepper"
+repository = "https://github.com/pep-lang/pepper"
 
 [build]
 entry = "main.pep"
@@ -12,4 +12,4 @@ output = "pepc"
 include = [".."]
 
 [dependencies]
-llvm = { github = "justinboswell/pepper-llvm", branch = "main" }
+llvm = { github = "pep-lang/pepper-llvm", branch = "main" }

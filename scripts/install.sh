@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs Pepper on Linux or macOS from a release's prebuilt archive.
 #
-#   curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.sh | sh
 #   sh install.sh [--version <x.y.z> | --archive <file>] [--prefix <dir>]
 #                 [--yes] [--no-modify-path] [--no-prerequisites]
 #   sh install.sh --uninstall [--prefix <dir>]
@@ -27,7 +27,7 @@
 # short runs nothing.
 set -eu
 
-REPO="justinboswell/pepper"
+REPO="pep-lang/pepper"
 
 say() { printf 'pepper-install: %s\n' "$*"; }
 warn() { printf 'pepper-install: warning: %s\n' "$*" >&2; }
@@ -96,10 +96,10 @@ detect_target() {
     arch=arm64
   fi
   if [ "$os" = linux ] && [ "$arch" = arm64 ]; then
-    die "there is no prebuilt Pepper for Linux on arm64 yet; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
+    die "there is no prebuilt Pepper for Linux on arm64 yet; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"
   fi
   if [ "$os" = linux ] && ldd --version 2>&1 | grep -qi musl; then
-    die "the prebuilt Pepper needs glibc 2.28 or newer, and this system uses musl; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
+    die "the prebuilt Pepper needs glibc 2.28 or newer, and this system uses musl; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"
   fi
   echo "$os-$arch"
 }
