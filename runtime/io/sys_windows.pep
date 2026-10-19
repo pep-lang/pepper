@@ -57,6 +57,8 @@ extern int DeleteFileW(ushort* path);
 [Target(OS(Windows))]
 extern int MoveFileExW(ushort* from, ushort* to, uint flags);
 [Target(OS(Windows))]
+extern uint GetFullPathNameW(ushort* name, uint size, ushort* buf, void* file_part);
+[Target(OS(Windows))]
 extern uint GetCurrentDirectoryW(uint size, ushort* buf);
 [Target(OS(Windows))]
 extern int SetCurrentDirectoryW(ushort* path);
@@ -261,7 +263,7 @@ _io_sys_std_handle(stream: StdStream): FileHandle {
 # FILE_FLAG_BACKUP_SEMANTICS, so directories open too.
 [Target(OS(Windows))]
 _io_win_create(path: Path, access: ulong, disposition: uint, extra_flags: ulong): IoResult<FileHandle> {
-    var w = _io_win_wide(path._value);
+    var w = _io_win_path(path);
     var flags = 33554560 | extra_flags;  # BACKUP_SEMANTICS | ATTRIBUTE_NORMAL
     var h = CreateFileW(w, access as uint, 7, __null, disposition, flags as uint, __null);
     var code = GetLastError();
@@ -270,6 +272,39 @@ _io_win_create(path: Path, access: ulong, disposition: uint, extra_flags: ulong)
         return IoResult<FileHandle>.err(IoError(code, _io_sys_error_message(code)));
     }
     return IoResult<FileHandle>.ok(h);
+}
+
+# A NUL-terminated UTF-16 copy of `path` for the *W file functions; the
+# caller frees it with _pep_free. A path that is 248 units or more once
+# absolute (the room CreateDirectoryW leaves under MAX_PATH) is made
+# absolute and given the `\\?\` prefix (`\\?\UNC\` for `\\server\share`),
+# which lifts the limit to 32767 units whatever the system's long-path
+# setting. That prefix turns off Win32's own normalizing (`/`,
+# `.`, `..`), so GetFullPathNameW does it first, as Rust's std does.
+[Target(OS(Windows))]
+_io_win_path(path: Path): __ptr<u16> {
+    var s = path._value;
+    var w = _io_win_wide(s);
+    if ((s.size < 248 && path.is_absolute()) || s.starts_with("\\\\?\\") || s.starts_with("\\\\.\\")) {
+        return w;
+    }
+    var need = GetFullPathNameW(w, 0, __null, __null);
+    if (need == 0) {
+        return w;
+    }
+    var full = _pep_malloc((need as ulong) * 2) as __ptr<u16>;
+    var n = GetFullPathNameW(w, need, full, __null) as int;
+    if (n < 248 || n >= (need as int)) {
+        _pep_free(full);
+        return w;
+    }
+    _pep_free(w);
+    var absolute = _io_win_narrow(full, n);
+    _pep_free(full);
+    if (absolute.starts_with("\\\\")) {
+        return _io_win_wide("\\\\?\\UNC\\" + _io_slice(absolute, 2, absolute.size));
+    }
+    return _io_win_wide("\\\\?\\" + absolute);
 }
 
 # ── File operations ──────────────────────────────────────────────────────────
@@ -478,7 +513,7 @@ _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
     if (path._value.size == 0) {
         return IoResult<bool>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
-    var w = _io_win_wide(path.join(Path("*"))._value);
+    var w = _io_win_path(path.join(Path("*")));
     iterator._data = _pep_malloc(592);
     var h = FindFirstFileW(w, iterator._data);
     _pep_free(w);
@@ -542,7 +577,7 @@ _io_sys_directory_close(handle: __ptr<void>) {
 
 [Target(OS(Windows))]
 _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
-    var w = _io_win_wide(path._value);
+    var w = _io_win_path(path);
     var ok = CreateDirectoryW(w, __null);
     var code = GetLastError();
     _pep_free(w);
@@ -551,7 +586,7 @@ _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
 
 [Target(OS(Windows))]
 _io_sys_rmdir(path: Path): IoResult<void> {
-    var w = _io_win_wide(path._value);
+    var w = _io_win_path(path);
     var ok = RemoveDirectoryW(w);
     var code = GetLastError();
     _pep_free(w);
@@ -560,7 +595,7 @@ _io_sys_rmdir(path: Path): IoResult<void> {
 
 [Target(OS(Windows))]
 _io_sys_unlink(path: Path): IoResult<void> {
-    var w = _io_win_wide(path._value);
+    var w = _io_win_path(path);
     var ok = DeleteFileW(w);
     var code = GetLastError();
     _pep_free(w);
@@ -580,8 +615,8 @@ _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
 # MOVEFILE_REPLACE_EXISTING, as POSIX rename replaces.
 [Target(OS(Windows))]
 _io_sys_rename(from: Path, to: Path): IoResult<void> {
-    var wf = _io_win_wide(from._value);
-    var wt = _io_win_wide(to._value);
+    var wf = _io_win_path(from);
+    var wt = _io_win_path(to);
     var ok = MoveFileExW(wf, wt, 1);
     var code = GetLastError();
     _pep_free(wf);
@@ -770,7 +805,7 @@ _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
         flags = 3;
     }
     var wt = _io_win_wide(target._value);
-    var wl = _io_win_wide(link._value);
+    var wl = _io_win_path(link);
     var ok = CreateSymbolicLinkW(wl, wt, flags);
     var code = GetLastError();
     if (ok == 0 && code == 87) {  # INVALID_PARAMETER

@@ -1842,11 +1842,11 @@ changed.
   then generates no objects. A function whose link summary calls through a
   trait (a dependent summary) has no facts: its body stands in the
   interface instead.
-- **The store.** A unit's folder, `<cache>/v2/units/<unit>/<key>/`, holds
+- **The store.** A unit's folder, `<cache>/v3/u/<unit>/<key>/`, holds
   `interfaces`, its files' interface hashes, `summaries`, its functions'
   link summaries (none when the build warned about the unit, so it is
   checked, and warns, again), and `parts`, the list of its parts' objects.
-  Each part is cached on its own, `<cache>/v2/units/<unit>#<n>/<key>/0.o`,
+  Each part is cached on its own, `<cache>/v3/u/<unit>#<n>/<key>/0.o`,
   keyed like a C file's object (`Keys.part`): the part's files by their
   text, and every other file the unit reads by its interface hash. So when
   a body edit misses a unit, only the edited file's part is optimized and
@@ -1858,13 +1858,22 @@ changed.
   reused in the last ten minutes, since a build may be linking it; a unit
   hit marks its parts reused too, so a build storing newer keys of a part
   does not remove one another build is about to link. A unit's folder
-  spells the `/` of its name as `.` (`units/process.command#0/`), so each
+  spells the `/` of its name as `.` (`u/process.command#0/`), so each
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
   whole, objects a build was about to link among them.
+- **Short paths.** The cache sits in the project's folder, and Windows
+  tools fail on a path over 260 characters, so its paths stay short:
+  one-letter folders, a unit's folder cut to 20 characters, the last 9 a
+  hash of its whole name (`_unit_folder`), and a key's folder or
+  file named by its first 20 hex digits (`_key_name`, 80 bits). No path
+  adds more than 72 characters to the cache's folder
+  (`keeps_every_path_in_the_cache_short`). The runtime's io also gives a
+  Windows path of 248 units or more the `\\?\` prefix
+  (`_io_win_path`), so a deeper project still builds.
 - **Programs.** A program's key (`Keys.program`) hashes every file and what
   the link takes (output, `-l`, `-L`, the current folder); when
-  `programs/<hash of the output path>` records that key and the output's
+  `p/<hash of the output path>` records that key and the output's
   hash, the build stops before sema (`-T cache` says `up to date`). A build
   that warned records nothing, so the next one warns again.
 - `-T time` prints each stage's time and `-T cache` each unit's hit or
@@ -3015,7 +3024,7 @@ a struct below (`_pep_copy_value`), which has no owner there
 member in each object that uses it. A declaration keeps an owner (`DECLARED_ONLY` for an
 instantiation), so `prepare` gives it the linker spelling of its definition.
 The object is cached under the compilation unit's key (`_compilation_unit_object`:
-`<cache>/v2/units/compilation unit <name>/<key>/0.o`, `1.o` and on for its other parts
+`<cache>/v3/u/+<name>/<key>/0.o`, `1.o` and on for its other parts
 (`_unit_objects`), and `defines`; the key already
 holds the codegen options), and a compilation unit counts as done from the cache only
 when both its record and its object are there; a build marks the object
@@ -3132,7 +3141,7 @@ in `sema/builder.pep` builds in about 12 s instead of 24 s this way.
 The modules of the closures are rebuilt from bytes for each compilation unit checked.
 Loading a record costs a read and a merge, not a check.
 
-**Records.** A record lives at `<cache>/v1/checked16/<name>/<key>.rec`. The
+**Records.** A record lives at `<cache>/v3/c16/<name>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new
 number, so old records are never misread. Each compilation unit keeps its newest four
 keys. A record starts with the program's files' namespaces, which its file

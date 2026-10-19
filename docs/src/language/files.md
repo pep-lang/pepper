@@ -30,6 +30,11 @@ see [Error handling with Result](results.md)).
 {{#include ../../examples/files-basics.pep}}
 ```
 
+On Windows, a path of 248 characters or more works like any other: `io`
+makes it absolute and gives it the `\\?\` prefix, which lifts Windows'
+260-character limit whatever the system's long-path setting. A shorter
+path is passed as it is.
+
 ## Permissions
 
 A file's permission bits say who may read, write and run it. They are the
