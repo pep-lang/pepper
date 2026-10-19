@@ -54,8 +54,8 @@ Four steps, on every platform:
    ```
 
 4. **The private packages.** `tools/compiler` depends on
-   `justinboswell/pepper-llvm` and `tools/pep-lsp` on
-   `justinboswell/pepper-lsp`. The first build of each fetches its package
+   `pep-lang/pepper-llvm` and `tools/pep-lsp` on
+   `pep-lang/pepper-lsp`. The first build of each fetches its package
    with git into the tool's `.pep/deps`, so your git needs read access to
    those repositories.
 

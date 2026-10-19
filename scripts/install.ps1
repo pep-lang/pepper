@@ -45,7 +45,7 @@
     Remove the install and its PATH entry.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+    irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File install.ps1 -Version 0.4.0
@@ -67,7 +67,7 @@ $ProgressPreference = 'SilentlyContinue'
 # PowerShell 5.1 offers TLS 1.0 by default, which GitHub refuses.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$Repo = 'justinboswell/pepper'
+$Repo = 'pep-lang/pepper'
 $Target = 'windows-x64'
 $Token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $env:GH_TOKEN }
 
@@ -169,7 +169,7 @@ if ($knowsUninstall) {
 }
 
 if ([Environment]::Is64BitOperatingSystem -eq $false -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
-    Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
+    Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"
 }
 $work = Join-Path ([IO.Path]::GetTempPath()) ("pepper-install-" + [Guid]::NewGuid())
 New-Item -ItemType Directory -Path $work | Out-Null

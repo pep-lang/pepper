@@ -7,7 +7,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/justinboswell/pepper.git",
+    "url": "https://github.com/pep-lang/pepper.git",
     "directory": "tools/vscode-pepper"
   },
   "engines": {

@@ -7,12 +7,12 @@ for working on Pepper itself (see [Getting started](../tutorial/getting-started.
 
 ```sh
 # Linux and macOS
-curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 ```
 
 Each release also carries both scripts as assets, beside its archives.
@@ -149,7 +149,7 @@ example `GITHUB_TOKEN=$(gh auth token)`. The raw script URLs above need it too,
 so download the script with `gh` first:
 
 ```sh
-gh api repos/justinboswell/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
+gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
 GITHUB_TOKEN=$(gh auth token) sh install.sh
 ```
 

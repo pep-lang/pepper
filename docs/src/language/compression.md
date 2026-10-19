@@ -156,10 +156,10 @@ short.
 ## Zip archives
 
 `.zip` archives are read and written by the
-[zip package](https://github.com/justinboswell/pepper-zip), which builds
+[zip package](https://github.com/pep-lang/pepper-zip), which builds
 on `compress` and `archive`. It is a package rather than part of the
 runtime because the package manager needs only `.tar.gz`; add it with
-`pepper package add justinboswell/pepper-zip --name zip`.
+`pepper package add pep-lang/pepper-zip --name zip`.
 
 ```pepper
 import zip;

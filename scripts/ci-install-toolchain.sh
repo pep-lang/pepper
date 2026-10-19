@@ -46,7 +46,7 @@ esac
 
 if [ -z "$version" ]; then
   # The API lists releases newest first (by the commit each tag is on).
-  url="https://api.github.com/repos/justinboswell/pepper/releases?per_page=100"
+  url="https://api.github.com/repos/pep-lang/pepper/releases?per_page=100"
   token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   if [ -n "$token" ]; then
     releases="$(curl -fsSL -H "Authorization: Bearer $token" "$url")"

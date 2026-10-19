@@ -1,14 +1,14 @@
 # YAML
 
 YAML 1.2 is read and written by the
-[yaml package](https://github.com/justinboswell/pepper-yaml), which has
+[yaml package](https://github.com/pep-lang/pepper-yaml), which has
 the same shape as the [`json`](json.md) and [`toml`](toml.md) modules: a
 `YamlValue` to look values up in and change, clang-style errors at the
 line and column, documents that keep their comments when edited, and
 struct conversion with the [`serialize`](../reference/serialize-module.md)
 attributes. It is a package rather than part of the runtime because few
 programs need YAML; add it with
-`pepper package add justinboswell/pepper-yaml --name yaml`.
+`pepper package add pep-lang/pepper-yaml --name yaml`.
 
 ```pepper
 import yaml;

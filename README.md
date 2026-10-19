@@ -40,9 +40,9 @@ which is not thread-safe.
 
 ## Documentation
 
-**The Pepper book: <https://justinboswell.github.io/pepper/>** covers the
+**The Pepper book: <https://docs.pepper-lang.dev/>** covers the
 language, the tools and the standard library. It opens the newest release's
-docs; [`/dev/`](https://justinboswell.github.io/pepper/dev/) is main's, which
+docs; [`/dev/`](https://docs.pepper-lang.dev/dev/) is main's, which
 the links below open. Its source is [`docs/`](docs/src/SUMMARY.md).
 
 ## Install
@@ -56,13 +56,13 @@ is private the script needs a GitHub token, which the
 
 ```sh
 # Linux, macOS
-gh api repos/justinboswell/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
+gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
 GITHUB_TOKEN=$(gh auth token) sh install.sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-gh api repos/justinboswell/pepper/contents/scripts/install.ps1 -H "Accept: application/vnd.github.raw" > install.ps1
+gh api repos/pep-lang/pepper/contents/scripts/install.ps1 -H "Accept: application/vnd.github.raw" > install.ps1
 $env:GITHUB_TOKEN = gh auth token
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
@@ -78,8 +78,8 @@ pepper +0.9.1 build hello.pep     # one command with another toolchain
 ```
 
 A project pins its toolchain with `toolchain = "0.9"` in its `pep.toml`.
-See [Installing Pepper](https://justinboswell.github.io/pepper/dev/tools/install.html)
-and [Toolchains](https://justinboswell.github.io/pepper/dev/tools/pep-install.html).
+See [Installing Pepper](https://docs.pepper-lang.dev/dev/tools/install.html)
+and [Toolchains](https://docs.pepper-lang.dev/dev/tools/pep-install.html).
 
 ## Using it
 
@@ -87,13 +87,13 @@ and [Toolchains](https://justinboswell.github.io/pepper/dev/tools/pep-install.ht
 
 | Command | What it does |
 | --- | --- |
-| [`pepper build`](https://justinboswell.github.io/pepper/dev/tools/pep-build.html) | compiles a file, or the project a [`pep.toml`](https://justinboswell.github.io/pepper/dev/tools/projects.html) describes |
-| [`pepper run`](https://justinboswell.github.io/pepper/dev/tools/pep-run.html) | builds a program and runs it (0.9.3 and later) |
-| [`pepper test`](https://justinboswell.github.io/pepper/dev/tools/pep-test.html) | builds and runs the `[Test]` functions |
-| [`pepper fmt`](https://justinboswell.github.io/pepper/dev/tools/pep-fmt.html) | formats source in the one standard style |
-| [`pepper doc`](https://justinboswell.github.io/pepper/dev/tools/pep-doc.html) | generates the standard library reference and builds the book |
-| [`pepper profile`](https://justinboswell.github.io/pepper/dev/tools/pep-profile.html) | profiles a program and draws a flame graph |
-| [`pepper package`](https://justinboswell.github.io/pepper/dev/tools/pep-package.html) | adds and fetches a project's dependencies |
+| [`pepper build`](https://docs.pepper-lang.dev/dev/tools/pep-build.html) | compiles a file, or the project a [`pep.toml`](https://docs.pepper-lang.dev/dev/tools/projects.html) describes |
+| [`pepper run`](https://docs.pepper-lang.dev/dev/tools/pep-run.html) | builds a program and runs it (0.9.3 and later) |
+| [`pepper test`](https://docs.pepper-lang.dev/dev/tools/pep-test.html) | builds and runs the `[Test]` functions |
+| [`pepper fmt`](https://docs.pepper-lang.dev/dev/tools/pep-fmt.html) | formats source in the one standard style |
+| [`pepper doc`](https://docs.pepper-lang.dev/dev/tools/pep-doc.html) | generates the standard library reference and builds the book |
+| [`pepper profile`](https://docs.pepper-lang.dev/dev/tools/pep-profile.html) | profiles a program and draws a flame graph |
+| [`pepper package`](https://docs.pepper-lang.dev/dev/tools/pep-package.html) | adds and fetches a project's dependencies |
 
 ```sh
 pepper run hello.pep              # build and run
@@ -103,7 +103,7 @@ pepper fmt -w src
 pepper help                       # every command
 ```
 
-The [VS Code extension](https://justinboswell.github.io/pepper/dev/tutorial/getting-started.html#editor-support)
+The [VS Code extension](https://docs.pepper-lang.dev/dev/tutorial/getting-started.html#editor-support)
 runs the language server, `pep-lsp`, for errors as you type, hover,
 completion and go to definition.
 
@@ -112,7 +112,7 @@ completion and go to definition.
 The compiler (`tools/compiler`, also called pepc), the standard library
 (`runtime/`) and every tool (`tools/`) are Pepper programs, built with the
 `x.y.z-dev` build of main and tested with `scripts/pepper-tests.sh`.
-[Building Pepper from source](https://justinboswell.github.io/pepper/dev/contributing/building.html)
+[Building Pepper from source](https://docs.pepper-lang.dev/dev/contributing/building.html)
 ([source](docs/src/contributing/building.md)) walks through the setup,
 including LLVM 20, the build and the tests.
 

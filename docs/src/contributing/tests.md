@@ -120,8 +120,8 @@ LLVM's prefix, as `scripts/pepper-tests.sh` does (`PEPPER_LLVM_PREFIX`,
 or this checkout's `.pep/llvm-prefix`).
 
 Two Pepper tools depend on private repositories. The compiler written in
-Pepper, `tools/compiler`, depends on `justinboswell/pepper-llvm`, and the
-language server `tools/pep-lsp` depends on `justinboswell/pepper-lsp`. CI
+Pepper, `tools/compiler`, depends on `pep-lang/pepper-llvm`, and the
+language server `tools/pep-lsp` depends on `pep-lang/pepper-lsp`. CI
 clones each over SSH with a read-only deploy key of that repository, whose
 private half is this repository's secret `PEPPER_LLVM_DEPLOY_KEY` or
 `PEPPER_LSP_DEPLOY_KEY`.

@@ -10,12 +10,12 @@ One command installs it:
 
 ```sh
 # Linux and macOS
-curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 ```
 
 It installs into `~/.pepper` (`%LOCALAPPDATA%\pepper` on Windows), adds its
@@ -175,7 +175,7 @@ reports compiler errors as you type and provides hover information,
 completion, go to definition, and an outline of each file.
 
 The packaged extension is published as a `.vsix` file on the repository's
-[releases page](https://github.com/justinboswell/pepper/releases), under the
+[releases page](https://github.com/pep-lang/pepper/releases), under the
 release whose tag starts with `vsix-v`. Download it and install it in VS Code
 with **Extensions: Install from VSIX...** from the command palette. The
 language server is bundled with the extension, so there is nothing else to

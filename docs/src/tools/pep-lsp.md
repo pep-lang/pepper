@@ -39,7 +39,7 @@ window to pick the toolchain up:
 toolchain's `pep-lsp` (or `pepper lsp`) for `.pep` files.
 
 The server is written in Pepper, in `tools/pep-lsp`, on the
-[`lsp` package](https://github.com/justinboswell/pepper-lsp), a framework
+[`lsp` package](https://github.com/pep-lang/pepper-lsp), a framework
 for writing a language server for any language in Pepper. To build it from
 a checkout of the repository, with this checkout's standard library:
 

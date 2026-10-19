@@ -1,7 +1,7 @@
 // Toolchain helpers with no vscode dependency, so a plain node test can
 // exercise them (`npm test`).
 
-const INSTALL_SCRIPTS = "https://raw.githubusercontent.com/justinboswell/pepper/main/scripts";
+const INSTALL_SCRIPTS = "https://raw.githubusercontent.com/pep-lang/pepper/main/scripts";
 
 /**
  * The `pepper install ...` command an error from `pepper install which`

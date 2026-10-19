@@ -296,7 +296,7 @@ jobs:
               "Pepper $TAG." \
               "" \
               "Install it with scripts/install.sh (Linux, macOS) or scripts/install.ps1 (Windows);" \
-              "see https://justinboswell.github.io/pepper/tools/install.html." \
+              "see https://docs.pepper-lang.dev/tools/install.html." \
               > "$RUNNER_TEMP/notes.md"
             # Another workflow on the same tag may create it in between.
             gh release create "$TAG" --target "$GITHUB_SHA" --title "Pepper $TAG" \

@@ -4,8 +4,8 @@
 # secret:
 #
 #   package                        used by          secret
-#   justinboswell/pepper-llvm      tools/compiler   PEPPER_LLVM_DEPLOY_KEY (#656)
-#   justinboswell/pepper-lsp       tools/pep-lsp    PEPPER_LSP_DEPLOY_KEY
+#   pep-lang/pepper-llvm      tools/compiler   PEPPER_LLVM_DEPLOY_KEY (#656)
+#   pep-lang/pepper-lsp       tools/pep-lsp    PEPPER_LSP_DEPLOY_KEY
 #
 # Source it in the step that runs the tools tests:
 #
@@ -64,8 +64,8 @@ Host $repository.github.com
   StrictHostKeyChecking yes
 EOF
   local index=${GIT_CONFIG_COUNT:-0}
-  export "GIT_CONFIG_KEY_${index}=url.git@$repository.github.com:justinboswell/$repository.insteadOf"
-  export "GIT_CONFIG_VALUE_${index}=https://github.com/justinboswell/$repository"
+  export "GIT_CONFIG_KEY_${index}=url.git@$repository.github.com:pep-lang/$repository.insteadOf"
+  export "GIT_CONFIG_VALUE_${index}=https://github.com/pep-lang/$repository"
   export GIT_CONFIG_COUNT=$((index + 1))
   _package_auth_count=$((_package_auth_count + 1))
   echo "git clones $repository over SSH with $secret."

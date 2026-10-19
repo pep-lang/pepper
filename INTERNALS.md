@@ -33,7 +33,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 
 | Path | Role |
 | --- | --- |
-| `tools/compiler` | The compiler, `pep-build`: a `pep.toml` project (output `pepc`) whose modules are the folders below. `main.pep` is the command line. It depends on the private `pepper-llvm` package (justinboswell/pepper-llvm), the bindings to LLVM 20's C API, which the build fetches into `tools/compiler/.pep/deps`. |
+| `tools/compiler` | The compiler, `pep-build`: a `pep.toml` project (output `pepc`) whose modules are the folders below. `main.pep` is the command line. It depends on the private `pepper-llvm` package (pep-lang/pepper-llvm), the bindings to LLVM 20's C API, which the build fetches into `tools/compiler/.pep/deps`. |
 | `tools/compiler/ast`, `parse`, `desugar` | `compiler.ast`, the syntax tree; `compiler.parse`, the recursive-descent parser over `tools/syntax`'s tokens, with the checks on the finished tree (`parse/checks.pep`); `compiler.desugar`, which lowers what the source wrote (interpolated strings, formats, module `static` blocks, parentheses) to the tree the rest of the compiler reads. No LLVM. |
 | `tools/compiler/diagnostic`, `doc` | `compiler.diagnostic`: a `Diagnostic` with notes and fixes, rendered clang-style, names demangled. `compiler.doc`: doc comments (`##`) and the documentation check, shared by pep-doc and the language server. |
 | `tools/compiler/link` | `compiler.link`: program loading (`program.pep`: runtime discovery, search paths, the import walk; `files.pep`: module folders, namespaces, import resolution; `project.pep`: `pep.toml`, `pep.lock` and `Packages`), platform selection (`platform.pep`, `Target`), module linking (`link.pep`), the checks after linking (`visibility.pep`, `deprecation.pep`), the scope walk they share (`walk.pep`), symbol names (`names.pep`), and the units codegen and the cache split the program into (`units.pep`). No LLVM. |
@@ -42,7 +42,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tools/compiler/incremental` | `compiler.incremental`, which links no LLVM, so `pep-lsp` uses it too: the build cache (`cache.pep`, `interface.pep`), a program's checked compilation units (`compilation_units.pep`), checking them (`check.pep`) and checking them in parallel worker children (`workers.pep`). |
 | `tools/compiler/driver` | `compiler.driver`: building a program (`build.pep`), its compilation units' objects, compiling parts in parallel (`parts.pep`), linking (`linker.pep`), projects and fetching dependencies (`project.pep`), and the test `main` of `--test` (`test_main.pep`). |
 | `tools/compiler/*_test.pep` | The compiler's tests (see [section 9](#9-tests)). |
-| `tools/pep-lsp` | `pep-lsp`, the language server, on the `lsp` package (justinboswell/pepper-lsp) and the compiler's front end (see [section 8](#8-language-server-tools-and-the-compilers-modules)). |
+| `tools/pep-lsp` | `pep-lsp`, the language server, on the `lsp` package (pep-lang/pepper-lsp) and the compiler's front end (see [section 8](#8-language-server-tools-and-the-compilers-modules)). |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
 | `tools/pep-doc` | `pep-doc`, on the compiler's parser: generates `docs/src/reference/` from runtime doc comments (`reference.pep`, with the doc comments read by `compiler.doc`), runs `pep-doc check` (`checks.pep`, `book.pep`), and builds the versioned mdBook site (`site.pep`). |
 | `tools/syntax` | A Pepper library: the lexer for Pepper source, which keeps each token's comments, for `compiler.parse` and tools. See [section 8](#8-language-server-tools-and-the-compilers-modules). |
@@ -2380,7 +2380,7 @@ diagnostics"). The mechanics:
 **`tools/pep-lsp`** is the language server, `pep-lsp`; releases
 (`scripts/release-build.sh`) and the VS Code extension (`vsix.yml`) ship
 it. It's built
-on the `lsp` package (justinboswell/pepper-lsp), a tower-lsp style
+on the `lsp` package (pep-lang/pepper-lsp), a tower-lsp style
 framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
 (`compiler.parse`, `compiler.link`, `compiler.sema`), checking a program

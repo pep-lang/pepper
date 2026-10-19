@@ -27,7 +27,7 @@ Pepper is written in Pepper. The compiler, `pep-build`, is the Pepper program in
 
    Cheapest source first: an LLVM 20 already on the machine, then the package manager (`apt install llvm-20-dev` plus `libpolly-20-dev`, 4–8s; `brew install llvm@20`), then the upstream release archive, of which only what the build consumes is unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries. The prefix goes to `.pep/llvm-prefix` (gitignored), which `scripts/pepper-tests.sh`, the release build and CI read.
 
-3. **The private packages.** `tools/compiler` depends on `justinboswell/pepper-llvm` and `tools/pep-lsp` on `justinboswell/pepper-lsp` (their `pep.toml`). The first build fetches each into the tool's `.pep/deps` with git, so git needs read access. Cloud sessions need both repositories attached (`add_repo`); CI uses deploy keys (`scripts/ci-package-auth.sh`).
+3. **The private packages.** `tools/compiler` depends on `pep-lang/pepper-llvm` and `tools/pep-lsp` on `pep-lang/pepper-lsp` (their `pep.toml`). The first build fetches each into the tool's `.pep/deps` with git, so git needs read access. Cloud sessions need both repositories attached (`add_repo`); CI uses deploy keys (`scripts/ci-package-auth.sh`).
 
 ## Build
 
