@@ -93,6 +93,41 @@ numbers_chars_and_strings_compare() {
     expect_equal((4).clamp(0, 10), 4);
 }
 
+# `char` is a signed 8-bit number, so one at 128 or above (here 200, -56)
+# sorts before 'a'. Read from an array, so no comparison folds to a constant.
+[Test]
+chars_order_as_signed_bytes() {
+    var chars = ['a' as char, 'b' as char, (200 as byte) as char, 'z' as char];
+    var a = chars[0];
+    var b = chars[1];
+    var high = chars[2];
+    var z = chars[3];
+    expect_true(a < b);
+    expect_false(b < a);
+    expect_false(a < a);
+    expect_true(a <= a);
+    expect_true(a <= b);
+    expect_false(b <= a);
+    expect_true(b > a);
+    expect_false(a > b);
+    expect_true(b >= b);
+    expect_false(a >= b);
+    expect_true(high < a);
+    expect_true(high <= a);
+    expect_false(high > a);
+    expect_false(high >= a);
+    expect_equal(high.compare(a), -1);
+    expect_equal(a.compare(high), 1);
+    expect_equal(a.min(b), a);
+    expect_equal(a.max(b), b);
+    expect_equal(a.min(high), high);
+    expect_equal(a.max(high), a);
+    expect_equal(z.clamp(a, b), b);
+    expect_equal(high.clamp(a, b), a);
+    expect_equal(b.clamp(a, z), b);
+    expect_equal(a.clamp(high, b), a);
+}
+
 [Test]
 floats_compare_in_a_total_order() {
     var nan = _nan();
