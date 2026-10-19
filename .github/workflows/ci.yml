@@ -199,6 +199,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
         run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
       # A change to the compiler is tested with that compiler: built here
@@ -282,6 +283,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
         run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
       # A change to the compiler is tested with that compiler: built here
@@ -354,6 +356,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
         run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
       # A change to the compiler is tested with that compiler: built here
@@ -499,6 +502,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
         run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
       # See test-windows.

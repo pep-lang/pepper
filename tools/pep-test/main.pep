@@ -260,9 +260,8 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
     in_parallel(selected.count, options.jobs, (i: ulong) => {
         var start = os.Instant.now();
         var outcome = run_test(selected[i], options.timeout, scratch.join($"{i}"));
-        var took = format_duration(start.elapsed());
         outcomes[i] = outcome;
-        print($"test {display_name(selected[i], qualify)} ... {outcome.passed ? "ok" : "FAILED"} ({took})");
+        report_test(display_name(selected[i], qualify), outcome, start.elapsed(), options.timeout);
     });
 
     ulong passed = 0;
@@ -587,6 +586,18 @@ matches(name: String, filters: Array<String>): bool {
 # The test's name, after its file's when tests from several files run.
 display_name(test: Test, qualify: bool): String {
     return qualify ? $"{test.file}::{test.name}" : test.name;
+}
+
+# Prints how a test ended and how long it took, with a warning when it
+# passed after more than 60% of its timeout: it fails once its machine is
+# busier (#1001).
+report_test(name: String, outcome: Outcome, elapsed: os.Duration, timeout: ulong) {
+    var took = format_duration(elapsed);
+    print($"test {name} ... {outcome.passed ? "ok" : "FAILED"} ({took})");
+    if (!outcome.passed or timeout == 0 or elapsed.milliseconds() * 10 <= timeout * 6000) {
+        return;
+    }
+    print($"warning: test {name} took {took}, over 60% of its {timeout} s timeout");
 }
 
 # A test's run time: whole milliseconds under a second, else seconds with

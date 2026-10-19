@@ -197,3 +197,19 @@ ends_what_a_test_that_panics_or_returns_started() {
     expect_contains(ran.stdout + ran.stderr, "panic: on purpose\n");
     expect_ends_with(ran.stdout, "1 passed, 1 failed\n");
 }
+
+[Test]
+warns_of_a_test_near_its_timeout() {
+    # 2.7 s of a 4 s timeout is over the 60% that warns (#1001); 0 s is not.
+    var folder = TempFolder("pep_test_slow");
+    write_file(
+        folder.path.join("slow_test.pep"),
+        "import os;\n\n[Test]\nslow() {\n    var start = os.Instant.now();\n"
+            + "    while (start.elapsed().milliseconds() < 2700) {}\n}\n\n[Test]\nquick() {}\n"
+    );
+    var ran = pep_test(folder.path, ["--timeout", "4"]);
+    expect_exit(ran, 0);
+    expect_contains(ran.stdout, "warning: test slow took ");
+    expect_contains(ran.stdout, ", over 60% of its 4 s timeout\n");
+    expect_equal(ran.stdout.split("warning:").count, 2 as ulong);
+}

@@ -19,7 +19,10 @@
 #
 # Environment: GH_TOKEN or GITHUB_TOKEN, to list and download the releases
 # while the repository is private; RUNNER_TEMP, where the home goes
-# (default: target/); PEPPER_TARGET_DIR, the folder target/ stands for.
+# (default: target/); PEPPER_TARGET_DIR, the folder target/ stands for;
+# PEPPER_EXPECT_COMMIT, the commit a -dev toolchain must be the build of:
+# CI sets it to the merge once its own release has published that build,
+# so a job that installs the build before it fails instead (#989).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -56,6 +59,18 @@ if [ -z "$version" ]; then
     | awk -F'[.-]' '{ print $1, $2, $3, ($4 == "dev" ? 0 : 1), $0 }' \
     | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -d' ' -f5)"
   [ -n "$version" ] || { echo "error: no toolchain (vX.Y.Z release or vX.Y.Z-dev prerelease) is published" >&2; exit 1; }
+fi
+# A release of a -dev VERSION publishes it with its tag on the commit it
+# built (release.yml); a release VERSION publishes nothing until tagged.
+expected="${PEPPER_EXPECT_COMMIT:-}"
+held="$(tr -d '\r' < VERSION)"
+if [ -n "$expected" ] && [ "${held%-dev}" != "$held" ]; then
+  built=""
+  [ "$version" != "$held" ] || built="$(git ls-remote origin "refs/tags/v$version" | cut -f1)"
+  if [ "$built" != "$expected" ]; then
+    echo "error: installing Pepper $version (the build of ${built:-another commit}), not the build of $held at $expected that this run's release published" >&2
+    exit 1
+  fi
 fi
 home="${RUNNER_TEMP:-$target}/pepper-home"
 rm -rf "$home"

@@ -61,6 +61,12 @@ the author.
   `scripts/pepper-tests.sh` built, found on the PATH (see "Tests that run
   the tools" in `docs/src/contributing/tests.md`); data files go in the
   tool's `testdata/` folder.
+- A PR that changes `tools/compiler/incremental/`, `tools/compiler/driver/`
+  or `tools/compiler/link/` also runs `scripts/ci-cross-link.sh build
+  <pep-build> <output-dir>` before it merges: it builds for the host and
+  `--target` the other two systems, which only main's CI does otherwise
+  (#994). It needs the system roots `scripts/ci-provision-cross.sh` sets
+  up.
 - `runtime/` and `tools/` stay formatted with `pep-fmt`:
   `tools/pep-fmt/repository_test.pep` fails on a file that is not
   (`pep-fmt -w <file>` fixes it).

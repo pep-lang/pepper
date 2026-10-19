@@ -73,7 +73,10 @@ error.
    `--jobs` at once, and prints `test NAME ... ok (TIME)` or
    `... FAILED (TIME)` as each ends (in order with `--jobs 1`). TIME is
    how long the test's process ran: whole milliseconds (`12 ms`), or
-   seconds with two decimals from one second up (`1.25 s`). A test passes
+   seconds with two decimals from one second up (`1.25 s`). A test that
+   passes after more than 60% of its timeout is followed by
+   `warning: test NAME took TIME, over 60% of its N s timeout`: it will
+   time out once its machine is busier. A test passes
    when its process exits with 0; a `[ShouldPanic]` test passes when its
    process panics with a message that contains the attribute's text.
 5. **Reports the failures,** each with what the test printed (the panic's
