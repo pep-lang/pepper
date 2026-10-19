@@ -313,11 +313,22 @@ checks_the_runtime_again_for_another_target_in_one_cache() {
         options.in_process = true;
         return driver.build(program.value(), options);
     };
-    expect_true(build(link.Target()).is_ok());
+    var native = build(link.Target());
+    expect_true(native.is_ok());
+    expect_false(native.value().misses.is_empty);
     var built = build(_parse(other));
     if (built.is_err()) {
         print(built.error());
         # Checked and compiled; only the link needs the target's system root.
         expect_true(built.error().contains($"note: linking for '{other}'"));
     }
+    # Native again, after the other target, in the same cache: it checks
+    # and builds, reusing the first build's objects.
+    var again = build(link.Target());
+    if (again.is_err()) {
+        print(again.error());
+    }
+    expect_true(again.is_ok());
+    expect_true(again.value().unchanged or !again.value().hits.is_empty);
+    expect_true(again.value().misses.is_empty);
 }

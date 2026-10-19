@@ -269,10 +269,15 @@ keeps_no_copy_of_the_bodies_it_decodes() {
         expect_true(built.is_ok());
         var ran = process.Command(output.to_string()).spawn();
         expect_true(ran.is_ok() and ran.value().wait().value().success());
+        return built.value();
     };
-    build();
+    var first = build();
+    expect_true(first.hits.is_empty);
     _write_callee(root, "1 - 1");
-    build();
+    # Only `a.pep`'s unit changed: the others' objects are reused.
+    var second = build();
+    expect_false(second.hits.is_empty);
+    expect_false(second.misses.is_empty);
 }
 
 # A summary a compilation unit settles for a function below it blames a
@@ -307,10 +312,17 @@ keeps_a_settled_summary_right_when_its_function_moves() {
             print(built.error());
         }
         expect_true(built.is_ok());
+        var ran = process.Command(output.to_string()).spawn();
+        expect_true(ran.is_ok() and ran.value().wait().value().success());
+        return built.value();
     };
-    build();
+    var first = build();
+    expect_true(first.hits.is_empty);
     File.write_text(root.join(Path("a.pep")), "# moved\n" + callee);
-    build();
+    # Only `a.pep` moved: the others' objects are reused.
+    var second = build();
+    expect_false(second.hits.is_empty);
+    expect_false(second.misses.is_empty);
 }
 
 [Test]
@@ -513,13 +525,17 @@ keeps_string_literals_apart_across_units() {
         expect_true(built.is_ok());
         var ran = process.Command(output.to_string()).spawn();
         expect_true(ran.is_ok() and ran.value().wait().value().success());
+        return built.value();
     };
-    build();
+    var first = build();
+    expect_true(first.hits.is_empty);
     File.write_text(
         root.join(Path("main.pep")),
         "import \"a\";\nmain(): int {\n    var first = \"one\" + \"two\" + \"three\";\n    return a_text() == \"alphabeta\" and first == \"onetwothree\" ? 0 : 1;\n}\n"
     );
-    build();
+    # `a.pep`'s object comes from the cache, with its own literals.
+    var second = build();
+    expect_false(second.hits.is_empty);
 }
 
 # Writes a program whose `a.pep` returns `a_body`, and whose `main.pep`
@@ -562,7 +578,7 @@ _build_deferred(root: Path): bool {
             return program.value().has_bodies(i);
         }
     }
-    return true;
+    panic("a.pep is not among the program's files");
 }
 
 # A build loaded with `defer_bodies` links and checks the bodies of the files it
