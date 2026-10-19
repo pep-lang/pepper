@@ -174,12 +174,11 @@ The VS Code extension adds syntax highlighting and a language server, which
 reports compiler errors as you type and provides hover information,
 completion, go to definition, and an outline of each file.
 
-The packaged extension is published as a `.vsix` file on the repository's
-[releases page](https://github.com/pep-lang/pepper/releases), under the
-release whose tag starts with `vsix-v`. Download it and install it in VS Code
-with **Extensions: Install from VSIX...** from the command palette. The
-language server is bundled with the extension, so there is nothing else to
-install.
+The packaged extension is published as a `.vsix` file on the
+[pep-lang/vscode-pepper releases page](https://github.com/pep-lang/vscode-pepper/releases).
+Download it and install it in VS Code with **Extensions: Install from
+VSIX...** from the command palette. It runs the language server of your
+Pepper toolchain, and offers to install the toolchain when there is none.
 
 A few things are useful once it is installed:
 

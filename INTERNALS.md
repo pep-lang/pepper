@@ -43,7 +43,6 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tools/compiler/driver` | `compiler.driver`: building a program (`build.pep`), its compilation units' objects, compiling parts in parallel (`parts.pep`), linking (`linker.pep`), projects and fetching dependencies (`project.pep`), and the test `main` of `--test` (`test_main.pep`). |
 | `tools/compiler/*_test.pep` | The compiler's tests (see [section 9](#9-tests)). |
 | `tools/pep-lsp` | `pep-lsp`, the language server, on the `lsp` package (pep-lang/pepper-lsp) and the compiler's front end (see [section 8](#8-language-server-tools-and-the-compilers-modules)). |
-| `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
 | `tools/pep-doc` | `pep-doc`, on the compiler's parser: generates `docs/src/reference/` from runtime doc comments (`reference.pep`, with the doc comments read by `compiler.doc`), runs `pep-doc check` (`checks.pep`, `book.pep`), and builds the versioned mdBook site (`site.pep`). |
 | `tools/syntax` | A Pepper library: the lexer for Pepper source, which keeps each token's comments, for `compiler.parse` and tools. See [section 8](#8-language-server-tools-and-the-compilers-modules). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, on `compiler.parse`'s written tree. |
@@ -58,7 +57,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tests/` | `.pep` corpus: `hello.pep` plus one `tests/<Feature.Case>/test.pep` per folder, which `compiler/corpus_test.pep` builds and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
 | `scripts/` | The version every tool reports (`set-version.sh`), the release build (`release-build.sh`, `release-smoke-test.sh`), CI's toolchain install (`ci-install-toolchain.sh`), LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the Pepper tests (`pepper-tests.sh`), the sema model's generators (`gen-sema-model.py`, `gen-sema-record.py`), and `install-vscode-extension.ps1`. |
-| `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `release.yml`, `docs.yml`, `llvm-package.yml` (see [section 11](#11-ci)). |
+| `.github/workflows/` | `ci.yml`, `platform-test.yml`, `release.yml`, `docs.yml`, `llvm-package.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
 Dependency direction: `syntax ← ast/parse/desugar ← link ← sema ←
@@ -2378,8 +2377,8 @@ diagnostics"). The mechanics:
 ## 8. Language server, tools, and the compiler's modules
 
 **`tools/pep-lsp`** is the language server, `pep-lsp`; releases
-(`scripts/release-build.sh`) and the VS Code extension (`vsix.yml`) ship
-it. It's built
+(`scripts/release-build.sh`) ship it, and the VS Code extension
+(pep-lang/vscode-pepper) runs the toolchain's. It's built
 on the `lsp` package (pep-lang/pepper-lsp), a tower-lsp style
 framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
@@ -2518,27 +2517,12 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
 - Sema takes seconds per analysis (1.5 s for a program that is only the
   runtime, 20 s for pep-doc), which is why requests never wait for it.
 - `smoke-test.mjs` exercises raw JSON-RPC against a built server
-  (`PEPPER_LSP_BIN`); `vsix.yml` runs it on each server it bundles.
+  (`PEPPER_LSP_BIN`).
 
-**`tools/vscode-pepper`**: `src/extension.js` launches the server. It runs
-a *shadow copy* of the binary because Windows locks a running exe (copied
-under a temporary name, then renamed), polls the binary and restarts on
-change, and registers `pepper.restartServer`. Restarts are serialized,
-retry a failed start, and reuse one output channel.
-The server is `pep-lsp` (`tools/pep-lsp`): `pepper.lspPath`, else the
-toolchain's `pep-lsp` (`pepper install which`, run with `PEPPER_RUNTIME`
-set to that toolchain's runtime), else the bundled
-`server/<platform-arch>/` (`serverPath.js`). Syntax highlighting is
-`syntaxes/pepper.tmLanguage.json`. `vsix.yml` builds the VSIX for four
-targets (x64 Windows and Linux, x64 and arm64 macOS) and publishes it as
-a `vsix-v*` release; it runs only for a `vX.Y.Z` tag or a manual dispatch.
-Each leg installs the toolchain of `VERSION` (`ci-install-toolchain.sh`;
-a tag waits for `release.yml` to publish it) and builds `tools/pep-lsp`
-with its `pep-build -O` against the checkout's runtime.
-`scripts/install-vscode-extension.ps1 [-Watch]` builds `tools/pep-lsp` the
-same way with the installed toolchain's `pep-build`, packages the VSIX with
-`npx @vscode/vsce`, and runs `code --install-extension` from the current
-branch.
+**The VS Code extension** lives in pep-lang/vscode-pepper. It runs the
+toolchain's `pep-lsp` (`pepper install which`), or `pepper.lspPath`, and
+bundles no server. `scripts/install-vscode-extension.ps1` installs its
+newest release.
 
 **`tools/syntax` and `tools/pep-fmt`** are Pepper programs, built with
 `pepper build tools/pep-fmt/main.pep`. They are the project's largest
@@ -3393,7 +3377,7 @@ program by hand.
    `sema_test.pep`, `link_test.pep`) for each error, and a
    `tests/<Feature.Case>/test.pep` program if useful. Update the language
    guide chapter in `docs/src/language/` (with a tested example in
-   `docs/examples/`) and the TextMate grammar in `tools/vscode-pepper`.
+   `docs/examples/`) and the TextMate grammar in pep-lang/vscode-pepper.
 
 ### Add a sema pass
 
@@ -3540,11 +3524,6 @@ checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
   -f script=…`; the default runs `scripts/pepper-tests.sh` with the build
   of main). It has a failure/cancel diagnostics step. Read AGENTS.md's CI
   section before writing a script for it.
-- **`vsix.yml`**: builds the extension and `pep-lsp` for win32-x64,
-  linux-x64, darwin-x64 and darwin-arm64. It runs only on a `vX.Y.Z` tag
-  push or a manual dispatch, and publishes the release from a tag or from
-  `main`. There is no arm64 Windows or Linux runner, so those platforms get
-  no bundled server.
 - **`release.yml`**: on each merge into main that changes `runtime/`,
   `tools/`, `VERSION` or the release scripts (run by `ci.yml`'s `release`
   job, which every job that installs the toolchain waits for, so CI tests

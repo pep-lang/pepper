@@ -297,25 +297,6 @@ jobs:
           fi
           gh release upload "$TAG" pepper-* SHA256SUMS ../scripts/install.sh ../scripts/install.ps1 --clobber
 
-  # A release's extension builds with that release's toolchain, so the VSIX
-  # workflow starts only once the archives are published: a tag push would
-  # start it beside this workflow, where its legs would wait for a toolchain
-  # not yet published.
-  vsix:
-    if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
-    needs: [version, publish]
-    runs-on: ubuntu-24.04
-    permissions:
-      actions: write
-    timeout-minutes: 5
-
-    steps:
-      - name: Start the VSIX workflow on the tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: gh workflow run vsix.yml --repo "$REPO" --ref "$GITHUB_REF_NAME"
-
   # After a release, main starts the next minor version: a pull request that
   # sets X.(Y+1).0-dev (scripts/set-version.sh) and merges itself once its
   # checks pass (auto-merge), when main still holds the version just

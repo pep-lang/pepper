@@ -183,14 +183,11 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   compiler that builds it, is the newest published toolchain too, so the release
   may take any version, not only the one main was developing:
   1. A pull request runs `scripts/set-version.sh 0.9.0`, which sets the
-     version everywhere a tool reads it; the same pull request sets the VS
-     Code extension's `package.json` and `package-lock.json` to match.
+     version everywhere a tool reads it.
   2. Tag that merge `v0.9.0` and push the tag. The workflow checks that the
      commit holds that version, builds it and publishes the release; the
-     `Docs` workflow publishes the docs from the same tag, and once the
-     release's archives are up the workflow dispatches `VSIX` on the tag,
-     which builds the extension with them and publishes it as
-     `vsix-v<extension version>`.
+     `Docs` workflow publishes the docs from the same tag. The VS Code
+     extension is released from its own repository, pep-lang/vscode-pepper.
   3. Once it is published, the workflow opens a pull request that starts
      the next minor version on main (`0.10.0-dev`) and merges itself once
      its checks pass, unless main has already moved on; a major version is

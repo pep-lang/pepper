@@ -536,8 +536,8 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
 # initialization options the server reads (`json_flag(params.
 # initialization_options, ["inlayHints", "parameterNames"], ...)` and
 # `options.value().contains("buildOptions")` in tools/pep-lsp/server.pep,
-# spelled with dots), and the VS Code extension's settings and commands
-# (`pepper.lspPath`).
+# spelled with dots). The VS Code extension's settings live in
+# pep-lang/vscode-pepper.
 _lsp(root: Path, problems: String[]): Result<void> {
     var page = "docs/src/tools/pep-lsp.md";
     var main = _repository_file(root, "tools/pep-lsp/arguments.pep")?;
@@ -588,21 +588,8 @@ _lsp(root: Path, problems: String[]): Result<void> {
         from = start;
         initialization.append(slice(server, start, find_byte(server, '"', start, server.size)));
     }
-    var package = _repository_file(root, "tools/vscode-pepper/package.json")?;
-    var settings = Array<String>();
-    from = 0;
-    while (true) {
-        var found = package.find("\"pepper.", from);
-        if (found < 0) {
-            break;
-        }
-        var start = found as ulong + 1;
-        from = start;
-        settings.append(slice(package, start, find_byte(package, '"', start, package.size)));
-    }
     _undocumented(root, "pep-lsp", page, "option", help_options(help), _Match.Word, problems)?;
     _undocumented(root, "pep-lsp", page, "initialization option", _sorted_once(initialization), _Match.Word, problems)?;
-    _undocumented(root, "pep-lsp", page, "VS Code setting or command", _sorted_once(settings), _Match.Word, problems)?;
     return Result<void>.ok();
 }
 
