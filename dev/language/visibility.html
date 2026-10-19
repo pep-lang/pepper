@@ -12,23 +12,24 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
-        <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-e96d0476.css">
-        <link rel="stylesheet" href="../css/chrome-d279d366.css">
-        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+        <link rel="stylesheet" href="../theme/version-switcher.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -36,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-497e68c2.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8b7d02da.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -53,7 +54,7 @@
             </div>
         </div>
     </div>
-    <div id="mdbook-body-container">
+    <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
@@ -82,12 +83,12 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
             let sidebar = null;
-            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
@@ -102,39 +103,39 @@
             }
         </script>
 
-        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="mdbook-page-wrapper" class="page-wrapper">
+        <div id="page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="mdbook-menu-bar-hover-placeholder"></div>
-                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
                         </label>
-                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
                         </button>
-                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
                         </button>
                     </div>
 
@@ -142,62 +143,56 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                            <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/visibility.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
-                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/visibility.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="mdbook-search-wrapper" class="hidden">
-                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
                         <div class="search-wrapper">
-                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
                             <div class="spinner-wrapper">
-                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                                <i class="fa fa-spinner fa-spin"></i>
                             </div>
                         </div>
                     </form>
-                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
-                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
-                        <ul id="mdbook-searchresults">
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="mdbook-content" class="content">
+                <div id="content" class="content">
                     <main>
                         <h1 id="visibility"><a class="header" href="#visibility">Visibility</a></h1>
 <p>Visibility decides which declarations other files may use. A top-level
 declaration has one of three levels:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Written</th><th>Visible to</th></tr>
-</thead>
-<tbody>
+<div class="table-wrapper"><table><thead><tr><th>Written</th><th>Visible to</th></tr></thead><tbody>
 <tr><td><code>private f()</code></td><td>its own file only</td></tr>
 <tr><td><code>f()</code></td><td>the files of its <a href="modules.html#modules">module</a></td></tr>
 <tr><td><code>export f()</code></td><td>any file that imports it</td></tr>
-</tbody>
-</table>
+</tbody></table>
 </div>
 <p>With no modifier, a declaration is <strong>internal to its module</strong>: the files of
-one module see each other’s declarations, and nothing else does. A file
+one module see each other's declarations, and nothing else does. A file
 outside any module is a module of its own, so its declarations are
 <strong>private to the file</strong>. This lets a module, or a file, keep its helpers to
 itself and offer a small, clear surface to the code that imports it.</p>
@@ -319,10 +314,10 @@ lib.pep:29:1: note: declared here
 <p>The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports <code>'name' is private to file.pep</code>.</p>
 <h2 id="files-of-a-module-see-each-other-through-imports"><a class="header" href="#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a></h2>
-<p>Inside a module, <code>export</code> is not needed for one file to use another’s
+<p>Inside a module, <code>export</code> is not needed for one file to use another's
 declarations, but an import is: a file sees the top-level declarations of
 another file of its module, exported or not, once it imports that file
-(<code>import "rules";</code>), as a C file sees another’s declarations through its
+(<code>import "rules";</code>), as a C file sees another's declarations through its
 header. <code>export</code> means visible <strong>outside</strong> the module, through its
 <code>module.pep</code>.</p>
 <p>Here the <code>inventory</code> module keeps its rules in <code>rules.pep</code>, which exports
@@ -380,8 +375,8 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>A file’s own declarations come first, then what its imports bring in (the
-files of its module it imports included), then the runtime’s. A file of the
+<p>A file's own declarations come first, then what its imports bring in (the
+files of its module it imports included), then the runtime's. A file of the
 module that names a declaration of another one it does not import gets an
 error that names the file to import. Without its <code>import "rules";</code>,
 <code>stock.pep</code> would report:</p>
@@ -389,8 +384,8 @@ error that names the file to import. Without its <code>import "rules";</code>,
     5 |     var _shelf: Shelf;
       |                 ^~~~~
 </code></pre>
-<p>So a file’s dependencies are exactly its imports, and the compiler checks
-and caches each file against what it imports alone. A module’s files are
+<p>So a file's dependencies are exactly its imports, and the compiler checks
+and caches each file against what it imports alone. A module's files are
 the files of the program in its folder (and in subfolders that are not
 modules themselves): a file joins the program when the module imports it,
 so <code>module.pep</code> imports a file with nothing to export, like <code>rules.pep</code>,
@@ -418,7 +413,7 @@ extension is <code>private</code>.</p>
 <p>Put <code>private</code> in front of a top-level declaration to keep it to its own
 file: the other files of its module do not see it. You can mark every kind
 of declaration that <code>export</code> applies to. Two files of one module may then
-each declare a <code>private</code> helper of the same name, and each file’s code
+each declare a <code>private</code> helper of the same name, and each file's code
 reaches its own. Here <code>summary.pep</code> and <code>detail.pep</code> each have a private
 <code>WIDTH</code> and <code>label</code>, and share the module-internal <code>pad</code>:</p>
 <pre><code class="language-pepper"># `private` keeps these to this file: detail.pep may declare its own
@@ -488,7 +483,7 @@ one name in the other files form their set without it, and its own file
 sees only its own.</p>
 </li>
 <li>
-<p>A <code>private</code> extension’s methods are usable only in its file.</p>
+<p>A <code>private</code> extension's methods are usable only in its file.</p>
 </li>
 </ul>
 <p>Code outside the module never sees a <code>private</code> declaration, as it never
@@ -501,15 +496,15 @@ are already private to it. A declaration cannot be both <code>export</code> and
       |        ^~~~~~~
 </code></pre>
 <h2 id="members-of-structs-and-extensions"><a class="header" href="#members-of-structs-and-extensions">Members of structs and extensions</a></h2>
-<p>Fields and methods declared inside a struct’s body are reached through the
-struct, so they share the struct’s visibility: if you can use the struct, you
+<p>Fields and methods declared inside a struct's body are reached through the
+struct, so they share the struct's visibility: if you can use the struct, you
 can use all of its members.</p>
 <p>To let other code read a value but not write it, make it a
 <a href="properties.html">property</a> with only a <code>get</code>: <code>var balance: long { get; }</code>
-can be assigned only by the struct’s own constructors and methods.</p>
-<p>Methods added by an extension share the <strong>extension’s</strong> visibility instead. In
+can be assigned only by the struct's own constructors and methods.</p>
+<p>Methods added by an extension share the <strong>extension's</strong> visibility instead. In
 the example, <code>norm()</code> is added by a private extension, so only <code>lib.pep</code> (or,
-in a module, the module’s files) can call it, even though <code>Point</code> itself is
+in a module, the module's files) can call it, even though <code>Point</code> itself is
 exported:</p>
 <pre><code class="language-text">main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
@@ -518,10 +513,10 @@ lib.pep:46:5: note: declared here
    46 |     norm(): int {
       |     ^~~~
 </code></pre>
-<p>An exported extension’s methods are usable where its file is <strong>imported</strong>,
+<p>An exported extension's methods are usable where its file is <strong>imported</strong>,
 not everywhere: a file sees the extensions it declares itself, the exported
 extensions of the files it imports, the exported extensions of every file of
-a module it imports (<code>import geo</code> reaches <code>geo/ext.pep</code>’s), and those of the
+a module it imports (<code>import geo</code> reaches <code>geo/ext.pep</code>'s), and those of the
 runtime, which every file sees. Here <code>measure.pep</code> adds <code>manhattan()</code> to
 <code>Point</code>, and <code>main.pep</code> imports it to call it:</p>
 <pre><code class="language-pepper">import "point";
@@ -568,20 +563,20 @@ call may go through a value of that trait, which works whatever file
 declares the conformance. A file can return a <code>Shape</code> whose struct and
 conformance stay private, and callers still call <code>area</code> on it.</li>
 <li>A call on a receiver whose type is not known in this file: <code>this.m()</code> in a
-trait’s default method, or <code>x.m()</code> (or <code>x.f().m()</code>) where <code>x</code> is a
-parameter typed by a type parameter, the function’s or its struct’s
+trait's default method, or <code>x.m()</code> (or <code>x.f().m()</code>) where <code>x</code> is a
+parameter typed by a type parameter, the function's or its struct's
 (<code>measure&lt;X&gt;(x: X)</code>). Such a call resolves where the generic is used, with
-that file’s imports.</li>
+that file's imports.</li>
 </ul>
 <p>When the extension is in a file of another module, the error names the
 module to import instead (<code>import its module 'geo'</code>), since a file of another
 module is reached only through its module.</p>
-<p>Inside a struct’s methods (and a trait’s default methods), a bare call to a
+<p>Inside a struct's methods (and a trait's default methods), a bare call to a
 name that an extension you cannot see adds as a method is an error too,
 rather than a call to the top-level function of that name: the compiler
 would otherwise bind it to the method.
-Rename one of them, or import the extension’s file if the method is what you
-meant. That import may point back at a file that imports this one (a struct’s
+Rename one of them, or import the extension's file if the method is what you
+meant. That import may point back at a file that imports this one (a struct's
 file importing the file that extends it); such cycles are allowed.</p>
 <p>Extending a struct does not make a private struct visible to other files.</p>
 <p>Visibility is checked before types are known, so members are matched by name:
@@ -589,7 +584,7 @@ a call <code>x.m()</code> is accepted if any struct body visible to the file (it
 or exported) or any extension visible to it, as above, declares a member
 named <code>m</code>.</p>
 <h2 id="where-export-and-private-go"><a class="header" href="#where-export-and-private-go">Where <code>export</code> and <code>private</code> go</a></h2>
-<p><code>export</code> and <code>private</code> go directly before the declaration’s keyword or name,
+<p><code>export</code> and <code>private</code> go directly before the declaration's keyword or name,
 <strong>after</strong> any attributes:</p>
 <pre><code class="language-pepper">[Target(OS(Windows))]
 export platform_name(): String { return "Windows"; }
@@ -605,21 +600,21 @@ private twice(x: int): int { return x * 2; }
 <p><code>export</code> controls visibility between Pepper files only. Making a function
 callable from C with C linkage is a separate matter, handled by the <code>[Export]</code>
 attribute described in <a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
-<h2 id="the-runtimes-exports"><a class="header" href="#the-runtimes-exports">The runtime’s exports</a></h2>
-<p>The runtime’s public surface (<code>String</code>, <code>Array</code>, <code>HashMap</code>, <code>HashSet</code>,
+<h2 id="the-runtimes-exports"><a class="header" href="#the-runtimes-exports">The runtime's exports</a></h2>
+<p>The runtime's public surface (<code>String</code>, <code>Array</code>, <code>HashMap</code>, <code>HashSet</code>,
 <code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
 <a href="../reference/README.html">standard library reference</a>) is exported the same
-way, and is visible in every file without an import. The runtime’s own helpers
+way, and is visible in every file without an import. The runtime's own helpers
 are private, so calling one, such as <code>_pep_check_sync_enabled</code>, reports
 <code>'_pep_check_sync_enabled' is private to</code> followed by the path of the
-runtime’s <code>internals.pep</code>.</p>
+runtime's <code>internals.pep</code>.</p>
 <h2 id="each-module-has-its-own-namespace"><a class="header" href="#each-module-has-its-own-namespace">Each module has its own namespace</a></h2>
 <p>A private declaration belongs to its file (or its module) alone, so two
 files outside any module, or two modules, may each declare a private name
 without clashing. Within a module, <code>private</code> does the same for two of its
 files (see
 <a href="#keeping-a-declaration-to-its-file">Keeping a declaration to its file</a>). Here <code>main.pep</code> and <code>lib.pep</code> each have their own
-<code>Counter</code> and <code>make</code>, and each file’s code reaches its own:</p>
+<code>Counter</code> and <code>make</code>, and each file's code reaches its own:</p>
 <pre><code class="language-pepper"># lib.pep's private helpers: no other file can see them, and no other
 # file's names can clash with them.
 struct Counter { var n: int; }
@@ -658,30 +653,30 @@ private <code>helper</code>. Files are told apart by their path inside their mod
 (<code>io/file.pep</code>), not by their file name alone. Within one module, the files
 share their names instead, except <code>private</code> ones (see
 <a href="#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a>).</p>
-<p>Exported names work the same way between modules: each module’s exports
+<p>Exported names work the same way between modules: each module's exports
 are its own, so two modules may export the same name, and importers tell
 them apart by qualifier (<code>a.parse</code> and <code>b.parse</code>) or by an import list
 (<code>import [parse as parse_b] from b</code>). Using a name that two whole-file
 imports both provide is an error at the use (see
 <a href="modules.html#how-imported-names-behave">Modules and imports</a>). A private name
 may repeat an exported one from another file; in the file that declares it,
-the file’s own declaration is the one that name refers to.</p>
+the file's own declaration is the one that name refers to.</p>
 <p>Two kinds of file keep their exported names program-wide, because every file
 reaches them without an import or by its bare name: the runtime (and any
-<code>--import</code> module), and the program’s main file. So an export may not repeat
+<code>--import</code> module), and the program's main file. So an export may not repeat
 a runtime name: <code>exported 'String' is also declared in</code> followed by the
-runtime’s file.</p>
+runtime's file.</p>
 <p>A few kinds of declaration are not private in this sense:</p>
 <ul>
 <li><strong><code>extern</code> declarations</strong> name a C function, which is the same function in
 every file. Several files may declare the same extern.</li>
 <li><strong>Concrete overrides</strong> of a generic function, such as <code>hash&lt;int&gt;</code> alongside
-<code>hash&lt;T&gt;</code>, take the generic function’s name: they replace its version for
+<code>hash&lt;T&gt;</code>, take the generic function's name: they replace its version for
 those types wherever it is called. So each override may be declared in only
 one file (<code>override 'hash&lt;int&gt;' is also declared in b.pep</code>), and overriding
 one the runtime already provides, such as <code>hash&lt;String&gt;</code>, is also an error.
 An override must be for a generic function you can see: overriding another
-file’s private generic function reports that it is private. An override
+file's private generic function reports that it is private. An override
 may be for a struct, such as <code>hash&lt;Point&gt;</code>, and must be declared in the
 file or module that declares the generic or one of its type arguments
 (see <a href="generics.html#overriding-a-generic-function-for-one-type">Generics</a>).</li>
@@ -696,11 +691,11 @@ twice.</li>
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../language/optionals.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                                <i class="fa fa-angle-left"></i>
                             </a>
 
                             <a rel="next prefetch" href="../language/modules.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                                <i class="fa fa-angle-right"></i>
                             </a>
 
                         <div style="clear: both"></div>
@@ -710,21 +705,16 @@ twice.</li>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../language/optionals.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                        <i class="fa fa-angle-left"></i>
                     </a>
 
                     <a rel="next prefetch" href="../language/modules.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                        <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
 
         </div>
 
-        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
-        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
-        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
-        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
-        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -733,16 +723,16 @@ twice.</li>
         </script>
 
 
-        <script src="../elasticlunr-ef4e11c1.min.js"></script>
-        <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-09f2665d.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="../clipboard-1626706a.min.js"></script>
-        <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-609e4cb8.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-586b5853.js"></script>
+        <script src="../theme/version-switcher.js"></script>
 
 
 

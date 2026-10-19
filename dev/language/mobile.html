@@ -12,23 +12,24 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
-        <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-e96d0476.css">
-        <link rel="stylesheet" href="../css/chrome-d279d366.css">
-        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+        <link rel="stylesheet" href="../theme/version-switcher.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -36,10 +37,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-497e68c2.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8b7d02da.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -53,7 +54,7 @@
             </div>
         </div>
     </div>
-    <div id="mdbook-body-container">
+    <div id="body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
@@ -82,12 +83,12 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
             let sidebar = null;
-            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
@@ -102,39 +103,39 @@
             }
         </script>
 
-        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
-            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="mdbook-page-wrapper" class="page-wrapper">
+        <div id="page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="mdbook-menu-bar-hover-placeholder"></div>
-                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
                         </label>
-                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
                         </button>
-                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
                         </ul>
-                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
                         </button>
                     </div>
 
@@ -142,44 +143,44 @@
 
                     <div class="right-buttons">
                         <a href="../print.html" title="Print this book" aria-label="Print this book">
-                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                            <i id="print-button" class="fa fa-print"></i>
                         </a>
-                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
-                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/mobile.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
-                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/mobile.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="mdbook-search-wrapper" class="hidden">
-                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
                         <div class="search-wrapper">
-                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
                             <div class="spinner-wrapper">
-                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                                <i class="fa fa-spinner fa-spin"></i>
                             </div>
                         </div>
                     </form>
-                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
-                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
-                        <ul id="mdbook-searchresults">
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="mdbook-content" class="content">
+                <div id="content" class="content">
                     <main>
                         <h1 id="ios-and-android"><a class="header" href="#ios-and-android">iOS and Android</a></h1>
 <p>Pepper compiles natively for iOS and Android through the same LLVM backend
@@ -190,37 +191,31 @@ called: mark the functions <code>[Export]</code>, build a library with <code>--l
 (see <a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>), and call
 it from Swift directly, or from Kotlin and Java through JNI.</p>
 <h2 id="targets"><a class="header" href="#targets">Targets</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Triple</th><th>Runs on</th></tr>
-</thead>
-<tbody>
+<div class="table-wrapper"><table><thead><tr><th>Triple</th><th>Runs on</th></tr></thead><tbody>
 <tr><td><code>aarch64-apple-ios</code></td><td>iPhone and iPad</td></tr>
 <tr><td><code>aarch64-apple-ios-simulator</code></td><td>the iOS simulator on an Apple silicon Mac</td></tr>
 <tr><td><code>x86_64-apple-ios-simulator</code></td><td>the iOS simulator on an Intel Mac</td></tr>
 <tr><td><code>aarch64-linux-android</code></td><td>Android phones and tablets (<code>arm64-v8a</code>)</td></tr>
 <tr><td><code>x86_64-linux-android</code></td><td>the Android emulator on x64 (<code>x86_64</code>)</td></tr>
-</tbody>
-</table>
+</tbody></table>
 </div>
 <ul>
 <li>
 <p><strong>Versions.</strong> A triple can name the oldest OS version the code runs on:
 <code>aarch64-apple-ios17.0</code>, <code>aarch64-apple-ios17.0-simulator</code>,
 <code>aarch64-linux-android33</code>. Without one, iOS code runs on iOS 15 and later
-and Android code on API level 30 (Android 11) and later. Pepper’s runtime
+and Android code on API level 30 (Android 11) and later. Pepper's runtime
 needs API level 30, so an older one is an error:</p>
 <pre><code class="language-text">error: unsupported target 'aarch64-linux-android24': Pepper's runtime needs Android API level 30 or later (write 'android30')
 </code></pre>
 </li>
 <li>
-<p><strong>Spellings.</strong> <code>arm64</code> works for <code>aarch64</code>, as do Rust’s <code>-sim</code> for
+<p><strong>Spellings.</strong> <code>arm64</code> works for <code>aarch64</code>, as do Rust's <code>-sim</code> for
 <code>-simulator</code> and any vendor (<code>aarch64-unknown-linux-android</code>).
 <code>x86_64-apple-ios</code> means the simulator, since no iPhone is x64.</p>
 </li>
 <li>
-<p><strong>CPU.</strong> Code for an iPhone runs on every arm64 iPhone (clang’s
+<p><strong>CPU.</strong> Code for an iPhone runs on every arm64 iPhone (clang's
 <code>apple-a7</code>); add <code>-mcpu=apple-a14</code> to use what newer ones have. Android
 x64 code uses SSE4.2 and POPCNT, which the Android x86_64 ABI requires.</p>
 </li>
@@ -230,22 +225,22 @@ x64 code uses SSE4.2 and POPCNT, which the Android x86_64 ABI requires.</p>
 <pre><code class="language-sh">pepper build --target aarch64-apple-ios --lib static greeter.pep -o ios/libgreeter.a
 pepper build --target aarch64-linux-android --lib static greeter.pep -o android/libgreeter.a
 </code></pre>
-<p>The compiler writes each archive itself, in the format the platform’s
-linkers read (BSD’s for iOS, GNU’s for Android), so nothing from Xcode or
+<p>The compiler writes each archive itself, in the format the platform's
+linkers read (BSD's for iOS, GNU's for Android), so nothing from Xcode or
 the NDK is needed to make it. Each writes <code>greeter.h</code> beside the library.
 Build the library once for each
 target the app ships: the device and the simulator on iOS, and each
 Android ABI.</p>
 <p>Linking, for a shared library or an executable to run in the simulator or
-an emulator, needs the platform’s SDK:</p>
+an emulator, needs the platform's SDK:</p>
 <ul>
-<li><strong>iOS</strong> links with LLVM’s <code>ld64.lld</code> against an iOS SDK. On a Mac with
+<li><strong>iOS</strong> links with LLVM's <code>ld64.lld</code> against an iOS SDK. On a Mac with
 Xcode the compiler asks <code>xcrun</code> for it (<code>iphoneos</code>, or <code>iphonesimulator</code>
 for the simulator). Elsewhere name it with <code>--sysroot</code>, or set
 <code>PEPPER_SYSROOT_AARCH64_APPLE_IOS</code> (and
 <code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code>, and so on): the variable is
 named for the triple without its version.</li>
-<li><strong>Android</strong> links with the NDK’s own clang, which brings the NDK’s
+<li><strong>Android</strong> links with the NDK's own clang, which brings the NDK's
 linker, compiler-rt and unwinder. Name the NDK with <code>--sysroot &lt;ndk&gt;</code> or
 <code>PEPPER_SYSROOT_AARCH64_LINUX_ANDROID</code>, or set <code>ANDROID_NDK_HOME</code> or
 <code>ANDROID_NDK_ROOT</code>; otherwise the newest NDK in the Android SDK
@@ -261,7 +256,7 @@ them. Most code needs neither: iOS is Darwin, like macOS, and Android runs
 the Linux kernel, so <code>OS(Mac)</code> is true on iOS and <code>OS(Linux)</code> on Android,
 as <code>TARGET_OS_MAC</code> and <code>__linux__</code> are in C (see
 <a href="platform-selection.html#writing-a-condition">Platform selection</a>). The
-runtime’s macOS and Linux code serves them, with a few declarations
+runtime's macOS and Linux code serves them, with a few declarations
 narrowed where they differ. At run time, <code>os.system_os()</code> returns
 <code>OperatingSystem.IOS</code> or <code>OperatingSystem.Android</code>.</p>
 <h2 id="calling-pepper-from-swift"><a class="header" href="#calling-pepper-from-swift">Calling Pepper from Swift</a></h2>
@@ -270,8 +265,8 @@ header, and link the library:</p>
 <pre><code class="language-sh">xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios15.0-simulator -parse-as-library \
   -import-objc-header greeter.h App.swift -L . -lgreeter -o App.app/App
 </code></pre>
-<p>In an Xcode project, add the library to the target’s <em>Link Binary With
-Libraries</em> phase and <code>#include "greeter.h"</code> in the target’s bridging header.
+<p>In an Xcode project, add the library to the target's <em>Link Binary With
+Libraries</em> phase and <code>#include "greeter.h"</code> in the target's bridging header.
 A <code>String</code> crosses as a pointer and a size, and a returned string is freed
 with <code>pepper_string_free</code>:</p>
 <pre><code class="language-swift">func pepperGreeting(_ name: String) -&gt; String {
@@ -283,8 +278,8 @@ with <code>pepper_string_free</code>:</p>
 <h2 id="calling-pepper-from-kotlin-or-java"><a class="header" href="#calling-pepper-from-kotlin-or-java">Calling Pepper from Kotlin or Java</a></h2>
 <p>Kotlin and Java reach C through JNI: a shared library holds the Pepper code
 and a C function for each <code>native</code> method, named for its class, which
-converts Java’s types to the C ones the header declares. Link both with the
-NDK’s clang into the <code>.so</code> the app loads:</p>
+converts Java's types to the C ones the header declares. Link both with the
+NDK's clang into the <code>.so</code> the app loads:</p>
 <pre><code class="language-sh">pepper build --target aarch64-linux-android --lib static greeter.pep -o pepper/libgreeter.a
 $NDK/toolchains/llvm/prebuilt/*/bin/clang --target=aarch64-linux-android30 -shared -fPIC \
   -I pepper jni.c pepper/libgreeter.a -lm -o jniLibs/arm64-v8a/libgreeter.so
@@ -308,58 +303,58 @@ once:</p>
     }
 }
 </code></pre>
-<p>With Gradle, put each ABI’s <code>.so</code> in <code>src/main/jniLibs/&lt;abi&gt;/</code>
-(<code>arm64-v8a</code>, <code>x86_64</code>), or build it from the module’s <code>CMakeLists.txt</code>
+<p>With Gradle, put each ABI's <code>.so</code> in <code>src/main/jniLibs/&lt;abi&gt;/</code>
+(<code>arm64-v8a</code>, <code>x86_64</code>), or build it from the module's <code>CMakeLists.txt</code>
 with the static library as an imported target.</p>
 <h2 id="threads"><a class="header" href="#threads">Threads</a></h2>
 <p>Exported functions may be called from any thread (see
 <a href="c-interop.html#initialization-panics-and-threads">Initialization, panics and threads</a>),
 so the app decides where Pepper code runs. Keep long work off the main
-thread (iOS’s main queue, Android’s UI thread): call it from a background
+thread (iOS's main queue, Android's UI thread): call it from a background
 queue, a coroutine on <code>Dispatchers.Default</code>, or a Pepper thread or task the
-library starts itself. Pepper code never calls back into UIKit or Android’s
-views on its own; hand results back to the main thread on the app’s side.</p>
+library starts itself. Pepper code never calls back into UIKit or Android's
+views on its own; hand results back to the main thread on the app's side.</p>
 <h2 id="what-works-differently"><a class="header" href="#what-works-differently">What works differently</a></h2>
-<p>The runtime runs the documentation’s examples on both platforms, with these
+<p>The runtime runs the documentation's examples on both platforms, with these
 differences:</p>
 <ul>
 <li><strong>Starting processes.</strong> An iOS app cannot start other programs, and the
-<code>process</code> module’s <code>Command.spawn</code> returns an <code>IoError</code> there. On Android
+<code>process</code> module's <code>Command.spawn</code> returns an <code>IoError</code> there. On Android
 it works, but an app has few programs to start, and below API level 34
 <code>Command.working_directory</code> makes <code>spawn</code> return an <code>IoError</code> (bionic
 lacks <code>posix_spawn_file_actions_addchdir_np</code> there).</li>
 <li><strong>TLS.</strong> The <code>tls</code> module (and HTTPS) loads OpenSSL at run time, which
 neither platform ships, so making a TLS context returns an <code>IoError</code>
-unless the app bundles <code>libssl</code>. Use the platform’s own networking
+unless the app bundles <code>libssl</code>. Use the platform's own networking
 (<code>URLSession</code>, OkHttp) for HTTPS for now.</li>
 <li><strong>Files.</strong> An app reads and writes inside its own container: pass the
-path the platform gives (<code>FileManager</code>’s documents directory,
+path the platform gives (<code>FileManager</code>'s documents directory,
 <code>Context.getFilesDir()</code>) to the Pepper code. <code>os.home_directory()</code> and
 the temporary directory point into the container on iOS. Android has no
 <code>/tmp</code>: without <code>TMPDIR</code>, <code>io.Directory.temp()</code> is <code>/data/local/tmp</code>,
 which an app cannot write, so an app passes its cache directory. A Unix
-socket’s path is at most 104 bytes there, and the container’s own path
+socket's path is at most 104 bytes there, and the container's own path
 takes most of them, so give a socket there a short name. On Android, an
 app creates Unix socket files in its own data folder
 (<code>Context.getFilesDir()</code>); SELinux refuses them elsewhere, and from an
 <code>adb shell</code> program everywhere, with a permission error.</li>
-<li><strong>Backtraces.</strong> Android’s backtraces come from the NDK’s unwinder
-(bionic’s <code>backtrace</code> needs API level 33), and both platforms name
-functions from the binary’s own symbols, so strip a release build only
+<li><strong>Backtraces.</strong> Android's backtraces come from the NDK's unwinder
+(bionic's <code>backtrace</code> needs API level 33), and both platforms name
+functions from the binary's own symbols, so strip a release build only
 after keeping a copy for symbolication.</li>
-<li><strong>Standard output</strong> goes to the Xcode console and the simulator’s
+<li><strong>Standard output</strong> goes to the Xcode console and the simulator's
 <code>--stdout</code> file on iOS. On Android it goes nowhere in an app: log with the
-platform’s logger instead (<code>__android_log_write</code> through an <code>extern</code>).</li>
+platform's logger instead (<code>__android_log_write</code> through an <code>extern</code>).</li>
 </ul>
 <h2 id="shipping"><a class="header" href="#shipping">Shipping</a></h2>
 <ul>
-<li>Pepper compiles ahead of time, so iOS’s ban on JIT compilation does not
+<li>Pepper compiles ahead of time, so iOS's ban on JIT compilation does not
 apply. Bitcode is no longer required by the App Store.</li>
-<li>A static library is linked into the app’s own binary, so its code is
-covered by the app’s signature; strip the release build’s symbols as
-usual (Xcode’s <em>Strip Linked Product</em>, the Android Gradle plugin’s
+<li>A static library is linked into the app's own binary, so its code is
+covered by the app's signature; strip the release build's symbols as
+usual (Xcode's <em>Strip Linked Product</em>, the Android Gradle plugin's
 <code>strip</code> of <code>jniLibs</code>). A Pepper library adds the runtime parts the
-program uses: the prototype app’s library below is about 1 MB unstripped.</li>
+program uses: the prototype app's library below is about 1 MB unstripped.</li>
 <li>Each Android ABI needs its own <code>.so</code>; Google Play requires <code>arm64-v8a</code>.</li>
 </ul>
 <h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
@@ -374,7 +369,7 @@ same Pepper library, <a href="../../examples/mobile/greeter.pep"><code>greeter.p
 it with <code>swiftc</code> for the simulator and for devices, installs it in a
 booted simulator, launches it and checks its output.</li>
 <li><code>android/</code>: an activity in Java with the JNI functions in <code>jni.c</code>, and
-<code>build.sh</code>, which builds the APK with the Android SDK’s own tools
+<code>build.sh</code>, which builds the APK with the Android SDK's own tools
 (<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed), installs it
 in the emulator, starts it and checks its log.</li>
 </ul>
@@ -387,7 +382,7 @@ runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
 <li><strong>TLS through the platform</strong>: Security.framework on iOS, and on Android
-the system’s BoringSSL through Conscrypt or a bundled OpenSSL.</li>
+the system's BoringSSL through Conscrypt or a bundled OpenSSL.</li>
 <li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
 by hand; a generator could write them from the header.</li>
 <li><strong>Packaging</strong>: an <code>.xcframework</code> holding the device and simulator
@@ -401,11 +396,11 @@ tvOS, watchOS and visionOS.</li>
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
                             <a rel="prev" href="../language/platform-selection.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                                <i class="fa fa-angle-left"></i>
                             </a>
 
                             <a rel="next prefetch" href="../language/build-options.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                                <i class="fa fa-angle-right"></i>
                             </a>
 
                         <div style="clear: both"></div>
@@ -415,21 +410,16 @@ tvOS, watchOS and visionOS.</li>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
                     <a rel="prev" href="../language/platform-selection.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                        <i class="fa fa-angle-left"></i>
                     </a>
 
                     <a rel="next prefetch" href="../language/build-options.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                        <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
 
         </div>
 
-        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
-        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
-        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
-        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
-        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -438,16 +428,16 @@ tvOS, watchOS and visionOS.</li>
         </script>
 
 
-        <script src="../elasticlunr-ef4e11c1.min.js"></script>
-        <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-09f2665d.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="../clipboard-1626706a.min.js"></script>
-        <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-609e4cb8.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../theme/version-switcher-586b5853.js"></script>
+        <script src="../theme/version-switcher.js"></script>
 
 
 
