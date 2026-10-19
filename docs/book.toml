@@ -9,8 +9,8 @@ src = "src"
 create-missing = false
 
 [output.html]
-git-repository-url = "https://github.com/justinboswell/pepper"
-edit-url-template = "https://github.com/justinboswell/pepper/edit/main/docs/{path}"
+git-repository-url = "https://github.com/pep-lang/pepper"
+edit-url-template = "https://github.com/pep-lang/pepper/edit/main/docs/{path}"
 additional-js = ["theme/version-switcher.js"]
 additional-css = ["theme/version-switcher.css"]
 

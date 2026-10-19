@@ -9,7 +9,7 @@
 # compiler-dir holds the `pep-build` to test with. By default it is the
 # installed toolchain's, the one `pepper install which` names: CI and the
 # workers install the build of main (`scripts/install.sh --version
-# <x.y.z-dev>`, #713) rather than building the compiler. To test a change
+# <x.y.z-dev>`) rather than building the compiler. To test a change
 # to the compiler itself with the compiler it builds, build pep-build from
 # tools/compiler with the installed one and pass its folder (README.md,
 # "Building from source").
@@ -29,7 +29,7 @@
 #
 # The tools' tests take the longest, mostly building their test programs,
 # so they start as soon as the tools they run are built and run beside
-# the runtime's; their output follows the runtime's (#662).
+# the runtime's; their output follows the runtime's.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -101,7 +101,7 @@ fi
 # on Windows, with the LLVM-C.dll it loads), so a toolchain's folder is
 # never written to. The copy keeps the compiler's time: the build cache
 # keys on the compiler's path, size and time (`compiler_identity`), so a
-# fresh time would rebuild everything on every pass (#662).
+# fresh time would rebuild everything on every pass.
 bin="$target/pepper-tests/bin"
 mkdir -p "$bin"
 if [ "$compiler" != "$bin" ]; then

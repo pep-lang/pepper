@@ -72,7 +72,7 @@ export check_store_type(slot_ty: llvm.Type, value: llvm.Value, name: String, pep
         return Result<void>.ok();
     }
     # A `var` whose type inference never resolved reaches codegen as
-    # `__auto` (#471), which the user can work around.
+    # `__auto`, which the user can work around.
     if (pepper_ty == AUTO) {
         return Result<void>.err(Error($"cannot infer the type of '{name}'; write its type in place of 'var'"));
     }

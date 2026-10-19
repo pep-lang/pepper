@@ -1,6 +1,6 @@
 # compress: CRC-32 and Adler-32, DEFLATE with its zlib and gzip framings at
 # every level, streams made by zlib and Python's gzip, the streaming reader
-# and writer, and corrupt input. They also run with `-D USE_ZLIB` (#370),
+# and writer, and corrupt input. They also run with `-D USE_ZLIB`,
 # so every test checks zlib as well.
 
 import compress;

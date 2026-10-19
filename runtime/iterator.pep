@@ -857,7 +857,7 @@ extend ChainIterator<T> with Iterator<T>;
 [Value]
 export struct FlatMapIterator<T, U> {
     # No member names `(T) => Iterator<U>`: the runtime must build with the
-    # previous published compiler (stage 0), and compilers without #1002's
+    # previous published compiler (stage 0), and compilers without the
     # fix reject that type in a generic struct ("unknown type name 'U'").
     ## The iterators to yield the elements of, one per source element.
     MapIterator<T, Iterator<U>> _source;

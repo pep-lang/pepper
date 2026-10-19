@@ -1032,7 +1032,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             last_folder = Optional<Path>.Value(stored.value());
         }
         # Only the compilation units the program's own reads: others, files of
-        # the entry's module it never reaches, are not linked (#839).
+        # the entry's module it never reaches, are not linked.
         for (var k in last.reads) {
             var folder = options.cache.value().objects($"compilation unit {units[k].name}", units[k].key);
             options.cache.value().used(folder);

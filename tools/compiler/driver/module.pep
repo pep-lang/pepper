@@ -1,4 +1,4 @@
-## The driver of the Pepper compiler written in Pepper (#225): builds a
+## The driver of the Pepper compiler written in Pepper: builds a
 ## program to an executable or a library for C (generate, optimize, emit
 ## objects, optimize them as one with LTO, link or archive).
 

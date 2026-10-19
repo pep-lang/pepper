@@ -225,7 +225,7 @@ restores_modes_times_and_links() {
     {
         # Only POSIX applied the entry's mode (octal 555). On Windows the
         # permissions are the attribute word, where 493 sets the read-only
-        # attribute, which then kept the folder from being removed (#724).
+        # attribute, which then kept the folder from being removed.
         target.join("bin").set_permissions(493);
     }
     io.File.remove(target.join("notes.txt"));

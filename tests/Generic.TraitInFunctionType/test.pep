@@ -1,6 +1,6 @@
 # A trait type naming a generic function's parameter inside a function type
 # (`(T) => Iterator<U>`) is substituted when the function is specialized,
-# and the unspecialized function compiles (#992).
+# and the unspecialized function compiles.
 
 # Never called: its signature alone used to fail.
 unused<T, U>(make: (T) => Iterator<U>): int {

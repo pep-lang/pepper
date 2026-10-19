@@ -15,16 +15,16 @@
 # must build and run a program, and the binaries must load nothing a user
 # might not have.
 #
-#   linux-x64     the self-hosted Linux runner, inside a manylinux_2_28 container, so the
+#   linux-x64     ubuntu-24.04, inside a manylinux_2_28 container, so the
 #                 binaries need only glibc 2.28 (RHEL 8, Debian 10 and later)
-#   macos-arm64   the self-hosted arm64 Mac
-#   windows-x64   the self-hosted Windows runner
+#   macos-arm64   macos-15 (arm64)
+#   windows-x64   windows-2025
 #
 # What publishes:
 #
 #   a merge into main that changes the compiler, the runtime or the tools
 #                 (CI's `changes` job decides, and CI runs this workflow
-#                 before its tests) publishes the build of main (#713):
+#                 before its tests) publishes the build of main:
 #                 the version main holds, a prerelease such as 0.4.0-dev,
 #                 on the prerelease v0.4.0-dev, whose tag moves to the merge
 #                 and whose assets are replaced. CI and the workers install
@@ -74,10 +74,8 @@ concurrency:
 permissions:
   contents: read
 
-# A container job leaves root-owned files in the self-hosted runner's
-# checkout, and git then refuses that checkout as of "dubious ownership" in
-# later jobs (gh release view, git commit). The runners are the
-# maintainer's own, with one checkout each.
+# A container job leaves root-owned files in the checkout, and git then
+# refuses it as of "dubious ownership" (gh release view, git commit).
 env:
   GIT_CONFIG_COUNT: 1
   GIT_CONFIG_KEY_0: safe.directory
@@ -91,7 +89,7 @@ jobs:
   # commit that moved VERSION from 0.4.0-dev, and stage 0 named from VERSION
   # (0.9.0-dev) had never been published.
   version:
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -150,12 +148,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: linux-x64, runs-on: pepper-linux, container: "quay.io/pypa/manylinux_2_28_x86_64" }
-          - { target: macos-arm64, runs-on: pepper-macos, container: "" }
+          - { target: linux-x64, runs-on: ubuntu-24.04, container: "quay.io/pypa/manylinux_2_28_x86_64" }
+          - { target: macos-arm64, runs-on: macos-15, container: "" }
           # No macos-x64 leg: it needs an Intel Mac, and GitHub-hosted runners
           # spend the account's Actions quota in days. release-build.sh still
           # builds that target on one by hand.
-          - { target: windows-x64, runs-on: pepper-windows, container: "" }
+          - { target: windows-x64, runs-on: windows-2025, container: "" }
     runs-on: ${{ matrix.runs-on }}
     container: ${{ matrix.container }}
     # LLVM provisioning plus two builds of the compiler, from cold. The
@@ -184,13 +182,7 @@ jobs:
           # installs with the install scripts (as CI does) once it has
           # provisioned clang.
           PEPPER_STAGE0_INSTALL: "1"
-          # pep-build is pepc, which depends on the private pepper-llvm
-          # package, and pep-lsp on the private pepper-lsp package
-          # (scripts/ci-package-auth.sh).
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/release-build.sh "$TARGET" "$PEPPER_VERSION" dist
 
       # Install the archive just built with the install script, which then
@@ -221,8 +213,8 @@ jobs:
           .\scripts\install.ps1 -Uninstall -Prefix $prefix
           if (Test-Path $prefix) { throw "$prefix is still there after -Uninstall" }
 
-      # A container job runs as root: the files it leaves in the self-hosted
-      # runner's folders must stay writable by the runner's own jobs.
+      # A container job runs as root: the files it leaves in the runner's
+      # folders must stay writable by its later steps.
       - name: Give the runner its folders back
         if: always() && matrix.container != ''
         shell: bash
@@ -245,7 +237,7 @@ jobs:
   publish:
     if: needs.version.outputs.publish == 'true'
     needs: [version, build]
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     timeout-minutes: 15
@@ -296,7 +288,7 @@ jobs:
               "Pepper $TAG." \
               "" \
               "Install it with scripts/install.sh (Linux, macOS) or scripts/install.ps1 (Windows);" \
-              "see https://justinboswell.github.io/pepper/tools/install.html." \
+              "see https://docs.pepper-lang.dev/${TAG#v}/tools/install.html." \
               > "$RUNNER_TEMP/notes.md"
             # Another workflow on the same tag may create it in between.
             gh release create "$TAG" --target "$GITHUB_SHA" --title "Pepper $TAG" \
@@ -304,25 +296,6 @@ jobs:
               || gh release view "$TAG" >/dev/null
           fi
           gh release upload "$TAG" pepper-* SHA256SUMS ../scripts/install.sh ../scripts/install.ps1 --clobber
-
-  # A release's extension builds with that release's toolchain, so the VSIX
-  # workflow starts only once the archives are published: a tag push would
-  # start it beside this workflow, where its legs wait for the toolchain on
-  # the same self-hosted runners these builds need.
-  vsix:
-    if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
-    needs: [version, publish]
-    runs-on: pepper-linux
-    permissions:
-      actions: write
-    timeout-minutes: 5
-
-    steps:
-      - name: Start the VSIX workflow on the tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: gh workflow run vsix.yml --repo "$REPO" --ref "$GITHUB_REF_NAME"
 
   # After a release, main starts the next minor version: a pull request that
   # sets X.(Y+1).0-dev (scripts/set-version.sh) and merges itself once its
@@ -339,7 +312,7 @@ jobs:
   bump:
     if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
     needs: [version, publish]
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     permissions:
       actions: write
       contents: write

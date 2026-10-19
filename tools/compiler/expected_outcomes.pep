@@ -2,7 +2,7 @@
 # lines, how compiling it ends (`# expect: accepted`, or the first line of
 # each diagnostic), and `check_programs` holds the compiler to it. The
 # expectations were recorded when pepc matched the Rust compiler byte for
-# byte (#225's cutover); one that changes marks a changed diagnostic or a
+# byte (the self-hosting cutover); one that changes marks a changed diagnostic or a
 # change in what the language accepts.
 #
 # PEPC_RECORD_EXPECTATIONS=<folder> records instead: each test's outcomes,

@@ -1091,7 +1091,7 @@ extend Generator {
         return Result<llvm.Value>.ok(builder.zero_extend(value, wide, "c_result"));
     }
 
-    ## `_pep_malloc(size)` of a constant size, a constructor's (#635): a
+    ## `_pep_malloc(size)` of a constant size, a constructor's: a
     ## call to `_pep_malloc_uninit`, which skips the runtime's `memset`, then
     ## an inline `memset` of the block. The block is as zero as before, but
     ## LLVM sees the zeroing, so it deletes the bytes the constructor's own
@@ -1116,7 +1116,7 @@ extend Generator {
     }
 
     ## Lowers a call to the C library's `memcpy`, `memmove` or `memset` to
-    ## the LLVM intrinsic, so LLVM inlines a constant-size copy (#340). A
+    ## the LLVM intrinsic, so LLVM inlines a constant-size copy. A
     ## call to the extern itself would not do: Pepper declares a `void`
     ## extern with an `i32` return, which does not match the C signature, so
     ## LLVM never recognizes it as the builtin. None for any other function,

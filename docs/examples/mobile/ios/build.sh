@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the prototype iOS app and run it in the simulator (#375):
+# Build the prototype iOS app and run it in the simulator:
 #
 #   bash build.sh <pep-build> <output-dir> [<simulator-udid>]
 #

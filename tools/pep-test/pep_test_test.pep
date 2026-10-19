@@ -95,29 +95,22 @@ five() {}
     # Every second test of the list, starting with the first or the second.
     var first = pep_test(folder.path, ["--list", "--shard", "1/2"]);
     expect_exit(first, 0);
-    expect_equal(first.stdout, $"a_test.pep::one
-a_test.pep::three
-{b}::five
-");
+    expect_equal(first.stdout, $"a_test.pep::one\na_test.pep::three\n{b}::five\n");
     var second = pep_test(folder.path, ["--list", "--shard", "2/2"]);
     expect_exit(second, 0);
-    expect_equal(second.stdout, $"a_test.pep::two
-{b}::four
-");
+    expect_equal(second.stdout, $"a_test.pep::two\n{b}::four\n");
 
     # The shard is taken from the tests the filter keeps.
     var ran = pep_test(folder.path, ["--shard", "2/2", "-f", "o"]);
     expect_exit(ran, 0);
     expect_contains(ran.stdout, "test a_test.pep::two ... ok (");
-    expect_ends_with(ran.stdout, "1 passed, 0 failed, 2 filtered out, 2 in other shards
-");
+    expect_ends_with(ran.stdout, "1 passed, 0 failed, 2 filtered out, 2 in other shards\n");
 
     for (var shard in ["0/2", "3/2", "2", "1/0", "a/b"]) {
         var wrong = pep_test(folder.path, ["--shard", shard]);
         expect_exit(wrong, 2);
         expect_contains(
-            wrong.stderr, $"pep-test: error: '--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard}'
-"
+            wrong.stderr, $"pep-test: error: '--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard}'\n"
         );
     }
 }
@@ -184,7 +177,7 @@ reports_test_files_of_a_module_that_clash() {
 [Test]
 removes_what_tests_leave_in_the_temporary_folder() {
     # Neither test's TempFolder is removed by its destructor: one panics,
-    # the other times out (#818).
+    # the other times out.
     var folder = TempFolder("pep_test_temp");
     write_file(
         folder.path.join("leak_test.pep"),
@@ -235,7 +228,7 @@ _hang_source(): String {
 [Test]
 ends_what_a_test_that_times_out_started() {
     # The child holds pep-test's pipes to the test's output open: unless
-    # the timeout ends it too, pep-test never finishes (#842).
+    # the timeout ends it too, pep-test never finishes.
     var folder = TempFolder("pep_test_tree");
     write_file(
         folder.path.join("tree_test.pep"),
@@ -253,7 +246,7 @@ ends_what_a_test_that_times_out_started() {
 [Test]
 ends_what_a_test_that_panics_or_returns_started() {
     # As for a timeout: the children of a test that panics or returns end
-    # with it, or pep-test never finishes (#852). No timeout: the watchdog
+    # with it, or pep-test never finishes. No timeout: the watchdog
     # is not what ends them.
     var folder = TempFolder("pep_test_tree");
     write_file(
@@ -273,7 +266,7 @@ ends_what_a_test_that_panics_or_returns_started() {
 
 [Test]
 warns_of_a_test_near_its_timeout() {
-    # 2.7 s of a 4 s timeout is over the 60% that warns (#1001); 0 s is not.
+    # 2.7 s of a 4 s timeout is over the 60% that warns; 0 s is not.
     var folder = TempFolder("pep_test_slow");
     write_file(
         folder.path.join("slow_test.pep"),

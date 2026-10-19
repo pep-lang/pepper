@@ -53,11 +53,10 @@ Four steps, on every platform:
    pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
    ```
 
-4. **The private packages.** `tools/compiler` depends on
-   `justinboswell/pepper-llvm` and `tools/pep-lsp` on
-   `justinboswell/pepper-lsp`. The first build of each fetches its package
-   with git into the tool's `.pep/deps`, so your git needs read access to
-   those repositories.
+4. **The packages.** `tools/compiler` depends on
+   `pep-lang/pepper-llvm` and `tools/pep-lsp` on
+   `pep-lang/pepper-lsp`. The first build of each fetches its package
+   with git into the tool's `.pep/deps`.
 
 ### Where LLVM comes from
 
@@ -177,28 +176,17 @@ update. `INTERNALS.md` is the map of the compiler: where each stage lives
 and the patterns it follows. `.agents/skills/` holds step-by-step
 workflows (build, test, finish a PR, test another platform), and its
 `build` and `test` skills carry the failure signatures this project has
-hit, such as LLVM discovery and link failures and the private packages'
+hit, such as LLVM discovery and link failures and the packages'
 fetch. Start there before diagnosing a failure from scratch.
 
-## The VS Code extension from a branch
+## The VS Code extension
 
-The released extension comes from the `vsix-v*` GitHub release. To run the
-extension and language server from the branch checked out, before it
-merges:
-
-```powershell
-scripts/install-vscode-extension.ps1          # build pep-lsp + vsix, install into VS Code
-scripts/install-vscode-extension.ps1 -Watch   # follow the branch: pull and reinstall on change
-```
-
-The extension restarts its language server by itself when the installed
-server changes; a change to the extension's own code needs **Developer:
-Reload Window**. When editing the server, setting `pepper.lspPath` to a
-`pep-lsp` you build skips the install (see
-[The language server: pep-lsp](../tools/pep-lsp.md)). Packaging
-(`vsce package`, run by the script and the `VSIX` workflow) bundles
-`tools/vscode-pepper/src` and its dependencies into one file with esbuild
-(`npm run bundle`).
+The extension lives in pep-lang/vscode-pepper and runs the toolchain's
+`pep-lsp`. `scripts/install-vscode-extension.ps1` installs its newest
+release. To try a server built from a branch, set `pepper.lspPath` to the
+`pep-lsp` you build (see
+[The language server: pep-lsp](../tools/pep-lsp.md)); the extension
+restarts the server whenever that file changes.
 
 ## Platforms
 

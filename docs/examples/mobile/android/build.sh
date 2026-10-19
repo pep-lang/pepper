@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the prototype Android app and run it in the emulator (#375):
+# Build the prototype Android app and run it in the emulator:
 #
 #   bash build.sh <pep-build> <output-dir> [<adb-serial>]
 #

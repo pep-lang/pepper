@@ -2,7 +2,7 @@
 # the curated programs below, accept or reject each as its first line says
 # (`# expect: accepted`, or the first line of the error a pass reports).
 # Those expectations were recorded when pepc's passes matched the Rust
-# compiler's byte for byte (#225's cutover); a change that alters one
+# compiler's byte for byte (the self-hosting cutover); a change that alters one
 # changes a diagnostic or what the language accepts, on purpose or not.
 
 import [Diagnostic, render_all] from compiler.diagnostic;
@@ -505,7 +505,7 @@ rewrites_function_values() {
 
 # A file's own functions named like the runtime's (`print`, `to_string`)
 # join the runtime's sets, and may not repeat a runtime member's
-# parameters (#922).
+# parameters.
 [Test]
 joins_the_runtime_overload_sets() {
     var folder = TempFolder("passes_runtime_overloads");

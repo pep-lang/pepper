@@ -3,7 +3,7 @@
 
 # Each ThreadLocal has an index, given out once from `_thread_local_indexes`
 # and never reused. A thread's values live in a table of its own, held in
-# native `[ThreadLocal]` variables (#625): `_thread_local_slots[index]`
+# native `[ThreadLocal]` variables: `_thread_local_slots[index]`
 # points at a malloc'd slot, `sizeof<T>()` bytes for a POD `T`, one reference
 # for a struct `T`, or is null where the thread has no value. So `get()` is a
 # thread-local load, a bounds check and two loads, with no call into the

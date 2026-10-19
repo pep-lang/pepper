@@ -196,7 +196,7 @@ export compilation_units(program: link.Program, base: String, root_last: bool = 
     var order = _components(reads, skip);
     # The last compilation unit is the program's own, which defines the entry
     # points: the root file's. Files of the root's module it never reads can
-    # come after it in that order (#839); move it last when nothing reads it,
+    # come after it in that order; move it last when nothing reads it,
     # else check the program whole.
     if (root_last and !_move_root_last(order, cycle_of[0], reads, skip)) {
         return Array<CompilationUnit>();

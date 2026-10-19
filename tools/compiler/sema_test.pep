@@ -179,7 +179,7 @@ records_read_back_what_they_wrote() {
 }
 
 # A string that starts with `UNSIGNED_MARK` stays a quoted string in the
-# model's JSON, and a value past `long`'s range is its bare digits (#821).
+# model's JSON, and a value past `long`'s range is its bare digits.
 [Test]
 model_json_keeps_strings_apart_from_large_unsigned_values() {
     var folder = TempFolder("sema_unsigned");

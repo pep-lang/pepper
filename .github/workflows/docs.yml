@@ -30,8 +30,8 @@ concurrency:
 permissions:
   contents: write
 
-# A container job of release.yml leaves root-owned files in the self-hosted
-# runner's checkout, and git then refuses it ("dubious ownership").
+# A container job leaves root-owned files in the checkout, and git then
+# refuses it ("dubious ownership").
 env:
   GIT_CONFIG_COUNT: 1
   GIT_CONFIG_KEY_0: safe.directory
@@ -39,7 +39,7 @@ env:
 
 jobs:
   publish:
-    runs-on: pepper-linux
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
       run:
@@ -95,7 +95,7 @@ jobs:
           fi
 
       # pep-doc is a Pepper program, built against this checkout's runtime
-      # with the newest published build of main (#713), also for a release
+      # with the newest published build of main, also for a release
       # tag, whose own release may not be published yet.
       - name: Install the toolchain
         env:

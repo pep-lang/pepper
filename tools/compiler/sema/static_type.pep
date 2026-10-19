@@ -203,7 +203,7 @@ export struct StructTable {
     ## Returns the return type of method `name` of type `ty`. When only the
     ## generic base is filed, its own parameters are replaced by `ty`'s type
     ## arguments: `_literal_append` of `Array<int>` returns `Array<int>`,
-    ## not the base's `Array<T>` (#996).
+    ## not the base's `Array<T>`.
     ##
     ## @param ty the receiver's type
     ## @param name the method's name
@@ -248,7 +248,7 @@ extend _TableFields with FieldTypes;
 # Whether `f` is generic and its return type names one of its own type
 # parameters (`_array_literal<T>(first: T): Array<T>`). A call to it has no
 # static type until its type arguments are inferred: that `T` is not the
-# caller's (#996).
+# caller's.
 _returns_own_parameter(f: FunctionDef): bool {
     for (var p in f.generic_params) {
         if (f.ty.mentions(p.name)) {

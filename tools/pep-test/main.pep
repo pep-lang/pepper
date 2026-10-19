@@ -463,7 +463,7 @@ list_tests(program: String, tests: Array<Test>): String? {
 # Runs `test` in a child process and judges how it ended. The child's
 # temporary folder is `temp`, removed when the test ends, so what a test
 # that panics or times out (or a child of its that outlives it) leaves
-# there is removed too, rather than leaked into the system's (#818). Its
+# there is removed too, rather than leaked into the system's. Its
 # name is short: macOS caps a Unix socket's path at 103 bytes.
 run_test(test: Test, timeout: ulong, temp: Path): Outcome {
     var outcome = Outcome();
@@ -629,7 +629,7 @@ display_name(test: Test, qualify: bool): String {
 
 # Prints how a test ended and how long it took, with a warning when it
 # passed after more than 60% of its timeout: it fails once its machine is
-# busier (#1001).
+# busier.
 report_test(name: String, outcome: Outcome, elapsed: os.Duration, timeout: ulong) {
     var took = format_duration(elapsed);
     print($"test {name} ... {outcome.passed ? "ok" : "FAILED"} ({took})");

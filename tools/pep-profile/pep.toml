@@ -2,7 +2,7 @@
 name = "pep_profile"
 description = "Profiles a program and writes a flame graph, run as `pepper profile`"
 license = "MIT"
-repository = "https://github.com/justinboswell/pepper"
+repository = "https://github.com/pep-lang/pepper"
 
 [build]
 entry = "main.pep"

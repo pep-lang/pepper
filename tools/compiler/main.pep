@@ -1,4 +1,4 @@
-# pepc: the Pepper compiler written in Pepper (#225), built and shipped as
+# pepc: the Pepper compiler written in Pepper, built and shipped as
 # `pep-build`: the same command line, `pep-build --help` for the options.
 # `main` declares every option with the `cli` module, which prints
 # `--help` from the declarations and reports a command line it cannot

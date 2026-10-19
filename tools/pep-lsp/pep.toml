@@ -1,9 +1,9 @@
 [package]
 name = "pep_lsp"
 version = "0.3.0"
-description = "The Pepper language server, written in Pepper on the lsp package (#225)"
+description = "The Pepper language server, written in Pepper on the lsp package"
 license = "MIT"
-repository = "https://github.com/justinboswell/pepper"
+repository = "https://github.com/pep-lang/pepper"
 
 [build]
 entry = "main.pep"
@@ -12,4 +12,4 @@ output = "pep-lsp"
 include = [".."]
 
 [dependencies]
-lsp = { github = "justinboswell/pepper-lsp", branch = "main" }
+lsp = { github = "pep-lang/pepper-lsp", branch = "main" }

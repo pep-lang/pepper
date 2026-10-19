@@ -520,7 +520,7 @@ sort_and_destroy_elements_with_their_own_comparison() {
     expect_equal(nested[0][0], 1);
 }
 
-# An empty Array is not allocated until it is written or shared (#652):
+# An empty Array is not allocated until it is written or shared:
 # creating one, reading it and iterating it allocate nothing.
 [Test]
 empty_array_allocates_nothing() {

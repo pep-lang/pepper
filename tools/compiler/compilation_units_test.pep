@@ -318,7 +318,7 @@ keys_a_unit_on_the_functions_it_can_name() {
 }
 
 # The link reads the objects from a response file, which keeps a path's
-# spaces and backslashes (#887): on Windows a backslash is a separator, and
+# spaces and backslashes: on Windows a backslash is a separator, and
 # a path with one overflowed the command line.
 [Test]
 links_objects_under_a_path_with_spaces_and_backslashes() {
@@ -333,7 +333,7 @@ links_objects_under_a_path_with_spaces_and_backslashes() {
 # A module file that another file of its module reads: a build checks its
 # program whole (no compilation units), since the root's compilation unit
 # must come last; the language server, which stops at the document's, gets
-# them in the order they read each other (#823).
+# them in the order they read each other.
 [Test]
 a_root_another_file_reads_has_units_only_when_it_need_not_be_last() {
     var folder = TempFolder("units_root_read");
@@ -354,7 +354,7 @@ a_root_another_file_reads_has_units_only_when_it_need_not_be_last() {
 
 # A number type's trait extension with a required method, in a compilation
 # unit below: checking that unit again found its methods lowered to
-# functions already and reported "'char' does not implement 'rank'" (#950).
+# functions already and reported "'char' does not implement 'rank'".
 [Test]
 keeps_a_number_extension_a_unit_below_lowered() {
     _builds_and_runs(

@@ -1,7 +1,7 @@
 # Calls to a struct's own methods: by their bare names, a generic method
 # called with explicit type arguments (`make<String>(n)`) from a method, a
-# static method and a closure, as `this.make<String>(n)` would call it (#672);
-# and overloads mixing plain and generic members (#674).
+# static method and a closure, as `this.make<String>(n)` would call it;
+# and overloads mixing plain and generic members.
 
 struct Labeled<T> {
     var label = "";
@@ -58,7 +58,7 @@ calls_a_generic_method_by_its_bare_name() {
 
 # A method overloaded by plain and generic members, picked by the argument's
 # type: `bool` goes to the plain member, `T?` and `T[]` to their generic
-# members ahead of the plain `T` one (#674).
+# members ahead of the plain `T` one.
 struct Describer<U> {
     var tag = "d";
 

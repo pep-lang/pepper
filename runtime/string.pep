@@ -254,7 +254,7 @@ export struct String {
     }
 
     # `grow`, leaving the new bytes uninitialized when `zero` is false, for
-    # a caller that writes every one of them (#925).
+    # a caller that writes every one of them.
     _grow(new_size: ulong, zero: bool) {
         if (new_size > _size) {
             _version = _version + 1;
@@ -282,7 +282,7 @@ export struct String {
     append(rhs: String) {
         _version = _version + 1;
         # Nothing to copy, and a String with no buffer has no terminator to
-        # write (#692).
+        # write.
         if (rhs._size == 0) {
             return;
         }
@@ -1864,7 +1864,7 @@ export to_string<A, B, C, D, E, F, G, H>(value: (A, B, C, D, E, F, G, H)): Strin
 export print(text: String) {
     puts(text.c_str());
     # C stdio fully buffers a pipe or file; flush so a reader such as the
-    # `pepper` launcher's caller sees each line now (#465).
+    # `pepper` launcher's caller sees each line now.
     fflush(__null);
 }
 

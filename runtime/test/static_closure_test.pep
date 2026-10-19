@@ -1,5 +1,5 @@
 # Closures written in a `static` block's emitted statements are lifted like
-# any other closure (#673), and capture the runtime locals the block declares.
+# any other closure, and capture the runtime locals the block declares.
 
 struct Reader {
     var check: (String) => bool = __null;

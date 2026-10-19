@@ -59,7 +59,7 @@ edits_arrays_and_objects() {
 [Test]
 assigns_through_chained_indexers() {
     # `root["a"]["b"] = v` sets a member of the object `root["a"]` holds,
-    # as `var a = root["a"]; a["b"] = v;` does (#623).
+    # as `var a = root["a"]; a["b"] = v;` does.
     var root = json.parse("{\"a\": {}, \"list\": [[1], [2]]}").value();
     root["a"]["b"] = json.JsonValue.Integer(1);
     root["a"]["b"] = json.JsonValue.Integer(2);

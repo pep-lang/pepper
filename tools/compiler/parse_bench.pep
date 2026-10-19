@@ -1,10 +1,10 @@
-# The parser benchmark (#601): every `.pep` file of the repository, read
+# The parser benchmark: every `.pep` file of the repository, read
 # into memory once, then lexed (`lex`), parsed to the compiler's AST
 # (`ast`, `parse.parse`), and parsed to the AST as written, tokens and
 # comments kept (`written`, `parse.parse_written`, what pep-fmt reads),
 # several passes each. Prints the best pass of each phase.
 #
-# Then the broken inputs of #225's step 1, each file with its last `}`
+# Then the broken inputs of the self-hosting cutover's step 1, each file with its last `}`
 # removed, a `;` in its second half removed, or the rest of a line after
 # ` = ` in its second half removed: parsed (`broken`, `parse.parse`, which
 # stops at the first error) and parsed past their errors (`recover`,

@@ -1,4 +1,4 @@
-## SIMD vectors (#517): the built-in type `__simd<T, N>`, LLVM's `<N x T>`,
+## SIMD vectors: the built-in type `__simd<T, N>`, LLVM's `<N x T>`,
 ## and the `__simd_<op><V>(args)` intrinsics (`Expression.Simd`) that the
 ## runtime's `simd.Vector<T, N>` and `simd.Mask<N>` are written with.
 ##

@@ -87,7 +87,7 @@ _async_sys_os_thread(): ulong {
 _async_sys_sleep(milliseconds: ulong) {
     # struct timespec { time_t tv_sec; long tv_nsec; }. From C's malloc, so
     # a thread asleep does not hold a live allocation that a leak check
-    # would count (a test's timeout watchdog sleeps through the test, #741).
+    # would count (a test's timeout watchdog sleeps through the test).
     __ptr<long> time = malloc(16);
     time[0] = (milliseconds / 1000) as long;
     time[1] = ((milliseconds % 1000) * 1000000) as long;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build Pepper programs for iOS and Android and run them in the iOS simulator
-# and the Android emulator, on a Mac with Xcode and the Android SDK (#375).
+# and the Android emulator, on a Mac with Xcode and the Android SDK.
 #
 #   bash scripts/mobile-test.sh <compiler> <output-dir> [ios|android|all] [example-prefix...]
 #

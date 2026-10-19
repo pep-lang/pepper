@@ -13,9 +13,9 @@ Warnings in the files a document imports show on those files too, such as
 a use of a deprecated function in a library the document calls. A file open
 in the editor shows its own analysis instead.
 
-The [VS Code extension](../tutorial/getting-started.md#editor-support) bundles
-it. When [`pepper install`](pep-install.md) manages your Pepper home, the
-extension instead runs the `pep-lsp` of the toolchain the first workspace
+The [VS Code extension](../tutorial/getting-started.md#editor-support)
+(pep-lang/vscode-pepper) runs it. When [`pepper install`](pep-install.md)
+manages your Pepper home, the extension runs the `pep-lsp` of the toolchain the first workspace
 folder uses, as `pepper install which` reports it there, so the editor
 checks code with the same compiler and standard library as `pepper build`.
 If that fails (say the project pins a toolchain that is not installed), a
@@ -39,7 +39,7 @@ window to pick the toolchain up:
 toolchain's `pep-lsp` (or `pepper lsp`) for `.pep` files.
 
 The server is written in Pepper, in `tools/pep-lsp`, on the
-[`lsp` package](https://github.com/justinboswell/pepper-lsp), a framework
+[`lsp` package](https://github.com/pep-lang/pepper-lsp), a framework
 for writing a language server for any language in Pepper. To build it from
 a checkout of the repository, with this checkout's standard library:
 
@@ -132,7 +132,7 @@ options above, and restarts the server when one changes:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `pepper.lspPath` | empty | The `pep-lsp` to run; empty uses the project's toolchain's, else the one bundled with the extension. The server restarts whenever that file is rebuilt |
+| `pepper.lspPath` | empty | The `pep-lsp` to run; empty uses the project's toolchain's. The server restarts whenever that file is rebuilt |
 | `pepper.inlayHints.implicitConversions` | `true` | `inlayHints.implicitConversions` |
 | `pepper.inlayHints.parameterNames` | `true` | `inlayHints.parameterNames` |
 | `pepper.buildOptions` | `[]` | `buildOptions` |

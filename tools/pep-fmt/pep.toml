@@ -2,7 +2,7 @@
 name = "pep_fmt"
 description = "Formats Pepper source in the standard style, run as `pepper fmt`"
 license = "MIT"
-repository = "https://github.com/justinboswell/pepper"
+repository = "https://github.com/pep-lang/pepper"
 
 [build]
 entry = "main.pep"

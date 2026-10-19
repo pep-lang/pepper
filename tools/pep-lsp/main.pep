@@ -1,5 +1,5 @@
 # pep-lsp: the Pepper language server, written in Pepper on the `lsp`
-# package (github.com/justinboswell/pepper-lsp). Editors start it, through
+# package (github.com/pep-lang/pepper-lsp). Editors start it, through
 # `pepper lsp`, and talk to it over standard input and output.
 #
 # Releases and the VS Code extension ship it. Build it from the repository

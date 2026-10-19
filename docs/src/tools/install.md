@@ -7,12 +7,12 @@ for working on Pepper itself (see [Getting started](../tutorial/getting-started.
 
 ```sh
 # Linux and macOS
-curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 ```
 
 Each release also carries both scripts as assets, beside its archives.
@@ -149,7 +149,7 @@ example `GITHUB_TOKEN=$(gh auth token)`. The raw script URLs above need it too,
 so download the script with `gh` first:
 
 ```sh
-gh api repos/justinboswell/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
+gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
 GITHUB_TOKEN=$(gh auth token) sh install.sh
 ```
 
@@ -183,14 +183,11 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   compiler that builds it, is the newest published toolchain too, so the release
   may take any version, not only the one main was developing:
   1. A pull request runs `scripts/set-version.sh 0.9.0`, which sets the
-     version everywhere a tool reads it; the same pull request sets the VS
-     Code extension's `package.json` and `package-lock.json` to match.
+     version everywhere a tool reads it.
   2. Tag that merge `v0.9.0` and push the tag. The workflow checks that the
      commit holds that version, builds it and publishes the release; the
-     `Docs` workflow publishes the docs from the same tag, and once the
-     release's archives are up the workflow dispatches `VSIX` on the tag,
-     which builds the extension with them and publishes it as
-     `vsix-v<extension version>`.
+     `Docs` workflow publishes the docs from the same tag. The VS Code
+     extension is released from its own repository, pep-lang/vscode-pepper.
   3. Once it is published, the workflow opens a pull request that starts
      the next minor version on main (`0.10.0-dev`) and merges itself once
      its checks pass, unless main has already moved on; a major version is

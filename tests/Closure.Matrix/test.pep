@@ -3,8 +3,7 @@
 #   kind: uses its parameter, ignores it, captures a local;
 #   slot: plain function, generic function, generic method, struct field,
 #         constructor argument;
-# with the generic function also given an array literal beside the closure
-# (#992, #996, #949).
+# with the generic function also given an array literal beside the closure.
 
 # How many elements `make` gives for each of `items`, in total.
 count_all(items: Array<int>, make: (int) => Iterator<int>): int {
