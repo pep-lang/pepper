@@ -149,6 +149,11 @@ jobs:
 
   test-windows:
     runs-on: windows-2025
+    # Four jobs, each running a quarter of the suite (`--shard`).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
@@ -213,8 +218,10 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --shard "$SHARD"
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`pep-doc reference`) in the same
@@ -222,6 +229,7 @@ jobs:
       # declaration, and on a tool option missing from its page, reading the
       # tools the Pepper tests step built, pep-doc among them.
       - name: Documentation is current
+        if: matrix.shard == 1
         shell: bash
         run: '"${PEPPER_TARGET_DIR:-target}/pepper-tests/bin/pep-doc" check'
 
@@ -229,6 +237,11 @@ jobs:
   # through `test` (see the top of this file).
   test-macos:
     runs-on: macos-15
+    # Four jobs, each running a quarter of the suite (`--shard`).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
@@ -293,12 +306,18 @@ jobs:
           # checking 8 compilation units at once ran a 16 GB Mac out of
           # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
+          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3 --shard "$SHARD"
 
   # The suite on Linux. Required: `test` gates on it.
   test-linux:
     runs-on: ubuntu-24.04
+    # Four jobs, each running a quarter of the suite (`--shard`).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
@@ -359,14 +378,17 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --shard "$SHARD"
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and
       # check they print what the host build prints. Linking for the other
       # operating systems needs their SDKs: the cross-link jobs below do that.
       - name: Cross-compile for Linux arm64
+        if: matrix.shard == 1
         shell: bash
         # This checkout's runtime, not the installed toolchain's.
         env:

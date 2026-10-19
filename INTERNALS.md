@@ -3498,7 +3498,9 @@ checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
     prerelease `release.yml` publishes on each merge, or a release with a
     higher version, through `install.sh` / `install.ps1`), build `tools/compiler` with it when it changed
     (`ci-build-compiler.sh`), run `scripts/pepper-tests.sh`, and `pep-doc
-    check`.
+    check`. Each of the three is a matrix of four jobs, each running a
+    quarter of the tests (`--shard I/4`); the first also runs `pep-doc
+    check` and, on Linux, the arm64 cross-compile.
   - `test-macos` (**`macos-15`**) and `test-linux` (**`ubuntu-24.04`**)
     do the same; `test-linux` also cross-compiles a few examples for Linux
     arm64 and runs them under qemu. Both are required, through `test`,
