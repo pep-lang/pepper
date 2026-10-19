@@ -53,3 +53,4 @@ downloads and extracts the archive again even when a valid install is there.
 | Variable | What it does |
 | --- | --- |
 | `PEPPER_SETUP_DEVTOOLS` | `1` sets up the debugger on every run, as `--devtools` does, so it can be turned on once per machine |
+| `PEPPER_LLVM_VERSION` | Provisions that LLVM (such as `20.1.8`) instead of the one the scripts pin; `llvm-package.yml` sets it to package another release |

@@ -3554,9 +3554,10 @@ checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped
   Windows LLVM 20 package that CI installs, and with `platforms=manylinux`
   the Linux release's LLVM (`build-llvm-manylinux.sh`), so a runner without
-  a cached build skips hours of building. It is the one self-hosted
-  workflow (`pepper-linux`, `pepper-macos`, `pepper-windows`), and runs
-  only by hand.
+  a cached build skips hours of building. Its `version` input packages
+  another LLVM release (`PEPPER_LLVM_VERSION` in the setup scripts). It is
+  the one self-hosted workflow (`pepper-linux`, `pepper-macos`,
+  `pepper-windows`), and runs only by hand.
 
 ---
 

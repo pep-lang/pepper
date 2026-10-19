@@ -12,6 +12,11 @@
 #
 #   gh workflow run llvm-package.yml
 #
+# `version` packages another LLVM release instead of the pinned one (the
+# setup scripts provision it through PEPPER_LLVM_VERSION):
+#
+#   gh workflow run llvm-package.yml -f version=20.1.8 -f platforms=windows,manylinux
+#
 # Each platform provisions a full upstream LLVM, strips it to the pieces this
 # project actually consumes (see scripts/package-llvm.*), and uploads the
 # result as an asset on the `llvm-<version>` release.
@@ -37,6 +42,10 @@ name: llvm-package
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "LLVM version, such as 20.1.8 (default: the one the setup scripts pin)"
+        required: false
+        default: ""
       platforms:
         description: "Comma-separated: linux, macos, windows, manylinux"
         required: false
@@ -64,6 +73,7 @@ jobs:
       - id: resolve
         env:
           PLATFORMS: ${{ inputs.platforms }}
+          VERSION_INPUT: ${{ inputs.version }}
         run: |
           # Versions live in the setup scripts, next to the code that installs
           # them; never duplicate them here. Strip CR first: a Windows checkout
@@ -92,6 +102,15 @@ jobs:
           if [ "$version" != "$win_version" ]; then
             echo "::error::LLVM $major differs: setup-llvm.sh=$version setup-llvm.ps1=$win_version"
             exit 1
+          fi
+
+          if [ -n "$VERSION_INPUT" ]; then
+            if ! printf '%s' "$VERSION_INPUT" | grep -qxE '[0-9]+\.[0-9]+\.[0-9]+'; then
+              echo "::error::version '$VERSION_INPUT' is not <major>.<minor>.<patch>"
+              exit 1
+            fi
+            version="$VERSION_INPUT"
+            major="${version%%.*}"
           fi
 
           runners=''
@@ -186,14 +205,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/AppData/Local/pepper/cache
-          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
+          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-${{ needs.prepare.outputs.version }}-windows-x64
 
       - name: Cache LLVM archive (Unix)
         if: runner.os != 'Windows'
         uses: actions/cache@v6
         with:
           path: ~/.local/share/pepper/cache
-          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ matrix.os }}
+          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ needs.prepare.outputs.version }}-${{ matrix.os }}
 
       # --no-packages stops the Unix leg from *installing* an apt/brew LLVM to
       # package; it does not stop one already on the image from being adopted
@@ -201,10 +220,14 @@ jobs:
       # assertion in the next step is for.
       - name: Provision full LLVM (Windows)
         if: runner.os == 'Windows'
+        env:
+          PEPPER_LLVM_VERSION: ${{ needs.prepare.outputs.version }}
         run: pwsh -File scripts/setup-llvm.ps1
 
       - name: Provision full LLVM (Unix)
         if: runner.os != 'Windows'
+        env:
+          PEPPER_LLVM_VERSION: ${{ needs.prepare.outputs.version }}
         run: bash scripts/setup-llvm.sh --no-packages
 
       - name: Build package

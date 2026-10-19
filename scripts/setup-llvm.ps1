@@ -36,6 +36,12 @@
     pwsh -File scripts/setup-llvm.ps1 -DevTools
 
 .EXAMPLE
+    $env:PEPPER_LLVM_VERSION = '20.1.8'; pwsh -File scripts/setup-llvm.ps1
+
+    Provisions that LLVM instead of the pinned one (llvm-package.yml uses it
+    to package another release).
+
+.EXAMPLE
     $env:PEPPER_SETUP_DEVTOOLS = '1'; pwsh -File scripts/setup-llvm.ps1
 #>
 [CmdletBinding()]
@@ -62,6 +68,10 @@ $LlvmVersions = @{
     '20' = '20.1.8'
 }
 $LlvmVersion = $LlvmVersions[$LlvmMajor]
+if ($env:PEPPER_LLVM_VERSION) {
+    $LlvmVersion = $env:PEPPER_LLVM_VERSION
+    $LlvmMajor = $LlvmVersion.Split('.')[0]
+}
 
 # liblldb.dll is linked against this exact CPython minor version and the
 # llvm.org installer does not bundle it, so the embeddable runtime is placed

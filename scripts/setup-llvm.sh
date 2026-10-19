@@ -27,6 +27,9 @@
 #                   changing anything.
 #   -h, --help      this text.
 #
+# PEPPER_LLVM_VERSION=<major.minor.patch> provisions that LLVM instead of the
+# pinned one (llvm-package.yml uses it to package another release).
+#
 # It records the prefix it settles on in .pep/llvm-prefix (one line, read by
 # scripts/pepper-tests.sh, the release build and the workflows).
 #
@@ -50,6 +53,11 @@ archive_version() {
         *) return 1 ;;
     esac
 }
+
+if [ -n "${PEPPER_LLVM_VERSION:-}" ]; then
+    LLVM_MAJOR="${PEPPER_LLVM_VERSION%%.*}"
+    archive_version() { [ "$1" = "$LLVM_MAJOR" ] && echo "$PEPPER_LLVM_VERSION"; }
+fi
 
 # CPython minor version liblldb is linked against in the LLVM releases; only
 # used to make the "lldb won't start" hint concrete.
