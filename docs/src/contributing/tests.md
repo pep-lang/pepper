@@ -91,6 +91,25 @@ Linux, macOS and Windows. A PR that changes the compiler (`tools/compiler/`)
 is tested with that compiler instead: CI builds it with the build of main
 first (`scripts/ci-build-compiler.sh`) and runs the suite with it.
 
+That compiler can hide a runtime change that needs a compiler fix the
+published build of main does not have yet, which breaks main's CI and the
+release, since both build the compiler with the published one. So a PR
+that changes `tools/compiler/` or `runtime/` also runs, before it merges:
+
+```bash
+scripts/stage0-check.sh                    # with the newest published toolchain
+scripts/stage0-check.sh --version 0.10.0   # with an older one
+```
+
+It installs the newest published toolchain (stage 0) with
+`scripts/ci-install-toolchain.sh` into `target/pepper-home`, builds
+`tools/compiler` with it (`scripts/ci-build-compiler.sh`, into
+`target/compiler`), then runs the runtime's tests with stage 0's own
+`pepper test`. Further arguments go to that `pepper test`. It needs
+`GH_TOKEN` while the repository is private, and on macOS and Windows
+LLVM's prefix, as `scripts/pepper-tests.sh` does (`PEPPER_LLVM_PREFIX`,
+or this checkout's `.pep/llvm-prefix`).
+
 Two Pepper tools depend on private repositories. The compiler written in
 Pepper, `tools/compiler`, depends on `justinboswell/pepper-llvm`, and the
 language server `tools/pep-lsp` depends on `justinboswell/pepper-lsp`. CI

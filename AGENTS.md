@@ -73,6 +73,9 @@ checkout's `runtime/`. So runtime code may only use what that compiler
 accepts: a compiler fix lands first, and runtime code that needs it waits
 for the next `-dev` publish, or is written around it. Check a runtime change
 by building any program with stage 0 and `PEPPER_RUNTIME=runtime`.
+A PR that changes `tools/compiler/` or `runtime/` runs `scripts/stage0-check.sh`
+before it merges: stage 0 builds the compiler and runs the runtime's tests,
+which `scripts/pepper-tests.sh` with the branch's compiler cannot show.
 #1002 broke main this way (`FlatMapIterator`'s `(T) => Iterator<U>` field).
 
 ## Response style
