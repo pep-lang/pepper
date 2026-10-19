@@ -24,7 +24,7 @@
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
 import digest;
-import [Directory, File, Path] from io;
+import [Directory, File, IoResult, Path] from io;
 import compiler.link;
 import os;
 import process;
@@ -99,6 +99,12 @@ export struct Cache {
             return Result<Path, String>.err($"cannot create {folder}: {created.error().message}");
         }
         var moved = File.rename(built, target);
+        if (moved.is_err() and !target.metadata().is_ok()) {
+            # A rename cannot cross drives, and the build folder can sit on
+            # another one than the cache (a temp folder on C: and the
+            # checkout on D:, as on a hosted Windows runner).
+            moved = _move_across_drives(built, target);
+        }
         if (moved.is_err()) {
             if (!target.metadata().is_ok()) {
                 return Result<Path, String>.err($"cannot move {built} to {target}: {moved.error().message}");
@@ -727,4 +733,54 @@ export write_record(
         text.append($"{program.files[loc.file as ulong].namespace}\t{loc.span.start}\t{loc.span.end}\t{summary}\n");
     }
     File.write_text(folder.join(Path(_SUMMARIES)), text.to_string());
+}
+
+# Moves the folder `built` to `target` where a rename cannot: copies it to a
+# folder beside `target`, on the cache's own drive, and renames that, so a
+# key's folder still only ever appears whole. `built` goes once the copy is
+# in place.
+export _move_across_drives(built: Path, target: Path): IoResult<void> {
+    var staged = Path($"{target}.{digest.to_hex(digest.blake3(built.to_string())).substr(0, 12)}");
+    Directory.remove_all(staged);
+    var copied = _copy_folder(built, staged);
+    if (copied.is_ok()) {
+        copied = File.rename(staged, target);
+    }
+    if (copied.is_err()) {
+        Directory.remove_all(staged);
+        return copied;
+    }
+    Directory.remove_all(built);
+    return IoResult<void>.ok();
+}
+
+# Copies the folder `from`, with every file and folder in it, to `to`.
+_copy_folder(from: Path, to: Path): IoResult<void> {
+    var created = Directory.create_all(to);
+    if (created.is_err()) {
+        return created;
+    }
+    var listing = Directory.open(from);
+    if (listing.is_err()) {
+        return IoResult<void>.err(listing.error());
+    }
+    var entries = listing.value().entries();
+    if (entries.is_err()) {
+        return IoResult<void>.err(entries.error());
+    }
+    for (var entry in entries.value()) {
+        var into = to.join(Path(entry.name));
+        if (entry.is_directory) {
+            var r = _copy_folder(entry.path, into);
+            if (r.is_err()) {
+                return r;
+            }
+            continue;
+        }
+        var c = File.copy(entry.path, into);
+        if (c.is_err()) {
+            return IoResult<void>.err(c.error());
+        }
+    }
+    return IoResult<void>.ok();
 }
