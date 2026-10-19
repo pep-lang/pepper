@@ -53,11 +53,10 @@ Four steps, on every platform:
    pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
    ```
 
-4. **The private packages.** `tools/compiler` depends on
+4. **The packages.** `tools/compiler` depends on
    `pep-lang/pepper-llvm` and `tools/pep-lsp` on
    `pep-lang/pepper-lsp`. The first build of each fetches its package
-   with git into the tool's `.pep/deps`, so your git needs read access to
-   those repositories.
+   with git into the tool's `.pep/deps`.
 
 ### Where LLVM comes from
 
@@ -177,7 +176,7 @@ update. `INTERNALS.md` is the map of the compiler: where each stage lives
 and the patterns it follows. `.agents/skills/` holds step-by-step
 workflows (build, test, finish a PR, test another platform), and its
 `build` and `test` skills carry the failure signatures this project has
-hit, such as LLVM discovery and link failures and the private packages'
+hit, such as LLVM discovery and link failures and the packages'
 fetch. Start there before diagnosing a failure from scratch.
 
 ## The VS Code extension from a branch

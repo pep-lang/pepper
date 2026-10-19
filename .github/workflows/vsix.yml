@@ -88,16 +88,13 @@ jobs:
           bash -euxo pipefail scripts/ci-install-toolchain.sh ${version:+--version "$version"}
 
       # Release build, as required for the bundled server, of this
-      # checkout's tools/pep-lsp against this checkout's runtime. pep-lsp
-      # depends on the private pepper-lsp package (scripts/ci-package-auth.sh).
+      # checkout's tools/pep-lsp against this checkout's runtime.
       - name: Build pep-lsp (release)
         shell: bash
         env:
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
           PEPPER_RUNTIME: ${{ github.workspace }}/runtime
           TRIPLE: ${{ matrix.triple }}
         run: |
-          source scripts/ci-package-auth.sh
           set -euxo pipefail
           out="$RUNNER_TEMP/pep-lsp-${{ matrix.target }}"
           rm -rf "$out"

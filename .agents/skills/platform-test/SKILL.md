@@ -35,10 +35,9 @@ gh workflow run platform-test.yml -f platforms=macos    # the Pepper tests (the 
   `mac`/`osx`, `win`). Defaults to all three. An unknown platform fails the
   run rather than falling back to the default.
 - `script`: any command, run with bash from the repo root. Defaults to
-  `source scripts/ci-package-auth.sh && bash scripts/pepper-tests.sh
-  "$PEPPER_COMPILER_DIR"`: the whole Pepper suite with the build of main,
-  which the job installs first (its `pep-build`'s folder is in
-  `PEPPER_COMPILER_DIR`), and the private packages' deploy keys.
+  `bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"`: the whole Pepper
+  suite with the build of main, which the job installs first (its
+  `pep-build`'s folder is in `PEPPER_COMPILER_DIR`).
 
 - `provision`: `false` skips LLVM provisioning, for questions about what the
   bare runner image already has.

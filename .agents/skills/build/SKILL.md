@@ -27,7 +27,7 @@ Pepper is written in Pepper. The compiler, `pep-build`, is the Pepper program in
 
    Cheapest source first: an LLVM 20 already on the machine, then the package manager (`apt install llvm-20-dev` plus `libpolly-20-dev`, 4–8s; `brew install llvm@20`), then the upstream release archive, of which only what the build consumes is unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries. The prefix goes to `.pep/llvm-prefix` (gitignored), which `scripts/pepper-tests.sh`, the release build and CI read.
 
-3. **The private packages.** `tools/compiler` depends on `pep-lang/pepper-llvm` and `tools/pep-lsp` on `pep-lang/pepper-lsp` (their `pep.toml`). The first build fetches each into the tool's `.pep/deps` with git, so git needs read access. Cloud sessions need both repositories attached (`add_repo`); CI uses deploy keys (`scripts/ci-package-auth.sh`).
+3. **The packages.** `tools/compiler` depends on `pep-lang/pepper-llvm` and `tools/pep-lsp` on `pep-lang/pepper-lsp` (their `pep.toml`). The first build fetches each into the tool's `.pep/deps` with git over HTTPS; both repositories are public, so no credentials are needed.
 
 ## Build
 
@@ -64,7 +64,7 @@ pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows: installs lldb into the 
 ## When the build breaks
 
 - **`'<Name>' is not exported by 'llvm'`** (or another missing name of a package): the copy in `tools/compiler/.pep/deps` is older than `tools/compiler/pep.lock`. Refresh it: `pepper package -C tools/compiler fetch`.
-- **A package fetch fails** (`Permission denied (publickey)`, `Repository not found`): git cannot read `pepper-llvm` / `pepper-lsp`. Attach the repository (cloud session) or set up access; in CI, the deploy key secret is missing.
+- **A package fetch fails** (`Permission denied (publickey)`, `Repository not found`): git cannot read `pepper-llvm` / `pepper-lsp`. Check the URL in `pep.toml` and the network; both repositories are public.
 - **`cannot find -lLLVM-20`** (Linux) or **`library 'LLVM' not found`** (macOS): no LLVM 20 on the link's search path. On Linux `llvm-20-dev` puts `libLLVM-20.so` on the default path; on macOS and Windows pass `-L "$(head -1 .pep/llvm-prefix)/lib"`.
 - **`could not find native static library Polly`** or a missing `libPolly*.a` in a static link of LLVM (the release build): a Debian `llvm-20-dev` without `libpolly-20-dev`. `llvm-config --libnames --link-static` names Polly's archives whether or not they are installed, so `usable_llvm()` in `setup-llvm.sh` rejects such a prefix and installs `libpolly-20-dev`.
 - **Random access violations inside LLVM on Windows**: LLVM's release static libraries are built against the static CRT; two CRTs in one process corrupt the heap. pepc therefore links `LLVM-C.dll` on Windows (pepper-llvm's `[Link("LLVM-C")]`). Don't "fix" this by linking the static libraries.

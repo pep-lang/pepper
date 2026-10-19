@@ -207,23 +207,14 @@ jobs:
       - name: Build the changed compiler
         if: needs.changes.outputs.compiler == 'true'
         shell: bash
-        env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/ci-build-compiler.sh
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
-        # (#656) and pepper-lsp packages.
-        env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
@@ -291,27 +282,19 @@ jobs:
       - name: Build the changed compiler
         if: needs.changes.outputs.compiler == 'true'
         shell: bash
-        env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/ci-build-compiler.sh
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
-        # (#656) and pepper-lsp packages.
         env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
           # The macOS runner has 16 GB. Uncapped, 8 tests at once each
           # checking 8 compilation units at once ran it out of memory and
           # kernel-panicked it (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
-          source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 4
 
   # The suite on Linux. Required: `test` gates on it.
@@ -370,23 +353,14 @@ jobs:
       - name: Build the changed compiler
         if: needs.changes.outputs.compiler == 'true'
         shell: bash
-        env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/ci-build-compiler.sh
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
-        # (#656) and pepper-lsp packages.
-        env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
@@ -516,10 +490,7 @@ jobs:
         if: needs.changes.outputs.compiler == 'true'
         timeout-minutes: 20
         shell: bash
-        env:
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/ci-build-compiler.sh
 
       - name: Cross-link the examples

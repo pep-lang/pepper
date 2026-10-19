@@ -4,9 +4,8 @@
 #   gh workflow run platform-test.yml -f platforms=macos -f script='bash scripts/mobile-test.sh "$PEPPER_COMPILER_DIR/pep-build" "$RUNNER_TEMP/mobile" ios'
 #
 # The script runs with the published build of main installed (as CI installs
-# it), its pep-build's folder in PEPPER_COMPILER_DIR, and the private
-# packages' deploy keys in the environment for scripts/ci-package-auth.sh;
-# the default script sources it and runs the whole Pepper test suite.
+# it) and its pep-build's folder in PEPPER_COMPILER_DIR; the default script
+# runs the whole Pepper test suite.
 #
 # Add `--ref <branch>` to test un-merged work. `workflow_dispatch` only
 # registers once this file is on the default branch, but the run then executes
@@ -34,7 +33,7 @@ on:
       script:
         description: "Command to run (bash, from the repo root)"
         required: false
-        default: source scripts/ci-package-auth.sh && bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+        default: bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
       provision:
         description: "Provision LLVM before running the script (false to probe the bare image)"
         required: false
@@ -198,10 +197,6 @@ jobs:
         env:
           SCRIPT: ${{ inputs.script }}
           PLATFORM: ${{ matrix.os }}
-          # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
-          # and pepper-lsp packages (scripts/ci-package-auth.sh).
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
           echo "Running on $PLATFORM: $SCRIPT"
           bash -euxo pipefail -c "$SCRIPT"

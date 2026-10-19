@@ -119,20 +119,10 @@ It installs the newest published toolchain (stage 0) with
 LLVM's prefix, as `scripts/pepper-tests.sh` does (`PEPPER_LLVM_PREFIX`,
 or this checkout's `.pep/llvm-prefix`).
 
-Two Pepper tools depend on private repositories. The compiler written in
-Pepper, `tools/compiler`, depends on `pep-lang/pepper-llvm`, and the
-language server `tools/pep-lsp` depends on `pep-lang/pepper-lsp`. CI
-clones each over SSH with a read-only deploy key of that repository, whose
-private half is this repository's secret `PEPPER_LLVM_DEPLOY_KEY` or
-`PEPPER_LSP_DEPLOY_KEY`.
-
-`scripts/ci-package-auth.sh` writes the keys to temporary files. It gives
-each package a host alias in an SSH config that offers only that package's
-key, since GitHub takes the first key offered and a deploy key opens only
-its own repository. It points git at the aliases through `GIT_CONFIG_*` and
-`GIT_SSH_COMMAND` variables of the test step only. Without a secret (in a
-fork, say) the step says so in a notice, and the tests of the tool that
-uses that package fail when they fetch it.
+Two Pepper tools depend on packages in other repositories. The compiler
+written in Pepper, `tools/compiler`, depends on `pep-lang/pepper-llvm`, and
+the language server `tools/pep-lsp` depends on `pep-lang/pepper-lsp`. Both
+are public, so the build clones them over HTTPS with no credentials.
 
 ## Tests that run the tools
 

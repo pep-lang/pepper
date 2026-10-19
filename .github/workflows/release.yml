@@ -184,13 +184,7 @@ jobs:
           # installs with the install scripts (as CI does) once it has
           # provisioned clang.
           PEPPER_STAGE0_INSTALL: "1"
-          # pep-build is pepc, which depends on the private pepper-llvm
-          # package, and pep-lsp on the private pepper-lsp package
-          # (scripts/ci-package-auth.sh).
-          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
-          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/release-build.sh "$TARGET" "$PEPPER_VERSION" dist
 
       # Install the archive just built with the install script, which then

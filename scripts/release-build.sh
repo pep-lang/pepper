@@ -251,7 +251,7 @@ mkdir -p "$pepc_build"
 # Stage 1: pepc built by stage 0. Stage 2, which ships: pepc built by
 # stage 1. Both with the runtime of this checkout.
 export PEPPER_RUNTIME="$repo_root/runtime"
-# The private packages pepc and pep-lsp depend on, fetched up front, so
+# The packages pepc and pep-lsp depend on, fetched up front, so
 # pep-package's output (which package, and git's error) is in the log when
 # a fetch fails. The fetch uses a pep-package stage 0 builds from this
 # checkout, with its runtime: stage 0's own may predate a runtime fix it
@@ -277,8 +277,7 @@ unset PEPC_NO_COMPILATION_UNITS
 "$stage/bin/pep-build$exe" --version
 
 echo "=== build the Pepper tools"
-# With the pep-build that ships. pep-lsp depends on the private pepper-lsp
-# package (scripts/ci-package-auth.sh).
+# With the pep-build that ships.
 for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
   "$stage/bin/pep-build$exe" -O --lto=full "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done

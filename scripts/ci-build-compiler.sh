@@ -11,8 +11,7 @@
 #
 # Environment: PEPPER_COMPILER_DIR, the installed toolchain's folder
 # (scripts/ci-install-toolchain.sh); PEPPER_TARGET_DIR, the folder target/
-# stands for; the package keys of scripts/ci-package-auth.sh, sourced
-# first, since the compiler depends on pepper-llvm. macOS and Windows find
+# stands for. macOS and Windows find
 # LLVM as scripts/pepper-tests.sh does: PEPPER_LLVM_PREFIX, else the prefix
 # scripts/setup-llvm.sh or .ps1 wrote to .pep/llvm-prefix.
 set -euo pipefail
