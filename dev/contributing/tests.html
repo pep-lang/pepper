@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cc6a32e9.js";
+            window.path_to_searchindex_js = "../searchindex-477dbf43.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8b7d02da.js"></script>
@@ -264,6 +264,21 @@ files uses a fresh folder under the system’s temporary folder
 Linux, macOS and Windows. A PR that changes the compiler (<code>tools/compiler/</code>)
 is tested with that compiler instead: CI builds it with the build of main
 first (<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
+<p>That compiler can hide a runtime change that needs a compiler fix the
+published build of main does not have yet, which breaks main’s CI and the
+release, since both build the compiler with the published one. So a PR
+that changes <code>tools/compiler/</code> or <code>runtime/</code> also runs, before it merges:</p>
+<pre><code class="language-bash">scripts/stage0-check.sh                    # with the newest published toolchain
+scripts/stage0-check.sh --version 0.10.0   # with an older one
+</code></pre>
+<p>It installs the newest published toolchain (stage 0) with
+<code>scripts/ci-install-toolchain.sh</code> into <code>target/pepper-home</code>, builds
+<code>tools/compiler</code> with it (<code>scripts/ci-build-compiler.sh</code>, into
+<code>target/compiler</code>), then runs the runtime’s tests with stage 0’s own
+<code>pepper test</code>. Further arguments go to that <code>pepper test</code>. It needs
+<code>GH_TOKEN</code> while the repository is private, and on macOS and Windows
+LLVM’s prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
+or this checkout’s <code>.pep/llvm-prefix</code>).</p>
 <p>Two Pepper tools depend on private repositories. The compiler written in
 Pepper, <code>tools/compiler</code>, depends on <code>justinboswell/pepper-llvm</code>, and the
 language server <code>tools/pep-lsp</code> depends on <code>justinboswell/pepper-lsp</code>. CI
