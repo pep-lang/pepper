@@ -1,0 +1,1514 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>File - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-d1944eb7.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2d913a78.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/reference/io-file.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <!-- Generated from runtime/io/file.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="file"><a class="header" href="#file">File</a></h1>
+<p>Source: <code>runtime/io/file.pep</code></p>
+<h2 id="openoptions"><a class="header" href="#openoptions">OpenOptions</a></h2>
+<pre><code class="language-pepper">struct OpenOptions
+</code></pre>
+<p>Describes how <code>File.open_with</code> (or <code>OpenOptions.open</code>) opens a file:
+which access it asks for, and whether the file is created or truncated.</p>
+<p>A builder in the style of Rust’s <code>std::fs::OpenOptions</code>. A new
+<code>OpenOptions</code> has every option off; each setter stores its flag and
+returns this same <code>OpenOptions</code>, so calls chain. The rules, checked when
+the file is opened:</p>
+<ul>
+<li>At least one of <code>read</code>, <code>write</code> or <code>append</code> must be set, or opening
+fails with <code>is_invalid_input()</code>.</li>
+<li><code>create</code>, <code>create_new</code> and <code>truncate</code> need <code>write</code> or <code>append</code>, or
+opening fails with <code>is_invalid_input()</code>.</li>
+<li><code>append</code> implies write access, and every write goes to the current end
+of the file whatever the position; it wins over <code>write</code>.</li>
+<li><code>create</code> opens an existing file as it is (combine with <code>truncate</code> to
+empty it) and creates a missing one.</li>
+<li><code>create_new</code> creates the file and fails with <code>is_already_exists()</code> when
+it already exists, atomically (<code>O_EXCL</code> on POSIX, <code>CREATE_NEW</code> on
+Windows); <code>create</code> is then irrelevant.</li>
+<li><code>truncate</code> empties an existing file on open.</li>
+<li>Without <code>create</code> or <code>create_new</code>, a missing file fails with
+<code>is_not_found()</code>.</li>
+</ul>
+<p>On POSIX a created file gets mode 0666 (or the <code>mode</code> set) less the
+process umask, and the descriptor is opened close-on-exec. On Windows every file is opened
+sharing read, write and delete access with other openers.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.open_with</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = OpenOptions().read(true).write(true).create(true).open(Path("data.bin"));
+if (r.is_err()) {
+    return 1;
+}
+var f = r.value();
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
+<code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="read"><a class="header" href="#read">read</a></h4>
+<pre><code class="language-pepper">read(v: bool): OpenOptions
+</code></pre>
+<p>Sets whether the file is opened for reading.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — true to request read access</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<h4 id="write"><a class="header" href="#write">write</a></h4>
+<pre><code class="language-pepper">write(v: bool): OpenOptions
+</code></pre>
+<p>Sets whether the file is opened for writing. Writes go to the
+current position and overwrite what is there.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — true to request write access</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<h4 id="append"><a class="header" href="#append">append</a></h4>
+<pre><code class="language-pepper">append(v: bool): OpenOptions
+</code></pre>
+<p>Sets append mode: the file is opened for writing and every write
+goes to the current end of the file, whatever the position (seeking
+still moves the position for reads). Implies write access, and takes
+precedence over <code>write</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — true to open in append mode</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<h4 id="truncate"><a class="header" href="#truncate">truncate</a></h4>
+<pre><code class="language-pepper">truncate(v: bool): OpenOptions
+</code></pre>
+<p>Sets whether an existing file is truncated to 0 bytes when it is
+opened. Requires <code>write</code> or <code>append</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — true to truncate an existing file</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<h4 id="create"><a class="header" href="#create">create</a></h4>
+<pre><code class="language-pepper">create(v: bool): OpenOptions
+</code></pre>
+<p>Sets whether a missing file is created. An existing file is opened as
+it is unless <code>truncate</code> is also set. Requires <code>write</code> or <code>append</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — true to create the file when it is missing</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<h4 id="create_new"><a class="header" href="#create_new">create_new</a></h4>
+<pre><code class="language-pepper">create_new(v: bool): OpenOptions
+</code></pre>
+<p>Sets whether the file must be newly created: opening fails with
+<code>is_already_exists()</code> when the path already exists. The check and the
+creation are one atomic step. Requires <code>write</code> or <code>append</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — true to require that the file does not exist yet</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<h4 id="mode"><a class="header" href="#mode">mode</a></h4>
+<pre><code class="language-pepper">mode(mode: Mode): OpenOptions
+</code></pre>
+<p>Sets the permission bits a file gets when this open creates it, so it
+never exists with the default mode: on POSIX the <code>mode_t</code> bits passed
+to <code>open</code>, less the process umask, as <code>Metadata.permissions</code> reports
+them (493, octal 755, for <code>rwxr-xr-x</code>). An existing file keeps its
+mode. Ignored on Windows and WASI; use <code>File.set_read_only</code> there.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the permission bits for a new file; 438 (octal 666) by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var script = OpenOptions().write(true).create_new(true).mode(493).open(Path("run.sh"));
+</code></pre>
+<h4 id="open"><a class="header" href="#open">open</a></h4>
+<pre><code class="language-pepper">open(path: Path): IoResult&lt;File&gt;
+</code></pre>
+<p>Opens <code>path</code> with these options. The same as
+<code>File.open_with(path, this)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to open</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the open <code>File</code>, positioned at the start; an error when the options break a rule (<code>is_invalid_input()</code>), the path is empty or missing (<code>is_not_found()</code>), it exists under <code>create_new</code> (<code>is_already_exists()</code>), or the system refuses (<code>is_permission_denied()</code> and others)</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.open_with</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
+log.write_all("started");
+</code></pre>
+<h2 id="filetype"><a class="header" href="#filetype">FileType</a></h2>
+<pre><code class="language-pepper">enum FileType
+</code></pre>
+<p>The kind of a file system object, as <code>Metadata.file_type</code> and
+<code>DirEntry.file_type</code> report it.</p>
+<p>A symlink is reported as <code>Symlink</code> only where links are not followed
+(<code>Path.symlink_metadata()</code> and directory listings); on Windows that is any
+reparse point, junctions included, even one that points to a directory.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var m = io.Path("notes.txt").metadata();
+if (m.is_ok()) {
+    match (m.value().file_type) {
+        File =&gt; { print("a file"); }
+        Directory =&gt; { print("a directory"); }
+        Symlink, Other =&gt; { print("something else"); }
+    }
+}
+</code></pre>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="file-1"><a class="header" href="#file-1">File</a></h4>
+<pre><code class="language-pepper">File
+</code></pre>
+<p>A regular file. On Windows, anything that is neither a directory nor
+a reparse point.</p>
+<h4 id="directory"><a class="header" href="#directory">Directory</a></h4>
+<pre><code class="language-pepper">Directory
+</code></pre>
+<p>A directory.</p>
+<h4 id="symlink"><a class="header" href="#symlink">Symlink</a></h4>
+<pre><code class="language-pepper">Symlink
+</code></pre>
+<p>A symbolic link itself (on Windows, any reparse point).</p>
+<h4 id="other"><a class="header" href="#other">Other</a></h4>
+<pre><code class="language-pepper">Other
+</code></pre>
+<p>Anything else, such as a FIFO, socket or device on POSIX.</p>
+<h2 id="seekfrom"><a class="header" href="#seekfrom">SeekFrom</a></h2>
+<pre><code class="language-pepper">enum SeekFrom
+</code></pre>
+<p>Where <code>File.seek</code> measures its offset from, with the offset itself.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.seek</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.open(Path("data.bin")).value();
+var length = f.seek(SeekFrom.End(0)).value();     # at the end
+f.seek(SeekFrom.Start(4));                        # 4 bytes in
+var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+</code></pre>
+<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h4 id="start"><a class="header" href="#start">Start</a></h4>
+<pre><code class="language-pepper">Start(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the start of the file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the new position; negative is an error</li>
+</ul>
+<h4 id="current"><a class="header" href="#current">Current</a></h4>
+<pre><code class="language-pepper">Current(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the current position.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the distance to move; negative moves back</li>
+</ul>
+<h4 id="end"><a class="header" href="#end">End</a></h4>
+<pre><code class="language-pepper">End(offset: Offset)
+</code></pre>
+<p><code>offset</code> bytes from the end of the file.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the distance from the end; negative moves back from it</li>
+</ul>
+<h2 id="stdstream"><a class="header" href="#stdstream">StdStream</a></h2>
+<pre><code class="language-pepper">enum StdStream
+</code></pre>
+<p>One of the process’s standard streams, as <code>File.std_file</code> takes it.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.std_file</code></li>
+</ul>
+<h3 id="cases-2"><a class="header" href="#cases-2">Cases</a></h3>
+<h4 id="input"><a class="header" href="#input">Input</a></h4>
+<pre><code class="language-pepper">Input
+</code></pre>
+<p>Standard input: file descriptor 0 on POSIX, <code>STD_INPUT_HANDLE</code> on
+Windows.</p>
+<h4 id="output"><a class="header" href="#output">Output</a></h4>
+<pre><code class="language-pepper">Output
+</code></pre>
+<p>Standard output: file descriptor 1 on POSIX, <code>STD_OUTPUT_HANDLE</code> on
+Windows.</p>
+<h4 id="error"><a class="header" href="#error">Error</a></h4>
+<pre><code class="language-pepper">Error
+</code></pre>
+<p>Standard error: file descriptor 2 on POSIX, <code>STD_ERROR_HANDLE</code> on
+Windows.</p>
+<h2 id="metadata"><a class="header" href="#metadata">Metadata</a></h2>
+<pre><code class="language-pepper">struct Metadata
+</code></pre>
+<p>Describes a file system object: its kind, size, read-only flag,
+permission bits and timestamps, as a snapshot taken when it was queried.</p>
+<p>Returned by <code>File.metadata()</code>, <code>Path.metadata()</code> (which follows
+symlinks), <code>Path.symlink_metadata()</code> (which does not) and
+<code>DirEntry.metadata()</code>. The timestamps are nanoseconds since the Unix
+epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
+<code>statx</code> (Linux) or <code>stat</code> (macOS); on Windows from
+<code>GetFileInformationByHandle</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var m = Path("notes.txt").metadata();
+if (m.is_ok() &amp;&amp; m.value().is_file) {
+    var bytes = m.value().size;
+}
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="size"><a class="header" href="#size">size</a></h4>
+<pre><code class="language-pepper">ulong size
+</code></pre>
+<p>The file’s length in bytes.</p>
+<h4 id="file_type"><a class="header" href="#file_type">file_type</a></h4>
+<pre><code class="language-pepper">FileType file_type
+</code></pre>
+<p>The kind of object: <code>File</code>, <code>Directory</code>, <code>Symlink</code> or <code>Other</code>. It
+agrees with <code>is_file</code>, <code>is_directory</code> and <code>is_symlink</code>, except that a
+Windows reparse point to a directory is <code>Symlink</code> with both
+<code>is_directory</code> and <code>is_symlink</code> set.</p>
+<h4 id="is_file"><a class="header" href="#is_file">is_file</a></h4>
+<pre><code class="language-pepper">bool is_file
+</code></pre>
+<p>Whether this is a regular file. On Windows, anything that is neither
+a directory nor a reparse point (symlink) counts as a file.</p>
+<h4 id="is_directory"><a class="header" href="#is_directory">is_directory</a></h4>
+<pre><code class="language-pepper">bool is_directory
+</code></pre>
+<p>Whether this is a directory.</p>
+<h4 id="is_symlink"><a class="header" href="#is_symlink">is_symlink</a></h4>
+<pre><code class="language-pepper">bool is_symlink
+</code></pre>
+<p>Whether this is a symbolic link itself. Only metadata that does not
+follow links (<code>Path.symlink_metadata()</code>) can report one. On Windows
+this is any reparse point (<code>FILE_ATTRIBUTE_REPARSE_POINT</code>), which
+includes junctions.</p>
+<h4 id="read_only"><a class="header" href="#read_only">read_only</a></h4>
+<pre><code class="language-pepper">bool read_only
+</code></pre>
+<p>Whether the file is read-only: on POSIX, no write permission bit
+(0222) is set for anyone; on Windows, <code>FILE_ATTRIBUTE_READONLY</code> is set.</p>
+<h4 id="modified"><a class="header" href="#modified">modified</a></h4>
+<pre><code class="language-pepper">long modified
+</code></pre>
+<p>The time of the last modification of the contents, in nanoseconds since the Unix epoch.</p>
+<h4 id="accessed"><a class="header" href="#accessed">accessed</a></h4>
+<pre><code class="language-pepper">long accessed
+</code></pre>
+<p>The time of the last access, in nanoseconds since the Unix epoch (file systems mounted with <code>noatime</code> or <code>relatime</code> update it rarely or never).</p>
+<h4 id="created"><a class="header" href="#created">created</a></h4>
+<pre><code class="language-pepper">long? created
+</code></pre>
+<p>The creation (birth) time, in nanoseconds since the Unix epoch; none
+where the platform does not report one, such as on Linux file systems
+that do not record it.</p>
+<h4 id="permissions"><a class="header" href="#permissions">permissions</a></h4>
+<pre><code class="language-pepper">Mode permissions
+</code></pre>
+<p>The raw permission bits: on POSIX the <code>mode_t</code> permission bits
+(<code>mode &amp; 07777</code>, for example 256 for owner read); on Windows the
+<code>FILE_ATTRIBUTE_*</code> bits.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="metadata-1"><a class="header" href="#metadata-1">Metadata()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a <code>Metadata</code> with every number zero, every flag false,
+<code>file_type</code> <code>Other</code> and <code>created</code> none. Metadata is normally obtained
+from a query such as <code>File.metadata()</code>.</p>
+<h2 id="file-2"><a class="header" href="#file-2">File</a></h2>
+<pre><code class="language-pepper">[NotCopyable( "owns an operating-system handle and cannot be copied; send its path, and open the file again on the receiving thread" )] struct File
+</code></pre>
+<p>An open file, or a standard stream, read and written through its
+platform handle (a file descriptor on POSIX, a <code>HANDLE</code> on Windows).</p>
+<p>Open one with <code>File.open</code> (read-only), <code>File.create</code> (write-only,
+created or truncated), or <code>File.open_with</code> / <code>OpenOptions.open</code> for
+anything else. The static conveniences <code>read_bytes</code>, <code>read_to_string</code>,
+<code>write_bytes</code>, <code>write_text</code>, <code>copy</code>, <code>rename</code> and <code>remove</code> work on a
+whole file by path.</p>
+<p>I/O is unbuffered: each <code>read</code> and <code>write</code> is one system call. Reads and
+writes start at the current position and move it forward; the <code>seek_*</code>
+methods move it explicitly. A write to a standard stream first flushes
+the output <code>print</code> has buffered, so the two never come out of order.</p>
+<p>Closing: the File’s destructor closes an owned handle when the last
+reference to the File is released, and ignores any error. Call <code>close()</code>
+to close earlier or to observe the error. The standard streams
+(<code>stdin()</code>, <code>stdout()</code>, <code>stderr()</code>) are never closed by a File. Every
+operation on a closed File fails with an error that none of the
+<code>IoError</code> predicates identify (<code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code>
+on Windows).</p>
+<p>Errors are <code>IoError</code> values carrying the platform’s code; use its
+predicates (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …) to tell
+kinds apart portably.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("out.txt")).value();
+f.write_all("hello");
+f.close();
+var text = File.read_to_string(Path("out.txt")).value();   # "hello"
+</code></pre>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
+<h4 id="path"><a class="header" href="#path">path</a></h4>
+<pre><code class="language-pepper">Path path
+</code></pre>
+<p>The path the File was opened with; <code>&lt;stdin&gt;</code>, <code>&lt;stdout&gt;</code> or
+<code>&lt;stderr&gt;</code> for a standard stream, and empty for a <code>File()</code> never
+opened.</p>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="file-3"><a class="header" href="#file-3">File()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed File that owns nothing yet: <code>is_open()</code> is false and
+every I/O method fails. Use <code>File.open</code>, <code>File.create</code> or
+<code>File.open_with</code> to get an open one.</p>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="open-1"><a class="header" href="#open-1">open</a></h4>
+<pre><code class="language-pepper">static open(path: Path): IoResult&lt;File&gt;
+</code></pre>
+<p>Opens an existing file for reading only. The position starts at 0.</p>
+<p>A directory can be opened this way too, but reading it fails with
+<code>is_is_a_directory()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to open</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the open <code>File</code>; an error with <code>is_not_found()</code> when the path is empty or does not exist, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = File.open(Path("config.txt"));
+if (r.is_err() &amp;&amp; r.error().is_not_found()) {
+    return 0;
+}
+var text = r.value().read_string();
+</code></pre>
+<h4 id="create-1"><a class="header" href="#create-1">create</a></h4>
+<pre><code class="language-pepper">static create(path: Path): IoResult&lt;File&gt;
+</code></pre>
+<p>Opens a file for writing only, creating it if it is missing and
+truncating it to 0 bytes if it exists.</p>
+<p>On POSIX a created file gets mode 0666 less the process umask.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to create or truncate</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the open <code>File</code>, empty and positioned at 0; an error with <code>is_not_found()</code> when the path is empty or its parent directory does not exist, <code>is_permission_denied()</code> when access is refused, or another platform error (on POSIX, <code>is_is_a_directory()</code> when the path is a directory)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("report.txt")).value();
+f.write_all("done");
+</code></pre>
+<h4 id="open_with"><a class="header" href="#open_with">open_with</a></h4>
+<pre><code class="language-pepper">static open_with(path: Path, options: OpenOptions): IoResult&lt;File&gt;
+</code></pre>
+<p>Opens <code>path</code> as <code>options</code> describe. <code>OpenOptions.open</code> is the same
+call written as a builder.</p>
+<p>The options are checked first, as in Rust: at least one of read,
+write or append is required, and create, create_new or truncate
+require write or append. The position starts at 0 (append mode
+still writes at the end).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to open</li>
+<li><code>options</code> — the access mode and creation behavior</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the open <code>File</code>; an error with <code>is_invalid_input()</code> when no access mode is set or create, create_new or truncate is set without write or append; <code>is_not_found()</code> when the path is empty, or the file (or a parent directory) is missing and neither create nor create_new is set; <code>is_already_exists()</code> when create_new is set and the path exists; <code>is_permission_denied()</code> when access is refused; or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var opts = OpenOptions().write(true).create_new(true);
+var r = File.open_with(Path("lock"), opts);
+if (r.is_err() &amp;&amp; r.error().is_already_exists()) {
+    return 1;
+}
+</code></pre>
+<h4 id="std_file"><a class="header" href="#std_file">std_file</a></h4>
+<pre><code class="language-pepper">static std_file(stream: StdStream, name: String): File
+</code></pre>
+<p>Returns a File for one of the process’s standard streams. The File
+does not own the handle, so neither <code>close()</code> nor the destructor
+closes the stream. <code>stdin()</code>, <code>stdout()</code> and <code>stderr()</code> are the usual
+way to call this.</p>
+<p>On Windows a process without a console or redirection may get a null
+handle, and the File is then not open.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>stream</code> — the stream</li>
+<li><code>name</code> — the display name stored in the File’s <code>path</code>, such as <code>&lt;stdout&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on that stream, that does not close the stream when released</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var err = File.std_file(StdStream.Error, "&lt;stderr&gt;");
+err.write_all("warning");
+</code></pre>
+<h4 id="std_file-1"><a class="header" href="#std_file-1">std_file</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'std_file' with a 'StdStream' instead")] static std_file(which: int, name: String): File
+</code></pre>
+<p>Deprecated: use <code>std_file(StdStream, String)</code> instead. Returns a File
+for the standard stream numbered <code>which</code>, as <code>std_file</code> does for the
+matching <code>StdStream</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>which</code> — the stream: 0 for standard input, 1 for standard output, 2 for standard error</li>
+<li><code>name</code> — the display name stored in the File’s <code>path</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on that stream; a File that is not open for any other <code>which</code></li>
+</ul>
+<h4 id="stdin"><a class="header" href="#stdin">stdin</a></h4>
+<pre><code class="language-pepper">static stdin(): File
+</code></pre>
+<p>Returns a File reading the process’s standard input. Each call
+returns a new File on the same stream; the stream is never closed by
+a File. A read returns 0 at end of input (on Windows, also when the
+writing end of a pipe has closed).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on standard input, named <code>&lt;stdin&gt;</code></li>
+</ul>
+<h4 id="stdout"><a class="header" href="#stdout">stdout</a></h4>
+<pre><code class="language-pepper">static stdout(): File
+</code></pre>
+<p>Returns a File writing to the process’s standard output. Each call
+returns a new File on the same stream, and <code>close()</code> only marks that
+File closed: the stream stays usable. Writes are unbuffered, and each
+one first flushes what <code>print</code> has buffered, so output from <code>print</code>
+and from this File comes out in program order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on standard output, named <code>&lt;stdout&gt;</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var out = File.stdout();
+out.write_all("hello");
+</code></pre>
+<h4 id="stderr"><a class="header" href="#stderr">stderr</a></h4>
+<pre><code class="language-pepper">static stderr(): File
+</code></pre>
+<p>Returns a File writing to the process’s standard error. Each call
+returns a new File on the same stream, and <code>close()</code> only marks that
+File closed: the stream stays usable. Writes are unbuffered, and each
+one first flushes what <code>print</code> has buffered.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a File on standard error, named <code>&lt;stderr&gt;</code></li>
+</ul>
+<h4 id="adopt"><a class="header" href="#adopt">adopt</a></h4>
+<pre><code class="language-pepper">static adopt(transfer: FileTransfer): IoResult&lt;File&gt;
+</code></pre>
+<p>Takes the handle out of <code>transfer</code> (see <code>into_transfer</code>) into a new
+File on the calling thread, whose <code>path</code> is empty. Only the first
+<code>adopt</code> of a token gets the handle.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transfer</code> — the token from <code>into_transfer</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the File; an error when the token is empty (already adopted, or made from a closed File)</li>
+</ul>
+<h4 id="read_bytes"><a class="header" href="#read_bytes">read_bytes</a></h4>
+<pre><code class="language-pepper">static read_bytes(path: Path): IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Reads the whole file at <code>path</code> into a byte array (Rust’s
+<code>fs::read</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the file’s bytes; an error as for <code>File.open</code> (such as <code>is_not_found()</code>) or <code>read_all</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = File.read_bytes(Path("image.png"));
+if (r.is_ok()) {
+    var n = r.value().count;
+}
+</code></pre>
+<h4 id="read_to_string"><a class="header" href="#read_to_string">read_to_string</a></h4>
+<pre><code class="language-pepper">static read_to_string(path: Path): IoResult&lt;String&gt;
+</code></pre>
+<p>Reads the whole file at <code>path</code> as UTF-8 text (Rust’s
+<code>fs::read_to_string</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the file’s text; an error with <code>is_invalid_input()</code> when it is not valid UTF-8, or an error as for <code>File.open</code> (such as <code>is_not_found()</code>) or <code>read_all</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = File.read_to_string(Path("notes.txt"));
+if (r.is_err()) {
+    return 1;
+}
+var text = r.value();
+</code></pre>
+<h4 id="write_bytes"><a class="header" href="#write_bytes">write_bytes</a></h4>
+<pre><code class="language-pepper">static write_bytes(path: Path, data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes <code>data</code> as the whole contents of the file at <code>path</code>, creating
+it or replacing what it held (Rust’s <code>fs::write</code>), then closes it.</p>
+<p>Not atomic: the file is truncated first, so a failure part way
+leaves it truncated or partly written.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to write</li>
+<li><code>data</code> — the new contents</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the data is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var data = Array&lt;u8&gt;();
+data.append(1 as u8);
+File.write_bytes(Path("one.bin"), data);
+</code></pre>
+<h4 id="write_text"><a class="header" href="#write_text">write_text</a></h4>
+<pre><code class="language-pepper">static write_text(path: Path, s: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes <code>s</code> as UTF-8 as the whole contents of the file at <code>path</code>,
+creating it or replacing what it held, then closes it. No newline is
+added.</p>
+<p>Not atomic: the file is truncated first, so a failure part way
+leaves it truncated or partly written.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to write</li>
+<li><code>s</code> — the new contents</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the text is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
+</ul>
+<p><strong>Note</strong></p>
+<ul>
+<li>this is the design proposal’s <code>write_to_string</code>; a static <code>write</code> would clash with the instance <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = File.write_text(Path("hello.txt"), "hello, world");
+if (r.is_err()) {
+    return 1;
+}
+</code></pre>
+<h4 id="copy"><a class="header" href="#copy">copy</a></h4>
+<pre><code class="language-pepper">static copy(from: Path, to: Path): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Copies the contents of the file <code>from</code> to <code>to</code>, creating <code>to</code> or
+truncating it first, in 64 KiB chunks.</p>
+<p>Only the contents are copied: <code>to</code> keeps its own permissions and
+timestamps (a new file gets the defaults of <code>File.create</code>). A failure
+part way leaves <code>to</code> partly written.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the file to copy</li>
+<li><code>to</code> — the destination file</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes copied; <code>is_invalid_input()</code> when <code>from</code> and <code>to</code> are the same file (after resolving symlinks), which truncating <code>to</code> would empty before it was read; otherwise an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var n = File.copy(Path("a.txt"), Path("b.txt")).value();
+</code></pre>
+<h4 id="rename"><a class="header" href="#rename">rename</a></h4>
+<pre><code class="language-pepper">static rename(from: Path, to: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Renames or moves <code>from</code> to <code>to</code>, replacing an existing file at <code>to</code>
+(<code>rename</code> on POSIX, <code>MoveFileExW</code> with <code>MOVEFILE_REPLACE_EXISTING</code> on
+Windows).</p>
+<p>Works for directories too. Moving between file systems (volumes)
+fails rather than copying.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the existing path</li>
+<li><code>to</code> — the new path</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or, on POSIX, either path is empty, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">File.rename(Path("draft.txt"), Path("final.txt"));
+</code></pre>
+<h4 id="symlink-1"><a class="header" href="#symlink-1">symlink</a></h4>
+<pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a symbolic link at <code>link</code> that points to the file <code>target</code>
+(<code>symlink</code> on POSIX, <code>CreateSymbolicLinkW</code> on Windows). Use
+<code>Directory.symlink</code> for a link to a directory: Windows makes the two
+kinds differently, and a file link to a directory does not open
+there. POSIX makes the same link either way.</p>
+<p><code>target</code> is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with <code>is_permission_denied()</code> otherwise.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the path the link points to</li>
+<li><code>link</code> — where to create the link</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the link exists; an error with <code>is_already_exists()</code> when something is already at <code>link</code>, <code>is_not_found()</code> when its parent is missing or a path is empty, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.read_link</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">File.symlink(Path("app-1.2.so"), Path("lib/app.so"));
+</code></pre>
+<h4 id="remove"><a class="header" href="#remove">remove</a></h4>
+<pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Deletes the file at <code>path</code>. A symlink is removed itself, not its
+target. Directories are not removed: use <code>Directory.remove</code> or
+<code>Directory.remove_all</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the file to delete</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when the path does not exist (on POSIX, also when it is empty); when it is a directory, <code>is_is_a_directory()</code> on Linux and <code>is_permission_denied()</code> on macOS and Windows; <code>is_permission_denied()</code> when access is refused (on Windows also for a read-only file); or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = File.remove(Path("old.txt"));
+if (r.is_err() &amp;&amp; !r.error().is_not_found()) {
+    return 1;
+}
+</code></pre>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="is_open"><a class="header" href="#is_open">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the File holds a valid handle: true after a
+successful open, false after <code>close()</code> and for a <code>File()</code> never
+opened.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true while the File is open</li>
+</ul>
+<h4 id="check_open"><a class="header" href="#check_open">check_open</a></h4>
+<pre><code class="language-pepper">check_open(): IoResult&lt;void&gt;
+</code></pre>
+<p>Checks that the File is open, for use before an operation.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result when the File is open; an error with the message “file is closed” otherwise (code <code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows; no <code>IoError</code> predicate holds)</li>
+</ul>
+<h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Reads up to <code>max</code> bytes from the current position and appends them
+to <code>buf</code>, growing it; the bytes already in <code>buf</code> are kept. Advances
+the position by the count read.</p>
+<p>One system call: the read may be partial, returning fewer than <code>max</code>
+bytes before the end of the file (always so for pipes and terminals),
+and a single call moves at most about 2 GiB on POSIX or 1 GiB on
+Windows. Loop until it returns 0 to read everything, or use
+<code>read_all</code>. On POSIX an interrupted read (<code>EINTR</code>) is retried. On
+failure <code>buffer</code> keeps its previous contents.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read; 0 reads nothing and returns 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at end of file; an error when the File is closed, or <code>is_is_a_directory()</code> when it is a directory, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var buf = Array&lt;u8&gt;();
+while (true) {
+    var r = f.read(buf, 4096);
+    if (r.is_err() || r.value() == 0) {
+        break;
+    }
+}
+</code></pre>
+<h4 id="read_all"><a class="header" href="#read_all">read_all</a></h4>
+<pre><code class="language-pepper">read_all(): IoResult&lt;u8[]&gt;
+</code></pre>
+<p>Reads everything from the current position to the end of the file,
+in 64 KiB chunks, leaving the position at the end.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of the bytes read (empty at end of file); an error when the File is closed, <code>is_is_a_directory()</code> when it is a directory, or another platform error, in which case the bytes read so far are discarded</li>
+</ul>
+<h4 id="read_string"><a class="header" href="#read_string">read_string</a></h4>
+<pre><code class="language-pepper">read_string(): IoResult&lt;String&gt;
+</code></pre>
+<p>Reads everything from the current position to the end of the file,
+as <code>read_all</code> does, and returns it as UTF-8 text.</p>
+<p>The bytes must be strictly valid UTF-8 (RFC 3629: no overlong forms,
+surrogates, or code points past U+10FFFF). A byte-order mark is kept
+as part of the text.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text read (empty at end of file); an error with <code>is_invalid_input()</code> when the bytes are not valid UTF-8, or any error <code>read_all</code> returns</li>
+</ul>
+<h4 id="write-1"><a class="header" href="#write-1">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Writes bytes from <code>data</code> at the current position (or at the end, in
+append mode) with a single system call, and advances the position.</p>
+<p>The write may be partial: it can write fewer than <code>data.count</code>
+bytes, and one call moves at most about 2 GiB on POSIX or 1 GiB on
+Windows. Use <code>write_all</code> to write everything. On POSIX an interrupted
+write (<code>EINTR</code>) is retried.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes written, which may be less than <code>data.count</code>; an error when the File is closed or was not opened for writing, or another platform error</li>
+</ul>
+<h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of <code>data</code>, repeating the write until every byte is
+written. Advances the position by <code>data.count</code>.</p>
+<p>If an error occurs part of <code>data</code> may already have been written.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error when the File is closed or was not opened for writing, when a write makes no progress (“failed to write the whole buffer”, with code <code>EIO</code> on POSIX or <code>ERROR_WRITE_FAULT</code> on Windows), or another platform error</li>
+</ul>
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(s: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of the UTF-8 bytes of <code>s</code>, as <code>write_all</code> does for bytes.
+No newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the text to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error as for <code>write_all(u8[])</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("greeting.txt")).value();
+var r = f.write_all("hello, world");
+if (r.is_err()) {
+    return 1;
+}
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(s: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Writes all of the UTF-8 bytes of
+<code>s</code>, exactly like <code>write_all(s)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the text to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
+</ul>
+<h4 id="seek"><a class="header" href="#seek">seek</a></h4>
+<pre><code class="language-pepper">seek(from: SeekFrom): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Moves the position as <code>from</code> says: to an offset from the start, from
+the current position, or from the end of the file.</p>
+<p>Seeking past the end is allowed; a later write there fills the gap
+with zeros. A position before the start of the file is an error.
+Seeking a stream that has no position (a pipe or a terminal) fails on
+POSIX and has platform-defined results on Windows.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the origin and the offset from it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error when the File is closed, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.open(Path("data.bin")).value();
+var length = f.seek(SeekFrom.End(0)).value();
+f.seek(SeekFrom.Start(0));
+</code></pre>
+<h4 id="seek_start"><a class="header" href="#seek_start">seek_start</a></h4>
+<pre><code class="language-pepper">seek_start(pos: Offset): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Moves the position to <code>pos</code> bytes from the start of the file, like
+<code>seek(SeekFrom.Start(pos))</code> without allocating the <code>SeekFrom</code>.</p>
+<p>Seeking past the end is allowed; a later write there fills the gap
+with zeros.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pos</code> — the new position, in bytes from the start</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error as for <code>seek</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>seek</code></li>
+</ul>
+<h4 id="seek_end"><a class="header" href="#seek_end">seek_end</a></h4>
+<pre><code class="language-pepper">seek_end(delta: Offset): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Moves the position to <code>delta</code> bytes from the end of the file, like
+<code>seek(SeekFrom.End(delta))</code>. <code>seek_end(0)</code> moves to the end and
+returns the file’s length.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>delta</code> — the offset from the end of the file, in bytes; negative moves back from the end</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error as for <code>seek</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>seek</code></li>
+</ul>
+<h4 id="seek_current"><a class="header" href="#seek_current">seek_current</a></h4>
+<pre><code class="language-pepper">seek_current(delta: Offset): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Moves the position by <code>delta</code> bytes from where it is, like
+<code>seek(SeekFrom.Current(delta))</code>. <code>seek_current(0)</code> returns the
+current position without moving it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>delta</code> — the offset from the current position, in bytes; negative moves back</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error as for <code>seek</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>seek</code></li>
+</ul>
+<h4 id="seek-1"><a class="header" href="#seek-1">seek</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'seek' with a 'SeekFrom' instead")] seek(offset: Offset, whence: int): IoResult&lt;Offset&gt;
+</code></pre>
+<p>Deprecated: use <code>seek(SeekFrom)</code> instead. Moves the position by
+<code>offset</code> relative to the origin <code>whence</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>offset</code> — the offset in bytes from the origin; may be negative</li>
+<li><code>whence</code> — the origin: 0 the start of the file, 1 the current position, 2 the end of the file</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new position, in bytes from the start of the file; an error as for <code>seek(SeekFrom)</code>, or when <code>whence</code> is not 0, 1 or 2</li>
+</ul>
+<h4 id="set_length"><a class="header" href="#set_length">set_length</a></h4>
+<pre><code class="language-pepper">set_length(size: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Truncates or extends the file to exactly <code>size</code> bytes; bytes added
+are zeros. The position is kept, even when it is now past the end.</p>
+<p>The File must have been opened for writing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the new length, in bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the File is closed, was not opened for writing, or the system refuses the size</li>
+</ul>
+<h4 id="set_len"><a class="header" href="#set_len">set_len</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'set_length' instead", "set_length")] set_len(size: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>set_length</code> instead. Truncates or extends the file to
+exactly <code>size</code> bytes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the new length, in bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>set_length(size)</code></li>
+</ul>
+<h4 id="sync"><a class="header" href="#sync">sync</a></h4>
+<pre><code class="language-pepper">sync(): IoResult&lt;void&gt;
+</code></pre>
+<p>Flushes the file’s contents and metadata to the storage device,
+waiting until they are written (<code>fsync</code> on POSIX,
+<code>FlushFileBuffers</code> on Windows). Writes are already unbuffered in the
+process; this forces them out of the operating system’s cache.</p>
+<p>On Windows the File must have been opened with write access.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the data is durable; an error when the File is closed or the device reports a failure, or another platform error</li>
+</ul>
+<h4 id="lock"><a class="header" href="#lock">lock</a></h4>
+<pre><code class="language-pepper">lock(): IoResult&lt;void&gt;
+</code></pre>
+<p>Takes an exclusive advisory lock on the whole file, waiting until no
+other holder has a lock on it, shared or exclusive. Modeled on Rust’s
+<code>File::lock</code>.</p>
+<p>The lock belongs to this File: another File opened on the same path
+(in this process or another) contends with it, and it is released by
+<code>unlock</code>, by <code>close</code>, or when the File is destroyed. Taking a lock
+while this File already holds one is platform-defined, as in Rust:
+POSIX converts the lock, Windows may wait forever. The lock is
+advisory on POSIX (<code>flock(LOCK_EX)</code>): it binds only those who also
+lock. On Windows (<code>LockFileEx</code>) it also stops other handles from
+reading or writing the file while held. The wait blocks the calling
+thread, also inside a task. WASI has no file locks.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the lock is held; an error when the File is closed, on WASI, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>try_lock</code></li>
+<li><code>unlock</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = OpenOptions().write(true).create(true).open(Path(".pep/fetch.lock")).value();
+if (f.lock().is_ok()) {
+    # ... work no other locker does at the same time ...
+    f.unlock();
+}
+</code></pre>
+<h4 id="lock_shared"><a class="header" href="#lock_shared">lock_shared</a></h4>
+<pre><code class="language-pepper">lock_shared(): IoResult&lt;void&gt;
+</code></pre>
+<p>Takes a shared advisory lock on the whole file, waiting until no
+other holder has an exclusive lock on it. Any number of Files can
+hold a shared lock at once. Modeled on Rust’s <code>File::lock_shared</code>;
+otherwise as <code>lock</code> (<code>flock(LOCK_SH)</code> on POSIX, <code>LockFileEx</code> without
+<code>LOCKFILE_EXCLUSIVE_LOCK</code> on Windows).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the lock is held; an error as for <code>lock</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock</code></li>
+</ul>
+<h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
+<pre><code class="language-pepper">try_lock(): IoResult&lt;bool&gt;
+</code></pre>
+<p>Takes an exclusive advisory lock on the whole file if no other
+holder has a lock on it, without waiting. Modeled on Rust’s
+<code>File::try_lock</code>; otherwise as <code>lock</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the lock is now held, false when another holder has a lock on the file (Rust’s <code>TryLockError::WouldBlock</code>); an error as for <code>lock</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var held = f.try_lock();
+if (held.is_ok() &amp;&amp; !held.value()) {
+    print("another process holds the lock\n");
+}
+</code></pre>
+<h4 id="try_lock_shared"><a class="header" href="#try_lock_shared">try_lock_shared</a></h4>
+<pre><code class="language-pepper">try_lock_shared(): IoResult&lt;bool&gt;
+</code></pre>
+<p>Takes a shared advisory lock on the whole file if no other holder
+has an exclusive lock on it, without waiting. Modeled on Rust’s
+<code>File::try_lock_shared</code>; otherwise as <code>lock_shared</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the lock is now held, false when another holder has an exclusive lock on the file; an error as for <code>lock</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock_shared</code></li>
+</ul>
+<h4 id="unlock"><a class="header" href="#unlock">unlock</a></h4>
+<pre><code class="language-pepper">unlock(): IoResult&lt;void&gt;
+</code></pre>
+<p>Releases the lock this File holds, shared or exclusive. Releasing a
+File that holds none is not an error. Closing or destroying the File
+releases its lock too. Modeled on Rust’s <code>File::unlock</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the lock is released; an error when the File is closed, on WASI, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock</code></li>
+</ul>
+<h4 id="metadata-2"><a class="header" href="#metadata-2">metadata</a></h4>
+<pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
+</code></pre>
+<p>Queries the metadata of the open file itself (the target, when it
+was opened through a symlink): size, kind, read-only flag,
+permission bits and timestamps.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the file’s <code>Metadata</code>; an error when the File is closed, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var size = f.metadata().value().size;
+</code></pre>
+<h4 id="set_permissions"><a class="header" href="#set_permissions">set_permissions</a></h4>
+<pre><code class="language-pepper">set_permissions(mode: Mode): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the permission bits of the open file (<code>fchmod</code> on POSIX).</p>
+<p><code>mode</code> holds the raw platform bits, as <code>Metadata.permissions</code> reports
+them: on POSIX the <code>mode_t</code> bits <code>mode &amp; 07777</code> (493, octal 755, for
+<code>rwxr-xr-x</code>). On Windows it is the <code>FILE_ATTRIBUTE_*</code> word, and only
+<code>FILE_ATTRIBUTE_READONLY</code> (1) is applied; the File needs write access
+there. WASI has no permission bits, and this fails. <code>set_read_only</code>
+and <code>set_executable</code> change one property portably.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the new permission bits</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once they are set; an error when the File is closed, <code>is_permission_denied()</code> when the caller does not own the file (or on Windows the File was opened without write access), or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("run.sh")).value();
+f.set_permissions(493);   # octal 755: rwxr-xr-x
+</code></pre>
+<h4 id="set_read_only"><a class="header" href="#set_read_only">set_read_only</a></h4>
+<pre><code class="language-pepper">set_read_only(read_only: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the open file read-only, or writable again: the portable part
+of <code>set_permissions</code>.</p>
+<p>On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner’s (octal 200), so a file never becomes writable
+by group or others this way. On Windows it sets or clears
+<code>FILE_ATTRIBUTE_READONLY</code>, and the File needs write access. Fails on
+WASI, which has no permission bits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>read_only</code> — true to make the file read-only, false to make it writable by its owner</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the file is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata.read_only</code></li>
+</ul>
+<h4 id="set_executable"><a class="header" href="#set_executable">set_executable</a></h4>
+<pre><code class="language-pepper">set_executable(executable: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the open file executable, or not, without raw permission bits.</p>
+<p>On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as <code>chmod +x</code> does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as <code>.exe</code> decides) and WASI no permission bits, so
+there this does nothing and succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>executable</code> — true to make the file executable, false to stop it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the file is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("run.sh")).value();
+f.write_all("#!/bin/sh\necho hi\n");
+f.set_executable(true);
+</code></pre>
+<h4 id="set_modified"><a class="header" href="#set_modified">set_modified</a></h4>
+<pre><code class="language-pepper">set_modified(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the open file’s modification time, leaving its access time
+alone (<code>futimens</code> on POSIX, <code>SetFileTime</code> on Windows).</p>
+<p>On Windows the File needs write access, and the time is kept to 100
+ns. A later write to the file sets its modification time again, so
+call this after the last write.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.modified</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error when the File is closed, <code>is_permission_denied()</code> when the caller does not own the file (or on Windows the File was opened without write access), or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_modified</code></li>
+</ul>
+<h4 id="set_accessed"><a class="header" href="#set_accessed">set_accessed</a></h4>
+<pre><code class="language-pepper">set_accessed(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the open file’s access time, leaving its modification time
+alone (<code>futimens</code> on POSIX, <code>SetFileTime</code> on Windows).</p>
+<p>On Windows the File needs write access, and the time is kept to 100
+ns.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.accessed</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error as for <code>set_modified</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_accessed</code></li>
+</ul>
+<h4 id="close"><a class="header" href="#close">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the File now, to observe the error the system reports (for
+example a deferred write failure). Without it the destructor closes
+the handle and ignores errors.</p>
+<p>Idempotent: closing a closed File succeeds. The File counts as
+closed afterwards even when closing reports an error, so the handle
+is never closed twice. A standard stream is only marked closed: the
+stream stays open, and <code>File.stdout()</code> and the like still work.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing an owned handle fails</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("out.bin")).value();
+f.write_all("data");
+if (f.close().is_err()) {
+    return 1;
+}
+</code></pre>
+<h4 id="into_transfer"><a class="header" href="#into_transfer">into_transfer</a></h4>
+<pre><code class="language-pepper">into_transfer(): FileTransfer
+</code></pre>
+<p>Moves the file’s handle into a <code>FileTransfer</code>, which another thread
+takes with <code>File.adopt</code>, and leaves this File closed. A File is not
+thread-safe, so this is how a thread hands one to another, such as
+the pipe from a child process’s standard output to the thread that
+reads it while this one writes to the child.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the token; for a closed File, one that <code>adopt</code> fails on</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+import [File, Path] from io;
+
+var transfer = File.open(Path("notes.txt")).value().into_transfer();
+var reader = async.Thread.spawn(() =&gt; {
+    var mine = File.adopt(transfer).value();
+    var text = mine.read_all();
+});
+reader.join();
+</code></pre>
+<h2 id="filetransfer"><a class="header" href="#filetransfer">FileTransfer</a></h2>
+<pre><code class="language-pepper">[Shared] struct FileTransfer
+</code></pre>
+<p>A file’s handle on its way from one thread to another: made by
+<code>File.into_transfer</code>, taken by <code>File.adopt</code>. Unlike a File, it is
+thread-safe, so a <code>shared</code> function (a body for <code>async.spawn</code> or
+<code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry it. If no one
+adopts it, the handle is closed when the last reference goes, unless it
+is one the File did not own (a standard stream).</p>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="filetransfer-1"><a class="header" href="#filetransfer-1">FileTransfer()</a></h4>
+<pre><code class="language-pepper">construct(handle: FileHandle, owned: bool)
+</code></pre>
+<p>Wraps a file handle. <code>File.into_transfer</code> makes these; use it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the handle, or an invalid one for an empty token</li>
+<li><code>owned</code> — whether the File the token came from closed its handle</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/io-path.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/io-directory.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/io-path.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/io-directory.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
