@@ -250,34 +250,72 @@ keep_alive_and_chunked_requests() {
     );
 }
 
+# Upgrades the connection `reader` and `writer` reach with `/upgrade`, and
+# checks the 101 head and the echo of bytes sent with the request head and
+# after the 101.
+expect_upgrade_echoes(reader: io.Reader, writer: io.Writer) {
+    # The first bytes of the new protocol travel with the request head.
+    writer.write_all(
+        "GET /upgrade HTTP/1.1\r\nHost: localhost\r\nUpgrade: echo\r\nConnection: Upgrade\r\n\r\nearly".bytes()
+    );
+    var reply = Array<u8>();
+    while (!String._from_bytes(reply).ends_with("early")) {
+        expect_true(reader.read(reply, 4096).value() > 0);
+    }
+    writer.write_all(" late".bytes());
+    while (!String._from_bytes(reply).ends_with("early late")) {
+        expect_true(reader.read(reply, 4096).value() > 0);
+    }
+    var text = String._from_bytes(reply);
+    expect_true(text.starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
+    var lower = text.lower();
+    expect_true(lower.contains("upgrade: echo\r\n"));
+    expect_true(lower.contains("connection: upgrade\r\n"));
+    expect_true(lower.contains("x-protocol: echo\r\n"));
+    expect_false(lower.contains("content-length"));
+    expect_true(text.ends_with("\r\n\r\nearly late"));  # raw bytes, not HTTP, after the head
+}
+
 [Test]
 a_handler_takes_over_the_connection_after_101() {
     async.run(
         () => {
             var port = port_of(start_server());
             var stream = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
-            # The first bytes of the new protocol travel with the request head.
-            stream.write_all(
-                "GET /upgrade HTTP/1.1\r\nHost: localhost\r\nUpgrade: echo\r\nConnection: Upgrade\r\n\r\nearly".bytes()
-            );
-            var reply = Array<u8>();
-            while (!String._from_bytes(reply).ends_with("early")) {
-                expect_true(stream.read(reply, 4096).value() > 0);
-            }
-            stream.write_all(" late".bytes());
+            expect_upgrade_echoes(stream, stream);
+            # The client's end of the stream ends the handler's echo, and the
+            # server closes the connection.
             stream.shutdown_write();
-            while (stream.read(reply, 4096).value() > 0) {}
-            var text = String._from_bytes(reply);
-            expect_true(text.starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
-            var lower = text.lower();
-            expect_true(lower.contains("upgrade: echo\r\n"));
-            expect_true(lower.contains("connection: upgrade\r\n"));
-            expect_true(lower.contains("x-protocol: echo\r\n"));
-            expect_false(lower.contains("content-length"));
-            expect_true(text.ends_with("\r\n\r\nearly late"));  # raw bytes, not HTTP, after the head
+            expect_equal(stream.read(Array<u8>(), 4096).value(), 0);
 
             # HTTP/1.0 cannot switch protocols: the upgrade becomes a 501.
             expect_true(raw(port, "GET /upgrade HTTP/1.0\r\n\r\n").starts_with("HTTP/1.1 501 Not Implemented"));
+        }
+    );
+}
+
+[Test]
+a_handler_takes_over_a_tls_connection_after_101() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var certificate = io.Path("tls/test/certificate.pem");
+            var acceptor = tls.TlsAcceptor.create(certificate, io.Path("tls/test/key.pem")).value();
+            var server = http.Server.bind_tls(io.SocketAddress(io.IpAddress.loopback_v4(), 0), acceptor).value();
+            var port = server.local_address().value().port();
+            async.spawn<void>(() => {
+                server.serve(handle);
+            });
+            var connector = tls.TlsConnector.create().value();
+            connector.add_root_certificate(certificate);
+            # No ALPN offer, so the server speaks HTTP/1.1, which can upgrade.
+            var tcp = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
+            var stream = connector.connect(tcp, "localhost").value();
+            expect_upgrade_echoes(stream, stream);
+            stream.shutdown();
+            stream.close();
         }
     );
 }
