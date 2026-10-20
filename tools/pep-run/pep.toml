@@ -2,7 +2,7 @@
 name = "pep_run"
 description = "Builds a program and runs it, run as `pepper run`"
 license = "MIT"
-repository = "https://github.com/justinboswell/pepper"
+repository = "https://github.com/pep-lang/pepper"
 
 [build]
 entry = "main.pep"

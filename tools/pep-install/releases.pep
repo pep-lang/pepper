@@ -15,7 +15,7 @@ import toolchain;
 
 # GitHub's list of the repository's releases, newest first. The repository
 # also has `vsix-*` and `llvm-*` releases, which are skipped.
-const RELEASES_URL = "https://api.github.com/repos/justinboswell/pepper/releases?per_page=100";
+const RELEASES_URL = "https://api.github.com/repos/pep-lang/pepper/releases?per_page=100";
 const GITHUB_API = "https://api.github.com/";
 
 # One toolchain release for this machine: its version and its archive.
