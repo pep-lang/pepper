@@ -154,10 +154,17 @@ struct _TypeArgumentChecks {
 
     check_call(callee: String, args: Expression[], loc: Loc, base: FunctionDef) {
         # An argument naming nothing gives no type to infer from;
-        # `resolve_resolvables` reports it as undeclared instead.
+        # `resolve_resolvables` reports it as undeclared instead. Nor does a
+        # member a known type does not have (`$"{s.count}"`), which codegen
+        # reports as 'no member named'.
         for (var a in args) {
             if (a is SymbolRef(symbol)) {
                 if (symbol.ty.is_empty() or symbol.ty.is_auto()) {
+                    return;
+                }
+            }
+            if (a is MemberRef(member)) {
+                if (owner_type(member.lhs).is_value() and !owner_type(a).is_value()) {
                     return;
                 }
             }
