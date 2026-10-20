@@ -131,6 +131,23 @@ it into a String with `String(p)` first:
 main.pep:3:19: error: cannot pass a value of type '__ptr<char>' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
 ```
 
+## Passing arrays
+
+An [`Array<T>`](../reference/array.md) is a reference-counted object too, so
+C gets its elements through a pointer:
+
+- `data()` returns a `__ptr<T>` to the first element. C may read and write
+  the elements through it. The pointer belongs to the Array: it is valid
+  until the Array is destroyed or its buffer grows (for example with
+  `append`). An empty Array's `data()` is `__null`.
+- `append_from(p, count)` appends `count` elements copied from `p`, as
+  `String(p, size)` does for bytes, so you still own (and may free) the C
+  buffer.
+
+```pepper
+{{#include ../../examples/c-arrays.pep}}
+```
+
 ## Variadic functions
 
 A C function with a variable argument list, such as `printf` or `snprintf`,

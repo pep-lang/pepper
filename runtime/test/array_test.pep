@@ -596,3 +596,66 @@ empty_array_in_a_value_is_shared_by_its_copies() {
     found.value().append(4);
     expect_equal(found.value().count, 1);
 }
+
+[Test]
+data_of_empty_array_is_null() {
+    var a = Array<int>(8);
+    expect_true(unsafe_cast<__ptr<u8>>(a.data()) == __null);
+    a.append(1);
+    a.remove_at(0);
+    expect_true(unsafe_cast<__ptr<u8>>(a.data()) == __null);
+}
+
+[Test]
+data_points_at_the_elements() {
+    var a = Array<int>();
+    a.append(10);
+    a.append(20);
+    var p = a.data();
+    expect_equal(p[0], 10);
+    expect_equal(p[1], 20);
+    p[1] = 21;
+    expect_equal(a[1], 21);
+}
+
+[Test]
+append_from_round_trips_through_data() {
+    var a = Array<u8>();
+    a.append(1);
+    a.append(2);
+    a.append(3);
+    var b = Array<u8>();
+    b.append(0);
+    b.append_from(a.data(), a.count);
+    expect_equal(b.count, 4);
+    expect_equal(b[0], 0);
+    expect_equal(b[1], 1);
+    expect_equal(b[3], 3);
+    b.append_from(__null, 0);
+    expect_equal(b.count, 4);
+}
+
+[Test]
+append_from_acquires_struct_elements() {
+    var t = Tally();
+    var a = Array<Tally>();
+    a.append(t);
+    a.append(t);
+    var b = Array<Tally>();
+    b.append_from(a.data(), a.count);
+    expect_equal(b.count, 2);
+    # One reference in `t`, two in `a`, two in `b`.
+    expect_equal(__refcount<Tally>(t), 5);
+}
+
+[Test]
+append_from_nothing_keeps_a_loop_running() {
+    var a = Array<Tally>();
+    a.append(Tally());
+    var seen = 0;
+    for (var t in a) {
+        a.append_from(__null, 0);
+        seen = seen + t.alive;
+    }
+    expect_equal(seen, 1);
+}
