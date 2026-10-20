@@ -27,6 +27,7 @@ import [
     check_in_workers,
     worker_file,
     mark,
+    numbered_objects,
     serve_compilation_units,
     store_checked,
     warnings_in,
@@ -508,7 +509,7 @@ _compile_unit(
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
     }
-    var defines = _defines(partition, _unit_objects(folder, extension));
+    var defines = _defines(partition, numbered_objects(folder, extension));
     if (defines.is_err()) {
         return Optional<String>.Value(defines.error());
     }
@@ -1034,11 +1035,14 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         # Only the compilation units the program's own reads: others, files of
         # the entry's module it never reaches, are not linked.
         for (var k in last.reads) {
-            var folder = options.cache.value().objects($"+{units[k].name}", units[k].key);
-            options.cache.value().used(folder);
-            objects.append_all(_unit_objects(folder, extension));
+            var found = options.cache.value().reused_objects($"+{units[k].name}", units[k].key, extension);
+            if (found.is_err()) {
+                Directory.remove_all(work);
+                return Result<Built, String>.err(found.error());
+            }
+            objects.append_all(found.value());
         }
-        objects.append_all(_unit_objects(last_folder.value(), extension));
+        objects.append_all(numbered_objects(last_folder.value(), extension));
         objects.append(last_folder.value().join(Path($"entry.{extension}")));
         clock.lap("objects");
     } else {
@@ -1444,18 +1448,6 @@ _drop_defines(jobs: PartJob[]) {
     for (var job in jobs) {
         File.remove(Path($"{job.object}.defines"));
     }
-}
-
-## The objects of a compilation unit's parts in `folder`: `0.<extension>`
-## and on, as many as `_unit_jobs` wrote.
-_unit_objects(folder: Path, extension: String): Path[] {
-    var objects = Array<Path>();
-    var at = folder.join(Path($"0.{extension}"));
-    while (at.is_file()) {
-        objects.append(at);
-        at = folder.join(Path($"{objects.count}.{extension}"));
-    }
-    return objects;
 }
 
 ## The largest part a unit is compiled in, in `codegen.file_sizes`'s
