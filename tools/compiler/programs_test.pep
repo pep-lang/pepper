@@ -4,7 +4,8 @@
 # struct field `add_options` cannot declare; `os`'s environment and the
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
-# that are copies of the program, and `exec`. The programs are in
+# that are copies of the program, and `exec`; and the error for a member a
+# value's type lacks inside an interpolation. The programs are in
 # `testdata/`.
 
 import [File, Path] from io;
@@ -75,6 +76,20 @@ cli_struct_options_name_an_unsupported_field() {
         error.value(),
         "error: 'add_options' cannot declare field 'table' of type 'Map<String, int>'; use bool, String, a number type, io.Path or an enum, or one of those as T? or T[]"
     );
+}
+
+# ── interpolation ───────────────────────────────────────────────────────────
+
+# Codegen names the member; sema's check of `_pep_interpolate`'s type
+# arguments, which lowering wraps the value in, must not report first.
+[Test]
+an_unknown_member_in_an_interpolation_is_named() {
+    var folder = TempFolder("programs_interpolation_unknown_member");
+    var source = folder.path.join("interpolation_unknown_member.pep");
+    write_file(source, read_file(Path("compiler").join("testdata").join("interpolation_unknown_member.pep")));
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(error.value(), "interpolation_unknown_member.pep:5:20: error: no member named 'count' in 'String'");
 }
 
 # ── os ──────────────────────────────────────────────────────────────────────
