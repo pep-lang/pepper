@@ -1675,6 +1675,11 @@ struct _TypeScopes {
         if (current.is_value() and !_is_converted_literal(node)) {
             var st = current.value();
             if (!has_method(st, function) or calls_method(st, function, node.args.count)) {
+                # Overloaded methods are tabled under their members' names.
+                if (overloads.is_method_set(st, function)) {
+                    var choice = select_method_overload(st, function, node.args, node.loc, current);
+                    return choice.is_value() ? choice.value().ret : TypeName.auto();
+                }
                 var all = method_tables(st.to_string(), function);
                 if (all.count > 0) {
                     for (var (m, ret) in all[0]) {

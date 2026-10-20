@@ -356,6 +356,11 @@ export serve_compilation_units(
             }
             records[d] = bytes.value();
         }
+        # Its files' references are checked as the build checks the files it
+        # links itself: another module's private extern is not visible.
+        if (!error.is_value()) {
+            error = program.check();
+        }
         if (!error.is_value()) {
             error = work(k, records);
         }
