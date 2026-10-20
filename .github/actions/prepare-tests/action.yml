@@ -49,10 +49,15 @@ runs:
       run: bash scripts/ci-provision-llvm.sh
 
     # Builds go beside the checkout, so the cache below can name one place
-    # on every OS.
-    - name: Use a target dir beside the checkout
+    # on every OS. Every build shares one build cache (PEPPER_CACHE_DIR),
+    # the test programs' and also those the tools' tests make in their own
+    # folders, whose runtime units then come from it. The tests of the
+    # cache itself name their own.
+    - name: Use a target dir and a build cache beside the checkout
       shell: bash
-      run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+      run: |
+        echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+        echo "PEPPER_CACHE_DIR=$RUNNER_WORKSPACE/pepper-cache" >> "$GITHUB_ENV"
 
     # The runners share one $TMPDIR, which test folders left by crashed or
     # cancelled runs fill up. macOS's getcwd can scan every entry of a
@@ -98,20 +103,17 @@ runs:
         PEPPER_EXPECT_COMMIT: ${{ inputs.expect-commit }}
       run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
-    # The build cache of the test programs and tools (pep-test builds in
-    # runtime/ and tools/, pepper-tests.sh the tools in the checkout), and
-    # the changed compiler with its build folder. The cache keys on the
-    # compiler's path, size and time and on each source's path, all the
-    # same in every job of one OS, so a shard's builds hit what build-*
-    # stored. The build job also starts from the newest earlier run's.
+    # The build cache (PEPPER_CACHE_DIR, above), and the changed compiler
+    # with its build folder. The cache keys on the compiler's path, size
+    # and time and on each source's path, all the same in every job of one
+    # OS, so a shard's builds hit what build-* stored. The build job also
+    # starts from the newest earlier run's.
     - name: Restore and save the build cache
       if: inputs.role == 'build'
       uses: actions/cache@v6
       with:
         path: |
-          .pep/cache
-          runtime/.pep/cache
-          tools/.pep/cache
+          ${{ runner.workspace }}/pepper-cache
           ${{ runner.workspace }}/target-test/compiler
         key: pepper-tests-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
         restore-keys: pepper-tests-${{ runner.os }}-
@@ -120,9 +122,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: |
-          .pep/cache
-          runtime/.pep/cache
-          tools/.pep/cache
+          ${{ runner.workspace }}/pepper-cache
           ${{ runner.workspace }}/target-test/compiler
         key: pepper-tests-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
         fail-on-cache-miss: true

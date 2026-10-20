@@ -3515,8 +3515,8 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     contents, since the cache keys on the compiler's path, size and time.
     Then `scripts/pepper-tests.sh --list` builds the tools and every test
     program without running them, and the job saves the cache
-    (`.pep/cache`, `runtime/.pep/cache`, `tools/.pep/cache` and the changed
-    compiler) under a key for this run.
+    (`PEPPER_CACHE_DIR`, which every build in the job shares, the tools'
+    tests' own builds included, and the changed compiler) under a key for this run.
   - `test-windows`, `test-macos` and `test-linux` are each a matrix of
     four shards that wait for their OS's build job, restore exactly its
     cache (the changed compiler comes from it), and run a quarter of the
