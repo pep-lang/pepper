@@ -290,8 +290,15 @@ jobs:
               "Install it with scripts/install.sh (Linux, macOS) or scripts/install.ps1 (Windows);" \
               "see https://docs.pepper-lang.dev/${TAG#v}/tools/install.html." \
               > "$RUNNER_TEMP/notes.md"
+            # A patch to an older line (v0.9.3 after v0.10.0) must not become
+            # Latest, which GitHub otherwise gives the newest-created release.
+            latest=$(gh release view --json tagName --jq .tagName || true)
+            latest_flag=--latest
+            if [ -n "$latest" ] && [ "$(printf '%s\n' "$TAG" "$latest" | sort -V | tail -n 1)" != "$TAG" ]; then
+              latest_flag=--latest=false
+            fi
             # Another workflow on the same tag may create it in between.
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "Pepper $TAG" \
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Pepper $TAG" "$latest_flag" \
               --notes-file "$RUNNER_TEMP/notes.md" \
               || gh release view "$TAG" >/dev/null
           fi

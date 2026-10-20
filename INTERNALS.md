@@ -3495,8 +3495,8 @@ cross-link job build that compiler with the installed one first
 step uses it, so the whole suite tests the changed compiler. The macOS and Linux jobs of `ci.yml` build into a folder beside the
 checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
 
-- **`ci.yml`** (pushes to main, and dispatch; not pull requests, so test a
-  PR with the pre-merge checks or dispatch CI on its branch):
+- **`ci.yml`** (pull requests, pushes to main, and dispatch; main's ruleset
+  requires its `test` check before a pull request merges):
   - `test` is the gate: a job that always runs (`if: always()`, so never
     skipped, since a skipped job counts as passing) and passes only when
     `test-windows`, `test-linux` and `test-macos` succeeded or the commit
