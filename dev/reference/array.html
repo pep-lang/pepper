@@ -701,7 +701,7 @@ var missing = a.find(7);   # missing.is_empty() == true
 <li>true when <code>find(item)</code> finds a match</li>
 </ul>
 <h4 id="slice"><a class="header" href="#slice">slice</a></h4>
-<pre><code class="language-pepper">[__Reads] slice(start: ulong, end: ulong): ArraySlice&lt;T&gt;
+<pre><code class="language-pepper">[__Reads] slice(start: ulong, end: ulong): ArrayView&lt;T&gt;
 </code></pre>
 <p>Returns a read-only view of the elements from <code>start</code> up to but not
 including <code>end</code>, without copying them.</p>
@@ -726,6 +726,64 @@ panics, so it never reads elements that moved or were freed.</p>
 <pre><code class="language-pepper">var a = [1, 2, 3, 4, 5];
 var middle = a.slice(1, 4);   # views [2, 3, 4]
 var second = middle[1];       # 3
+</code></pre>
+<h4 id="chunks"><a class="header" href="#chunks">chunks</a></h4>
+<pre><code class="language-pepper">[__Reads] chunks&lt;TElement=T&gt;(size: ulong): ArrayChunks&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the Array in runs of <code>size</code> elements, as
+slices; the last run is shorter when <code>size</code> does not divide <code>count</code>.
+The same as <code>slice(0, count).chunks(size)</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the number of elements in each run</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator over <code>count / size</code> runs, rounded up</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var rows = Array&lt;int&gt;();
+for (var row in [1, 2, 3, 4, 5, 6].chunks(3)) {
+    rows.append(row[0]);   # 1, then 4
+}
+</code></pre>
+<h4 id="windows"><a class="header" href="#windows">windows</a></h4>
+<pre><code class="language-pepper">[__Reads] windows&lt;TElement=T&gt;(size: ulong): ArrayChunks&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over every run of <code>size</code> consecutive elements,
+as slices, each starting one element after the one before. The same
+as <code>slice(0, count).windows(size)</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the number of elements in each run</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator over <code>count - size + 1</code> runs, or none when the Array is shorter than <code>size</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var rises = 0;
+for (var pair in [1, 3, 2, 5].windows(2)) {
+    if (pair[1] &gt; pair[0]) {
+        rises = rises + 1;   # 2 in all
+    }
+}
 </code></pre>
 <h4 id="binary_search_by"><a class="header" href="#binary_search_by">binary_search_by</a></h4>
 <pre><code class="language-pepper">[__Reads] binary_search_by(order: (T) =&gt; int): ulong?
@@ -912,7 +970,7 @@ Array's running iterators when <code>rhs</code> is not empty.</p>
 <li><code>+=</code></li>
 </ul>
 <h4 id="extend_from"><a class="header" href="#extend_from">extend_from</a></h4>
-<pre><code class="language-pepper">extend_from(items: ArraySlice&lt;T&gt;)
+<pre><code class="language-pepper">extend_from(items: ArrayView&lt;T&gt;)
 </code></pre>
 <p>Appends every element of <code>items</code>, in order, to the end of this Array.</p>
 <p>Runs in O(count of <code>items</code>), growing the buffer at most once. <code>items</code>
@@ -1244,8 +1302,8 @@ returning false.</p>
 <li>if <code>next()</code> was never called ("ArrayIterator.current() before next()")</li>
 <li>if <code>next()</code> already returned false ("ArrayIterator.current() past the end")</li>
 </ul>
-<h2 id="arrayslice"><a class="header" href="#arrayslice">ArraySlice</a></h2>
-<pre><code class="language-pepper">[Value] struct ArraySlice&lt;T&gt;
+<h2 id="arrayview"><a class="header" href="#arrayview">ArrayView</a></h2>
+<pre><code class="language-pepper">[Value] struct ArrayView&lt;T&gt;
 </code></pre>
 <p>A read-only view of a run of an Array's elements, made by <code>Array.slice</code>,
 that lets a function take "some of the elements" without copying them.</p>
@@ -1266,7 +1324,7 @@ order.</p>
 <li><code>Array.slice</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">total(values: ArraySlice&lt;int&gt;): int {
+<pre><code class="language-pepper">total(values: ArrayView&lt;int&gt;): int {
     var sum = 0;
     for (var x in values) {
         sum = sum + x;
@@ -1303,10 +1361,10 @@ slice's first element; this is the indexer read <code>slice[index]</code>.</p>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
-<li>if <code>index &lt; count</code> does not hold ("ArraySlice index out of bounds")</li>
+<li>if <code>index &lt; count</code> does not hold ("ArrayView index out of bounds")</li>
 </ul>
 <h4 id="slice-1"><a class="header" href="#slice-1">slice</a></h4>
-<pre><code class="language-pepper">slice(start: ulong, end: ulong): ArraySlice&lt;T&gt;
+<pre><code class="language-pepper">slice(start: ulong, end: ulong): ArrayView&lt;T&gt;
 </code></pre>
 <p>Returns a view of this slice's elements from <code>start</code> up to but not
 including <code>end</code>, positions counted within this slice.</p>
@@ -1322,16 +1380,129 @@ including <code>end</code>, positions counted within this slice.</p>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
-<li>if <code>start &lt;= end</code> and <code>end &lt;= count</code> do not both hold ("ArraySlice slice out of bounds")</li>
+<li>if <code>start &lt;= end</code> and <code>end &lt;= count</code> do not both hold ("ArrayView slice out of bounds")</li>
 </ul>
 <h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
-<pre><code class="language-pepper">iterate(): ArraySliceIterator&lt;T&gt;
+<pre><code class="language-pepper">iterate(): ArrayViewIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator over the slice's elements in order; this is what
 <code>for (var x in slice)</code> calls.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new iterator positioned before the first element</li>
+</ul>
+<h4 id="split_at"><a class="header" href="#split_at">split_at</a></h4>
+<pre><code class="language-pepper">split_at(index: ulong): (ArrayView&lt;T&gt;, ArrayView&lt;T&gt;)
+</code></pre>
+<p>Splits the slice in two at <code>index</code>: the elements before it, and the
+elements from it on.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the position the second slice starts at; from 0 through <code>count</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the slices <code>slice(0, index)</code> and <code>slice(index, count)</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
+<li>if <code>index &lt;= count</code> does not hold ("ArrayView slice out of bounds")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4, 5];
+var (head, tail) = a.slice(0, 5).split_at(2);   # [1, 2] and [3, 4, 5]
+</code></pre>
+<h4 id="chunks-1"><a class="header" href="#chunks-1">chunks</a></h4>
+<pre><code class="language-pepper">chunks&lt;TElement=T&gt;(size: ulong): ArrayChunks&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the slice in runs of <code>size</code> elements, as
+slices, from the start; the last run is shorter when <code>size</code> does not
+divide <code>count</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the number of elements in each run</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator over <code>count / size</code> runs, rounded up</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4, 5];
+for (var run in a.slice(0, 5).chunks(2)) {
+    # [1, 2], then [3, 4], then [5]
+}
+</code></pre>
+<h4 id="windows-1"><a class="header" href="#windows-1">windows</a></h4>
+<pre><code class="language-pepper">windows&lt;TElement=T&gt;(size: ulong): ArrayChunks&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over every run of <code>size</code> consecutive elements,
+as slices, each starting one element after the one before; none when
+the slice is shorter than <code>size</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the number of elements in each run</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator over <code>count - size + 1</code> runs, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3];
+for (var pair in a.slice(0, 3).windows(2)) {
+    # [1, 2], then [2, 3]
+}
+</code></pre>
+<h4 id="operator--7"><a class="header" href="#operator--7">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: ArrayView&lt;T&gt;): bool
+</code></pre>
+<p>Reports whether both slices have the same count and pairwise equal
+elements, compared with <code>==</code> as <code>Array.find</code> does. Where the slices
+are is not compared.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the slice to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the slices are element-wise equal</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if either Array was modified since its slice was made ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="operator--8"><a class="header" href="#operator--8">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: ArrayView&lt;T&gt;): bool
+</code></pre>
+<p>Reports whether the slices differ in count or in any element; the
+negation of <code>==</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the slice to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the slices are not element-wise equal</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if either Array was modified since its slice was made ("Array modified while a slice of it is in use")</li>
 </ul>
 <h4 id="to_array"><a class="header" href="#to_array">to_array</a></h4>
 <pre><code class="language-pepper">to_array(): Array&lt;T&gt;
@@ -1398,10 +1569,10 @@ none; see <code>Array.binary_search_by</code>.</p>
 <ul>
 <li>if the Array was modified since the slice was made, <code>order</code> included ("Array modified while a slice of it is in use")</li>
 </ul>
-<h2 id="extend-arrayslice"><a class="header" href="#extend-arrayslice">extend ArraySlice<T></a></h2>
-<pre><code class="language-pepper">extend ArraySlice&lt;T: Comparable&gt;
+<h2 id="extend-arrayview"><a class="header" href="#extend-arrayview">extend ArrayView<T></a></h2>
+<pre><code class="language-pepper">extend ArrayView&lt;T: Comparable&gt;
 </code></pre>
-<p>The searches of a sorted ArraySlice, for an element type with an order
+<p>The searches of a sorted ArrayView, for an element type with an order
 (see <code>Comparable</code>).</p>
 <p><strong>Type parameters</strong></p>
 <ul>
@@ -1473,18 +1644,40 @@ sorts after <code>item</code>, or <code>count</code>; see <code>Array.upper_boun
 <ul>
 <li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
 </ul>
-<h2 id="arraysliceiterator"><a class="header" href="#arraysliceiterator">ArraySliceIterator</a></h2>
-<pre><code class="language-pepper">[Value] struct ArraySliceIterator&lt;T&gt;
+<h4 id="compare-1"><a class="header" href="#compare-1">compare</a></h4>
+<pre><code class="language-pepper">compare(other: ArrayView&lt;T&gt;): int
 </code></pre>
-<p>An <code>Iterator&lt;T&gt;</code> over the elements of an <code>ArraySlice</code>, in order; returned
-by <code>ArraySlice.iterate()</code> and driven by <code>for (var x in slice)</code>.</p>
+<p>Returns the lexicographic order of this slice and <code>other</code>: the order
+of the first pair of elements that differ (by their <code>compare</code>), or,
+when one slice is the start of the other, the shorter first.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the slice to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, zero or a positive number as this slice sorts before, with or after <code>other</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if either Array was modified since its slice was made ("Array modified while a slice of it is in use")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3];
+assert(a.slice(0, 2).compare(a.slice(1, 3)) &lt; 0, "[1, 2] before [2, 3]");
+</code></pre>
+<h2 id="arrayviewiterator"><a class="header" href="#arrayviewiterator">ArrayViewIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct ArrayViewIterator&lt;T&gt;
+</code></pre>
+<p>An <code>Iterator&lt;T&gt;</code> over the elements of an <code>ArrayView</code>, in order; returned
+by <code>ArrayView.iterate()</code> and driven by <code>for (var x in slice)</code>.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the element type of the slice</li>
 </ul>
 <p><strong>See also</strong></p>
 <ul>
-<li><code>ArraySlice.iterate</code></li>
+<li><code>ArrayView.iterate</code></li>
 </ul>
 <h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
@@ -1510,8 +1703,86 @@ by <code>ArraySlice.iterate()</code> and driven by <code>for (var x in slice)</c
 <p><strong>Panics</strong></p>
 <ul>
 <li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
-<li>if <code>next()</code> was never called ("ArraySliceIterator.current() before next()")</li>
-<li>if <code>next()</code> already returned false ("ArraySlice index out of bounds")</li>
+<li>if <code>next()</code> was never called ("ArrayViewIterator.current() before next()")</li>
+<li>if <code>next()</code> already returned false ("ArrayView index out of bounds")</li>
+</ul>
+<h2 id="arrayslice"><a class="header" href="#arrayslice">ArraySlice</a></h2>
+<pre><code class="language-pepper">[Deprecated("use 'ArrayView' instead", "ArrayView")] type ArraySlice&lt;T&gt; = ArrayView&lt;T&gt;
+</code></pre>
+<p>Deprecated: use <code>ArrayView</code> instead.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type of the Array</li>
+</ul>
+<h2 id="arraysliceiterator"><a class="header" href="#arraysliceiterator">ArraySliceIterator</a></h2>
+<pre><code class="language-pepper">[Deprecated("use 'ArrayViewIterator' instead", "ArrayViewIterator")] type ArraySliceIterator&lt;T&gt; = ArrayViewIterator&lt;T&gt;
+</code></pre>
+<p>Deprecated: use <code>ArrayViewIterator</code> instead.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type of the view</li>
+</ul>
+<h2 id="arraychunks"><a class="header" href="#arraychunks">ArrayChunks</a></h2>
+<pre><code class="language-pepper">[Value] struct ArrayChunks&lt;T&gt;
+</code></pre>
+<p>An <code>Iterator</code> over runs of an <code>ArrayView</code>, each itself a slice:
+returned by <code>chunks</code> (runs side by side, the last perhaps shorter) and
+<code>windows</code> (overlapping runs, each one element on).</p>
+<p>Each run is a slice of the same Array, so it is fail-fast like any
+slice: once the Array is modified, the next step panics.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type of the slice</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>ArrayView.chunks</code></li>
+<li><code>ArrayView.windows</code></li>
+</ul>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="arraychunks-1"><a class="header" href="#arraychunks-1">ArrayChunks()</a></h4>
+<pre><code class="language-pepper">construct(slice: ArrayView&lt;T&gt;, size: ulong, step: ulong)
+</code></pre>
+<p>Makes an iterator over the runs of <code>size</code> elements of <code>slice</code>, each
+starting <code>step</code> after the one before. With <code>step</code> equal to <code>size</code>
+the last run may be shorter (chunks); otherwise every run is whole
+(windows).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>slice</code> — the slice to split</li>
+<li><code>size</code> — the number of elements in each run</li>
+<li><code>step</code> — how far each run starts after the one before</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
+</ul>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next run.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current run, false once past the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
+<pre><code class="language-pepper">current(): ArrayView&lt;T&gt;
+</code></pre>
+<p>Returns the run the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current run, a slice of up to <code>size</code> elements</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
+<li>if <code>next()</code> was never called ("ArrayChunks.current() before next()")</li>
+<li>if <code>next()</code> already returned false ("ArrayChunks.current() past the end")</li>
 </ul>
 
                     </main>

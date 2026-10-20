@@ -233,9 +233,13 @@ pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 </li>
 <li>
 <p><strong>The packages.</strong> <code>tools/compiler</code> depends on
-<code>pep-lang/pepper-llvm</code> and <code>tools/pep-lsp</code> on
-<code>pep-lang/pepper-lsp</code>. The first build of each fetches its package
-with git into the tool's <code>.pep/deps</code>.</p>
+<code>pep-lang/pepper-llvm</code>, <code>tools/pep-lsp</code> on <code>pep-lang/pepper-lsp</code>, and
+<code>tools/pep-package</code> on <code>pep-lang/pepper-semver</code>. The first build of
+each fetches its package into the tool's <code>.pep/deps</code>, with the
+<code>pep-package</code> beside the compiler or on the <code>PATH</code>, or with git at the
+commit <code>pep.lock</code> records when there is none. So <code>pep-package</code> itself
+builds before any <code>pep-package</code> exists; the release build fetches all
+three with stage 0's.</p>
 </li>
 </ol>
 <h3 id="where-llvm-comes-from"><a class="header" href="#where-llvm-comes-from">Where LLVM comes from</a></h3>

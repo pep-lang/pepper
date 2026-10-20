@@ -329,8 +329,10 @@ declares, and <code>pep-package</code> says which requirement it overrode.</li>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p><code>pep-package</code> is written in Pepper (<code>tools/pep-package</code>) and reads and
 edits <code>pep.toml</code> and <code>pep.lock</code> with the runtime's
-<a href="../reference/toml-module.html">toml module</a>, so building it needs no
-network:</p>
+<a href="../reference/toml-module.html">toml module</a>, and its versions and ranges
+with the <a href="https://github.com/pep-lang/pepper-semver"><code>semver</code> package</a>,
+which its first build fetches (with git when no <code>pep-package</code> is
+installed):</p>
 <pre><code class="language-bash">pepper build tools/pep-package/main.pep -o pep-package
 </code></pre>
 
