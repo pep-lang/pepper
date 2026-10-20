@@ -297,6 +297,25 @@ export struct Generator {
         ir.set_target_triple(machine.triple());
     }
 
+    ## A private `unnamed_addr` constant holding `text`'s bytes and a NUL,
+    ## as `builder.global_string` makes, but sized by `text.size`:
+    ## `global_string` takes a C string, so it cut a literal at its first
+    ## NUL. `unnamed_addr` lets every part of a split module keep its own copy.
+    ##
+    ## @param text the bytes
+    ## @param name the global's name
+    ## @returns the global
+    string_data(text: String, name: String): llvm.Value {
+        var array = context.const_string(text, true);
+        var global = ir.add_global(array.value_type(), name);
+        global.set_initializer(array);
+        global.set_global_constant(true);
+        global.set_linkage(llvm.Linkage.Private);
+        global.set_unnamed_address(2);
+        global.set_alignment(1);
+        return global;
+    }
+
     ## Records `loc`'s file as the owner of function `name`, as `own` does,
     ## except, compiling one compilation unit's object, when the file is another
     ## compilation unit's (`Generator.declared`): the function is not in that
