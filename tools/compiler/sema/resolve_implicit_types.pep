@@ -79,7 +79,6 @@ _number_keys(): String[] {
 
 ## How many arguments the methods of one name take: the name (an overload
 ## set's members share their set's name), and the fewest and most.
-## Each method's set name and the fewest and most arguments it takes.
 ## Generic methods count too: in `read<T>()`'s specialization a bare
 ## `read<T>(x)` calls its overload before that is specialized, not a free
 ## function `read`.
