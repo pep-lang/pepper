@@ -1,17 +1,13 @@
-# What scripts/pepper-tests.sh needs on a hosted runner, for CI's build-*
-# and test-* jobs (ci.yml): LLVM, the libraries the tests link, the
-# toolchain to test with, and PEPPER_TARGET_DIR. Then the build cache the
-# job's build-* job filled: `build` restores the newest one for this OS
-# and saves this run's after the job; a test shard restores this run's.
-# With `compiler`, the checkout's compiler is built (build) or comes from
-# that cache (test), and PEPPER_COMPILER_DIR names it.
+# What scripts/pepper-tests.sh needs on a hosted runner, for CI's test-*
+# jobs (ci.yml): LLVM, the libraries the tests link, the toolchain to test
+# with, and PEPPER_TARGET_DIR. It restores the newest build cache an
+# earlier run saved for this OS and saves this run's after the job. With
+# `compiler`, the checkout's compiler is built, and PEPPER_COMPILER_DIR
+# names it.
 name: Prepare the Pepper tests
 description: Provision a runner for scripts/pepper-tests.sh and restore its build cache
 
 inputs:
-  role:
-    description: "`build` (fill the cache) or `test` (use this run's)"
-    required: true
   compiler:
     description: "'true' to test the checkout's compiler instead of the installed one"
     required: true
@@ -85,7 +81,7 @@ runs:
     # The corpus also runs under wasmtime, built for wasm32-wasip1
     # (tools/compiler/corpus_test.pep), which fails here without them.
     - name: Provision wasi-sdk and wasmtime
-      if: runner.os == 'Linux' && inputs.role == 'test'
+      if: runner.os == 'Linux'
       shell: bash
       run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
 
@@ -100,12 +96,11 @@ runs:
 
     # The build cache of the test programs and tools (pep-test builds in
     # runtime/ and tools/, pepper-tests.sh the tools in the checkout), and
-    # the changed compiler with its build folder. The cache keys on the
+    # the changed compiler with its build folder: restored from the newest
+    # earlier run for this OS, saved after the job. The cache keys on the
     # compiler's path, size and time and on each source's path, all the
-    # same in every job of one OS, so a shard's builds hit what build-*
-    # stored. The build job also starts from the newest earlier run's.
+    # same between runs on one OS.
     - name: Restore and save the build cache
-      if: inputs.role == 'build'
       uses: actions/cache@v6
       with:
         path: |
@@ -115,32 +110,14 @@ runs:
           ${{ runner.workspace }}/target-test/compiler
         key: pepper-tests-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
         restore-keys: pepper-tests-${{ runner.os }}-
-    - name: Restore this run's build cache
-      if: inputs.role == 'test'
-      uses: actions/cache/restore@v6
-      with:
-        path: |
-          .pep/cache
-          runtime/.pep/cache
-          tools/.pep/cache
-          ${{ runner.workspace }}/target-test/compiler
-        key: pepper-tests-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
-        fail-on-cache-miss: true
 
-    # A change to the compiler is tested with that compiler: build-* builds
-    # it with the installed one (scripts/ci-build-compiler.sh, the
-    # release's stage 1) and the shards take it from the cache.
+    # A change to the compiler is tested with that compiler, built with
+    # the installed one (scripts/ci-build-compiler.sh, the release's stage
+    # 1).
     - name: Build the changed compiler
-      if: inputs.compiler == 'true' && inputs.role == 'build'
+      if: inputs.compiler == 'true'
       shell: bash
       run: bash -euxo pipefail scripts/ci-build-compiler.sh
-    - name: Use the changed compiler
-      if: inputs.compiler == 'true' && inputs.role == 'test'
-      shell: bash
-      run: |
-        set -euxo pipefail
-        "$PEPPER_TARGET_DIR/compiler/pep-build" --version
-        echo "PEPPER_COMPILER_DIR=$PEPPER_TARGET_DIR/compiler" >> "$GITHUB_ENV"
 
     # The cache keys on the compiler's time too, and each job installs the
     # toolchain afresh. A time taken from the compiler's contents is the same

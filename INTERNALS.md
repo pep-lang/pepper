@@ -3489,7 +3489,7 @@ runner: **`windows-2025`** and **`ubuntu-24.04`** (x64), and **`macos-15`**
 installs the published build of main (`scripts/ci-install-toolchain.sh`)
 and builds and tests with it, except where the compiler changed: a merge
 that changes `tools/compiler/` (`changes` classifies it), or a dispatch on
-a branch, has each build-<os> and
+a branch, has each test and
 cross-link job build that compiler with the installed one first
 (`scripts/ci-build-compiler.sh`, the release's stage 1), and every later
 step uses it, so the whole suite tests the changed compiler. The test jobs of `ci.yml` build into a folder beside the checkout
@@ -3501,30 +3501,24 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     skipped, since a skipped job counts as passing) and passes only when
     `test-windows`, `test-linux` and `test-macos` succeeded or the commit
     is prose only. It fails on a cancelled run.
-  - `build-windows` (**`windows-2025`**), `build-macos` (**`macos-15`**)
-    and `build-linux` (**`ubuntu-24.04`**) build the suite once per OS.
-    Their setup is the composite action
+  - `test-windows` (**`windows-2025`**), `test-macos` (**`macos-15`**)
+    and `test-linux` (**`ubuntu-24.04`**) run the whole suite, one job per
+    OS, so a run takes three runners. Their setup is the composite action
     `.github/actions/prepare-tests`: provision LLVM 20
     (`ci-provision-llvm.sh`, cached on Windows; the compiler's tests link
     it through pepper-llvm) and the libraries the tests link, install the
     newest published toolchain (the `x.y.z-dev` prerelease `release.yml`
     publishes on each merge, or a release with a higher version, through
-    `install.sh` / `install.ps1`), restore the newest earlier build cache
-    for the OS (actions/cache), build `tools/compiler` when it changed
+    `install.sh` / `install.ps1`), restore the newest build cache an
+    earlier run saved for the OS (`.pep/cache`, `runtime/.pep/cache`,
+    `tools/.pep/cache` and the changed compiler; actions/cache, saved again
+    after the job), build `tools/compiler` when it changed
     (`ci-build-compiler.sh`), and give the compiler a time taken from its
     contents, since the cache keys on the compiler's path, size and time.
-    Then `scripts/pepper-tests.sh --list` builds the tools and every test
-    program without running them, and the job saves the cache
-    (`.pep/cache`, `runtime/.pep/cache`, `tools/.pep/cache` and the changed
-    compiler) under a key for this run.
-  - `test-windows`, `test-macos` and `test-linux` are each a matrix of
-    four shards that wait for their OS's build job, restore exactly its
-    cache (the changed compiler comes from it), and run a quarter of the
-    tests (`--shard I/4`), whose builds are then cache hits. The first
-    Windows shard also runs `pep-doc check`, and the first Linux shard
-    cross-compiles a few examples for Linux arm64 and runs them under
-    qemu. All three are required, through `test`, which fails on a
-    cancelled or timed-out job as on a failed one.
+    Then `scripts/pepper-tests.sh` runs. The Windows job also runs `pep-doc
+    check`, and the Linux job cross-compiles a few examples for Linux arm64
+    and runs them under qemu. All three are required, through `test`,
+    which fails on a cancelled or timed-out job as on a failed one.
   - `cross-sysroots`, `cross-link` and `cross-run` (not required)
     cross-link from each runner for the other two operating systems and
     run the result on its own runner. `cross-sysroots` packs the Linux

@@ -15,15 +15,14 @@
 # stop them: they test with the newest build that did publish, and the run
 # shows the release's failure beside their results. A commit that changes
 # the compiler (tools/compiler/), or a dispatch on a branch other than main,
-# is tested with its own compiler instead: build-<os> and each cross-link
-# job build it with the installed pep-build (scripts/ci-build-compiler.sh,
+# is tested with its own compiler instead: each test and cross-link job
+# builds it with the installed pep-build (scripts/ci-build-compiler.sh,
 # the release's stage 1), and every later step uses it.
 #
 # Every job runs on a GitHub-hosted runner: windows-2025, ubuntu-24.04 and
 # macos-15 (arm64). Hosted runners start clean, so each job provisions LLVM
-# (apt, Homebrew, or the llvm-package archive on Windows). The test builds
-# are shared through actions/cache: build-<os> builds them once, starting
-# from the previous run's cache, and its four test-<os> shards reuse them.
+# (apt, Homebrew, or the llvm-package archive on Windows). Each test job
+# starts from the build cache the previous run saved (actions/cache).
 #
 # CI runs on each push to main (a merge) and by hand (workflow_dispatch),
 # not on pull requests yet (the self-hosted runners it used to run on
@@ -148,45 +147,22 @@ jobs:
       contents: write
     uses: ./.github/workflows/docs.yml
 
-  # The suite runs in two steps per OS. `build-<os>` builds the tools and
-  # every test program (`pepper-tests.sh --list`), and the changed compiler
-  # if there is one, which fills the build cache, and saves it. Then the
-  # four `test-<os>` shards each restore it and run a quarter of the tests
-  # (`--shard`): their builds are cache hits. The shared steps are in
-  # .github/actions/prepare-tests.
-  build-windows:
+  # The suite, one job per OS, so a run takes three runners: the free
+  # org's are shared by every branch. The shared steps are in
+  # .github/actions/prepare-tests, which also restores the newest earlier
+  # run's build cache for the OS and saves this run's.
+  test-windows:
     runs-on: windows-2025
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    timeout-minutes: 90
+    # The whole suite on one 4-core runner, from a warm build cache when an
+    # earlier run left one.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
         with:
-          role: build
-          compiler: ${{ needs.changes.outputs.compiler }}
-          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
-          token: ${{ github.token }}
-      - name: Build the tests
-        shell: bash
-        run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --list > "$RUNNER_TEMP/tests.txt"
-
-  test-windows:
-    runs-on: windows-2025
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    needs: [changes, release, build-windows]
-    if: ${{ !cancelled() && needs.build-windows.result == 'success' }}
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/prepare-tests
-        with:
-          role: test
           compiler: ${{ needs.changes.outputs.compiler }}
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
@@ -195,10 +171,8 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        env:
-          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --shard "$SHARD"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`pep-doc reference`) in the same
@@ -206,26 +180,30 @@ jobs:
       # declaration, and on a tool option missing from its page, reading the
       # tools the Pepper tests step built, pep-doc among them.
       - name: Documentation is current
-        if: matrix.shard == 1
         shell: bash
         run: '"$PEPPER_TARGET_DIR/pepper-tests/bin/pep-doc" check'
 
   # The suite on macOS against the default LLVM, from Homebrew. Required,
   # through `test` (see the top of this file).
-  build-macos:
+  test-macos:
     runs-on: macos-15
     needs: [changes, release]
+    # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    timeout-minutes: 90
+    # The whole suite on one 4-core runner, from a warm build cache when an
+    # earlier run left one.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
         with:
-          role: build
           compiler: ${{ needs.changes.outputs.compiler }}
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
-      - name: Build the tests
+
+      # The runtime's and the Pepper tools' own tests, `[Test]` functions run
+      # by `pepper test`.
+      - name: Pepper tests
         shell: bash
         env:
           # The hosted macOS runner has 7 GB. Uncapped, 8 tests at once each
@@ -233,73 +211,24 @@ jobs:
           # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3 --list > "$RUNNER_TEMP/tests.txt"
-
-  test-macos:
-    runs-on: macos-15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    needs: [changes, release, build-macos]
-    if: ${{ !cancelled() && needs.build-macos.result == 'success' }}
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/prepare-tests
-        with:
-          role: test
-          compiler: ${{ needs.changes.outputs.compiler }}
-          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
-          token: ${{ github.token }}
-
-      # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`.
-      - name: Pepper tests
-        shell: bash
-        env:
-          # See build-macos.
-          PEPC_COMPILATION_UNIT_JOBS: 2
-          SHARD: ${{ matrix.shard }}/4
-        run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3 --shard "$SHARD"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
 
   # The suite on Linux. Required: `test` gates on it.
   # build_cache_tests verify the cache (`--verify-cache`) on every
   # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
   # the other tests make too, which doubles the cost of each warm build.
-  build-linux:
-    runs-on: ubuntu-24.04
-    needs: [changes, release]
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/prepare-tests
-        with:
-          role: build
-          compiler: ${{ needs.changes.outputs.compiler }}
-          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
-          token: ${{ github.token }}
-      - name: Build the tests
-        shell: bash
-        run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --list > "$RUNNER_TEMP/tests.txt"
-
   test-linux:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    needs: [changes, release, build-linux]
-    if: ${{ !cancelled() && needs.build-linux.result == 'success' }}
-    timeout-minutes: 60
+    needs: [changes, release]
+    # Runs after `release` whether it published, failed or was skipped.
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    # The whole suite on one 4-core runner, from a warm build cache when an
+    # earlier run left one.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
         with:
-          role: test
           compiler: ${{ needs.changes.outputs.compiler }}
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
@@ -308,17 +237,14 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        env:
-          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --shard "$SHARD"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and
       # check they print what the host build prints. Linking for the other
       # operating systems needs their SDKs: the cross-link jobs below do that.
       - name: Cross-compile for Linux arm64
-        if: matrix.shard == 1
         shell: bash
         # This checkout's runtime, not the installed toolchain's.
         env:
