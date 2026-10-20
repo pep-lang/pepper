@@ -35,9 +35,10 @@ export const ENTRY_FILE = "_pep_test_main.pep";
 ##
 ## @param path the file
 ## @param source its text
+## @param target what the build compiles for: a `[Test]` function its `[Target]` leaves out is not registered
 ## @returns the text to build
-export add_test_main(path: Path, source: String): String {
-    var registrations = _registrations(source);
+export add_test_main(path: Path, source: String, target: link.Target): String {
+    var registrations = _registrations(source, target);
     if (!registrations.is_value()) {
         return source;
     }
@@ -54,8 +55,9 @@ export add_test_main(path: Path, source: String): String {
 ## tests added. The files must share one folder.
 ##
 ## @param paths the test files
+## @param target what the build compiles for: a `[Test]` function its `[Target]` leaves out is not registered
 ## @returns the entry file and each file's text by `path_key`, or why they cannot make one program
-export test_program(paths: Path[]): Result<(Path, HashMap<String, String>), String> {
+export test_program(paths: Path[], target: link.Target): Result<(Path, HashMap<String, String>), String> {
     var folder = paths[0].parent().is_value() ? paths[0].parent().value() : Path("");
     var sources = HashMap<String, String>();
     var imports = "";
@@ -79,7 +81,7 @@ export test_program(paths: Path[]): Result<(Path, HashMap<String, String>), Stri
             continue;
         }
         imports = imports + $"import {_quoted(stem.value())};\n";
-        var registrations = _registrations(source);
+        var registrations = _registrations(source, target);
         if (registrations.is_value()) {
             if (!source.ends_with("\n")) {
                 source = source + "\n";
@@ -108,8 +110,8 @@ export test_program(paths: Path[]): Result<(Path, HashMap<String, String>), Stri
 }
 
 ## One `_pep_tests.add` (or `add_should_panic`) line per `[Test]` function
-## of `source`, or Empty when it does not parse.
-_registrations(source: String): String? {
+## of `source` that `target` keeps, or Empty when it does not parse.
+_registrations(source: String, target: link.Target): String? {
     var module = parse.parse(source);
     if (module.is_err()) {
         return Optional<String>.Empty;
@@ -117,7 +119,8 @@ _registrations(source: String): String? {
     var out = "";
     for (var declaration in module.value().declarations) {
         if (declaration is Function(function)) {
-            if (!ast.has_attribute(function.attributes, "Test")) {
+            # A function the build drops cannot be named (pep-lang/pepper#23).
+            if (!ast.has_attribute(function.attributes, "Test") or !target.keeps(function.attributes)) {
                 continue;
             }
             ulong line = 1;

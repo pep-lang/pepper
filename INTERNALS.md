@@ -140,7 +140,8 @@ Besides the build options (`-I`, `--import`, `-l`, `-L`, `-D`, `-o`,
   the runtime's `testing` module into every file
   (`test_main.TESTING_MODULE`), and appends to the entry file's text, after
   its last line, a `[TestMain] main(args: String[])` that registers each of
-  the file's `[Test]` functions with a `TestRunner` and calls `run(args)`;
+  the file's `[Test]` functions that the target keeps (`Target.keeps`)
+  with a `TestRunner` and calls `run(args)`;
   being in the entry file, it can name the file's private functions (see
   `entry_point.pep` for how it replaces the file's `main`). Given several
   files of one folder, `test_program` instead appends to each file an
