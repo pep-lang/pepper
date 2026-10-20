@@ -333,6 +333,9 @@ test, one per line) and <code>--run NAME</code> (run one test), which is how
 tests of them all into one program, and <code>--run FILE::NAME</code> tells apart
 two tests of one name.</li>
 </ul>
+<p>A <code>[Test]</code> function that <a href="platform-selection.html">platform selection</a>
+leaves out (<code>[Target(OS(Linux))]</code> in a build for Windows) is not part of
+the test program: <code>--list</code> does not show it.</p>
 <p>A <code>[Test]</code> function that takes parameters, returns a value or is generic is
 an error, as are <code>[Test]</code> on a method and <code>[ShouldPanic]</code> without <code>[Test]</code>:</p>
 <pre><code class="language-text">main.pep:2:8: error: test 'checks' must take no parameters

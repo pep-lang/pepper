@@ -261,9 +261,10 @@ The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writ
 files uses a fresh folder under the system's temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
 <p>CI runs <code>scripts/pepper-tests.sh</code> with the installed build of main on
-Linux, macOS and Windows, as four jobs on each (<code>--shard 1/4</code> to <code>4/4</code>). A PR that changes the compiler (<code>tools/compiler/</code>)
-is tested with that compiler instead: CI builds it with the build of main
-first (<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
+Linux, macOS and Windows, one job on each, starting from the build cache
+the previous run saved. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
+that compiler instead: CI builds it with the build of main first
+(<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
 <p>That compiler can hide a runtime change that needs a compiler fix the
 published build of main does not have yet, which breaks main's CI and the
 release, since both build the compiler with the published one. So a PR

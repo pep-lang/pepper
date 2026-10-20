@@ -340,12 +340,13 @@ commit holds that version, builds it and publishes the release; the
 <code>Docs</code> workflow publishes the docs from the same tag. The VS Code
 extension is released from its own repository, pep-lang/vscode-pepper.</li>
 <li>Once it is published, the workflow opens a pull request that starts
-the next minor version on main (<code>0.10.0-dev</code>) and merges itself once
-its checks pass, unless main has already moved on; a major version is
-started by hand. A pull request the workflow opens with its own token
-starts no workflows, so it is opened with the <code>RELEASE_BUMP_TOKEN</code>
-secret when that is set, and otherwise the workflow dispatches CI on
-its branch.</li>
+the next minor version on main (<code>0.10.0-dev</code>), unless main has already
+moved on, and dispatches CI on its branch; a major version is started
+by hand. Merge it once CI passes, as an admin
+(<code>gh pr merge &lt;branch&gt; --squash --admin</code>): a run dispatched by hand
+does not count toward the <code>test</code> check main requires. Until it merges,
+merges to main publish no prerelease, since main holds the released
+version.</li>
 </ol>
 </li>
 </ul>
