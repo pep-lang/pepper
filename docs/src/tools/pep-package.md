@@ -187,8 +187,10 @@ name each imports it by.
 
 `pep-package` is written in Pepper (`tools/pep-package`) and reads and
 edits `pep.toml` and `pep.lock` with the runtime's
-[toml module](../reference/toml-module.md), so building it needs no
-network:
+[toml module](../reference/toml-module.md), and its versions and ranges
+with the [`semver` package](https://github.com/pep-lang/pepper-semver),
+which its first build fetches (with git when no `pep-package` is
+installed):
 
 ```bash
 pepper build tools/pep-package/main.pep -o pep-package

@@ -1,0 +1,10 @@
+# Written by `pepper package`: the exact revision of every dependency.
+# Commit it with pep.toml; do not edit it by hand.
+version = 1
+
+[[package]]
+name = "semver"
+source = "github:pep-lang/pepper-semver"
+version = "1.0.0"
+commit = "112c1291d8e6c23de9e7c131ce45fbffd85b3a10"
+sha256 = "03a7b4c071ddb02e9b58745ffef3f616e44bd3afd7f3e5a907c1b60a7ca86fdd"
