@@ -298,17 +298,15 @@ jobs:
           gh release upload "$TAG" pepper-* SHA256SUMS ../scripts/install.sh ../scripts/install.ps1 --clobber
 
   # After a release, main starts the next minor version: a pull request that
-  # sets X.(Y+1).0-dev (scripts/set-version.sh) and merges itself once its
-  # checks pass (auto-merge), when main still holds the version just
-  # released. A patch release made from a branch, or a release
-  # main has already moved past, leaves main alone. A major version is
-  # started by hand.
+  # sets X.(Y+1).0-dev (scripts/set-version.sh), when main still holds the
+  # version just released. Until it merges, merges to main publish nothing
+  # (main holds a release's version), so merge it once its CI passes, as
+  # any other pull request. A patch release made from a branch, or a
+  # release main has already moved past, leaves main alone. A major version
+  # is started by hand.
   #
-  # A pull request opened with the workflow's own token starts no
-  # workflows. With the RELEASE_BUMP_TOKEN secret (a token that can push
-  # branches and open pull requests) it is opened with that token and CI
-  # runs as for any other; without it, the job dispatches CI on the branch,
-  # whose `test` check on that commit is what auto-merge waits for.
+  # CI does not run on pull requests, so the job dispatches it on the
+  # branch.
   bump:
     if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
     needs: [version, publish]
@@ -323,13 +321,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          token: ${{ secrets.RELEASE_BUMP_TOKEN || github.token }}
 
       - name: Open the pull request starting the next version
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN || github.token }}
-          HAS_BUMP_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN != '' }}
+          GH_TOKEN: ${{ github.token }}
           RELEASED: ${{ needs.version.outputs.version }}
         run: |
           set -euxo pipefail
@@ -360,11 +356,5 @@ jobs:
             "v$RELEASED is released. This sets main's version to \`$next\` (scripts/set-version.sh), so each merge publishes the \`v$next\` prerelease that CI installs." \
             > "$RUNNER_TEMP/body.md"
           gh pr create --base main --head "$branch" --title "Start $next" --body-file "$RUNNER_TEMP/body.md"
-          if [ "$HAS_BUMP_TOKEN" != true ]; then
-            gh workflow run ci.yml --ref "$branch"
-          fi
-          # It merges itself once its checks pass. Auto-merge must be allowed
-          # in the repository's settings.
-          if ! gh pr merge "$branch" --auto --squash; then
-            echo "::warning::could not turn on auto-merge for $branch; allow auto-merge in the repository settings, or merge it by hand"
-          fi
+          gh workflow run ci.yml --ref "$branch"
+          echo "::notice::opened the pull request for $branch and dispatched CI on it; merge it once CI passes"
