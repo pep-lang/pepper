@@ -828,12 +828,12 @@ export struct Array<T> {
     ##     for (var row in [1, 2, 3, 4, 5, 6].chunks(3)) {
     ##         rows.append(row[0]);   # 1, then 4
     ##     }
-    # `chunks` and `windows` here and on ArrayView are generic only so they
-    # compile when called: compiled with every Array type, they would make
-    # `ArrayChunks<T>`, whose `Iterator` methods make `Array<ArrayView<T>>`,
-    # whose `chunks` makes `ArrayChunks<ArrayView<T>>`, without end.
     [__Reads]
     chunks<TElement=T>(size: ulong, location: __ptr<char> = __caller_location()): ArrayChunks<TElement> {
+        # `chunks` and `windows` here and on ArrayView are generic only so they
+        # compile when called: compiled with every Array type, they would make
+        # `ArrayChunks<T>`, whose `Iterator` methods make `Array<ArrayView<T>>`,
+        # whose `chunks` makes `ArrayChunks<ArrayView<T>>`, without end.
         return ArrayChunks<TElement>(slice(0, _size), size, size, location);
     }
 

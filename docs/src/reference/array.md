@@ -687,6 +687,30 @@ var second = middle[1];       # 3
 [__Reads] chunks<TElement=T>(size: ulong): ArrayChunks<TElement>
 ```
 
+Returns an iterator over the Array in runs of `size` elements, as
+slices; the last run is shorter when `size` does not divide `count`.
+The same as `slice(0, count).chunks(size)`.
+
+**Type parameters**
+- `TElement` — the element type, `T` by default
+
+**Parameters**
+- `size` — the number of elements in each run
+
+**Returns**
+- an iterator over `count / size` runs, rounded up
+
+**Panics**
+- if `size` is 0 ("ArrayView chunk size is 0")
+
+**Example**
+```pepper
+var rows = Array<int>();
+for (var row in [1, 2, 3, 4, 5, 6].chunks(3)) {
+    rows.append(row[0]);   # 1, then 4
+}
+```
+
 #### windows
 
 ```pepper
