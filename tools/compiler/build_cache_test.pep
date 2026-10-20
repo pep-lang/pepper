@@ -915,6 +915,32 @@ _build_methods(root: Path) {
     expect_true(ran.is_ok() and ran.value().status.success());
 }
 
+# A trait's default method is compiled into the struct that adopts it, in
+# that struct's compilation unit: an edit to its body there builds the
+# adopter again (#46), which runs the new body.
+[Test]
+rebuilds_the_adopters_of_a_changed_default_method() {
+    var folder = TempFolder("default_method");
+    var root = folder.path;
+    var write = (added: int) => {
+        File.write_text(
+            root.join(Path("a.pep")),
+            $"export trait Sized {{\n    n(): int;\n    total(): int {{\n        return n() + {added};\n    }}\n}}\n"
+        );
+        File.write_text(
+            root.join(Path("b.pep")),
+            "import \"a\";\nstruct _Three {\n    n(): int {\n        return 3;\n    }\n}\nextend _Three with Sized;\nexport b_value(): int {\n    return _Three().total();\n}\n"
+        );
+        File.write_text(
+            root.join(Path("main.pep")), $"import \"b\";\nmain(): int {{\n    return b_value() - {3 + added};\n}}\n"
+        );
+    };
+    write(1);
+    _build_methods(root);
+    write(2);
+    _build_methods(root);
+}
+
 # Adding or changing a method a reader does not call keeps the reader's
 # record, even one that adds to the struct; changing one it calls does not.
 [Test]

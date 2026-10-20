@@ -3251,7 +3251,9 @@ implementation is found stale too.
 written (`own_lines` in the generator, `DeltaBase.own`): an entry for each
 element, entry or name the delta adds, changes or drops, each hashed with
 non-generic bodies blanked (`blank_bodies`) and positions blanked
-(`blank_locs`). Generic bodies stay in, because a reader specializes them.
+(`blank_locs`). Generic bodies stay in, because a reader specializes them,
+and so do traits' default method bodies, because `apply_extensions` copies
+them into each adopting struct, whose compilation unit compiles them.
 Left out:
 
 - The fields in `NOT_INTERFACE` (`literal_args`, `call_targets`,

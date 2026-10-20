@@ -1273,7 +1273,7 @@ def module_delta():
             lx += ['    ' + l for l in write_to(co, ci, tree[1])]
             lx += [f'    base.add_hashed("conversions", interface_text({co}), {cj});', f'    {cj} += 1;', '}']
         elif tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
-            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', merge=fname not in resumed, named=fname == 'functions', own=None if fname in resumed else fname, ref='base.ref_functions' if fname == 'functions' else None)
+            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', merge=fname not in resumed, named=fname == 'functions', own=None if fname in resumed else fname, own_bodies='false' if fname == 'traits' else 'true', ref='base.ref_functions' if fname == 'functions' else None)
             if fname == 'functions':
                 lr = [_lazy(l) for l in lr]
                 lx += ['base.ref_functions = value.functions.clone();']
@@ -1319,7 +1319,7 @@ def module_interface_fields():
         tree = rust_type(f['type'])
         lines += ['    {', '        var out = RecordOut();', '        out.blank_bodies = interface;', '        out.blank_locs = interface;']
         body = write(f'value.{fname}', tree)
-        if fname == 'templates':
+        if fname in ('templates', 'traits'):
             body = ['out.blank_bodies = false;'] + body
         if fname in ('literal_args', 'call_targets', 'argument_names', 'stripped', 'summaries_to_record', 'cached_files'):
             body = ['if (interface) {', '    out.unsigned(0);', '} else {'] + ['    ' + l for l in body] + ['}']
