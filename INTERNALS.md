@@ -333,7 +333,9 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   deprecation check share: it
   tracks the names bound at each point (parameters, locals, generic
   parameters, the members of the struct being defined or extended), which
-  hide top-level names. It is one trait, `ScopeWalk`, whose default methods
+  hide top-level names; a bare generic call `m<T>(...)` whose `m` is such
+  a member is the member, so only its type arguments resolve as types. It
+  is one trait, `ScopeWalk`, whose default methods
   return each expression and statement rebuilt (an enum's payload cannot
   change in place); linking's `Rewriter` rebuilds the tree, and
   visibility's and deprecation's walks only read it. Each implements the
