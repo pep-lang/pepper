@@ -144,7 +144,7 @@ for (var x in a) {
 #### data
 
 ```pepper
-data(): __ptr<T>
+[__Reads] data(): __ptr<T>
 ```
 
 Returns a pointer to the first element, for passing the elements to C,

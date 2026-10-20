@@ -226,6 +226,7 @@ export struct Array<T> {
     ##     var a = Array<int>();
     ##     a.append(7);
     ##     var p = a.data();   # p[0] == 7
+    [__Reads]
     data(): __ptr<T> {
         if (_size == 0) {
             return __null;
@@ -362,6 +363,9 @@ export struct Array<T> {
     ##     var b = Array<u8>();
     ##     b.append_from(a.data(), a.count);   # b holds [1, 2]
     append_from(source: __ptr<T>, count: ulong) {
+        if (count == 0) {
+            return;
+        }
         if (__is_pod<T>()) {
             _append_raw(source, count);
             return;

@@ -647,3 +647,15 @@ append_from_acquires_struct_elements() {
     # One reference in `t`, two in `a`, two in `b`.
     expect_equal(__refcount<Tally>(t), 5);
 }
+
+[Test]
+append_from_nothing_keeps_a_loop_running() {
+    var a = Array<Tally>();
+    a.append(Tally());
+    var seen = 0;
+    for (var t in a) {
+        a.append_from(__null, 0);
+        seen = seen + t.alive;
+    }
+    expect_equal(seen, 1);
+}
