@@ -24,11 +24,11 @@
 # (apt, Homebrew, or the llvm-package archive on Windows) and builds from
 # scratch.
 #
-# CI runs on each push to main (a merge) and by hand (workflow_dispatch),
-# not on pull requests yet (the self-hosted runners it used to run on
-# could not take a run per PR push). Test a PR before merging it with the
-# pre-merge checks, or run CI on its branch from the Actions tab ("Run
-# workflow", pick the branch) or `gh workflow run ci.yml --ref <branch>`.
+# CI runs on each pull request, on each push to main (a merge), and by
+# hand (workflow_dispatch: `gh workflow run ci.yml --ref <branch>`). main's
+# ruleset requires `test` to pass on a pull request before it merges, so
+# auto-merge waits for it. A newer push to a pull request cancels its run
+# in progress; on main and by hand, runs queue.
 #
 # A skipped job reports success, so `test` is never a job that can be
 # skipped: it always runs and fails unless `test-windows`, `test-linux` and
@@ -38,12 +38,14 @@ name: CI
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
-# Runs queue instead of cancelling, so each one finishes with a result.
+# A pull request's newer push replaces its run in progress; other runs
+# queue instead of cancelling, so each one finishes with a result.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -81,8 +83,9 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" != "push" ]; then
-            # A dispatch tests everything. On main it uses main's published
-            # compiler; on another branch (a PR) it builds the branch's.
+            # A pull request or a dispatch tests everything. On main it uses
+            # main's published compiler; on another branch (a PR) it builds
+            # the branch's.
             echo "code=true" >> "$GITHUB_OUTPUT"
             if [ "$REF" = "$DEFAULT" ]; then
               echo "compiler=false" >> "$GITHUB_OUTPUT"
