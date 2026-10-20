@@ -2389,6 +2389,12 @@ struct _RegionWalk {
         return found.is_value() and program.has_region(found.value());
     }
 
+    ## Whether `e` is a `shared` function value.
+    is_shared_function(e: Expression): bool {
+        var found = ty(e);
+        return found.is_value() and found.value().is_shared_function_type();
+    }
+
     is_pointer_typed(e: Expression): bool {
         var found = ty(e);
         return found.is_value() and found.value().is_pointer();
@@ -2795,13 +2801,20 @@ struct _RegionWalk {
                 return call_method(e, node.this_value, node.method, node.args);
             }
             Invoke(node) => {
-                var acc = eval(node.callee);
+                # A `shared` function value reaches only thread-safe state
+                # besides its arguments, so its result links only those.
+                bool shared = is_shared_function(node.callee);
+                var callee = eval(node.callee);
+                long acc = shared ? -1 : callee;
                 for (var arg in node.args) {
                     var r = eval(arg);
                     acc = link(acc, r, arg);
                 }
                 if (!has_region(e)) {
                     return -1;
+                }
+                if (shared) {
+                    return acc >= 0 ? acc : fresh();
                 }
                 var r = acc >= 0 ? acc : region(checking ? _RegionPart.Outer : _RegionPart.Fresh);
                 regions[find(r) as ulong].tainted = true;
@@ -3317,6 +3330,9 @@ _describe(e: Expression): String {
         ToTrait(node) => {
             return _describe(node.value);
         }
+        Invoke(node) => {
+            return $"{_describe(node.callee)}({_described_args(node.args)})";
+        }
         else => {
             return "value";
         }
@@ -3681,6 +3697,18 @@ struct _Checks {
                     operands.append(a);
                 }
                 return call_disconnected(e, resolved.callee, operands);
+            }
+            # A `shared` function value's result links only its arguments.
+            Invoke(node) => {
+                if (!walk.is_shared_function(node.callee)) {
+                    return false;
+                }
+                for (var a in node.args) {
+                    if (!disconnected(a)) {
+                        return false;
+                    }
+                }
+                return true;
             }
             else => {
                 return false;

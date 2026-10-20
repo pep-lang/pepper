@@ -352,7 +352,9 @@ task, and so do the waits of `Mutex` and `Condition` below.)
 
 `send` and `try_send` take a **new** value, which nothing on the sending
 thread references, and hand it to the receiver without copying it: a
-constructor call, a literal, a call that returns a fresh value,
+constructor call, a literal, a call that returns a fresh value (through a
+`shared` function value too, when its arguments are new: it reaches nothing
+else that is not thread-safe),
 [`move(x)`](memory.md#handing-a-reference-over-with-move) (a variable that
 holds the only reference) or [`copy(x)`](memory.md#copying-a-value-with-copy)
 (when the sender keeps using `x`). A `String`, an `Array` or a struct of them
