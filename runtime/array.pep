@@ -805,9 +805,9 @@ export struct Array<T> {
     ##     var middle = a.slice(1, 4);   # views [2, 3, 4]
     ##     var second = middle[1];       # 3
     [__Reads]
-    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArraySlice<T> {
+    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArrayView<T> {
         _pep_check_bounds(start <= end && end <= _size, "Array slice out of bounds", location);
-        var view = ArraySlice<T>();
+        var view = ArrayView<T>();
         view._source = this;
         view._start = start;
         view._end = end;
@@ -822,16 +822,16 @@ export struct Array<T> {
     ## @typeParam TElement the element type, `T` by default
     ## @param size the number of elements in each run
     ## @returns an iterator over `count / size` runs, rounded up
-    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @panics if `size` is 0 ("ArrayView chunk size is 0")
     ## @example
     ##     var rows = Array<int>();
     ##     for (var row in [1, 2, 3, 4, 5, 6].chunks(3)) {
     ##         rows.append(row[0]);   # 1, then 4
     ##     }
-    # `chunks` and `windows` here and on ArraySlice are generic only so they
+    # `chunks` and `windows` here and on ArrayView are generic only so they
     # compile when called: compiled with every Array type, they would make
-    # `ArrayChunks<T>`, whose `Iterator` methods make `Array<ArraySlice<T>>`,
-    # whose `chunks` makes `ArrayChunks<ArraySlice<T>>`, without end.
+    # `ArrayChunks<T>`, whose `Iterator` methods make `Array<ArrayView<T>>`,
+    # whose `chunks` makes `ArrayChunks<ArrayView<T>>`, without end.
     [__Reads]
     chunks<TElement=T>(size: ulong, location: __ptr<char> = __caller_location()): ArrayChunks<TElement> {
         return ArrayChunks<TElement>(slice(0, _size), size, size, location);
@@ -844,7 +844,7 @@ export struct Array<T> {
     ## @typeParam TElement the element type, `T` by default
     ## @param size the number of elements in each run
     ## @returns an iterator over `count - size + 1` runs, or none when the Array is shorter than `size`
-    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @panics if `size` is 0 ("ArrayView chunk size is 0")
     ## @example
     ##     var rises = 0;
     ##     for (var pair in [1, 3, 2, 5].windows(2)) {
@@ -1087,7 +1087,7 @@ export struct Array<T> {
     ##     var a = [1, 2];
     ##     var b = [7, 8, 9];
     ##     a.extend_from(b.slice(1, 3));   # [1, 2, 8, 9]
-    extend_from(items: ArraySlice<T>, location: __ptr<char> = __caller_location()) {
+    extend_from(items: ArrayView<T>, location: __ptr<char> = __caller_location()) {
         items._check(location);
         _append_from(items._source, items._start, items.count);
     }
@@ -1442,7 +1442,7 @@ export struct ArrayIterator<T> {
 ##
 ## @typeParam T the element type of the Array
 ## @example
-##     total(values: ArraySlice<int>): int {
+##     total(values: ArrayView<int>): int {
 ##         var sum = 0;
 ##         for (var x in values) {
 ##             sum = sum + x;
@@ -1454,7 +1454,7 @@ export struct ArrayIterator<T> {
 ##     var tail_sum = total(a.slice(2, 4));   # 7
 ## @see Array.slice
 [Value]
-export struct ArraySlice<T> {
+export struct ArrayView<T> {
     ## The Array viewed; the slice holds a reference to it.
     Array<T> _source;
     ## The position in `_source` of the slice's first element.
@@ -1495,10 +1495,10 @@ export struct ArraySlice<T> {
     ## @param index the zero-based position in the slice
     ## @returns the element at `index`
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-    ## @panics if `index < count` does not hold ("ArraySlice index out of bounds")
+    ## @panics if `index < count` does not hold ("ArrayView index out of bounds")
     [](index: ulong, location: __ptr<char> = __caller_location()): T {
         _check(location);
-        _pep_check_bounds(index < _end - _start, "ArraySlice index out of bounds", location);
+        _pep_check_bounds(index < _end - _start, "ArrayView index out of bounds", location);
         return _source._data[_start + index];
     }
 
@@ -1509,10 +1509,10 @@ export struct ArraySlice<T> {
     ## @param end the position one past the last element; from `start` through `count`
     ## @returns a view of `end - start` elements of the same Array
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-    ## @panics if `start <= end` and `end <= count` do not both hold ("ArraySlice slice out of bounds")
-    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArraySlice<T> {
+    ## @panics if `start <= end` and `end <= count` do not both hold ("ArrayView slice out of bounds")
+    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArrayView<T> {
         _check(location);
-        _pep_check_bounds(start <= end && end <= _end - _start, "ArraySlice slice out of bounds", location);
+        _pep_check_bounds(start <= end && end <= _end - _start, "ArrayView slice out of bounds", location);
         var view = this;
         view._start = _start + start;
         view._end = _start + end;
@@ -1523,8 +1523,8 @@ export struct ArraySlice<T> {
     ## `for (var x in slice)` calls.
     ##
     ## @returns a new iterator positioned before the first element
-    iterate(): ArraySliceIterator<T> {
-        var it = ArraySliceIterator<T>();
+    iterate(): ArrayViewIterator<T> {
+        var it = ArrayViewIterator<T>();
         it._slice = this;
         return it;
     }
@@ -1535,11 +1535,11 @@ export struct ArraySlice<T> {
     ## @param index the position the second slice starts at; from 0 through `count`
     ## @returns the slices `slice(0, index)` and `slice(index, count)`
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-    ## @panics if `index <= count` does not hold ("ArraySlice slice out of bounds")
+    ## @panics if `index <= count` does not hold ("ArrayView slice out of bounds")
     ## @example
     ##     var a = [1, 2, 3, 4, 5];
     ##     var (head, tail) = a.slice(0, 5).split_at(2);   # [1, 2] and [3, 4, 5]
-    split_at(index: ulong, location: __ptr<char> = __caller_location()): (ArraySlice<T>, ArraySlice<T>) {
+    split_at(index: ulong, location: __ptr<char> = __caller_location()): (ArrayView<T>, ArrayView<T>) {
         return (slice(0, index, location), slice(index, count, location));
     }
 
@@ -1550,7 +1550,7 @@ export struct ArraySlice<T> {
     ## @typeParam TElement the element type, `T` by default
     ## @param size the number of elements in each run
     ## @returns an iterator over `count / size` runs, rounded up
-    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @panics if `size` is 0 ("ArrayView chunk size is 0")
     ## @example
     ##     var a = [1, 2, 3, 4, 5];
     ##     for (var run in a.slice(0, 5).chunks(2)) {
@@ -1567,7 +1567,7 @@ export struct ArraySlice<T> {
     ## @typeParam TElement the element type, `T` by default
     ## @param size the number of elements in each run
     ## @returns an iterator over `count - size + 1` runs, or none
-    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @panics if `size` is 0 ("ArrayView chunk size is 0")
     ## @example
     ##     var a = [1, 2, 3];
     ##     for (var pair in a.slice(0, 3).windows(2)) {
@@ -1584,7 +1584,7 @@ export struct ArraySlice<T> {
     ## @param rhs the slice to compare with
     ## @returns true when the slices are element-wise equal
     ## @panics if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
-    ==(rhs: ArraySlice<T>): bool {
+    ==(rhs: ArrayView<T>): bool {
         _check(__caller_location());
         rhs._check(__caller_location());
         if (count != rhs.count) {
@@ -1606,7 +1606,7 @@ export struct ArraySlice<T> {
     ## @param rhs the slice to compare with
     ## @returns true when the slices are not element-wise equal
     ## @panics if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
-    !=(rhs: ArraySlice<T>): bool {
+    !=(rhs: ArrayView<T>): bool {
         return !(this == rhs);
     }
 
@@ -1690,11 +1690,11 @@ export struct ArraySlice<T> {
     }
 }
 
-## The searches of a sorted ArraySlice, for an element type with an order
+## The searches of a sorted ArrayView, for an element type with an order
 ## (see `Comparable`).
 ##
 ## @typeParam T the element type, `Comparable`
-export extend ArraySlice<T: Comparable> {
+export extend ArrayView<T: Comparable> {
     ## Returns the position of the first element equal to `item` in this
     ## slice, which must be sorted in `compare` order, or none; see
     ## `Array.binary_search`.
@@ -1753,7 +1753,7 @@ export extend ArraySlice<T: Comparable> {
     ## @example
     ##     var a = [1, 2, 3];
     ##     assert(a.slice(0, 2).compare(a.slice(1, 3)) < 0, "[1, 2] before [2, 3]");
-    compare(other: ArraySlice<T>): int {
+    compare(other: ArrayView<T>): int {
         _check(__caller_location());
         other._check(__caller_location());
         ulong index = 0;
@@ -1768,15 +1768,15 @@ export extend ArraySlice<T: Comparable> {
     }
 }
 
-## An `Iterator<T>` over the elements of an `ArraySlice`, in order; returned
-## by `ArraySlice.iterate()` and driven by `for (var x in slice)`.
+## An `Iterator<T>` over the elements of an `ArrayView`, in order; returned
+## by `ArrayView.iterate()` and driven by `for (var x in slice)`.
 ##
 ## @typeParam T the element type of the slice
-## @see ArraySlice.iterate
+## @see ArrayView.iterate
 [Value]
-export struct ArraySliceIterator<T> {
+export struct ArrayViewIterator<T> {
     ## The slice being iterated.
-    ArraySlice<T> _slice;
+    ArrayView<T> _slice;
     ## The position of the current element in `_slice`; meaningful once `_started` is set.
     ulong _index;
     ## Whether `next()` has been called at least once.
@@ -1802,15 +1802,27 @@ export struct ArraySliceIterator<T> {
     ##
     ## @returns the current element
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-    ## @panics if `next()` was never called ("ArraySliceIterator.current() before next()")
-    ## @panics if `next()` already returned false ("ArraySlice index out of bounds")
+    ## @panics if `next()` was never called ("ArrayViewIterator.current() before next()")
+    ## @panics if `next()` already returned false ("ArrayView index out of bounds")
     current(): T {
-        assert(_started, "ArraySliceIterator.current() before next()");
+        assert(_started, "ArrayViewIterator.current() before next()");
         return _slice[_index];
     }
 }
 
-extend ArraySliceIterator<T> with Iterator<T>;
+extend ArrayViewIterator<T> with Iterator<T>;
+
+## Deprecated: use `ArrayView` instead.
+##
+## @typeParam T the element type of the Array
+[Deprecated("use 'ArrayView' instead", "ArrayView")]
+export type ArraySlice<T> = ArrayView<T>;
+
+## Deprecated: use `ArrayViewIterator` instead.
+##
+## @typeParam T the element type of the view
+[Deprecated("use 'ArrayViewIterator' instead", "ArrayViewIterator")]
+export type ArraySliceIterator<T> = ArrayViewIterator<T>;
 
 # `_ArraySorter` insertion sorts a range this small, or smaller.
 const _SORT_INSERTION_SIZE: ulong = 24;
@@ -2133,7 +2145,7 @@ struct _ArraySorter<T> {
     }
 }
 
-## An `Iterator` over runs of an `ArraySlice`, each itself a slice:
+## An `Iterator` over runs of an `ArrayView`, each itself a slice:
 ## returned by `chunks` (runs side by side, the last perhaps shorter) and
 ## `windows` (overlapping runs, each one element on).
 ##
@@ -2141,12 +2153,12 @@ struct _ArraySorter<T> {
 ## slice: once the Array is modified, the next step panics.
 ##
 ## @typeParam T the element type of the slice
-## @see ArraySlice.chunks
-## @see ArraySlice.windows
+## @see ArrayView.chunks
+## @see ArrayView.windows
 [Value]
 export struct ArrayChunks<T> {
     ## The slice being split into runs.
-    ArraySlice<T> _slice;
+    ArrayView<T> _slice;
     ## The number of elements in each run.
     ulong _size;
     ## How far each run starts after the one before: `_size` for chunks, 1 for windows.
@@ -2164,9 +2176,9 @@ export struct ArrayChunks<T> {
     ## @param slice the slice to split
     ## @param size the number of elements in each run
     ## @param step how far each run starts after the one before
-    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
-    construct(slice: ArraySlice<T>, size: ulong, step: ulong, location: __ptr<char> = __caller_location()) {
-        assert(size > 0, "ArraySlice chunk size is 0", location);
+    ## @panics if `size` is 0 ("ArrayView chunk size is 0")
+    construct(slice: ArrayView<T>, size: ulong, step: ulong, location: __ptr<char> = __caller_location()) {
+        assert(size > 0, "ArrayView chunk size is 0", location);
         _slice = slice;
         _size = size;
         _step = step;
@@ -2201,14 +2213,14 @@ export struct ArrayChunks<T> {
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     ## @panics if `next()` was never called ("ArrayChunks.current() before next()")
     ## @panics if `next()` already returned false ("ArrayChunks.current() past the end")
-    current(): ArraySlice<T> {
+    current(): ArrayView<T> {
         assert(_started, "ArrayChunks.current() before next()");
         assert(_has_run(), "ArrayChunks.current() past the end");
         return _slice.slice(_start, Array<T>._min(_start + _size, _slice.count));
     }
 }
 
-extend ArrayChunks<T> with Iterator<ArraySlice<T>>;
+extend ArrayChunks<T> with Iterator<ArrayView<T>>;
 
 # The start of an array literal: a new Array holding `first`, whose type
 # gives the literal's element type (see `_literal_append`).

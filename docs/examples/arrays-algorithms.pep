@@ -1,4 +1,4 @@
-total(values: ArraySlice<int>): int {
+total(values: ArrayView<int>): int {
     var sum = 0;
     for (var x in values) {
         sum = sum + x;

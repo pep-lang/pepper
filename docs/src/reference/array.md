@@ -653,7 +653,7 @@ Runs in O(count).
 #### slice
 
 ```pepper
-[__Reads] slice(start: ulong, end: ulong): ArraySlice<T>
+[__Reads] slice(start: ulong, end: ulong): ArrayView<T>
 ```
 
 Returns a read-only view of the elements from `start` up to but not
@@ -707,7 +707,7 @@ as `slice(0, count).windows(size)`.
 - an iterator over `count - size + 1` runs, or none when the Array is shorter than `size`
 
 **Panics**
-- if `size` is 0 ("ArraySlice chunk size is 0")
+- if `size` is 0 ("ArrayView chunk size is 0")
 
 **Example**
 ```pepper
@@ -948,7 +948,7 @@ Array's running iterators when `rhs` is not empty.
 #### extend_from
 
 ```pepper
-extend_from(items: ArraySlice<T>)
+extend_from(items: ArrayView<T>)
 ```
 
 Appends every element of `items`, in order, to the end of this Array.
@@ -1361,10 +1361,10 @@ Returns the element the last successful `next()` moved to.
 - if `next()` was never called ("ArrayIterator.current() before next()")
 - if `next()` already returned false ("ArrayIterator.current() past the end")
 
-## ArraySlice
+## ArrayView
 
 ```pepper
-[Value] struct ArraySlice<T>
+[Value] struct ArrayView<T>
 ```
 
 A read-only view of a run of an Array's elements, made by `Array.slice`,
@@ -1388,7 +1388,7 @@ order.
 
 **Example**
 ```pepper
-total(values: ArraySlice<int>): int {
+total(values: ArrayView<int>): int {
     var sum = 0;
     for (var x in values) {
         sum = sum + x;
@@ -1437,12 +1437,12 @@ slice's first element; this is the indexer read `slice[index]`.
 
 **Panics**
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-- if `index < count` does not hold ("ArraySlice index out of bounds")
+- if `index < count` does not hold ("ArrayView index out of bounds")
 
 #### slice
 
 ```pepper
-slice(start: ulong, end: ulong): ArraySlice<T>
+slice(start: ulong, end: ulong): ArrayView<T>
 ```
 
 Returns a view of this slice's elements from `start` up to but not
@@ -1457,12 +1457,12 @@ including `end`, positions counted within this slice.
 
 **Panics**
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-- if `start <= end` and `end <= count` do not both hold ("ArraySlice slice out of bounds")
+- if `start <= end` and `end <= count` do not both hold ("ArrayView slice out of bounds")
 
 #### iterate
 
 ```pepper
-iterate(): ArraySliceIterator<T>
+iterate(): ArrayViewIterator<T>
 ```
 
 Returns an iterator over the slice's elements in order; this is what
@@ -1474,7 +1474,7 @@ Returns an iterator over the slice's elements in order; this is what
 #### split_at
 
 ```pepper
-split_at(index: ulong): (ArraySlice<T>, ArraySlice<T>)
+split_at(index: ulong): (ArrayView<T>, ArrayView<T>)
 ```
 
 Splits the slice in two at `index`: the elements before it, and the
@@ -1488,7 +1488,7 @@ elements from it on.
 
 **Panics**
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-- if `index <= count` does not hold ("ArraySlice slice out of bounds")
+- if `index <= count` does not hold ("ArrayView slice out of bounds")
 
 **Example**
 ```pepper
@@ -1516,7 +1516,7 @@ divide `count`.
 - an iterator over `count / size` runs, rounded up
 
 **Panics**
-- if `size` is 0 ("ArraySlice chunk size is 0")
+- if `size` is 0 ("ArrayView chunk size is 0")
 
 **Example**
 ```pepper
@@ -1546,7 +1546,7 @@ the slice is shorter than `size`.
 - an iterator over `count - size + 1` runs, or none
 
 **Panics**
-- if `size` is 0 ("ArraySlice chunk size is 0")
+- if `size` is 0 ("ArrayView chunk size is 0")
 
 **Example**
 ```pepper
@@ -1559,7 +1559,7 @@ for (var pair in a.slice(0, 3).windows(2)) {
 #### operator ==
 
 ```pepper
-==(rhs: ArraySlice<T>): bool
+==(rhs: ArrayView<T>): bool
 ```
 
 Reports whether both slices have the same count and pairwise equal
@@ -1578,7 +1578,7 @@ are is not compared.
 #### operator !=
 
 ```pepper
-!=(rhs: ArraySlice<T>): bool
+!=(rhs: ArrayView<T>): bool
 ```
 
 Reports whether the slices differ in count or in any element; the
@@ -1664,13 +1664,13 @@ none; see `Array.binary_search_by`.
 **Panics**
 - if the Array was modified since the slice was made, `order` included ("Array modified while a slice of it is in use")
 
-## extend ArraySlice<T>
+## extend ArrayView<T>
 
 ```pepper
-extend ArraySlice<T: Comparable>
+extend ArrayView<T: Comparable>
 ```
 
-The searches of a sorted ArraySlice, for an element type with an order
+The searches of a sorted ArrayView, for an element type with an order
 (see `Comparable`).
 
 **Type parameters**
@@ -1751,7 +1751,7 @@ Reports whether the elements are in `compare` order; see
 #### compare
 
 ```pepper
-compare(other: ArraySlice<T>): int
+compare(other: ArrayView<T>): int
 ```
 
 Returns the lexicographic order of this slice and `other`: the order
@@ -1773,20 +1773,20 @@ var a = [1, 2, 3];
 assert(a.slice(0, 2).compare(a.slice(1, 3)) < 0, "[1, 2] before [2, 3]");
 ```
 
-## ArraySliceIterator
+## ArrayViewIterator
 
 ```pepper
-[Value] struct ArraySliceIterator<T>
+[Value] struct ArrayViewIterator<T>
 ```
 
-An `Iterator<T>` over the elements of an `ArraySlice`, in order; returned
-by `ArraySlice.iterate()` and driven by `for (var x in slice)`.
+An `Iterator<T>` over the elements of an `ArrayView`, in order; returned
+by `ArrayView.iterate()` and driven by `for (var x in slice)`.
 
 **Type parameters**
 - `T` — the element type of the slice
 
 **See also**
-- `ArraySlice.iterate`
+- `ArrayView.iterate`
 
 ### Methods
 
@@ -1817,8 +1817,30 @@ Returns the element the last successful `next()` moved to.
 
 **Panics**
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
-- if `next()` was never called ("ArraySliceIterator.current() before next()")
-- if `next()` already returned false ("ArraySlice index out of bounds")
+- if `next()` was never called ("ArrayViewIterator.current() before next()")
+- if `next()` already returned false ("ArrayView index out of bounds")
+
+## ArraySlice
+
+```pepper
+[Deprecated("use 'ArrayView' instead", "ArrayView")] type ArraySlice<T> = ArrayView<T>
+```
+
+Deprecated: use `ArrayView` instead.
+
+**Type parameters**
+- `T` — the element type of the Array
+
+## ArraySliceIterator
+
+```pepper
+[Deprecated("use 'ArrayViewIterator' instead", "ArrayViewIterator")] type ArraySliceIterator<T> = ArrayViewIterator<T>
+```
+
+Deprecated: use `ArrayViewIterator` instead.
+
+**Type parameters**
+- `T` — the element type of the view
 
 ## ArrayChunks
 
@@ -1826,7 +1848,7 @@ Returns the element the last successful `next()` moved to.
 [Value] struct ArrayChunks<T>
 ```
 
-An `Iterator` over runs of an `ArraySlice`, each itself a slice:
+An `Iterator` over runs of an `ArrayView`, each itself a slice:
 returned by `chunks` (runs side by side, the last perhaps shorter) and
 `windows` (overlapping runs, each one element on).
 
@@ -1837,15 +1859,15 @@ slice: once the Array is modified, the next step panics.
 - `T` — the element type of the slice
 
 **See also**
-- `ArraySlice.chunks`
-- `ArraySlice.windows`
+- `ArrayView.chunks`
+- `ArrayView.windows`
 
 ### Constructor
 
 #### ArrayChunks()
 
 ```pepper
-construct(slice: ArraySlice<T>, size: ulong, step: ulong)
+construct(slice: ArrayView<T>, size: ulong, step: ulong)
 ```
 
 Makes an iterator over the runs of `size` elements of `slice`, each
@@ -1859,7 +1881,7 @@ the last run may be shorter (chunks); otherwise every run is whole
 - `step` — how far each run starts after the one before
 
 **Panics**
-- if `size` is 0 ("ArraySlice chunk size is 0")
+- if `size` is 0 ("ArrayView chunk size is 0")
 
 ### Methods
 
@@ -1880,7 +1902,7 @@ Advances to the next run.
 #### current
 
 ```pepper
-current(): ArraySlice<T>
+current(): ArrayView<T>
 ```
 
 Returns the run the last successful `next()` moved to.

@@ -59,7 +59,8 @@ other than the elements' own, or for elements that are not `Comparable`.
 
 ## Slices
 
-`a.slice(start, end)` is an `ArraySlice<T>`: a read-only view of the
+`a.slice(start, end)` is an `ArrayView<T>` (formerly `ArraySlice<T>`, a
+name that still works, with a deprecation warning): a read-only view of the
 elements from `start` up to but not including `end`. It has `count`,
 `is_empty`, indexing, `for` loops, `slice`, `to_array`, `find`, `contains`
 and the searches above, plus:

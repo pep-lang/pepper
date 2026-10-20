@@ -1,4 +1,4 @@
-# ArraySlice views: split_at, chunks, windows, ==, compare, and how each
+# ArrayView views: split_at, chunks, windows, ==, compare, and how each
 # stays fail-fast when the Array changes underneath it.
 
 struct Tally {
@@ -36,7 +36,7 @@ split_at_splits_in_two() {
 }
 
 [Test]
-[ShouldPanic("ArraySlice slice out of bounds")]
+[ShouldPanic("ArrayView slice out of bounds")]
 split_at_past_the_end_panics() {
     var a = [1, 2];
     a.slice(0, 2).split_at(3);
@@ -79,14 +79,14 @@ chunks_iterator_ends_and_stays_ended() {
 }
 
 [Test]
-[ShouldPanic("ArraySlice chunk size is 0")]
+[ShouldPanic("ArrayView chunk size is 0")]
 chunks_of_zero_panic() {
     var a = [1, 2];
     a.chunks(0);
 }
 
 [Test]
-[ShouldPanic("ArraySlice chunk size is 0")]
+[ShouldPanic("ArrayView chunk size is 0")]
 windows_of_zero_panic() {
     var a = [1, 2];
     a.windows(0);
