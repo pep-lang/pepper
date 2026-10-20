@@ -1,7 +1,7 @@
 [package]
 name = "pep_test"
 description = "Runs the `[Test]` functions of Pepper files, run as `pepper test`"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/pep-lang/pepper"
 
 [build]

@@ -2,7 +2,7 @@
 name = "compiler"
 version = "0.1.0"
 description = "The Pepper compiler written in Pepper, built as `pepc`"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/pep-lang/pepper"
 
 [build]

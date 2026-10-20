@@ -2,7 +2,7 @@
 name = "pep_lsp"
 version = "0.3.0"
 description = "The Pepper language server, written in Pepper on the lsp package"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/pep-lang/pepper"
 
 [build]

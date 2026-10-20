@@ -2,7 +2,7 @@
 name = "pep_package"
 version = "0.3.0"
 description = "The package manager, run as `pepper package`"
-license = "MIT"
+license = "Apache-2.0"
 repository = "https://github.com/pep-lang/pepper"
 
 [build]
