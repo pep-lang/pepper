@@ -5,7 +5,8 @@
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`; and the error for a member a
-# value's type lacks inside an interpolation. The programs are in
+# value's type lacks inside an interpolation; and a `match` in a generic
+# method of another module's struct. The programs are in
 # `testdata/`.
 
 import [File, Path] from io;
