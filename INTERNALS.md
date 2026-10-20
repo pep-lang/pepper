@@ -1857,7 +1857,13 @@ changed.
   unit, and each part, keeps its newest eight keys, and none stored or
   reused in the last ten minutes, since a build may be linking it; a unit
   hit marks its parts reused too, so a build storing newer keys of a part
-  does not remove one another build is about to link. A unit's folder
+  does not remove one another build is about to link. Pruning reads a
+  key's time again just before it moves the folder aside, and moves it
+  back when it was reused meanwhile; a build links the objects of a
+  compilation unit it found in the cache through `Cache.reused_objects`,
+  which looks again for about a second while the folder is away and fails
+  the build rather than link without them (a link short of a unit's
+  objects fails on undefined symbols, #24). A unit's folder
   spells the `/` of its name as `.` (`u/process.command#0/`), so each
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them

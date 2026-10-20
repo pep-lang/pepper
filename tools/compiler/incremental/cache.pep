@@ -29,6 +29,7 @@
 ## adds more than about 70 characters to the cache's own.
 
 import compiler.ast;
+import async;
 import [Diagnostic] from compiler.diagnostic;
 import digest;
 import [Directory, File, IoResult, Path] from io;
@@ -51,6 +52,10 @@ const _KEEP = 8;
 ## in nanoseconds, however many newer keys there are: a build running at
 ## the same time may be linking them.
 const _GRACE: long = 600000000000;
+## How many times `Cache.reused_objects` looks for a key's objects, and how
+## long it waits between looks, in milliseconds: about a second in all.
+const _REUSE_TRIES: ulong = 20;
+const _REUSE_WAIT = 50;
 
 ## A build cache.
 export struct Cache {
@@ -89,6 +94,33 @@ export struct Cache {
     ## @returns whether it was marked; not when a build pruned it first
     used(folder: Path): bool {
         return folder.set_modified(os.SystemTime.now().unix_nanoseconds()).is_ok();
+    }
+
+    ## Returns the objects of `unit` under `key` (`numbered_objects`),
+    ## marked as just reused, for linking a unit this build found in the
+    ## cache when it checked it. A build pruning the unit moves a key's
+    ## folder aside, and back when it was reused meanwhile (`_prune`), so a
+    ## folder found missing or empty is looked for again for about a
+    ## second: a link without its objects fails on undefined symbols.
+    ##
+    ## @param unit the unit's name
+    ## @param key its key
+    ## @param extension the objects' file extension
+    ## @returns the objects, or why the cache no longer holds them
+    reused_objects(unit: String, key: String, extension: String): Result<Path[], String> {
+        var folder = objects(unit, key);
+        for (var _ in 0.._REUSE_TRIES) {
+            if (used(folder)) {
+                var found = numbered_objects(folder, extension);
+                if (!found.is_empty) {
+                    return Result<Path[], String>.ok(found);
+                }
+            }
+            async.Thread.sleep(_REUSE_WAIT);
+        }
+        return Result<Path[], String>.err(
+            $"the build cache no longer holds the objects of '{unit}' ({folder}); build again"
+        );
     }
 
     ## Moves `built`, a folder of objects just written, to where the objects
@@ -244,6 +276,11 @@ _prune(folder: Path) {
     for (var i in (_KEEP as ulong)..aged.count) {
         var (modified, path) = aged[i];
         if (now - modified < _GRACE) {
+            continue;
+        }
+        # Reused since the listing: a build may be about to link it.
+        var current = path.metadata();
+        if (current.is_ok() and now - current.value().modified < _GRACE) {
             continue;
         }
         # A name no key has; a leftover is pruned again later.
@@ -813,4 +850,20 @@ _copy_folder(from: Path, to: Path): IoResult<void> {
         }
     }
     return IoResult<void>.ok();
+}
+
+## The objects of a unit's parts in `folder`: `0.<extension>` and on, until
+## one is missing.
+##
+## @param folder the folder of the objects
+## @param extension the objects' file extension
+## @returns the objects, none when `folder` holds no `0.<extension>`
+export numbered_objects(folder: Path, extension: String): Path[] {
+    var objects = Array<Path>();
+    var at = folder.join(Path($"0.{extension}"));
+    while (at.is_file()) {
+        objects.append(at);
+        at = folder.join(Path($"{objects.count}.{extension}"));
+    }
+    return objects;
 }

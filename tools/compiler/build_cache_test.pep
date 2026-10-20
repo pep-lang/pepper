@@ -367,6 +367,32 @@ keeps_the_objects_another_build_stored_first() {
     expect_false(second.metadata().is_ok());
 }
 
+# A build links the objects of a compilation unit it found in the cache
+# from there, and never links without them: a key's folder gone by then
+# (another build pruning the unit moves it aside, and back when it was
+# reused meanwhile) is an error, not a link short of the unit's symbols
+# (pep-lang/pepper#24).
+[Test]
+links_a_reused_units_objects_or_fails() {
+    var folder = TempFolder("reused_objects");
+    var root = folder.path;
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var built = root.join(Path("built"));
+    Directory.create_all(built);
+    File.write_text(built.join(Path("0.o")), "part 0");
+    File.write_text(built.join(Path("1.o")), "part 1");
+    expect_true(cache.store(built, "+unit", "key").is_ok());
+
+    var found = cache.reused_objects("+unit", "key", "o");
+    expect_true(found.is_ok());
+    expect_equal(found.value().count, 2 as ulong);
+    expect_equal(found.value()[1].file_name().value(), "1.o");
+
+    var gone = cache.reused_objects("+unit", "other", "o");
+    expect_true(gone.is_err());
+    expect_true(gone.error().starts_with("the build cache no longer holds the objects of '+unit'"));
+}
+
 # A key reused by a build counts as the unit's newest, and no key stored
 # or reused lately is pruned, so a build linking it at the same time finds
 # its objects.
