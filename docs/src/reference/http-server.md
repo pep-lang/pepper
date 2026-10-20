@@ -142,6 +142,105 @@ on the worker that accepted it.
 **Panics**
 - outside `async.run`
 
+## Connection
+
+```pepper
+struct Connection
+```
+
+A connection a `Server` handler took over by answering with
+`Response.upgrade`: the raw stream after the `101 Switching Protocols`
+head, TCP or (under `Server.bind_tls`) TLS, as an `io.Reader` and an
+`io.Writer`.
+
+Reads return first the bytes the server had already read past the
+request (a client may send its first message right after the request),
+then what arrives. Like the handler, it belongs to the connection's task.
+
+**Example**
+```pepper
+upgraded(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) => {
+        var data = Array<u8>();
+        while (connection.read(data, 4096).value() > 0) {
+            connection.write_all(data);
+            data.clear();
+        }
+    });
+}
+```
+
+### Constructor
+
+#### Connection()
+
+```pepper
+construct(reader: _HttpReader)
+```
+
+Wraps the connection `reader` reads. The server makes one for
+`Response.upgrade`.
+
+**Parameters**
+- `reader` — the connection and the bytes it buffered
+
+### Methods
+
+#### read
+
+```pepper
+read(buffer: u8[], max: ulong): io.IoResult<ulong>
+```
+
+Waits until some bytes are available, then appends up to `max` of
+them to `buffer`: the ones buffered past the request first.
+
+**Parameters**
+- `buffer` — the array the bytes are appended to
+- `max` — the most bytes to read
+
+**Returns**
+- the number of bytes appended, 0 at the end of the stream; an error when the stream fails
+
+#### write
+
+```pepper
+write(data: u8[]): io.IoResult<ulong>
+```
+
+Writes what the stream takes in one call, which may be less than all
+of `data`.
+
+**Parameters**
+- `data` — the bytes to write
+
+**Returns**
+- the number of bytes written; an error when the stream fails
+
+#### write_all
+
+```pepper
+write_all(data: u8[]): io.IoResult<void>
+```
+
+Writes all of `data`.
+
+**Parameters**
+- `data` — the bytes to write
+
+**Returns**
+- an Ok result once every byte is written; an error when the stream fails
+
+#### close
+
+```pepper
+close()
+```
+
+Closes the connection, sending TLS close_notify first under TLS. The
+server also closes it when the `takeover` function returns; closing
+again does nothing.
+
 ## reason_phrase
 
 ```pepper
