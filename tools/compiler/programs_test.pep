@@ -15,12 +15,13 @@ import [build_program, expect_contains, expect_exit, read_file, run, write_file]
 import toolchain;
 
 # Builds `testdata/<name>.pep`, copied into `folder` so that no project
-# around this one applies, into the executable `name` there.
-_build(name: String, folder: Path): Path {
+# around this one applies, into the executable `name` there, with `pep-build`
+# options `options`.
+_build(name: String, folder: Path, options: Array<String> = Array<String>()): Path {
     var source = folder.join(name + ".pep");
     write_file(source, read_file(Path("compiler").join("testdata").join(name + ".pep")));
     var program = folder.join(name + toolchain.executable_suffix());
-    var error = build_program(source, program, folder.join("build"));
+    var error = build_program(source, program, folder.join("build"), options);
     if (error.is_value()) {
         panic($"{name}.pep does not build:\n{error.value()}");
     }
@@ -90,6 +91,20 @@ an_unknown_member_in_an_interpolation_is_named() {
     var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
     expect_true(error.is_value(), "the program does not build");
     expect_contains(error.value(), "interpolation_unknown_member.pep:5:20: error: no member named 'count' in 'String'");
+}
+
+# ── match ───────────────────────────────────────────────────────────────────
+
+# A generic method of a struct in another module, specialized by the
+# compilation unit that calls it, has its `is Err(e)` lowered there.
+[Test]
+a_match_in_another_modules_generic_method_is_lowered() {
+    var folder = TempFolder("programs_match_in_other_module");
+    var testdata = Path("compiler").join("testdata");
+    var module = Path("m").join("module.pep");
+    write_file(folder.path.join(module), read_file(testdata.join("match_in_other_module").join(module)));
+    var program = _build("match_in_other_module", folder.path, ["-I", folder.path.to_string()]);
+    expect_exit(run(process.Command(program.to_string())), 3);
 }
 
 # ── os ──────────────────────────────────────────────────────────────────────

@@ -19,12 +19,23 @@ import [method_key, PassState] from "state";
 import "type_name";
 
 ## Takes the bodies of `module`'s checked declarations out of it, into
-## `state.stashed`.
+## `state.stashed`. Once they are, it takes out again only those a pass
+## put back (`check_confinement`'s): a method this compilation unit added
+## to a checked struct, such as a generic method's specialization, is the
+## unit's own to lower.
 ##
 ## @param module the module
 ## @param state the passes' state
 export stash_bodies(module: Module, state: PassState) {
     if (module.checked.functions.is_empty and module.checked.structs.is_empty) {
+        return;
+    }
+    if (state.trait_memo.stashed) {
+        for (var (key, function) in state.stashed_from) {
+            if (function.body.is_value()) {
+                _take_body(state, key, function);
+            }
+        }
         return;
     }
     for (var f in module.functions) {
@@ -61,6 +72,11 @@ _stash(state: PassState, owner: String, kind: String, function: FunctionDef) {
         return;
     }
     state.stashed_from.append((key, function));
+    _take_body(state, key, function);
+}
+
+# Moves `function`'s body into the stash under `key`.
+_take_body(state: PassState, key: String, function: FunctionDef) {
     # A body the record's reader skipped stays undecoded.
     if (function.pending_body.is_value()) {
         state.stashed_pending[key] = function.pending_body.value();
