@@ -815,6 +815,48 @@ export struct Array<T> {
         return view;
     }
 
+    ## Returns an iterator over the Array in runs of `size` elements, as
+    ## slices; the last run is shorter when `size` does not divide `count`.
+    ## The same as `slice(0, count).chunks(size)`.
+    ##
+    ## @typeParam TElement the element type, `T` by default
+    ## @param size the number of elements in each run
+    ## @returns an iterator over `count / size` runs, rounded up
+    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @example
+    ##     var rows = Array<int>();
+    ##     for (var row in [1, 2, 3, 4, 5, 6].chunks(3)) {
+    ##         rows.append(row[0]);   # 1, then 4
+    ##     }
+    # `chunks` and `windows` here and on ArraySlice are generic only so they
+    # compile when called: compiled with every Array type, they would make
+    # `ArrayChunks<T>`, whose `Iterator` methods make `Array<ArraySlice<T>>`,
+    # whose `chunks` makes `ArrayChunks<ArraySlice<T>>`, without end.
+    [__Reads]
+    chunks<TElement=T>(size: ulong, location: __ptr<char> = __caller_location()): ArrayChunks<TElement> {
+        return ArrayChunks<TElement>(slice(0, _size), size, size, location);
+    }
+
+    ## Returns an iterator over every run of `size` consecutive elements,
+    ## as slices, each starting one element after the one before. The same
+    ## as `slice(0, count).windows(size)`.
+    ##
+    ## @typeParam TElement the element type, `T` by default
+    ## @param size the number of elements in each run
+    ## @returns an iterator over `count - size + 1` runs, or none when the Array is shorter than `size`
+    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @example
+    ##     var rises = 0;
+    ##     for (var pair in [1, 3, 2, 5].windows(2)) {
+    ##         if (pair[1] > pair[0]) {
+    ##             rises = rises + 1;   # 2 in all
+    ##         }
+    ##     }
+    [__Reads]
+    windows<TElement=T>(size: ulong, location: __ptr<char> = __caller_location()): ArrayChunks<TElement> {
+        return ArrayChunks<TElement>(slice(0, _size), size, 1, location);
+    }
+
     ## Returns the position of the element that `order` reports equal to the
     ## target, searching an Array sorted in the order `order` follows, or
     ## none when there is none.
@@ -1487,6 +1529,87 @@ export struct ArraySlice<T> {
         return it;
     }
 
+    ## Splits the slice in two at `index`: the elements before it, and the
+    ## elements from it on.
+    ##
+    ## @param index the position the second slice starts at; from 0 through `count`
+    ## @returns the slices `slice(0, index)` and `slice(index, count)`
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    ## @panics if `index <= count` does not hold ("ArraySlice slice out of bounds")
+    ## @example
+    ##     var a = [1, 2, 3, 4, 5];
+    ##     var (head, tail) = a.slice(0, 5).split_at(2);   # [1, 2] and [3, 4, 5]
+    split_at(index: ulong, location: __ptr<char> = __caller_location()): (ArraySlice<T>, ArraySlice<T>) {
+        return (slice(0, index, location), slice(index, count, location));
+    }
+
+    ## Returns an iterator over the slice in runs of `size` elements, as
+    ## slices, from the start; the last run is shorter when `size` does not
+    ## divide `count`.
+    ##
+    ## @typeParam TElement the element type, `T` by default
+    ## @param size the number of elements in each run
+    ## @returns an iterator over `count / size` runs, rounded up
+    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @example
+    ##     var a = [1, 2, 3, 4, 5];
+    ##     for (var run in a.slice(0, 5).chunks(2)) {
+    ##         # [1, 2], then [3, 4], then [5]
+    ##     }
+    chunks<TElement=T>(size: ulong, location: __ptr<char> = __caller_location()): ArrayChunks<TElement> {
+        return ArrayChunks<TElement>(this, size, size, location);
+    }
+
+    ## Returns an iterator over every run of `size` consecutive elements,
+    ## as slices, each starting one element after the one before; none when
+    ## the slice is shorter than `size`.
+    ##
+    ## @typeParam TElement the element type, `T` by default
+    ## @param size the number of elements in each run
+    ## @returns an iterator over `count - size + 1` runs, or none
+    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    ## @example
+    ##     var a = [1, 2, 3];
+    ##     for (var pair in a.slice(0, 3).windows(2)) {
+    ##         # [1, 2], then [2, 3]
+    ##     }
+    windows<TElement=T>(size: ulong, location: __ptr<char> = __caller_location()): ArrayChunks<TElement> {
+        return ArrayChunks<TElement>(this, size, 1, location);
+    }
+
+    ## Reports whether both slices have the same count and pairwise equal
+    ## elements, compared with `==` as `Array.find` does. Where the slices
+    ## are is not compared.
+    ##
+    ## @param rhs the slice to compare with
+    ## @returns true when the slices are element-wise equal
+    ## @panics if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
+    ==(rhs: ArraySlice<T>): bool {
+        _check(__caller_location());
+        rhs._check(__caller_location());
+        if (count != rhs.count) {
+            return false;
+        }
+        ulong index = 0;
+        while (index < count) {
+            if (!(_at(index) == rhs._at(index))) {
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+
+    ## Reports whether the slices differ in count or in any element; the
+    ## negation of `==`.
+    ##
+    ## @param rhs the slice to compare with
+    ## @returns true when the slices are not element-wise equal
+    ## @panics if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
+    !=(rhs: ArraySlice<T>): bool {
+        return !(this == rhs);
+    }
+
     ## Returns a new Array holding a copy of the slice's elements, in order.
     ##
     ## The copy is shallow, as `Array.clone` is: for a struct `T` the new
@@ -1617,6 +1740,31 @@ export extend ArraySlice<T: Comparable> {
             index = index + 1;
         }
         return true;
+    }
+
+    ## Returns the lexicographic order of this slice and `other`: the order
+    ## of the first pair of elements that differ (by their `compare`), or,
+    ## when one slice is the start of the other, the shorter first.
+    ##
+    ## @param other the slice to compare with
+    ## @returns a negative number, zero or a positive number as this slice
+    ##   sorts before, with or after `other`
+    ## @panics if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
+    ## @example
+    ##     var a = [1, 2, 3];
+    ##     assert(a.slice(0, 2).compare(a.slice(1, 3)) < 0, "[1, 2] before [2, 3]");
+    compare(other: ArraySlice<T>): int {
+        _check(__caller_location());
+        other._check(__caller_location());
+        ulong index = 0;
+        while (index < count && index < other.count) {
+            var order = _at(index).compare(other._at(index));
+            if (order != 0) {
+                return order;
+            }
+            index = index + 1;
+        }
+        return count.compare(other.count);
     }
 }
 
@@ -1984,6 +2132,83 @@ struct _ArraySorter<T> {
         }
     }
 }
+
+## An `Iterator` over runs of an `ArraySlice`, each itself a slice:
+## returned by `chunks` (runs side by side, the last perhaps shorter) and
+## `windows` (overlapping runs, each one element on).
+##
+## Each run is a slice of the same Array, so it is fail-fast like any
+## slice: once the Array is modified, the next step panics.
+##
+## @typeParam T the element type of the slice
+## @see ArraySlice.chunks
+## @see ArraySlice.windows
+[Value]
+export struct ArrayChunks<T> {
+    ## The slice being split into runs.
+    ArraySlice<T> _slice;
+    ## The number of elements in each run.
+    ulong _size;
+    ## How far each run starts after the one before: `_size` for chunks, 1 for windows.
+    ulong _step;
+    ## The position in `_slice` of the current run; meaningful once `_started` is set.
+    ulong _start;
+    ## Whether `next()` has been called at least once.
+    bool _started;
+
+    ## Makes an iterator over the runs of `size` elements of `slice`, each
+    ## starting `step` after the one before. With `step` equal to `size`
+    ## the last run may be shorter (chunks); otherwise every run is whole
+    ## (windows).
+    ##
+    ## @param slice the slice to split
+    ## @param size the number of elements in each run
+    ## @param step how far each run starts after the one before
+    ## @panics if `size` is 0 ("ArraySlice chunk size is 0")
+    construct(slice: ArraySlice<T>, size: ulong, step: ulong, location: __ptr<char> = __caller_location()) {
+        assert(size > 0, "ArraySlice chunk size is 0", location);
+        _slice = slice;
+        _size = size;
+        _step = step;
+    }
+
+    # Whether a run starts at `_start`: any element left for chunks, a
+    # whole run for windows.
+    _has_run(): bool {
+        if (_step == _size) {
+            return _start < _slice.count;
+        }
+        return _slice.count >= _size && _start <= _slice.count - _size;
+    }
+
+    ## Advances to the next run.
+    ##
+    ## @returns true when there is a current run, false once past the end
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    next(): bool {
+        _slice._check(__caller_location());
+        if (!_started) {
+            _started = true;
+        } else if (_has_run()) {
+            _start = _start + _step;
+        }
+        return _has_run();
+    }
+
+    ## Returns the run the last successful `next()` moved to.
+    ##
+    ## @returns the current run, a slice of up to `size` elements
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    ## @panics if `next()` was never called ("ArrayChunks.current() before next()")
+    ## @panics if `next()` already returned false ("ArrayChunks.current() past the end")
+    current(): ArraySlice<T> {
+        assert(_started, "ArrayChunks.current() before next()");
+        assert(_has_run(), "ArrayChunks.current() past the end");
+        return _slice.slice(_start, Array<T>._min(_start + _size, _slice.count));
+    }
+}
+
+extend ArrayChunks<T> with Iterator<ArraySlice<T>>;
 
 # The start of an array literal: a new Array holding `first`, whose type
 # gives the literal's element type (see `_literal_append`).

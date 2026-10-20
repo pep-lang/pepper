@@ -681,6 +681,44 @@ var middle = a.slice(1, 4);   # views [2, 3, 4]
 var second = middle[1];       # 3
 ```
 
+#### chunks
+
+```pepper
+[__Reads] chunks<TElement=T>(size: ulong): ArrayChunks<TElement>
+```
+
+#### windows
+
+```pepper
+[__Reads] windows<TElement=T>(size: ulong): ArrayChunks<TElement>
+```
+
+Returns an iterator over every run of `size` consecutive elements,
+as slices, each starting one element after the one before. The same
+as `slice(0, count).windows(size)`.
+
+**Type parameters**
+- `TElement` — the element type, `T` by default
+
+**Parameters**
+- `size` — the number of elements in each run
+
+**Returns**
+- an iterator over `count - size + 1` runs, or none when the Array is shorter than `size`
+
+**Panics**
+- if `size` is 0 ("ArraySlice chunk size is 0")
+
+**Example**
+```pepper
+var rises = 0;
+for (var pair in [1, 3, 2, 5].windows(2)) {
+    if (pair[1] > pair[0]) {
+        rises = rises + 1;   # 2 in all
+    }
+}
+```
+
 #### binary_search_by
 
 ```pepper
@@ -1433,6 +1471,128 @@ Returns an iterator over the slice's elements in order; this is what
 **Returns**
 - a new iterator positioned before the first element
 
+#### split_at
+
+```pepper
+split_at(index: ulong): (ArraySlice<T>, ArraySlice<T>)
+```
+
+Splits the slice in two at `index`: the elements before it, and the
+elements from it on.
+
+**Parameters**
+- `index` — the position the second slice starts at; from 0 through `count`
+
+**Returns**
+- the slices `slice(0, index)` and `slice(index, count)`
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+- if `index <= count` does not hold ("ArraySlice slice out of bounds")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4, 5];
+var (head, tail) = a.slice(0, 5).split_at(2);   # [1, 2] and [3, 4, 5]
+```
+
+#### chunks
+
+```pepper
+chunks<TElement=T>(size: ulong): ArrayChunks<TElement>
+```
+
+Returns an iterator over the slice in runs of `size` elements, as
+slices, from the start; the last run is shorter when `size` does not
+divide `count`.
+
+**Type parameters**
+- `TElement` — the element type, `T` by default
+
+**Parameters**
+- `size` — the number of elements in each run
+
+**Returns**
+- an iterator over `count / size` runs, rounded up
+
+**Panics**
+- if `size` is 0 ("ArraySlice chunk size is 0")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4, 5];
+for (var run in a.slice(0, 5).chunks(2)) {
+    # [1, 2], then [3, 4], then [5]
+}
+```
+
+#### windows
+
+```pepper
+windows<TElement=T>(size: ulong): ArrayChunks<TElement>
+```
+
+Returns an iterator over every run of `size` consecutive elements,
+as slices, each starting one element after the one before; none when
+the slice is shorter than `size`.
+
+**Type parameters**
+- `TElement` — the element type, `T` by default
+
+**Parameters**
+- `size` — the number of elements in each run
+
+**Returns**
+- an iterator over `count - size + 1` runs, or none
+
+**Panics**
+- if `size` is 0 ("ArraySlice chunk size is 0")
+
+**Example**
+```pepper
+var a = [1, 2, 3];
+for (var pair in a.slice(0, 3).windows(2)) {
+    # [1, 2], then [2, 3]
+}
+```
+
+#### operator ==
+
+```pepper
+==(rhs: ArraySlice<T>): bool
+```
+
+Reports whether both slices have the same count and pairwise equal
+elements, compared with `==` as `Array.find` does. Where the slices
+are is not compared.
+
+**Parameters**
+- `rhs` — the slice to compare with
+
+**Returns**
+- true when the slices are element-wise equal
+
+**Panics**
+- if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
+
+#### operator !=
+
+```pepper
+!=(rhs: ArraySlice<T>): bool
+```
+
+Reports whether the slices differ in count or in any element; the
+negation of `==`.
+
+**Parameters**
+- `rhs` — the slice to compare with
+
+**Returns**
+- true when the slices are not element-wise equal
+
+**Panics**
+- if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
+
 #### to_array
 
 ```pepper
@@ -1588,6 +1748,31 @@ Reports whether the elements are in `compare` order; see
 **Panics**
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
 
+#### compare
+
+```pepper
+compare(other: ArraySlice<T>): int
+```
+
+Returns the lexicographic order of this slice and `other`: the order
+of the first pair of elements that differ (by their `compare`), or,
+when one slice is the start of the other, the shorter first.
+
+**Parameters**
+- `other` — the slice to compare with
+
+**Returns**
+- a negative number, zero or a positive number as this slice sorts before, with or after `other`
+
+**Panics**
+- if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
+
+**Example**
+```pepper
+var a = [1, 2, 3];
+assert(a.slice(0, 2).compare(a.slice(1, 3)) < 0, "[1, 2] before [2, 3]");
+```
+
 ## ArraySliceIterator
 
 ```pepper
@@ -1634,3 +1819,76 @@ Returns the element the last successful `next()` moved to.
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
 - if `next()` was never called ("ArraySliceIterator.current() before next()")
 - if `next()` already returned false ("ArraySlice index out of bounds")
+
+## ArrayChunks
+
+```pepper
+[Value] struct ArrayChunks<T>
+```
+
+An `Iterator` over runs of an `ArraySlice`, each itself a slice:
+returned by `chunks` (runs side by side, the last perhaps shorter) and
+`windows` (overlapping runs, each one element on).
+
+Each run is a slice of the same Array, so it is fail-fast like any
+slice: once the Array is modified, the next step panics.
+
+**Type parameters**
+- `T` — the element type of the slice
+
+**See also**
+- `ArraySlice.chunks`
+- `ArraySlice.windows`
+
+### Constructor
+
+#### ArrayChunks()
+
+```pepper
+construct(slice: ArraySlice<T>, size: ulong, step: ulong)
+```
+
+Makes an iterator over the runs of `size` elements of `slice`, each
+starting `step` after the one before. With `step` equal to `size`
+the last run may be shorter (chunks); otherwise every run is whole
+(windows).
+
+**Parameters**
+- `slice` — the slice to split
+- `size` — the number of elements in each run
+- `step` — how far each run starts after the one before
+
+**Panics**
+- if `size` is 0 ("ArraySlice chunk size is 0")
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next run.
+
+**Returns**
+- true when there is a current run, false once past the end
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### current
+
+```pepper
+current(): ArraySlice<T>
+```
+
+Returns the run the last successful `next()` moved to.
+
+**Returns**
+- the current run, a slice of up to `size` elements
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+- if `next()` was never called ("ArrayChunks.current() before next()")
+- if `next()` already returned false ("ArrayChunks.current() past the end")
