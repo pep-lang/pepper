@@ -212,6 +212,27 @@ export struct Array<T> {
         }
     }
 
+    ## Returns a pointer to the first element, for passing the elements to C,
+    ## as `String.c_str()` does for text.
+    ##
+    ## The pointer is owned by the Array. It is valid until the Array is
+    ## destroyed or its buffer reallocates (`append`, `insert`, `reserve`, or
+    ## anything else that grows it); writes through it change the elements.
+    ## For an empty Array it is `__null`, even when capacity is reserved.
+    ##
+    ## @returns the address of element 0, or `__null` when the Array is empty
+    ## @see append_from
+    ## @example
+    ##     var a = Array<int>();
+    ##     a.append(7);
+    ##     var p = a.data();   # p[0] == 7
+    data(): __ptr<T> {
+        if (_size == 0) {
+            return __null;
+        }
+        return _data;
+    }
+
     ## Whether the Array has no elements.
     [__Reads]
     var is_empty: bool {
@@ -320,6 +341,40 @@ export struct Array<T> {
         # Slots past `count` are kept empty, so the store only acquires.
         __construct_at(_data[_size], item);
         _size = _size + 1;
+    }
+
+    ## Appends the `count` elements at `source`, in order: the way to fill an
+    ## Array from a C buffer, as `String(data, size)` does for text.
+    ##
+    ## Runs in O(count), with one copy of the whole range for a POD `T`. For
+    ## a struct `T` the Array acquires a reference to each element. `source`
+    ## must point at `count` valid elements, and not into this Array, which
+    ## may reallocate. Invalidates running iterators.
+    ##
+    ## @param source the first element to copy; may be `__null` when `count` is 0
+    ## @param count the number of elements to copy
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
+    ## @see data
+    ## @example
+    ##     var a = Array<u8>();
+    ##     a.append(1);
+    ##     a.append(2);
+    ##     var b = Array<u8>();
+    ##     b.append_from(a.data(), a.count);   # b holds [1, 2]
+    append_from(source: __ptr<T>, count: ulong) {
+        if (__is_pod<T>()) {
+            _append_raw(source, count);
+            return;
+        }
+        _version = _version + 1;
+        _reserve_extra(count);
+        ulong index = 0;
+        while (index < count) {
+            # Slots past `count` are kept empty, so the store only acquires.
+            __construct_at(_data[_size], source[index]);
+            _size = _size + 1;
+            index = index + 1;
+        }
     }
 
     # Appends the `count` elements at `source` with one copy, for a POD `T`
