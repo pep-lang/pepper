@@ -1,4 +1,4 @@
-total(values: ArraySlice<int>): int {
+total(values: ArrayView<int>): int {
     var sum = 0;
     for (var x in values) {
         sum = sum + x;
@@ -53,5 +53,18 @@ main(): int {
     assert(middle.count == 3 && middle[0] == 2, "views [2, 3, 4]");
     assert(total(middle) == 9, "passed to a function");
     assert(middle.to_array() == [2, 3, 4], "copied out");
+    var (head, rest) = middle.split_at(1);
+    assert(head.count == 1 && rest[0] == 3, "split in two");
+    var pairs = 0;
+    for (var pair in numbers.chunks(2)) {
+        pairs = pairs + pair.count;   # [1, 2], [3, 4], [5]
+    }
+    assert(pairs == 5, "every element in some chunk");
+    var rises = 0;
+    for (var pair in numbers.windows(2)) {
+        rises = rises + (pair[1] > pair[0] ? 1 : 0);
+    }
+    assert(rises == 4, "each neighbor is larger");
+    assert(numbers.slice(0, 2) == [9, 1, 2].slice(1, 3), "equal elements");
     return 0;
 }
