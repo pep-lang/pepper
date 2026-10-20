@@ -6920,7 +6920,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             _m_TraitDef_write(out, value.traits[_i1543]);
             {
                 var _own1544 = RecordOut();
-                _own1544.blank_bodies = true;
+                _own1544.blank_bodies = false;
                 _own1544.blank_locs = true;
                 _own1544.pending_as_bytes = true;
                 _m_TraitDef_write(_own1544, value.traits[_i1543]);
@@ -6938,7 +6938,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             _m_TraitDef_write(out, value.traits[_i1543]);
             {
                 var _own1545 = RecordOut();
-                _own1545.blank_bodies = true;
+                _own1545.blank_bodies = false;
                 _own1545.blank_locs = true;
                 _own1545.pending_as_bytes = true;
                 _m_TraitDef_write(_own1545, value.traits[_i1543]);
@@ -12238,6 +12238,7 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
+        out.blank_bodies = false;
         out.unsigned(value.traits.count);
         for (var _item2610 in value.traits) {
             _m_TraitDef_write(out, _item2610);
