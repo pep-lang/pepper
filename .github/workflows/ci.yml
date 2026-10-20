@@ -15,14 +15,14 @@
 # stop them: they test with the newest build that did publish, and the run
 # shows the release's failure beside their results. A commit that changes
 # the compiler (tools/compiler/), or a dispatch on a branch other than main,
-# is tested with its own compiler instead: each job
-# builds it with the installed pep-build (scripts/ci-build-compiler.sh, the
-# release's stage 1), and every later step uses it.
+# is tested with its own compiler instead: each test and cross-link job
+# builds it with the installed pep-build (scripts/ci-build-compiler.sh,
+# the release's stage 1), and every later step uses it.
 #
 # Every job runs on a GitHub-hosted runner: windows-2025, ubuntu-24.04 and
 # macos-15 (arm64). Hosted runners start clean, so each job provisions LLVM
-# (apt, Homebrew, or the llvm-package archive on Windows) and builds from
-# scratch.
+# (apt, Homebrew, or the llvm-package archive on Windows). Each test job
+# starts from the build cache the previous run saved (actions/cache).
 #
 # CI runs on each pull request, on each push to main (a merge), and by
 # hand (workflow_dispatch: `gh workflow run ci.yml --ref <branch>`). main's
@@ -153,81 +153,32 @@ jobs:
       contents: write
     uses: ./.github/workflows/docs.yml
 
+  # The suite, one job per OS, so a run takes three runners: the free
+  # org's are shared by every branch. The shared steps are in
+  # .github/actions/prepare-tests, which also restores the newest earlier
+  # run's build cache for the OS and saves this run's.
   test-windows:
     runs-on: windows-2025
-    # Four jobs, each running a quarter of the suite (`--shard`).
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # Hosted runners have 4 cores: the suite took 16-22 min on the
-    # self-hosted 32-core PC, and provisioning LLVM ~5 more on a cold cache.
-    timeout-minutes: 90
-
+    # The whole suite on one 4-core runner, from a warm build cache when an
+    # earlier run left one.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
-
-      # Windows is the one platform with no package manager that ships a usable
-      # LLVM, so it installs the minimal package published by the llvm-package
-      # workflow (~450 MB) and falls back to the upstream archive (4 GB
-      # extracted) if none exists yet. The cache covers whichever download
-      # happens; its key tracks the setup script's hash, not a hardcoded
-      # version, because a hardcoded key keeps hitting exactly after a version
-      # bump and actions/cache skips its save on an exact hit -- so the new
-      # archive would never be cached and every later run would re-download.
-      # Self-hosted runners keep the installed LLVM and the download cache on
-      # disk, so restoring and saving them through actions/cache is pure cost.
-      - name: Cache LLVM download
-        if: runner.environment == 'github-hosted'
-        uses: actions/cache@v6
+      - uses: ./.github/actions/prepare-tests
         with:
-          path: ~/AppData/Local/pepper/cache
-          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
-
-      - name: Provision LLVM
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-provision-llvm.sh
-
-      # Self-hosted runners keep their disk between jobs, but checkout's clean
-      # step deletes target/, where scripts/pepper-tests.sh builds the tools
-      # and the tests. Build beside the checkout instead, where the clean
-      # cannot reach. Deleting it is always safe: the next job just builds
-      # from scratch.
-      - name: Use persistent target dir (self-hosted)
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
-
-      # The toolchain to test with: the published build of main, installed
-      # with the install scripts.
-      - name: Install the toolchain
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
-
-      # A change to the compiler is tested with that compiler: built here
-      # with the installed one, it replaces it in PEPPER_COMPILER_DIR.
-      - name: Build the changed compiler
-        if: needs.changes.outputs.compiler == 'true'
-        shell: bash
-        run: |
-          bash -euxo pipefail scripts/ci-build-compiler.sh
+          compiler: ${{ needs.changes.outputs.compiler }}
+          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        env:
-          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --shard "$SHARD"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`pep-doc reference`) in the same
@@ -235,73 +186,26 @@ jobs:
       # declaration, and on a tool option missing from its page, reading the
       # tools the Pepper tests step built, pep-doc among them.
       - name: Documentation is current
-        if: matrix.shard == 1
         shell: bash
-        run: '"${PEPPER_TARGET_DIR:-target}/pepper-tests/bin/pep-doc" check'
+        run: '"$PEPPER_TARGET_DIR/pepper-tests/bin/pep-doc" check'
 
   # The suite on macOS against the default LLVM, from Homebrew. Required,
   # through `test` (see the top of this file).
   test-macos:
     runs-on: macos-15
-    # Four jobs, each running a quarter of the suite (`--shard`).
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # 10 more for building a changed compiler.
-    timeout-minutes: 90
-
+    # The whole suite on one 4-core runner, from a warm build cache when an
+    # earlier run left one.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
-
-      - name: Provision LLVM
-        shell: bash
-        run: bash scripts/ci-provision-llvm.sh
-
-      # See test-windows: build beside the checkout, where its clean step
-      # cannot reach.
-      - name: Use persistent target dir
-        shell: bash
-        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
-
-      # The runners share one $TMPDIR, which test folders left by crashed or
-      # cancelled runs fill up. macOS's getcwd can scan every entry of a
-      # folder's parent, so a build in a test folder there took minutes per
-      # path once it held ~300k (tests timing out at 300 s). Older than a
-      # day, none belongs to a running job.
-      - name: Prune stale test folders
-        shell: bash
-        run: |
-          set -euxo pipefail
-          find "$TMPDIR" -maxdepth 1 \( -name 'pepper_*' -o -name 'pep-test-*' \) -mmin +1440 -exec rm -rf {} +
-
-      # The digest tests link Homebrew's libcrypto under `-D USE_LIBCRYPTO`
-      # (scripts/pepper-tests.sh); zlib comes with macOS.
-      - name: Provision libcrypto
-        shell: bash
-        run: |
-          set -euxo pipefail
-          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
-
-      # The toolchain to test with: the published build of main, installed
-      # with the install scripts.
-      - name: Install the toolchain
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
-
-      # A change to the compiler is tested with that compiler: built here
-      # with the installed one, it replaces it in PEPPER_COMPILER_DIR.
-      - name: Build the changed compiler
-        if: needs.changes.outputs.compiler == 'true'
-        shell: bash
-        run: |
-          bash -euxo pipefail scripts/ci-build-compiler.sh
+      - uses: ./.github/actions/prepare-tests
+        with:
+          compiler: ${{ needs.changes.outputs.compiler }}
+          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -312,89 +216,41 @@ jobs:
           # checking 8 compilation units at once ran a 16 GB Mac out of
           # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
-          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3 --shard "$SHARD"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
 
   # The suite on Linux. Required: `test` gates on it.
+  # build_cache_tests verify the cache (`--verify-cache`) on every
+  # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
+  # the other tests make too, which doubles the cost of each warm build.
   test-linux:
     runs-on: ubuntu-24.04
-    # Four jobs, each running a quarter of the suite (`--shard`).
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # 10 more for building a changed compiler.
-    timeout-minutes: 90
-    # build_cache_tests verify the cache (`--verify-cache`) on every
-    # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
-    # the other tests make too, which doubles the cost of each warm build.
-
+    # The whole suite on one 4-core runner, from a warm build cache when an
+    # earlier run left one.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
-
-      # apt serves a complete LLVM dev install in seconds, so there is nothing
-      # to cache and no archive to download.
-      - name: Provision LLVM
-        shell: bash
-        run: bash scripts/ci-provision-llvm.sh
-
-      # See test-windows: build beside the checkout, where its clean step
-      # cannot reach.
-      - name: Use persistent target dir
-        shell: bash
-        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
-
-      # The digest and compress tests also run with `-D USE_LIBCRYPTO` and
-      # `-D USE_ZLIB` (scripts/pepper-tests.sh), which link libcrypto
-      # and zlib.
-      - name: Provision libcrypto and zlib
-        shell: bash
-        run: |
-          set -euxo pipefail
-          dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
-
-      # The corpus also runs under wasmtime, built for wasm32-wasip1
-      # (tools/compiler/corpus_test.pep), which fails here without them.
-      - name: Provision wasi-sdk and wasmtime
-        shell: bash
-        run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
-
-      # The toolchain to test with: the published build of main, installed
-      # with the install scripts.
-      - name: Install the toolchain
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
-
-      # A change to the compiler is tested with that compiler: built here
-      # with the installed one, it replaces it in PEPPER_COMPILER_DIR.
-      - name: Build the changed compiler
-        if: needs.changes.outputs.compiler == 'true'
-        shell: bash
-        run: |
-          bash -euxo pipefail scripts/ci-build-compiler.sh
+      - uses: ./.github/actions/prepare-tests
+        with:
+          compiler: ${{ needs.changes.outputs.compiler }}
+          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        env:
-          SHARD: ${{ matrix.shard }}/4
         run: |
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --shard "$SHARD"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and
       # check they print what the host build prints. Linking for the other
       # operating systems needs their SDKs: the cross-link jobs below do that.
       - name: Cross-compile for Linux arm64
-        if: matrix.shard == 1
         shell: bash
         # This checkout's runtime, not the installed toolchain's.
         env:

@@ -3492,8 +3492,8 @@ that changes `tools/compiler/` (`changes` classifies it), or a dispatch on
 a branch, has each test and
 cross-link job build that compiler with the installed one first
 (`scripts/ci-build-compiler.sh`, the release's stage 1), and every later
-step uses it, so the whole suite tests the changed compiler. The macOS and Linux jobs of `ci.yml` build into a folder beside the
-checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
+step uses it, so the whole suite tests the changed compiler. The test jobs of `ci.yml` build into a folder beside the checkout
+(`PEPPER_TARGET_DIR`).
 
 - **`ci.yml`** (pull requests, pushes to main, and dispatch; main's ruleset
   requires its `test` check before a pull request merges):
@@ -3501,18 +3501,23 @@ checkout (`PEPPER_TARGET_DIR`); the Windows job builds into `target/`.
     skipped, since a skipped job counts as passing) and passes only when
     `test-windows`, `test-linux` and `test-macos` succeeded or the commit
     is prose only. It fails on a cancelled run.
-  - `test-windows` (**`windows-2025`**): provision LLVM 20
-    (`ci-provision-llvm.sh`, cached; the compiler's tests link it through
-    pepper-llvm), install the newest published toolchain (the `x.y.z-dev`
-    prerelease `release.yml` publishes on each merge, or a release with a
-    higher version, through `install.sh` / `install.ps1`), build `tools/compiler` with it when it changed
-    (`ci-build-compiler.sh`), run `scripts/pepper-tests.sh`, and `pep-doc
-    check`. Each of the three is a matrix of four jobs, each running a
-    quarter of the tests (`--shard I/4`); the first also runs `pep-doc
-    check` and, on Linux, the arm64 cross-compile.
-  - `test-macos` (**`macos-15`**) and `test-linux` (**`ubuntu-24.04`**)
-    do the same; `test-linux` also cross-compiles a few examples for Linux
-    arm64 and runs them under qemu. Both are required, through `test`,
+  - `test-windows` (**`windows-2025`**), `test-macos` (**`macos-15`**)
+    and `test-linux` (**`ubuntu-24.04`**) run the whole suite, one job per
+    OS, so a run takes three runners. Their setup is the composite action
+    `.github/actions/prepare-tests`: provision LLVM 20
+    (`ci-provision-llvm.sh`, cached on Windows; the compiler's tests link
+    it through pepper-llvm) and the libraries the tests link, install the
+    newest published toolchain (the `x.y.z-dev` prerelease `release.yml`
+    publishes on each merge, or a release with a higher version, through
+    `install.sh` / `install.ps1`), restore the newest build cache an
+    earlier run saved for the OS (`.pep/cache`, `runtime/.pep/cache`,
+    `tools/.pep/cache` and the changed compiler; actions/cache, saved again
+    after the job), build `tools/compiler` when it changed
+    (`ci-build-compiler.sh`), and give the compiler a time taken from its
+    contents, since the cache keys on the compiler's path, size and time.
+    Then `scripts/pepper-tests.sh` runs. The Windows job also runs `pep-doc
+    check`, and the Linux job cross-compiles a few examples for Linux arm64
+    and runs them under qemu. All three are required, through `test`,
     which fails on a cancelled or timed-out job as on a failed one.
   - `cross-sysroots`, `cross-link` and `cross-run` (not required)
     cross-link from each runner for the other two operating systems and

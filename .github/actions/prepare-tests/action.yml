@@ -1,0 +1,132 @@
+# What scripts/pepper-tests.sh needs on a hosted runner, for CI's test-*
+# jobs (ci.yml): LLVM, the libraries the tests link, the toolchain to test
+# with, and PEPPER_TARGET_DIR. It restores the newest build cache an
+# earlier run saved for this OS and saves this run's after the job. With
+# `compiler`, the checkout's compiler is built, and PEPPER_COMPILER_DIR
+# names it.
+name: Prepare the Pepper tests
+description: Provision a runner for scripts/pepper-tests.sh and restore its build cache
+
+inputs:
+  compiler:
+    description: "'true' to test the checkout's compiler instead of the installed one"
+    required: true
+  expect-commit:
+    description: the commit the installed toolchain must be built from, or empty
+    required: false
+    default: ""
+  token:
+    description: a GitHub token, for the release downloads
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Windows is the one platform with no package manager that ships a usable
+    # LLVM, so it installs the minimal package published by the llvm-package
+    # workflow (~450 MB) and falls back to the upstream archive (4 GB
+    # extracted) if none exists yet. The cache covers whichever download
+    # happens; its key tracks the setup script's hash, not a hardcoded
+    # version, because a hardcoded key keeps hitting exactly after a version
+    # bump and actions/cache skips its save on an exact hit -- so the new
+    # archive would never be cached and every later run would re-download.
+    - name: Cache LLVM download
+      if: runner.os == 'Windows'
+      uses: actions/cache@v6
+      with:
+        path: ~/AppData/Local/pepper/cache
+        key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
+
+    # apt and Homebrew serve the others in seconds.
+    - name: Provision LLVM
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: bash scripts/ci-provision-llvm.sh
+
+    # Builds go beside the checkout, so the cache below can name one place
+    # on every OS.
+    - name: Use a target dir beside the checkout
+      shell: bash
+      run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+
+    # The runners share one $TMPDIR, which test folders left by crashed or
+    # cancelled runs fill up. macOS's getcwd can scan every entry of a
+    # folder's parent, so a build in a test folder there took minutes per
+    # path once it held ~300k (tests timing out at 300 s). Older than a
+    # day, none belongs to a running job.
+    - name: Prune stale test folders
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        find "$TMPDIR" -maxdepth 1 \( -name 'pepper_*' -o -name 'pep-test-*' \) -mmin +1440 -exec rm -rf {} +
+
+    # The digest tests link libcrypto under `-D USE_LIBCRYPTO`, and on Linux
+    # the compress tests link zlib under `-D USE_ZLIB`
+    # (scripts/pepper-tests.sh); macOS comes with zlib.
+    - name: Provision libcrypto
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+    - name: Provision libcrypto and zlib
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
+
+    # The corpus also runs under wasmtime, built for wasm32-wasip1
+    # (tools/compiler/corpus_test.pep), which fails here without them.
+    - name: Provision wasi-sdk and wasmtime
+      if: runner.os == 'Linux'
+      shell: bash
+      run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
+
+    # The toolchain to test with: the published build of main, installed
+    # with the install scripts.
+    - name: Install the toolchain
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PEPPER_EXPECT_COMMIT: ${{ inputs.expect-commit }}
+      run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+
+    # The build cache of the test programs and tools (pep-test builds in
+    # runtime/ and tools/, pepper-tests.sh the tools in the checkout), and
+    # the changed compiler with its build folder: restored from the newest
+    # earlier run for this OS, saved after the job. The cache keys on the
+    # compiler's path, size and time and on each source's path, all the
+    # same between runs on one OS.
+    - name: Restore and save the build cache
+      uses: actions/cache@v6
+      with:
+        path: |
+          .pep/cache
+          runtime/.pep/cache
+          tools/.pep/cache
+          ${{ runner.workspace }}/target-test/compiler
+        key: pepper-tests-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
+        restore-keys: pepper-tests-${{ runner.os }}-
+
+    # A change to the compiler is tested with that compiler, built with
+    # the installed one (scripts/ci-build-compiler.sh, the release's stage
+    # 1).
+    - name: Build the changed compiler
+      if: inputs.compiler == 'true'
+      shell: bash
+      run: bash -euxo pipefail scripts/ci-build-compiler.sh
+
+    # The cache keys on the compiler's time too, and each job installs the
+    # toolchain afresh. A time taken from the compiler's contents is the same
+    # in every job, and differs between compilers. Perl, since macOS's touch
+    # takes no `-d @seconds` and has no sha256sum.
+    - name: Give the compiler a time from its contents
+      shell: bash
+      run: |
+        set -euxo pipefail
+        compiler="$PEPPER_COMPILER_DIR/pep-build"
+        [ -f "$compiler" ] || compiler="$compiler.exe"
+        perl -MDigest::SHA -e '$f = shift; $t = hex(substr(Digest::SHA->new(256)->addfile($f, "b")->hexdigest, 0, 7)); utime($t, $t, $f) or die "$f: $!\n"' "$compiler"
