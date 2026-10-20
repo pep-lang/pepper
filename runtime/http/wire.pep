@@ -355,6 +355,55 @@ _http_write_stream(connection: _HttpConnection, source: io.Reader, length: long,
     return io.IoResult<void>.ok();
 }
 
+# Why `headers` cannot be sent, or none: a field name that is not a token,
+# or a value with CR, LF or NUL, would let it add fields or end the head
+# (RFC 9110 §5.1, §5.5).
+_http_bad_fields(headers: Headers): String? {
+    for (var name in headers.names()) {
+        if (!_http_is_token(name)) {
+            return Optional<String>.Value($"the field name '{name}' is not a token");
+        }
+        for (var value in headers.values(name)) {
+            if (!_http_is_field_value(value)) {
+                return Optional<String>.Value($"the value of the field '{name}' holds CR, LF or NUL");
+            }
+        }
+    }
+    return Optional<String>.Empty;
+}
+
+# Whether `text` is an RFC 9110 token: one or more letters, digits and
+# "!#$%&'*+-.^_`|~".
+_http_is_token(text: String): bool {
+    if (text.size == 0) {
+        return false;
+    }
+    ulong i = 0;
+    while (i < text.size) {
+        var c = text.byte_at(i);
+        var alphanumeric = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+        if (!alphanumeric && (c >= 128 || !"!#$%&'*+-.^_`|~".contains(text.substr_bytes(i, 1)))) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+# Whether `text` can be sent as a field value or reason phrase: it has no
+# CR, LF or NUL.
+_http_is_field_value(text: String): bool {
+    ulong i = 0;
+    while (i < text.size) {
+        var c = text.byte_at(i);
+        if (c == 0 || c == '\r' || c == '\n') {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
 # Appends a start line, the fields and the empty line to `out`.
 _http_write_head(out: u8[], start: String, headers: Headers) {
     _http_append(out, start);

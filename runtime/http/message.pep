@@ -10,6 +10,10 @@ import "server";
 ## name may hold several values, kept in the order added. Different names
 ## have no defined order, as HTTP allows.
 ##
+## `Headers` takes any name and value, but a `Client` refuses to send a
+## field name that is not an RFC 9110 token or a value with CR, LF or NUL,
+## and a `Server` answers `500` instead of sending one.
+##
 ## @example
 ##     var headers = http.Headers();
 ##     headers.add("Accept", "text/html");

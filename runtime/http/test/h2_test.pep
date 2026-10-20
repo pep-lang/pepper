@@ -51,6 +51,12 @@ private answer(request: http.Request): http.Response {
         expect_false(request.can_upgrade());
         return http.Response().upgrade("echo", (connection) => {});
     }
+    if (path == "/inject") {
+        var injected = http.Response(303);
+        injected.headers["Location"] = "/next
+Set-Cookie: admin=1";
+        return injected;
+    }
     if (path == "/slow") {
         async.sleep(os.Duration.from_milliseconds(50));
         return http.Response(200).set_text("slow");
@@ -110,6 +116,10 @@ requests_share_one_connection() {
 
             var upgrade = exchange(connection, http.Request("GET", base + "/upgrade"));
             expect_equal(upgrade.status, 501);  # an upgrade on a stream is refused
+
+            var injected = exchange(connection, http.Request("GET", base + "/inject"));
+            expect_equal(injected.status, 500);  # a value with CR or LF is refused
+            expect_false(injected.headers.has("location"));
 
             var head = exchange(connection, http.Request("HEAD", base + "/hello"));
             expect_equal(head.status, 200);
