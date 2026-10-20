@@ -196,6 +196,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
     var target = line.substr_bytes(space as ulong + 1, (last - space - 1) as ulong);
     var version = line.substr_bytes(last as ulong + 1, line.size - last as ulong - 1);
     var request = Request(method, target);
+    request._upgradable = version == "HTTP/1.1";
     var fields = _http_read_headers(reader, request.headers);
     if (fields.is_err()) {
         if (fields.error().code == _http_code_too_large()) {
@@ -232,7 +233,16 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         return false;
     }
     var response = handler(request);
+    if (response._upgrade && !request._upgradable) {
+        response = Response(501);  # HTTP/1.0 cannot switch protocols
+    }
     var sent = _http_send_response(reader._connection, response, method == "HEAD", keep, version == "HTTP/1.1");
+    if (response._upgrade) {
+        if (sent) {
+            response._takeover(Connection(reader));
+        }
+        return false;
+    }
     return keep && sent;
 }
 
@@ -282,6 +292,12 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
         }
     }
     var status = response.status;
+    if (response._upgrade) {
+        headers.add("Connection", "Upgrade");
+        var upgrade = Array<u8>();
+        _http_write_head(upgrade, "HTTP/1.1 101 Switching Protocols", headers);
+        return connection._write_all(upgrade).is_ok();
+    }
     var bodiless = status < 200 || status == 204 || status == 304;
     var streamed = response._streamed && !bodiless;
     if (streamed) {
@@ -317,6 +333,78 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
     }
     return keep;
 }
+
+## A connection a `Server` handler took over by answering with
+## `Response.upgrade`: the raw stream after the `101 Switching Protocols`
+## head, TCP or (under `Server.bind_tls`) TLS, as an `io.Reader` and an
+## `io.Writer`.
+##
+## Reads return first the bytes the server had already read past the
+## request (a client may send its first message right after the request),
+## then what arrives. Like the handler, it belongs to the connection's task.
+##
+## @example
+##     upgraded(request: http.Request): http.Response {
+##         return http.Response().upgrade("echo", (connection) => {
+##             var data = Array<u8>();
+##             while (connection.read(data, 4096).value() > 0) {
+##                 connection.write_all(data);
+##                 data.clear();
+##             }
+##         });
+##     }
+export struct Connection {
+    # The connection's reader, holding the bytes read past the request.
+    var _reader: _HttpReader;
+
+    ## Wraps the connection `reader` reads. The server makes one for
+    ## `Response.upgrade`.
+    ##
+    ## @param reader the connection and the bytes it buffered
+    construct(reader: _HttpReader) {
+        this._reader = reader;
+    }
+
+    ## Waits until some bytes are available, then appends up to `max` of
+    ## them to `buffer`: the ones buffered past the request first.
+    ##
+    ## @param buffer the array the bytes are appended to
+    ## @param max the most bytes to read
+    ## @returns the number of bytes appended, 0 at the end of the stream; an
+    ##   error when the stream fails
+    read(buffer: u8[], max: ulong): io.IoResult<ulong> {
+        return this._reader._some(buffer, max);
+    }
+
+    ## Writes what the stream takes in one call, which may be less than all
+    ## of `data`.
+    ##
+    ## @param data the bytes to write
+    ## @returns the number of bytes written; an error when the stream fails
+    write(data: u8[]): io.IoResult<ulong> {
+        return this._reader._connection._writer.write(data);
+    }
+
+    ## Writes all of `data`.
+    ##
+    ## @param data the bytes to write
+    ## @returns an Ok result once every byte is written; an error when the
+    ##   stream fails
+    write_all(data: u8[]): io.IoResult<void> {
+        return this._reader._connection._write_all(data);
+    }
+
+    ## Closes the connection, sending TLS close_notify first under TLS. The
+    ## server also closes it when the `takeover` function returns; closing
+    ## again does nothing.
+    close() {
+        this._reader._connection._close();
+    }
+}
+
+extend Connection with io.Reader;
+
+extend Connection with io.Writer;
 
 ## Returns the standard reason phrase for an HTTP status code.
 ##

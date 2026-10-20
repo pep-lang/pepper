@@ -231,6 +231,20 @@ Creates a request with no headers and no body.
 
 ### Methods
 
+#### can_upgrade
+
+```pepper
+can_upgrade(): bool
+```
+
+Reports whether a `Server` handler may answer this request with
+`Response.upgrade`: true for an HTTP/1.1 request, false for HTTP/1.0,
+for a request on an HTTP/2 stream (which cannot switch protocols), and
+for one a client builds.
+
+**Returns**
+- true when the connection can be taken over
+
 #### set_text
 
 ```pepper
@@ -424,6 +438,42 @@ Creates a response with no headers and no body.
 - `status` — the status code
 
 ### Methods
+
+#### upgrade
+
+```pepper
+upgrade(protocol: String, takeover: (Connection) => void): Response
+```
+
+Makes this a `101 Switching Protocols` response that hands the
+connection to `takeover`, for a protocol that starts as HTTP/1.1, such
+as WebSocket. The server sends the status, `Upgrade: protocol`,
+`Connection: Upgrade` and the other headers (no `Content-Length`, no
+body), then calls `takeover` in the connection's task with the
+connection, and serves no more HTTP on it. The connection closes when
+`takeover` returns, or earlier at `Connection.close()`.
+
+Only a request whose `can_upgrade()` is true can be upgraded: for
+any other (HTTP/1.0, or an HTTP/2 stream) the server sends `501 Not
+Implemented` instead and never calls `takeover`.
+
+**Parameters**
+- `protocol` — the `Upgrade` field: the protocol the connection switches to, such as `websocket`
+- `takeover` — speaks the new protocol on the connection; bytes the client sent right after the request are the first it reads
+
+**Returns**
+- this response
+
+**Example**
+```pepper
+echo(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) => {
+        for (var chunk in connection.chunks(4096)) {
+            connection.write_all(chunk.value());
+        }
+    });
+}
+```
 
 #### set_text
 

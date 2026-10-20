@@ -46,6 +46,11 @@ private answer(request: http.Request): http.Response {
         moved.headers["Location"] = "/hello?moved";
         return moved;
     }
+    if (path == "/upgrade") {
+        # An HTTP/2 stream cannot switch protocols.
+        expect_false(request.can_upgrade());
+        return http.Response().upgrade("echo", (connection) => {});
+    }
     if (path == "/slow") {
         async.sleep(os.Duration.from_milliseconds(50));
         return http.Response(200).set_text("slow");
@@ -102,6 +107,9 @@ requests_share_one_connection() {
 
             var missing = exchange(connection, http.Request("GET", base + "/nowhere"));
             expect_equal(missing.status, 404);
+
+            var upgrade = exchange(connection, http.Request("GET", base + "/upgrade"));
+            expect_equal(upgrade.status, 501);  # an upgrade on a stream is refused
 
             var head = exchange(connection, http.Request("HEAD", base + "/hello"));
             expect_equal(head.status, 200);
