@@ -150,6 +150,10 @@ file of tests can keep a `main` of its own. `pep-build --test`, which
   tests of them all into one program, and `--run FILE::NAME` tells apart
   two tests of one name.
 
+A `[Test]` function that [platform selection](platform-selection.md)
+leaves out (`[Target(OS(Linux))]` in a build for Windows) is not part of
+the test program: `--list` does not show it.
+
 A `[Test]` function that takes parameters, returns a value or is generic is
 an error, as are `[Test]` on a method and `[ShouldPanic]` without `[Test]`:
 

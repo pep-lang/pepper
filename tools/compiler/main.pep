@@ -349,7 +349,7 @@ main(args: String[]): int {
             for (var p in paths) {
                 test_files.append(Path(p));
             }
-            var made = driver.test_program(test_files);
+            var made = driver.test_program(test_files, setup.target);
             if (made.is_err()) {
                 _report(made.error());
                 return 1;
@@ -363,7 +363,7 @@ main(args: String[]): int {
                 File.stderr().write_all($"cannot read {entry}: {read.error().message}\n");
                 return 1;
             }
-            setup.sources[link.path_key(entry)] = driver.add_test_main(entry, read.value());
+            setup.sources[link.path_key(entry)] = driver.add_test_main(entry, read.value(), setup.target);
         }
     }
     # Where a build writes: `-o`, else named for the entry file or the

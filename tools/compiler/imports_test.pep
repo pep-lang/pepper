@@ -149,7 +149,7 @@ _test_files(dir: Path, out: Array<(Path, link.Setup)>) {
         setup.import_dirs.append(Path(_REPO).join(Path("tools")));
         setup.target.build_options[link.TEST_BUILD_OPTION] = "1";
         setup.forced_imports.append(driver.TESTING_MODULE);
-        setup.sources[link.path_key(entry.path)] = driver.add_test_main(entry.path, text.value());
+        setup.sources[link.path_key(entry.path)] = driver.add_test_main(entry.path, text.value(), setup.target);
         out.append((entry.path, setup));
     }
 }
