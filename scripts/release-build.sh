@@ -225,11 +225,11 @@ mkdir -p "$pepc_build"
 # Stage 1: pepc built by stage 0. Stage 2, which ships: pepc built by
 # stage 1. Both with the runtime of this checkout.
 export PEPPER_RUNTIME="$repo_root/runtime"
-# The packages pepc and pep-lsp depend on, fetched up front, so
-# pep-package's output (which package, and git's error) is in the log when
-# a fetch fails. The fetch uses a pep-package stage 0 builds from this
-# checkout, with its runtime: stage 0's own may predate a runtime fix it
-# needs (on glibc before 2.29 it could not start git in a folder).
+# The packages pepc, pep-lsp and pep-package depend on, fetched up front
+# with stage 0's own pep-package (pep-package needs `semver` before it can
+# be built), so pep-package's output (which package, and git's error) is in
+# the log when a fetch fails. Stage 0 starts git in a folder on glibc
+# before 2.29 too (0.11.0-dev does), which the manylinux build needs.
 # pep-build fetches only what is missing, so the builds below fetch nothing.
 # shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
 # runtime's number extensions that declare `Comparable` when it checks
@@ -237,10 +237,8 @@ export PEPPER_RUNTIME="$repo_root/runtime"
 # units. Drop the variable once the published stage 0 is 0.10.0-dev or
 # later.
 export PEPC_NO_COMPILATION_UNITS=1
-"$stage0/pep-build$exe" -O tools/pep-package/main.pep \
-  -o "$pepc_build/pep-package$exe" --build "$pepc_build/pep-package-build"
-for project in tools/compiler tools/pep-lsp; do
-  "$pepc_build/pep-package$exe" -C "$project" fetch
+for project in tools/compiler tools/pep-lsp tools/pep-package; do
+  "$stage0/pep-package$exe" -C "$project" fetch
 done
 "$stage0/pep-build$exe" -O tools/compiler/main.pep \
   -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"

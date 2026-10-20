@@ -136,7 +136,7 @@ extend Generator {
                 if (cached.is_value()) {
                     return Result<llvm.Value>.ok(cached.value());
                 }
-                var ptr = builder.global_string(node.value, "str");
+                var ptr = string_data(node.value, "str");
                 global_strings[node.value] = ptr;
                 return Result<llvm.Value>.ok(ptr);
             }

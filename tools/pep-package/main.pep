@@ -19,12 +19,12 @@ import cli;
 import [Directory, File, Path] from io;
 import os;
 import process;
+import [Version, parse_range] from semver;
 import toml;
 import "git";
 import "lock";
 import "manifest";
 import "resolve";
-import "semver";
 
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
@@ -301,7 +301,7 @@ struct Project {
             var newest = Optional<Version>.Empty;
             for (var ref in refs) {
                 if (ref.name.starts_with("refs/tags/")) {
-                    var version = parse_version(ref.name.substr(10, ref.name.length));
+                    var version = tag_version(ref.name.substr(10, ref.name.length));
                     if (version.is_value()
                         and version.value().prerelease.is_empty
                         and (newest.is_empty() or version.value().compare(newest.value()) > 0)) {

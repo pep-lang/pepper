@@ -1,5 +1,5 @@
 # Array algorithms (binary search, fill, retain, dedup, resize, split_off)
-# and ArraySlice, including how each keeps the counts of struct elements.
+# and ArrayView, including how each keeps the counts of struct elements.
 
 struct Tally {
     int alive;
@@ -137,7 +137,7 @@ split_off_moves_the_tail() {
     expect_equal(__refcount<Tally>(t), 3);
 }
 
-sum(values: ArraySlice<int>): int {
+sum(values: ArrayView<int>): int {
     var total = 0;
     for (var x in values) {
         total = total + x;
@@ -168,7 +168,7 @@ slice_views_part_of_the_array() {
 [Test]
 slice_keeps_its_array_alive() {
     var t = Tally();
-    var view = ArraySlice<Tally>();
+    var view = ArrayView<Tally>();
     {
         var items = Array<Tally>();
         items.append(t);
@@ -186,7 +186,7 @@ slice_past_the_end_panics() {
 }
 
 [Test]
-[ShouldPanic("ArraySlice index out of bounds")]
+[ShouldPanic("ArrayView index out of bounds")]
 slice_index_past_its_end_panics() {
     var a = [1, 2, 3];
     var view = a.slice(0, 2);

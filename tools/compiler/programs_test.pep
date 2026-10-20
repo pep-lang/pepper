@@ -5,8 +5,9 @@
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`; and the error for a member a
-# value's type lacks inside an interpolation; and a `match` in a generic
-# method of another module's struct. The programs are in
+# value's type lacks inside an interpolation; string literals that hold
+# a NUL; and a `match` in a generic method of another module's struct. The
+# programs are in
 # `testdata/`.
 
 import [File, Path] from io;
@@ -388,4 +389,13 @@ process_exec_replaces_the_program_and_keeps_its_id() {
     # `/private/tmp`.
     expect_equal(lines[3], Path("/tmp").canonicalize().value().to_string());
     expect_exit(output, 9);
+}
+
+# ── literals ────────────────────────────────────────────────────────────────
+
+[Test]
+string_literal_with_nul_keeps_its_bytes_beside_its_prefix() {
+    var output = _run("string_literal_nul");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "1 97\n3 97 0 98\n");
 }
