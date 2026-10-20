@@ -1,7 +1,9 @@
 # A generic method may return what its generic overload returns, called
 # bare: in `read<Item>()`, `read<T>(Mode.Skip)` calls the other `read`,
 # whose specialization does not exist yet, and not the free function
-# `read` of the same name (#32, where POSIX's `read` took the call).
+# `read` of the same name (#32, where POSIX's `read` took the call). On
+# Linux and macOS the runtime's `read` also makes linking rename this
+# file's, which must not rename the call.
 
 enum Mode {
     Keep,

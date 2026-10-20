@@ -758,6 +758,17 @@ export trait ScopeWalk {
             }
             FunctionCall(function, arguments, span) => {
                 visit_callee(function);
+                # A bare `m<T>(...)` in a method calls the member `m`, as a
+                # bare `m(...)` does: only its type arguments name types.
+                match (function) {
+                    TypeLiteral(type_name) => {
+                        if (is_local(type_name.name)) {
+                            walk_type_name(type_name);
+                            return Expression.FunctionCall(function, _visit_all(arguments), span);
+                        }
+                    }
+                    else => {}
+                }
                 var callee = visit_expression(function);
                 return Expression.FunctionCall(callee, _visit_all(arguments), span);
             }
