@@ -56,8 +56,10 @@ struct _HttpConnection {
     var _tls: tls.TlsStream?;
     var _reader: io.Reader;
     var _writer: io.Writer;
+    var _closed: bool;
 
     construct(tcp: io.TcpStream) {
+        this._closed = false;
         this._tcp = tcp;
         this._tls = Optional<tls.TlsStream>.Empty;
         this._reader = tcp;
@@ -79,8 +81,13 @@ struct _HttpConnection {
         return this._writer.write_all(data);
     }
 
-    # Ends the connection: close_notify over TLS, then the socket.
+    # Ends the connection: close_notify over TLS, then the socket. Again,
+    # it does nothing.
     _close() {
+        if (this._closed) {
+            return;
+        }
+        this._closed = true;
         if (this._tls.is_value()) {
             this._tls.value().shutdown();
             this._tls.value().close();

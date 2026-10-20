@@ -10,7 +10,7 @@
 ##
 ## - [Messages](http-message.md): `Headers`, `Request`, and `Response`
 ## - [Client](http-client.md): `Client`, `Session` and `BodyReader`
-## - [Server](http-server.md): `Server` and `reason_phrase`
+## - [Server](http-server.md): `Server`, `Connection` and `reason_phrase`
 ##
 ## @example
 ##     import async;
@@ -46,5 +46,6 @@ export MAX_RESPONSE_BODY;
 export BodyReader;
 export Session;
 export Server;
+export Connection;
 export MAX_REQUEST_BODY;
 export reason_phrase;

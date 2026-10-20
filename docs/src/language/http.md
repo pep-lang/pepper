@@ -125,6 +125,28 @@ the trait of files, sockets and the `compress` readers:
 {{#include ../../examples/http-streaming.pep}}
 ```
 
+## Switching protocols
+
+A protocol that starts as an HTTP/1.1 request, such as WebSocket, can be
+served from a handler: it answers with
+`Response().upgrade(protocol, takeover)`.
+
+- The server sends `101 Switching Protocols` with `Upgrade: protocol`,
+  `Connection: Upgrade` and the response's other headers, and no
+  `Content-Length` or body. It then calls `takeover` in the connection's
+  task with an `http.Connection`, and serves no more HTTP on it.
+- A `Connection` is an `io.Reader` and an `io.Writer` over the raw stream,
+  TCP or, under `Server.bind_tls`, TLS. Its first reads return the bytes
+  the client sent right after the request head, which the server had
+  already read. It closes when `takeover` returns, or at `close()`.
+- `request.can_upgrade()` says whether the connection can switch: true for
+  HTTP/1.1, false for HTTP/1.0 and for a request on an HTTP/2 stream. On
+  HTTP/2 an upgrade response becomes `501 Not Implemented`.
+
+```pepper
+{{#include ../../examples/http-upgrade.pep}}
+```
+
 ## Reusing connections
 
 `client.session()` returns a `Session`, which sends requests with the
@@ -185,6 +207,8 @@ flow-controlled so that one large transfer does not hold up the rest.
   `MAX_REQUEST_BODY` (16 MiB).
 - HTTP/2 server push, stream priorities and the `Upgrade: h2c` handshake
   are not supported; a client speaks HTTP/2 only over TLS.
+- A server handler can take over only an HTTP/1.1 connection; WebSocket
+  over HTTP/2 (RFC 8441) is not supported.
 
 The reference pages for [messages](../reference/http-message.md), the
 [client](../reference/http-client.md), the

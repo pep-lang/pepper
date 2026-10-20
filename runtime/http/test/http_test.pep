@@ -59,6 +59,18 @@ handle(request: http.Request): http.Response {
             request.headers["authorization"] + "|" + request.headers["cookie"] + "|" + request.headers["x-test"]
         );
     }
+    if (path == "/upgrade" && request.can_upgrade()) {
+        # Takes the connection over and echoes every byte back.
+        var upgraded = http.Response().upgrade("echo", (connection) => {
+            for (var chunk in connection.chunks(4096)) {
+                if (chunk.is_err() || connection.write_all(chunk.value()).is_err()) {
+                    break;
+                }
+            }
+        });
+        upgraded.headers["X-Protocol"] = "echo";
+        return upgraded;
+    }
     if (path == "/framing") {
         var framing = request.headers["transfer-encoding"] + "|" + request.headers["content-length"];
         return http.Response(200).set_text(framing + "|" + to_string(request.body().count));
@@ -234,6 +246,38 @@ keep_alive_and_chunked_requests() {
             expect_true(reply.starts_with("HTTP/1.1 100 Continue"));
             expect_true(reply.contains("HTTP/1.1 200 OK"));
             expect_true(reply.contains("hello chunks"));  # the chunks joined
+        }
+    );
+}
+
+[Test]
+a_handler_takes_over_the_connection_after_101() {
+    async.run(
+        () => {
+            var port = port_of(start_server());
+            var stream = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
+            # The first bytes of the new protocol travel with the request head.
+            stream.write_all(
+                "GET /upgrade HTTP/1.1\r\nHost: localhost\r\nUpgrade: echo\r\nConnection: Upgrade\r\n\r\nearly".bytes()
+            );
+            var reply = Array<u8>();
+            while (!String._from_bytes(reply).ends_with("early")) {
+                expect_true(stream.read(reply, 4096).value() > 0);
+            }
+            stream.write_all(" late".bytes());
+            stream.shutdown_write();
+            while (stream.read(reply, 4096).value() > 0) {}
+            var text = String._from_bytes(reply);
+            expect_true(text.starts_with("HTTP/1.1 101 Switching Protocols\r\n"));
+            var lower = text.lower();
+            expect_true(lower.contains("upgrade: echo\r\n"));
+            expect_true(lower.contains("connection: upgrade\r\n"));
+            expect_true(lower.contains("x-protocol: echo\r\n"));
+            expect_false(lower.contains("content-length"));
+            expect_true(text.ends_with("\r\n\r\nearly late"));  # raw bytes, not HTTP, after the head
+
+            # HTTP/1.0 cannot upgrade: the handler sees `can_upgrade()` false.
+            expect_true(raw(port, "GET /upgrade HTTP/1.0\r\n\r\n").starts_with("HTTP/1.1 404"));
         }
     );
 }
