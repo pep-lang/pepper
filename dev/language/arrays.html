@@ -215,6 +215,26 @@ main(): int {
     tail.fill(9);
     assert(tail == [9, 9], "filled");
 
+    # Reshaping.
+    var digits = [1, 2, 3, 4, 5];
+    digits.rotate(2);
+    assert(digits == [3, 4, 5, 1, 2], "rotated");
+    var drained = digits.drain(1, 3);
+    assert(digits == [3, 1, 2] &amp;&amp; drained == [4, 5], "drained");
+    digits.remove_if((x) =&gt; x &gt; 2);
+    digits.extend_from(drained.slice(0, 1));
+    assert(digits == [1, 2, 4], "filtered and extended");
+
+    # Ordering without a full stable sort.
+    var scores = [40, 95, 12, 77, 63, 8];
+    scores.select_nth(2);
+    assert(scores[2] == 40, "the third smallest");
+    scores.partial_sort(2);
+    assert(scores[0] == 8 &amp;&amp; scores[1] == 12, "the two smallest, in order");
+    scores.sort_unstable((x, y) =&gt; y - x);
+    assert(scores == [95, 77, 63, 40, 12, 8], "descending");
+    assert([1, 2, 3].compare([1, 3]) &lt; 0, "lexicographic");
+
     # A slice views part of an array without copying it.
     var numbers = [1, 2, 3, 4, 5];
     var middle = numbers.slice(1, 4);
@@ -246,10 +266,31 @@ panics with <code>Array modified during retain</code>.</li>
 <li><code>dedup()</code> removes each element equal (<code>==</code>) to the one before it; on a
 sorted array that removes every duplicate.</li>
 <li><code>resize(count, value)</code> shortens the array, or appends copies of <code>value</code>.</li>
-<li><code>split_off(index)</code> moves the elements from <code>index</code> on into a new array.</li>
+<li><code>split_off(index)</code> moves the elements from <code>index</code> on into a new array,
+and <code>drain(start, end)</code> moves out the elements in between.</li>
+<li><code>remove_if(remove)</code> is the opposite of <code>retain</code>.</li>
+<li><code>rotate(count)</code> moves the first <code>count</code> elements to the end.</li>
+<li><code>extend_from(slice)</code> appends the elements of a slice, which may be a
+slice of the same array.</li>
 </ul>
 <p>Each counts as modifying the array, so a <code>for</code> loop over it panics on its
 next step.</p>
+<h2 id="ordering"><a class="header" href="#ordering">Ordering</a></h2>
+<ul>
+<li><code>sort_unstable()</code> sorts with pattern-defeating quicksort: no scratch
+buffer, and O(count) on input that is already sorted or all equal, but
+equal elements may change places. <code>sort()</code> is the stable sort.</li>
+<li><code>select_nth(nth)</code> puts the element a sort would put at <code>nth</code> there, with
+smaller elements before it and larger ones after (C++'s <code>nth_element</code>),
+in O(count) on average: the median without a full sort.</li>
+<li><code>partial_sort(count)</code> sorts only the <code>count</code> smallest elements into the
+front.</li>
+<li><code>a.compare(b)</code> orders two arrays lexicographically: by the first
+elements that differ, else the shorter first. <code>==</code> compares element by
+element.</li>
+</ul>
+<p>Each takes a comparer too (<code>sort_unstable((a, b) =&gt; b - a)</code>) for an order
+other than the elements' own, or for elements that are not <code>Comparable</code>.</p>
 <h2 id="slices"><a class="header" href="#slices">Slices</a></h2>
 <p><code>a.slice(start, end)</code> is an <code>ArraySlice&lt;T&gt;</code>: a read-only view of the
 elements from <code>start</code> up to but not including <code>end</code>. It has <code>count</code>,
@@ -269,8 +310,10 @@ changing the array.</li>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
 array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code>.</li>
-<li><code>sort_unstable</code>, <code>rotate</code>, <code>drain</code>, <code>chunks</code> and <code>windows</code> are not
-there yet.</li>
+<li><code>chunks</code> and <code>windows</code> are not there yet.</li>
+<li>An <code>Array</code> is not itself <code>Comparable</code> (there are no conditional trait
+implementations yet), so <code>&lt;</code> between arrays and <code>sort()</code> on an array of
+arrays need <code>compare</code>: <code>rows.sort((a, b) =&gt; a.compare(b))</code>.</li>
 <li><code>String</code> has no slice type; <code>substr</code> copies.</li>
 </ul>
 

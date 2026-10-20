@@ -209,8 +209,10 @@ elements.</p>
 <p>An Array is <code>Iterable&lt;T&gt;</code>: <code>for (var x in a)</code> visits each element in index
 order. Every mutating operation (an element store through <code>[]</code>, <code>append</code>,
 <code>insert</code>, <code>remove_at</code>, <code>pop</code>, <code>clear</code>, a shrinking <code>truncate</code>, <code>swap</code>,
-<code>fill</code>, <code>retain</code>, <code>resize</code>, <code>split_off</code>, and <code>reverse</code>, <code>sort</code> or <code>dedup</code>
-of two or more elements) invalidates running iterators and slices
+<code>fill</code>, <code>retain</code>, <code>remove_if</code>, <code>resize</code>, <code>split_off</code>, <code>drain</code>,
+<code>extend_from</code>, <code>rotate</code>, <code>select_nth</code>, <code>partial_sort</code>, and <code>reverse</code>,
+<code>sort</code>, <code>sort_unstable</code> or <code>dedup</code> of two or more elements) invalidates
+running iterators and slices
 (<code>slice</code>), and the next step of such a loop panics with "Array modified
 during iteration".</p>
 <p><strong>Type parameters</strong></p>
@@ -532,6 +534,27 @@ invalidated.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 </code></pre>
+<h4 id="rotate"><a class="header" href="#rotate">rotate</a></h4>
+<pre><code class="language-pepper">rotate(count: ulong)
+</code></pre>
+<p>Moves the first <code>count</code> elements to the end, keeping the order within
+each part: the element at <code>count</code> becomes the first.</p>
+<p>Runs in O(count of the Array), exchanging elements, so reference
+counts are unchanged. Rotating by 0 or by the Array's <code>count</code> changes
+nothing and leaves iterators valid; any other rotation invalidates
+them.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of leading elements to move; from 0 through the Array's <code>count</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is more than the Array's <code>count</code> ("Array rotate count out of bounds")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4, 5];
+a.rotate(2);   # [3, 4, 5, 1, 2]
+</code></pre>
 <h4 id="sort"><a class="header" href="#sort">sort</a></h4>
 <pre><code class="language-pepper">sort(compare: (T, T) =&gt; int)
 </code></pre>
@@ -564,6 +587,80 @@ var numbers = Array&lt;int&gt;();
 numbers.append(3);
 numbers.append(1);
 numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
+</code></pre>
+<h4 id="sort_unstable"><a class="header" href="#sort_unstable">sort_unstable</a></h4>
+<pre><code class="language-pepper">sort_unstable(compare: (T, T) =&gt; int)
+</code></pre>
+<p>Sorts the elements in place into the order <code>compare</code> defines, without
+keeping equal elements in their original order.</p>
+<p><code>compare</code> follows the convention of <code>sort(compare)</code>. It is
+pattern-defeating quicksort (pdqsort): O(count log count) calls to
+<code>compare</code> in the worst case, O(count) on an Array that is already
+sorted or all equal, and no scratch buffer, so it is the faster sort
+when stability does not matter. Elements only trade slots, so no
+reference count changes. Invalidates running iterators when there
+are two or more elements.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>compare</code> — returns the order of its two arguments, as for <code>sort</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>compare</code> modifies the Array ("Array modified during sort")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [5, 1, 4, 2, 3];
+a.sort_unstable((x, y) =&gt; x - y);   # [1, 2, 3, 4, 5]
+</code></pre>
+<h4 id="select_nth"><a class="header" href="#select_nth">select_nth</a></h4>
+<pre><code class="language-pepper">select_nth(nth: ulong, compare: (T, T) =&gt; int)
+</code></pre>
+<p>Reorders the elements so that the one at <code>nth</code> is the element a full
+sort would put there, every element before it sorts before or with
+it, and every element after it sorts after or with it (C++'s
+<code>nth_element</code>). Each side is otherwise in no particular order.</p>
+<p><code>compare</code> follows the convention of <code>sort(compare)</code>. Runs in O(count)
+calls to <code>compare</code> on average and O(count log count) in the worst
+case, with no scratch buffer. Elements only trade slots, so no
+reference count changes. Invalidates running iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>nth</code> — the position to settle; less than <code>count</code></li>
+<li><code>compare</code> — returns the order of its two arguments, as for <code>sort</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>nth &lt; count</code> does not hold ("Array select_nth index out of bounds")</li>
+<li>if <code>compare</code> modifies the Array ("Array modified during sort")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [9, 1, 8, 2, 7, 3];
+a.select_nth(2, (x, y) =&gt; x - y);   # a[2] == 3, the third smallest
+</code></pre>
+<h4 id="partial_sort"><a class="header" href="#partial_sort">partial_sort</a></h4>
+<pre><code class="language-pepper">partial_sort(count: ulong, compare: (T, T) =&gt; int)
+</code></pre>
+<p>Puts the <code>count</code> elements that sort first into the first <code>count</code>
+positions, in order, and leaves the rest after them in no particular
+order: the start of a full sort, found faster.</p>
+<p><code>compare</code> follows the convention of <code>sort(compare)</code>. Runs in
+O(count of the Array + <code>count</code> log <code>count</code>) calls to <code>compare</code> on
+average, with no scratch buffer; it is not stable. Elements only
+trade slots, so no reference count changes. Invalidates running
+iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of leading elements to sort; from 0 through the Array's <code>count</code></li>
+<li><code>compare</code> — returns the order of its two arguments, as for <code>sort</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is more than the Array's <code>count</code> ("Array partial_sort count out of bounds")</li>
+<li>if <code>compare</code> modifies the Array ("Array modified during sort")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var scores = [40, 95, 12, 77, 63];
+scores.partial_sort(3, (x, y) =&gt; y - x);   # starts [95, 77, 63]
 </code></pre>
 <h4 id="find"><a class="header" href="#find">find</a></h4>
 <pre><code class="language-pepper">[__Reads] find(item: T): ulong?
@@ -689,6 +786,26 @@ capacity is unchanged. Invalidates running iterators.</p>
 <pre><code class="language-pepper">var a = [1, 2, 3, 4];
 a.retain((x) =&gt; x % 2 == 0);   # [2, 4]
 </code></pre>
+<h4 id="remove_if"><a class="header" href="#remove_if">remove_if</a></h4>
+<pre><code class="language-pepper">remove_if(remove: (T) =&gt; bool)
+</code></pre>
+<p>Removes every element for which <code>remove</code> returns true, keeping the
+order of the rest; the opposite of <code>retain</code>.</p>
+<p>Runs in O(count) calls to <code>remove</code>, which sees each element once, in
+index order, and must not modify the Array. For a struct <code>T</code> each
+removed element is released. Invalidates running iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>remove</code> — returns true for an element to remove</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>remove</code> modifies the Array ("Array modified during retain")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4];
+a.remove_if((x) =&gt; x &gt; 2);   # [1, 2]
+</code></pre>
 <h4 id="dedup"><a class="header" href="#dedup">dedup</a></h4>
 <pre><code class="language-pepper">dedup()
 </code></pre>
@@ -748,6 +865,31 @@ running iterators when any element moves.</p>
 <pre><code class="language-pepper">var a = [1, 2, 3, 4];
 var tail = a.split_off(1);   # a holds [1]; tail holds [2, 3, 4]
 </code></pre>
+<h4 id="drain"><a class="header" href="#drain">drain</a></h4>
+<pre><code class="language-pepper">drain(start: ulong, end: ulong): Array&lt;T&gt;
+</code></pre>
+<p>Removes the elements from <code>start</code> up to but not including <code>end</code> and
+returns them as a new Array, shifting the later elements down.</p>
+<p>Runs in O(count - start). The elements move without changing their
+reference counts. This Array's capacity is unchanged. Invalidates
+running iterators when any element is removed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the position of the first element to remove</li>
+<li><code>end</code> — the position one past the last element to remove; from <code>start</code> through <code>count</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Array holding the removed elements, in order</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>start &lt;= end</code> and <code>end &lt;= count</code> do not both hold ("Array drain range out of bounds")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4, 5];
+var middle = a.drain(1, 3);   # a holds [1, 4, 5]; middle holds [2, 3]
+</code></pre>
 <h4 id="append_all"><a class="header" href="#append_all">append_all</a></h4>
 <pre><code class="language-pepper">append_all(rhs: Array&lt;T&gt;)
 </code></pre>
@@ -769,6 +911,29 @@ Array's running iterators when <code>rhs</code> is not empty.</p>
 <ul>
 <li><code>+=</code></li>
 </ul>
+<h4 id="extend_from"><a class="header" href="#extend_from">extend_from</a></h4>
+<pre><code class="language-pepper">extend_from(items: ArraySlice&lt;T&gt;)
+</code></pre>
+<p>Appends every element of <code>items</code>, in order, to the end of this Array.</p>
+<p>Runs in O(count of <code>items</code>), growing the buffer at most once. <code>items</code>
+may view this same Array. For a struct <code>T</code> each appended element is
+acquired once more. Invalidates this Array's running iterators and
+slices (<code>items</code> among them, when it views this Array) when <code>items</code>
+is not empty.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to copy</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array <code>items</code> views was modified since <code>items</code> was made ("Array modified while a slice of it is in use")</li>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2];
+var b = [7, 8, 9];
+a.extend_from(b.slice(1, 3));   # [1, 2, 8, 9]
+</code></pre>
 <h4 id="clone"><a class="header" href="#clone">clone</a></h4>
 <pre><code class="language-pepper">[__Reads] clone(): Array&lt;T&gt;
 </code></pre>
@@ -953,6 +1118,79 @@ sorts after the one that follows it.</p>
 <ul>
 <li>true when the Array is sorted</li>
 </ul>
+<h4 id="sort_unstable-1"><a class="header" href="#sort_unstable-1">sort_unstable</a></h4>
+<pre><code class="language-pepper">sort_unstable()
+</code></pre>
+<p>Sorts the elements in place into their own order, <code>compare</code>, without
+keeping equal elements in their original order; otherwise behaves
+like <code>sort_unstable(compare)</code>.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if comparing modifies the Array ("Array modified during sort")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [3, 1, 2];
+a.sort_unstable();   # [1, 2, 3]
+</code></pre>
+<h4 id="select_nth-1"><a class="header" href="#select_nth-1">select_nth</a></h4>
+<pre><code class="language-pepper">select_nth(nth: ulong)
+</code></pre>
+<p>Reorders the elements so that the one at <code>nth</code> is the one sorting
+would put there, with the elements before it sorting before or with
+it and those after it after or with it; see
+<code>select_nth(nth, compare)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>nth</code> — the position to settle; less than <code>count</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>nth &lt; count</code> does not hold ("Array select_nth index out of bounds")</li>
+<li>if comparing modifies the Array ("Array modified during sort")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [9, 1, 8, 2, 7];
+a.select_nth(2);   # a[2] == 7, the median
+</code></pre>
+<h4 id="partial_sort-1"><a class="header" href="#partial_sort-1">partial_sort</a></h4>
+<pre><code class="language-pepper">partial_sort(count: ulong)
+</code></pre>
+<p>Puts the <code>count</code> smallest elements into the first <code>count</code> positions,
+in order; see <code>partial_sort(count, compare)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of leading elements to sort; from 0 through the Array's <code>count</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is more than the Array's <code>count</code> ("Array partial_sort count out of bounds")</li>
+<li>if comparing modifies the Array ("Array modified during sort")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [5, 3, 9, 1, 7];
+a.partial_sort(2);   # starts [1, 3]
+</code></pre>
+<h4 id="compare"><a class="header" href="#compare">compare</a></h4>
+<pre><code class="language-pepper">[__Reads] compare(other: Array&lt;T&gt;): int
+</code></pre>
+<p>Returns the lexicographic order of this Array and <code>other</code>: the order
+of the first pair of elements that differ (by their <code>compare</code>), or,
+when one Array is the start of the other, the shorter first.</p>
+<p>Runs in O(count); stops at the first difference. Two empty Arrays
+sort together. It follows <code>Comparable</code>'s convention, so an Array of
+Arrays sorts with <code>sort((a, b) =&gt; a.compare(b))</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the Array to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, zero or a positive number as this Array sorts before, with or after <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert([1, 2, 3].compare([1, 3]) &lt; 0, "2 sorts before 3");
+assert([1, 2].compare([1, 2, 0]) &lt; 0, "the shorter first");
+</code></pre>
 <h2 id="arrayiterator"><a class="header" href="#arrayiterator">ArrayIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ArrayIterator&lt;T&gt;
 </code></pre>
