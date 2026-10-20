@@ -109,6 +109,20 @@ sort_unstable_survives_an_inconsistent_compare() {
 }
 
 [Test]
+sort_unstable_falls_back_to_heapsort() {
+    # "Always less" makes every partition empty on one side, so the sort
+    # reaches its heapsort fallback; it must stay in bounds and keep every
+    # element.
+    var numbers = random.Generator(12345);
+    var a = make(0, 1000, numbers);
+    var expected = sorted_copy(a);
+    a.sort_unstable((x, y) => -1);
+    expect_true(sorted_copy(a) == expected);
+    a.select_nth(500, (x, y) => -1);
+    expect_true(sorted_copy(a) == expected);
+}
+
+[Test]
 [ShouldPanic("Array modified during sort")]
 sort_unstable_that_modifies_the_array_panics() {
     var a = [3, 1, 2];
