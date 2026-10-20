@@ -291,6 +291,83 @@ on the worker that accepted it.</p>
 <ul>
 <li>outside <code>async.run</code></li>
 </ul>
+<h2 id="connection"><a class="header" href="#connection">Connection</a></h2>
+<pre><code class="language-pepper">struct Connection
+</code></pre>
+<p>A connection a <code>Server</code> handler took over by answering with
+<code>Response.upgrade</code>: the raw stream after the <code>101 Switching Protocols</code>
+head, TCP or (under <code>Server.bind_tls</code>) TLS, as an <code>io.Reader</code> and an
+<code>io.Writer</code>.</p>
+<p>Reads return first the bytes the server had already read past the
+request (a client may send its first message right after the request),
+then what arrives. Like the handler, it belongs to the connection's task.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">upgraded(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) =&gt; {
+        var data = Array&lt;u8&gt;();
+        while (connection.read(data, 4096).value() &gt; 0) {
+            connection.write_all(data);
+            data.clear();
+        }
+    });
+}
+</code></pre>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="connection-1"><a class="header" href="#connection-1">Connection()</a></h4>
+<pre><code class="language-pepper">construct(reader: _HttpReader)
+</code></pre>
+<p>Wraps the connection <code>reader</code> reads. The server makes one for
+<code>Response.upgrade</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>reader</code> — the connection and the bytes it buffered</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="read"><a class="header" href="#read">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until some bytes are available, then appends up to <code>max</code> of
+them to <code>buffer</code>: the ones buffered past the request first.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at the end of the stream; an error when the stream fails</li>
+</ul>
+<h4 id="write"><a class="header" href="#write">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Writes what the stream takes in one call, which may be less than all
+of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes written; an error when the stream fails</li>
+</ul>
+<h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error when the stream fails</li>
+</ul>
+<h4 id="close"><a class="header" href="#close">close</a></h4>
+<pre><code class="language-pepper">close()
+</code></pre>
+<p>Closes the connection, sending TLS close_notify first under TLS. The
+server also closes it when the <code>takeover</code> function returns; closing
+again does nothing.</p>
 <h2 id="reason_phrase"><a class="header" href="#reason_phrase">reason_phrase</a></h2>
 <pre><code class="language-pepper">reason_phrase(status: int): String
 </code></pre>

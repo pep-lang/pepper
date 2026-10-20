@@ -347,6 +347,17 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="can_upgrade"><a class="header" href="#can_upgrade">can_upgrade</a></h4>
+<pre><code class="language-pepper">can_upgrade(): bool
+</code></pre>
+<p>Reports whether a <code>Server</code> handler may answer this request with
+<code>Response.upgrade</code>: true for an HTTP/1.1 request, false for HTTP/1.0,
+for a request on an HTTP/2 stream (which cannot switch protocols), and
+for one a client builds.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection can be taken over</li>
+</ul>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -488,6 +499,36 @@ request's, or after redirects the last one's. Empty otherwise.</p>
 <li><code>status</code> — the status code</li>
 </ul>
 <h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="upgrade"><a class="header" href="#upgrade">upgrade</a></h4>
+<pre><code class="language-pepper">upgrade(protocol: String, takeover: (Connection) =&gt; void): Response
+</code></pre>
+<p>Makes this a <code>101 Switching Protocols</code> response that hands the
+connection to <code>takeover</code>, for a protocol that starts as HTTP/1.1, such
+as WebSocket. The server sends the status, <code>Upgrade: protocol</code>,
+<code>Connection: Upgrade</code> and the other headers (no <code>Content-Length</code>, no
+body), then calls <code>takeover</code> in the connection's task with the
+connection, and serves no more HTTP on it. The connection closes when
+<code>takeover</code> returns, or earlier at <code>Connection.close()</code>.</p>
+<p>Only a request whose <code>can_upgrade()</code> is true can be upgraded: for
+any other (HTTP/1.0, or an HTTP/2 stream) the server sends <code>501 Not Implemented</code> instead and never calls <code>takeover</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocol</code> — the <code>Upgrade</code> field: the protocol the connection switches to, such as <code>websocket</code></li>
+<li><code>takeover</code> — speaks the new protocol on the connection; bytes the client sent right after the request are the first it reads</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">echo(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) =&gt; {
+        for (var chunk in connection.chunks(4096)) {
+            connection.write_all(chunk.value());
+        }
+    });
+}
+</code></pre>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>

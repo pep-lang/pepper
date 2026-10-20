@@ -346,6 +346,47 @@ assigning it to a <code>String</code> variable, or returning it as one is reject
 it into a String with <code>String(p)</code> first:</p>
 <pre><code class="language-text">main.pep:3:19: error: cannot pass a value of type '__ptr&lt;char&gt;' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
 </code></pre>
+<h2 id="passing-arrays"><a class="header" href="#passing-arrays">Passing arrays</a></h2>
+<p>An <a href="../reference/array.html"><code>Array&lt;T&gt;</code></a> is a reference-counted object too, so
+C gets its elements through a pointer:</p>
+<ul>
+<li><code>data()</code> returns a <code>__ptr&lt;T&gt;</code> to the first element. C may read and write
+the elements through it. The pointer belongs to the Array: it is valid
+until the Array is destroyed or its buffer grows (for example with
+<code>append</code>). An empty Array's <code>data()</code> is <code>__null</code>.</li>
+<li><code>append_from(p, count)</code> appends <code>count</code> elements copied from <code>p</code>, as
+<code>String(p, size)</code> does for bytes, so you still own (and may free) the C
+buffer.</li>
+</ul>
+<pre><code class="language-pepper"># Passing an Array's elements to C, and filling an Array from a C buffer.
+
+extern void* memset(void* s, int c, ulong n);
+extern void* malloc(ulong size);
+extern void free(void* p);
+
+main(): int {
+    # data() points at the elements, so C can read or write them in place.
+    var bytes = Array&lt;u8&gt;();
+    bytes.append(1);
+    bytes.append(2);
+    bytes.append(3);
+    memset(bytes.data() as __ptr&lt;void&gt;, 7, bytes.count);
+    assert(bytes[2] == 7, "C wrote through data()");
+
+    # An empty Array has no elements to point at: data() is __null.
+    var none = Array&lt;u8&gt;();
+    assert(unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(none.data()) == __null, "empty is __null");
+
+    # append_from copies count elements out of a C buffer, which you still own.
+    __ptr&lt;u8&gt; buffer = unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(malloc(4));
+    memset(buffer as __ptr&lt;void&gt;, 9, 4);
+    var copy = Array&lt;u8&gt;();
+    copy.append_from(buffer, 4);
+    free(buffer as __ptr&lt;void&gt;);
+    assert(copy.count == 4 &amp;&amp; copy[3] == 9, "append_from copied the buffer");
+    return 0;
+}
+</code></pre>
 <h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
 <p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
 ends its prototype with <code>...</code> after at least one named parameter:</p>

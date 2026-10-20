@@ -403,6 +403,65 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="switching-protocols"><a class="header" href="#switching-protocols">Switching protocols</a></h2>
+<p>A protocol that starts as an HTTP/1.1 request, such as WebSocket, can be
+served from a handler: it answers with
+<code>Response().upgrade(protocol, takeover)</code>.</p>
+<ul>
+<li>The server sends <code>101 Switching Protocols</code> with <code>Upgrade: protocol</code>,
+<code>Connection: Upgrade</code> and the response's other headers, and no
+<code>Content-Length</code> or body. It then calls <code>takeover</code> in the connection's
+task with an <code>http.Connection</code>, and serves no more HTTP on it.</li>
+<li>A <code>Connection</code> is an <code>io.Reader</code> and an <code>io.Writer</code> over the raw stream,
+TCP or, under <code>Server.bind_tls</code>, TLS. Its first reads return the bytes
+the client sent right after the request head, which the server had
+already read. It closes when <code>takeover</code> returns, or at <code>close()</code>.</li>
+<li><code>request.can_upgrade()</code> says whether the connection can switch: true for
+HTTP/1.1, false for HTTP/1.0 and for a request on an HTTP/2 stream. For
+those, an upgrade response becomes <code>501 Not Implemented</code>.</li>
+</ul>
+<pre><code class="language-pepper">import async;
+import http;
+import io;
+import text;
+
+# `/shout` switches the connection to a made-up protocol that sends back
+# every byte in upper case, until the client stops sending.
+handle(request: http.Request): http.Response {
+    if (!request.can_upgrade() || request.headers["upgrade"] != "shout") {
+        return http.Response(400).set_text("send Upgrade: shout");
+    }
+    return http.Response().upgrade("shout", (connection) =&gt; {
+        for (var chunk in connection.chunks(4096)) {
+            connection.write_all(text.Utf8.decode_lossy(chunk.value()).upper().bytes());
+        }
+    });
+}
+
+main(): int {
+    async.run(
+        () =&gt; {
+            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = server.local_address().value().port();
+            async.spawn&lt;void&gt;(() =&gt; {
+                server.serve(handle);
+            });
+            var stream = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
+            # The request head and the first bytes of the new protocol, together.
+            stream.write_all(
+                "GET /shout HTTP/1.1\r\nHost: localhost\r\nUpgrade: shout\r\nConnection: Upgrade\r\n\r\nhello".bytes()
+            );
+            stream.shutdown_write();
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 4096).value() &gt; 0) {}
+            var reply_text = text.Utf8.decode_lossy(reply);
+            assert(reply_text.starts_with("HTTP/1.1 101 Switching Protocols\r\n"), "switched");
+            assert(reply_text.ends_with("\r\n\r\nHELLO"), "spoke the new protocol");
+        }
+    );
+    return 0;
+}
+</code></pre>
 <h2 id="reusing-connections"><a class="header" href="#reusing-connections">Reusing connections</a></h2>
 <p><code>client.session()</code> returns a <code>Session</code>, which sends requests with the
 client's settings and keeps each connection open after its response
@@ -486,6 +545,8 @@ a response's reader early resets only its stream.</li>
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
 <li>HTTP/2 server push, stream priorities and the <code>Upgrade: h2c</code> handshake
 are not supported; a client speaks HTTP/2 only over TLS.</li>
+<li>A server handler can take over only an HTTP/1.1 connection; WebSocket
+over HTTP/2 (RFC 8441) is not supported.</li>
 </ul>
 <p>The reference pages for <a href="../reference/http-message.html">messages</a>, the
 <a href="../reference/http-client.html">client</a>, the

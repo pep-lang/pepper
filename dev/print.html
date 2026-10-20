@@ -16614,6 +16614,65 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="switching-protocols"><a class="header" href="#switching-protocols">Switching protocols</a></h2>
+<p>A protocol that starts as an HTTP/1.1 request, such as WebSocket, can be
+served from a handler: it answers with
+<code>Response().upgrade(protocol, takeover)</code>.</p>
+<ul>
+<li>The server sends <code>101 Switching Protocols</code> with <code>Upgrade: protocol</code>,
+<code>Connection: Upgrade</code> and the response's other headers, and no
+<code>Content-Length</code> or body. It then calls <code>takeover</code> in the connection's
+task with an <code>http.Connection</code>, and serves no more HTTP on it.</li>
+<li>A <code>Connection</code> is an <code>io.Reader</code> and an <code>io.Writer</code> over the raw stream,
+TCP or, under <code>Server.bind_tls</code>, TLS. Its first reads return the bytes
+the client sent right after the request head, which the server had
+already read. It closes when <code>takeover</code> returns, or at <code>close()</code>.</li>
+<li><code>request.can_upgrade()</code> says whether the connection can switch: true for
+HTTP/1.1, false for HTTP/1.0 and for a request on an HTTP/2 stream. For
+those, an upgrade response becomes <code>501 Not Implemented</code>.</li>
+</ul>
+<pre><code class="language-pepper">import async;
+import http;
+import io;
+import text;
+
+# `/shout` switches the connection to a made-up protocol that sends back
+# every byte in upper case, until the client stops sending.
+handle(request: http.Request): http.Response {
+    if (!request.can_upgrade() || request.headers["upgrade"] != "shout") {
+        return http.Response(400).set_text("send Upgrade: shout");
+    }
+    return http.Response().upgrade("shout", (connection) =&gt; {
+        for (var chunk in connection.chunks(4096)) {
+            connection.write_all(text.Utf8.decode_lossy(chunk.value()).upper().bytes());
+        }
+    });
+}
+
+main(): int {
+    async.run(
+        () =&gt; {
+            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = server.local_address().value().port();
+            async.spawn&lt;void&gt;(() =&gt; {
+                server.serve(handle);
+            });
+            var stream = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
+            # The request head and the first bytes of the new protocol, together.
+            stream.write_all(
+                "GET /shout HTTP/1.1\r\nHost: localhost\r\nUpgrade: shout\r\nConnection: Upgrade\r\n\r\nhello".bytes()
+            );
+            stream.shutdown_write();
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 4096).value() &gt; 0) {}
+            var reply_text = text.Utf8.decode_lossy(reply);
+            assert(reply_text.starts_with("HTTP/1.1 101 Switching Protocols\r\n"), "switched");
+            assert(reply_text.ends_with("\r\n\r\nHELLO"), "spoke the new protocol");
+        }
+    );
+    return 0;
+}
+</code></pre>
 <h2 id="reusing-connections"><a class="header" href="#reusing-connections">Reusing connections</a></h2>
 <p><code>client.session()</code> returns a <code>Session</code>, which sends requests with the
 client's settings and keeps each connection open after its response
@@ -16697,6 +16756,8 @@ a response's reader early resets only its stream.</li>
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
 <li>HTTP/2 server push, stream priorities and the <code>Upgrade: h2c</code> handshake
 are not supported; a client speaks HTTP/2 only over TLS.</li>
+<li>A server handler can take over only an HTTP/1.1 connection; WebSocket
+over HTTP/2 (RFC 8441) is not supported.</li>
 </ul>
 <p>The reference pages for <a href="language/../reference/http-message.html">messages</a>, the
 <a href="language/../reference/http-client.html">client</a>, the
@@ -18677,6 +18738,47 @@ included) is never a <code>String</code>, so passing one where a <code>String</c
 assigning it to a <code>String</code> variable, or returning it as one is rejected. Copy
 it into a String with <code>String(p)</code> first:</p>
 <pre><code class="language-text">main.pep:3:19: error: cannot pass a value of type '__ptr&lt;char&gt;' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
+</code></pre>
+<h2 id="passing-arrays"><a class="header" href="#passing-arrays">Passing arrays</a></h2>
+<p>An <a href="language/../reference/array.html"><code>Array&lt;T&gt;</code></a> is a reference-counted object too, so
+C gets its elements through a pointer:</p>
+<ul>
+<li><code>data()</code> returns a <code>__ptr&lt;T&gt;</code> to the first element. C may read and write
+the elements through it. The pointer belongs to the Array: it is valid
+until the Array is destroyed or its buffer grows (for example with
+<code>append</code>). An empty Array's <code>data()</code> is <code>__null</code>.</li>
+<li><code>append_from(p, count)</code> appends <code>count</code> elements copied from <code>p</code>, as
+<code>String(p, size)</code> does for bytes, so you still own (and may free) the C
+buffer.</li>
+</ul>
+<pre><code class="language-pepper"># Passing an Array's elements to C, and filling an Array from a C buffer.
+
+extern void* memset(void* s, int c, ulong n);
+extern void* malloc(ulong size);
+extern void free(void* p);
+
+main(): int {
+    # data() points at the elements, so C can read or write them in place.
+    var bytes = Array&lt;u8&gt;();
+    bytes.append(1);
+    bytes.append(2);
+    bytes.append(3);
+    memset(bytes.data() as __ptr&lt;void&gt;, 7, bytes.count);
+    assert(bytes[2] == 7, "C wrote through data()");
+
+    # An empty Array has no elements to point at: data() is __null.
+    var none = Array&lt;u8&gt;();
+    assert(unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(none.data()) == __null, "empty is __null");
+
+    # append_from copies count elements out of a C buffer, which you still own.
+    __ptr&lt;u8&gt; buffer = unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(malloc(4));
+    memset(buffer as __ptr&lt;void&gt;, 9, 4);
+    var copy = Array&lt;u8&gt;();
+    copy.append_from(buffer, 4);
+    free(buffer as __ptr&lt;void&gt;);
+    assert(copy.count == 4 &amp;&amp; copy[3] == 9, "append_from copied the buffer");
+    return 0;
+}
 </code></pre>
 <h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
 <p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
@@ -31888,6 +31990,28 @@ the iterator then sees no elements and ends.</p>
     total = total + x;
 }
 </code></pre>
+<h4 id="data"><a class="header" href="#data">data</a></h4>
+<pre><code class="language-pepper">[__Reads] data(): __ptr&lt;T&gt;
+</code></pre>
+<p>Returns a pointer to the first element, for passing the elements to C,
+as <code>String.c_str()</code> does for text.</p>
+<p>The pointer is owned by the Array. It is valid until the Array is
+destroyed or its buffer reallocates (<code>append</code>, <code>insert</code>, <code>reserve</code>, or
+anything else that grows it); writes through it change the elements.
+For an empty Array it is <code>__null</code>, even when capacity is reserved.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address of element 0, or <code>__null</code> when the Array is empty</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>append_from</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = Array&lt;int&gt;();
+a.append(7);
+var p = a.data();   # p[0] == 7
+</code></pre>
 <h4 id="reserve"><a class="header" href="#reserve">reserve</a></h4>
 <pre><code class="language-pepper">reserve(capacity: ulong)
 </code></pre>
@@ -31987,6 +32111,35 @@ Invalidates running iterators.</p>
 <pre><code class="language-pepper">var a = Array&lt;int&gt;();
 a.append(1);
 a.append(2);   # a holds [1, 2]
+</code></pre>
+<h4 id="append_from"><a class="header" href="#append_from">append_from</a></h4>
+<pre><code class="language-pepper">append_from(source: __ptr&lt;T&gt;, count: ulong)
+</code></pre>
+<p>Appends the <code>count</code> elements at <code>source</code>, in order: the way to fill an
+Array from a C buffer, as <code>String(data, size)</code> does for text.</p>
+<p>Runs in O(count), with one copy of the whole range for a POD <code>T</code>. For
+a struct <code>T</code> the Array acquires a reference to each element. <code>source</code>
+must point at <code>count</code> valid elements, and not into this Array, which
+may reallocate. Invalidates running iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the first element to copy; may be <code>__null</code> when <code>count</code> is 0</li>
+<li><code>count</code> — the number of elements to copy</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>data</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = Array&lt;u8&gt;();
+a.append(1);
+a.append(2);
+var b = Array&lt;u8&gt;();
+b.append_from(a.data(), a.count);   # b holds [1, 2]
 </code></pre>
 <h4 id="insert"><a class="header" href="#insert">insert</a></h4>
 <pre><code class="language-pepper">insert(idx: ulong, item: T)
@@ -56185,7 +56338,7 @@ the same <code>Request</code> and <code>Response</code> types.</p>
 <ul>
 <li><a href="reference/http-message.html">Messages</a>: <code>Headers</code>, <code>Request</code>, and <code>Response</code></li>
 <li><a href="reference/http-client.html">Client</a>: <code>Client</code>, <code>Session</code> and <code>BodyReader</code></li>
-<li><a href="reference/http-server.html">Server</a>: <code>Server</code> and <code>reason_phrase</code></li>
+<li><a href="reference/http-server.html">Server</a>: <code>Server</code>, <code>Connection</code> and <code>reason_phrase</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import async;
@@ -56373,6 +56526,17 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
 <h3 id="methods-176"><a class="header" href="#methods-176">Methods</a></h3>
+<h4 id="can_upgrade"><a class="header" href="#can_upgrade">can_upgrade</a></h4>
+<pre><code class="language-pepper">can_upgrade(): bool
+</code></pre>
+<p>Reports whether a <code>Server</code> handler may answer this request with
+<code>Response.upgrade</code>: true for an HTTP/1.1 request, false for HTTP/1.0,
+for a request on an HTTP/2 stream (which cannot switch protocols), and
+for one a client builds.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection can be taken over</li>
+</ul>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -56514,6 +56678,36 @@ request's, or after redirects the last one's. Empty otherwise.</p>
 <li><code>status</code> — the status code</li>
 </ul>
 <h3 id="methods-177"><a class="header" href="#methods-177">Methods</a></h3>
+<h4 id="upgrade"><a class="header" href="#upgrade">upgrade</a></h4>
+<pre><code class="language-pepper">upgrade(protocol: String, takeover: (Connection) =&gt; void): Response
+</code></pre>
+<p>Makes this a <code>101 Switching Protocols</code> response that hands the
+connection to <code>takeover</code>, for a protocol that starts as HTTP/1.1, such
+as WebSocket. The server sends the status, <code>Upgrade: protocol</code>,
+<code>Connection: Upgrade</code> and the other headers (no <code>Content-Length</code>, no
+body), then calls <code>takeover</code> in the connection's task with the
+connection, and serves no more HTTP on it. The connection closes when
+<code>takeover</code> returns, or earlier at <code>Connection.close()</code>.</p>
+<p>Only a request whose <code>can_upgrade()</code> is true can be upgraded: for
+any other (HTTP/1.0, or an HTTP/2 stream) the server sends <code>501 Not Implemented</code> instead and never calls <code>takeover</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocol</code> — the <code>Upgrade</code> field: the protocol the connection switches to, such as <code>websocket</code></li>
+<li><code>takeover</code> — speaks the new protocol on the connection; bytes the client sent right after the request are the first it reads</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">echo(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) =&gt; {
+        for (var chunk in connection.chunks(4096)) {
+            connection.write_all(chunk.value());
+        }
+    });
+}
+</code></pre>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -57041,6 +57235,83 @@ on the worker that accepted it.</p>
 <ul>
 <li>outside <code>async.run</code></li>
 </ul>
+<h2 id="connection"><a class="header" href="#connection">Connection</a></h2>
+<pre><code class="language-pepper">struct Connection
+</code></pre>
+<p>A connection a <code>Server</code> handler took over by answering with
+<code>Response.upgrade</code>: the raw stream after the <code>101 Switching Protocols</code>
+head, TCP or (under <code>Server.bind_tls</code>) TLS, as an <code>io.Reader</code> and an
+<code>io.Writer</code>.</p>
+<p>Reads return first the bytes the server had already read past the
+request (a client may send its first message right after the request),
+then what arrives. Like the handler, it belongs to the connection's task.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">upgraded(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) =&gt; {
+        var data = Array&lt;u8&gt;();
+        while (connection.read(data, 4096).value() &gt; 0) {
+            connection.write_all(data);
+            data.clear();
+        }
+    });
+}
+</code></pre>
+<h3 id="constructor-127"><a class="header" href="#constructor-127">Constructor</a></h3>
+<h4 id="connection-1"><a class="header" href="#connection-1">Connection()</a></h4>
+<pre><code class="language-pepper">construct(reader: _HttpReader)
+</code></pre>
+<p>Wraps the connection <code>reader</code> reads. The server makes one for
+<code>Response.upgrade</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>reader</code> — the connection and the bytes it buffered</li>
+</ul>
+<h3 id="methods-182"><a class="header" href="#methods-182">Methods</a></h3>
+<h4 id="read-10"><a class="header" href="#read-10">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until some bytes are available, then appends up to <code>max</code> of
+them to <code>buffer</code>: the ones buffered past the request first.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at the end of the stream; an error when the stream fails</li>
+</ul>
+<h4 id="write-8"><a class="header" href="#write-8">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Writes what the stream takes in one call, which may be less than all
+of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes written; an error when the stream fails</li>
+</ul>
+<h4 id="write_all-10"><a class="header" href="#write_all-10">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error when the stream fails</li>
+</ul>
+<h4 id="close-11"><a class="header" href="#close-11">close</a></h4>
+<pre><code class="language-pepper">close()
+</code></pre>
+<p>Closes the connection, sending TLS close_notify first under TLS. The
+server also closes it when the <code>takeover</code> function returns; closing
+again does nothing.</p>
 <h2 id="reason_phrase"><a class="header" href="#reason_phrase">reason_phrase</a></h2>
 <pre><code class="language-pepper">reason_phrase(status: int): String
 </code></pre>
@@ -57111,7 +57382,7 @@ var connector = tls.TlsConnector.create().value();
 var stream = connector.connect_host("localhost", 8443).value();
 stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-127"><a class="header" href="#constructor-127">Constructor</a></h3>
+<h3 id="constructor-128"><a class="header" href="#constructor-128">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -57129,7 +57400,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-182"><a class="header" href="#methods-182">Methods</a></h3>
+<h3 id="methods-183"><a class="header" href="#methods-183">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -57242,7 +57513,7 @@ while (true) {
     }
 }
 </code></pre>
-<h3 id="constructor-128"><a class="header" href="#constructor-128">Constructor</a></h3>
+<h3 id="constructor-129"><a class="header" href="#constructor-129">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -57266,7 +57537,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-183"><a class="header" href="#methods-183">Methods</a></h3>
+<h3 id="methods-184"><a class="header" href="#methods-184">Methods</a></h3>
 <h4 id="require_client_certificate"><a class="header" href="#require_client_certificate">require_client_certificate</a></h4>
 <pre><code class="language-pepper">require_client_certificate(roots: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -57344,7 +57615,7 @@ var reply = Array&lt;u8&gt;();
 while (stream.read(reply, 4096).value() &gt; 0) {
 }
 </code></pre>
-<h3 id="constructor-129"><a class="header" href="#constructor-129">Constructor</a></h3>
+<h3 id="constructor-130"><a class="header" href="#constructor-130">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -57355,7 +57626,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform's session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-184"><a class="header" href="#methods-184">Methods</a></h3>
+<h3 id="methods-185"><a class="header" href="#methods-185">Methods</a></h3>
 <h4 id="is_open-8"><a class="header" href="#is_open-8">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -57374,7 +57645,7 @@ set.</p>
 <ul>
 <li>the protocol name, such as <code>h2</code>; none when no protocol was chosen or the stream is closed</li>
 </ul>
-<h4 id="read-10"><a class="header" href="#read-10">read</a></h4>
+<h4 id="read-11"><a class="header" href="#read-11">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until data arrives, then appends up to <code>max</code> decrypted bytes of
@@ -57401,7 +57672,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once <code>count</code> bytes are appended; an error when the connection ends first, or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
 </ul>
-<h4 id="write-8"><a class="header" href="#write-8">write</a></h4>
+<h4 id="write-9"><a class="header" href="#write-9">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Encrypts and sends bytes from <code>data</code>. The send may be partial; use
@@ -57414,7 +57685,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>the number of bytes sent; an error when the stream is closed, a TLS error, or an io error from the socket</li>
 </ul>
-<h4 id="write_all-10"><a class="header" href="#write_all-10">write_all</a></h4>
+<h4 id="write_all-11"><a class="header" href="#write_all-11">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
@@ -57426,7 +57697,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
-<h4 id="write_all-11"><a class="header" href="#write_all-11">write_all</a></h4>
+<h4 id="write_all-12"><a class="header" href="#write_all-12">write_all</a></h4>
 <pre><code class="language-pepper">write_all(text: String): io.IoResult&lt;void&gt;
 </code></pre>
 <p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
@@ -57468,7 +57739,7 @@ close_notify). The peer's reads return 0 after the data sent before.</p>
 <ul>
 <li>an Ok result on success; an error when the stream is closed, or an io error from the socket</li>
 </ul>
-<h4 id="close-11"><a class="header" href="#close-11">close</a></h4>
+<h4 id="close-12"><a class="header" href="#close-12">close</a></h4>
 <pre><code class="language-pepper">close(): io.IoResult&lt;void&gt;
 </code></pre>
 <p>Closes the connection now, without a close_notify (see <code>shutdown</code>).
@@ -57547,7 +57818,7 @@ status 124 and a message on standard error. However the program ends
 test started ends with it (a job object on Windows, a process group
 elsewhere), so none holds <code>pep-test</code>'s pipes to its output open.</li>
 </ul>
-<h3 id="constructor-130"><a class="header" href="#constructor-130">Constructor</a></h3>
+<h3 id="constructor-131"><a class="header" href="#constructor-131">Constructor</a></h3>
 <h4 id="testrunner-2"><a class="header" href="#testrunner-2">TestRunner()</a></h4>
 <pre><code class="language-pepper">construct(file: String)
 </code></pre>
@@ -57556,7 +57827,7 @@ elsewhere), so none holds <code>pep-test</code>'s pipes to its output open.</li>
 <ul>
 <li><code>file</code> — the entry file's path, as <code>pep-build</code> was given it, or the folder of the files of a test program built from several</li>
 </ul>
-<h3 id="methods-185"><a class="header" href="#methods-185">Methods</a></h3>
+<h3 id="methods-186"><a class="header" href="#methods-186">Methods</a></h3>
 <h4 id="from_file"><a class="header" href="#from_file">from_file</a></h4>
 <pre><code class="language-pepper">from_file(file: String)
 </code></pre>
@@ -57630,7 +57901,7 @@ writes_a_file() {
 <pre><code class="language-pepper">const path: io.Path
 </code></pre>
 <p>The folder's path.</p>
-<h3 id="constructor-131"><a class="header" href="#constructor-131">Constructor</a></h3>
+<h3 id="constructor-132"><a class="header" href="#constructor-132">Constructor</a></h3>
 <h4 id="tempfolder-2"><a class="header" href="#tempfolder-2">TempFolder()</a></h4>
 <pre><code class="language-pepper">construct(name: String)
 </code></pre>
