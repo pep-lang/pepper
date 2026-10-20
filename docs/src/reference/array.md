@@ -35,8 +35,10 @@ elements.
 An Array is `Iterable<T>`: `for (var x in a)` visits each element in index
 order. Every mutating operation (an element store through `[]`, `append`,
 `insert`, `remove_at`, `pop`, `clear`, a shrinking `truncate`, `swap`,
-`fill`, `retain`, `resize`, `split_off`, and `reverse`, `sort` or `dedup`
-of two or more elements) invalidates running iterators and slices
+`fill`, `retain`, `remove_if`, `resize`, `split_off`, `drain`,
+`extend_from`, `rotate`, `select_nth`, `partial_sort`, and `reverse`,
+`sort`, `sort_unstable` or `dedup` of two or more elements) invalidates
+running iterators and slices
 (`slice`), and the next step of such a loop panics with "Array modified
 during iteration".
 
@@ -447,6 +449,32 @@ invalidated.
 a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 ```
 
+#### rotate
+
+```pepper
+rotate(count: ulong)
+```
+
+Moves the first `count` elements to the end, keeping the order within
+each part: the element at `count` becomes the first.
+
+Runs in O(count of the Array), exchanging elements, so reference
+counts are unchanged. Rotating by 0 or by the Array's `count` changes
+nothing and leaves iterators valid; any other rotation invalidates
+them.
+
+**Parameters**
+- `count` — the number of leading elements to move; from 0 through the Array's `count`
+
+**Panics**
+- if `count` is more than the Array's `count` ("Array rotate count out of bounds")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4, 5];
+a.rotate(2);   # [3, 4, 5, 1, 2]
+```
+
 #### sort
 
 ```pepper
@@ -484,6 +512,95 @@ var numbers = Array<int>();
 numbers.append(3);
 numbers.append(1);
 numbers.sort((a, b) => b - a);        # descending: [3, 1]
+```
+
+#### sort_unstable
+
+```pepper
+sort_unstable(compare: (T, T) => int)
+```
+
+Sorts the elements in place into the order `compare` defines, without
+keeping equal elements in their original order.
+
+`compare` follows the convention of `sort(compare)`. It is
+pattern-defeating quicksort (pdqsort): O(count log count) calls to
+`compare` in the worst case, O(count) on an Array that is already
+sorted or all equal, and no scratch buffer, so it is the faster sort
+when stability does not matter. Elements only trade slots, so no
+reference count changes. Invalidates running iterators when there
+are two or more elements.
+
+**Parameters**
+- `compare` — returns the order of its two arguments, as for `sort`
+
+**Panics**
+- if `compare` modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var a = [5, 1, 4, 2, 3];
+a.sort_unstable((x, y) => x - y);   # [1, 2, 3, 4, 5]
+```
+
+#### select_nth
+
+```pepper
+select_nth(nth: ulong, compare: (T, T) => int)
+```
+
+Reorders the elements so that the one at `nth` is the element a full
+sort would put there, every element before it sorts before or with
+it, and every element after it sorts after or with it (C++'s
+`nth_element`). Each side is otherwise in no particular order.
+
+`compare` follows the convention of `sort(compare)`. Runs in O(count)
+calls to `compare` on average and O(count log count) in the worst
+case, with no scratch buffer. Elements only trade slots, so no
+reference count changes. Invalidates running iterators.
+
+**Parameters**
+- `nth` — the position to settle; less than `count`
+- `compare` — returns the order of its two arguments, as for `sort`
+
+**Panics**
+- if `nth < count` does not hold ("Array select_nth index out of bounds")
+- if `compare` modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var a = [9, 1, 8, 2, 7, 3];
+a.select_nth(2, (x, y) => x - y);   # a[2] == 3, the third smallest
+```
+
+#### partial_sort
+
+```pepper
+partial_sort(count: ulong, compare: (T, T) => int)
+```
+
+Puts the `count` elements that sort first into the first `count`
+positions, in order, and leaves the rest after them in no particular
+order: the start of a full sort, found faster.
+
+`compare` follows the convention of `sort(compare)`. Runs in
+O(count of the Array + `count` log `count`) calls to `compare` on
+average, with no scratch buffer; it is not stable. Elements only
+trade slots, so no reference count changes. Invalidates running
+iterators.
+
+**Parameters**
+- `count` — the number of leading elements to sort; from 0 through the Array's `count`
+- `compare` — returns the order of its two arguments, as for `sort`
+
+**Panics**
+- if `count` is more than the Array's `count` ("Array partial_sort count out of bounds")
+- if `compare` modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var scores = [40, 95, 12, 77, 63];
+scores.partial_sort(3, (x, y) => y - x);   # starts [95, 77, 63]
 ```
 
 #### find
@@ -638,6 +755,31 @@ var a = [1, 2, 3, 4];
 a.retain((x) => x % 2 == 0);   # [2, 4]
 ```
 
+#### remove_if
+
+```pepper
+remove_if(remove: (T) => bool)
+```
+
+Removes every element for which `remove` returns true, keeping the
+order of the rest; the opposite of `retain`.
+
+Runs in O(count) calls to `remove`, which sees each element once, in
+index order, and must not modify the Array. For a struct `T` each
+removed element is released. Invalidates running iterators.
+
+**Parameters**
+- `remove` — returns true for an element to remove
+
+**Panics**
+- if `remove` modifies the Array ("Array modified during retain")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4];
+a.remove_if((x) => x > 2);   # [1, 2]
+```
+
 #### dedup
 
 ```pepper
@@ -713,6 +855,35 @@ var a = [1, 2, 3, 4];
 var tail = a.split_off(1);   # a holds [1]; tail holds [2, 3, 4]
 ```
 
+#### drain
+
+```pepper
+drain(start: ulong, end: ulong): Array<T>
+```
+
+Removes the elements from `start` up to but not including `end` and
+returns them as a new Array, shifting the later elements down.
+
+Runs in O(count - start). The elements move without changing their
+reference counts. This Array's capacity is unchanged. Invalidates
+running iterators when any element is removed.
+
+**Parameters**
+- `start` — the position of the first element to remove
+- `end` — the position one past the last element to remove; from `start` through `count`
+
+**Returns**
+- a new Array holding the removed elements, in order
+
+**Panics**
+- if `start <= end` and `end <= count` do not both hold ("Array drain range out of bounds")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4, 5];
+var middle = a.drain(1, 3);   # a holds [1, 4, 5]; middle holds [2, 3]
+```
+
 #### append_all
 
 ```pepper
@@ -735,6 +906,34 @@ Array's running iterators when `rhs` is not empty.
 
 **See also**
 - `+=`
+
+#### extend_from
+
+```pepper
+extend_from(items: ArraySlice<T>)
+```
+
+Appends every element of `items`, in order, to the end of this Array.
+
+Runs in O(count of `items`), growing the buffer at most once. `items`
+may view this same Array. For a struct `T` each appended element is
+acquired once more. Invalidates this Array's running iterators and
+slices (`items` among them, when it views this Array) when `items`
+is not empty.
+
+**Parameters**
+- `items` — the elements to copy
+
+**Panics**
+- if the Array `items` views was modified since `items` was made ("Array modified while a slice of it is in use")
+- if the buffer must grow while an I/O operation in a task is using it
+
+**Example**
+```pepper
+var a = [1, 2];
+var b = [7, 8, 9];
+a.extend_from(b.slice(1, 3));   # [1, 2, 8, 9]
+```
 
 #### clone
 
@@ -968,6 +1167,97 @@ Runs in O(count). An Array of fewer than two elements is sorted.
 
 **Returns**
 - true when the Array is sorted
+
+#### sort_unstable
+
+```pepper
+sort_unstable()
+```
+
+Sorts the elements in place into their own order, `compare`, without
+keeping equal elements in their original order; otherwise behaves
+like `sort_unstable(compare)`.
+
+**Panics**
+- if comparing modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var a = [3, 1, 2];
+a.sort_unstable();   # [1, 2, 3]
+```
+
+#### select_nth
+
+```pepper
+select_nth(nth: ulong)
+```
+
+Reorders the elements so that the one at `nth` is the one sorting
+would put there, with the elements before it sorting before or with
+it and those after it after or with it; see
+`select_nth(nth, compare)`.
+
+**Parameters**
+- `nth` — the position to settle; less than `count`
+
+**Panics**
+- if `nth < count` does not hold ("Array select_nth index out of bounds")
+- if comparing modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var a = [9, 1, 8, 2, 7];
+a.select_nth(2);   # a[2] == 7, the median
+```
+
+#### partial_sort
+
+```pepper
+partial_sort(count: ulong)
+```
+
+Puts the `count` smallest elements into the first `count` positions,
+in order; see `partial_sort(count, compare)`.
+
+**Parameters**
+- `count` — the number of leading elements to sort; from 0 through the Array's `count`
+
+**Panics**
+- if `count` is more than the Array's `count` ("Array partial_sort count out of bounds")
+- if comparing modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var a = [5, 3, 9, 1, 7];
+a.partial_sort(2);   # starts [1, 3]
+```
+
+#### compare
+
+```pepper
+[__Reads] compare(other: Array<T>): int
+```
+
+Returns the lexicographic order of this Array and `other`: the order
+of the first pair of elements that differ (by their `compare`), or,
+when one Array is the start of the other, the shorter first.
+
+Runs in O(count); stops at the first difference. Two empty Arrays
+sort together. It follows `Comparable`'s convention, so an Array of
+Arrays sorts with `sort((a, b) => a.compare(b))`.
+
+**Parameters**
+- `other` — the Array to compare with
+
+**Returns**
+- a negative number, zero or a positive number as this Array sorts before, with or after `other`
+
+**Example**
+```pepper
+assert([1, 2, 3].compare([1, 3]) < 0, "2 sorts before 3");
+assert([1, 2].compare([1, 2, 0]) < 0, "the shorter first");
+```
 
 ## ArrayIterator
 

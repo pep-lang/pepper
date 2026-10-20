@@ -54,8 +54,10 @@ import "internals";
 ## An Array is `Iterable<T>`: `for (var x in a)` visits each element in index
 ## order. Every mutating operation (an element store through `[]`, `append`,
 ## `insert`, `remove_at`, `pop`, `clear`, a shrinking `truncate`, `swap`,
-## `fill`, `retain`, `resize`, `split_off`, and `reverse`, `sort` or `dedup`
-## of two or more elements) invalidates running iterators and slices
+## `fill`, `retain`, `remove_if`, `resize`, `split_off`, `drain`,
+## `extend_from`, `rotate`, `select_nth`, `partial_sort`, and `reverse`,
+## `sort`, `sort_unstable` or `dedup` of two or more elements) invalidates
+## running iterators and slices
 ## (`slice`), and the next step of such a loop panics with "Array modified
 ## during iteration".
 ##
@@ -498,14 +500,47 @@ export struct Array<T> {
     reverse() {
         if (_size >= 2) {
             _version = _version + 1;
-            ulong low = 0;
-            ulong high = _size - 1;
-            while (low < high) {
-                _array_swap(_slot(low), _slot(high), sizeof<T>());
-                low = low + 1;
-                high = high - 1;
-            }
+            _reverse_range(0, _size);
         }
+    }
+
+    # Reverses slots `start` up to `end` by exchanging raw slots, so no
+    # count changes. Leaves `_version` alone.
+    _reverse_range(start: ulong, end: ulong) {
+        if (end - start < 2) {
+            return;
+        }
+        ulong low = start;
+        ulong high = end - 1;
+        while (low < high) {
+            _array_swap(_slot(low), _slot(high), sizeof<T>());
+            low = low + 1;
+            high = high - 1;
+        }
+    }
+
+    ## Moves the first `count` elements to the end, keeping the order within
+    ## each part: the element at `count` becomes the first.
+    ##
+    ## Runs in O(count of the Array), exchanging elements, so reference
+    ## counts are unchanged. Rotating by 0 or by the Array's `count` changes
+    ## nothing and leaves iterators valid; any other rotation invalidates
+    ## them.
+    ##
+    ## @param count the number of leading elements to move; from 0 through the Array's `count`
+    ## @panics if `count` is more than the Array's `count` ("Array rotate count out of bounds")
+    ## @example
+    ##     var a = [1, 2, 3, 4, 5];
+    ##     a.rotate(2);   # [3, 4, 5, 1, 2]
+    rotate(count: ulong, location: __ptr<char> = __caller_location()) {
+        assert(count <= _size, "Array rotate count out of bounds", location);
+        if (count == 0 || count == _size) {
+            return;
+        }
+        _version = _version + 1;
+        _reverse_range(0, count);
+        _reverse_range(count, _size);
+        _reverse_range(0, _size);
     }
 
     ## Sorts the elements in place into the order `compare` defines. The
@@ -536,6 +571,96 @@ export struct Array<T> {
     ##     numbers.sort((a, b) => b - a);        # descending: [3, 1]
     sort(compare: (T, T) => int) {
         _merge_sort(compare);
+    }
+
+    ## Sorts the elements in place into the order `compare` defines, without
+    ## keeping equal elements in their original order.
+    ##
+    ## `compare` follows the convention of `sort(compare)`. It is
+    ## pattern-defeating quicksort (pdqsort): O(count log count) calls to
+    ## `compare` in the worst case, O(count) on an Array that is already
+    ## sorted or all equal, and no scratch buffer, so it is the faster sort
+    ## when stability does not matter. Elements only trade slots, so no
+    ## reference count changes. Invalidates running iterators when there
+    ## are two or more elements.
+    ##
+    ## @param compare returns the order of its two arguments, as for `sort`
+    ## @panics if `compare` modifies the Array ("Array modified during sort")
+    ## @example
+    ##     var a = [5, 1, 4, 2, 3];
+    ##     a.sort_unstable((x, y) => x - y);   # [1, 2, 3, 4, 5]
+    sort_unstable(compare: (T, T) => int) {
+        _pdq_sort(compare);
+    }
+
+    # The body of `sort_unstable(compare)`, which `sort_unstable()` calls
+    # too (see `_merge_sort`).
+    _pdq_sort(compare: (T, T) => int) {
+        if (_size < 2) {
+            return;
+        }
+        var sorter = _ArraySorter<T>(this, compare);
+        sorter.sort(0, _size);
+    }
+
+    ## Reorders the elements so that the one at `nth` is the element a full
+    ## sort would put there, every element before it sorts before or with
+    ## it, and every element after it sorts after or with it (C++'s
+    ## `nth_element`). Each side is otherwise in no particular order.
+    ##
+    ## `compare` follows the convention of `sort(compare)`. Runs in O(count)
+    ## calls to `compare` on average and O(count log count) in the worst
+    ## case, with no scratch buffer. Elements only trade slots, so no
+    ## reference count changes. Invalidates running iterators.
+    ##
+    ## @param nth the position to settle; less than `count`
+    ## @param compare returns the order of its two arguments, as for `sort`
+    ## @panics if `nth < count` does not hold ("Array select_nth index out of bounds")
+    ## @panics if `compare` modifies the Array ("Array modified during sort")
+    ## @example
+    ##     var a = [9, 1, 8, 2, 7, 3];
+    ##     a.select_nth(2, (x, y) => x - y);   # a[2] == 3, the third smallest
+    select_nth(nth: ulong, compare: (T, T) => int, location: __ptr<char> = __caller_location()) {
+        _select_nth(nth, compare, location);
+    }
+
+    # The body of `select_nth(nth, compare)`, shared with `select_nth(nth)`.
+    _select_nth(nth: ulong, compare: (T, T) => int, location: __ptr<char>) {
+        assert(nth < _size, "Array select_nth index out of bounds", location);
+        var sorter = _ArraySorter<T>(this, compare);
+        sorter.select(nth);
+    }
+
+    ## Puts the `count` elements that sort first into the first `count`
+    ## positions, in order, and leaves the rest after them in no particular
+    ## order: the start of a full sort, found faster.
+    ##
+    ## `compare` follows the convention of `sort(compare)`. Runs in
+    ## O(count of the Array + `count` log `count`) calls to `compare` on
+    ## average, with no scratch buffer; it is not stable. Elements only
+    ## trade slots, so no reference count changes. Invalidates running
+    ## iterators.
+    ##
+    ## @param count the number of leading elements to sort; from 0 through the Array's `count`
+    ## @param compare returns the order of its two arguments, as for `sort`
+    ## @panics if `count` is more than the Array's `count` ("Array partial_sort count out of bounds")
+    ## @panics if `compare` modifies the Array ("Array modified during sort")
+    ## @example
+    ##     var scores = [40, 95, 12, 77, 63];
+    ##     scores.partial_sort(3, (x, y) => y - x);   # starts [95, 77, 63]
+    partial_sort(count: ulong, compare: (T, T) => int, location: __ptr<char> = __caller_location()) {
+        _partial_sort(count, compare, location);
+    }
+
+    # The body of `partial_sort(count, compare)`, shared with
+    # `partial_sort(count)`.
+    _partial_sort(count: ulong, compare: (T, T) => int, location: __ptr<char>) {
+        assert(count <= _size, "Array partial_sort count out of bounds", location);
+        var sorter = _ArraySorter<T>(this, compare);
+        if (count > 0 && count < _size) {
+            sorter.select(count - 1);
+        }
+        sorter.sort(0, count);
     }
 
     # The body of `sort(compare)`, which `sort()` on `Comparable` elements
@@ -758,6 +883,22 @@ export struct Array<T> {
         _size = kept;
     }
 
+    ## Removes every element for which `remove` returns true, keeping the
+    ## order of the rest; the opposite of `retain`.
+    ##
+    ## Runs in O(count) calls to `remove`, which sees each element once, in
+    ## index order, and must not modify the Array. For a struct `T` each
+    ## removed element is released. Invalidates running iterators.
+    ##
+    ## @param remove returns true for an element to remove
+    ## @panics if `remove` modifies the Array ("Array modified during retain")
+    ## @example
+    ##     var a = [1, 2, 3, 4];
+    ##     a.remove_if((x) => x > 2);   # [1, 2]
+    remove_if(remove: (T) => bool) {
+        retain((x) => !remove(x));
+    }
+
     ## Removes each element equal (`==`) to the one before it, so a run of
     ## equal elements keeps only its first. On a sorted Array this removes
     ## every duplicate.
@@ -836,21 +977,42 @@ export struct Array<T> {
     ##     var tail = a.split_off(1);   # a holds [1]; tail holds [2, 3, 4]
     split_off(index: ulong, location: __ptr<char> = __caller_location()): Array<T> {
         assert(index <= _size, "Array split_off index out of bounds", location);
-        ulong moved = _size - index;
+        return drain(index, _size);
+    }
+
+    ## Removes the elements from `start` up to but not including `end` and
+    ## returns them as a new Array, shifting the later elements down.
+    ##
+    ## Runs in O(count - start). The elements move without changing their
+    ## reference counts. This Array's capacity is unchanged. Invalidates
+    ## running iterators when any element is removed.
+    ##
+    ## @param start the position of the first element to remove
+    ## @param end the position one past the last element to remove; from `start` through `count`
+    ## @returns a new Array holding the removed elements, in order
+    ## @panics if `start <= end` and `end <= count` do not both hold ("Array drain range out of bounds")
+    ## @example
+    ##     var a = [1, 2, 3, 4, 5];
+    ##     var middle = a.drain(1, 3);   # a holds [1, 4, 5]; middle holds [2, 3]
+    drain(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): Array<T> {
+        assert(start <= end && end <= _size, "Array drain range out of bounds", location);
+        ulong moved = end - start;
         if (moved == 0) {
             return Array<T>();
         }
         _version = _version + 1;
-        Array<T> tail = Array<T>(moved);
-        # The references move to `tail` as raw bytes, so no count changes,
-        # and their old slots are zeroed to stay empty.
-        _array_copy(tail._data, _slot(index), moved * sizeof<T>());
+        Array<T> drained = Array<T>(moved);
+        # The references move to `drained` and the tail moves down as raw
+        # bytes, so no count changes; the slots vacated at the end are
+        # zeroed to stay empty.
+        _array_copy(drained._data, _slot(start), moved * sizeof<T>());
+        _array_move(_slot(start), _slot(end), (_size - end) * sizeof<T>());
         if (!__is_pod<T>()) {
-            _array_zero(_slot(index), moved * sizeof<T>());
+            _array_zero(_slot(_size - moved), moved * sizeof<T>());
         }
-        tail._size = moved;
-        _size = index;
-        return tail;
+        drained._size = moved;
+        _size = _size - moved;
+        return drained;
     }
 
     ## Appends every element of `rhs`, in order, to the end of this Array.
@@ -865,15 +1027,39 @@ export struct Array<T> {
     ## @panics if the buffer must grow while an I/O operation in a task is using it
     ## @see +=
     append_all(rhs: Array<T>) {
-        # Snapshot the count, and read `rhs._data` only after growing: with
-        # `a += a` (rhs aliases this) both change.
-        ulong count = rhs._size;
+        _append_from(rhs, 0, rhs._size);
+    }
+
+    ## Appends every element of `items`, in order, to the end of this Array.
+    ##
+    ## Runs in O(count of `items`), growing the buffer at most once. `items`
+    ## may view this same Array. For a struct `T` each appended element is
+    ## acquired once more. Invalidates this Array's running iterators and
+    ## slices (`items` among them, when it views this Array) when `items`
+    ## is not empty.
+    ##
+    ## @param items the elements to copy
+    ## @panics if the Array `items` views was modified since `items` was made ("Array modified while a slice of it is in use")
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
+    ## @example
+    ##     var a = [1, 2];
+    ##     var b = [7, 8, 9];
+    ##     a.extend_from(b.slice(1, 3));   # [1, 2, 8, 9]
+    extend_from(items: ArraySlice<T>, location: __ptr<char> = __caller_location()) {
+        items._check(location);
+        _append_from(items._source, items._start, items.count);
+    }
+
+    # Appends `count` elements of `source` from `start` on with one block
+    # copy. `count` is read by the caller first and `source`'s buffer only
+    # after growing, since `source` may be this Array (`a += a`).
+    _append_from(source: Array<T>, start: ulong, count: ulong) {
         if (count == 0) {
             return;
         }
         _version = _version + 1;
         _reserve_extra(count);
-        _array_copy(_slot(_size), rhs._data, count * sizeof<T>());
+        _array_copy(_slot(_size), source._slot(start), count * sizeof<T>());
         # The copied slots are new references to the same elements.
         if (!__is_pod<T>()) {
             ulong index = _size;
@@ -1068,6 +1254,73 @@ export extend Array<T: Comparable> {
     [__Reads]
     is_sorted(): bool {
         return slice(0, _size).is_sorted();
+    }
+
+    ## Sorts the elements in place into their own order, `compare`, without
+    ## keeping equal elements in their original order; otherwise behaves
+    ## like `sort_unstable(compare)`.
+    ##
+    ## @panics if comparing modifies the Array ("Array modified during sort")
+    ## @example
+    ##     var a = [3, 1, 2];
+    ##     a.sort_unstable();   # [1, 2, 3]
+    sort_unstable() {
+        _pdq_sort((a, b) => a.compare(b));
+    }
+
+    ## Reorders the elements so that the one at `nth` is the one sorting
+    ## would put there, with the elements before it sorting before or with
+    ## it and those after it after or with it; see
+    ## `select_nth(nth, compare)`.
+    ##
+    ## @param nth the position to settle; less than `count`
+    ## @panics if `nth < count` does not hold ("Array select_nth index out of bounds")
+    ## @panics if comparing modifies the Array ("Array modified during sort")
+    ## @example
+    ##     var a = [9, 1, 8, 2, 7];
+    ##     a.select_nth(2);   # a[2] == 7, the median
+    select_nth(nth: ulong, location: __ptr<char> = __caller_location()) {
+        _select_nth(nth, (a, b) => a.compare(b), location);
+    }
+
+    ## Puts the `count` smallest elements into the first `count` positions,
+    ## in order; see `partial_sort(count, compare)`.
+    ##
+    ## @param count the number of leading elements to sort; from 0 through the Array's `count`
+    ## @panics if `count` is more than the Array's `count` ("Array partial_sort count out of bounds")
+    ## @panics if comparing modifies the Array ("Array modified during sort")
+    ## @example
+    ##     var a = [5, 3, 9, 1, 7];
+    ##     a.partial_sort(2);   # starts [1, 3]
+    partial_sort(count: ulong, location: __ptr<char> = __caller_location()) {
+        _partial_sort(count, (a, b) => a.compare(b), location);
+    }
+
+    ## Returns the lexicographic order of this Array and `other`: the order
+    ## of the first pair of elements that differ (by their `compare`), or,
+    ## when one Array is the start of the other, the shorter first.
+    ##
+    ## Runs in O(count); stops at the first difference. Two empty Arrays
+    ## sort together. It follows `Comparable`'s convention, so an Array of
+    ## Arrays sorts with `sort((a, b) => a.compare(b))`.
+    ##
+    ## @param other the Array to compare with
+    ## @returns a negative number, zero or a positive number as this Array
+    ##   sorts before, with or after `other`
+    ## @example
+    ##     assert([1, 2, 3].compare([1, 3]) < 0, "2 sorts before 3");
+    ##     assert([1, 2].compare([1, 2, 0]) < 0, "the shorter first");
+    [__Reads]
+    compare(other: Array<T>): int {
+        ulong index = 0;
+        while (index < _size && index < other._size) {
+            var order = _data[index].compare(other._data[index]);
+            if (order != 0) {
+                return order;
+            }
+            index = index + 1;
+        }
+        return _size.compare(other._size);
     }
 }
 
@@ -1410,6 +1663,327 @@ export struct ArraySliceIterator<T> {
 }
 
 extend ArraySliceIterator<T> with Iterator<T>;
+
+# `_ArraySorter` insertion sorts a range this small, or smaller.
+const _SORT_INSERTION_SIZE: ulong = 24;
+# `_ArraySorter` takes the pivot of a larger range as a median of three medians.
+const _SORT_NINTHER_SIZE: ulong = 128;
+
+# One `sort_unstable`, `select_nth` or `partial_sort` of `_array`:
+# pattern-defeating quicksort (Orson Peters' pdqsort), which falls back to
+# heapsort when partitions keep coming out unbalanced, so it is
+# O(count log count) in the worst case with no scratch buffer. Elements only
+# trade slots (`_swap`), so no count changes. Every comparison is followed
+# by a version check, so a `compare` that changes the Array panics before
+# the next slot is read; and every scan is bounded by its range, so even an
+# inconsistent `compare` stays in bounds (its result is then just unsorted).
+[Value]
+struct _ArraySorter<T> {
+    Array<T> _array;
+    (T, T) => int _compare;
+    ulong _version;
+    # Whether the last `_partition_right` found the range already partitioned.
+    bool _partitioned;
+
+    construct(array: Array<T>, compare: (T, T) => int) {
+        array._version = array._version + 1;
+        _array = array;
+        _compare = compare;
+        _version = array._version;
+    }
+
+    # Sorts slots `begin` up to `end`.
+    sort(begin: ulong, end: ulong) {
+        _sort(begin, end, _bad_allowed(end - begin), true);
+    }
+
+    # Moves the element a full sort puts at `nth` there, with every element
+    # before it sorting before or with it and every element after it after
+    # or with it: quickselect on the same partitions as `_sort`.
+    select(nth: ulong) {
+        ulong begin = 0;
+        ulong end = _array._size;
+        var bad_allowed = _bad_allowed(end);
+        var leftmost = true;
+        while (end - begin > _SORT_INSERTION_SIZE) {
+            _choose_pivot(begin, end);
+            # See `_sort`: every element of the range sorts with or after
+            # the pivot, so the equal ones go left and are in place.
+            if (!leftmost && !_less(begin - 1, begin)) {
+                ulong equal_end = _partition_left(begin, end);
+                if (nth <= equal_end) {
+                    return;
+                }
+                begin = equal_end + 1;
+                continue;
+            }
+            ulong size = end - begin;
+            ulong pivot = _partition_right(begin, end);
+            if (pivot == nth) {
+                return;
+            }
+            if (pivot - begin < size / 8 || end - pivot - 1 < size / 8) {
+                bad_allowed = bad_allowed - 1;
+                if (bad_allowed == 0) {
+                    _heap_sort(begin, end);
+                    return;
+                }
+                _break_patterns(begin, pivot, end);
+            }
+            if (nth < pivot) {
+                end = pivot;
+            } else {
+                begin = pivot + 1;
+                leftmost = false;
+            }
+        }
+        _insertion_sort(begin, end);
+    }
+
+    # The number of unbalanced partitions a range of `count` may take
+    # before it falls back to heapsort: log2(count), at least 1.
+    static _bad_allowed(count: ulong): ulong {
+        ulong log = 1;
+        while (count > 2) {
+            count = count / 2;
+            log = log + 1;
+        }
+        return log;
+    }
+
+    # Whether the element at `a` sorts before the one at `b`.
+    _less(a: ulong, b: ulong): bool {
+        var order = _compare(_array._data[a], _array._data[b]);
+        assert(_array._version == _version, "Array modified during sort");
+        return order < 0;
+    }
+
+    _swap(a: ulong, b: ulong) {
+        if (a != b) {
+            _array_swap(_array._slot(a), _array._slot(b), sizeof<T>());
+        }
+    }
+
+    # Orders the elements at `a` and `b`.
+    _sort2(a: ulong, b: ulong) {
+        if (_less(b, a)) {
+            _swap(a, b);
+        }
+    }
+
+    # Orders the elements at `a`, `b` and `c`.
+    _sort3(a: ulong, b: ulong, c: ulong) {
+        _sort2(a, b);
+        _sort2(b, c);
+        _sort2(a, b);
+    }
+
+    _sort(begin: ulong, end: ulong, bad_allowed: ulong, leftmost: bool) {
+        while (true) {
+            ulong size = end - begin;
+            if (size <= _SORT_INSERTION_SIZE) {
+                _insertion_sort(begin, end);
+                return;
+            }
+            _choose_pivot(begin, end);
+            # Outside the leftmost range the element before `begin` is a
+            # pivot that sorts before or with every element here. A pivot
+            # that sorts with it is the smallest, so the elements equal to it
+            # go left and need no more sorting: runs of equal elements cost
+            # O(count).
+            if (!leftmost && !_less(begin - 1, begin)) {
+                begin = _partition_left(begin, end) + 1;
+                continue;
+            }
+            ulong pivot = _partition_right(begin, end);
+            bool partitioned = _partitioned;
+            if (pivot - begin < size / 8 || end - pivot - 1 < size / 8) {
+                bad_allowed = bad_allowed - 1;
+                if (bad_allowed == 0) {
+                    _heap_sort(begin, end);
+                    return;
+                }
+                _break_patterns(begin, pivot, end);
+            } else if (partitioned
+                && _partial_insertion_sort(begin, pivot)
+                && _partial_insertion_sort(pivot + 1, end)) {
+                # Already sorted input stops here, in O(count).
+                return;
+            }
+            _sort(begin, pivot, bad_allowed, leftmost);
+            begin = pivot + 1;
+            leftmost = false;
+        }
+    }
+
+    # Moves the median of a sample of the range to `begin`, as the pivot.
+    _choose_pivot(begin: ulong, end: ulong) {
+        ulong half = (end - begin) / 2;
+        if (end - begin > _SORT_NINTHER_SIZE) {
+            _sort3(begin, begin + half, end - 1);
+            _sort3(begin + 1, begin + half - 1, end - 2);
+            _sort3(begin + 2, begin + half + 1, end - 3);
+            _sort3(begin + half - 1, begin + half, begin + half + 1);
+            _swap(begin, begin + half);
+        } else {
+            _sort3(begin + half, begin, end - 1);
+        }
+    }
+
+    # Partitions the range around the pivot at `begin`: elements that sort
+    # before it go left, the rest right. Returns the pivot's new position,
+    # and sets `_partitioned` when no element had to move.
+    _partition_right(begin: ulong, end: ulong): ulong {
+        ulong first = begin + 1;
+        while (first < end && _less(first, begin)) {
+            first = first + 1;
+        }
+        ulong last = end;
+        while (last > first) {
+            last = last - 1;
+            if (_less(last, begin)) {
+                break;
+            }
+        }
+        _partitioned = first >= last;
+        while (first < last) {
+            _swap(first, last);
+            first = first + 1;
+            while (first < end && _less(first, begin)) {
+                first = first + 1;
+            }
+            last = last - 1;
+            while (last > first && !_less(last, begin)) {
+                last = last - 1;
+            }
+        }
+        ulong pivot = first - 1;
+        _swap(begin, pivot);
+        return pivot;
+    }
+
+    # Partitions the range around the pivot at `begin`, elements that sort
+    # with it going left; for a pivot no element sorts before. Returns the
+    # pivot's new position, the last of the elements equal to it.
+    _partition_left(begin: ulong, end: ulong): ulong {
+        ulong last = end - 1;
+        while (last > begin && _less(begin, last)) {
+            last = last - 1;
+        }
+        ulong first = begin;
+        while (first < last) {
+            first = first + 1;
+            if (_less(begin, first)) {
+                break;
+            }
+        }
+        while (first < last) {
+            _swap(first, last);
+            last = last - 1;
+            while (last > first && _less(begin, last)) {
+                last = last - 1;
+            }
+            first = first + 1;
+            while (first < last && !_less(begin, first)) {
+                first = first + 1;
+            }
+        }
+        _swap(begin, last);
+        return last;
+    }
+
+    # Swaps a few elements on each side of an unbalanced partition into new
+    # places, breaking up the pattern that made it unbalanced.
+    _break_patterns(begin: ulong, pivot: ulong, end: ulong) {
+        ulong left = pivot - begin;
+        ulong right = end - pivot - 1;
+        if (left >= _SORT_INSERTION_SIZE) {
+            _swap(begin, begin + left / 4);
+            _swap(pivot - 1, pivot - left / 4);
+            if (left > _SORT_NINTHER_SIZE) {
+                _swap(begin + 1, begin + left / 4 + 1);
+                _swap(begin + 2, begin + left / 4 + 2);
+                _swap(pivot - 2, pivot - left / 4 - 1);
+                _swap(pivot - 3, pivot - left / 4 - 2);
+            }
+        }
+        if (right >= _SORT_INSERTION_SIZE) {
+            _swap(pivot + 1, pivot + 1 + right / 4);
+            _swap(end - 1, end - right / 4);
+            if (right > _SORT_NINTHER_SIZE) {
+                _swap(pivot + 2, pivot + 2 + right / 4);
+                _swap(pivot + 3, pivot + 3 + right / 4);
+                _swap(end - 2, end - right / 4 - 1);
+                _swap(end - 3, end - right / 4 - 2);
+            }
+        }
+    }
+
+    _insertion_sort(begin: ulong, end: ulong) {
+        ulong index = begin + 1;
+        while (index < end) {
+            ulong at = index;
+            while (at > begin && _less(at, at - 1)) {
+                _swap(at, at - 1);
+                at = at - 1;
+            }
+            index = index + 1;
+        }
+    }
+
+    # Insertion sorts the range unless that would move elements more than
+    # 8 places in all; returns whether it finished.
+    _partial_insertion_sort(begin: ulong, end: ulong): bool {
+        ulong moves = 0;
+        ulong index = begin + 1;
+        while (index < end) {
+            ulong at = index;
+            while (at > begin && _less(at, at - 1)) {
+                _swap(at, at - 1);
+                at = at - 1;
+            }
+            moves = moves + (index - at);
+            if (moves > 8) {
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+
+    _heap_sort(begin: ulong, end: ulong) {
+        ulong count = end - begin;
+        ulong index = count / 2;
+        while (index > 0) {
+            index = index - 1;
+            _sift_down(begin, index, count);
+        }
+        while (count > 1) {
+            count = count - 1;
+            _swap(begin, begin + count);
+            _sift_down(begin, 0, count);
+        }
+    }
+
+    # Moves the element at heap position `root` down the max-heap of
+    # `count` elements starting at slot `begin`.
+    _sift_down(begin: ulong, root: ulong, count: ulong) {
+        while (true) {
+            ulong child = 2 * root + 1;
+            if (child >= count) {
+                return;
+            }
+            if (child + 1 < count && _less(begin + child, begin + child + 1)) {
+                child = child + 1;
+            }
+            if (!_less(begin + root, begin + child)) {
+                return;
+            }
+            _swap(begin + root, begin + child);
+            root = child;
+        }
+    }
+}
 
 # The start of an array literal: a new Array holding `first`, whose type
 # gives the literal's element type (see `_literal_append`).

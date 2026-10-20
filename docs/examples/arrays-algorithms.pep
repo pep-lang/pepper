@@ -27,6 +27,26 @@ main(): int {
     tail.fill(9);
     assert(tail == [9, 9], "filled");
 
+    # Reshaping.
+    var digits = [1, 2, 3, 4, 5];
+    digits.rotate(2);
+    assert(digits == [3, 4, 5, 1, 2], "rotated");
+    var drained = digits.drain(1, 3);
+    assert(digits == [3, 1, 2] && drained == [4, 5], "drained");
+    digits.remove_if((x) => x > 2);
+    digits.extend_from(drained.slice(0, 1));
+    assert(digits == [1, 2, 4], "filtered and extended");
+
+    # Ordering without a full stable sort.
+    var scores = [40, 95, 12, 77, 63, 8];
+    scores.select_nth(2);
+    assert(scores[2] == 40, "the third smallest");
+    scores.partial_sort(2);
+    assert(scores[0] == 8 && scores[1] == 12, "the two smallest, in order");
+    scores.sort_unstable((x, y) => y - x);
+    assert(scores == [95, 77, 63, 40, 12, 8], "descending");
+    assert([1, 2, 3].compare([1, 3]) < 0, "lexicographic");
+
     # A slice views part of an array without copying it.
     var numbers = [1, 2, 3, 4, 5];
     var middle = numbers.slice(1, 4);
