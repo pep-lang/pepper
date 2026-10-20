@@ -3081,7 +3081,10 @@ the cache has one. Otherwise it checks the compilation unit:
    declaration's function, tuple and weak types got their structs, its signatures
    their check, its closures their structs and its aliases their expansion with its
    own compilation unit. `restore_bodies` puts back only what `stash_bodies` took
-   (`PassState.stashed_from`).
+   (`PassState.stashed_from`), and `stash_bodies` run again (before the passes
+   that lower bodies) takes out only those of these that a pass put back: a
+   method the compilation unit added to a checked struct (a generic method's
+   specialization) is lowered with the unit.
 5. `sema.finish_checked` makes the `CheckedUnit` (the module, the link
    summaries, the type aliases), and `store_checked` writes its record,
    own interface and warnings, rendered (`<key>.rec.warn`), under the key.
