@@ -3517,9 +3517,9 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     newest published toolchain (the `x.y.z-dev` prerelease `release.yml`
     publishes on each merge, or a release with a higher version, through
     `install.sh` / `install.ps1`), restore the newest build cache an
-    earlier run saved for the OS (`.pep/cache`, `runtime/.pep/cache`,
-    `tools/.pep/cache` and the changed compiler; actions/cache, saved again
-    after the job), build `tools/compiler` when it changed
+    earlier run saved for the OS (`PEPPER_CACHE_DIR`, one cache every
+    build in the job shares, the tools' tests' own builds included, and
+    the changed compiler; actions/cache, saved again after the job), build `tools/compiler` when it changed
     (`ci-build-compiler.sh`), and give the compiler a time taken from its
     contents, since the cache keys on the compiler's path, size and time.
     Then `scripts/pepper-tests.sh` runs. The Windows job also runs `pep-doc
