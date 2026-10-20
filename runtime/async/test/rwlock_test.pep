@@ -112,11 +112,22 @@ a_waiting_writer_comes_before_new_readers() {
             expect_true(false);  # try_write took a lock a reader holds
         }
         writer = async.Thread.spawn(write_gate);
-        # Give the writer time to start waiting behind this reader.
-        async.Thread.sleep(50);
-        with (var late = gate.try_read()) {
-            expect_true(false);  # a new reader went ahead of a waiting writer
+        # Once the writer waits behind this reader, a new reader must fail.
+        # Poll for that rather than sleep a fixed time: a busy machine can
+        # take long to start the writer.
+        var blocked = false;
+        var tries = 0;
+        while (!blocked && tries < 1000) {
+            with (var late = gate.try_read()) {
+                tries = tries + 1;
+            } else {
+                blocked = true;
+            }
+            if (!blocked) {
+                async.Thread.sleep(10);
+            }
         }
+        expect_true(blocked);  # new readers kept going ahead of a waiting writer
         expect_equal(writer_done.load(), 0 as long);
     }
     writer.join();
