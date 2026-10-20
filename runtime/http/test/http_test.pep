@@ -59,7 +59,7 @@ handle(request: http.Request): http.Response {
             request.headers["authorization"] + "|" + request.headers["cookie"] + "|" + request.headers["x-test"]
         );
     }
-    if (path == "/upgrade" && request.can_upgrade()) {
+    if (path == "/upgrade") {
         # Takes the connection over and echoes every byte back.
         var upgraded = http.Response().upgrade("echo", (connection) => {
             for (var chunk in connection.chunks(4096)) {
@@ -276,8 +276,8 @@ a_handler_takes_over_the_connection_after_101() {
             expect_false(lower.contains("content-length"));
             expect_true(text.ends_with("\r\n\r\nearly late"));  # raw bytes, not HTTP, after the head
 
-            # HTTP/1.0 cannot upgrade: the handler sees `can_upgrade()` false.
-            expect_true(raw(port, "GET /upgrade HTTP/1.0\r\n\r\n").starts_with("HTTP/1.1 404"));
+            # HTTP/1.0 cannot switch protocols: the upgrade becomes a 501.
+            expect_true(raw(port, "GET /upgrade HTTP/1.0\r\n\r\n").starts_with("HTTP/1.1 501 Not Implemented"));
         }
     );
 }

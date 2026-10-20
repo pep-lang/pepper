@@ -350,9 +350,9 @@ export struct Response {
     ## connection, and serves no more HTTP on it. The connection closes when
     ## `takeover` returns, or earlier at `Connection.close()`.
     ##
-    ## Answer this way only a request whose `can_upgrade()` is true. On an
-    ## HTTP/2 stream the server sends `501 Not Implemented` instead and never
-    ## calls `takeover`.
+    ## Only a request whose `can_upgrade()` is true can be upgraded: for
+    ## any other (HTTP/1.0, or an HTTP/2 stream) the server sends `501 Not
+    ## Implemented` instead and never calls `takeover`.
     ##
     ## @param protocol the `Upgrade` field: the protocol the connection
     ##   switches to, such as `websocket`

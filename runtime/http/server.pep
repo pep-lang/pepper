@@ -233,6 +233,9 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         return false;
     }
     var response = handler(request);
+    if (response._upgrade && !request._upgradable) {
+        response = Response(501);  # HTTP/1.0 cannot switch protocols
+    }
     var sent = _http_send_response(reader._connection, response, method == "HEAD", keep, version == "HTTP/1.1");
     if (response._upgrade) {
         if (sent) {

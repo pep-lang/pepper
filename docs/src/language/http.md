@@ -140,8 +140,8 @@ served from a handler: it answers with
   the client sent right after the request head, which the server had
   already read. It closes when `takeover` returns, or at `close()`.
 - `request.can_upgrade()` says whether the connection can switch: true for
-  HTTP/1.1, false for HTTP/1.0 and for a request on an HTTP/2 stream. On
-  HTTP/2 an upgrade response becomes `501 Not Implemented`.
+  HTTP/1.1, false for HTTP/1.0 and for a request on an HTTP/2 stream. For
+  those, an upgrade response becomes `501 Not Implemented`.
 
 ```pepper
 {{#include ../../examples/http-upgrade.pep}}
