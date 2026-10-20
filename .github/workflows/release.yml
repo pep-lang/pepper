@@ -300,13 +300,14 @@ jobs:
   # After a release, main starts the next minor version: a pull request that
   # sets X.(Y+1).0-dev (scripts/set-version.sh), when main still holds the
   # version just released. Until it merges, merges to main publish nothing
-  # (main holds a release's version), so merge it once its CI passes, as
-  # any other pull request. A patch release made from a branch, or a
-  # release main has already moved past, leaves main alone. A major version
-  # is started by hand.
+  # (main holds a release's version), so merge it once its CI passes. A
+  # patch release made from a branch, or a release main has already moved
+  # past, leaves main alone. A major version is started by hand.
   #
-  # CI does not run on pull requests, so the job dispatches it on the
-  # branch.
+  # A pull request opened with the workflow's own token starts no
+  # workflows, so the job dispatches CI on the branch. That run does not
+  # count toward the `test` check main's ruleset requires, so the pull
+  # request is merged by an admin once it passes (`gh pr merge --admin`).
   bump:
     if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
     needs: [version, publish]
@@ -357,4 +358,4 @@ jobs:
             > "$RUNNER_TEMP/body.md"
           gh pr create --base main --head "$branch" --title "Start $next" --body-file "$RUNNER_TEMP/body.md"
           gh workflow run ci.yml --ref "$branch"
-          echo "::notice::opened the pull request for $branch and dispatched CI on it; merge it once CI passes"
+          echo "::notice::opened the pull request for $branch and dispatched CI on it; merge it with 'gh pr merge $branch --squash --admin' once CI passes"

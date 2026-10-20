@@ -191,8 +191,11 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   3. Once it is published, the workflow opens a pull request that starts
      the next minor version on main (`0.10.0-dev`), unless main has already
      moved on, and dispatches CI on its branch; a major version is started
-     by hand. Merge it once CI passes: until then, merges to main publish
-     no prerelease, since main holds the released version.
+     by hand. Merge it once CI passes, as an admin
+     (`gh pr merge <branch> --squash --admin`): a run dispatched by hand
+     does not count toward the `test` check main requires. Until it merges,
+     merges to main publish no prerelease, since main holds the released
+     version.
 
 For each platform, `scripts/release-build.sh` builds the
 tools, lays them out as above, archives them as
