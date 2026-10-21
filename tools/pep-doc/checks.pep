@@ -9,7 +9,8 @@
 # | Tool | Options from | Page |
 # | --- | --- | --- |
 # | `pep-build` | `pep-build --help`, `TRACE_CHANNELS`, the environment variables the compiler reads | `docs/src/tools/pep-build.md` |
-# | `pepper`, `pep-fmt`, `pep-profile`, `pep-run`, `pep-test` | the tool's `--help` | `docs/src/tools/<tool>.md` |
+# | `pepper`, `pep-fmt`, `pep-profile`, `pep-run`, `pep-test`, `pep-new` | the tool's `--help` | `docs/src/tools/<tool>.md` |
+# | `pep-init` | its `--help` | `docs/src/tools/pep-new.md`, which documents both |
 # | `pep-package`, `pep-install` | the tool's `--help` and each command's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-doc` | its own help (`HELP` in main.pep) | `docs/src/tools/pep-doc.md` |
 # | `pep-lsp` | `HELP` in `tools/pep-lsp/arguments.pep`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
@@ -35,7 +36,9 @@ import "strings";
 # The Pepper tools whose `--help` lists options, built from
 # `tools/<tool>/main.pep`.
 export pepper_tools(): String[] {
-    return ["pepper", "pep-fmt", "pep-profile", "pep-package", "pep-install", "pep-run", "pep-test"];
+    return [
+        "pepper", "pep-fmt", "pep-profile", "pep-package", "pep-install", "pep-run", "pep-test", "pep-new", "pep-init"
+    ];
 }
 
 # Whether `tool` has commands, each with options of its own.
@@ -486,7 +489,7 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
 
     # The Pepper tools, from their --help.
     for (var tool in pepper_tools()) {
-        var page = $"docs/src/tools/{tool}.md";
+        var page = $"docs/src/tools/{tool == "pep-init" ? "pep-new" : tool}.md";
         var tool_help = _help_of(tools, tool, Array<String>())?;
         _undocumented(root, tool, page, "option", help_options(tool_help), _Match.Word, problems)?;
         if (!_has_commands(tool)) {

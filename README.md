@@ -88,6 +88,7 @@ and [Toolchains](https://docs.pepper-lang.dev/dev/tools/pep-install.html).
 | Command | What it does |
 | --- | --- |
 | [`pepper build`](https://docs.pepper-lang.dev/dev/tools/pep-build.html) | compiles a file, or the project a [`pep.toml`](https://docs.pepper-lang.dev/dev/tools/projects.html) describes |
+| [`pepper new`](https://docs.pepper-lang.dev/dev/tools/pep-new.html) | starts a program or package (`pepper init` in the current folder) |
 | [`pepper run`](https://docs.pepper-lang.dev/dev/tools/pep-run.html) | builds a program and runs it (0.9.3 and later) |
 | [`pepper test`](https://docs.pepper-lang.dev/dev/tools/pep-test.html) | builds and runs the `[Test]` functions |
 | [`pepper fmt`](https://docs.pepper-lang.dev/dev/tools/pep-fmt.html) | formats source in the one standard style |

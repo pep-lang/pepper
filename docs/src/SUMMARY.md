@@ -79,6 +79,7 @@
 - [Toolchains: pep-install](tools/pep-install.md)
 - [The compiler: pep-build](tools/pep-build.md)
 - [Projects: pep.toml](tools/projects.md)
+- [Starting a project: pep-new and pep-init](tools/pep-new.md)
 - [Running a program: pep-run](tools/pep-run.md)
 - [The package manager: pep-package](tools/pep-package.md)
 - [Formatting with pep-fmt](tools/pep-fmt.md)

@@ -22,7 +22,8 @@
 #   bin/pepper        the entry point, and every `pep-<command>` it runs:
 #   bin/pep-build     the compiler, pepc (tools/compiler), LLVM linked in
 #                     (Windows: LLVM-C.dll beside it)
-#   bin/pep-fmt, pep-test, pep-package, pep-profile, pep-run, pep-install, pep-lsp, pep-doc
+#   bin/pep-fmt, pep-test, pep-package, pep-profile, pep-run, pep-new, pep-init,
+#       pep-install, pep-lsp, pep-doc
 #   runtime/          the runtime, which the compiler finds from bin/..
 #   LICENSE.md
 #
@@ -250,7 +251,7 @@ unset PEPC_NO_COMPILATION_UNITS
 
 echo "=== build the Pepper tools"
 # With the pep-build that ships.
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-new pep-init pep-install pep-doc pep-lsp; do
   "$stage/bin/pep-build$exe" -O --lto=full "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done
 unset PEPPER_RUNTIME

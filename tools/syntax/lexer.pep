@@ -41,6 +41,49 @@ export is_identifier_part(c: int): bool {
     return is_identifier_start(c) or is_digit(c);
 }
 
+## Returns whether `text` is a name source code can use, as in `import
+## text`: a letter or `_`, then letters, digits and `_`, all ASCII, and not
+## a reserved word (`is_reserved_word`).
+##
+## @param text the text to test
+## @returns true for such a name, false for empty text
+export is_identifier(text: String): bool {
+    if (text.is_empty) {
+        return false;
+    }
+    ulong index = 0;
+    for (var c in text.bytes()) {
+        if (!(index == 0 ? is_identifier_start(c) : is_identifier_part(c))) {
+            return false;
+        }
+        index += 1;
+    }
+    return !is_reserved_word(text, Token(TokenKind.Identifier, 0, text.size));
+}
+
+## Returns the identifier nearest `text`: each byte an identifier cannot
+## hold becomes `_`, a leading digit gets a `_` in front, and a reserved
+## word one behind.
+##
+## @param text the text to turn into an identifier
+## @returns the identifier, or empty for empty text
+## @example
+##     syntax.to_identifier("my-app");   # "my_app"
+##     syntax.to_identifier("2d");       # "_2d"
+##     syntax.to_identifier("match");    # "match_"
+export to_identifier(text: String): String {
+    var result = "";
+    ulong index = 0;
+    for (var c in text.bytes()) {
+        result.append(is_identifier_part(c) ? text.substr_bytes(index, 1) : "_");
+        index += 1;
+    }
+    if (!result.is_empty and is_digit(result.byte_at(0))) {
+        return "_" + result;
+    }
+    return is_reserved_word(result, Token(TokenKind.Identifier, 0, result.size)) ? result + "_" : result;
+}
+
 is_hex_digit(c: int): bool {
     return is_digit(c) or (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F');
 }

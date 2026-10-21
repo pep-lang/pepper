@@ -50,6 +50,8 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | Command | Program | What it does |
 | --- | --- | --- |
 | `pepper build` | `pep-build` | Compiles a program, or with no file the project ([The compiler: pep-build](pep-build.md), [Projects: pep.toml](projects.md)) |
+| `pepper new` | `pep-new` | Starts a program or package in a new folder ([Starting a project: pep-new and pep-init](pep-new.md)) |
+| `pepper init` | `pep-init` | Starts a program or package in the current folder ([Starting a project: pep-new and pep-init](pep-new.md)) |
 | `pepper run` | `pep-run` | Builds a program and runs it, like `python script.py` ([Running a program: pep-run](pep-run.md)) |
 | `pepper install` | `pep-install` | Installs toolchains side by side and picks the default ([Toolchains: pep-install](pep-install.md)) |
 | `pepper package` | `pep-package` | Adds, removes, updates and fetches a project's dependencies ([The package manager: pep-package](pep-package.md)) |

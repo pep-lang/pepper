@@ -47,6 +47,9 @@ out=$("./hello$exe")
 echo "$out"
 [ "$out" = "Hello world!" ] || { echo "unexpected output from hello" >&2; exit 1; }
 "$bin/pepper$exe" fmt --check hello.pep
+# A project `pepper new` starts builds.
+"$bin/pepper$exe" new smoke_app
+"$bin/pepper$exe" -C smoke_app build
 
 echo "=== installer"
 installer="$(dirname "$archive")/$(basename "$archive" | sed 's/^pepper-/pepper-install-/')"

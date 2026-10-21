@@ -51,7 +51,7 @@ Changes nothing, and fails (exit status 1) when:
 
 The tools' options come from their `--help`: `pep-build`'s and the Pepper
 tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,
-`pep-run`, `pep-test`), which `scripts/pepper-tests.sh` builds in
+`pep-run`, `pep-test`, `pep-new`, and `pep-init`, whose page is `pep-new`'s), which `scripts/pepper-tests.sh` builds in
 `target/pepper-tests/bin` beside a link to its `pep-build`, so run it
 first.
 
