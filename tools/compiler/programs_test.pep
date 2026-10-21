@@ -6,8 +6,9 @@
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`; and the error for a member a
 # value's type lacks inside an interpolation; string literals that hold
-# a NUL; a `match` in a generic method of another module's struct; and a `[Move]`
-# argument called through a `shared` function value. The
+# a NUL; a `match` in a generic method of another module's struct; a `[Move]`
+# argument called through a `shared` function value; and externs bound to
+# C symbols Pepper functions are named after, at each `-O` level. The
 # programs are in
 # `testdata/`.
 
@@ -408,4 +409,15 @@ move_takes_a_call_through_a_shared_function_value() {
     var output = _run("move_shared_call");
     expect_exit(output, 0);
     expect_equal(output.stdout, "1\n6\n");
+}
+
+# ── externs ─────────────────────────────────────────────────────────────────
+
+[Test]
+extern_bound_to_a_pepper_function_name_calls_the_c_symbol() {
+    for (var options in [Array<String>(), ["-O"], ["-O", "--lto", "full"]]) {
+        var folder = TempFolder("programs_extern_named_like_function");
+        var program = _build("extern_named_like_function", folder.path, options);
+        expect_exit(run(process.Command(program.to_string())), 100);
+    }
 }
