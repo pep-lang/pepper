@@ -758,6 +758,10 @@ error_programs(): String[] {
         "# expect: main.pep:3:9: error: redefinition of 'x'\nf(x: bool): int {\n    var x = 5;\n    return x;\n}\nmain(): int { return f(true); }\n",
         "# expect: main.pep:4:13: error: redefinition of 'x'\nmain(): int {\n    var f = (x: int) => {\n        var x = 2;\n        return x;\n    };\n    return f(1);\n}\n",
         "# expect: main.pep:2:11: error: redefinition of 'x'\nf(x: int, x: int): int { return x; }\nmain(): int { return f(1, 2); }\n",
+        # Extension and trait methods are checked too, a declaration included.
+        "# expect: main.pep:5:13: error: redefinition of 'k'\nstruct P { var n: int; }\nextend P {\n    twice(k: int): int {\n        var k = 2;\n        return n * k;\n    }\n}\nmain(): int { return P().twice(1); }\n",
+        "# expect: main.pep:5:13: error: redefinition of 'k'\ntrait Shape {\n    sides(): int;\n    doubled(k: int): int {\n        var k = 2;\n        return sides() * k;\n    }\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:3:18: error: redefinition of 'a'\ntrait Shape {\n    area(a: int, a: int): int;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:5:13: error: redefinition of 'z'\nmain(): int {\n    var g = (y: int) => {\n        var z = 2;\n        var z = 3;\n        return z;\n    };\n    return g(1);\n}\n",
         "# expect: main.pep:7:13: error: cannot construct enum 'Doc' directly: its values are made by its cases\nenum Doc {\n    Line,\n    Text(text: int),\n}\nmain(): int {\n    var d = Doc();\n    return 0;\n}\n",
         "# expect: main.pep:7:17: error: case 'Text' of 'Doc' takes 2 values: 'Doc.Text(text, more)'\nenum Doc {\n    Line,\n    Text(text: int, more: int),\n}\nmain(): int {\n    var d = Doc.Text;\n    return 0;\n}\n",

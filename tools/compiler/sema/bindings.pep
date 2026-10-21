@@ -43,7 +43,7 @@ struct _Scopes {
     # Declares `variable`, visible as `binding`, in the innermost scope.
     declare(variable: VariableDef, binding: _LocalBinding) {
         # Synthesized locals (a loop's hidden iterator) carry no location.
-        if (declared.count > 0 and !variable.loc.is_none()) {
+        if (!variable.loc.is_none()) {
             var names = declared.last();
             for (var (name, previous) in names) {
                 if (name == variable.name) {
@@ -130,13 +130,26 @@ export check_bindings(module: Module, state: PassState) {
             _check_function(state, method, globals, fields);
         }
     }
+    # shortcut: an extension's or trait's fields are not known here, so these
+    # methods leave out the globals too, lest a field look like a const
+    # global; an assignment to a global there goes unreported until
+    # extensions are checked with their target's fields.
+    var none = Array<_LocalBinding>();
+    for (var extension in module.extensions) {
+        for (var method in extension.methods) {
+            _check_function(state, method, none, none);
+        }
+    }
+    for (var t in module.traits) {
+        for (var method in t.methods) {
+            _check_function(state, method, none, none);
+        }
+    }
 }
 
 _check_function(state: PassState, function: FunctionDef, globals: _LocalBinding[], fields: _LocalBinding[]) {
-    if (!function.body.is_value()) {
-        return;
-    }
-    _check_body(function.parameters, function.body.value(), _Scopes(state, globals.copy(), fields));
+    # A declaration without a body still may not repeat a parameter.
+    _check_body(function.parameters, function.body.value_or(Block()), _Scopes(state, globals.copy(), fields));
 }
 
 _check_block(block: Block, scopes: _Scopes) {
