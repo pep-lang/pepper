@@ -21,6 +21,20 @@ extern ushort __wasi_args_sizes_get(void* count, void* buffer_size);
 extern ushort __wasi_args_get(void* values, void* buffer);
 extern void _Exit(int status);
 extern int fflush(void* stream);
+# C's `exit`. The IR name `exit` is Pepper's deprecated `exit`, so the
+# symbol is spelled with LLVM's `\x01` (no prefix added; Mach-O's C
+# symbols start with `_`) until pep-lang/pepper#76 is fixed.
+[Target(!OS(Mac))]
+[Link(name = "\x01exit")]
+extern void _c_exit(int status);
+[Target(OS(Mac))]
+[Link(name = "\x01_exit")]
+extern void _c_exit(int status);
+
+# Set in the copy `process.fork()` starts: its exit skips the parent's
+# `atexit` handlers. Thread-local, as the copy has only the forking thread.
+[ThreadLocal]
+var _pep_forked: bool;
 
 ## Deprecated: use `process.arguments` instead.
 ##
@@ -44,7 +58,7 @@ export _pep_arguments(): Array<String> {
 ## Deprecated: use `process.exit` instead.
 ##
 ## Ends the program at once with status `code`, as `process.exit(code)`
-## does.
+## does: C's `atexit` handlers run and the C output streams are flushed.
 ##
 ## @param code the exit status: 0 for success, anything else for failure
 [Deprecated("use 'process.exit' instead (import process)")]
@@ -52,12 +66,27 @@ export exit(code: int) {
     _pep_exit(code);
 }
 
-# Ends the program: `process.exit` and the deprecated `exit`.
+# Ends the program: `process.exit` and the deprecated `exit`. C's `exit`
+# runs the `atexit` handlers and flushes C stdio; a forked copy ends as
+# `_pep_exit_now` does.
 export _pep_exit(code: int) {
-    # C `_Exit`, not `exit`: Pepper's `exit` takes the name, and flushing
-    # here does what C's `exit` would before it ends the process.
+    if (_pep_forked) {
+        _pep_exit_now(code);
+    }
+    _c_exit(code);
+}
+
+# Ends the program without running `atexit` handlers, after flushing C
+# stdio: a forked copy, whose handlers are the parent's, Windows' `exec`,
+# which stands in for replacing the process, and a test's watchdog.
+export _pep_exit_now(code: int) {
     fflush(__null);
     _Exit(code);
+}
+
+# Marks this process as a forked copy, for `_pep_exit`.
+export _pep_mark_forked() {
+    _pep_forked = true;
 }
 
 # The arguments from the C runtime's `argc`/`argv`.

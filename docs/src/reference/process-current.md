@@ -30,7 +30,8 @@ Starts a copy of the running process (POSIX `fork`): the copy has the
 same memory, open files and code, and both go on from here. In the
 parent, returns the copy as a `Child` to wait for; in the copy, returns
 none. The copy has only the calling thread, so fork before starting
-threads or tasks, and end the copy with `exit()`.
+threads or tasks, and end the copy with `exit()`, which there skips the
+parent's `atexit` handlers.
 
 The C standard streams are flushed first, so what `print` buffered is
 written once. Not on Windows or WASI, which start processes only from a
