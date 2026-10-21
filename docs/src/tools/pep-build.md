@@ -99,8 +99,9 @@ project's dependencies, and its `[build]` table's `include` folders and
 
 Before compiling a program in a project, the compiler fetches whatever
 `pep.lock` lists and the project's `.pep/deps` lacks or holds at another
-commit, and the dependencies `pep.toml` names that `pep.lock` does not list
-yet, by running `pep-package fetch` (beside `pep-build`, else on the
+commit, and the Git dependencies that `pep.toml`, or the `pep.toml` of a
+`path` dependency it reaches, names and `pep.lock` does not list yet, by
+running `pep-package fetch` (beside `pep-build`, else on the
 `PATH`). Without
 `pep-package`, it checks the missing commits out with `git` itself, and
 asks for `pepper package fetch` to move a checkout at another commit. A
