@@ -193,7 +193,7 @@ export check_compilation_units(
     verify: bool,
     prechecked: HashMap<ulong, (u8[], String, String)> = HashMap<ulong, (u8[], String, String)>(),
     last_extension: String = "",
-    last_below: Array<HashSet<String>> = Array<HashSet<String>>(),
+    last_below: Defines[] = Array<Defines>(),
     stop: ulong? = Optional<ulong>.Empty,
     times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
 ): Result<Checked, CheckError> {

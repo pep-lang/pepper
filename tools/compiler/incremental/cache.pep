@@ -137,7 +137,7 @@ export struct Cache {
     ## @param below what the objects of each compilation unit it reads define
     ## @param file a file its objects' folder must hold
     ## @returns the key of the objects to link, or none
-    unit_objects(unit: String, key: String, below: Array<HashSet<String>>, file: String): String? {
+    unit_objects(unit: String, key: String, below: Defines[], file: String): String? {
         var folder = objects(unit, key);
         if (used(folder) and folder.join(Path(file)).is_file() and _needs_met(folder, below)) {
             return Optional<String>.Value(key);
@@ -158,7 +158,7 @@ export struct Cache {
     ## @param key its key
     ## @param below what the objects of each compilation unit it reads define
     ## @returns the key
-    unit_store_key(unit: String, key: String, below: Array<HashSet<String>>): String {
+    unit_store_key(unit: String, key: String, below: Defines[]): String {
         return objects(unit, key).is_directory() ? _with_below(key, below) : key;
     }
 
@@ -270,24 +270,77 @@ _key_name(key: String): String {
 }
 
 ## The name of the file beside a compilation unit's objects listing what
-## they declare and the objects below them defined, a name a line
-## (`Cache.unit_objects`).
+## they use of what the objects below them define: the stamp of those
+## (`stamp_of`), then a name a line (`Cache.unit_objects`).
 export const NEEDS_FILE = "needs";
 
+## What the objects of one compilation unit define for those above: their
+## `defines` file, a name a line.
+export struct Defines {
+    ## The file's text.
+    var text: String;
+    ## The hash of `text`.
+    var hash: String;
+    var _names: HashSet<String>? = Optional<HashSet<String>>.Empty;
+
+    ## @param text the `defines` file's text
+    construct(text: String) {
+        this.text = text;
+        this.hash = digest.to_hex(digest.blake3(text));
+    }
+
+    ## Returns the names `text` lists, read the first time.
+    ##
+    ## @returns the names
+    names(): HashSet<String> {
+        if (!_names.is_value()) {
+            var out = HashSet<String>();
+            for (var line in text.split("\n")) {
+                if (!line.is_empty) {
+                    out.insert(line);
+                }
+            }
+            _names = Optional<HashSet<String>>.Value(out);
+        }
+        return _names.value();
+    }
+}
+
+## Returns what identifies `below`: each one's hash, in order.
+##
+## @param below what the objects of each compilation unit one reads define
+## @returns the hashes, a space apart
+export stamp_of(below: Defines[]): String {
+    var hashes = Array<String>();
+    for (var defined in below) {
+        hashes.append(defined.hash);
+    }
+    return " ".join(hashes);
+}
+
 ## Whether every name the `needs` file in `folder` lists is in one of
-## `below`; not when it has none (objects of a build before it).
-_needs_met(folder: Path, below: Array<HashSet<String>>): bool {
+## `below`: at once when its stamp is theirs, the objects below unchanged;
+## not when it has none (objects of a build before it).
+_needs_met(folder: Path, below: Defines[]): bool {
     var needs = File.read_to_string(folder.join(Path(NEEDS_FILE)));
     if (needs.is_err()) {
         return false;
     }
-    for (var name in needs.value().split("\n")) {
+    var lines = needs.value().split("\n");
+    if (lines.is_empty) {
+        return false;
+    }
+    if (lines[0] == stamp_of(below)) {
+        return true;
+    }
+    for (var i in 1..lines.count) {
+        var name = lines[i];
         if (name.is_empty) {
             continue;
         }
         bool found = false;
         for (var defined in below) {
-            if (defined.contains(name)) {
+            if (defined.names().contains(name)) {
                 found = true;
                 break;
             }
@@ -301,31 +354,21 @@ _needs_met(folder: Path, below: Array<HashSet<String>>): bool {
 
 ## Returns every name one of `below` holds.
 ##
-## @param below sets of names
+## @param below what the objects of each compilation unit one reads define
 ## @returns their union
-export union_of(below: Array<HashSet<String>>): HashSet<String> {
+export union_of(below: Defines[]): HashSet<String> {
     var out = HashSet<String>();
     for (var defined in below) {
-        for (var name in defined) {
+        for (var name in defined.names()) {
             out.insert(name);
         }
     }
     return out;
 }
 
-## `key` with every name `below` holds added, in order.
-_with_below(key: String, below: Array<HashSet<String>>): String {
-    var sorted = Array<String>();
-    for (var name in union_of(below)) {
-        sorted.append(name);
-    }
-    sorted.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
-    var hasher = digest.Blake3();
-    hasher.update($"{key}\nbelow\n");
-    for (var name in sorted) {
-        hasher.update($"{name}\n");
-    }
-    return hasher.finish_hex();
+## `key` with what identifies `below` added (`stamp_of`).
+_with_below(key: String, below: Defines[]): String {
+    return digest.to_hex(digest.blake3($"{key}\nbelow {stamp_of(below)}\n"));
 }
 
 ## Returns the cache a build uses: `$PEPPER_CACHE_DIR` when set, else

@@ -27,7 +27,9 @@ import [
     check_in_workers,
     worker_file,
     mark,
+    Defines,
     NEEDS_FILE,
+    stamp_of,
     union_of,
     numbered_objects,
     serve_compilation_units,
@@ -375,28 +377,21 @@ _copy_defines(folder: Path, dir: Path, k: ulong) {
 
 # The symbols the objects of compilation unit number `k` define (`_defines`),
 # from `<k>.defines` in `dir`; read once each, into `read`.
-_defined_by(k: ulong, dir: Path, read: HashMap<ulong, HashSet<String>>): HashSet<String> {
+_defined_by(k: ulong, dir: Path, read: HashMap<ulong, Defines>): Defines {
     var known = read.try_get(k);
     if (known.is_value()) {
         return known.value();
     }
-    var out = HashSet<String>();
     var text = File.read_to_string(worker_file(dir, k, "defines"));
-    if (text.is_ok()) {
-        for (var line in text.value().split("\n")) {
-            if (!line.is_empty) {
-                out.insert(line);
-            }
-        }
-    }
+    var out = Defines(text.ok_or(""));
     read[k] = out;
     return out;
 }
 
 # What the objects of each compilation unit numbered `ks` define
 # (`_defined_by`).
-_below(ks: ulong[], dir: Path, read: HashMap<ulong, HashSet<String>>): Array<HashSet<String>> {
-    var out = Array<HashSet<String>>();
+_below(ks: ulong[], dir: Path, read: HashMap<ulong, Defines>): Defines[] {
+    var out = Array<Defines>();
     for (var k in ks) {
         out.append(_defined_by(k, dir, read));
     }
@@ -425,9 +420,9 @@ _needs(ir: llvm.Module, declared: HashSet<String>): String {
 # Returns the key of the objects to link, which hold `file`: those, or
 # another build's under that key that also link with the objects below.
 _store_unit(
-    cache: Cache, unit: CompilationUnit, folder: Path, needs: String, below: Array<HashSet<String>>, file: String
+    cache: Cache, unit: CompilationUnit, folder: Path, needs: String, below: Defines[], file: String
 ): Result<String, String> {
-    if (File.write_text(folder.join(Path(NEEDS_FILE)), needs).is_err()) {
+    if (File.write_text(folder.join(Path(NEEDS_FILE)), $"{stamp_of(below)}\n{needs}").is_err()) {
         return Result<String, String>.err($"cannot write to {folder}");
     }
     var name = $"+{unit.name}";
@@ -479,7 +474,7 @@ _store_last(
     link_text: String,
     warned: String,
     needs: String,
-    below: Array<HashSet<String>>,
+    below: Defines[],
     extension: String
 ): Result<Path, String> {
     if (File.write_text(folder.join(Path("link")), link_text).is_err()
@@ -504,7 +499,7 @@ _compile_unit(
     unit: CompilationUnit,
     module: sema.Module,
     state: sema.PassState,
-    below: Array<HashSet<String>>,
+    below: Defines[],
     options: BuildOptions,
     cache: Cache,
     dir: Path
@@ -665,7 +660,7 @@ _check_in_workers(
     jobs: ulong,
     prechecked: HashMap<ulong, (u8[], String, String)>,
     object_keys: HashMap<ulong, String>,
-    last_below: Array<HashSet<String>>
+    last_below: Defines[]
 ): Result<void, String> {
     # A folder of this build's own: builds in one folder at once (`pepper
     # test` builds its test programs side by side) share `build_dir`. Kept
@@ -679,7 +674,7 @@ _check_in_workers(
     var cache = options.cache.value();
     var extension = _object_extension(options, codegen.target_triple(program.target));
     # What each compilation unit's objects define, read once.
-    var read = HashMap<ulong, HashSet<String>>();
+    var read = HashMap<ulong, Defines>();
     var checked = check_in_workers(
         program,
         units,
@@ -807,7 +802,7 @@ _work_on(
             async.Thread.sleep(2);
         }
     }
-    var below = _below(unit.reads, dir, HashMap<ulong, HashSet<String>>());
+    var below = _below(unit.reads, dir, HashMap<ulong, Defines>());
     var t6 = os.Instant.now();
     stages.append($"wait {(t6 - t5).milliseconds()}\n");
     mark(dir, k, "compiling");
@@ -908,7 +903,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # The keys of the objects of the compilation units the last reads, and
     # what those define, by compilation unit (`_check_in_workers`).
     var object_keys = HashMap<ulong, String>();
-    var last_below = Array<HashSet<String>>();
+    var last_below = Array<Defines>();
     # The cache's folder of the last compilation unit's objects, when it has
     # them (`_store_last`).
     var last_folder = Optional<Path>.Empty;
