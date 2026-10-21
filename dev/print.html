@@ -4130,6 +4130,11 @@ main(): int {
     var t = Token();
     t.at = (5, 6);
     assert(t.at.column == 6, "a labeled field");
+
+    # Labels pass through a type argument.
+    var counts = Array&lt;(word: String, count: int)&gt;();
+    counts.append((word: "tuple", count: 2));
+    assert(counts[0].count == 2, "a labeled element");
     return 0;
 }
 </code></pre>
@@ -4139,9 +4144,13 @@ an unlabeled one with the same element types are the same type, so each
 converts to the other freely.</li>
 <li>Either every element has a label or none does, and labels in one tuple must
 differ.</li>
-<li>Labels do not pass through a type argument: <code>Optional&lt;(line: int, column: int)&gt;</code>
-is the same type as <code>Optional&lt;(int, int)&gt;</code>, so its <code>value()</code> returns an
-unlabeled tuple. Declare a labeled variable to name the elements again.</li>
+<li>Labels pass through a type argument: an element of an
+<code>Array&lt;(word: String, count: int)&gt;</code>, a <code>HashMap</code> value or the <code>value()</code> of a
+<code>(line: int, column: int)?</code> answers to its labels, though
+<code>Optional&lt;(line: int, column: int)&gt;</code> is the same type as
+<code>Optional&lt;(int, int)&gt;</code>. A variable typed by a static method's result, such
+as <code>var p = Optional&lt;(line: int, column: int)&gt;.Value(at);</code>, has no labels:
+declare its type to name the elements.</li>
 <li><code>var p = (line: 3, column: 7);</code> gives <code>p</code> the labeled type
 <code>(line: int, column: int)</code>. A labeled value takes at least two elements.</li>
 <li>A labeled value initializing or returned as a labeled type must use its
@@ -22124,6 +22133,7 @@ module of the package too.</p>
 <tr><td><code>license</code></td><td>Its license, such as <code>MIT</code></td></tr>
 <tr><td><code>repository</code></td><td>Where its source lives</td></tr>
 <tr><td><code>toolchain</code></td><td>The toolchain it builds with: <code>0.3.0</code>, <code>0.3</code> for the newest installed 0.3.x, or <code>latest</code>. A <code>pepper</code> installed by <a href="tools/pep-install.html">pep-install</a> runs that toolchain's tools in the project (see <a href="tools/pepper.html#toolchains">Toolchains</a>); the compiler itself only checks that it is a version</td></tr>
+<tr><td><code>minimum_toolchain</code></td><td>The oldest toolchain release that builds it: <code>0.11.0</code>, or a prerelease such as <code>0.11.0-dev</code>, which comes before <code>0.11.0</code>. Resolving versions, <code>pepper package</code> skips a version of a package whose <code>minimum_toolchain</code> is newer than its own toolchain (see <a href="tools/pep-package.html#the-toolchain-a-package-needs">Resolving versions</a>). Unlike <code>toolchain</code>, which picks the toolchain the project itself builds with, it says what the package's users need</td></tr>
 </tbody></table>
 </div>
 <h2 id="build"><a class="header" href="#build"><code>[build]</code></a></h2>
@@ -22354,7 +22364,8 @@ that has it. When more than one does, it says so:</p>
 pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
 pepper package add codeberg:third/shapes   # only Codeberg, without looking elsewhere
 </code></pre>
-<p>Without a range, the dependency gets the newest version tag (as a range
+<p>Without a range, the dependency gets the newest version tag this toolchain
+builds (see <a href="tools/pep-package.html#resolving-versions">Resolving versions</a>; as a range
 that accepts compatible later versions: <code>1.4.2</code> accepts 1.4.2 up to, not
 including, 2.0.0); a repository with no version tags follows its default
 branch. The name source code imports defaults to the repository's last part,
@@ -22435,6 +22446,30 @@ declares, and <code>pep-package</code> says which requirement it overrode.</li>
 <li>A locked revision stays while it still satisfies every requirement;
 <code>update</code> is what moves it.</li>
 </ul>
+<h3 id="the-toolchain-a-package-needs"><a class="header" href="#the-toolchain-a-package-needs">The toolchain a package needs</a></h3>
+<p>A package states the oldest toolchain release that builds it with
+<code>minimum_toolchain</code> in its <code>[package]</code> table (see
+<a href="tools/projects.html#package">Projects</a>). <code>add</code>, <code>update</code> and <code>fetch</code> resolve for
+the toolchain <code>pep-package</code> belongs to (the release <code>pep-package --version</code>
+prints, which <code>pepper</code> picks with the rest of the toolchain):</p>
+<ul>
+<li>
+<p>A version range skips every version whose <code>minimum_toolchain</code> is newer,
+picking the newest one left, and says which it skipped and why:</p>
+<pre><code class="language-text">pep-package: github:other/websocket skipped 1.3.0 (needs toolchain 0.11.0); this is 0.10.1
+</code></pre>
+<p>When every version the ranges accept needs a newer toolchain, resolution
+fails and names what each needs.</p>
+</li>
+<li>
+<p>A locked version that needs a newer toolchain is an error naming the
+package's version and both toolchains; <code>update</code> moves it to a version
+this toolchain builds. So is a branch, tag or commit that needs one.</p>
+</li>
+</ul>
+<p>Only the <code>pep.toml</code> of the version picked, and of the newer ones the ranges
+accept, are read: from the package's clone in <code>.pep/deps</code>, without checking
+them out, each once per run.</p>
 <h2 id="environment-variables-2"><a class="header" href="#environment-variables-2">Environment variables</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host's repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
