@@ -1,10 +1,14 @@
 # Releases reference chains deep enough to overflow the stack if each
 # link's release recursed into the next (#65): a linked list, a list
 # through a trait-typed field, a reference enum list, and a tree whose
-# nodes hold an `Array` of children. Then prints the order shallow
+# nodes hold an `Array` of children; and one released by a task while
+# another task waits inside a destructor. Then prints the order shallow
 # destructors run in, which the deep-release path must not change.
 
+import async;
 import process;
+
+const counted = async.Atomic<int>(0);
 
 struct Link {
     var next: Link;
@@ -31,6 +35,21 @@ enum List {
 
 struct Tree {
     var children: Array<Tree> = Array<Tree>();
+}
+
+struct Counted {
+    var next: Counted;
+
+    destruct {
+        counted.fetch_add(1);
+    }
+}
+
+# Its destructor lets other tasks run: a release that suspends its task.
+struct Waits {
+    destruct {
+        async.yield_now();
+    }
 }
 
 struct Named {
@@ -87,6 +106,32 @@ tree(depth: int) {
     }
 }
 
+# A task waits inside a destructor while another releases a deep chain,
+# which must be destroyed at once, without overflowing the task's stack.
+suspended_destructor(depth: int) {
+    async.run(() => {
+        var waiting = async.Task<void>.spawn_local(() => {
+            var waits = Waits();
+        });
+        var releasing = async.Task<void>.spawn_local(() => {
+            {
+                var root = Counted();
+                var node = root;
+                for (var i in 0..depth) {
+                    var child = Counted();
+                    node.next = child;
+                    node = child;
+                }
+            }
+            if (counted.load() == depth + 1) {
+                print("chain released while a task waits in a destructor");
+            }
+        });
+        waiting.join();
+        releasing.join();
+    });
+}
+
 shallow_order() {
     var root = Named("root");
     root.first = Named("first");
@@ -105,6 +150,7 @@ main(): int {
     print("enum chain released");
     tree(depth);
     print("tree released");
+    suspended_destructor(depth);
     shallow_order();
     return 0;
 }

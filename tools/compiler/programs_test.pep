@@ -418,6 +418,7 @@ deep_chains_release_without_overflow_and_shallow_order_holds() {
     var folder = TempFolder("programs_deep_release");
     var program = _build("deep_release", folder.path).to_string();
     var expected = "link chain released\ntrait chain released\nenum chain released\ntree released\n"
+        + "chain released while a task waits in a destructor\n"
         + "destroy root\ndestroy second\ndestroy first\ndestroy first.second\ndestroy first.first\n";
     for (var depth in ["10", "1000000"]) {
         var output = run(process.Command(program).argument(depth));

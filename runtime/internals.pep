@@ -983,7 +983,7 @@ export _pep_free(p: __ptr<void>) {
 # drains once its own object is destroyed: in the order they were
 # released, each one's own pushes before the next. A stack budget rather
 # than a depth count keeps the common case to one thread-local read.
-const _RELEASE_STACK: ulong = 65536;
+const _RELEASE_STACK: ulong = 16384;
 
 # LLVM intrinsics; see "LLVM intrinsics" in
 # docs/src/language/c-interop.md.
@@ -1027,6 +1027,22 @@ export _pep_release_last(object: __ptr<void>, destroy: extern (__ptr<void>) => v
     } else {
         destroy(object);
     }
+}
+
+# A task that suspends inside a destruction (a destructor that waits)
+# takes the thread's floor with it, so the tasks that run meanwhile start
+# their own, and it may resume on another thread (`async`'s
+# `_async_suspend`). Objects it left pending are drained by the next
+# outermost release on this thread.
+export _pep_release_suspend(): ulong {
+    var floor = _release_floor;
+    _release_floor = 0;
+    return floor;
+}
+
+# Gives a resumed task back the floor `_pep_release_suspend` took.
+export _pep_release_resume(floor: ulong) {
+    _release_floor = floor;
 }
 
 [Cold]

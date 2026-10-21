@@ -2126,9 +2126,12 @@ emits in each unit that needs it (no owner, so `linkonce_odr`): it calls
 `__dtor`, drops the strong references' weak reference, and frees the object
 when that reached 0, as the zero branch of `__release` does.
 `_pep_release_last` (`runtime/internals.pep`) calls it at once unless this
-thread's destructions already nest 64 KiB of stack below the outermost
+thread's destructions already nest 16 KiB of stack below the outermost
 one; a deeper one goes on a thread-local list the outermost drains, so
-releasing a chain of any length cannot overflow the stack (#65). Every
+releasing a chain of any length cannot overflow the stack (#65). A task
+that suspends inside a destruction keeps its floor across the switch
+(`_async_suspend` calls `_pep_release_suspend`/`_pep_release_resume`), so
+the tasks that share its thread meanwhile start their own. Every
 struct with a standard `__release` (`StructDesc.release_counts`, immortal
 cases included) gets its `T.__release` from `emit_standard_release`, the
 same step with the immortal check (`guarded`) when `StructDesc.immortal`,

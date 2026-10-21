@@ -605,7 +605,11 @@ extend Generator {
     ## `synthesize`'s body, so a release through a trait or a C handle
     ## reaches `_pep_release_last` as an inlined one does.
     emit_standard_release(name: String, owner: StructDesc): Result<void> {
-        var fn_value = functions[name];
+        var found = functions.try_get(name);
+        if (!found.is_value()) {
+            return Result<void>.ok();
+        }
+        var fn_value = found.value();
         var entry = context.append_block(fn_value, "entry");
         builder.position_at_end(entry);
         inline_count_step(owner.name, fn_value.param(0), false, owner.release_counts.value(), false, owner.immortal)?;
