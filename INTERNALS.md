@@ -1820,7 +1820,9 @@ changed.
   name, `_` doubled and other bytes as `_xx`), except externs' C symbols:
   an extern whose C symbol a Pepper function is named after (`exit`) is
   declared as `__extern.exit` (`EXTERN_PREFIX`, set aside by
-  `instantiate_function`) and takes its C symbol after the respelling;
+  `instantiate_function`) and takes its C symbol after the respelling
+  (`restore_extern_names`, which `generate_ir` also runs for
+  `--emit-llvm`, respelling only the function it clashes with);
   each part is measured.
   `keep_part` turns the other parts' definitions into declarations and runs
   `globaldce`. Codegen gives every mangled declaration internal linkage

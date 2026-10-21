@@ -441,7 +441,9 @@ move_takes_a_call_through_a_shared_function_value() {
 
 [Test]
 extern_bound_to_a_pepper_function_name_calls_the_c_symbol() {
-    for (var options in [Array<String>(), ["-O"], ["-O", "--lto", "full"]]) {
+    # The clash broke the link at every level; `-O` and `-O --lto full`
+    # cover both ways the parts link (`-O0` links them as `-O` does).
+    for (var options in [["-O"], ["-O", "--lto", "full"]]) {
         var folder = TempFolder("programs_extern_named_like_function");
         var program = _build("extern_named_like_function", folder.path, options);
         expect_exit(run(process.Command(program.to_string())), 100);

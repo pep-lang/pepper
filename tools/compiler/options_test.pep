@@ -196,6 +196,21 @@ emit_llvm_writes_the_ir_optimized_at_the_level() {
 }
 
 [Test]
+emit_llvm_names_an_extern_by_its_c_symbol() {
+    # Externs bound to `abs` and `exit`, which Pepper functions are named
+    # after (pepper#100): the IR names each extern by its C symbol.
+    var source = File.read_to_string(Path("compiler").join("testdata").join("extern_named_like_function.pep"));
+    var folder = _program("options_llvm_extern", source.value());
+    var build = folder.path.join(Path("build"));
+    _succeeds(folder.path, ["--emit-llvm", "-O0", "main.pep", "--build", build.to_string(), "--no-cache"]);
+    var ir = File.read_to_string(build.join(Path("main.ll"))).value();
+    expect_false(ir.contains("__extern."));
+    expect_true(ir.contains(" @abs(i32"));
+    expect_true(ir.contains(" @exit(i32"));
+    expect_true(ir.contains("define i32 @_Pabs("));
+}
+
+[Test]
 constructors_zero_their_object_inline() {
     # A constructor's allocation has a constant size, so it skips the
     # runtime's zeroing and zeroes the object inline, where LLVM can see it.
