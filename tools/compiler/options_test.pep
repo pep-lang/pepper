@@ -467,6 +467,28 @@ lto_links_compilation_units_with_location_strings() {
     expect_true(ran.is_ok() and ran.value().status.success());
 }
 
+# A compilation unit worker reports the linking errors of the files it
+# checks, as the build does: a missing import in a module reached through
+# `-I` is located at the import, not at the first use of its name (#62).
+[Test]
+workers_report_a_missing_import_in_an_included_module() {
+    var folder = _program("options_worker_import", "import lib;\n\nmain(): int {\n    return lib.S.make();\n}\n");
+    Directory.create_all(folder.path.join(Path("lib")));
+    File.write_text(
+        folder.path.join(Path("lib")).join(Path("module.pep")),
+        "import nope;\n\nexport struct S {\n    static make(): int {\n        return nope.f();\n    }\n}\n"
+    );
+    var command = process.Command(_compiler().to_string());
+    command.arguments(["-I", ".", "main.pep", "-o", "main", "--build", "build", "--cache", "cache"]);
+    command.working_directory(folder.path).environment("PEPC_COMPILATION_UNIT_JOBS", "2");
+    command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    var built = command.run();
+    expect_true(built.is_ok());
+    expect_false(built.value().status.success());
+    expect_true(built.value().stderr.contains("module.pep:1:8: error: cannot find module 'nope'"));
+    expect_false(built.value().stderr.contains("undeclared identifier"));
+}
+
 # Every object (`.o`, `.obj`, `.bc`) under `folder`.
 _objects(folder: Path, out: Path[]) {
     var opened = Directory.open(folder);
