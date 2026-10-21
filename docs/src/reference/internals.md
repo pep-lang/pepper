@@ -141,7 +141,10 @@ the runtime adds. A stack overflow skips the hook: the thread has no
 stack left to run it on.
 
 A panic inside the hook does not run the hook again: it prints the
-first panic's message, then its own, and aborts.
+first panic's message, then its own, and aborts. Two threads that
+panic at once each run the hook, at the same time. Keep the hook
+short, and keep it from taking a lock the panicking code may hold: it
+would wait forever instead of letting the program end.
 
 **Parameters**
 - `hook` — runs with the panic's message and location

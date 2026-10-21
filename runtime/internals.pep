@@ -1280,7 +1280,10 @@ var _pep_panic_hook_location: __ptr<char>;
 ## stack left to run it on.
 ##
 ## A panic inside the hook does not run the hook again: it prints the
-## first panic's message, then its own, and aborts.
+## first panic's message, then its own, and aborts. Two threads that
+## panic at once each run the hook, at the same time. Keep the hook
+## short, and keep it from taking a lock the panicking code may hold: it
+## would wait forever instead of letting the program end.
 ##
 ## @param hook runs with the panic's message and location
 ## @example
@@ -1353,6 +1356,7 @@ _pep_run_panic_hook(message: __ptr<char>, location: __ptr<char>) {
     _pep_panic_hook_message = message;
     _pep_panic_hook_location = location;
     installed.hook(String(message), location == __null ? String() : String(location));
+    _pep_panic_hook_message = __null;
 }
 
 # Writes `location: <kind><message>` and a newline to standard error.

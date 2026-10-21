@@ -19,7 +19,9 @@
 import [File, Path] from io;
 import process;
 import [TempFolder] from testing;
-import [build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, write_file] from tool_testing;
+import [
+    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, write_file
+] from tool_testing;
 import toolchain;
 
 # Builds `testdata/<name>.pep`, copied into `folder` so that no project

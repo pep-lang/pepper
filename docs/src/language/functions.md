@@ -321,6 +321,11 @@ panic has none):
   hook on, so it prints its message alone.
 - The hook cannot stop the panic: when it returns, the message and the
   backtrace print and the program aborts, as without one.
+- It runs in the middle of whatever the panicking thread was doing, and
+  two threads that panic at once each run it, at the same time. Keep it
+  short, and keep it from taking a lock the panicking code may hold (a
+  `Mutex` it panicked inside): it would wait forever instead of letting
+  the program end.
 - `set_panic_hook` replaces the hook installed before. `take_panic_hook()`
   removes it and returns it (or a hook that does nothing, when there was
   none), so a library can chain the one it found, as the example does.
