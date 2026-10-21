@@ -266,8 +266,6 @@ extend Generator {
         var check = context.append_block(function, "link_check");
         var take = context.append_block(function, "link_take");
         var destroy = context.append_block(function, "link_destroy");
-        var free_block = context.append_block(function, "link_free");
-        var after_free = context.append_block(function, "link_freed");
         var release = context.append_block(function, "link_release");
         var done = context.append_block(function, "link_done");
         builder.branch(loop);
@@ -292,15 +290,7 @@ extend Generator {
         builder.position_at_end(destroy);
         var taken = builder.phi(pointer, "taken");
         taken.add_incoming([pointer.zero(), pointer.zero(), link], [loop, check, take]);
-        call_function($"{ty_name}.__dtor", [current])?;
-        var weak = count_step(current, CountField.Weak, false, atomic, false)?;
-        builder.conditional_branch(
-            builder.compare(llvm.IntPredicate.Equal, weak, i32_type.zero(), "unreferenced"), free_block, after_free
-        );
-        builder.position_at_end(free_block);
-        call_function("_pep_free", [current])?;
-        builder.branch(after_free);
-        builder.position_at_end(after_free);
+        destroy_object(ty_name, current, atomic)?;
         builder.conditional_branch(builder.is_null(taken, "none_taken"), done, release);
         builder.position_at_end(release);
         var left = count_step(taken, CountField.Strong, false, atomic, false)?;
@@ -323,7 +313,7 @@ extend Generator {
     ## `T.__chain_destroy(object, list)`: what the last release of `T` does
     ## once the count is 0. Pushes each chain field's object that only the
     ## field holds on `list`, with a reference of the list's own, then runs
-    ## the destructor and frees the memory as `last_release` does.
+    ## the destructor and frees the memory (`destroy_object`).
     chain_destroy(ty_name: String): Result<llvm.Value> {
         var name = $"{ty_name}.__chain_destroy";
         var existing = ir.function(name);
@@ -364,17 +354,7 @@ extend Generator {
             builder.branch(after);
             builder.position_at_end(after);
         }
-        call_function($"{ty_name}.__dtor", [object])?;
-        var weak = count_step(object, CountField.Weak, false, desc.release_counts.value(), false)?;
-        var free_block = context.append_block(function, "free");
-        var done = context.append_block(function, "done");
-        builder.conditional_branch(
-            builder.compare(llvm.IntPredicate.Equal, weak, i32_type.zero(), "unreferenced"), free_block, done
-        );
-        builder.position_at_end(free_block);
-        call_function("_pep_free", [object])?;
-        builder.branch(done);
-        builder.position_at_end(done);
+        destroy_object(ty_name, object, desc.release_counts.value())?;
         builder.return_void();
         if (!resume.is_null()) {
             builder.position_at_end(resume);
