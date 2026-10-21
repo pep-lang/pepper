@@ -10,9 +10,11 @@
 ##   when it is declared `main(args: String[]): int`. On Windows they are in
 ##   the process's ANSI code page.
 ## - `exit(code: int)` ends the program at once with status `code` (only its
-##   low 8 bits reach a POSIX parent), after flushing standard output and the
-##   other C output streams. Nothing else runs: locals are not released and
-##   destructors do not run.
+##   low 8 bits reach a POSIX parent), as C's `exit` does: the handlers
+##   registered with C's `atexit` run, then standard output and the other C
+##   output streams are flushed. Locals are not released and destructors do
+##   not run; other threads keep running while the handlers run. In a copy
+##   `fork()` started, the handlers, which are the parent's, are skipped.
 
 import io;
 import [Child] from "child";
@@ -53,13 +55,15 @@ _process_arguments(): Array<String> {
 ## Ends as C's `exit` does, and as returning from `main` does: the
 ## handlers registered with C's `atexit` run, then standard output and
 ## every other C output stream are flushed, so text printed so far is not
-## lost. Nothing else runs: locals are not released, destructors do not
-## run, and other threads stop where they are. Returning from `main` is the
+## lost. Nothing else runs: locals are not released and destructors do not
+## run. Other threads keep running while the handlers run, then stop
+## wherever they are when the process ends. Returning from `main` is the
 ## usual way to end; `exit` is for ending from deep inside a call.
 ##
 ## In the copy `fork()` starts, the `atexit` handlers, which are the
-## parent's, do not run: the streams are flushed and the copy ends, as C's
-## `_exit` ends a forked child.
+## parent's, do not run, whichever of the copy's threads calls `exit`: the
+## streams are flushed and the copy ends, as C's `_exit` ends a forked
+## child.
 ##
 ## @param code the exit status: 0 for success, anything else for failure
 ##   (only its low 8 bits reach a POSIX parent)

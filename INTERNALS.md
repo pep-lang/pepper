@@ -3027,9 +3027,11 @@ worker's standard input; before each one a worker reads and links the
 bodies of its files only (`Program.link_bodies`, which links more files'
 bodies each time it is called), since the compilation units it reads come as
 records. The
-worker first reports the program's linking and visibility errors
-(`Program.check_diagnostics`, as the build does before the first compilation
-unit it checks itself), so an error in a file a worker checks is not left to
+worker first reports the linking errors and the visibility errors in the
+compilation unit's own files (`Program.check_diagnostics` given them, as the
+build does before the first compilation unit it checks itself; the files of
+the compilation units it checked before stay linked, and are not walked
+again), so an error in a file a worker checks is not left to
 sema, then checks it as below and leaves its record, own interface, what its
 object defines, warnings or error in `<dir>` (`<k>.rec`, `<k>.own`,
 `<k>.defines`, `<k>.warn`, `<k>.err`), then `<k>.done`; the compilation units it reads
