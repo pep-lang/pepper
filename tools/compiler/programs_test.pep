@@ -6,7 +6,9 @@
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`; and the error for a member a
 # value's type lacks inside an interpolation or for another module's
-# private extern. The programs are in `testdata/`.
+# private extern; string literals that hold a NUL; and a `match` in a
+# generic method of another module's struct. The programs are in
+# `testdata/`.
 
 import [File, Path] from io;
 import process;
@@ -15,12 +17,13 @@ import [build_program, expect_contains, expect_exit, read_file, run, write_file]
 import toolchain;
 
 # Builds `testdata/<name>.pep`, copied into `folder` so that no project
-# around this one applies, into the executable `name` there.
-_build(name: String, folder: Path): Path {
+# around this one applies, into the executable `name` there, with `pep-build`
+# options `options`.
+_build(name: String, folder: Path, options: Array<String> = Array<String>()): Path {
     var source = folder.join(name + ".pep");
     write_file(source, read_file(Path("compiler").join("testdata").join(name + ".pep")));
     var program = folder.join(name + toolchain.executable_suffix());
-    var error = build_program(source, program, folder.join("build"));
+    var error = build_program(source, program, folder.join("build"), options);
     if (error.is_value()) {
         panic($"{name}.pep does not build:\n{error.value()}");
     }
@@ -99,13 +102,30 @@ an_unknown_member_in_an_interpolation_is_named() {
 [Test]
 another_modules_private_extern_is_not_visible() {
     var folder = TempFolder("programs_private_extern");
-    write_file(folder.path.join("lib").join("module.pep"), "extern int abs(int value);\nexport one(): int {\n    return abs(-1);\n}\n");
+    write_file(
+        folder.path.join("lib").join("module.pep"),
+        "extern int abs(int value);\nexport one(): int {\n    return abs(-1);\n}\n"
+    );
     write_file(folder.path.join("user").join("module.pep"), "export two(): int {\n    return abs(-2);\n}\n");
     var source = folder.path.join("main.pep");
     write_file(source, "import \"lib\";\nimport \"user\";\nmain(): int {\n    return lib.one() + user.two() - 3;\n}\n");
     var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
     expect_true(error.is_value(), "the program does not build");
     expect_contains(error.value(), "module.pep:2:12: error: 'abs' is internal to module 'lib'");
+}
+
+# ── match ───────────────────────────────────────────────────────────────────
+
+# A generic method of a struct in another module, specialized by the
+# compilation unit that calls it, has its `is Err(e)` lowered there.
+[Test]
+a_match_in_another_modules_generic_method_is_lowered() {
+    var folder = TempFolder("programs_match_in_other_module");
+    var testdata = Path("compiler").join("testdata");
+    var module = Path("m").join("module.pep");
+    write_file(folder.path.join(module), read_file(testdata.join("match_in_other_module").join(module)));
+    var program = _build("match_in_other_module", folder.path, ["-I", folder.path.to_string()]);
+    expect_exit(run(process.Command(program.to_string())), 3);
 }
 
 # ── os ──────────────────────────────────────────────────────────────────────
@@ -388,4 +408,13 @@ process_exec_replaces_the_program_and_keeps_its_id() {
     # `/private/tmp`.
     expect_equal(lines[3], Path("/tmp").canonicalize().value().to_string());
     expect_exit(output, 9);
+}
+
+# ── literals ────────────────────────────────────────────────────────────────
+
+[Test]
+string_literal_with_nul_keeps_its_bytes_beside_its_prefix() {
+    var output = _run("string_literal_nul");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "1 97\n3 97 0 98\n");
 }

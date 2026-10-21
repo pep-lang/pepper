@@ -3,6 +3,7 @@
 
 import io;
 import text;
+import "server";
 
 ## HTTP header fields, by name. Names ignore ASCII case: they are stored
 ## lowercased, so `Content-Type` and `content-type` are the same field. A
@@ -155,6 +156,9 @@ export struct Request {
     var _streamed: bool;
     var _source: io.Reader;
     var _length: long;
+    # Whether a handler may answer with `Response.upgrade`: an HTTP/1.1
+    # request a `Server` read.
+    var _upgradable: bool;
 
     ## Creates a request with no headers and no body.
     ##
@@ -168,6 +172,17 @@ export struct Request {
         this._streamed = false;
         this._source = io.ByteReader(this._body);
         this._length = -1;
+        this._upgradable = false;
+    }
+
+    ## Reports whether a `Server` handler may answer this request with
+    ## `Response.upgrade`: true for an HTTP/1.1 request, false for HTTP/1.0,
+    ## for a request on an HTTP/2 stream (which cannot switch protocols), and
+    ## for one a client builds.
+    ##
+    ## @returns true when the connection can be taken over
+    can_upgrade(): bool {
+        return this._upgradable;
     }
 
     ## Sets the body to the UTF-8 bytes of `text`.
@@ -306,6 +321,10 @@ export struct Response {
     var _streamed: bool;
     var _source: io.Reader;
     var _length: long;
+    # Set by `upgrade`: the server runs `_takeover` on the connection after
+    # sending the 101 head.
+    var _upgrade: bool;
+    var _takeover: (Connection) => void;
 
     ## Creates a response with no headers and no body.
     ##
@@ -319,6 +338,41 @@ export struct Response {
         this._streamed = false;
         this._source = io.ByteReader(this._body);
         this._length = -1;
+        this._upgrade = false;
+        this._takeover = (connection: Connection) => {};
+    }
+
+    ## Makes this a `101 Switching Protocols` response that hands the
+    ## connection to `takeover`, for a protocol that starts as HTTP/1.1, such
+    ## as WebSocket. The server sends the status, `Upgrade: protocol`,
+    ## `Connection: Upgrade` and the other headers (no `Content-Length`, no
+    ## body), then calls `takeover` in the connection's task with the
+    ## connection, and serves no more HTTP on it. The connection closes when
+    ## `takeover` returns, or earlier at `Connection.close()`.
+    ##
+    ## Only a request whose `can_upgrade()` is true can be upgraded: for
+    ## any other (HTTP/1.0, or an HTTP/2 stream) the server sends `501 Not
+    ## Implemented` instead and never calls `takeover`.
+    ##
+    ## @param protocol the `Upgrade` field: the protocol the connection
+    ##   switches to, such as `websocket`
+    ## @param takeover speaks the new protocol on the connection; bytes the
+    ##   client sent right after the request are the first it reads
+    ## @returns this response
+    ## @example
+    ##     echo(request: http.Request): http.Response {
+    ##         return http.Response().upgrade("echo", (connection) => {
+    ##             for (var chunk in connection.chunks(4096)) {
+    ##                 connection.write_all(chunk.value());
+    ##             }
+    ##         });
+    ##     }
+    upgrade(protocol: String, takeover: (Connection) => void): Response {
+        this.status = 101;
+        this.headers["Upgrade"] = protocol;
+        this._upgrade = true;
+        this._takeover = takeover;
+        return this;
     }
 
     ## Sets the body to the UTF-8 bytes of `text`.

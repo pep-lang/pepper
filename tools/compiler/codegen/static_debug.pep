@@ -83,7 +83,7 @@ extend Generator {
                 ty = debug_type("bool");
             }
             String(text) => {
-                constant = builder.global_string(text, "static.string");
+                constant = string_data(text, "static.string");
                 ty = debug_type("__ptr<char>");
             }
             Record(record) => {

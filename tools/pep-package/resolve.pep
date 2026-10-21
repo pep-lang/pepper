@@ -9,11 +9,12 @@
 # package is being updated.
 
 import [Path] from io;
+import semver;
+import [Version, VersionRange, parse_range] from semver;
 import "archive";
 import "git";
 import "lock";
 import "manifest";
-import "semver";
 
 # What a dependent asks of a package.
 export struct Wanted {
@@ -337,7 +338,7 @@ export struct Resolver {
                 }
                 var version = "";
                 if (first.kind == "tag") {
-                    var parsed = parse_version(first.value);
+                    var parsed = tag_version(first.value);
                     version = parsed.is_value() ? parsed.value().to_string() : "";
                 }
                 return Result<Locked>.Ok(Locked("", source, version, ref.commit));
@@ -358,7 +359,7 @@ export struct Resolver {
             ranges.append(range.value());
         }
         if (kept.is_value()) {
-            var locked_version = parse_version(kept.value().version);
+            var locked_version = tag_version(kept.value().version);
             if (locked_version.is_value() and _accepted(ranges, locked_version.value())) {
                 return Result<Locked>.Ok(kept.value());
             }
@@ -374,7 +375,7 @@ export struct Resolver {
             if (!ref.name.starts_with("refs/tags/")) {
                 continue;
             }
-            var parsed = parse_version(ref.name.substr(10, ref.name.length));
+            var parsed = tag_version(ref.name.substr(10, ref.name.length));
             if (parsed.is_empty()) {
                 continue;
             }
@@ -420,6 +421,13 @@ export struct Resolver {
         }
         return Result<Locked>.Ok(Locked("", source, version.to_string(), commit));
     }
+}
+
+# The version a tag names: `1.2.3` or `v1.2.3`, with an optional
+# prerelease (`v1.0.0-rc.1`); none for any other tag.
+export tag_version(tag: String): Optional<Version> {
+    var parsed = semver.parse(tag.starts_with("v") ? tag.substr(1, tag.length) : tag);
+    return parsed.is_ok() ? Optional<Version>.Value(parsed.value()) : Optional<Version>.Empty;
 }
 
 _accepted(ranges: Array<VersionRange>, version: Version): bool {

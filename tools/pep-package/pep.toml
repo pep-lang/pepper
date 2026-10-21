@@ -10,3 +10,6 @@ entry = "main.pep"
 output = "pep-package"
 # `toolchain` and `tool_testing` are folders beside this one.
 include = [".."]
+
+[dependencies]
+semver = { github = "pep-lang/pepper-semver", version = "1.0.0" }

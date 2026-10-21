@@ -142,6 +142,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | `Channel.send(x)`, `try_send(x)` with a variable something else references (now an error: `send` no longer copies) | `send(move(x))`, or `send(copy(x))` to keep using `x` |
 | `[Sending]` parameter attribute (now an error) | `[Move]` |
 | `io.Print` trait | `io.Writer` (which also needs `write(data)`) |
+| `ArraySlice<T>`, `ArraySliceIterator<T>` | `ArrayView<T>`, `ArrayViewIterator<T>` |
 | `Atomic<T>` without an import (now an error: it moved to the `async` module) | `async.Atomic<T>` after `import async`, or `import [Atomic] from async` |
 | `math.parse_int(text, base)` | `long.parse(text, base)`, with no import |
 | `Optional<T>()` (now an error: `Optional` is an enum) | `Optional<T>.Empty` |

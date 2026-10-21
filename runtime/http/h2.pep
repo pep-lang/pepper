@@ -1327,6 +1327,9 @@ _h2_answer(connection: _H2Connection, stream: _H2Stream, handler: shared (Reques
     }
     request.set_body(stream.data);
     var response = handler(request);
+    if (response._upgrade) {
+        response = Response(501);  # a stream cannot switch protocols
+    }
     _h2_respond(connection, stream, response, method == "HEAD");
 }
 

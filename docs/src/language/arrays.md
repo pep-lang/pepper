@@ -59,10 +59,32 @@ other than the elements' own, or for elements that are not `Comparable`.
 
 ## Slices
 
-`a.slice(start, end)` is an `ArraySlice<T>`: a read-only view of the
+`a.slice(start, end)` is an `ArrayView<T>` (formerly `ArraySlice<T>`, a
+name that still works, with a deprecation warning): a read-only view of the
 elements from `start` up to but not including `end`. It has `count`,
 `is_empty`, indexing, `for` loops, `slice`, `to_array`, `find`, `contains`
-and the searches above.
+and the searches above, plus:
+
+- `split_at(index)`, which returns two slices: the elements before
+  `index`, and those from it on.
+- `chunks(size)`, which visits runs of `size` elements side by side, as
+  slices; the last run is shorter when `size` does not divide the count.
+- `windows(size)`, which visits every run of `size` neighbors, each
+  starting one element after the one before.
+- `==` and, for `Comparable` elements, the lexicographic `compare`, which
+  compare the elements, not where they are.
+
+`Array` has `chunks` and `windows` too, over all its elements. Neither
+copies an element: each run is a slice of the same array.
+
+```pepper
+var rises = 0;
+for (var pair in [1, 3, 2, 5].windows(2)) {
+    if (pair[1] > pair[0]) {
+        rises = rises + 1;   # 2 in all
+    }
+}
+```
 
 A slice is safe by construction:
 
@@ -73,12 +95,15 @@ A slice is safe by construction:
   with `Array modified while a slice of it is in use`, so it can never read
   an element that moved or a buffer that was freed. Make a new slice after
   changing the array.
+- It never holds a pointer into the array's buffer, only the array and a
+  range, so even growing the array (which moves the buffer) cannot leave
+  it pointing at freed memory. The runs `chunks` and `windows` give are
+  slices too, and follow the same rules.
 
 ## Not yet
 
 - Slices are read-only; there is no slice that writes through to its
   array, and no `a[1..4]` syntax: write `a.slice(1, 4)`.
-- `chunks` and `windows` are not there yet.
 - An `Array` is not itself `Comparable` (there are no conditional trait
   implementations yet), so `<` between arrays and `sort()` on an array of
   arrays need `compare`: `rows.sort((a, b) => a.compare(b))`.

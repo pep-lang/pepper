@@ -14,7 +14,7 @@ the same `Request` and `Response` types.
 
 - [Messages](http-message.md): `Headers`, `Request`, and `Response`
 - [Client](http-client.md): `Client`, `Session` and `BodyReader`
-- [Server](http-server.md): `Server` and `reason_phrase`
+- [Server](http-server.md): `Server`, `Connection` and `reason_phrase`
 
 **Example**
 ```pepper

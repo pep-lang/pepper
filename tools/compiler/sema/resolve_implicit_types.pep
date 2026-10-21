@@ -1412,6 +1412,10 @@ struct _TypeScopes {
                 if (source_type.is_empty() or source_type.is_auto()) {
                     return TypeName.auto();
                 }
+                # A source that is its own iterator (`Range<ulong>`) has no
+                # `iterate` to announce it once it is specialized: its type
+                # does.
+                tables.note(_type_read(source_type.to_string()));
                 var all = method_tables(source_type.to_string(), "iterate");
                 if (all.count == 0) {
                     return TypeName.auto();

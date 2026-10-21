@@ -54,9 +54,13 @@ Four steps, on every platform:
    ```
 
 4. **The packages.** `tools/compiler` depends on
-   `pep-lang/pepper-llvm` and `tools/pep-lsp` on
-   `pep-lang/pepper-lsp`. The first build of each fetches its package
-   with git into the tool's `.pep/deps`.
+   `pep-lang/pepper-llvm`, `tools/pep-lsp` on `pep-lang/pepper-lsp`, and
+   `tools/pep-package` on `pep-lang/pepper-semver`. The first build of
+   each fetches its package into the tool's `.pep/deps`, with the
+   `pep-package` beside the compiler or on the `PATH`, or with git at the
+   commit `pep.lock` records when there is none. So `pep-package` itself
+   builds before any `pep-package` exists; the release build fetches all
+   three with stage 0's.
 
 ### Where LLVM comes from
 
