@@ -10,6 +10,8 @@
 #     version = "1.2.3"
 #     commit = "0123456789abcdef0123456789abcdef01234567"
 #     sha256 = "<the checksum of its files: see archive.pep>"
+#
+# A package only `[dev-dependencies]` lead to has `dev = true`.
 
 import [File, Path] from io;
 import toml;
@@ -27,6 +29,8 @@ export struct Locked {
     # The checksum of the package's files (`files_sha256`), which a fetch
     # without git verifies; empty in a lock written before it was kept.
     var sha256: String = "";
+    # Whether only the project's dev-dependencies lead to it.
+    var dev: bool = false;
 
     construct() {}
 
@@ -77,6 +81,8 @@ export read_lock(path: Path): Result<Array<Locked>> {
         locked.version = _text(item, "version");
         locked.commit = _text(item, "commit");
         locked.sha256 = _text(item, "sha256");
+        var dev = item.try_get("dev");
+        locked.dev = dev.is_value() and dev.value().as_bool().value_or(false);
         if (locked.source.is_empty or locked.commit.is_empty) {
             return Result<Array<Locked>>.Err($"{path.to_string()}: every package needs a 'source' and a 'commit'");
         }
@@ -111,6 +117,9 @@ export lock_text(packages: Array<Locked>): String {
         text += "commit = " + toml.TomlValue.String(locked.commit).to_string() + "\n";
         if (!locked.sha256.is_empty) {
             text += "sha256 = " + toml.TomlValue.String(locked.sha256).to_string() + "\n";
+        }
+        if (locked.dev) {
+            text += "dev = true\n";
         }
     }
     return text;

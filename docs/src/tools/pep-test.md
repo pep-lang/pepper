@@ -64,7 +64,9 @@ error.
    in parallel. Each file keeps the scope it has in any program, so test
    files in a module's folder see each other's names, and a helper two of
    them declare must be `private` (see
-   [Unit tests](../language/testing.md#where-tests-live)). A program that
+   [Unit tests](../language/testing.md#where-tests-live)). A test build
+   sees the project's `[dev-dependencies]` (see
+   [Projects: pep.toml](projects.md#dev-dependencies)). A program that
    does not build is reported with the compiler's errors, and the other
    folders' tests still run.
 3. **Lists each program's tests** with `--list` and keeps those that match

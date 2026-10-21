@@ -214,6 +214,86 @@ add_fetches_the_newest_version_and_its_dependencies() {
 }
 
 [Test]
+dev_dependencies_are_added_locked_as_dev_and_removed() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("dev");
+    var project = Project("dev", "");
+    expect_exit(hosts.package(project.dir, ["add", "--dev", "other/numbers@1"]), 0);
+    expect_contains(
+        project.manifest(), "[dev-dependencies]\nnumbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    expect_contains(project.lock(), "\ndev = true\n");
+    # A test build fetches and sees them; the program's own build does
+    # not see them.
+    write_file(
+        project.dir.join("app_test.pep"),
+        "import numbers;\n\n[Test]\nversion() {\n    expect_equal(numbers.numbers_version(), \"1.3.1\");\n}\n"
+    );
+    Directory.remove_all(project.dir.join(".pep"));
+    var tested = run(
+        hosts.command(tool("pep-build").to_string(), project.dir, ["--test", "app_test.pep", "-o", "app_test"])
+    );
+    expect_exit(tested, 0);
+    var built = run(hosts.command(tool("pep-build").to_string(), project.dir, ["app_test.pep", "-o", "app_plain"]));
+    expect_false(built.status.success());
+    expect_contains(
+        built.stdout + built.stderr,
+        "error: 'numbers' is a dev-dependency, which only tests and the files in examples/ import"
+    );
+
+    # Once a dependency leads to it too, it is no longer dev-only.
+    expect_exit(hosts.package(project.dir, ["add", "someone/geometry"]), 0);
+    expect_false(project.lock().contains("dev = true"));
+    expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
+    expect_exit(hosts.package(project.dir, ["remove", "geometry"]), 0);
+    expect_contains(project.lock(), "\ndev = true\n");
+
+    # A name taken in either table is taken.
+    var taken = hosts.package(project.dir, ["add", "other/numbers"]);
+    expect_exit(taken, 1);
+    expect_contains(taken.stderr, "a dependency named 'numbers' already exists (github:other/numbers)");
+    expect_exit(hosts.package(project.dir, ["remove", "numbers"]), 0);
+    expect_false(project.manifest().contains("numbers"));
+    expect_false(project.dir.join("pep.lock").exists());
+}
+
+[Test]
+a_dependent_ignores_a_packages_dev_dependencies() {
+    if (!has_git()) {
+        return;
+    }
+    # `someone/shapes` tests with numbers 2.0.0, which geometry's range
+    # (1) excludes.
+    var hosts = Hosts("dev_dependent");
+    add_version(
+        hosts.folder.path,
+        "someone/shapes",
+        "1.0.0",
+        [
+            "module.pep",
+            "export sides(): int {\n    return 4;\n}\n",
+            "pep.toml",
+            "[package]\nname = \"shapes\"\n\n[dev-dependencies]\n"
+                + "numbers = { github = \"other/numbers\", version = \"=2.0.0\" }\n"
+        ]
+    );
+    publish(hosts.folder.path, "someone/shapes");
+    var project = Project(
+        "dev_dependent",
+        "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+            + "shapes = { github = \"someone/shapes\", version = \"1\" }\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    expect_false(project.lock().contains("2.0.0"));
+    expect_false(project.lock().contains("dev = true"));
+    expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
+}
+
+[Test]
 builds_fetch_what_pep_lock_lists() {
     if (!has_git()) {
         return;

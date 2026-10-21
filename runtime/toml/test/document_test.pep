@@ -49,6 +49,9 @@ edits_a_document_in_place() {
     fresh.set(["package"], package).value();
     fresh.set(["dependencies", "json5"], toml.TomlValue.String("1")).value();
     expect_equal(fresh.to_string(), "[package]\nname = \"fresh\"\n\n[dependencies]\njson5 = \"1\"\n");
+    # An inline table in a table that does not exist yet stays inline.
+    fresh.set(["dev-dependencies", "check"], local, inline = true).value();
+    expect_true(fresh.to_string().ends_with("json5 = \"1\"\n\n[dev-dependencies]\ncheck = { path = \"../local\" }\n"));
     var crlf = toml.parse_document("[a]\r\nb = 1").value();
     crlf.set(["a", "c"], toml.TomlValue.Integer(2)).value();
     expect_equal(crlf.to_string(), "[a]\r\nb = 1\nc = 2\n");

@@ -179,6 +179,19 @@ export struct TomlDocument {
             }
             out.append("\n");
         }
+        if (inline && value is Table) {
+            # `to_document` would write the table as a section of its own.
+            var header = keys.copy();
+            header.pop();
+            out.append("[");
+            out.append(_name(header));
+            out.append("]\n");
+            out.append(_name([keys.last()]));
+            out.append(" = ");
+            out.append(value.to_string());
+            out.append("\n");
+            return _splice(_text.size, _text.size, out.to_string());
+        }
         out.append(wrapper.to_document());
         return _splice(_text.size, _text.size, out.to_string());
     }

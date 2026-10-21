@@ -1,5 +1,6 @@
 # pep.toml as the package manager reads it: the package's name, the oldest
-# toolchain it builds with, and its dependencies. The compiler checks the rest of the file when it builds.
+# toolchain it builds with, and its dependencies and dev-dependencies. The
+# compiler checks the rest of the file when it builds.
 
 import [File, Path] from io;
 import toml;
@@ -9,7 +10,7 @@ export is_host(key: String): bool {
     return key == "github" or key == "gitlab" or key == "codeberg";
 }
 
-# One entry of `[dependencies]`.
+# One entry of `[dependencies]` or `[dev-dependencies]`.
 export struct Requirement {
     # The key: the name source code imports.
     var name: String = "";
@@ -21,6 +22,9 @@ export struct Requirement {
     var kind: String = "default";
     # The range, branch, tag or commit.
     var value: String = "";
+    # Whether it is in `[dev-dependencies]`: only the project's own tests
+    # and examples use it, so a project depending on this one ignores it.
+    var dev: bool = false;
 
     construct() {}
 
@@ -32,6 +36,11 @@ export struct Requirement {
 
     is_path(): bool {
         return host == "path";
+    }
+
+    # The table it is in: `dependencies` or `dev-dependencies`.
+    table(): String {
+        return dev ? "dev-dependencies" : "dependencies";
     }
 
     # The revision as pep.toml writes it, for messages: `1.2`, `branch main`.
@@ -72,7 +81,7 @@ export struct Manifest {
         return parent.is_value() ? parent.value() : Path(".");
     }
 
-    # The dependency named `name`.
+    # The dependency or dev-dependency named `name`.
     requirement(name: String): Optional<Requirement> {
         for (var requirement in requirements) {
             if (requirement.name == name) {
@@ -127,25 +136,28 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             manifest.hosts.append(host.value());
         }
     }
-    var dependencies = root.try_get("dependencies");
-    if (dependencies.is_empty()) {
-        return Result<Manifest>.Ok(manifest);
-    }
-    var table = dependencies.value().as_table();
-    if (table.is_empty()) {
-        return Result<Manifest>.Err($"{path.to_string()}: '[dependencies]' must be a table");
-    }
-    for (var (key, value) in table.value()) {
-        var requirement = _requirement(path, key, value);
-        if (requirement.is_err()) {
-            return Result<Manifest>.Err(requirement.error().message);
+    for (var name in ["dependencies", "dev-dependencies"]) {
+        var dependencies = root.try_get(name);
+        if (dependencies.is_empty()) {
+            continue;
         }
-        manifest.requirements.append(requirement.value());
+        var table = dependencies.value().as_table();
+        if (table.is_empty()) {
+            return Result<Manifest>.Err($"{path.to_string()}: '[{name}]' must be a table");
+        }
+        for (var (key, value) in table.value()) {
+            var requirement = _requirement(path, key, value);
+            if (requirement.is_err()) {
+                return Result<Manifest>.Err(requirement.error().message);
+            }
+            requirement.value().dev = name == "dev-dependencies";
+            manifest.requirements.append(requirement.value());
+        }
     }
     return Result<Manifest>.Ok(manifest);
 }
 
-# One `[dependencies]` entry.
+# One `[dependencies]` or `[dev-dependencies]` entry.
 _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement> {
     var fields = value.as_table();
     if (fields.is_empty()) {
