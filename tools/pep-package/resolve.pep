@@ -475,17 +475,17 @@ export struct Resolver {
                 best = Optional<(Version, String)>.Value(candidate);
                 break;
             }
-            skipped.append($"{candidate.0.to_string()} {shortfall}");
+            skipped.append($"{candidate.0.to_string()} ({shortfall})");
         }
         if (best.is_empty()) {
             return Result<Locked>.Err(
                 $"no version of {source} that every package accepts builds with toolchain {toolchain}: "
-                    + "; ".join(skipped)
+                    + ", ".join(skipped)
             );
         }
         var (version, commit) = best.value();
         if (!skipped.is_empty) {
-            notes.append($"{source} skipped {"; ".join(skipped)}: this is {toolchain}");
+            notes.append($"{source} skipped {", ".join(skipped)}; this is {toolchain}");
         }
         # Why an updated package is not at its newest version.
         if ((update_all or update.contains(source)) and newest.is_value() and newest.value().compare(version) > 0) {

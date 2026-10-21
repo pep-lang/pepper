@@ -347,10 +347,12 @@ struct Project {
             }
             var reset = edited.set(["dependencies", name], entry, inline = true);
             if (reset.is_err()) {
+                File.write_text(manifest_path, original);
                 return fail(reset.error().to_string());
             }
             var pinned = File.write_text(manifest_path, edited.to_string());
             if (pinned.is_err()) {
+                File.write_text(manifest_path, original);
                 return fail($"cannot write {manifest_path.to_string()}: {pinned.error().message}");
             }
         }

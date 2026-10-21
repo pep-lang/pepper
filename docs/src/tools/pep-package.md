@@ -188,7 +188,7 @@ prints, which `pepper` picks with the rest of the toolchain):
   picking the newest one left, and says which it skipped and why:
 
   ```text
-  pep-package: github:other/websocket skipped 1.3.0 needs toolchain 0.11.0: this is 0.10.1
+  pep-package: github:other/websocket skipped 1.3.0 (needs toolchain 0.11.0); this is 0.10.1
   ```
 
   When every version the ranges accept needs a newer toolchain, resolution
