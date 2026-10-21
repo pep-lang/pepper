@@ -335,7 +335,8 @@ state gets it another way:
 
 `[Link(name = "symbol")]` binds an extern to a C symbol whose name differs
 from the declared one. Pepper code calls the extern by its declared name, and
-the object file refers to `symbol`. Use it to give a C function a clearer
+the object file refers to `symbol`, even when a Pepper function is named
+`symbol` too: each call reaches its own function. Use it to give a C function a clearer
 name, to avoid clashing with a Pepper name, or, together with
 [`[Target]`](platform-selection.md), to bind one Pepper name to a different
 symbol on each platform. `lib` names the library that defines the symbol in

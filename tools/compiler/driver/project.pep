@@ -134,7 +134,8 @@ export fetch_dependencies(entry: Path): Result<void, String> {
 }
 
 ## What a project lacks: the locked packages missing from `.pep/deps` or
-## checked out there at another commit, and whether `pep.toml` names a dependency `pep.lock` does not list.
+## checked out there at another commit, and whether `pep.toml`, or a `path`
+## dependency's, names a Git dependency `pep.lock` does not list.
 struct _Missing {
     var packages: link.LockedPackage[] = Array<link.LockedPackage>();
     var unlocked: bool = false;
@@ -157,14 +158,13 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
             missing.packages.append(package);
         }
     }
-    for (var d in manifest.dependencies) {
-        var source = d.locked_source();
-        if (!source.is_value()) {
-            continue;
-        }
+    # A `path` dependency's own Git dependencies are fetched into this
+    # project too.
+    for (var d in manifest.git_dependencies()) {
+        var source = d.locked_source().value();
         var is_locked = false;
         for (var package in locked.value()) {
-            if (package.source() == source.value()) {
+            if (package.source() == source) {
                 is_locked = true;
             }
         }

@@ -22,6 +22,8 @@
 ##   as `llvm.global_ctors`) are in a part of their own, which depends on
 ##   the whole program and is never cached. Each export's entry point,
 ##   named `EXPORT_PREFIX` and its C symbol until then, takes its C symbol.
+##   So does an extern a Pepper function shares its C symbol's name with,
+##   named `EXTERN_PREFIX` and its C symbol until then.
 ##
 ## Every symbol a definition names gets its linker spelling
 ## (`link.symbol_name`), so names with `@`, `<` or spaces survive every linker.
@@ -134,6 +136,9 @@ export prepare(
     # The C entry points of `[Export]`ed functions, named by their C symbols
     # once every Pepper symbol has its spelling (a Pepper `add` is `_Padd`).
     var exports = Array<llvm.Value>();
+    # The externs kept apart from a Pepper function of their C symbol's name
+    # (`EXTERN_PREFIX`), named by it once that function has its spelling.
+    var externs = Array<llvm.Value>();
     var values = Array<llvm.Value>();
     values.append_all(functions);
     for (var global in ir.globals()) {
@@ -142,6 +147,10 @@ export prepare(
     for (var value in values) {
         var name = value.name();
         if (value.is_declaration()) {
+            if (name.starts_with(EXTERN_PREFIX)) {
+                externs.append(value);
+                continue;
+            }
             # A function whose body sema skipped (its unit's object comes
             # from the build cache) is declared only, under the spelling
             # that object defines.
@@ -210,6 +219,10 @@ export prepare(
         var symbol = name.substr_bytes(EXPORT_PREFIX.size, name.size - EXPORT_PREFIX.size);
         entry.set_name(symbol);
         part_of[entry.name()] = entry_part;
+    }
+    for (var declaration in externs) {
+        var name = declaration.name();
+        declaration.set_name(name.substr_bytes(EXTERN_PREFIX.size, name.size - EXTERN_PREFIX.size));
     }
     var out = Partition(part_of, sizes);
     out.names = names;

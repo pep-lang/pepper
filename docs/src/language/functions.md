@@ -306,9 +306,11 @@ anywhere, after flushing what was printed. Both are in the
 {{#include ../../examples/functions-arguments.pep}}
 ```
 
-`exit` skips everything that would run on the way out of `main`: locals are
-not released and destructors do not run. Prefer returning from `main`, and
-keep `exit` for ending from deep inside a call. See
+`exit` skips the Pepper code that would run on the way out of `main`: locals
+are not released and destructors do not run. What C runs at the end does
+run, as when `main` returns: the handlers a C library registered with
+`atexit`, then the flush of C's output streams. Prefer returning from
+`main`, and keep `exit` for ending from deep inside a call. See
 [Processes](processes.md).
 
 ## Functions as values

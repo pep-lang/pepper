@@ -83,7 +83,7 @@ export convert_string_literal(e: Expression): Expression {
 }
 
 ## Converts each string literal of every body, global initializer and
-## `String` parameter default.
+## parameter default.
 ##
 ## @param module the model, changed in place
 export convert_string_literals(module: Module) {
@@ -121,13 +121,12 @@ export convert_string_literals(module: Module) {
     }
 }
 
-## A `String` parameter's literal default is evaluated at each call that
-## omits the argument, so it is a `String` like any other literal; other
-## parameter types keep theirs.
+## A parameter's default is evaluated at each call that omits the argument,
+## so each literal in it is a `String` like any other literal.
 _convert_function(function: FunctionDef, converter: _StringConverter) {
     for (var p in function.parameters) {
-        if (p.ty.to_string() == "String" and p.default.is_value()) {
-            p.default = Optional<Expression>.Value(convert_string_literal(p.default.value()));
+        if (p.default.is_value()) {
+            p.default = Optional<Expression>.Value(rewrite_expression(p.default.value(), converter));
         }
     }
     if (function.body.is_value()) {
