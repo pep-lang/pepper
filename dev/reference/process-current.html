@@ -207,7 +207,8 @@ destructors do not run.</li>
 same memory, open files and code, and both go on from here. In the
 parent, returns the copy as a <code>Child</code> to wait for; in the copy, returns
 none. The copy has only the calling thread, so fork before starting
-threads or tasks, and end the copy with <code>exit()</code>.</p>
+threads or tasks, and end the copy with <code>exit()</code>, which there skips the
+parent's <code>atexit</code> handlers.</p>
 <p>The C standard streams are flushed first, so what <code>print</code> buffered is
 written once. Not on Windows or WASI, which start processes only from a
 program: there it returns an error.</p>

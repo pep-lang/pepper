@@ -4019,9 +4019,11 @@ main(args: String[]): int {
     return 0;
 }
 </code></pre>
-<p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
-not released and destructors do not run. Prefer returning from <code>main</code>, and
-keep <code>exit</code> for ending from deep inside a call. See
+<p><code>exit</code> skips the Pepper code that would run on the way out of <code>main</code>: locals
+are not released and destructors do not run. What C runs at the end does
+run, as when <code>main</code> returns: the handlers a C library registered with
+<code>atexit</code>, then the flush of C's output streams. Prefer returning from
+<code>main</code>, and keep <code>exit</code> for ending from deep inside a call. See
 <a href="language/processes.html">Processes</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function's name used without a call is a value that you can store in a
@@ -16921,7 +16923,10 @@ main(args: String[]): int {
 <li><code>process.arguments()</code> returns the program's command-line arguments, the
 same array <code>main(args: String[])</code> receives (see
 <a href="language/functions.html#command-line-arguments-and-exit">Functions</a>).</li>
-<li><code>process.exit(code)</code> ends the program at once with status <code>code</code>.</li>
+<li><code>process.exit(code)</code> ends the program at once with status <code>code</code>, as C's
+<code>exit</code> does: the handlers registered with C's <code>atexit</code> run, and printed
+output is flushed. In a copy <code>process.fork()</code> started, the handlers,
+which are the parent's, are skipped.</li>
 <li><code>process.id()</code> is the process's id.</li>
 <li><code>process.executable_path()</code> is the absolute path of the running program's
 executable, so a tool can find files installed next to it.</li>
@@ -19146,7 +19151,8 @@ main(): int {
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[Link(name = "symbol")]</code> binds an extern to a C symbol whose name differs
 from the declared one. Pepper code calls the extern by its declared name, and
-the object file refers to <code>symbol</code>. Use it to give a C function a clearer
+the object file refers to <code>symbol</code>, even when a Pepper function is named
+<code>symbol</code> too: each call reaches its own function. Use it to give a C function a clearer
 name, to avoid clashing with a Pepper name, or, together with
 <a href="language/platform-selection.html"><code>[Target]</code></a>, to bind one Pepper name to a different
 symbol on each platform. <code>lib</code> names the library that defines the symbol in
@@ -19158,6 +19164,11 @@ does on its own:</p>
 # 64 bits everywhere, where `long` follows the size of a pointer.
 [Link(name = "llabs")]
 extern i64 absolute(i64 value);
+
+# A Pepper function may be named after the C symbol: each call reaches its own.
+llabs(value: i64): i64 {
+    return value;
+}
 
 # C's long is 64 bits on Linux and macOS but 32 bits on Windows and
 # WebAssembly, so the 64-bit labs is only right on the first two.
@@ -19175,6 +19186,7 @@ extern double cube_root(double value);
 
 main(): int {
     assert(absolute(-7) == 7, "absolute calls llabs");
+    assert(llabs(-7) == -7, "llabs calls the Pepper function");
     assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
     [Target(OS(Linux))]
     {
@@ -25562,7 +25574,7 @@ does.</p>
 </code></pre>
 <p>Deprecated: use <code>process.exit</code> instead.</p>
 <p>Ends the program at once with status <code>code</code>, as <code>process.exit(code)</code>
-does.</p>
+does: C's <code>atexit</code> handlers run and the C output streams are flushed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>code</code> — the exit status: 0 for success, anything else for failure</li>
@@ -46556,9 +46568,9 @@ the process id, the standard streams and every other descriptor not
 marked close-on-exec, and nothing after the call runs. Windows cannot
 replace a process, so there the program is started with the standard
 streams inherited and waited for, and this process then ends with its
-exit status, as <code>process.exit</code> does. While it waits, this process
-ignores Ctrl-C and Ctrl-Break, which the program, sharing the
-console, receives and handles itself.</p>
+exit status, running no <code>atexit</code> handler, as a replaced process does
+not. While it waits, this process ignores Ctrl-C and Ctrl-Break,
+which the program, sharing the console, receives and handles itself.</p>
 <p>Output <code>print</code> has buffered is flushed first. The standard streams
 must be left inherited: no process remains to hold a pipe's other
 end. When the call fails, the process carries on unchanged, in its
@@ -46768,7 +46780,8 @@ destructors do not run.</li>
 same memory, open files and code, and both go on from here. In the
 parent, returns the copy as a <code>Child</code> to wait for; in the copy, returns
 none. The copy has only the calling thread, so fork before starting
-threads or tasks, and end the copy with <code>exit()</code>.</p>
+threads or tasks, and end the copy with <code>exit()</code>, which there skips the
+parent's <code>atexit</code> handlers.</p>
 <p>The C standard streams are flushed first, so what <code>print</code> buffered is
 written once. Not on Windows or WASI, which start processes only from a
 program: there it returns an error.</p>
@@ -58333,7 +58346,7 @@ programs, and the Pepper tools on files and folders, checking their
 output and exit status as a user would see them.</p>
 <div class="table-wrapper"><table><thead><tr><th>Test</th><th>What it runs</th></tr></thead><tbody>
 <tr><td><code>tools/compiler/corpus_test.pep</code></td><td><code>pep-build -I tests</code> on each <code>tests/&lt;Name&gt;/test.pep</code>, then the program from the repository's root, which must exit with 0. With <code>WASI_SDK_PATH</code> set and wasmtime on the PATH (or <code>WASMTIME</code> naming it), each again for <code>wasm32-wasip1</code> under wasmtime; it says it skipped otherwise, except under CI on Linux, which provisions both (<code>scripts/ci-provision-wasi.sh</code>) and where it fails without them. A new <code>tests/&lt;Name&gt;/test.pep</code> joins the run.</td></tr>
-<tr><td><code>tools/compiler/programs_test.pep</code></td><td><code>pep-build</code> on the programs of <code>tools/compiler/testdata/</code>, each run with the arguments and environment it needs: <code>cli</code>'s <code>parse</code> and an <code>add_options</code> error, <code>os</code>'s environment and host, <code>time</code>'s zones (TZif files under <code>TZDIR</code>, <code>TZ</code>, the system's database), and <code>process</code>'s arguments, <code>exit</code>, <code>main</code>'s arguments, children that are copies of the program, and <code>exec</code>.</td></tr>
+<tr><td><code>tools/compiler/programs_test.pep</code></td><td><code>pep-build</code> on the programs of <code>tools/compiler/testdata/</code>, each run with the arguments and environment it needs: <code>cli</code>'s <code>parse</code> and an <code>add_options</code> error, <code>os</code>'s environment and host, <code>time</code>'s zones (TZif files under <code>TZDIR</code>, <code>TZ</code>, the system's database), and <code>process</code>'s arguments, <code>exit</code> and the <code>atexit</code> handlers it runs, <code>main</code>'s arguments, children that are copies of the program, and <code>exec</code>.</td></tr>
 <tr><td><code>tools/pep-doc/examples_test.pep</code></td><td><code>pep-build</code> on every example of the book, then the example (see <a href="contributing/docs.html">Building this documentation</a>).</td></tr>
 <tr><td><code>tools/pep-fmt/repository_test.pep</code></td><td><code>format_source</code> in the test itself on every <code>.pep</code> file under <code>runtime/</code>, <code>tools/</code>, <code>tests/</code> and <code>docs/examples/</code>: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of <code>runtime/</code> and <code>tools/</code> are already formatted (<code>pep-fmt -w</code> fixes one that is not).</td></tr>
 <tr><td><code>tools/pep-fmt/cli_test.pep</code></td><td><code>pep-fmt</code> on standard input and on files and folders (<code>--check</code>, <code>-w</code>), its syntax errors and usage errors.</td></tr>

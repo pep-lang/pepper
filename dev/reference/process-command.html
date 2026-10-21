@@ -453,9 +453,9 @@ the process id, the standard streams and every other descriptor not
 marked close-on-exec, and nothing after the call runs. Windows cannot
 replace a process, so there the program is started with the standard
 streams inherited and waited for, and this process then ends with its
-exit status, as <code>process.exit</code> does. While it waits, this process
-ignores Ctrl-C and Ctrl-Break, which the program, sharing the
-console, receives and handles itself.</p>
+exit status, running no <code>atexit</code> handler, as a replaced process does
+not. While it waits, this process ignores Ctrl-C and Ctrl-Break,
+which the program, sharing the console, receives and handles itself.</p>
 <p>Output <code>print</code> has buffered is flushed first. The standard streams
 must be left inherited: no process remains to hold a pipe's other
 end. When the call fails, the process carries on unchanged, in its

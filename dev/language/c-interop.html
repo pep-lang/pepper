@@ -751,7 +751,8 @@ main(): int {
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[Link(name = "symbol")]</code> binds an extern to a C symbol whose name differs
 from the declared one. Pepper code calls the extern by its declared name, and
-the object file refers to <code>symbol</code>. Use it to give a C function a clearer
+the object file refers to <code>symbol</code>, even when a Pepper function is named
+<code>symbol</code> too: each call reaches its own function. Use it to give a C function a clearer
 name, to avoid clashing with a Pepper name, or, together with
 <a href="platform-selection.html"><code>[Target]</code></a>, to bind one Pepper name to a different
 symbol on each platform. <code>lib</code> names the library that defines the symbol in
@@ -763,6 +764,11 @@ does on its own:</p>
 # 64 bits everywhere, where `long` follows the size of a pointer.
 [Link(name = "llabs")]
 extern i64 absolute(i64 value);
+
+# A Pepper function may be named after the C symbol: each call reaches its own.
+llabs(value: i64): i64 {
+    return value;
+}
 
 # C's long is 64 bits on Linux and macOS but 32 bits on Windows and
 # WebAssembly, so the 64-bit labs is only right on the first two.
@@ -780,6 +786,7 @@ extern double cube_root(double value);
 
 main(): int {
     assert(absolute(-7) == 7, "absolute calls llabs");
+    assert(llabs(-7) == -7, "llabs calls the Pepper function");
     assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
     [Target(OS(Linux))]
     {

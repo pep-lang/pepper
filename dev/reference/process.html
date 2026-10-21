@@ -202,7 +202,7 @@ does.</p>
 </code></pre>
 <p>Deprecated: use <code>process.exit</code> instead.</p>
 <p>Ends the program at once with status <code>code</code>, as <code>process.exit(code)</code>
-does.</p>
+does: C's <code>atexit</code> handlers run and the C output streams are flushed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>code</code> — the exit status: 0 for success, anything else for failure</li>

@@ -587,9 +587,11 @@ main(args: String[]): int {
     return 0;
 }
 </code></pre>
-<p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
-not released and destructors do not run. Prefer returning from <code>main</code>, and
-keep <code>exit</code> for ending from deep inside a call. See
+<p><code>exit</code> skips the Pepper code that would run on the way out of <code>main</code>: locals
+are not released and destructors do not run. What C runs at the end does
+run, as when <code>main</code> returns: the handlers a C library registered with
+<code>atexit</code>, then the flush of C's output streams. Prefer returning from
+<code>main</code>, and keep <code>exit</code> for ending from deep inside a call. See
 <a href="processes.html">Processes</a>.</p>
 <h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
 <p>A function's name used without a call is a value that you can store in a

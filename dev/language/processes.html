@@ -338,7 +338,10 @@ main(args: String[]): int {
 <li><code>process.arguments()</code> returns the program's command-line arguments, the
 same array <code>main(args: String[])</code> receives (see
 <a href="functions.html#command-line-arguments-and-exit">Functions</a>).</li>
-<li><code>process.exit(code)</code> ends the program at once with status <code>code</code>.</li>
+<li><code>process.exit(code)</code> ends the program at once with status <code>code</code>, as C's
+<code>exit</code> does: the handlers registered with C's <code>atexit</code> run, and printed
+output is flushed. In a copy <code>process.fork()</code> started, the handlers,
+which are the parent's, are skipped.</li>
 <li><code>process.id()</code> is the process's id.</li>
 <li><code>process.executable_path()</code> is the absolute path of the running program's
 executable, so a tool can find files installed next to it.</li>
