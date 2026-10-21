@@ -103,6 +103,10 @@ checks_the_name_as_pep_toml_does_and_suggests_one() {
     );
     expect_false(folder.path.join("my-app").exists());
     expect_contains(in_folder(folder.path, "pep-new", ["x", "--name", "2d"]).stderr, "; try '--name _2d'\n");
+    expect_equal(
+        in_folder(folder.path, "pep-new", ["match", "--lib"]).stderr,
+        "pep-new: error: package name 'match' is a reserved word, which 'import' cannot name; try '--name match_'\n"
+    );
     expect_exit(in_folder(folder.path, "pep-new", ["my-app", "--name", "my_app"]), 0);
     expect_contains(read_file(folder.path.join("my-app").join("pep.toml")), "name = \"my_app\"\n");
 

@@ -52,7 +52,7 @@ import [
 ] from compiler.ast;
 import compiler.desugar;
 import syntax;
-import [SyntaxError, Token, TokenKind] from syntax;
+import [is_reserved_word, SyntaxError, Token, TokenKind] from syntax;
 import [Utf8] from text;
 import "checks" as checks;
 
@@ -4730,51 +4730,6 @@ struct Parser {
         flush(parts, bytes, text_start, literal_start + offset);
         return parts;
     }
-}
-
-# Returns whether `token` is one of the words `_at_name` refuses as names
-# (`struct`, `if`, `and`, ...), compared in place.
-is_reserved_word(source: String, token: Token): bool {
-    if (token.kind != TokenKind.Identifier) {
-        return false;
-    }
-    int first = source.byte_at(token.offset);
-    if (first == 'a') {
-        return token.spells(source, "and");
-    } else if (first == 'c') {
-        return token.spells(source, "const") or token.spells(source, "construct");
-    } else if (first == 'd') {
-        return token.spells(source, "destruct");
-    } else if (first == 'e') {
-        return token.spells(source, "else")
-            or token.spells(source, "extern")
-            or token.spells(source, "extend")
-            or token.spells(source, "export")
-            or token.spells(source, "enum");
-    } else if (first == 'f') {
-        return token.spells(source, "for") or token.spells(source, "false");
-    } else if (first == 'i') {
-        return token.spells(source, "import") or token.spells(source, "if");
-    } else if (first == 'm') {
-        return token.spells(source, "match");
-    } else if (first == 'n') {
-        return token.spells(source, "new");
-    } else if (first == 'o') {
-        return token.spells(source, "or");
-    } else if (first == 'p') {
-        return token.spells(source, "private");
-    } else if (first == 'r') {
-        return token.spells(source, "return");
-    } else if (first == 's') {
-        return token.spells(source, "struct") or token.spells(source, "static") or token.spells(source, "sizeof");
-    } else if (first == 't') {
-        return token.spells(source, "true") or token.spells(source, "trait") or token.spells(source, "type");
-    } else if (first == 'v') {
-        return token.spells(source, "var");
-    } else if (first == 'w') {
-        return token.spells(source, "while") or token.spells(source, "with");
-    }
-    return false;
 }
 
 # Returns whether `token` is one of the words that stop a statement from

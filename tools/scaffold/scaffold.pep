@@ -26,7 +26,10 @@ export struct Options {
 export create(tool: String, folder: Path, options: Options): int {
     var name = options.name.is_value() ? options.name.value() : _folder_name(folder);
     if (!syntax.is_identifier(name)) {
-        var message = $"package name '{name}' is not an identifier: use letters, digits and '_', not starting with a digit";
+        var reserved = syntax.is_reserved_word(name, syntax.Token(syntax.TokenKind.Identifier, 0, name.size));
+        var message = reserved ?
+            $"package name '{name}' is a reserved word, which 'import' cannot name" :
+            $"package name '{name}' is not an identifier: use letters, digits and '_', not starting with a digit";
         var fixed = syntax.to_identifier(name);
         if (!fixed.is_empty) {
             message = message + $"; try '--name {fixed}'";
@@ -57,16 +60,20 @@ export create(tool: String, folder: Path, options: Options): int {
         }
         return _fail(tool, $"nothing written: these files are there already{list}");
     }
+    var done = Array<Path>();
     for (var (path, text) in files) {
         var file = folder.join(path);
         var made = Directory.create_all(file.parent().value());
-        if (made.is_err()) {
-            return _fail(tool, $"cannot create '{file.parent().value()}': {made.error().message}");
-        }
-        var written = File.write_text(file, text);
+        var written = made.is_err() ? made : File.write_text(file, text);
         if (written.is_err()) {
+            # Take back what this run wrote (none of it was there before), so
+            # a retry is not refused over half a project.
+            for (var earlier in done) {
+                File.remove(earlier);
+            }
             return _fail(tool, $"cannot write '{file}': {written.error().message}");
         }
+        done.append(file);
         if (path.ends_with(".sh")) {
             file.set_executable(true);
         }

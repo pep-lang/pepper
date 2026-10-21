@@ -98,13 +98,16 @@ pep-init: error: nothing written: these files are there already
   ./README.md
 ```
 
-The name is checked as `pep.toml` checks `[package] name`, and the error
-suggests one that works, made by turning each character an identifier
-cannot hold into `_`:
+The name must be one `import` can use: an identifier, as `pep.toml` checks
+`[package] name`, and not a reserved word such as `match` or `type`. The
+error suggests one that works, made by turning each character an
+identifier cannot hold into `_`, or by adding `_` to a reserved word:
 
 ```text
 $ pepper new my-app
 pep-new: error: package name 'my-app' is not an identifier: use letters, digits and '_', not starting with a digit; try '--name my_app'
+$ pepper new match --lib
+pep-new: error: package name 'match' is a reserved word, which 'import' cannot name; try '--name match_'
 ```
 
 ## Building them
