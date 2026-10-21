@@ -149,7 +149,7 @@ replacing any the request has.
 - `request` — the request; its `url` must be absolute
 
 **Returns**
-- the response after any redirects, whatever its status; an error with `is_invalid_input()` for a URL that is not `http://` or `https://`, the errors of `io.TcpStream.connect_host` and `tls.TlsConnector.connect`, or an error when the response is not valid HTTP/1.x, its body is larger than `MAX_RESPONSE_BODY`, or there are more than `max_redirects` redirects
+- the response after any redirects, whatever its status; an error with `is_invalid_input()` for a URL that is not `http://` or `https://`, a method or field name that is not an RFC 9110 token, or a field value holding CR, LF or NUL (which would split the request), the errors of `io.TcpStream.connect_host` and `tls.TlsConnector.connect`, or an error when the response is not valid HTTP/1.x, its body is larger than `MAX_RESPONSE_BODY`, or there are more than `max_redirects` redirects
 
 #### open
 
