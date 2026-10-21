@@ -36,7 +36,28 @@ struct Box<T> {
     }
 }
 
+struct Wrap<T> {
+    var value: T;
+
+    construct(value: T) {
+        this.value = value;
+    }
+
+    doubled(): String {
+        return $"{value}{value}";
+    }
+}
+
+# A specialization and its method that only a free function's default
+# uses.
+picked(text: String = Wrap<int>(4).doubled()): String {
+    return text;
+}
+
 main(): int {
+    if (picked() != "44") {
+        return 4;
+    }
     if (shown(7) != "7 a1 2 5t 3 7") {
         return 1;
     }

@@ -1185,7 +1185,7 @@ compilation unit's own (`unit`), without the extensions' copies, or with
 the templates (generic methods, trait defaults). `rewrite_places`,
 `rewrite_concrete_places` (skipping generic bases) and
 `closure_sites.rewrite_module` apply a `Rewriter` to them;
-`resolve_injected`, `gather_generics`, `check_interpolations`,
+`resolve_injected`, `gather_generics`, `specialize_used_methods`, `check_interpolations`,
 `check_ranges`, `resolve_operators`, `verify_injected` and the site walks
 of `closure_sites` (`for_each_site`, `select_sites`, `sync_closures`) walk
 them, so each reaches defaults and initializers too. **A new kind of place

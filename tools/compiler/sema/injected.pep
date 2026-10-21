@@ -18,6 +18,7 @@
 ## calls. `verify_injected` checks, at the end of the passes, that no
 ## concrete code still holds one in its placeholder form.
 
+import [RANGE_FUNCTION] from "builder";
 import [error_at] from "common";
 import [is_text_conversion] from "interpolation";
 import [convert_string_literal] from "literals";
@@ -189,17 +190,15 @@ extend _Placeholders with Rewriter;
 ## Whether `function` is an injected construct's call that still lacks the
 ## types its operands give it.
 _is_placeholder_call(function: String): bool {
-    if (tuple_constructor_labels(function).is_value()) {
-        return true;
+    # Spelled, a call names its type arguments: `_range<int>`.
+    if (function.contains("<")) {
+        return false;
     }
-    match (function) {
-        "_pep_interpolate", "_pep_format", "_pep_format_integer", "_pep_format_float", "_array_literal", "_map_literal", "_range" => {
-            return true;
-        }
-        else => {
-            return false;
-        }
-    }
+    return tuple_constructor_labels(function).is_value()
+        or is_text_conversion(function)
+        or function == RANGE_FUNCTION
+        or function == "_array_literal"
+        or function == "_map_literal";
 }
 
 ## Notes a `?`'s hidden local (`__try_N`) still without a type, in nested
