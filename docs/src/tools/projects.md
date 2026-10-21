@@ -176,7 +176,7 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
 An import of a dependency that is not on disk says which folder is missing:
 
 ```text
-main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry
+main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry; run 'pepper package fetch'
     1 | import geometry;
       |        ^~~~~~~~
 ```
