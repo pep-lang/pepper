@@ -424,7 +424,7 @@ string_literals_in_default_arguments_arrive_whole() {
     var program = _build("default_argument_literal", folder.path, ["-I", folder.path.to_string()]);
     var output = run(process.Command(program.to_string()));
     expect_exit(output, 0);
-    expect_equal(output.stdout, "3 default 4 5\n2 6 module\n");
+    expect_equal(output.stdout, "3 default 4 5\n7 rex\n2 6 module\n");
 }
 
 # ── moves ───────────────────────────────────────────────────────────────────
