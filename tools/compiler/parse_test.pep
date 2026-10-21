@@ -49,6 +49,26 @@ parses_every_source_file_part_8() {
     parses_sources(7);
 }
 
+# The return type of `source`'s first function, as text and its span's end.
+return_type_of(source: String): (String, ulong) {
+    var module = parse.parse(source);
+    if (module.is_err()) {
+        return (module.error().message, 0 as ulong);
+    }
+    if (module.value().declarations[0] is Function(function)) {
+        return (function.return_type.to_string(), function.return_type.span.end);
+    }
+    return ("", 0 as ulong);
+}
+
+[Test]
+parses_array_and_optional_suffixes_after_a_tuple_type() {
+    expect_equal(return_type_of("f(): (String, int)[] {}"), ("(String, int)[]", 20 as ulong));
+    expect_equal(return_type_of("f(): (a: int, b: int)[][] {}"), ("(a: int, b: int)[][]", 25 as ulong));
+    expect_equal(return_type_of("f(): (int, int)[]? {}"), ("Optional<(int, int)[]>", 18 as ulong));
+    expect_equal(return_type_of("f(): Box<int>[] {}"), ("Box<int>[]", 15 as ulong));
+}
+
 const PARSE_PARTS: ulong = 8;
 
 # Checks every `PARSE_PARTS`th source file of the repository, from the `part`th.
