@@ -25,6 +25,8 @@ main(): int {
         File.stderr().write_all("main did not install the stack guard: built by a pep-build older than it?\n");
         return 3;
     }
+    # An overflow skips the panic hook: the test sees no "hook" line.
+    set_panic_hook((message, location) => File.stderr().write_all("hook\n"));
     var n = where == "none" ? 1000 : 100000000;
     if (where == "thread") {
         async.Thread.spawn(() => print($"{depth(n)}")).join();

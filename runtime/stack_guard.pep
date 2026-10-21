@@ -2,7 +2,8 @@
 # a guard page, and instead of the silent crash that follows, the program
 # writes `panic: stack overflow` to standard error and aborts, as a panic
 # does. There is too little stack left to format anything, or to print a
-# backtrace, so the message is a fixed string written with one system call.
+# backtrace, so the message is a fixed string written with one system call,
+# and the panic hook (`set_panic_hook`) does not run.
 #
 # The compiler calls `_pep_stack_guard_start` first thing in `main`, which
 # installs the process's handler and sets up the main thread; every `Thread`
