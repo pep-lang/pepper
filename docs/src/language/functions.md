@@ -101,6 +101,10 @@ its own copy. For a `String`, an `Array` or any other struct, the value is a
 reference, so the function receives another reference to the same object: it
 can change the object's contents, and the caller sees the change. Assigning a
 new object to the parameter does not affect the caller's variable.
+
+A parameter is a local of the function's body: a `var` in the body's outermost
+block may not reuse its name (see
+[Scope and shadowing](types-and-variables.md#scope-and-shadowing)).
 [Memory and reference counting](memory.md) describes exactly how references are
 counted when you pass them.
 

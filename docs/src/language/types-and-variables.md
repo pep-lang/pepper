@@ -307,6 +307,32 @@ arithmetic produces under C's rules (see [Arithmetic follows C](#arithmetic-foll
 `var m = 1 + 0.5;` is a `double` holding 1.5, and with `u8 small = 250;`,
 `var s = small + 10;` is an `int` holding 260.
 
+### Scope and shadowing
+
+A variable is visible from its declaration to the end of the block that
+declares it. Declaring the same name twice in one block is an error
+(`redefinition of 'x'`, with a note at the first). A function's or closure's
+parameters belong to its body's outermost block, so a local there may not
+repeat a parameter's name either, nor may two parameters share one, as in
+C++:
+
+```text
+main.pep:2:9: error: redefinition of 'x'
+    2 |     var x = 5;
+      |         ^
+main.pep:1:3: note: previous definition is here
+    1 | f(x: bool): int {
+      |   ^
+```
+
+An inner scope may reuse a name, hiding the outer one until it ends: a nested
+block, a `for` loop's variable, a `match` arm's or an `is` pattern's
+bindings, and a closure's parameters.
+
+```pepper
+{{#include ../../examples/variables-shadowing.pep}}
+```
+
 ### Constants
 
 `const` declares a name that you do not intend to change:
