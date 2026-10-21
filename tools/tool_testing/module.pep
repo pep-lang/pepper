@@ -1,6 +1,6 @@
 ## Helpers for the tests that run the Pepper tools end to end (`pepper`,
-## `pep-test`, `pep-fmt`, `pep-package`, `pep-profile`, `pep-run`, and `pep-build` on
-## the `tests/` corpus): finding a tool, running it, and building a small
+## `pep-test`, `pep-fmt`, `pep-package`, `pep-profile`, `pep-run`,
+## `pep-new`, `pep-init`, and `pep-build` on the `tests/` corpus): finding a tool, running it, and building a small
 ## program with `pep-build`.
 ##
 ## The tools come from beside the test program or the PATH, where

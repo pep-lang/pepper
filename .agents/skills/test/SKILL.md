@@ -33,7 +33,7 @@ export PATH="$PWD/target/pepper-tests/bin:$PATH"
 | `tools/compiler/*_test.pep` | The compiler written in Pepper; `corpus_test.pep` builds and runs every `tests/<Name>/test.pep` with `pep-build -I tests` (each must exit 0; a new fixture joins automatically), and under wasmtime when `WASI_SDK_PATH` and wasmtime are there |
 | `tools/pep-doc/examples_test.pep` | Builds and runs every book example |
 | `tools/pep-fmt/` | The style (`format_test.pep`), every repository file formats idempotently to the same syntax tree and `runtime/`/`tools/` are formatted (`repository_test.pep`), the program (`cli_test.pep`) |
-| `tools/pepper/`, `tools/pep-test/`, `tools/pep-package/`, `tools/pep-profile/`, `tools/pep-run/` | Each tool end to end (`*_test.pep`), built by the script and found on the PATH, with the `tool_testing` helpers and data in `testdata/`; `pepper_test.pep` also checks every tool's `--version` |
+| `tools/pepper/`, `tools/pep-test/`, `tools/pep-package/`, `tools/pep-profile/`, `tools/pep-run/`, `tools/pep-new/` | Each tool end to end (`*_test.pep`), built by the script and found on the PATH, with the `tool_testing` helpers and data in `testdata/`; `pepper_test.pep` also checks every tool's `--version` |
 | `tools/pep-install/`, `tools/pep-lsp/` | Those tools, in-process |
 
 A run is good when every `pepper test` summary says `0 failed` and the script exits 0. A test that cannot run here prints `skipped: ...` and passes (the wasmtime corpus runs, the live profile, the package tests without git).

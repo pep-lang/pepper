@@ -78,6 +78,24 @@ pepper run hello.pep
 Arguments after the file go to the program's `main`; see
 [Running a program: pep-run](../tools/pep-run.md).
 
+### Starting a project
+
+A program bigger than one file is a project: a folder with a
+[`pep.toml`](../tools/projects.md) that names it and lists the packages it
+uses. `pepper new` starts one, with a `main.pep` and a test, so `pepper
+build` and `pepper test` work in it straight away:
+
+```sh
+pepper new hello
+cd hello
+pepper build     # builds ./hello
+pepper test      # runs its [Test] function
+```
+
+`pepper new geometry --lib` starts a package instead, and `pepper init`
+starts either in the current folder; see
+[Starting a project: pep-new and pep-init](../tools/pep-new.md).
+
 ### Where the compiler finds the standard library
 
 Every program is compiled together with Pepper's standard library, the

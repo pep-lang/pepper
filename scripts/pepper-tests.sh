@@ -15,7 +15,8 @@
 # "Building from source").
 #
 # The script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
-# `pep-profile`, `pep-package`, `pep-run`, `pep-install`, `pep-doc`) from this
+# `pep-profile`, `pep-package`, `pep-run`, `pep-new`, `pep-init`,
+# `pep-install`, `pep-doc`) from this
 # checkout with that `pep-build`, into target/pepper-tests/bin (under
 # $PEPPER_TARGET_DIR when it is set), beside a link to the `pep-build`, so
 # `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
@@ -128,15 +129,15 @@ export PEPPER_RUNTIME="$root/runtime"
 
 # The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
 # the tools' tests run `pepper`, `pep-test`, `pep-fmt`, `pep-profile`,
-# `pep-package` and `pep-run` end to end (finding them on the PATH, below),
-# and `pep-doc check` reads every tool's `--help`. The tests wait for the
-# first six; the rest are waited for at the end.
+# `pep-package`, `pep-run`, `pep-new` and `pep-init` end to end (finding
+# them on the PATH, below), and `pep-doc check` reads every tool's `--help`.
+# The tests wait for the first eight; the rest are waited for at the end.
 pids=()
-for tool in pepper pep-test pep-fmt pep-profile pep-package pep-run pep-install pep-doc; do
+for tool in pepper pep-test pep-fmt pep-profile pep-package pep-run pep-new pep-init pep-install pep-doc; do
   "$bin/pep-build$exe" -O "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done
-for pid in "${pids[@]:0:6}"; do
+for pid in "${pids[@]:0:8}"; do
   wait "$pid"
 done
 pepper="$bin/pepper$exe"
@@ -193,7 +194,7 @@ fi
 
 wait "$tools" || failed=1
 cat "$tools_log"
-for pid in "${pids[@]:6}"; do
+for pid in "${pids[@]:8}"; do
   wait "$pid"
 done
 

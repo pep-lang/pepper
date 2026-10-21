@@ -10,6 +10,11 @@ pepper build          # builds the program pep.toml describes
 ./my_app
 ```
 
+`pepper new my_app` starts a project with a `pep.toml`, a `main.pep` and a
+test, and `pepper new my_lib --lib` a package (see
+[Starting a project: pep-new and pep-init](pep-new.md)). A `pep.toml` can
+say more:
+
 ```toml
 [package]
 name = "my_app"

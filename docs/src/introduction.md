@@ -141,7 +141,7 @@ chapter shows a feature, the example was compiled and run to check it.
   [naming conventions](language/naming.md). Read it in order, or jump to the
   topic you need.
 - **Tools.** [The pepper command](tools/pepper.md),
-  [pep-run](tools/pep-run.md),
+  [pep-new](tools/pep-new.md), [pep-run](tools/pep-run.md),
   [pep-fmt](tools/pep-fmt.md), [pep-profile](tools/pep-profile.md),
   [pep-test](tools/pep-test.md) and [debugging](tools/debugging.md).
 - **Standard library reference.** Every type and function in the runtime,

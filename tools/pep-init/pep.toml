@@ -1,0 +1,11 @@
+[package]
+name = "pep_init"
+description = "Starts a project in the current folder, run as `pepper init`"
+license = "Apache-2.0"
+repository = "https://github.com/pep-lang/pepper"
+
+[build]
+entry = "main.pep"
+output = "pep-init"
+# `scaffold` and `syntax` are folders beside this one.
+include = [".."]

@@ -20,6 +20,7 @@ import [Directory, File, Path] from io;
 import os;
 import process;
 import [Version, parse_range] from semver;
+import syntax;
 import toml;
 import "git";
 import "lock";
@@ -129,22 +130,7 @@ default_name(repository: String): String {
     if (name.ends_with(".pep")) {
         name = name.substr(0, name.length - 4);
     }
-    return name.replace("-", "_").replace(".", "_");
-}
-
-# Whether `name` is an identifier `import` can use.
-is_identifier(name: String): bool {
-    if (name.is_empty) {
-        return false;
-    }
-    var first = true;
-    for (var byte in name.bytes()) {
-        if (!(byte.is_alphabetic() or byte == '_' or (!first and byte.is_digit()))) {
-            return false;
-        }
-        first = false;
-    }
-    return true;
+    return syntax.to_identifier(name);
 }
 
 # A project: its pep.toml, pep.lock and `.pep/deps`.
@@ -263,7 +249,7 @@ struct Project {
             return fail($"'{spec}' must name a repository as owner/name");
         }
         var name = given_name.is_empty ? default_name(rest) : given_name;
-        if (!is_identifier(name)) {
+        if (!syntax.is_identifier(name)) {
             return fail($"'{name}' is not a name 'import' can use; give one with --name");
         }
         var manifest = read_manifest(manifest_path);
