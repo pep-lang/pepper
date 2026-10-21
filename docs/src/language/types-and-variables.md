@@ -226,7 +226,7 @@ A backslash in a string literal starts an escape sequence, as in C and Rust:
 | `\\` | a backslash |
 | `\"` | a double quote |
 | `\'` | a single quote |
-| `\xHH` | the ASCII character with hexadecimal code `HH`, at most `\x7F` (any byte in a [character literal](#characters)) |
+| `\xHH` | the ASCII character with hexadecimal code `HH`, at most `\x7F` (any byte in a [character literal](#characters)); always two digits, so `"\x4"` is an error |
 | `\u{H...}` | the Unicode code point with hexadecimal code `H...` (1 to 6 digits) |
 
 ```pepper

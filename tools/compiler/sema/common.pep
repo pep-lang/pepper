@@ -103,6 +103,10 @@ _expression_loc(e: Expression): Loc {
         MethodCall(node) => {
             return node.loc;
         }
+        # A call through a function value is located at its callee.
+        Invoke(node) => {
+            return _expression_loc(node.callee);
+        }
         MakeClosure(node) => {
             return node.loc;
         }

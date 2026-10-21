@@ -6,8 +6,9 @@
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`; and the error for a member a
 # value's type lacks inside an interpolation or for another module's
-# private extern; string literals that hold a NUL; and a `match` in a
-# generic method of another module's struct. The programs are in
+# private extern; string literals that hold a NUL; a `match` in a generic
+# method of another module's struct; and a `[Move]` argument called
+# through a `shared` function value. The programs are in
 # `testdata/`.
 
 import [File, Path] from io;
@@ -417,4 +418,13 @@ string_literal_with_nul_keeps_its_bytes_beside_its_prefix() {
     var output = _run("string_literal_nul");
     expect_exit(output, 0);
     expect_equal(output.stdout, "1 97\n3 97 0 98\n");
+}
+
+# ── moves ───────────────────────────────────────────────────────────────────
+
+[Test]
+move_takes_a_call_through_a_shared_function_value() {
+    var output = _run("move_shared_call");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "1\n6\n");
 }

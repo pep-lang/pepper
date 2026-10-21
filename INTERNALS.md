@@ -2986,7 +2986,10 @@ worker's standard input; before each one a worker reads and links the
 bodies of its files only (`Program.link_bodies`, which links more files'
 bodies each time it is called), since the compilation units it reads come as
 records. The
-worker checks it as below and leaves its record, own interface, what its
+worker first reports the program's linking and visibility errors
+(`Program.check_diagnostics`, as the build does before the first compilation
+unit it checks itself), so an error in a file a worker checks is not left to
+sema, then checks it as below and leaves its record, own interface, what its
 object defines, warnings or error in `<dir>` (`<k>.rec`, `<k>.own`,
 `<k>.defines`, `<k>.warn`, `<k>.err`), then `<k>.done`; the compilation units it reads
 come to it as their `<k>.rec` and `<k>.defines`. A rebuild (its build folder
@@ -3009,7 +3012,7 @@ then include `wait`. `<dir>` is `<build>/compilation-units.<pid>`, the build's o
 in one folder at once (`pepper test` builds its test programs side by side)
 must not share it. It is removed after the build, but kept with `-T time`,
 where each worker also leaves the time its compilation unit's stages took
-(`<k>.stages`: merge, index, check, finish, store, object), and the build
+(`<k>.stages`: diagnostics, merge, index, check, finish, store, object), and the build
 leaves `schedule`: for each compilation unit a worker checked, its number, name, when
 it began and ended (milliseconds from the start) and the compilation units it reads,
 as Ninja's `.ninja_log`, to find the chain of compilation units that bounds the
