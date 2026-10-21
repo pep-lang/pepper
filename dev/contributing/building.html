@@ -302,7 +302,7 @@ llvm="$(head -1 .pep/llvm-prefix)"
 mkdir -p target/bin
 pepper build -O tools/compiler/main.pep -o target/bin/pep-build    # + -L "$llvm/lib" on macOS and Windows
 # Windows: cp "$llvm/bin/LLVM-C.dll" target/bin/
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-new pep-init pep-install pep-doc pep-lsp; do
   target/bin/pep-build -O "tools/$tool/main.pep" -o "target/bin/$tool"
 done
 </code></pre>

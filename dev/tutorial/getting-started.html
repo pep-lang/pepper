@@ -241,6 +241,18 @@ nothing changed:</p>
 </code></pre>
 <p>Arguments after the file go to the program's <code>main</code>; see
 <a href="../tools/pep-run.html">Running a program: pep-run</a>.</p>
+<h3 id="starting-a-project"><a class="header" href="#starting-a-project">Starting a project</a></h3>
+<p>A program bigger than one file is a project: a folder with a
+<a href="../tools/projects.html"><code>pep.toml</code></a> that names it and lists the packages it
+uses. <code>pepper new</code> starts one, with a <code>main.pep</code> and a test, so <code>pepper build</code> and <code>pepper test</code> work in it straight away:</p>
+<pre><code class="language-sh">pepper new hello
+cd hello
+pepper build     # builds ./hello
+pepper test      # runs its [Test] function
+</code></pre>
+<p><code>pepper new geometry --lib</code> starts a package instead, and <code>pepper init</code>
+starts either in the current folder; see
+<a href="../tools/pep-new.html">Starting a project: pep-new and pep-init</a>.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper's standard library, the
 <code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>

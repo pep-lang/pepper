@@ -221,6 +221,29 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="environment_flag"><a class="header" href="#environment_flag">environment_flag</a></h2>
+<pre><code class="language-pepper">environment_flag(name: String): bool
+</code></pre>
+<p>Returns whether the environment variable <code>name</code> turns a switch on: it is
+set to anything but the empty string or <code>0</code>, as <code>PEPPER_LOCKED=1</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable's name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when it is set to a value other than empty or <code>0</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    if (os.environment_flag("VERBOSE")) {
+        print("verbose");
+    }
+    return 0;
+}
+</code></pre>
 <h2 id="set_environment"><a class="header" href="#set_environment">set_environment</a></h2>
 <pre><code class="language-pepper">set_environment(name: String, value: String)
 </code></pre>

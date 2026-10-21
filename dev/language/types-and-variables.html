@@ -670,6 +670,7 @@ main(): int {
     # Write the type first, C style...
     int width = 80;
     float scale = 1.5;
+    (String, int)[] sizes = [("small", 1)];
 
     # ...or after the name with a colon.
     var height: int = 24;
@@ -691,6 +692,7 @@ main(): int {
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 &amp;&amp; scale == 1.5, "floating point");
     assert(ready &amp;&amp; name == "Pepper", "bool and String");
+    assert(sizes[0].1 == 1, "a tuple type written first");
     assert(offset &gt; 4000000000 &amp;&amp; LIMIT == 3, "long and const");
     return 0;
 }
@@ -698,7 +700,8 @@ main(): int {
 <p>The three forms are:</p>
 <ul>
 <li><code>var name = value;</code> infers the type from the value.</li>
-<li><code>Type name = value;</code> is the C style, with the type first.</li>
+<li><code>Type name = value;</code> is the C style, with the type first. Any type can come
+first, a tuple type too: <code>(String, int)[] sizes = [];</code>.</li>
 <li><code>var name: Type = value;</code> puts the type after the name.</li>
 </ul>
 <p>A variable declared without a value starts out as zero: <code>0</code> for numbers,
@@ -708,6 +711,82 @@ variables a value before you use them.</p>
 arithmetic produces under C's rules (see <a href="#arithmetic-follows-c">Arithmetic follows C</a>):
 <code>var m = 1 + 0.5;</code> is a <code>double</code> holding 1.5, and with <code>u8 small = 250;</code>,
 <code>var s = small + 10;</code> is an <code>int</code> holding 260.</p>
+<h3 id="scope-and-shadowing"><a class="header" href="#scope-and-shadowing">Scope and shadowing</a></h3>
+<p>A variable is visible from its declaration to the end of the block that
+declares it. Declaring the same name twice in one block is an error
+(<code>redefinition of 'x'</code>, with a note at the first). A function's or closure's
+parameters belong to its body's outermost block, so a local there may not
+repeat a parameter's name either, nor may two parameters share one, as in
+C++:</p>
+<pre><code class="language-text">main.pep:2:9: error: redefinition of 'x'
+    2 |     var x = 5;
+      |         ^
+main.pep:1:3: note: previous definition is here
+    1 | f(x: bool): int {
+      |   ^
+</code></pre>
+<p>An inner scope may reuse a name, hiding the outer one until it ends: a nested
+block, a <code>for</code> loop's variable, a <code>match</code> arm's or an <code>is</code> pattern's
+bindings, and a closure's parameters.</p>
+<pre><code class="language-pepper"># Shadowing: a name declared in an inner scope hides the outer one until
+# that scope ends. A function's parameters share its body's outermost
+# scope, so `var count = 0;` there would be a redefinition of 'count'.
+
+enum Shape {
+    Circle(radius: int),
+    Square(side: int),
+}
+
+# A loop variable and a block's local live in scopes of their own.
+sum_below(count: int): int {
+    var total = 0;
+    for (var count in 0..3) {
+        total += count as int;
+    }
+    {
+        var count = 100;
+        total += count;
+    }
+    return total + count;
+}
+
+# A match arm binds its names in the arm's scope.
+size(radius: int, shape: Shape): int {
+    match (shape) {
+        Circle(radius) =&gt; {
+            return radius;
+        }
+        Square(side) =&gt; {
+            return side + radius;
+        }
+    }
+}
+
+# So does an `is` pattern, in the block it guards.
+first_or(value: int, found: int?): int {
+    if (found is Value(value)) {
+        return value;
+    }
+    return value;
+}
+
+# A closure's parameter hides a local of the function it is written in.
+twice_plus(offset: int): int {
+    var value = 4;
+    var twice = (value: int) =&gt; value * 2;
+    return twice(offset) + value;
+}
+
+main(): int {
+    assert(sum_below(5) == 108, "0 + 1 + 2, the block's 100, and the parameter's 5");
+    assert(size(1, Shape.Circle(7)) == 7, "the arm's radius hides the parameter");
+    assert(size(1, Shape.Square(2)) == 3, "the parameter is visible in the other arm");
+    assert(first_or(1, Optional&lt;int&gt;.Value(9)) == 9, "the pattern's value hides the parameter");
+    assert(first_or(1, Optional&lt;int&gt;.Empty) == 1, "the parameter is back after the block");
+    assert(twice_plus(3) == 10, "the closure's value is its argument; the local is still 4");
+    return 0;
+}
+</code></pre>
 <h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <p><code>const</code> declares a name that you do not intend to change:</p>
 <pre><code class="language-pepper">const LIMIT = 3;

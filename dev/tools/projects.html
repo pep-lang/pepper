@@ -190,6 +190,10 @@ project builds with <code>pepper build</code> and nothing else:</p>
 pepper build          # builds the program pep.toml describes
 ./my_app
 </code></pre>
+<p><code>pepper new my_app</code> starts a project with a <code>pep.toml</code>, a <code>main.pep</code> and a
+test, and <code>pepper new my_lib --lib</code> a package (see
+<a href="pep-new.html">Starting a project: pep-new and pep-init</a>). A <code>pep.toml</code> can
+say more:</p>
 <pre><code class="language-toml">[package]
 name = "my_app"
 version = "0.1.0"
@@ -301,6 +305,11 @@ versions are chosen when several packages need one.</p>
 <pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
 pepper build
 </code></pre>
+<p>In CI, <code>pepper build --locked</code> and <code>pepper test --locked</code> fail when
+<code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
+<code>--offline</code> builds with only what <code>.pep/deps</code> holds (<code>--frozen</code> is both;
+<code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
+<a href="pep-package.html#reproducible-builds">Reproducible builds</a>.</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -340,7 +349,7 @@ dependencies resolve in the editor with no <code>-I</code>.</p>
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../tools/pep-run.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tools/pep-new.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -354,7 +363,7 @@ dependencies resolve in the editor with no <code>-I</code>.</p>
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../tools/pep-run.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tools/pep-new.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

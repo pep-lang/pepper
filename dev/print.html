@@ -318,7 +318,7 @@ program.</li>
 <a href="language/naming.html">naming conventions</a>. Read it in order, or jump to the
 topic you need.</li>
 <li><strong>Tools.</strong> <a href="tools/pepper.html">The pepper command</a>,
-<a href="tools/pep-run.html">pep-run</a>,
+<a href="tools/pep-new.html">pep-new</a>, <a href="tools/pep-run.html">pep-run</a>,
 <a href="tools/pep-fmt.html">pep-fmt</a>, <a href="tools/pep-profile.html">pep-profile</a>,
 <a href="tools/pep-test.html">pep-test</a> and <a href="tools/debugging.html">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
@@ -392,6 +392,18 @@ nothing changed:</p>
 </code></pre>
 <p>Arguments after the file go to the program's <code>main</code>; see
 <a href="tutorial/../tools/pep-run.html">Running a program: pep-run</a>.</p>
+<h3 id="starting-a-project"><a class="header" href="#starting-a-project">Starting a project</a></h3>
+<p>A program bigger than one file is a project: a folder with a
+<a href="tutorial/../tools/projects.html"><code>pep.toml</code></a> that names it and lists the packages it
+uses. <code>pepper new</code> starts one, with a <code>main.pep</code> and a test, so <code>pepper build</code> and <code>pepper test</code> work in it straight away:</p>
+<pre><code class="language-sh">pepper new hello
+cd hello
+pepper build     # builds ./hello
+pepper test      # runs its [Test] function
+</code></pre>
+<p><code>pepper new geometry --lib</code> starts a package instead, and <code>pepper init</code>
+starts either in the current folder; see
+<a href="tutorial/../tools/pep-new.html">Starting a project: pep-new and pep-init</a>.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper's standard library, the
 <code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
@@ -1384,6 +1396,7 @@ main(): int {
     # Write the type first, C style...
     int width = 80;
     float scale = 1.5;
+    (String, int)[] sizes = [("small", 1)];
 
     # ...or after the name with a colon.
     var height: int = 24;
@@ -1405,6 +1418,7 @@ main(): int {
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 &amp;&amp; scale == 1.5, "floating point");
     assert(ready &amp;&amp; name == "Pepper", "bool and String");
+    assert(sizes[0].1 == 1, "a tuple type written first");
     assert(offset &gt; 4000000000 &amp;&amp; LIMIT == 3, "long and const");
     return 0;
 }
@@ -1412,7 +1426,8 @@ main(): int {
 <p>The three forms are:</p>
 <ul>
 <li><code>var name = value;</code> infers the type from the value.</li>
-<li><code>Type name = value;</code> is the C style, with the type first.</li>
+<li><code>Type name = value;</code> is the C style, with the type first. Any type can come
+first, a tuple type too: <code>(String, int)[] sizes = [];</code>.</li>
 <li><code>var name: Type = value;</code> puts the type after the name.</li>
 </ul>
 <p>A variable declared without a value starts out as zero: <code>0</code> for numbers,
@@ -1422,6 +1437,82 @@ variables a value before you use them.</p>
 arithmetic produces under C's rules (see <a href="language/types-and-variables.html#arithmetic-follows-c">Arithmetic follows C</a>):
 <code>var m = 1 + 0.5;</code> is a <code>double</code> holding 1.5, and with <code>u8 small = 250;</code>,
 <code>var s = small + 10;</code> is an <code>int</code> holding 260.</p>
+<h3 id="scope-and-shadowing"><a class="header" href="#scope-and-shadowing">Scope and shadowing</a></h3>
+<p>A variable is visible from its declaration to the end of the block that
+declares it. Declaring the same name twice in one block is an error
+(<code>redefinition of 'x'</code>, with a note at the first). A function's or closure's
+parameters belong to its body's outermost block, so a local there may not
+repeat a parameter's name either, nor may two parameters share one, as in
+C++:</p>
+<pre><code class="language-text">main.pep:2:9: error: redefinition of 'x'
+    2 |     var x = 5;
+      |         ^
+main.pep:1:3: note: previous definition is here
+    1 | f(x: bool): int {
+      |   ^
+</code></pre>
+<p>An inner scope may reuse a name, hiding the outer one until it ends: a nested
+block, a <code>for</code> loop's variable, a <code>match</code> arm's or an <code>is</code> pattern's
+bindings, and a closure's parameters.</p>
+<pre><code class="language-pepper"># Shadowing: a name declared in an inner scope hides the outer one until
+# that scope ends. A function's parameters share its body's outermost
+# scope, so `var count = 0;` there would be a redefinition of 'count'.
+
+enum Shape {
+    Circle(radius: int),
+    Square(side: int),
+}
+
+# A loop variable and a block's local live in scopes of their own.
+sum_below(count: int): int {
+    var total = 0;
+    for (var count in 0..3) {
+        total += count as int;
+    }
+    {
+        var count = 100;
+        total += count;
+    }
+    return total + count;
+}
+
+# A match arm binds its names in the arm's scope.
+size(radius: int, shape: Shape): int {
+    match (shape) {
+        Circle(radius) =&gt; {
+            return radius;
+        }
+        Square(side) =&gt; {
+            return side + radius;
+        }
+    }
+}
+
+# So does an `is` pattern, in the block it guards.
+first_or(value: int, found: int?): int {
+    if (found is Value(value)) {
+        return value;
+    }
+    return value;
+}
+
+# A closure's parameter hides a local of the function it is written in.
+twice_plus(offset: int): int {
+    var value = 4;
+    var twice = (value: int) =&gt; value * 2;
+    return twice(offset) + value;
+}
+
+main(): int {
+    assert(sum_below(5) == 108, "0 + 1 + 2, the block's 100, and the parameter's 5");
+    assert(size(1, Shape.Circle(7)) == 7, "the arm's radius hides the parameter");
+    assert(size(1, Shape.Square(2)) == 3, "the parameter is visible in the other arm");
+    assert(first_or(1, Optional&lt;int&gt;.Value(9)) == 9, "the pattern's value hides the parameter");
+    assert(first_or(1, Optional&lt;int&gt;.Empty) == 1, "the parameter is back after the block");
+    assert(twice_plus(3) == 10, "the closure's value is its argument; the local is still 4");
+    return 0;
+}
+</code></pre>
 <h3 id="constants"><a class="header" href="#constants">Constants</a></h3>
 <p><code>const</code> declares a name that you do not intend to change:</p>
 <pre><code class="language-pepper">const LIMIT = 3;
@@ -3744,7 +3835,10 @@ and it lets the compiler check each <code>return</code> against it.</p>
 its own copy. For a <code>String</code>, an <code>Array</code> or any other struct, the value is a
 reference, so the function receives another reference to the same object: it
 can change the object's contents, and the caller sees the change. Assigning a
-new object to the parameter does not affect the caller's variable.
+new object to the parameter does not affect the caller's variable.</p>
+<p>A parameter is a local of the function's body: a <code>var</code> in the body's outermost
+block may not reuse its name (see
+<a href="language/types-and-variables.html#scope-and-shadowing">Scope and shadowing</a>).
 <a href="language/memory.html">Memory and reference counting</a> describes exactly how references are
 counted when you pass them.</p>
 <p>Arguments convert to the parameter's type the same way assignment does, so you
@@ -4002,11 +4096,77 @@ same way, on the main thread, a <a href="language/threads.html">thread</a> or a
 <pre><code class="language-text">panic: stack overflow
 </code></pre>
 <p>The stack has no room left to format anything, so the message has no
-location and no backtrace, and the program's buffered output is not flushed.
+location and no backtrace, the program's buffered output is not flushed,
+and the <a href="language/functions.html#panic-hooks">panic hook</a> does not run.
 Any other memory fault goes to the handler installed before the program's
 own (or crashes the program, when there is none), and a debugger sees the
 overflow first. WebAssembly has no guard
 pages, so a WASI program gets no such report.</p>
+<h3 id="panic-hooks"><a class="header" href="#panic-hooks">Panic hooks</a></h3>
+<p><code>set_panic_hook(hook)</code> installs a function that every panic calls before it
+prints its message: a full-screen program uses it to restore the terminal,
+so the message lands where the user can read it. The hook is a
+<code>shared (String, String) =&gt; void</code> (the type alias <code>PanicHook</code>), called with
+the message and the location (<code>file:line:col</code>, or an empty string when the
+panic has none):</p>
+<pre><code class="language-pepper"># A panic hook: code that runs before a panic prints its message.
+
+import [File] from io;
+
+# A full-screen program draws on the terminal's alternate screen, and must
+# leave it before a panic's message prints, or the message goes with it.
+leave_alternate_screen() {
+    File.stdout().write_all("\x1B[?1049l");
+}
+
+main(): int {
+    File.stdout().write_all("\x1B[?1049h");
+    # Chain the hook installed before (none here) after this program's own.
+    var previous = take_panic_hook();
+    set_panic_hook((message, location) =&gt; {
+        leave_alternate_screen();
+        previous(message, location);
+    });
+
+    # ... draw, until the user quits; a panic here leaves the screen first.
+
+    leave_alternate_screen();
+    take_panic_hook();
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>There is one hook for the whole process. Set on any thread, it runs on
+the thread that panics, for every kind of panic: <code>panic</code>, a failed
+<code>assert</code>, an index out of range, an overflowing operator, and every other
+check. A stack overflow is the exception: it has no stack left to run the
+hook on, so it prints its message alone.</p>
+</li>
+<li>
+<p>The hook cannot stop the panic: when it returns, the message and the
+backtrace print and the program aborts, as without one.</p>
+</li>
+<li>
+<p>It runs in the middle of whatever the panicking thread was doing, and
+two threads that panic at once each run it, at the same time. Keep it
+short, and keep it from taking a lock the panicking code may hold (a
+<code>Mutex</code> it panicked inside): it would wait forever instead of letting
+the program end.</p>
+</li>
+<li>
+<p><code>set_panic_hook</code> replaces the hook installed before. <code>take_panic_hook()</code>
+removes it and returns it (or a hook that does nothing, when there was
+none), so a library can chain the one it found, as the example does.</p>
+</li>
+<li>
+<p>A panic inside the hook does not run the hook again. It prints the
+message of the panic that ran the hook, then its own, and aborts:</p>
+<pre><code class="language-text">main.pep:9:5: panic: first
+main.pep:4:28: panic in the panic hook: second
+</code></pre>
+</li>
+</ul>
 <h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
 <p><code>main</code> comes in two forms. <code>main(): int</code> takes nothing. <code>main(args: String[]): int</code> receives the program's command-line arguments: element 0 is
 the program as it was started, and the arguments typed after it follow in
@@ -21136,7 +21296,8 @@ Mac and RHEL 8 do not have.</p>
     0.4.0/
       bin/
         pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
-        pep-fmt  pep-test  pep-package  pep-profile  pep-run  pep-lsp  pep-doc  pepper  pep-install
+        pep-fmt  pep-test  pep-package  pep-profile  pep-run  pep-new  pep-init
+        pep-lsp  pep-doc  pepper  pep-install
       runtime/          the runtime, which pep-build finds from its own folder
       LICENSE.md
   default-toolchain     the default toolchain's version
@@ -21310,6 +21471,8 @@ unknown command exits with 1. Otherwise the exit status is the command's.</p>
 <h2 id="the-commands-in-this-repository"><a class="header" href="#the-commands-in-this-repository">The commands in this repository</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command</th><th>Program</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program, or with no file the project (<a href="tools/pep-build.html">The compiler: pep-build</a>, <a href="tools/projects.html">Projects: pep.toml</a>)</td></tr>
+<tr><td><code>pepper new</code></td><td><code>pep-new</code></td><td>Starts a program or package in a new folder (<a href="tools/pep-new.html">Starting a project: pep-new and pep-init</a>)</td></tr>
+<tr><td><code>pepper init</code></td><td><code>pep-init</code></td><td>Starts a program or package in the current folder (<a href="tools/pep-new.html">Starting a project: pep-new and pep-init</a>)</td></tr>
 <tr><td><code>pepper run</code></td><td><code>pep-run</code></td><td>Builds a program and runs it, like <code>python script.py</code> (<a href="tools/pep-run.html">Running a program: pep-run</a>)</td></tr>
 <tr><td><code>pepper install</code></td><td><code>pep-install</code></td><td>Installs toolchains side by side and picks the default (<a href="tools/pep-install.html">Toolchains: pep-install</a>)</td></tr>
 <tr><td><code>pepper package</code></td><td><code>pep-package</code></td><td>Adds, removes, updates and fetches a project's dependencies (<a href="tools/pep-package.html">The package manager: pep-package</a>)</td></tr>
@@ -21569,6 +21732,9 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
+<tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
+<tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one <code>.pep/deps</code> lacks</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
@@ -21639,6 +21805,23 @@ running <code>pep-package fetch</code> (beside <code>pep-build</code>, else on t
 asks for <code>pepper package fetch</code> to move a checkout at another commit. A
 dependency checked out on a branch is left as it is. See
 <a href="tools/pep-package.html">The package manager: pep-package</a>.</p>
+<h3 id="--locked---offline---frozen"><a class="header" href="#--locked---offline---frozen"><code>--locked</code>, <code>--offline</code>, <code>--frozen</code></a></h3>
+<p>These make the fetch reproducible, for CI (see
+<a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>):</p>
+<ul>
+<li><code>--locked</code> (or <code>PEPPER_LOCKED=1</code>) fails when <code>pep.lock</code> is out of date
+with <code>pep.toml</code>, instead of updating it. A Git dependency <code>pep.toml</code>
+names that <code>pep.lock</code> does not list is an error before anything is
+fetched; otherwise the build runs <code>pep-package fetch --locked</code>, even when
+nothing is missing, so a changed range is caught too.</li>
+<li><code>--offline</code> (or <code>PEPPER_OFFLINE=1</code>) fetches nothing over the network: a
+locked package <code>.pep/deps</code> lacks is an error that names it, and
+<code>pep-package</code> runs with <code>--offline</code>.</li>
+<li><code>--frozen</code> is both.</li>
+</ul>
+<pre><code class="language-text">$ pepper build --offline
+--offline, and app/.pep/deps lacks github:someone/geometry 0582024b9cd7; run 'pepper package fetch' without --offline first
+</code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
 looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
@@ -22083,6 +22266,8 @@ objects.</li>
 <tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
+<tr><td><code>PEPPER_LOCKED</code></td><td>Anything but empty or <code>0</code>: the same as <code>--locked</code></td><td></td></tr>
+<tr><td><code>PEPPER_OFFLINE</code></td><td>Anything but empty or <code>0</code>: the same as <code>--offline</code></td><td></td></tr>
 <tr><td><code>PEPPER_LLVM_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program</td><td></td></tr>
 <tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The same, when <code>PEPPER_LLVM_PREFIX</code> is not set (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20)</td><td></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project's locked dependencies clones that host's repositories from, when <code>pep-package</code> is not installed (see <a href="tools/pep-package.html#environment-variables">pep-package</a>)</td><td></td></tr>
@@ -22102,6 +22287,10 @@ project builds with <code>pepper build</code> and nothing else:</p>
 pepper build          # builds the program pep.toml describes
 ./my_app
 </code></pre>
+<p><code>pepper new my_app</code> starts a project with a <code>pep.toml</code>, a <code>main.pep</code> and a
+test, and <code>pepper new my_lib --lib</code> a package (see
+<a href="tools/pep-new.html">Starting a project: pep-new and pep-init</a>). A <code>pep.toml</code> can
+say more:</p>
 <pre><code class="language-toml">[package]
 name = "my_app"
 version = "0.1.0"
@@ -22213,6 +22402,11 @@ versions are chosen when several packages need one.</p>
 <pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
 pepper build
 </code></pre>
+<p>In CI, <code>pepper build --locked</code> and <code>pepper test --locked</code> fail when
+<code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
+<code>--offline</code> builds with only what <code>.pep/deps</code> holds (<code>--frozen</code> is both;
+<code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
+<a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>.</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -22243,6 +22437,97 @@ or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> 
 </code></pre>
 <p>The language server reads <code>pep.toml</code> the same way, so imports of fetched
 dependencies resolve in the editor with no <code>-I</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="starting-a-project-pep-new-and-pep-init"><a class="header" href="#starting-a-project-pep-new-and-pep-init">Starting a project: pep-new and pep-init</a></h1>
+<p><code>pep-new</code> starts a project in a new folder, and <code>pep-init</code> starts one in
+the current folder, the way <code>cargo new</code> and <code>cargo init</code> do. <code>pepper new</code>
+and <code>pepper init</code> run them. Each writes a <a href="tools/projects.html"><code>pep.toml</code></a> and the
+files a project starts with, so <code>pepper build</code> and <code>pepper test</code> work at
+once:</p>
+<pre><code class="language-bash">pepper new hello                  # a program in the folder hello
+cd hello
+pepper build                      # builds ./hello
+pepper test                       # runs its [Test] function
+
+pepper new geometry --lib         # a package
+pepper new pepper-geometry --lib --name geometry --license MIT
+pepper init                       # a program in the current folder
+</code></pre>
+<pre><code class="language-text">pep-new [OPTIONS] &lt;path&gt;
+pep-init [OPTIONS]
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>&lt;path&gt;</code></td><td>The folder <code>pep-new</code> writes into, made when missing; its name is the project's unless <code>--name</code> gives one (<code>pep-new</code> only)</td></tr>
+<tr><td><code>--lib</code></td><td>Starts a package instead of a program</td></tr>
+<tr><td><code>--license &lt;SPDX&gt;</code></td><td>Writes <code>LICENSE</code> and names the license in <code>pep.toml</code>: <code>MIT</code> or <code>Apache-2.0</code></td></tr>
+<tr><td><code>--name &lt;NAME&gt;</code></td><td>Names the project, instead of the folder's name</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Prints the tool and its version</td></tr>
+</tbody></table>
+</div>
+<p>The exit status is 0 when the project is written, 1 when nothing is
+written (the errors below), and 2 for a usage error.</p>
+<h2 id="a-program"><a class="header" href="#a-program">A program</a></h2>
+<pre><code class="language-text">hello/
+  pep.toml        [package] name = "hello", version = "0.1.0"
+  main.pep        main() prints Hello, world!, and a [Test] checks it
+  .gitignore      .pep/ and the executable
+  README.md       how to build, run and test it
+</code></pre>
+<p>The test sits in <code>main.pep</code>, beside the function it tests (see
+<a href="tools/../language/testing.html#where-tests-live">Unit tests</a>); a plain build
+leaves it out.</p>
+<h2 id="a-package"><a class="header" href="#a-package">A package</a></h2>
+<p><code>--lib</code> writes the layout of
+<a href="https://github.com/pep-lang/pepper-package-template">pep-lang/pepper-package-template</a>,
+with the template's placeholder name replaced by the package's:</p>
+<pre><code class="language-text">geometry/
+  pep.toml                  [package] name, version 0.1.0, description, repository
+  module.pep                the root module: gathers the public API from its files
+  greet.pep                 one documented function, geometry.greet
+  tests/greet_test.pep      import geometry; and a [Test]
+  tests/run.sh              runs the tests with the package on the import path
+  .github/workflows/ci.yml  tests on Linux, macOS and Windows; releases on a vX.Y.Z tag
+  .gitignore                .pep/
+  README.md                 what it does, how to add it, test it and release it
+</code></pre>
+<p>A package's tests import it by name, which <code>pepper test</code> finds only with
+the package's folder on the import path under that name, so they run with
+<code>tests/run.sh path/to/pepper</code> (or <code>bash tests/run.sh</code> with <code>pepper</code> on the
+<code>PATH</code>), as CI does. The README and <code>pep.toml</code> name the repository as
+<code>OWNER/pepper-&lt;name&gt;</code>: put in the GitHub owner. The template's own
+<code>TEMPLATE.md</code> lists what else to fill in.</p>
+<p>The files come from the template repository word for word, so a package
+started either way is the same; the template's CI checks that what
+<code>pepper new mypkg --lib --license Apache-2.0</code> writes matches it.</p>
+<h2 id="licenses"><a class="header" href="#licenses">Licenses</a></h2>
+<p><code>--license MIT</code> writes the MIT License, with <code>Copyright (c) The &lt;name&gt; authors</code>; <code>--license Apache-2.0</code> writes the Apache License 2.0. Either adds
+<code>license = "&lt;SPDX&gt;"</code> to <code>pep.toml</code> and a License section to the README.
+Without <code>--license</code> none of the three is written. Another license is an
+error: write its text to <code>LICENSE</code> and its identifier to <code>pep.toml</code> by
+hand.</p>
+<h2 id="errors-6"><a class="header" href="#errors-6">Errors</a></h2>
+<p>Nothing is written when any of the files is there already; the error names
+each one, and the files are left as they were:</p>
+<pre><code class="language-text">$ pepper init
+pep-init: error: nothing written: these files are there already
+  ./main.pep
+  ./README.md
+</code></pre>
+<p>The name must be one <code>import</code> can use: an identifier, as <code>pep.toml</code> checks
+<code>[package] name</code>, and not a reserved word such as <code>match</code> or <code>type</code>. The
+error suggests one that works, made by turning each character an
+identifier cannot hold into <code>_</code>, or by adding <code>_</code> to a reserved word:</p>
+<pre><code class="language-text">$ pepper new my-app
+pep-new: error: package name 'my-app' is not an identifier: use letters, digits and '_', not starting with a digit; try '--name my_app'
+$ pepper new match --lib
+pep-new: error: package name 'match' is a reserved word, which 'import' cannot name; try '--name match_'
+</code></pre>
+<h2 id="building-them"><a class="header" href="#building-them">Building them</a></h2>
+<pre><code class="language-bash">target/bin/pep-build tools/pep-new/main.pep -o target/bin/pep-new
+target/bin/pep-build tools/pep-init/main.pep -o target/bin/pep-init
+</code></pre>
+<p>Both are built on the module in <code>tools/scaffold</code>; the package's files are in
+<code>tools/scaffold/template.pep</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="running-a-program-pep-run"><a class="header" href="#running-a-program-pep-run">Running a program: pep-run</a></h1>
 <p><code>pep-run</code> builds a program and runs it straight away, the way
 <code>python script.py</code> runs a script: there is no <code>-o</code> to choose and no
@@ -22318,7 +22603,7 @@ pepper package update                        # every dependency, as far as the r
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
 </code></pre>
-<pre><code class="language-text">pep-package [-C &lt;dir&gt;] &lt;command&gt; [arguments]
+<pre><code class="language-text">pep-package [-C &lt;dir&gt;] [--locked] [--offline] [--frozen] &lt;command&gt; [arguments]
 </code></pre>
 <p>It works on the project whose <code>pep.toml</code> is in the current folder or the
 nearest folder above it (see <a href="tools/projects.html">Projects: pep.toml</a>). Packages
@@ -22333,6 +22618,9 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <h2 id="options-and-commands-1"><a class="header" href="#options-and-commands-1">Options and commands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>-C &lt;dir&gt;</code>, <code>--directory &lt;dir&gt;</code></td><td>Works on the project at or above <code>&lt;dir&gt;</code> instead of the current folder</td></tr>
+<tr><td><code>--locked</code></td><td>Fails, leaving <code>pep.lock</code> as it is, when the command would change it (see <a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>)</td></tr>
+<tr><td><code>--offline</code></td><td>Uses only what <code>.pep/deps</code> holds, and fails on anything that needs the network</td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td></tr>
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
@@ -22343,8 +22631,9 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
 </div>
-<p>The exit status is 0 on success, 1 when a command fails, and 2 for a
-mistake on the command line.</p>
+<p><code>--locked</code>, <code>--offline</code> and <code>--frozen</code> go before or after the command
+(<code>pepper package fetch --locked</code>). The exit status is 0 on success, 1 when
+a command fails, and 2 for a mistake on the command line.</p>
 <h3 id="fetch-1"><a class="header" href="#fetch-1"><code>fetch</code></a></h3>
 <p>Fetches every package in <code>pep.lock</code> into the project's <code>.pep/deps</code> at its
 locked commit. When <code>pep.toml</code> names a dependency <code>pep.lock</code> does not list,
@@ -22414,6 +22703,32 @@ gains them on the next fetch.</p>
 checksums:</p>
 <pre><code class="language-text">pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
 </code></pre>
+<p>A command that leaves the graph as it was leaves <code>pep.lock</code> untouched, so
+a checkout with Windows line endings stays as git wrote it.</p>
+<h2 id="reproducible-builds"><a class="header" href="#reproducible-builds">Reproducible builds</a></h2>
+<p>CI builds want to fail rather than quietly change what they build:</p>
+<ul>
+<li><strong><code>--locked</code></strong> (or <code>PEPPER_LOCKED=1</code>): a command that would change
+<code>pep.lock</code> fails instead, says what would change, and leaves <code>pep.lock</code>
+as it was. <code>fetch --locked</code> passes only when <code>pep.lock</code> already matches
+<code>pep.toml</code>; it may still check packages out into <code>.pep/deps</code>.</li>
+<li><strong><code>--offline</code></strong> (or <code>PEPPER_OFFLINE=1</code>): nothing is cloned, fetched,
+downloaded or looked up. A package <code>.pep/deps</code> already holds at its
+locked commit is used; one it lacks is an error, and so is anything that
+must read which versions a repository offers (<code>add</code>, <code>update</code>, or a
+<code>pep.toml</code> change <code>pep.lock</code> does not cover).</li>
+<li><strong><code>--frozen</code></strong>: both.</li>
+</ul>
+<pre><code class="language-text">$ pepper package fetch --locked
+pep-package: error: pep.lock would change, and --locked keeps it as it is:
+  updated numbers: numbers 1.3.1 -&gt; numbers 2.0.0
+run the command without --locked (or PEPPER_LOCKED), then commit pep.lock
+
+$ pepper package fetch --offline
+pep-package: error: cannot fetch github:someone/geometry: --offline, and .pep/deps/github.com/someone/geometry does not hold the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+</code></pre>
+<p><code>pepper build</code> and <code>pepper test</code> take the same three options for the
+fetch they do on their own (see <a href="tools/pep-build.html">The compiler: pep-build</a>).</p>
 <h2 id="fetching-without-git"><a class="header" href="#fetching-without-git">Fetching without git</a></h2>
 <p>When git is not on the <code>PATH</code>, <code>pep-package</code> fetches each commit
 <code>pep.lock</code> pins as the host's archive of it, over HTTPS, checks its files
@@ -22474,6 +22789,8 @@ them out, each once per run.</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host's repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
+<tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody></table>
 </div>
@@ -22804,10 +23121,16 @@ finds it and it finds the compiler:</p>
 <tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
 <tr><td><code>-L &lt;dir&gt;</code>, <code>--library-path &lt;dir&gt;</code></td><td>A folder the linker searches for libraries, for <code>pep-build</code>; repeatable</td><td></td></tr>
 <tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="tools/../language/build-options.html">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
+<tr><td><code>--locked</code></td><td>Passed to <code>pep-build</code>: fail, rather than fetch, when the project's <code>pep.lock</code> is out of date (also <code>PEPPER_LOCKED=1</code>)</td><td></td></tr>
+<tr><td><code>--offline</code></td><td>Passed to <code>pep-build</code>: fetch nothing over the network, building with what <code>.pep/deps</code> holds (also <code>PEPPER_OFFLINE=1</code>)</td><td></td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
 </tbody></table>
 </div>
+<p><code>--locked</code>, <code>--offline</code> and <code>--frozen</code> govern the fetch each <code>pep-build</code>
+does for a project (see <a href="tools/pep-build.html">pep-build</a>); <code>pep-build</code> reads
+<code>PEPPER_LOCKED</code> and <code>PEPPER_OFFLINE</code> itself.</p>
 <p>The exit status is 0 when every test program builds and every test
 passes, 1 when a test fails or a program does not build, and 2 for a usage
 error.</p>
@@ -23039,7 +23362,7 @@ the tool and the page;</li>
 </ul>
 <p>The tools' options come from their <code>--help</code>: <code>pep-build</code>'s and the Pepper
 tools' (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
-<code>pep-run</code>, <code>pep-test</code>), which <code>scripts/pepper-tests.sh</code> builds in
+<code>pep-run</code>, <code>pep-test</code>, <code>pep-new</code>, and <code>pep-init</code>, whose page is <code>pep-new</code>'s), which <code>scripts/pepper-tests.sh</code> builds in
 <code>target/pepper-tests/bin</code> beside a link to its <code>pep-build</code>, so run it
 first.</p>
 <ul>
@@ -23451,6 +23774,54 @@ literal message picks this overload, so it allocates nothing.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">panic("unreachable");
+</code></pre>
+<h2 id="panichook"><a class="header" href="#panichook">PanicHook</a></h2>
+<pre><code class="language-pepper">type PanicHook = shared (String, String) =&gt; void
+</code></pre>
+<p>The function a panic runs before it prints its message: see
+<code>set_panic_hook</code>. It receives the panic's message and its location
+(<code>file:line:col</code>, or an empty string when the panic has none).</p>
+<h2 id="set_panic_hook"><a class="header" href="#set_panic_hook">set_panic_hook</a></h2>
+<pre><code class="language-pepper">set_panic_hook(hook: PanicHook)
+</code></pre>
+<p>Installs <code>hook</code> as the process's panic hook, replacing the one installed
+before (take that one with <code>take_panic_hook</code> first to chain them).</p>
+<p>Every panic, on any thread, calls the hook on the panicking thread
+before it prints its message and backtrace, then prints and aborts as
+always: the hook cannot stop the panic. A full-screen terminal program
+uses it to leave the alternate screen, so the message lands where the
+user can read it. That covers <code>panic</code>, a failed <code>assert</code>, an index out
+of range, an overflowing operator and every other check the compiler or
+the runtime adds. A stack overflow skips the hook: the thread has no
+stack left to run it on.</p>
+<p>A panic inside the hook does not run the hook again: it prints the
+first panic's message, then its own, and aborts. Two threads that
+panic at once each run the hook, at the same time. Keep the hook
+short, and keep it from taking a lock the panicking code may hold: it
+would wait forever instead of letting the program end.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hook</code> — runs with the panic's message and location</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var previous = take_panic_hook();
+set_panic_hook((message, location) =&gt; {
+    leave_alternate_screen();
+    previous(message, location);
+});
+</code></pre>
+<h2 id="take_panic_hook"><a class="header" href="#take_panic_hook">take_panic_hook</a></h2>
+<pre><code class="language-pepper">take_panic_hook(): PanicHook
+</code></pre>
+<p>Removes the process's panic hook and returns it, so that a panic again
+only prints its message.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hook <code>set_panic_hook</code> installed last, or one that does nothing when there is none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var hook = take_panic_hook();   # panics no longer run it
+set_panic_hook(hook);           # and now they do again
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/attributes.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="built-in-attributes"><a class="header" href="#built-in-attributes">Built-in attributes</a></h1>
@@ -47110,7 +47481,8 @@ environment variables, clocks and time, and the machine and user.</p>
 <code>import [Instant, Duration] from os</code>.</p>
 <ul>
 <li><a href="reference/os-environment.html">Environment</a>: <code>environment(name)</code>,
-<code>environment_variables()</code>, <code>set_environment(name, value)</code> and
+<code>environment_flag(name)</code>, <code>environment_variables()</code>,
+<code>set_environment(name, value)</code> and
 <code>remove_environment(name)</code></li>
 <li><a href="reference/os-time.html">Time</a>: <code>Duration</code>, <code>Instant</code> (a monotonic clock, for
 measuring) and <code>SystemTime</code> (the wall clock)</li>
@@ -47167,6 +47539,29 @@ main(): int {
     var home = os.environment("HOME");
     if (home) {
         print(home.value());
+    }
+    return 0;
+}
+</code></pre>
+<h2 id="environment_flag"><a class="header" href="#environment_flag">environment_flag</a></h2>
+<pre><code class="language-pepper">environment_flag(name: String): bool
+</code></pre>
+<p>Returns whether the environment variable <code>name</code> turns a switch on: it is
+set to anything but the empty string or <code>0</code>, as <code>PEPPER_LOCKED=1</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable's name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when it is set to a value other than empty or <code>0</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    if (os.environment_flag("VERBOSE")) {
+        print("verbose");
     }
     return 0;
 }
@@ -58170,7 +58565,7 @@ llvm="$(head -1 .pep/llvm-prefix)"
 mkdir -p target/bin
 pepper build -O tools/compiler/main.pep -o target/bin/pep-build    # + -L "$llvm/lib" on macOS and Windows
 # Windows: cp "$llvm/bin/LLVM-C.dll" target/bin/
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-new pep-init pep-install pep-doc pep-lsp; do
   target/bin/pep-build -O "tools/$tool/main.pep" -o "target/bin/$tool"
 done
 </code></pre>
@@ -58416,8 +58811,8 @@ holding <code>zlib.lib</code>, and is skipped without it);</li>
 <li>in <code>tools/</code>, the tools' tests, each under its tool's <code>pep.toml</code>.</li>
 </ul>
 <p>The tools' run, the longest, starts as soon as the tools its tests run
-(<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code> and
-<code>pep-run</code>) are
+(<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>,
+<code>pep-run</code>, <code>pep-new</code> and <code>pep-init</code>) are
 built, and runs beside the runtime's runs; its output is printed after
 theirs.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
@@ -58488,6 +58883,7 @@ output and exit status as a user would see them.</p>
 <tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes (tests that pass, fail, time out, leak an allocation or release one too many), from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite's own run skips them).</td></tr>
 <tr><td><code>tools/pep-package/package_test.pep</code></td><td><code>pep-package</code> and <code>pep-build</code> on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under <code>.pep/fetch.lock</code>; skipped without git.</td></tr>
 <tr><td><code>tools/pep-run/pep_run_test.pep</code></td><td><code>pep-run</code> building and running the programs in <code>tools/pep-run/testdata/</code> with a Pepper home of its own: arguments, exit status, working folder, the up-to-date rerun, compile errors and the options it refuses.</td></tr>
+<tr><td><code>tools/pep-new/pep_new_test.pep</code></td><td><code>pep-new</code> and <code>pep-init</code> scaffolding programs and packages into temporary folders, which <code>pepper build</code> and <code>pepper test</code> then build and test (a package with itself on the import path, as its <code>tests/run.sh</code> puts it); the refusal to overwrite, and the name and license errors.</td></tr>
 <tr><td><code>tools/pep-profile/profile_test.pep</code></td><td><code>pep-profile</code> on the recordings in <code>tools/pep-profile/testdata/</code>, and on a real program when samply or a working perf is installed (skipped otherwise).</td></tr>
 </tbody></table>
 </div>

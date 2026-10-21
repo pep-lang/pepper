@@ -192,7 +192,7 @@ pepper package update                        # every dependency, as far as the r
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
 </code></pre>
-<pre><code class="language-text">pep-package [-C &lt;dir&gt;] &lt;command&gt; [arguments]
+<pre><code class="language-text">pep-package [-C &lt;dir&gt;] [--locked] [--offline] [--frozen] &lt;command&gt; [arguments]
 </code></pre>
 <p>It works on the project whose <code>pep.toml</code> is in the current folder or the
 nearest folder above it (see <a href="projects.html">Projects: pep.toml</a>). Packages
@@ -207,6 +207,9 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>-C &lt;dir&gt;</code>, <code>--directory &lt;dir&gt;</code></td><td>Works on the project at or above <code>&lt;dir&gt;</code> instead of the current folder</td></tr>
+<tr><td><code>--locked</code></td><td>Fails, leaving <code>pep.lock</code> as it is, when the command would change it (see <a href="#reproducible-builds">Reproducible builds</a>)</td></tr>
+<tr><td><code>--offline</code></td><td>Uses only what <code>.pep/deps</code> holds, and fails on anything that needs the network</td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td></tr>
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
@@ -217,8 +220,9 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
 </div>
-<p>The exit status is 0 on success, 1 when a command fails, and 2 for a
-mistake on the command line.</p>
+<p><code>--locked</code>, <code>--offline</code> and <code>--frozen</code> go before or after the command
+(<code>pepper package fetch --locked</code>). The exit status is 0 on success, 1 when
+a command fails, and 2 for a mistake on the command line.</p>
 <h3 id="fetch"><a class="header" href="#fetch"><code>fetch</code></a></h3>
 <p>Fetches every package in <code>pep.lock</code> into the project's <code>.pep/deps</code> at its
 locked commit. When <code>pep.toml</code> names a dependency <code>pep.lock</code> does not list,
@@ -288,6 +292,32 @@ gains them on the next fetch.</p>
 checksums:</p>
 <pre><code class="language-text">pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
 </code></pre>
+<p>A command that leaves the graph as it was leaves <code>pep.lock</code> untouched, so
+a checkout with Windows line endings stays as git wrote it.</p>
+<h2 id="reproducible-builds"><a class="header" href="#reproducible-builds">Reproducible builds</a></h2>
+<p>CI builds want to fail rather than quietly change what they build:</p>
+<ul>
+<li><strong><code>--locked</code></strong> (or <code>PEPPER_LOCKED=1</code>): a command that would change
+<code>pep.lock</code> fails instead, says what would change, and leaves <code>pep.lock</code>
+as it was. <code>fetch --locked</code> passes only when <code>pep.lock</code> already matches
+<code>pep.toml</code>; it may still check packages out into <code>.pep/deps</code>.</li>
+<li><strong><code>--offline</code></strong> (or <code>PEPPER_OFFLINE=1</code>): nothing is cloned, fetched,
+downloaded or looked up. A package <code>.pep/deps</code> already holds at its
+locked commit is used; one it lacks is an error, and so is anything that
+must read which versions a repository offers (<code>add</code>, <code>update</code>, or a
+<code>pep.toml</code> change <code>pep.lock</code> does not cover).</li>
+<li><strong><code>--frozen</code></strong>: both.</li>
+</ul>
+<pre><code class="language-text">$ pepper package fetch --locked
+pep-package: error: pep.lock would change, and --locked keeps it as it is:
+  updated numbers: numbers 1.3.1 -&gt; numbers 2.0.0
+run the command without --locked (or PEPPER_LOCKED), then commit pep.lock
+
+$ pepper package fetch --offline
+pep-package: error: cannot fetch github:someone/geometry: --offline, and .pep/deps/github.com/someone/geometry does not hold the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+</code></pre>
+<p><code>pepper build</code> and <code>pepper test</code> take the same three options for the
+fetch they do on their own (see <a href="pep-build.html">The compiler: pep-build</a>).</p>
 <h2 id="fetching-without-git"><a class="header" href="#fetching-without-git">Fetching without git</a></h2>
 <p>When git is not on the <code>PATH</code>, <code>pep-package</code> fetches each commit
 <code>pep.lock</code> pins as the host's archive of it, over HTTPS, checks its files
@@ -348,6 +378,8 @@ them out, each once per run.</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host's repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
+<tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody></table>
 </div>

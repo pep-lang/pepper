@@ -273,6 +273,54 @@ literal message picks this overload, so it allocates nothing.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">panic("unreachable");
 </code></pre>
+<h2 id="panichook"><a class="header" href="#panichook">PanicHook</a></h2>
+<pre><code class="language-pepper">type PanicHook = shared (String, String) =&gt; void
+</code></pre>
+<p>The function a panic runs before it prints its message: see
+<code>set_panic_hook</code>. It receives the panic's message and its location
+(<code>file:line:col</code>, or an empty string when the panic has none).</p>
+<h2 id="set_panic_hook"><a class="header" href="#set_panic_hook">set_panic_hook</a></h2>
+<pre><code class="language-pepper">set_panic_hook(hook: PanicHook)
+</code></pre>
+<p>Installs <code>hook</code> as the process's panic hook, replacing the one installed
+before (take that one with <code>take_panic_hook</code> first to chain them).</p>
+<p>Every panic, on any thread, calls the hook on the panicking thread
+before it prints its message and backtrace, then prints and aborts as
+always: the hook cannot stop the panic. A full-screen terminal program
+uses it to leave the alternate screen, so the message lands where the
+user can read it. That covers <code>panic</code>, a failed <code>assert</code>, an index out
+of range, an overflowing operator and every other check the compiler or
+the runtime adds. A stack overflow skips the hook: the thread has no
+stack left to run it on.</p>
+<p>A panic inside the hook does not run the hook again: it prints the
+first panic's message, then its own, and aborts. Two threads that
+panic at once each run the hook, at the same time. Keep the hook
+short, and keep it from taking a lock the panicking code may hold: it
+would wait forever instead of letting the program end.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hook</code> — runs with the panic's message and location</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var previous = take_panic_hook();
+set_panic_hook((message, location) =&gt; {
+    leave_alternate_screen();
+    previous(message, location);
+});
+</code></pre>
+<h2 id="take_panic_hook"><a class="header" href="#take_panic_hook">take_panic_hook</a></h2>
+<pre><code class="language-pepper">take_panic_hook(): PanicHook
+</code></pre>
+<p>Removes the process's panic hook and returns it, so that a panic again
+only prints its message.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hook <code>set_panic_hook</code> installed last, or one that does nothing when there is none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var hook = take_panic_hook();   # panics no longer run it
+set_panic_hook(hook);           # and now they do again
+</code></pre>
 
                     </main>
 

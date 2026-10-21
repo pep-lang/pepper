@@ -217,10 +217,16 @@ finds it and it finds the compiler:</p>
 <tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
 <tr><td><code>-L &lt;dir&gt;</code>, <code>--library-path &lt;dir&gt;</code></td><td>A folder the linker searches for libraries, for <code>pep-build</code>; repeatable</td><td></td></tr>
 <tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="../language/build-options.html">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
+<tr><td><code>--locked</code></td><td>Passed to <code>pep-build</code>: fail, rather than fetch, when the project's <code>pep.lock</code> is out of date (also <code>PEPPER_LOCKED=1</code>)</td><td></td></tr>
+<tr><td><code>--offline</code></td><td>Passed to <code>pep-build</code>: fetch nothing over the network, building with what <code>.pep/deps</code> holds (also <code>PEPPER_OFFLINE=1</code>)</td><td></td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
 </tbody></table>
 </div>
+<p><code>--locked</code>, <code>--offline</code> and <code>--frozen</code> govern the fetch each <code>pep-build</code>
+does for a project (see <a href="pep-build.html">pep-build</a>); <code>pep-build</code> reads
+<code>PEPPER_LOCKED</code> and <code>PEPPER_OFFLINE</code> itself.</p>
 <p>The exit status is 0 when every test program builds and every test
 passes, 1 when a test fails or a program does not build, and 2 for a usage
 error.</p>

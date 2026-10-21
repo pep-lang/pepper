@@ -240,8 +240,8 @@ holding <code>zlib.lib</code>, and is skipped without it);</li>
 <li>in <code>tools/</code>, the tools' tests, each under its tool's <code>pep.toml</code>.</li>
 </ul>
 <p>The tools' run, the longest, starts as soon as the tools its tests run
-(<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code> and
-<code>pep-run</code>) are
+(<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>,
+<code>pep-run</code>, <code>pep-new</code> and <code>pep-init</code>) are
 built, and runs beside the runtime's runs; its output is printed after
 theirs.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
@@ -312,6 +312,7 @@ output and exit status as a user would see them.</p>
 <tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes (tests that pass, fail, time out, leak an allocation or release one too many), from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite's own run skips them).</td></tr>
 <tr><td><code>tools/pep-package/package_test.pep</code></td><td><code>pep-package</code> and <code>pep-build</code> on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under <code>.pep/fetch.lock</code>; skipped without git.</td></tr>
 <tr><td><code>tools/pep-run/pep_run_test.pep</code></td><td><code>pep-run</code> building and running the programs in <code>tools/pep-run/testdata/</code> with a Pepper home of its own: arguments, exit status, working folder, the up-to-date rerun, compile errors and the options it refuses.</td></tr>
+<tr><td><code>tools/pep-new/pep_new_test.pep</code></td><td><code>pep-new</code> and <code>pep-init</code> scaffolding programs and packages into temporary folders, which <code>pepper build</code> and <code>pepper test</code> then build and test (a package with itself on the import path, as its <code>tests/run.sh</code> puts it); the refusal to overwrite, and the name and license errors.</td></tr>
 <tr><td><code>tools/pep-profile/profile_test.pep</code></td><td><code>pep-profile</code> on the recordings in <code>tools/pep-profile/testdata/</code>, and on a real program when samply or a working perf is installed (skipped otherwise).</td></tr>
 </tbody></table>
 </div>
