@@ -195,9 +195,11 @@ arguments typed after it follow in order. <code>main</code> receives the same ar
 when it is declared <code>main(args: String[]): int</code>. On Windows they are in
 the process's ANSI code page.</li>
 <li><code>exit(code: int)</code> ends the program at once with status <code>code</code> (only its
-low 8 bits reach a POSIX parent), after flushing standard output and the
-other C output streams. Nothing else runs: locals are not released and
-destructors do not run.</li>
+low 8 bits reach a POSIX parent), as C's <code>exit</code> does: the handlers
+registered with C's <code>atexit</code> run, then standard output and the other C
+output streams are flushed. Locals are not released and destructors do
+not run; other threads keep running while the handlers run. In a copy
+<code>fork()</code> started, the handlers, which are the parent's, are skipped.</li>
 </ul>
 <p>Source: <code>runtime/process/current.pep</code></p>
 <h2 id="fork"><a class="header" href="#fork">fork</a></h2>

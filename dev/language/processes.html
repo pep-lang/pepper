@@ -341,7 +341,8 @@ same array <code>main(args: String[])</code> receives (see
 <li><code>process.exit(code)</code> ends the program at once with status <code>code</code>, as C's
 <code>exit</code> does: the handlers registered with C's <code>atexit</code> run, and printed
 output is flushed. In a copy <code>process.fork()</code> started, the handlers,
-which are the parent's, are skipped.</li>
+which are the parent's, are skipped, from whichever of its threads
+<code>exit</code> is called.</li>
 <li><code>process.id()</code> is the process's id.</li>
 <li><code>process.executable_path()</code> is the absolute path of the running program's
 executable, so a tool can find files installed next to it.</li>

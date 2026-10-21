@@ -769,7 +769,8 @@ or enums whose cases carry no values.</li>
 (<code>Level.High</code>), or strings joined with <code>+</code>. They can be
 <a href="functions.html#named-arguments">named</a>: <code>[Check(weight = 3)]</code>.</li>
 <li>Without a constructor, the arguments set the fields in order, and a field
-with an initializer may be left out. A constructor may take <code>this.field</code>
+with an initializer may be left out. The initializer is a constant of the
+same kinds, strings joined with <code>+</code> included. A constructor may take <code>this.field</code>
 parameters, or parameters its body assigns to fields
 (<code>this.long_name = long_name;</code>), which is all its body may do.</li>
 <li>An attribute from another module can be named through it, with or

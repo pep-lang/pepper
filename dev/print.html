@@ -3771,7 +3771,13 @@ int clamp(int value, int low = 0, int high = 100) {
     return value;
 }
 
+# A default can be any expression: an interpolated string, a literal.
+labels(prefix: String = $"v{2}" + ".", sizes: int[] = [1, 2]): String {
+    return $"{prefix}{sizes.count}";
+}
+
 main(): int {
+    assert(labels() == "v2.2", "computed defaults");
     assert(greet("Ada") == "Hello, Ada!", "both defaults");
     assert(greet("Ada", "Hi") == "Hi, Ada!", "one default");
     assert(greet("Ada", "Hi", ".") == "Hi, Ada.", "no defaults");
@@ -3782,6 +3788,9 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>A default can be an expression, not only a literal: strings joined with <code>+</code>,
+an interpolated string, an array, map or tuple literal, a range, or a call.
+Each call that leaves the argument out evaluates it again.</p>
 <p>Defaults work the same way for methods and constructors. To give a later
 parameter a value without passing every parameter before it, name it (see
 <a href="language/functions.html#named-arguments">Named arguments</a>).</p>
@@ -8593,6 +8602,55 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>Destroying an object first runs its destructor, then releases its fields in
+reverse declaration order; an object a field release destroys is destroyed
+completely, its own fields included, before the next field is released. So
+an object's destructor always runs before those of the objects it held.</p>
+<p>A chain of any length can be released: a linked list of a million links, or
+a document nested a million levels deep, is destroyed without running out
+of stack. This changes the order above only for a <em>recursive</em> type: a
+struct whose fields can lead, through any number of steps, back to a value
+of its own type. A field that holds a struct of the same cycle directly (a
+list's <code>next</code>, a tree's <code>left</code> and <code>right</code>, a node's <code>children</code> array) is
+released only after the object holding it is completely destroyed, its
+other fields included, and the chain is destroyed in a loop: an object's
+destructor still runs before those of the objects it held, and the
+last-declared of those fields still goes first, but an object's other
+fields are released before the chain below it. A cycle that runs through a
+trait value, a container's elements or a closure's captures nests as
+usual until it is about 16 KiB of stack deep; past that, further objects
+wait on a list for the current thread and are destroyed, in the order they
+were released, when the outermost release has finished its own object.
+Either way, every object is destroyed before the release that started it
+returns, and a type no cycle runs through is destroyed exactly as
+described above.</p>
+<pre><code class="language-pepper">import async;
+
+const destroyed = async.Atomic&lt;int&gt;(0);
+
+struct Link {
+    var next: Link;
+    destruct {
+        destroyed.fetch_add(1);
+    }
+}
+
+main(): int {
+    # A million links, each holding the next one.
+    var head = Link();
+    var node = head;
+    for (var i in 0..999999) {
+        node.next = Link();
+        node = node.next;
+    }
+    node = Link();
+    # Releasing the head destroys the whole chain, without one stack frame
+    # per link.
+    head = Link();
+    assert(destroyed.load() == 1000000, "every link was destroyed");
+    return 0;
+}
+</code></pre>
 <p>Concretely, a reference is released when:</p>
 <ul>
 <li><strong>A local variable goes out of scope</strong>, at the closing brace of the block
@@ -10367,7 +10425,8 @@ or enums whose cases carry no values.</li>
 (<code>Level.High</code>), or strings joined with <code>+</code>. They can be
 <a href="language/functions.html#named-arguments">named</a>: <code>[Check(weight = 3)]</code>.</li>
 <li>Without a constructor, the arguments set the fields in order, and a field
-with an initializer may be left out. A constructor may take <code>this.field</code>
+with an initializer may be left out. The initializer is a constant of the
+same kinds, strings joined with <code>+</code> included. A constructor may take <code>this.field</code>
 parameters, or parameters its body assigns to fields
 (<code>this.long_name = long_name;</code>), which is all its body may do.</li>
 <li>An attribute from another module can be named through it, with or
@@ -16940,7 +16999,8 @@ same array <code>main(args: String[])</code> receives (see
 <li><code>process.exit(code)</code> ends the program at once with status <code>code</code>, as C's
 <code>exit</code> does: the handlers registered with C's <code>atexit</code> run, and printed
 output is flushed. In a copy <code>process.fork()</code> started, the handlers,
-which are the parent's, are skipped.</li>
+which are the parent's, are skipped, from whichever of its threads
+<code>exit</code> is called.</li>
 <li><code>process.id()</code> is the process's id.</li>
 <li><code>process.executable_path()</code> is the absolute path of the running program's
 executable, so a tool can find files installed next to it.</li>
@@ -46784,9 +46844,11 @@ arguments typed after it follow in order. <code>main</code> receives the same ar
 when it is declared <code>main(args: String[]): int</code>. On Windows they are in
 the process's ANSI code page.</li>
 <li><code>exit(code: int)</code> ends the program at once with status <code>code</code> (only its
-low 8 bits reach a POSIX parent), after flushing standard output and the
-other C output streams. Nothing else runs: locals are not released and
-destructors do not run.</li>
+low 8 bits reach a POSIX parent), as C's <code>exit</code> does: the handlers
+registered with C's <code>atexit</code> run, then standard output and the other C
+output streams are flushed. Locals are not released and destructors do
+not run; other threads keep running while the handlers run. In a copy
+<code>fork()</code> started, the handlers, which are the parent's, are skipped.</li>
 </ul>
 <p>Source: <code>runtime/process/current.pep</code></p>
 <h2 id="fork"><a class="header" href="#fork">fork</a></h2>
@@ -58344,6 +58406,20 @@ Linux, macOS and Windows, one job on each, starting from the build cache
 the previous run saved. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
 that compiler instead: CI builds it with the build of main first
 (<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
+<p>CI also builds the compiler for a commit that leaves <code>tools/compiler/</code>
+alone when the published build of main is stale. The build of main
+publishes only after main's CI passes, so a run cancelled by the next
+push leaves it behind main's newest compiler change, and main's new
+tests would run with the old compiler. <code>scripts/ci-published-compiler.sh</code>
+decides: the published compiler is used only when the commit the
+<code>v&lt;VERSION&gt;</code> tag is on is on the commit's history and its
+<code>tools/compiler/</code> is the commit's. Otherwise, or when VERSION is not
+published, CI builds the commit's compiler. CI's <code>changes</code> job runs it on
+pull requests, on pushes to main and on dispatches on main. It prints the
+decision and its reason in its log and in the run's summary, under
+"Compiler". To check a commit by hand:</p>
+<pre><code class="language-bash">scripts/ci-published-compiler.sh [&lt;commit&gt;]   # exit 0: the published compiler will do
+</code></pre>
 <p>That compiler can hide a runtime change that needs a compiler fix the
 published build of main does not have yet, which breaks main's CI and the
 release, since both build the compiler with the published one. So a PR
