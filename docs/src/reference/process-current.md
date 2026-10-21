@@ -14,9 +14,11 @@ names the deprecated prelude functions still hold:
   when it is declared `main(args: String[]): int`. On Windows they are in
   the process's ANSI code page.
 - `exit(code: int)` ends the program at once with status `code` (only its
-  low 8 bits reach a POSIX parent), after flushing standard output and the
-  other C output streams. Nothing else runs: locals are not released and
-  destructors do not run.
+  low 8 bits reach a POSIX parent), as C's `exit` does: the handlers
+  registered with C's `atexit` run, then standard output and the other C
+  output streams are flushed. Locals are not released and destructors do
+  not run; other threads keep running while the handlers run. In a copy
+  `fork()` started, the handlers, which are the parent's, are skipped.
 
 Source: `runtime/process/current.pep`
 
