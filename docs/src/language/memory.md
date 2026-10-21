@@ -58,6 +58,34 @@ destroy further objects in turn.
 {{#include ../../examples/memory-lifetime.pep}}
 ```
 
+Destroying an object first runs its destructor, then releases its fields in
+reverse declaration order; an object a field release destroys is destroyed
+completely, its own fields included, before the next field is released. So
+an object's destructor always runs before those of the objects it held.
+
+A chain of any length can be released: a linked list of a million links, or
+a document nested a million levels deep, is destroyed without running out
+of stack. This changes the order above only for a *recursive* type: a
+struct whose fields can lead, through any number of steps, back to a value
+of its own type. A field that holds a struct of the same cycle directly (a
+list's `next`, a tree's `left` and `right`, a node's `children` array) is
+released only after the object holding it is completely destroyed, its
+other fields included, and the chain is destroyed in a loop: an object's
+destructor still runs before those of the objects it held, and the
+last-declared of those fields still goes first, but an object's other
+fields are released before the chain below it. A cycle that runs through a
+trait value, a container's elements or a closure's captures nests as
+usual until it is about 16 KiB of stack deep; past that, further objects
+wait on a list for the current thread and are destroyed, in the order they
+were released, when the outermost release has finished its own object.
+Either way, every object is destroyed before the release that started it
+returns, and a type no cycle runs through is destroyed exactly as
+described above.
+
+```pepper
+{{#include ../../examples/memory-deep-chains.pep}}
+```
+
 Concretely, a reference is released when:
 
 - **A local variable goes out of scope**, at the closing brace of the block
