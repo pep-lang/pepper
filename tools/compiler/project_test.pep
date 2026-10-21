@@ -284,4 +284,15 @@ only_tests_and_examples_see_dev_dependencies() {
             "module.pep:1:8: error: 'fixtures' is a dev-dependency of the package 'lib', which only its own tests and examples import"
         )
     );
+
+    # A dev-dependency may not hide a runtime module either.
+    var runtime = folder.path.join(Path("runtime"));
+    Directory.create_all(runtime.join(Path("io")));
+    File.write_text(runtime.join(Path("io")).join(Path("module.pep")), "");
+    File.write_text(
+        app.join(Path("pep.toml")), "[package]\nname = \"app\"\n[dev-dependencies]\nio = { path = \"../fixtures\" }\n"
+    );
+    var hidden = link.load_manifest(app.join(Path("pep.toml")), [runtime]);
+    expect_true(hidden.is_err());
+    expect_true(hidden.error().contains("dependency 'io' has the name of the runtime module 'io'"));
 }

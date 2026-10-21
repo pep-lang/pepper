@@ -280,15 +280,17 @@ export struct Manifest {
         var out = Array<Dependency>();
         var pending = [this];
         var seen = HashSet<String>();
+        var own = true;
         while (!pending.is_empty) {
             var manifest = pending.remove_at(0);
             if (!seen.insert(manifest.dir().normalize().to_string())) {
                 continue;
             }
             var named = manifest.dependencies.copy();
-            # Only this project's own dev-dependencies: it is first.
-            if (seen.count == 1) {
+            # Only this project's own dev-dependencies.
+            if (own) {
                 named.append_all(dev_dependencies);
+                own = false;
             }
             for (var d in named) {
                 if (d.host.is_value()) {
