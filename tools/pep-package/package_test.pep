@@ -833,12 +833,13 @@ publish_checks_tests_tags_and_pushes_the_version() {
 
     # Every problem at once: the version is already tagged, a field is
     # missing, a dependency follows a branch, `[dev-dependencies]` needs a
-    # newer toolchain than the minimum, and the change is not committed. A
-    # dev-dependency may be a path.
+    # newer toolchain than the minimum, the change is not committed, and a
+    # dependency is a path. A dev-dependency may be one.
     write_file(
         clone.join("pep.toml"),
         manifest("1.0.0", "")
             + "\n[dependencies]\nnumbers = { github = \"other/numbers\", branch = \"main\" }\n"
+            + "near = { path = \"../near\", version = \"1\" }\n"
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
     );
     var refused = package(["publish", "--dry-run"]);
@@ -849,6 +850,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
         refused.stderr,
         "\n  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it\n"
     );
+    # A version beside a path does not make it one a dependent can reach.
+    expect_contains(refused.stderr, "\n  dependency 'near' names path ../near, not a version range, ");
     expect_contains(
         refused.stderr,
         "\n  'dev-dependencies' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"

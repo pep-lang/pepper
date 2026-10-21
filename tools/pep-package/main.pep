@@ -651,7 +651,7 @@ struct Project {
         }
         for (var requirement in manifest.value().requirements) {
             # A dependent ignores dev-dependencies, so they may be anything.
-            if (requirement.dev or requirement.kind == "version") {
+            if (requirement.dev or (requirement.kind == "version" and !requirement.is_path())) {
                 continue;
             }
             var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
@@ -685,7 +685,9 @@ struct Project {
             return fail(refs.error().message);
         }
         var newest = Optional<semver.Version>.Empty;
+        var has_head = false;
         for (var ref in refs.value()) {
+            has_head = has_head or ref.name == "HEAD";
             if (ref.name == "HEAD" and ref.commit != commit) {
                 problems.append(
                     $"HEAD ({commit.substr(0, 12)}) is not the tip of origin's default branch ({ref.commit.substr(0, 12)}); push it, or check that branch out"
@@ -697,6 +699,9 @@ struct Project {
                     newest = tagged;
                 }
             }
+        }
+        if (!has_head) {
+            problems.append("origin has no default branch (HEAD), so nothing shows the commit is pushed; push one");
         }
         if (parsed.is_ok() and newest.is_value() and parsed.value().compare(newest.value()) <= 0) {
             problems.append(
