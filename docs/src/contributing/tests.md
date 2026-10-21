@@ -101,6 +101,23 @@ the previous run saved. A PR that changes the compiler (`tools/compiler/`) is te
 that compiler instead: CI builds it with the build of main first
 (`scripts/ci-build-compiler.sh`) and runs the suite with it.
 
+CI also builds the compiler for a commit that leaves `tools/compiler/`
+alone when the published build of main is stale. The build of main
+publishes only after main's CI passes, so a run cancelled by the next
+push leaves it behind main's newest compiler change, and main's new
+tests would run with the old compiler. `scripts/ci-published-compiler.sh`
+decides: the published compiler is used only when the commit the
+`v<VERSION>` tag is on is on the commit's history and its
+`tools/compiler/` is the commit's. Otherwise, or when VERSION is not
+published, CI builds the commit's compiler. CI's `changes` job runs it on
+pull requests, on pushes to main and on dispatches on main. It prints the
+decision and its reason in its log and in the run's summary, under
+"Compiler". To check a commit by hand:
+
+```bash
+scripts/ci-published-compiler.sh [<commit>]   # exit 0: the published compiler will do
+```
+
 That compiler can hide a runtime change that needs a compiler fix the
 published build of main does not have yet, which breaks main's CI and the
 release, since both build the compiler with the published one. So a PR

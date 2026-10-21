@@ -72,7 +72,8 @@ pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
 pepper package add codeberg:third/shapes   # only Codeberg, without looking elsewhere
 ```
 
-Without a range, the dependency gets the newest version tag (as a range
+Without a range, the dependency gets the newest version tag this toolchain
+builds (see [Resolving versions](#resolving-versions); as a range
 that accepts compatible later versions: `1.4.2` accepts 1.4.2 up to, not
 including, 2.0.0); a repository with no version tags follows its default
 branch. The name source code imports defaults to the repository's last part,
@@ -174,6 +175,31 @@ name each imports it by.
   declares, and `pep-package` says which requirement it overrode.
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
+
+### The toolchain a package needs
+
+A package states the oldest toolchain release that builds it with
+`minimum_toolchain` in its `[package]` table (see
+[Projects](projects.md#package)). `add`, `update` and `fetch` resolve for
+the toolchain `pep-package` belongs to (the release `pep-package --version`
+prints, which `pepper` picks with the rest of the toolchain):
+
+- A version range skips every version whose `minimum_toolchain` is newer,
+  picking the newest one left, and says which it skipped and why:
+
+  ```text
+  pep-package: github:other/websocket skipped 1.3.0 (needs toolchain 0.11.0); this is 0.10.1
+  ```
+
+  When every version the ranges accept needs a newer toolchain, resolution
+  fails and names what each needs.
+- A locked version that needs a newer toolchain is an error naming the
+  package's version and both toolchains; `update` moves it to a version
+  this toolchain builds. So is a branch, tag or commit that needs one.
+
+Only the `pep.toml` of the version picked, and of the newer ones the ranges
+accept, are read: from the package's clone in `.pep/deps`, without checking
+them out, each once per run.
 
 ## Environment variables
 

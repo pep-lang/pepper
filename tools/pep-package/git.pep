@@ -150,12 +150,9 @@ export check_out(url: String, directory: Path, commit: String): Result<String> {
         }
     }
     var dir = directory.to_string();
-    var known = git(["cat-file", "-e", commit + "^{commit}"], dir);
-    if (known.is_err()) {
-        var fetched = git(["fetch", "--quiet", "--tags", url, "+refs/heads/*:refs/remotes/origin/*"], dir);
-        if (fetched.is_err()) {
-            return Result<String>.Err(fetched.error().message);
-        }
+    var fetched = _fetch_commit(url, dir, commit);
+    if (fetched.is_err()) {
+        return Result<String>.Err(fetched.error().message);
     }
     var switched = git(["checkout", "--quiet", "--detach", commit], dir);
     if (switched.is_err()) {
@@ -166,4 +163,36 @@ export check_out(url: String, directory: Path, commit: String): Result<String> {
         return Result<String>.Err($"cannot read the commit of {dir}");
     }
     return Result<String>.Ok(head.value());
+}
+
+# Fetches from `url` into the clone `dir` unless it has `commit` already.
+_fetch_commit(url: String, dir: String, commit: String): Result<void> {
+    if (git(["cat-file", "-e", commit + "^{commit}"], dir).is_ok()) {
+        return Result<void>.ok();
+    }
+    var fetched = git(["fetch", "--quiet", "--tags", url, "+refs/heads/*:refs/remotes/origin/*"], dir);
+    if (fetched.is_err()) {
+        return Result<void>.Err(fetched.error().message);
+    }
+    return Result<void>.ok();
+}
+
+# The text of `file` at `commit` of `url`, read from the clone in
+# `directory` without checking the commit out (a missing clone is made by
+# checking `commit` out); none when the commit has no such file.
+export file_at(url: String, directory: Path, commit: String, file: String): Result<Optional<String>> {
+    if (checked_out(directory).is_empty()) {
+        var checked = check_out(url, directory, commit);
+        if (checked.is_err()) {
+            return Result<Optional<String>>.Err(checked.error().message);
+        }
+    }
+    var dir = directory.to_string();
+    var fetched = _fetch_commit(url, dir, commit);
+    if (fetched.is_err()) {
+        return Result<Optional<String>>.Err(fetched.error().message);
+    }
+    # The commit is there, so a failure means it has no such file.
+    var text = git(["show", commit + ":" + file], dir);
+    return Result<Optional<String>>.Ok(text.is_ok() ? Optional<String>.Value(text.value()) : Optional<String>.Empty);
 }

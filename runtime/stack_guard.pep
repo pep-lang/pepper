@@ -47,6 +47,16 @@ extern int WriteFile(void* file, void* buffer, uint size, uint* written, void* o
 # What a stack overflow writes to standard error.
 const _STACK_OVERFLOW_MESSAGE = "panic: stack overflow\n";
 
+# 1 once `_pep_stack_guard_start` has installed the handler.
+const _pep_stack_installed: __ptr<int> = calloc(1, 4);
+
+# Whether `main` installed the stack overflow handler: false in a program
+# built by a compiler older than the call (or on WASI). The overflow tests
+# check it first, so a missing call fails with that reason, not a crash.
+export _pep_stack_guard_installed(): bool {
+    return _pep_stack_installed[0] == 1;
+}
+
 # The stack each thread keeps for the handler: 20 KiB, as Rust keeps.
 [Target(OS(Windows))]
 const _STACK_GUARANTEE: uint = 20480;
@@ -69,6 +79,7 @@ export _pep_stack_guard_start() {
     var handler: extern (__ptr<void>) => int = _pep_stack_overflow_filter;
     AddVectoredExceptionHandler(0, handler);
     _pep_stack_guard_thread_start();
+    _pep_stack_installed[0] = 1;
 }
 
 # Sets up the calling thread or fiber: keeps stack in reserve for the handler.
@@ -185,10 +196,6 @@ const _STACK_SIGSEGV = 11;
 # after the other: what a fault that is not an overflow goes to.
 [Target(OS(Linux) || OS(Mac))]
 const _pep_stack_old_actions: __ptr<u8> = calloc(2, _STACK_ACTION_SIZE);
-
-# 1 once `_pep_stack_guard_start` has installed the handler.
-[Target(OS(Linux) || OS(Mac))]
-const _pep_stack_installed: __ptr<int> = calloc(1, 4);
 
 # The calling thread's alternate signal stack block (see
 # `_pep_stack_guard_thread_start`), or null.

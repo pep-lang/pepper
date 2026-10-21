@@ -13,7 +13,7 @@ struct Tally {
 runs(iterator: ArrayChunks<int>): Array<int> {
     var result = Array<int>();
     for (var run in iterator) {
-        result.append(run.count == 0 ? -1 : run[0]);
+        result.append(run[0]);
         result.append(run.count as int);
     }
     return result;
@@ -98,6 +98,13 @@ chunks_current_past_the_end_panics() {
     var it = [1].chunks(1);
     it.next();
     it.next();
+    it.current();
+}
+
+[Test]
+[ShouldPanic("ArrayChunks.current() before next()")]
+chunks_current_before_next_panics() {
+    var it = [1].chunks(1);
     it.current();
 }
 

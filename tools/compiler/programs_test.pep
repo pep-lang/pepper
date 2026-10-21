@@ -10,7 +10,8 @@
 # that hold a NUL or sit in default arguments; a `match` in a generic
 # method of another module's struct; a `[Move]` argument called through a
 # `shared` function value; externs bound to C symbols Pepper functions are
-# named after, at each `-O` level; and the message a stack overflow prints
+# named after, at each `-O` level; reference chains 100,000 deep, released
+# without overflowing the stack; and the message a stack overflow prints
 # on the main thread, a `Thread` and a task. The programs are in
 # `testdata/`.
 
@@ -459,10 +460,30 @@ move_takes_a_call_through_a_shared_function_value() {
 
 [Test]
 extern_bound_to_a_pepper_function_name_calls_the_c_symbol() {
-    for (var options in [Array<String>(), ["-O"], ["-O", "--lto", "full"]]) {
+    # The clash broke the link at every level; `-O` and `-O --lto full`
+    # cover both ways the parts link (`-O0` links them as `-O` does).
+    for (var options in [["-O"], ["-O", "--lto", "full"]]) {
         var folder = TempFolder("programs_extern_named_like_function");
         var program = _build("extern_named_like_function", folder.path, options);
         expect_exit(run(process.Command(program.to_string())), 100);
+    }
+}
+
+# ── releases ────────────────────────────────────────────────────────────────
+
+[Test]
+deep_chains_release_without_overflow_and_shallow_order_holds() {
+    var folder = TempFolder("programs_deep_release");
+    var program = _build("deep_release", folder.path).to_string();
+    var expected = "link chain released\nbranch tree released\ntrait chain released\nenum chain released\n"
+        + "tree released\nclosure chain released\nchain released while a task waits in a destructor\n"
+        + "destroy holder\ndestroy second\ndestroy second.piece\ndestroy first\ndestroy first.piece\n"
+        + "destroy root\ndestroy second\ndestroy first\ndestroy first.second\ndestroy first.first\n";
+    # 100,000 is far past the depth a recursive release overflows at.
+    for (var depth in ["10", "100000"]) {
+        var output = run(process.Command(program).argument(depth));
+        expect_exit(output, 0);
+        expect_equal(output.stdout, expected);
     }
 }
 

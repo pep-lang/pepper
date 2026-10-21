@@ -972,6 +972,152 @@ export _pep_free(p: __ptr<void>) {
     }
 }
 
+# Destroying an object releases its fields, and a field's last release
+# destroys that object in turn, so a long chain (a linked list, a deeply
+# nested document) would recurse once per link and overflow the stack
+# (#65). A chain of structs that hold each other directly is destroyed in
+# a loop by the compiler's chain last release (`codegen/chains.pep`), whose
+# list grows with `_pep_release_list_grow`. A cycle of types that also
+# runs through a trait value, a container's buffer or a closure cannot be
+# steered from the destructor: the last release of such a struct calls
+# `_pep_release_last` with the struct's `__last_release`, which runs the
+# destructor and frees the memory. The outermost one on a thread sets a
+# floor `_RELEASE_STACK` bytes below its frame. Nested ones above the floor run as nested calls;
+# one below it is pushed on this thread's pending list, which the outermost
+# drains once its own object is destroyed: in the order they were
+# released, each one's own pushes before the next. A stack budget rather
+# than a depth count keeps the common case to one thread-local read.
+const _RELEASE_STACK: ulong = 16384;
+
+# Moves a full chain list's entries (each an object and the function that
+# releases it) to a heap buffer of twice the `count` entries, freeing
+# `data` unless it is the caller's stack buffer `inline_data`.
+[Cold]
+[Unsafe("overflow")]
+export _pep_release_list_grow(
+    data: __ptr<__ptr<void>>, count: ulong, inline_data: __ptr<__ptr<void>>
+): __ptr<__ptr<void>> {
+    var entry = sizeof<__ptr<void>>() * 2;
+    __ptr<__ptr<void>> moved = _pep_malloc_uninit(entry * count * 2);
+    memcpy(moved, data, entry * count);
+    if (data != inline_data) {
+        _pep_free(data);
+    }
+    return moved;
+}
+
+# LLVM intrinsics; see "LLVM intrinsics" in
+# docs/src/language/c-interop.md.
+[Link(name = "llvm.frameaddress")]
+extern void* _release_frame_address(int level);
+
+# The lowest frame address a nested destruction runs at, or 0 when no
+# destruction is running on this thread.
+[ThreadLocal]
+var _release_floor: ulong;
+
+[ThreadLocal]
+var _release_objects: __ptr<__ptr<void>>;
+
+[ThreadLocal]
+var _release_destroys: __ptr<extern (__ptr<void>) => void>;
+
+[ThreadLocal]
+var _release_count: ulong;
+
+[ThreadLocal]
+var _release_capacity: ulong;
+
+# Runs `destroy(object)` for an object whose strong count reached 0: at
+# once, or later from the pending list when this thread's destructions are
+# nested `_RELEASE_STACK` bytes deep.
+[Cold]
+[Unsafe("overflow, null")]
+export _pep_release_last(object: __ptr<void>, destroy: extern (__ptr<void>) => void) {
+    var here = unsafe_cast<ulong>(_release_frame_address(0));
+    var floor = _release_floor;
+    if (floor == 0) {
+        _release_floor = here > _RELEASE_STACK ? here - _RELEASE_STACK : 1;
+        destroy(object);
+        if (_release_count != 0) {
+            _release_drain();
+        }
+        _release_floor = 0;
+    } else if (here < floor) {
+        _release_push(object, destroy);
+    } else {
+        destroy(object);
+    }
+}
+
+# A task that suspends inside a destruction (a destructor that waits)
+# takes the thread's floor with it, so the tasks that run meanwhile start
+# their own, and it may resume on another thread (`async`'s
+# `_async_suspend`). Objects it left pending are drained by the next
+# outermost release on this thread.
+export _pep_release_suspend(): ulong {
+    var floor = _release_floor;
+    _release_floor = 0;
+    return floor;
+}
+
+# Gives a resumed task back the floor `_pep_release_suspend` took.
+export _pep_release_resume(floor: ulong) {
+    _release_floor = floor;
+}
+
+[Cold]
+[Unsafe("overflow")]
+_release_push(object: __ptr<void>, destroy: extern (__ptr<void>) => void) {
+    if (_release_count == _release_capacity) {
+        var capacity = _release_capacity == 0 ? 64 : _release_capacity * 2;
+        _release_objects = _pep_realloc_uninit(_release_objects, _release_capacity * 8, capacity * 8);
+        _release_destroys = _pep_realloc_uninit(_release_destroys, _release_capacity * 8, capacity * 8);
+        _release_capacity = capacity;
+    }
+    _release_objects[_release_count] = object;
+    _release_destroys[_release_count] = destroy;
+    _release_count = _release_count + 1;
+}
+
+# Reverses the pending entries from `start` on: one destruction pushes its
+# objects in release order, and the list is drained from its end.
+[Unsafe("overflow")]
+_release_reverse(start: ulong) {
+    var low = start;
+    var high = _release_count;
+    while (low + 1 < high) {
+        high = high - 1;
+        var object = _release_objects[low];
+        _release_objects[low] = _release_objects[high];
+        _release_objects[high] = object;
+        var destroy = _release_destroys[low];
+        _release_destroys[low] = _release_destroys[high];
+        _release_destroys[high] = destroy;
+        low = low + 1;
+    }
+}
+
+# Destroys every pending object, and those their destruction pushes, then
+# frees the list: a deep release is rare, and a thread that exits keeps no
+# buffer.
+[Cold]
+[Unsafe("overflow, null")]
+_release_drain() {
+    _release_reverse(0);
+    while (_release_count != 0) {
+        _release_count = _release_count - 1;
+        var mark = _release_count;
+        _release_destroys[mark](_release_objects[mark]);
+        _release_reverse(mark);
+    }
+    _pep_free(_release_objects);
+    _pep_free(_release_destroys);
+    _release_objects = __null;
+    _release_destroys = __null;
+    _release_capacity = 0;
+}
+
 [Unsafe("overflow")]
 export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
     return _pep_resize(p, prev_size, new_size, true);
