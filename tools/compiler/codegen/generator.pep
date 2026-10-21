@@ -91,9 +91,6 @@ export struct StructDesc {
     ## reference enum's cases that carry nothing, a plain function type's
     ## static objects.
     var immortal: bool = false;
-    ## Whether `__release` is `synthesize`'s standard one (not a function
-    ## type's), so its last release may take chain fields out (`chains.pep`).
-    var standard: bool = false;
     ## Declared `[__Lazy]`: the zero-argument constructor is null, and a
     ## place holding null gets its object when first read for anything but
     ## a `[__Reads]` call or a field read (see `materialize`).
@@ -103,6 +100,37 @@ export struct StructDesc {
         this.name = name;
         this.llvm_type = llvm_type;
         this.loc = loc;
+    }
+}
+
+## How a chain field holds the objects of its struct's cycle.
+export enum ChainKind {
+    ## A struct reference.
+    Struct,
+    ## A trait value, whose object is one of the field's targets.
+    Trait,
+    ## An `Array`'s buffer of `_size` elements.
+    Buffer,
+    ## A function type's object, a closure of one of the field's targets.
+    Closures,
+}
+
+## A field of a recursive struct that its last release takes the objects
+## of its own cycle out of (`find_chains`).
+export struct ChainField {
+    var kind: ChainKind;
+    ## The field's position in the struct.
+    var position: uint;
+    ## The sema type of the slot an object is read from: the field's, or
+    ## for a buffer its element type.
+    var ty: String;
+    ## The structs of the cycle the slot can hold, by name.
+    var targets: Array<String> = Array<String>();
+
+    construct(kind: ChainKind, position: uint, ty: String) {
+        this.kind = kind;
+        this.position = position;
+        this.ty = ty;
     }
 }
 
@@ -157,13 +185,17 @@ export struct Generator {
     ## Structs a cycle of fields runs through (`find_chains`): their last
     ## release is the chain one.
     var recursive: HashSet<String> = HashSet<String>();
-    ## Recursive structs whose cycle also runs through a trait value, a
-    ## buffer or a closure: their last release goes through the runtime's
-    ## `_pep_release_last`.
+    ## Recursive structs whose cycle also runs through something no chain
+    ## field steers (a tuple, another container's buffer): their last
+    ## release goes through the runtime's `_pep_release_last`.
     var deep_recursive: HashSet<String> = HashSet<String>();
-    ## A recursive struct's chain fields: the position and type of each
-    ## field that holds a struct of its own cycle directly.
-    var chain_fields: HashMap<String, Array<(uint, String)>> = HashMap<String, Array<(uint, String)>>();
+    ## A recursive struct's chain fields: each field its last release takes
+    ## objects of its own cycle out of (`chains.pep`).
+    var chain_fields: HashMap<String, Array<ChainField>> = HashMap<String, Array<ChainField>>();
+    ## Structs with chain fields whose destructor only releases fields (no
+    ## `destruct` body sees them), so their last release moves a chain
+    ## field's object out, leaving the field null.
+    var chain_moves: HashSet<String> = HashSet<String>();
     ## Traits used as types, by type name.
     var traits: HashMap<String, TraitDesc> = HashMap<String, TraitDesc>();
     ## Weak trait values (`__weak<Shape>`), laid out like a trait value.
