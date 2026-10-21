@@ -21548,8 +21548,9 @@ project's dependencies, and its <code>[build]</code> table's <code>include</code
 <code>link</code> libraries apply to it as well.</p>
 <p>Before compiling a program in a project, the compiler fetches whatever
 <code>pep.lock</code> lists and the project's <code>.pep/deps</code> lacks or holds at another
-commit, and the dependencies <code>pep.toml</code> names that <code>pep.lock</code> does not list
-yet, by running <code>pep-package fetch</code> (beside <code>pep-build</code>, else on the
+commit, and the Git dependencies that <code>pep.toml</code>, or the <code>pep.toml</code> of a
+<code>path</code> dependency it reaches, names and <code>pep.lock</code> does not list yet, by
+running <code>pep-package fetch</code> (beside <code>pep-build</code>, else on the
 <code>PATH</code>). Without
 <code>pep-package</code>, it checks the missing commits out with <code>git</code> itself, and
 asks for <code>pepper package fetch</code> to move a checkout at another commit. A
@@ -22152,7 +22153,7 @@ or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> 
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
 </ul>
 <p>An import of a dependency that is not on disk says which folder is missing:</p>
-<pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry
+<pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry; run 'pepper package fetch'
     1 | import geometry;
       |        ^~~~~~~~
 </code></pre>
@@ -56388,6 +56389,9 @@ main(): int {
 lowercased, so <code>Content-Type</code> and <code>content-type</code> are the same field. A
 name may hold several values, kept in the order added. Different names
 have no defined order, as HTTP allows.</p>
+<p><code>Headers</code> takes any name and value, but a <code>Client</code> refuses to send a
+field name that is not an RFC 9110 token or a value with CR, LF or NUL,
+and a <code>Server</code> answers <code>500</code> instead of sending one.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var headers = http.Headers();
 headers.add("Accept", "text/html");
@@ -56931,7 +56935,7 @@ replacing any the request has.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the response after any redirects, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x, its body is larger than <code>MAX_RESPONSE_BODY</code>, or there are more than <code>max_redirects</code> redirects</li>
+<li>the response after any redirects, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, a method or field name that is not an RFC 9110 token, or a field value holding CR, LF or NUL (which would split the request), the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x, its body is larger than <code>MAX_RESPONSE_BODY</code>, or there are more than <code>max_redirects</code> redirects</li>
 </ul>
 <h4 id="open-4"><a class="header" href="#open-4">open</a></h4>
 <pre><code class="language-pepper">open(request: Request): io.IoResult&lt;Response&gt;
@@ -57163,7 +57167,11 @@ handler for every request. Connections are kept open between requests
 unless the client asks to close (or speaks HTTP/1.0).</p>
 <p>The handler gets the <code>Request</code> with its body read in full and returns the
 <code>Response</code>; the server adds <code>Content-Length</code> (and <code>Connection: close</code>
-when it will close). A request the server cannot parse gets <code>400 Bad Request</code>, one with header fields over 64 KiB <code>431 Request Header Fields Too Large</code>, and one with a body over <code>MAX_REQUEST_BODY</code> <code>413 Content Too Large</code>; the connection then closes.</p>
+when it will close). A request the server cannot parse gets <code>400 Bad Request</code>, one with header fields over 64 KiB <code>431 Request Header Fields Too Large</code>, and one with a body over <code>MAX_REQUEST_BODY</code> <code>413 Content Too Large</code>; the connection then closes. A response whose reason phrase or
+field value holds CR, LF or NUL, or whose field name is not an RFC 9110
+token, is sent as <code>500 Internal Server Error</code> instead, since those
+characters would split the response; the 500's text body names the
+field (or the reason phrase) at fault.</p>
 <p>HTTP/2 is served to a client that chooses it through ALPN (see
 <code>bind_tls</code>) or that starts a plain TCP connection with the HTTP/2
 preface (prior knowledge): each stream is a request, answered by the same

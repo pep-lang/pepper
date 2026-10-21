@@ -324,7 +324,7 @@ or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> 
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
 </ul>
 <p>An import of a dependency that is not on disk says which folder is missing:</p>
-<pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry
+<pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry; run 'pepper package fetch'
     1 | import geometry;
       |        ^~~~~~~~
 </code></pre>

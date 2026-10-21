@@ -295,7 +295,7 @@ replacing any the request has.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the response after any redirects, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x, its body is larger than <code>MAX_RESPONSE_BODY</code>, or there are more than <code>max_redirects</code> redirects</li>
+<li>the response after any redirects, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, a method or field name that is not an RFC 9110 token, or a field value holding CR, LF or NUL (which would split the request), the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x, its body is larger than <code>MAX_RESPONSE_BODY</code>, or there are more than <code>max_redirects</code> redirects</li>
 </ul>
 <h4 id="open"><a class="header" href="#open">open</a></h4>
 <pre><code class="language-pepper">open(request: Request): io.IoResult&lt;Response&gt;

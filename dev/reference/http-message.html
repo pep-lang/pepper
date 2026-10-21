@@ -194,6 +194,9 @@
 lowercased, so <code>Content-Type</code> and <code>content-type</code> are the same field. A
 name may hold several values, kept in the order added. Different names
 have no defined order, as HTTP allows.</p>
+<p><code>Headers</code> takes any name and value, but a <code>Client</code> refuses to send a
+field name that is not an RFC 9110 token or a value with CR, LF or NUL,
+and a <code>Server</code> answers <code>500</code> instead of sending one.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var headers = http.Headers();
 headers.add("Accept", "text/html");
