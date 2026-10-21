@@ -1817,7 +1817,11 @@ changed.
   `unnamed_addr` constants stay private copies); `main`,
   `__pep_global_init`, the exports and `llvm.*` stay in the entry part;
   symbols are respelled with `symbol_name` (`link/names.pep`: `_P` and the
-  name, `_` doubled and other bytes as `_xx`); each part is measured.
+  name, `_` doubled and other bytes as `_xx`), except externs' C symbols:
+  an extern whose C symbol a Pepper function is named after (`exit`) is
+  declared as `__extern.exit` (`EXTERN_PREFIX`, set aside by
+  `instantiate_function`) and takes its C symbol after the respelling;
+  each part is measured.
   `keep_part` turns the other parts' definitions into declarations and runs
   `globaldce`. Codegen gives every mangled declaration internal linkage
   within its part: no other object can name it, and ELF linkers read the

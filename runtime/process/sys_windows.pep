@@ -385,7 +385,8 @@ _process_sys_exec(command: Command): io.IoError {
         return ended.error();
     }
     var code = ended.value().code();
-    _pep_exit(code.is_value() ? code.value() : 1);
+    # As a POSIX exec, which replaces the process, runs no `atexit` handler.
+    _pep_exit_now(code.is_value() ? code.value() : 1);
     return io.IoError();
 }
 

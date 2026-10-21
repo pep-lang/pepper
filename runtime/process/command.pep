@@ -274,9 +274,9 @@ export struct Command {
     ## marked close-on-exec, and nothing after the call runs. Windows cannot
     ## replace a process, so there the program is started with the standard
     ## streams inherited and waited for, and this process then ends with its
-    ## exit status, as `process.exit` does. While it waits, this process
-    ## ignores Ctrl-C and Ctrl-Break, which the program, sharing the
-    ## console, receives and handles itself.
+    ## exit status, running no `atexit` handler, as a replaced process does
+    ## not. While it waits, this process ignores Ctrl-C and Ctrl-Break,
+    ## which the program, sharing the console, receives and handles itself.
     ##
     ## Output `print` has buffered is flushed first. The standard streams
     ## must be left inherited: no process remains to hold a pipe's other
