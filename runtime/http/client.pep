@@ -120,7 +120,9 @@ export struct Client {
     ## @param request the request; its `url` must be absolute
     ## @returns the response after any redirects, whatever its status; an
     ##   error with `is_invalid_input()` for a URL that is not `http://` or
-    ##   `https://`, the errors of `io.TcpStream.connect_host` and
+    ##   `https://`, a method or field name that is not an RFC 9110 token, or
+    ##   a field value holding CR, LF or NUL (which would split the request),
+    ##   the errors of `io.TcpStream.connect_host` and
     ##   `tls.TlsConnector.connect`, or an error when the response is not
     ##   valid HTTP/1.x, its body is larger than `MAX_RESPONSE_BODY`, or there
     ##   are more than `max_redirects` redirects
@@ -470,6 +472,15 @@ _http_open(client: Client, pool: _HttpPool?, request: Request): io.IoResult<Resp
 # `pool` if it has one for the URL's origin (and again on a new connection
 # if that one turns out closed), else on a new connection.
 _http_open_once(client: Client, pool: _HttpPool?, request: Request): io.IoResult<Response> {
+    if (!_http_is_token(request.method)) {
+        return io.IoResult<Response>.err(
+            io.IoError(_http_code_invalid_input(), $"the method '{request.method}' is not a token")
+        );
+    }
+    var bad = _http_bad_fields(request.headers);
+    if (bad.is_value()) {
+        return io.IoResult<Response>.err(io.IoError(_http_code_invalid_input(), bad.value()));
+    }
     var parsed = _http_parse_url(request.url);
     if (parsed.is_err()) {
         return io.IoResult<Response>.err(parsed.error());
