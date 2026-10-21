@@ -6,39 +6,21 @@
 
 import [error_at] from "common";
 import [Expression, Module] from "model";
+import [rewrite_concrete_places] from "places";
 import [PassState] from "state";
 import "type_name";
-import [Rewriter, rewrite_block] from "walk";
+import [Rewriter] from "walk";
 
 ## The name the builder gives a range's call.
 const _RANGE_FUNCTION = "_range";
 
-## Reports the first range whose bounds are not integers.
+## Reports the first range whose bounds are not integers, in every place
+## of concrete code.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error
 export check_ranges(module: Module, state: PassState) {
-    var checker = _RangeChecker(state);
-    for (var st in module.structs) {
-        if (st.ty.is_generic() and st.name == st.ty.name) {
-            continue;
-        }
-        for (var c in st.constructors) {
-            if (c.body.is_value()) {
-                rewrite_block(c.body.value(), checker);
-            }
-        }
-        for (var m in st.method_members) {
-            if (m.body.is_value()) {
-                rewrite_block(m.body.value(), checker);
-            }
-        }
-    }
-    for (var f in module.functions) {
-        if (!f.is_generic_func and f.body.is_value()) {
-            rewrite_block(f.body.value(), checker);
-        }
-    }
+    rewrite_concrete_places(module, _RangeChecker(state));
 }
 
 struct _RangeChecker {

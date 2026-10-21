@@ -2972,6 +2972,18 @@ _model_constant(module: Module, e: Expression): _CtValue? {
                 return _model_constant(module, node.args[0]);
             }
         }
+        # Text joined with `+`, as an attribute argument may be: before
+        # `resolve_injected`, and the `String` `+` call it makes.
+        Binary(node) => {
+            if (node.op == BinaryOp.Add) {
+                return _joined_constant(module, node.lhs, node.rhs);
+            }
+        }
+        MethodCall(node) => {
+            if (node.method == "+" and node.args.count == 1) {
+                return _joined_constant(module, node.this_value, node.args[0]);
+            }
+        }
         Unary(node) => {
             if (node.op is Neg) {
                 var inner = _model_constant(module, node.operand);
@@ -3021,6 +3033,20 @@ _model_constant(module: Module, e: Expression): _CtValue? {
             }
         }
         else => {}
+    }
+    return Optional<_CtValue>.Empty;
+}
+
+## The text of `lhs + rhs` when both are constant text.
+_joined_constant(module: Module, lhs: Expression, rhs: Expression): _CtValue? {
+    var a = _model_constant(module, lhs);
+    var b = _model_constant(module, rhs);
+    if (a.is_value() and b.is_value()) {
+        var x = _text_of(a.value());
+        var y = _text_of(b.value());
+        if (x.is_value() and y.is_value()) {
+            return Optional<_CtValue>.Value(_CtValue.Text(x.value() + y.value()));
+        }
     }
     return Optional<_CtValue>.Empty;
 }

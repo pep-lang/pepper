@@ -9,21 +9,12 @@ import [unit_decls] from "checked";
 import [is_closure_struct] from "closures";
 import [Loc] from "loc";
 import [
-    Block,
-    Expression,
-    ExtensionDef,
-    FunctionDef,
-    GenericParam,
-    Module,
-    SpecRequest,
-    StructDef,
-    TypeFlags,
-    TypeName,
-    VariableDef
+    Block, Expression, ExtensionDef, GenericParam, Module, SpecRequest, StructDef, TypeFlags, TypeName, VariableDef
 ] from "model";
 import [concrete_overrides] from "overloads";
+import [for_each_place, Place, PlaceVisitor] from "places";
 import [parse_type_string] from "type_name";
-import [Rewriter, rewrite_block, rewrite_expression] from "walk";
+import [Rewriter] from "walk";
 
 ## The generic uses found so far, by name: who asked first, and where.
 struct _Requests {
@@ -143,11 +134,51 @@ struct _CallGatherer {
 
 extend _CallGatherer with Rewriter;
 
-_walk_body(function: FunctionDef, gatherer: _CallGatherer) {
-    if (function.body.is_value()) {
-        rewrite_block(function.body.value(), gatherer);
+## Gathers the calls of each place with the generic parameters it can name.
+struct _CallsIn {
+    var functions: _Requests;
+    var module: Module;
+    # The extension whose methods are being walked, and the parameters
+    # they can name.
+    var _extension: ExtensionDef = ExtensionDef();
+    var _extension_names: String[] = Array<String>();
+
+    construct(functions: _Requests, module: Module) {
+        this.functions = functions;
+        this.module = module;
+    }
+
+    visit(place: Place) {
+        match (place.kind) {
+            Global => {
+                var global = place.variable.value();
+                if (!module.checked.globals.contains(global.name)) {
+                    # Global initializers name no generic parameters to skip.
+                    place.rewrite(_CallGatherer(functions, Array<String>(), global.name, false));
+                }
+            }
+            Function => {
+                var function = place.function.value();
+                place.rewrite(_CallGatherer(functions, _param_names(function.generic_params), function.name, true));
+            }
+            Extension => {
+                var ext = place.extension.value();
+                # An extension's methods come one after another.
+                if (!(_extension === ext)) {
+                    _extension = ext;
+                    _extension_names = _extension_params(module.structs, ext);
+                }
+                place.rewrite(_CallGatherer(functions, _extension_names, ext.target.name, true));
+            }
+            else => {
+                var st = place.owner.value();
+                place.rewrite(_CallGatherer(functions, _param_names(st.generic_params), st.name, true));
+            }
+        }
     }
 }
+
+extend _CallsIn with PlaceVisitor;
 
 ## Records the generic types of local declarations, in nested blocks too.
 _gather_locals(block: Block, structs: _Requests, params: String[], owner: String) {
@@ -207,14 +238,6 @@ export gather_generics(module: Module) {
     var decls = unit_decls(module);
     for (var st in decls.structs) {
         var params = _param_names(st.generic_params);
-        var gatherer = _CallGatherer(functions, params, st.name, true);
-        for (var method in st.method_members) {
-            _walk_body(method, gatherer);
-        }
-        for (var constructor in st.constructors) {
-            _walk_body(constructor, gatherer);
-        }
-        _walk_body(st.destructor, gatherer);
         for (var field in st.field_members) {
             if (_is_requested(field.ty, params)) {
                 structs.request(field.ty.to_string(), st.name, _written(field));
@@ -242,7 +265,6 @@ export gather_generics(module: Module) {
     }
     for (var function in decls.functions) {
         var params = _param_names(function.generic_params);
-        _walk_body(function, _CallGatherer(functions, params, function.name, true));
         # A generic function's own parameters (`Array<U>` in `f<U>`) are
         # not a use; its specializations' concrete types are.
         if (_is_requested(function.ty, params)) {
@@ -254,24 +276,17 @@ export gather_generics(module: Module) {
             }
         }
     }
-    # Global initializers: `var x = Array<int>()` at file scope.
     for (var global in module.globals) {
         if (module.checked.globals.contains(global.name)) {
             continue;
-        }
-        if (global.default.is_value()) {
-            rewrite_expression(global.default.value(), _CallGatherer(functions, Array<String>(), global.name, false));
         }
         if (global.ty.is_generic() and !global.ty.name.starts_with("__")) {
             structs.request(global.ty.to_string(), global.name, _written(global));
         }
     }
-    for (var ext in module.extensions) {
-        var gatherer = _CallGatherer(functions, _extension_params(module.structs, ext), ext.target.name, true);
-        for (var method in ext.methods) {
-            _walk_body(method, gatherer);
-        }
-    }
+    # The calls in every place of code: bodies, parameter defaults and
+    # initializers (`var x = Array<int>()` at file scope).
+    for_each_place(module, _CallsIn(functions, module), unit = true, fields = false);
     # Local declarations with no constructor call (`Array<int> a;`).
     for (var st in decls.structs) {
         var params = _param_names(st.generic_params);

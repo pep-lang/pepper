@@ -12,7 +12,13 @@ int clamp(int value, int low = 0, int high = 100) {
     return value;
 }
 
+# A default can be any expression: an interpolated string, a literal.
+labels(prefix: String = $"v{2}" + ".", sizes: int[] = [1, 2]): String {
+    return $"{prefix}{sizes.count}";
+}
+
 main(): int {
+    assert(labels() == "v2.2", "computed defaults");
     assert(greet("Ada") == "Hello, Ada!", "both defaults");
     assert(greet("Ada", "Hi") == "Hi, Ada!", "one default");
     assert(greet("Ada", "Hi", ".") == "Hi, Ada.", "no defaults");

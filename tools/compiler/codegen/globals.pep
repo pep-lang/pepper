@@ -257,7 +257,13 @@ extend Generator {
             for (var i in start..end) {
                 group.append(non_const[i]);
             }
-            emit_global_stores(group)?;
+            # An initializer that branches (an array literal's appends, a
+            # null test) adds its blocks to this function.
+            var outer = frame.function;
+            frame.function = Optional<llvm.Value>.Value(init_fn);
+            var stored = emit_global_stores(group);
+            frame.function = outer;
+            stored?;
             builder.return_void();
             file_inits.append(init_fn);
             start = end;

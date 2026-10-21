@@ -29,6 +29,7 @@ import [
 ] from "model";
 import [op_name] from "operators";
 import [apply_choice, arg_info, ArgInfo, method_target, Outcome, Overloads] from "overload_select";
+import [for_each_place, Place, PlaceVisitor] from "places";
 import "properties";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
@@ -41,9 +42,10 @@ import [Rewriter, rewrite_block] from "walk";
 ## The prefix of a compound index assignment's temporaries.
 const _INDEX_TEMPORARY = "_idx_tmp_";
 
-## Rewrites the operators on structs in every concrete body and global
-## initializer, recording
-## the overloaded members it picks in `module.call_targets`.
+## Rewrites the operators on structs in every place of code but a generic
+## struct's base (`places.for_each_place`): bodies, parameter defaults, and
+## field and global initializers, recording the overloaded members it picks
+## in `module.call_targets`.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -51,48 +53,43 @@ export resolve_operators(module: Module, state: PassState) {
     var table = StructTable(module, memo = state.trait_types_memo());
     var overloads = Overloads(module, state);
     var resolver = _OperatorResolver(table, overloads, state);
-    for (var st in module.structs) {
-        # A generic base's bodies stay raw: its specializations, where the
-        # element type is concrete, are resolved instead.
-        if (st.ty.is_generic() and st.name == st.ty.name) {
-            continue;
-        }
-        resolver.current = Optional<TypeName>.Value(st.ty);
-        for (var c in st.constructors) {
-            if (c.body.is_value()) {
-                resolver.body(c.body.value());
-            }
-        }
-        for (var m in st.method_members) {
-            if (m.body.is_value()) {
-                resolver.body(m.body.value());
-            }
-        }
+    for_each_place(module, _OperatorPlaces(resolver), extensions = false, fields = false);
+    module.call_targets.append_all(resolver.targets);
+}
+
+## Resolves the operators of each place.
+struct _OperatorPlaces {
+    var resolver: _OperatorResolver;
+
+    construct(resolver: _OperatorResolver) {
+        this.resolver = resolver;
     }
-    resolver.current = Optional<TypeName>.Empty;
-    for (var f in module.functions) {
+
+    visit(place: Place) {
+        # A generic base's members stay raw: its specializations, where the
+        # element type is concrete, are resolved instead.
+        if (place.owner.is_value() and place.is_generic()) {
+            return;
+        }
+        resolver.current = place.this_type;
+        if (place.variable.is_value()) {
+            var v = place.variable.value();
+            v.default = resolver.expression(v.default.value());
+            return;
+        }
+        var f = place.function.value();
+        for (var p in f.parameters) {
+            if (p.default.is_value()) {
+                p.default = resolver.expression(p.default.value());
+            }
+        }
         if (f.body.is_value()) {
             resolver.body(f.body.value());
         }
     }
-    # Global initializers; only the first statement of one survives.
-    for (var g in module.globals) {
-        if (!g.default.is_value()) {
-            continue;
-        }
-        var items = Array<Statement>();
-        items.append(Statement.Expression(g.default.value()));
-        var block = Block(items = items);
-        resolver.body(block);
-        g.default = Optional<Expression>.Empty;
-        if (block.items.count > 0) {
-            if (block.items[0] is Expression(value)) {
-                g.default = Optional<Expression>.Value(value);
-            }
-        }
-    }
-    module.call_targets.append_all(resolver.targets);
 }
+
+extend _OperatorPlaces with PlaceVisitor;
 
 ## The walks over one body; `current` is the struct whose method it is.
 struct _OperatorResolver {
@@ -108,6 +105,21 @@ struct _OperatorResolver {
         this.table = table;
         this.overloads = overloads;
         this.state = state;
+    }
+
+    ## Resolves `e`, an initializer or a default, as a body of one
+    ## statement; only the first statement of it survives.
+    expression(e: Expression): Expression? {
+        var items = Array<Statement>();
+        items.append(Statement.Expression(e));
+        var block = Block(items = items);
+        body(block);
+        if (block.items.count > 0) {
+            if (block.items[0] is Expression(value)) {
+                return Optional<Expression>.Value(value);
+            }
+        }
+        return Optional<Expression>.Empty;
     }
 
     body(body: Block) {

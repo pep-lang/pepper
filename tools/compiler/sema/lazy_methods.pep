@@ -8,10 +8,11 @@
 import [drop_body] from "checked";
 import [Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
+import [for_each_place, Place, PlaceVisitor] from "places";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import "type_name";
-import [Rewriter, rewrite_block, rewrite_expression] from "walk";
+import [Rewriter] from "walk";
 
 ## The methods the passes and code generation call without a use in the
 ## source naming them: iteration, copies, hashing, interpolation and the
@@ -127,39 +128,8 @@ export specialize_used_methods(module: Module, state: PassState, by_name: bool =
     }
     var uses = _MethodUses(module, state);
     uses.by_name = by_name;
-    for (var st in module.structs) {
-        if (st.generic_params.count != 0) {
-            continue;
-        }
-        uses.current = Optional<TypeName>.Value(st.ty);
-        uses.owner = st.name;
-        var methods = Array<FunctionDef>();
-        methods.append_all(st.method_members);
-        methods.append_all(st.constructors);
-        methods.append(st.destructor);
-        for (var m in methods) {
-            if (m.body.is_value()) {
-                rewrite_block(m.body.value(), uses);
-            }
-            for (var p in m.parameters) {
-                if (p.default.is_value()) {
-                    rewrite_expression(p.default.value(), uses);
-                }
-            }
-        }
-    }
-    uses.current = Optional<TypeName>.Empty;
-    uses.owner = "";
-    for (var f in module.functions) {
-        if (!f.is_generic_func and f.body.is_value()) {
-            rewrite_block(f.body.value(), uses);
-        }
-    }
-    for (var g in module.globals) {
-        if (g.default.is_value()) {
-            rewrite_expression(g.default.value(), uses);
-        }
-    }
+    # Every place of concrete code, free functions' defaults included.
+    for_each_place(module, uses, extensions = false, fields = false);
     # A use on a type spelled as written rather than as the struct is
     # named (`Result<Uri>` for `Result<Uri@uri>`) counts by name alone.
     var names = HashSet<String>();
@@ -277,6 +247,16 @@ struct _MethodUses {
         this.state = state;
     }
 
+    ## Walks a place of concrete code, with its struct as the owner.
+    visit(place: Place) {
+        if (place.is_generic()) {
+            return;
+        }
+        current = place.this_type;
+        owner = place.owner.is_value() ? place.owner.value().name : "";
+        place.rewrite(this);
+    }
+
     rewrite(e: Expression): Expression {
         match (e) {
             MethodCall(node) => {
@@ -341,6 +321,8 @@ struct _MethodUses {
 }
 
 extend _MethodUses with Rewriter;
+
+extend _MethodUses with PlaceVisitor;
 
 ## How code may spell `st`'s type: as named, and without its trailing type
 ## arguments, which have defaults (`Result<Uri>` for `Result<Uri, Error>`).

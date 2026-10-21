@@ -36,11 +36,12 @@ import [check_function_types] from "function_types_check";
 import [has_generic_methods, specialize_methods] from "generic_methods";
 import [gather_generics] from "generics";
 import [check_hash_keys] from "hash_keys";
+import [resolve_injected, verify_injected] from "injected";
 import [with_instantiation] from "instantiation";
 import [check_interpolations] from "interpolation";
 import [check_lazy] from "lazy";
 import [drop_unused_methods, specialize_used_methods] from "lazy_methods";
-import [convert_string_literals, resolve_literals] from "literals";
+import [resolve_literals] from "literals";
 import [lower_matches] from "matches";
 import [Module] from "model";
 import [bind_calls, check_link_attributes, check_named_attributes] from "named_arguments";
@@ -96,7 +97,7 @@ _step_name(index: ulong): String {
         "synthesize_function_types(module)",
         "resolve_literals(module)",
         "overloads::name_overloads(module)",
-        "convert_string_literals(module)",
+        "injected::resolve_injected(module)",
         "gather_generics(module)",
         "resolve_implicit_types(module)",
         "check_tries::check_tries(module)",
@@ -557,6 +558,14 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     if (steps.stepped("static_strings::share_string_literals(module)")) {
         return;
     }
+    # A checked build's assertion: no injected construct is left half
+    # resolved for code generation to meet.
+    var verify = os.environment("PEPC_VERIFY_INJECTED");
+    if (verify.is_value() and !verify.value().is_empty) {
+        # Not a step of its own: the steps a build names stay the same.
+        verify_injected(module, state);
+        steps.taken();
+    }
 }
 
 ## Runs step `index` (from 0), and returns the error it reports.
@@ -651,7 +660,7 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             return state.take_error();
         }
         18 => {
-            convert_string_literals(module);
+            resolve_injected(module);
             return Optional<Diagnostic>.Empty;
         }
         19 => {

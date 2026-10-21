@@ -341,7 +341,8 @@ declaration records a compile-time value of that struct, which
   (`Level.High`), or strings joined with `+`. They can be
   [named](functions.md#named-arguments): `[Check(weight = 3)]`.
 - Without a constructor, the arguments set the fields in order, and a field
-  with an initializer may be left out. A constructor may take `this.field`
+  with an initializer may be left out. The initializer is a constant of the
+  same kinds, strings joined with `+` included. A constructor may take `this.field`
   parameters, or parameters its body assigns to fields
   (`this.long_name = long_name;`), which is all its body may do.
 - An attribute from another module can be named through it, with or
