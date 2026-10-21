@@ -12,10 +12,11 @@ import "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module] from "model";
 import [set_name] from "names";
+import [rewrite_concrete_places] from "places";
 import "resolve_implicit_types";
 import [PassState] from "state";
 import [parse_type_string] from "type_name";
-import [rewrite_block, Rewriter] from "walk";
+import [Rewriter] from "walk";
 
 const _TO_STRING = "to_string";
 const _PRINT = "print";
@@ -62,34 +63,28 @@ _base_of(ty: String): String {
     return open < 0 ? ty : ty.substr_bytes(0, open as ulong);
 }
 
+## Returns whether `function` names (or specializes) a runtime function
+## an interpolated string calls to convert a value to text: each yields a
+## `String`.
+##
+## @param function the called function's name
+## @returns whether it is `_pep_interpolate` or a `_pep_format*` function
+export is_text_conversion(function: String): bool {
+    var base = _base_of(function);
+    return base == _INTERPOLATE_FUNCTION
+        or base == _FORMAT_FUNCTION
+        or base == _FORMAT_INTEGER_FUNCTION
+        or base == _FORMAT_FLOAT_FUNCTION;
+}
+
 ## Checks each value an interpolated string, a format specification or
-## `print` converts.
+## `print` converts, in every place of concrete code.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error
 export check_interpolations(module: Module, state: PassState) {
-    var checker = _InterpolationChecker(module, state);
     # Generic bases are checked through their specializations.
-    for (var function in module.functions) {
-        if (!function.is_generic_func and function.body.is_value()) {
-            rewrite_block(function.body.value(), checker);
-        }
-    }
-    for (var st in module.structs) {
-        if (st.generic_params.count != 0) {
-            continue;
-        }
-        for (var m in st.method_members) {
-            if (m.body.is_value()) {
-                rewrite_block(m.body.value(), checker);
-            }
-        }
-        for (var c in st.constructors) {
-            if (c.body.is_value()) {
-                rewrite_block(c.body.value(), checker);
-            }
-        }
-    }
+    rewrite_concrete_places(module, _InterpolationChecker(module, state));
 }
 
 struct _InterpolationChecker {

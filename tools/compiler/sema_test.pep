@@ -201,6 +201,36 @@ model_json_keeps_strings_apart_from_large_unsigned_values() {
     expect_equal(sema.canonical_json(object), "{\"count\":7,\"id\":18446744073709551615}");
 }
 
+# `verify_injected` finds a construct whose type the compiler injects still
+# in its placeholder form: string literals in a parameter default before
+# `resolve_injected` (step 18), and nothing once every pass has run.
+[Test]
+verify_injected_finds_what_the_passes_left() {
+    var folder = TempFolder("sema_verify_injected");
+    var path = folder.path.join("main.pep");
+    File.write_text(
+        path,
+        "tag(text: String = \"g\" + $\"{1}\"): String {\n    return text;\n}\n"
+            + "main(): int {\n    print(tag());\n    return 0;\n}\n"
+    );
+    var program = link.load_program(path, link.Setup());
+    expect_true(program.is_ok());
+    var early = sema.merge(program.value());
+    expect_true(early.is_ok());
+    var state = sema.PassState(program.value().target);
+    expect_true(sema.run_steps_with(early.value(), state, 18).is_ok());
+    sema.verify_injected(early.value(), state);
+    var error = state.take_error();
+    expect_true(error.is_value());
+    expect_true(error.value().message.contains("left unresolved"));
+    var late = sema.merge(program.value());
+    expect_true(late.is_ok());
+    state = sema.PassState(program.value().target);
+    expect_true(sema.run_steps_with(late.value(), state, 0xffffffffffffffff).is_ok());
+    sema.verify_injected(late.value(), state);
+    expect_false(state.take_error().is_value());
+}
+
 # `module` written to a record and read back, as JSON.
 _round_trip(module: sema.Module): String {
     var out = sema.RecordOut();

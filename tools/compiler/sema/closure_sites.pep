@@ -7,12 +7,13 @@ import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
 import [is_trait] from "enums";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
 import [CheckedDecls] from "pending";
+import [for_each_place, Place, PlaceKind, PlaceVisitor, rewrite_places] from "places";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [zero_for] from "synthesize";
 import [GenericSignature] from "type_arguments";
 import [FUNCTION, VOID] from "type_name";
-import [Rewriter, rewrite_block, rewrite_children, rewrite_expression] from "walk";
+import [Rewriter, rewrite_children] from "walk";
 
 ## Returns the direct sub-expressions of `e`, in order, as
 ## `rewrite_children` visits them.
@@ -38,106 +39,42 @@ struct _Collector {
 
 extend _Collector with Rewriter;
 
-## Applies `rewriter` to every expression in `module`: fields' and parameters'
-## defaults, bodies, extensions' bodies and globals' initializers.
+## Applies `rewriter` to every expression in the compilation unit's own code
+## (`places.for_each_place`): fields' and parameters' defaults, bodies,
+## extensions' bodies and globals' initializers.
 ##
 ## @param module the model
 ## @param rewriter what to do at each expression
 export rewrite_module(module: Module, rewriter: Rewriter) {
-    var decls = unit_decls(module);
-    for (var st in decls.structs) {
-        for (var field in st.field_members) {
-            if (field.default.is_value()) {
-                field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
-            }
-        }
-        for (var method in st.method_members) {
-            _rewrite_function(method, rewriter, true);
-        }
-        for (var c in st.constructors) {
-            _rewrite_function(c, rewriter, true);
-        }
-        _rewrite_function(st.destructor, rewriter, true);
-    }
-    for (var function in decls.functions) {
-        _rewrite_function(function, rewriter, true);
-    }
-    for (var ext in module.extensions) {
-        for (var method in ext.methods) {
-            _rewrite_function(method, rewriter, false);
-        }
-    }
-    for (var global in module.globals) {
-        if (global.default.is_value()) {
-            global.default = Optional<Expression>.Value(rewrite_expression(global.default.value(), rewriter));
-        }
-    }
+    rewrite_places(module, rewriter, unit = true);
 }
 
-## Applies `rewriter` to the expressions of the code `walk` picks, in
-## `_select_each`'s order over all of `module`, as `rewrite_module` does to
-## all of it.
+## Applies `rewriter` to the places `walk` picks, in `for_each_place`'s
+## order, as `rewrite_module` does to all of them.
 _rewrite_selected(module: Module, walk: Array<bool>, rewriter: Rewriter) {
-    var decls = unit_decls(module);
-    ulong at = 0;
-    for (var st in decls.structs) {
-        for (var field in st.field_members) {
-            if (walk[at]) {
-                field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
-            }
-            at += 1;
-        }
-        for (var method in st.method_members) {
-            if (walk[at]) {
-                _rewrite_function(method, rewriter, true);
-            }
-            at += 1;
-        }
-        for (var c in st.constructors) {
-            if (walk[at]) {
-                _rewrite_function(c, rewriter, true);
-            }
-            at += 1;
-        }
-        if (walk[at]) {
-            _rewrite_function(st.destructor, rewriter, true);
-        }
-        at += 1;
+    for_each_place(module, _RewriteSelected(walk, rewriter), unit = true);
+}
+
+## Rewrites the places a selection picks.
+struct _RewriteSelected {
+    var walk: Array<bool>;
+    var rewriter: Rewriter;
+    var at: ulong = 0;
+
+    construct(walk: Array<bool>, rewriter: Rewriter) {
+        this.walk = walk;
+        this.rewriter = rewriter;
     }
-    for (var function in decls.functions) {
+
+    visit(place: Place) {
         if (walk[at]) {
-            _rewrite_function(function, rewriter, true);
-        }
-        at += 1;
-    }
-    for (var ext in module.extensions) {
-        for (var method in ext.methods) {
-            if (walk[at]) {
-                _rewrite_function(method, rewriter, false);
-            }
-            at += 1;
-        }
-    }
-    for (var global in module.globals) {
-        if (walk[at]) {
-            global.default = Optional<Expression>.Value(rewrite_expression(global.default.value(), rewriter));
+            place.rewrite(rewriter);
         }
         at += 1;
     }
 }
 
-_rewrite_function(function: FunctionDef, rewriter: Rewriter, defaults: bool) {
-    if (defaults) {
-        for (var p in function.parameters) {
-            if (p.default.is_value()) {
-                p.default = Optional<Expression>.Value(rewrite_expression(p.default.value(), rewriter));
-            }
-        }
-    }
-    if (function.body.is_value()) {
-        rewrite_block(function.body.value(), rewriter);
-    }
-}
+extend _RewriteSelected with PlaceVisitor;
 
 ## What a site walk does at each expression.
 export trait SiteVisitor {
@@ -449,7 +386,7 @@ export trait SiteFilter {
 ## @param state the passes' state
 ## @param visitor what to do at each site
 export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
-    _sites_in_module(module, SiteTable(module, state), false, _select_all(module, false), visitor);
+    _sites_in_module(module, SiteTable(module, state), false, Optional<Array<bool>>.Empty, visitor);
 }
 
 ## Calls `visitor` at every expression site of `module`, skipping the
@@ -459,7 +396,7 @@ export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
 ## @param state the passes' state
 ## @param visitor what to do at each site
 export for_each_applied_site(module: Module, state: PassState, visitor: SiteVisitor) {
-    _sites_in_module(module, SiteTable(module, state), true, _select_all(module, true), visitor);
+    _sites_in_module(module, SiteTable(module, state), true, Optional<Array<bool>>.Empty, visitor);
 }
 
 ## The code a limited site walk goes through: each function, field
@@ -526,7 +463,7 @@ export select_sites_each(module: Module, filters: Array<SiteFilter>, applied: Ar
 ## @param visitor what to do at each site
 export for_each_selected_site(tables: ModuleTables, selection: SiteSelection, visitor: SiteVisitor) {
     if (selection.any()) {
-        _sites_in_module(tables.module, tables.sites(), selection.applied, selection.walk, visitor);
+        _sites_in_module(tables.module, tables.sites(), selection.applied, Optional<Array<bool>>.Value(selection.walk), visitor);
     }
 }
 
@@ -748,40 +685,6 @@ struct _Owned {
     }
 }
 
-## Which code of `module` a walk goes through, in the walk's order (the
-## extensions' own copies of their methods left out when `applied`): all
-## of it.
-_select_all(module: Module, applied: bool): Array<bool> {
-    var decls = unit_decls(module);
-    var walk = Array<bool>();
-    for (var st in decls.structs) {
-        for (var field in st.field_members) {
-            walk.append(field.default.is_value());
-        }
-        for (var method in st.method_members) {
-            walk.append(true);
-        }
-        for (var c in st.constructors) {
-            walk.append(true);
-        }
-        walk.append(true);
-    }
-    for (var function in decls.functions) {
-        walk.append(true);
-    }
-    if (!applied) {
-        for (var ext in module.extensions) {
-            for (var method in ext.methods) {
-                walk.append(true);
-            }
-        }
-    }
-    for (var global in module.globals) {
-        walk.append(global.default.is_value());
-    }
-    return walk;
-}
-
 ## Notes, per filter of `holder`, whether the code it just looked through
 ## holds an expression the filter wants; `extension` code is left out of
 ## the walks of the `applied` filters.
@@ -793,110 +696,90 @@ _note_found(holder: _Holder, applied: Array<bool>, extension: bool, walks: Array
     }
 }
 
-## Which code of `module` each of `filters` picks, in the walk's order (the
-## extensions' own copies of their methods left out where `applied`): the
-## code holding an expression the filter wants. One walk serves them all.
+## Which places of `module` each of `filters` picks, in `for_each_place`'s
+## order (the extensions' own copies of their methods left out where
+## `applied`): the places holding an expression the filter wants. One walk
+## serves them all.
 _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): Array<Array<bool>> {
-    var decls = unit_decls(module);
     var walks = Array<Array<bool>>();
     for (var filter in filters) {
         walks.append(Array<bool>());
     }
-    var holder = _Holder(filters);
-    for (var st in decls.structs) {
-        for (var field in st.field_members) {
-            _look_through_default(field.default, holder);
-            _note_found(holder, applied, false, walks);
-        }
-        for (var method in st.method_members) {
-            _look_through_function(method, holder);
-            _note_found(holder, applied, false, walks);
-        }
-        for (var c in st.constructors) {
-            _look_through_function(c, holder);
-            _note_found(holder, applied, false, walks);
-        }
-        _look_through_function(st.destructor, holder);
-        _note_found(holder, applied, false, walks);
-    }
-    for (var function in decls.functions) {
-        _look_through_function(function, holder);
-        _note_found(holder, applied, false, walks);
-    }
-    for (var ext in module.extensions) {
-        for (var method in ext.methods) {
-            _look_through_function(method, holder);
-            _note_found(holder, applied, true, walks);
-        }
-    }
-    for (var global in module.globals) {
-        _look_through_default(global.default, holder);
-        _note_found(holder, applied, false, walks);
-    }
+    for_each_place(module, _Selector(_Holder(filters), applied, walks), unit = true);
     return walks;
 }
 
-## Walks the sites of the code of `module` that `walk` picks, as `_select`
-## ordered it.
-_sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bool>, visitor: SiteVisitor) {
-    var decls = unit_decls(module);
-    ulong at = 0;
-    for (var st in decls.structs) {
-        var current = Optional<TypeName>.Value(st.ty);
-        var owned = _Owned(Optional<String>.Value(st.name), visitor);
-        for (var field in st.field_members) {
-            if (walk[at]) {
-                _sites_in_expression(field.default.value(), Optional<TypeName>.Value(field.ty), table, current, owned);
-            }
-            at += 1;
-        }
-        var functions = Array<FunctionDef>();
-        functions.append_all(st.method_members);
-        functions.append_all(st.constructors);
-        functions.append(st.destructor);
-        for (var method in functions) {
-            if (walk[at]) {
-                _sites_in_function(method, table, current, owned);
-            }
-            at += 1;
-        }
+## Notes which filters each place holds an expression for.
+struct _Selector {
+    var holder: _Holder;
+    var applied: Array<bool>;
+    var walks: Array<Array<bool>>;
+
+    construct(holder: _Holder, applied: Array<bool>, walks: Array<Array<bool>>) {
+        this.holder = holder;
+        this.applied = applied;
+        this.walks = walks;
     }
-    for (var function in decls.functions) {
-        if (walk[at]) {
-            _sites_in_function(
-                function, table, Optional<TypeName>.Empty, _Owned(Optional<String>.Value(function.name), visitor)
-            );
+
+    visit(place: Place) {
+        if (place.variable.is_value()) {
+            _look_through_default(place.variable.value().default, holder);
+        } else {
+            _look_through_function(place.function.value(), holder);
         }
-        at += 1;
-    }
-    if (!applied) {
-        for (var ext in module.extensions) {
-            for (var method in ext.methods) {
-                if (walk[at]) {
-                    _sites_in_function(
-                        method,
-                        table,
-                        Optional<TypeName>.Value(ext.target),
-                        _Owned(Optional<String>.Value(ext.target.name), visitor)
-                    );
-                }
-                at += 1;
-            }
-        }
-    }
-    for (var global in module.globals) {
-        if (walk[at]) {
-            _sites_in_expression(
-                global.default.value(),
-                Optional<TypeName>.Value(global.ty),
-                table,
-                Optional<TypeName>.Empty,
-                _Owned(Optional<String>.Empty, visitor)
-            );
-        }
-        at += 1;
+        _note_found(holder, applied, place.kind == PlaceKind.Extension, walks);
     }
 }
+
+extend _Selector with PlaceVisitor;
+
+## Walks the sites of the places of `module` that `walk` picks (every one
+## when empty), as `_select_each` ordered them.
+_sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bool>?, visitor: SiteVisitor) {
+    for_each_place(module, _SiteWalk(table, walk, visitor), unit = true, extensions = !applied);
+}
+
+## Walks the sites of each place a selection picks, with the type of the
+## slot each initializer flows into.
+struct _SiteWalk {
+    var table: SiteTable;
+    var walk: Array<bool>?;
+    var visitor: SiteVisitor;
+    var at: ulong = 0;
+
+    construct(table: SiteTable, walk: Array<bool>?, visitor: SiteVisitor) {
+        this.table = table;
+        this.walk = walk;
+        this.visitor = visitor;
+    }
+
+    visit(place: Place) {
+        var picked = !walk.is_value() or walk.value()[at];
+        at += 1;
+        if (!picked) {
+            return;
+        }
+        # The owner: a member's struct, an extension's target, a free
+        # function itself; a global has none.
+        var owner = Optional<String>.Empty;
+        if (place.owner.is_value()) {
+            owner = Optional<String>.Value(place.owner.value().name);
+        } else if (place.kind == PlaceKind.Function) {
+            owner = Optional<String>.Value(place.function.value().name);
+        } else if (place.this_type.is_value()) {
+            owner = Optional<String>.Value(place.this_type.value().name);
+        }
+        var owned = _Owned(owner, visitor);
+        if (place.variable.is_value()) {
+            var v = place.variable.value();
+            _sites_in_expression(v.default.value(), Optional<TypeName>.Value(v.ty), table, place.this_type, owned);
+        } else {
+            _sites_in_function(place.function.value(), table, place.this_type, owned);
+        }
+    }
+}
+
+extend _SiteWalk with PlaceVisitor;
 
 _sites_in_function(function: FunctionDef, table: SiteTable, current: TypeName?, visitor: _Owned) {
     for (var p in function.parameters) {
@@ -1336,7 +1219,7 @@ export sync_closures(module: Module, state: PassState): bool {
     var learned = HashMap<String, _Learned>();
     if (unknown.count > 0 and walks[0].contains(true)) {
         var learner = _Learner(SiteTable(module, state));
-        _sites_in_module(module, learner.table, false, walks[0], learner);
+        _sites_in_module(module, learner.table, false, Optional<Array<bool>>.Value(walks[0]), learner);
         learned = learner.learned;
     }
     bool changed = false;

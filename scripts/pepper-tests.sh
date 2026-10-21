@@ -30,7 +30,11 @@
 # The tools' tests take the longest, mostly building their test programs,
 # so they start as soon as the tools they run are built and run beside
 # the runtime's; their output follows the runtime's.
+#
+# Every build the tests make checks that sema left no injected construct
+# half resolved (PEPC_VERIFY_INJECTED, INTERNALS.md "Debugging").
 set -euo pipefail
+export PEPC_VERIFY_INJECTED="${PEPC_VERIFY_INJECTED:-1}"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="${PEPPER_TARGET_DIR:-$root/target}"

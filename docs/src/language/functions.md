@@ -121,6 +121,10 @@ the end of the list, since arguments are matched from the left.
 {{#include ../../examples/functions-defaults.pep}}
 ```
 
+A default can be an expression, not only a literal: strings joined with `+`,
+an interpolated string, an array, map or tuple literal, a range, or a call.
+Each call that leaves the argument out evaluates it again.
+
 Defaults work the same way for methods and constructors. To give a later
 parameter a value without passing every parameter before it, name it (see
 [Named arguments](#named-arguments)).
