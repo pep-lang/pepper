@@ -19,8 +19,8 @@ main(): int {
     }
     assert(total == 121, "every entry");
 
-    # An array of tuples.
-    var pairs = Array<(String, int)>();
+    # An array of tuples: `(String, int)[]` is `Array<(String, int)>`.
+    var pairs: (String, int)[] = [];
     pairs.append(("x", 1));
     pairs.append(("y", 2));
     for (var (name, count) in pairs) {
