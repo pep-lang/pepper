@@ -14,8 +14,9 @@
 # moves the -dev tag). That is whatever version this checkout's VERSION
 # file holds, so a change of VERSION (a release, or the next -dev) never
 # asks for a build that is not published yet; --version names a release
-# instead. No job builds the compiler except the release
-# build, which builds it with the toolchain this installs.
+# instead. The release build, and a CI job testing a commit whose compiler
+# this toolchain lacks (ci.yml's `changes` job decides), build the compiler
+# with the toolchain this installs.
 #
 # Environment: GH_TOKEN or GITHUB_TOKEN, to list and download the releases
 # while the repository is private; RUNNER_TEMP, where the home goes

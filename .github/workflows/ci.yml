@@ -141,11 +141,12 @@ jobs:
           if [ "$code" = true ] && [ "$compiler" = false ]; then
             if ! why=$(bash -euxo pipefail scripts/ci-published-compiler.sh HEAD); then
               compiler=true
+              [ -n "$why" ] || why="build the commit's compiler: the published build could not be checked (see the log)"
             fi
           fi
           [ "$code" = true ] || why="no tests: the commit changes only prose"
-          echo "### Compiler" >> "$GITHUB_STEP_SUMMARY"
-          echo "$why" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "$why"
+          printf '### Compiler\n\n```\n%s\n```\n' "$why" >> "$GITHUB_STEP_SUMMARY"
           echo "code=$code compiler=$compiler release=$release"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "compiler=$compiler" >> "$GITHUB_OUTPUT"
