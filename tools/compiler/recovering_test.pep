@@ -132,6 +132,22 @@ reads_a_line_the_lexer_refuses_as_spaces() {
     expect_equal(recovered.module.declarations.count, 1 as ulong);
 }
 
+# A `\x` with fewer than two hex digits before the closing quote is an
+# error at the escape, not a panic (#67).
+[Test]
+reports_a_hex_escape_cut_short() {
+    for (var literal in ["\"\\x\"", "\"\\x4\"", "\"a\\x\"", "$\"\\x\"", "'\\x'", "'\\x4'", "\"\\xG1\""]) {
+        var source = "f() { var s = " + literal + "; }";
+        var parsed = parse.parse(source);
+        if (parsed.is_ok()) {
+            panic(literal + " parses");
+        }
+        expect_equal(parsed.error().message, "expected two hex digits after '\\x'");
+        expect_equal(source.byte_at(parsed.error().span.start), '\\');
+    }
+    expect_true(parse.parse("f() { var s = \"\\x41\"; var c = '\\x41'; }").is_ok(), "two hex digits parse");
+}
+
 [Test]
 skips_a_broken_declaration_with_its_body() {
     var source = "f(x: int = ) {\n    return;\n}\n\ng() {}\n";
