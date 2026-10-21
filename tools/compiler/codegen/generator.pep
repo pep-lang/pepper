@@ -24,6 +24,7 @@ import [
 import [Address, Frame] from "address";
 import "address";
 import "calls";
+import "chains";
 import [RuntimeChecks] from "checks";
 import "checks";
 import [DebugInfo] from "debug";
@@ -81,13 +82,17 @@ export struct StructDesc {
     ## atomically: none for a struct whose `__acquire`/`__release` are not
     ## the standard ones.
     var inline_counts: bool? = Optional<bool>.Empty;
-    ## Whether codegen generates `__release` itself, and whether its counts
-    ## step atomically: none for a struct whose `__release` is not the
-    ## standard one.
+    ## Whether its counts step atomically, for a struct whose `__release`
+    ## codegen may generate itself (`standard_release`, or a function
+    ## type's): none for any other.
     var release_counts: bool? = Optional<bool>.Empty;
-    ## Whether some objects of the struct are immortal (a reference enum's
-    ## cases that carry nothing), so `__release` leaves their counts alone.
+    ## Whether `__release` leaves an immortal object's count alone: a
+    ## reference enum's cases that carry nothing, a plain function type's
+    ## static objects.
     var immortal: bool = false;
+    ## Whether `__release` is `synthesize`'s standard one (not a function
+    ## type's), so its last release may take chain fields out (`chains.pep`).
+    var standard: bool = false;
     ## Declared `[__Lazy]`: the zero-argument constructor is null, and a
     ## place holding null gets its object when first read for anything but
     ## a `[__Reads]` call or a field read (see `materialize`).
@@ -148,6 +153,16 @@ export struct Generator {
     var state: PassState;
     var types: Types;
     var structs: HashMap<String, StructDesc> = HashMap<String, StructDesc>();
+    ## Structs a cycle of fields runs through (`find_chains`): their last
+    ## release is the chain one.
+    var recursive: HashSet<String> = HashSet<String>();
+    ## Recursive structs whose cycle also runs through a trait value, a
+    ## buffer or a closure: their last release goes through the runtime's
+    ## `_pep_release_last`.
+    var deep_recursive: HashSet<String> = HashSet<String>();
+    ## A recursive struct's chain fields: the position and type of each
+    ## field that holds a struct of its own cycle directly.
+    var chain_fields: HashMap<String, Array<(uint, String)>> = HashMap<String, Array<(uint, String)>>();
     ## Traits used as types, by type name.
     var traits: HashMap<String, TraitDesc> = HashMap<String, TraitDesc>();
     ## Weak trait values (`__weak<Shape>`), laid out like a trait value.
@@ -565,6 +580,7 @@ export struct Generator {
         for (var st in structs) {
             instantiate_struct(st)?;
         }
+        find_chains(structs);
         # ABI sizes are only right once every body is set.
         for (var entry in this.structs) {
             var (_, desc) = entry;

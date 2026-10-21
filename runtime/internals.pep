@@ -975,15 +975,36 @@ export _pep_free(p: __ptr<void>) {
 # Destroying an object releases its fields, and a field's last release
 # destroys that object in turn, so a long chain (a linked list, a deeply
 # nested document) would recurse once per link and overflow the stack
-# (#65). Every last release of a struct calls `_pep_release_last` with the
-# struct's `__last_release`, which runs the destructor and frees the
-# memory. The outermost one on a thread sets a floor `_RELEASE_STACK`
-# bytes below its frame. Nested ones above the floor run as nested calls;
+# (#65). A chain of structs that hold each other directly is destroyed in
+# a loop by the compiler's chain last release (`codegen/chains.pep`), whose
+# list grows with `_pep_release_list_grow`. A cycle of types that also
+# runs through a trait value, a container's buffer or a closure cannot be
+# steered from the destructor: the last release of such a struct calls
+# `_pep_release_last` with the struct's `__last_release`, which runs the
+# destructor and frees the memory. The outermost one on a thread sets a
+# floor `_RELEASE_STACK` bytes below its frame. Nested ones above the floor run as nested calls;
 # one below it is pushed on this thread's pending list, which the outermost
 # drains once its own object is destroyed: in the order they were
 # released, each one's own pushes before the next. A stack budget rather
 # than a depth count keeps the common case to one thread-local read.
 const _RELEASE_STACK: ulong = 16384;
+
+# Moves a full chain list's entries (each an object and the function that
+# releases it) to a heap buffer of twice the `count` entries, freeing
+# `data` unless it is the caller's stack buffer `inline_data`.
+[Cold]
+[Unsafe("overflow")]
+export _pep_release_list_grow(
+    data: __ptr<__ptr<void>>, count: ulong, inline_data: __ptr<__ptr<void>>
+): __ptr<__ptr<void>> {
+    var entry = sizeof<__ptr<void>>() * 2;
+    __ptr<__ptr<void>> moved = _pep_malloc_uninit(entry * count * 2);
+    memcpy(moved, data, entry * count);
+    if (data != inline_data) {
+        _pep_free(data);
+    }
+    return moved;
+}
 
 # LLVM intrinsics; see "LLVM intrinsics" in
 # docs/src/language/c-interop.md.

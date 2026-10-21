@@ -25,6 +25,7 @@ import [
 import [Address, check_store_type] from "address";
 import "address";
 import "calls";
+import "chains";
 import [function_checks] from "checks";
 import "checks";
 import "debug";
@@ -73,7 +74,7 @@ is_abstract(st: StructDef): bool {
 }
 
 ## Whether a struct's `__release` is the standard one (`synthesize`'s),
-## which codegen generates itself: its counts may still skip immortal
+## which codegen may generate itself: its counts may still skip immortal
 ## objects (`immortal_cases`).
 standard_release(st: StructDef): bool {
     return st.release.body.is_value() and !st.ty.is_weak() and !st.ty.is_function_type();
@@ -140,10 +141,16 @@ extend Generator {
         }
         if (standard_release(st)) {
             desc.release_counts = Optional<bool>.Value(atomic_counts(st));
+            desc.standard = true;
             desc.immortal = immortal_cases(st);
             if (!desc.immortal) {
                 desc.inline_counts = desc.release_counts;
             }
+        } else if (st.ty.is_function_type() and st.release.body.is_value()) {
+            # The standard body, except a plain one leaves its static
+            # objects alone (`skip_static_objects`).
+            desc.release_counts = Optional<bool>.Value(atomic_counts(st));
+            desc.immortal = !st.ty.is_shared_function_type();
         }
         desc.lazy = ast.has_attribute(st.attributes, sema.LAZY_ATTRIBUTE);
         any_lazy = any_lazy or desc.lazy;
@@ -570,7 +577,9 @@ extend Generator {
         }
         if (function.name.ends_with(".__release")) {
             var owner = structs.try_get(function.name.substr_bytes(0, function.name.size - ".__release".size));
-            if (owner.is_value() and owner.value().release_counts.is_value()) {
+            if (owner.is_value()
+                and owner.value().release_counts.is_value()
+                and recursive.contains(owner.value().name)) {
                 return emit_standard_release(function.name, owner.value());
             }
         }
@@ -600,10 +609,10 @@ extend Generator {
         return result;
     }
 
-    ## `T.__release(this)`, named `name`, for a struct whose `__release` is
-    ## the standard one: the step `release_ref` inlines, in place of
-    ## `synthesize`'s body, so a release through a trait or a C handle
-    ## reaches `_pep_release_last` as an inlined one does.
+    ## `T.__release(this)`, named `name`, for a recursive struct (see
+    ## `find_chains`) whose `__release` codegen may generate: the step
+    ## `release_ref` inlines, in place of `synthesize`'s body, so a release
+    ## through a trait or a C handle reaches the chain last release too.
     emit_standard_release(name: String, owner: StructDesc): Result<void> {
         var found = functions.try_get(name);
         if (!found.is_value()) {

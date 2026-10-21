@@ -65,13 +65,22 @@ an object's destructor always runs before those of the objects it held.
 
 A chain of any length can be released: a linked list of a million links, or
 a document nested a million levels deep, is destroyed without running out
-of stack. Destruction nests as described above until it is about 16 KiB of
-stack deeper than the release that started it; past that, each further
-object is put on a list for the current thread instead, and is destroyed
-when that outermost release has finished its own object: in the order they
-were released, each one's own nested objects before the next. Only the
-order of destructors that deep changes; every object is still destroyed
-before the release that started it returns.
+of stack. This changes the order above only for a *recursive* type: a
+struct whose fields can lead, through any number of steps, back to a value
+of its own type. A field that holds a struct of the same cycle directly (a
+list's `next`, a tree's `left` and `right`, a node's `children` array) is
+released only after the object holding it is completely destroyed, its
+other fields included, and the chain is destroyed in a loop: an object's
+destructor still runs before those of the objects it held, and the
+last-declared of those fields still goes first, but an object's other
+fields are released before the chain below it. A cycle that runs through a
+trait value, a container's elements or a closure's captures nests as
+usual until it is about 16 KiB of stack deep; past that, further objects
+wait on a list for the current thread and are destroyed, in the order they
+were released, when the outermost release has finished its own object.
+Either way, every object is destroyed before the release that started it
+returns, and a type no cycle runs through is destroyed exactly as
+described above.
 
 ```pepper
 {{#include ../../examples/memory-deep-chains.pep}}
