@@ -1,6 +1,9 @@
 ## The running program's arguments and exit, kept for the deprecated
 ## prelude `arguments()` and `exit()`; the `process` module has them now.
 
+# Imported so the allocator's globals exist before `_pep_forked`'s.
+import "internals";
+
 [Target(OS(Linux))]
 extern void* fopen(char* path, char* mode);
 [Target(OS(Linux))]
@@ -31,10 +34,15 @@ extern void _c_exit(int status);
 [Link(name = "\x01_exit")]
 extern void _c_exit(int status);
 
-# Set in the copy `process.fork()` starts: its exit skips the parent's
-# `atexit` handlers. Thread-local, as the copy has only the forking thread.
-[ThreadLocal]
-var _pep_forked: bool;
+# Nonzero in the copy `process.fork()` starts: its exit skips the parent's
+# `atexit` handlers. Process-wide, so a thread the copy starts skips them too.
+const _pep_forked: __ptr<int> = _pep_new_forked_flag();
+
+_pep_new_forked_flag(): __ptr<int> {
+    __ptr<int> flag = _pep_malloc(4);
+    flag[0] = 0;
+    return flag;
+}
 
 ## Deprecated: use `process.arguments` instead.
 ##
@@ -70,7 +78,7 @@ export exit(code: int) {
 # runs the `atexit` handlers and flushes C stdio; a forked copy ends as
 # `_pep_exit_now` does.
 export _pep_exit(code: int) {
-    if (_pep_forked) {
+    if (__atomic_load<int>(_pep_forked) != 0) {
         _pep_exit_now(code);
     }
     _c_exit(code);
@@ -86,7 +94,7 @@ export _pep_exit_now(code: int) {
 
 # Marks this process as a forked copy, for `_pep_exit`.
 export _pep_mark_forked() {
-    _pep_forked = true;
+    __atomic_store<int>(_pep_forked, 1);
 }
 
 # The arguments from the C runtime's `argc`/`argv`.
