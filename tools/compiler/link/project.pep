@@ -335,6 +335,17 @@ is_toolchain_version(text: String): bool {
     return true;
 }
 
+## Whether `text` names one toolchain release: three numbers (`0.11.0`),
+## with an optional prerelease (`0.11.0-dev`), as `minimum_toolchain` takes.
+is_toolchain_release(text: String): bool {
+    var split = text.split_once("-");
+    if (split.is_value() and split.value().1.is_empty) {
+        return false;
+    }
+    var numbers = split.is_value() ? split.value().0 : text;
+    return numbers.split(".").count == 3 and is_toolchain_version(numbers);
+}
+
 ## Whether `name` can be imported: an identifier.
 export is_identifier(name: String): bool {
     if (name.is_empty) {
@@ -599,12 +610,29 @@ struct _Reader {
                         value_span(path)
                     );
                 }
+            } else if (key == "minimum_toolchain") {
+                var minimum = string(path, key, value);
+                if (minimum.is_value() and !is_toolchain_release(minimum.value())) {
+                    error(
+                        $"minimum_toolchain '{minimum.value()}' is not a release such as 0.11.0 or 0.11.0-dev",
+                        value_span(path)
+                    );
+                }
             } else {
                 unknown_key(
                     ["package"],
                     key,
                     "package",
-                    ["name", "version", "description", "authors", "license", "repository", "toolchain"]
+                    [
+                        "name",
+                        "version",
+                        "description",
+                        "authors",
+                        "license",
+                        "repository",
+                        "toolchain",
+                        "minimum_toolchain"
+                    ]
                 );
             }
         }

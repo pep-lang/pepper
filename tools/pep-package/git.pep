@@ -159,15 +159,9 @@ export check_out(url: String, directory: Path, commit: String, offline: bool = f
         }
     }
     var dir = directory.to_string();
-    var known = git(["cat-file", "-e", commit + "^{commit}"], dir);
-    if (known.is_err() and offline) {
-        return Result<String>.Err(not_held_offline(directory, commit));
-    }
-    if (known.is_err()) {
-        var fetched = git(["fetch", "--quiet", "--tags", url, "+refs/heads/*:refs/remotes/origin/*"], dir);
-        if (fetched.is_err()) {
-            return Result<String>.Err(fetched.error().message);
-        }
+    var fetched = _fetch_commit(url, directory, commit, offline);
+    if (fetched.is_err()) {
+        return Result<String>.Err(fetched.error().message);
     }
     var switched = git(["checkout", "--quiet", "--detach", commit], dir);
     if (switched.is_err()) {
@@ -178,4 +172,44 @@ export check_out(url: String, directory: Path, commit: String, offline: bool = f
         return Result<String>.Err($"cannot read the commit of {dir}");
     }
     return Result<String>.Ok(head.value());
+}
+
+# Fetches from `url` into the clone `directory` unless it has `commit`
+# already; `offline` fails rather than fetch.
+_fetch_commit(url: String, directory: Path, commit: String, offline: bool): Result<void> {
+    var dir = directory.to_string();
+    if (git(["cat-file", "-e", commit + "^{commit}"], dir).is_ok()) {
+        return Result<void>.ok();
+    }
+    if (offline) {
+        return Result<void>.Err(not_held_offline(directory, commit));
+    }
+    var fetched = git(["fetch", "--quiet", "--tags", url, "+refs/heads/*:refs/remotes/origin/*"], dir);
+    if (fetched.is_err()) {
+        return Result<void>.Err(fetched.error().message);
+    }
+    return Result<void>.ok();
+}
+
+# The text of `file` at `commit` of `url`, read from the clone in
+# `directory` without checking the commit out (a missing clone is made by
+# checking `commit` out); none when the commit has no such file. `offline`
+# reads only what the clone holds.
+export file_at(
+    url: String, directory: Path, commit: String, file: String, offline: bool = false
+): Result<Optional<String>> {
+    if (checked_out(directory).is_empty()) {
+        var checked = check_out(url, directory, commit, offline);
+        if (checked.is_err()) {
+            return Result<Optional<String>>.Err(checked.error().message);
+        }
+    }
+    var dir = directory.to_string();
+    var fetched = _fetch_commit(url, directory, commit, offline);
+    if (fetched.is_err()) {
+        return Result<Optional<String>>.Err(fetched.error().message);
+    }
+    # The commit is there, so a failure means it has no such file.
+    var text = git(["show", commit + ":" + file], dir);
+    return Result<Optional<String>>.Ok(text.is_ok() ? Optional<String>.Value(text.value()) : Optional<String>.Empty);
 }

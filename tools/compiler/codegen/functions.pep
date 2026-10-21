@@ -25,6 +25,7 @@ import [
 import [Address, check_store_type] from "address";
 import "address";
 import "calls";
+import "chains";
 import [function_checks] from "checks";
 import "checks";
 import "debug";
@@ -72,18 +73,24 @@ is_abstract(st: StructDef): bool {
     return (st.ty.is_generic() and st.name == st.ty.name) or st.ty.is_tuple();
 }
 
-## Whether a struct's `__acquire` and `__release` are the standard ones,
-## which codegen may inline.
-standard_counts(st: StructDef): bool {
-    bool immortal_cases = false;
+## Whether a struct's `__release` is the standard one (`synthesize`'s),
+## which codegen may generate itself: its counts may still skip immortal
+## objects (`immortal_cases`).
+standard_release(st: StructDef): bool {
+    return st.release.body.is_value() and !st.ty.is_weak() and !st.ty.is_function_type();
+}
+
+## Whether a reference enum has cases that carry nothing: immortal objects,
+## whose counts are left alone.
+immortal_cases(st: StructDef): bool {
     if (st.enum_cases.is_value()) {
         for (var c in st.enum_cases.value()) {
             if (c.payload.count == 0) {
-                immortal_cases = true;
+                return true;
             }
         }
     }
-    return st.release.body.is_value() and !st.ty.is_weak() and !st.ty.is_function_type() and !immortal_cases;
+    return false;
 }
 
 ## Whether a struct's counts step atomically: `[Shared]`, or a shared
@@ -132,8 +139,18 @@ extend Generator {
             desc.fields.append((f.name, f.ty.to_string()));
             desc.field_locs.append(f.loc);
         }
-        if (standard_counts(st)) {
-            desc.inline_counts = Optional<bool>.Value(atomic_counts(st));
+        if (standard_release(st)) {
+            desc.release_counts = Optional<bool>.Value(atomic_counts(st));
+            desc.standard = true;
+            desc.immortal = immortal_cases(st);
+            if (!desc.immortal) {
+                desc.inline_counts = desc.release_counts;
+            }
+        } else if (st.ty.is_function_type() and st.release.body.is_value()) {
+            # The standard body, except a plain one leaves its static
+            # objects alone (`skip_static_objects`).
+            desc.release_counts = Optional<bool>.Value(atomic_counts(st));
+            desc.immortal = !st.ty.is_shared_function_type();
         }
         desc.lazy = ast.has_attribute(st.attributes, sema.LAZY_ATTRIBUTE);
         any_lazy = any_lazy or desc.lazy;
@@ -565,6 +582,14 @@ extend Generator {
             hold(function, function.name);
             return Result<void>.ok();
         }
+        if (function.name.ends_with(".__release")) {
+            var owner = structs.try_get(function.name.substr_bytes(0, function.name.size - ".__release".size));
+            if (owner.is_value()
+                and owner.value().release_counts.is_value()
+                and recursive.contains(owner.value().name)) {
+                return emit_standard_release(function.name, owner.value());
+            }
+        }
         # `[Unsafe("...")]` turns checks off in this body only.
         var build_checks = runtime_checks;
         runtime_checks = build_checks.both(function_checks(function.attributes));
@@ -589,6 +614,23 @@ extend Generator {
         runtime_checks = build_checks;
         locate(result, function.loc);
         return result;
+    }
+
+    ## `T.__release(this)`, named `name`, for a recursive struct (see
+    ## `find_chains`) whose `__release` codegen may generate: the step
+    ## `release_ref` inlines, in place of `synthesize`'s body, so a release
+    ## through a trait or a C handle reaches the chain last release too.
+    emit_standard_release(name: String, owner: StructDesc): Result<void> {
+        var found = functions.try_get(name);
+        if (!found.is_value()) {
+            return Result<void>.ok();
+        }
+        var fn_value = found.value();
+        var entry = context.append_block(fn_value, "entry");
+        builder.position_at_end(entry);
+        inline_count_step(owner.name, fn_value.param(0), false, owner.release_counts.value(), false, owner.immortal)?;
+        builder.return_void();
+        return Result<void>.ok();
     }
 
     ## Gives `function` its subprogram, when debug info is on: named as

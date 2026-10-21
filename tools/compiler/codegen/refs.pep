@@ -9,6 +9,7 @@ import [BinaryOp, CountField, Expression, PassState, WeakOp] from compiler.sema;
 import [Address, check_store_type] from "address";
 import "address";
 import "calls";
+import "chains";
 import "checks";
 import "expressions";
 import "functions";
@@ -664,7 +665,13 @@ extend Generator {
             builder.conditional_branch(is_last, last, done);
             builder.position_at_end(last);
             var last_release_fn = last_release(ty_name, atomic)?;
-            builder.call(last_release_fn.global_type(), last_release_fn, [object], "");
+            if (deep_recursive.contains(ty_name)) {
+                # Through the runtime, which puts a destruction nested too
+                # deep on a list instead of recursing (`chains.pep`).
+                call_function("_pep_release_last", [object, last_release_fn])?;
+            } else {
+                builder.call(last_release_fn.global_type(), last_release_fn, [object], "");
+            }
             builder.branch(done);
         }
         builder.position_at_end(done);
@@ -674,7 +681,10 @@ extend Generator {
     ## `T.__last_release(this)`: what a standard `__release` does when the
     ## strong count reaches 0, out of line (`cold`, never inlined). It
     ## destroys the object, then gives up the strong references' weak
-    ## reference and frees the memory when no weak reference remains.
+    ## reference and frees the memory when no weak reference remains; for a
+    ## struct with chain fields it destroys its chain in a loop
+    ## (`emit_chain_last_release`). A deep recursive struct's is called
+    ## through the runtime's `_pep_release_last`.
     last_release(ty_name: String, atomic: bool): Result<llvm.Value> {
         var name = $"{ty_name}.__last_release";
         var existing = ir.function(name);
@@ -690,6 +700,28 @@ extend Generator {
         var entry = context.append_block(function, "entry");
         builder.position_at_end(entry);
         var object = function.param(0);
+        if (chain_fields.contains(ty_name)) {
+            emit_chain_last_release(ty_name, object)?;
+            builder.return_void();
+            if (!resume.is_null()) {
+                builder.position_at_end(resume);
+            }
+            return Result<llvm.Value>.ok(function);
+        }
+        destroy_object(ty_name, object, atomic)?;
+        builder.return_void();
+        if (!resume.is_null()) {
+            builder.position_at_end(resume);
+        }
+        return Result<llvm.Value>.ok(function);
+    }
+
+    ## Destroys `object` of type `ty_name` whose strong count reached 0:
+    ## runs `__dtor`, gives up the strong references' weak reference, and
+    ## frees the memory when no weak reference remains. Leaves the builder
+    ## after it.
+    destroy_object(ty_name: String, object: llvm.Value, atomic: bool): Result<void> {
+        var function = builder.insert_block().parent();
         call_function($"{ty_name}.__dtor", [object])?;
         var weak = count_step(object, CountField.Weak, false, atomic, false)?;
         var free_block = context.append_block(function, "free");
@@ -701,11 +733,7 @@ extend Generator {
         call_function("_pep_free", [object])?;
         builder.branch(done);
         builder.position_at_end(done);
-        builder.return_void();
-        if (!resume.is_null()) {
-            builder.position_at_end(resume);
-        }
-        return Result<llvm.Value>.ok(function);
+        return Result<void>.ok();
     }
 
     ## Sema type name when `expr` produces an owned rvalue temporary that a

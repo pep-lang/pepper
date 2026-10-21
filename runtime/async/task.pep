@@ -1137,9 +1137,12 @@ _async_cancel(worker: _Worker, core: _TaskCore) {
 }
 
 # Switches from the running task to the scheduler; returns when the task
-# is resumed.
+# is resumed. A destruction it is inside of stays its own
+# (`_pep_release_suspend`).
 _async_suspend(worker: _Worker) {
+    var floor = _pep_release_suspend();
     _async_fiber_switch(worker._current._fiber, worker._scheduler);
+    _pep_release_resume(floor);
 }
 
 # Runs the task the worker assigned to this fiber, and marks it finished.

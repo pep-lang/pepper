@@ -89,6 +89,11 @@ reports_problems_at_the_key() {
         errors("[package]\nname = \"a\"\ntoolchain = \"0.03\"\n"),
         "\"0.03\": toolchain '0.03' is not a version such as 0.3.0, 0.3 or latest"
     );
+    expect_equal(errors("[package]\nname = \"a\"\nminimum_toolchain = \"0.11.0-dev\"\n"), "");
+    expect_equal(
+        errors("[package]\nname = \"a\"\nminimum_toolchain = \"0.11\"\n"),
+        "\"0.11\": minimum_toolchain '0.11' is not a release such as 0.11.0 or 0.11.0-dev"
+    );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
         "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'"
