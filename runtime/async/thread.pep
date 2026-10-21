@@ -282,8 +282,10 @@ _async_thread_run(start: __ptr<void>) {
     slot[0] = __default<Thread>();
     _pep_free(slot);
     _async_current.set(thread);
+    _pep_stack_guard_thread_start();
     thread._body();
     thread._finished.store(1);
+    _pep_stack_guard_thread_end();
     # The thread's free small blocks go back for other threads to use.
     _pep_small_thread_exit();
 }

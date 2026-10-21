@@ -693,6 +693,11 @@ extend Generator {
         if (function.name == "main" and opt_level == 0 and functions.contains("_pep_set_backtrace_default")) {
             call_function("_pep_set_backtrace_default", Array<llvm.Value>())?;
         }
+        # A stack overflow reports itself instead of ending the program
+        # silently (runtime/stack_guard.pep).
+        if (function.name == "main" and functions.contains("_pep_stack_guard_start")) {
+            call_function("_pep_stack_guard_start", Array<llvm.Value>())?;
+        }
         # The entry block holds the return slot, so it dominates every store;
         # the return block loads it.
         var ret_ty = types.get(function.ty.to_string());
