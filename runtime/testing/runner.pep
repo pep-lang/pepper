@@ -3,7 +3,6 @@
 
 import async;
 import [File] from io;
-import process;
 
 extern void memcpy(void* destination, void* source, ulong size);
 extern void memset(void* destination, int value, ulong size);
@@ -169,14 +168,15 @@ export struct TestRunner {
             # The watchdog is left running: the program ends when the test
             # returns, or the watchdog ends it. The test waits until the
             # watchdog sleeps, so that nothing the new thread allocates as
-            # it starts counts against the test.
+            # it starts counts against the test. It ends the program without
+            # `atexit` handlers, which could need what the test still holds.
             var sleeping = async.Atomic<int>(0);
             async.Thread.spawn(() => {
                 sleeping.store(1);
                 async.Thread.sleep(limit * 1000);
                 _pep_write_error(text);
                 _end_the_process_tree();
-                process.exit(124);
+                _pep_exit_now(124);
             });
             while (sleeping.load() == 0) {
                 async.Thread.sleep(1);

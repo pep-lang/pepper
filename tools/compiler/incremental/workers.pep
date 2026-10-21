@@ -368,8 +368,9 @@ export serve_compilation_units(
 }
 
 ## Checks `unit` (number `k`) for a worker on the merged `records` of the
-## compilation units it reads, stores its record in the cache, and leaves it in
-## `dir` (`<k>.rec`, `<k>.own`, `<k>.warn`), then `<k>.checked`: the compilation
+## compilation units it reads, after the program's linking and visibility
+## errors (`Program.check_diagnostics`), stores its record in the cache, and
+## leaves it in `dir` (`<k>.rec`, `<k>.own`, `<k>.warn`), then `<k>.checked`: the compilation
 ## units that read it are checked on it while it compiles (pipelining, as a
 ## build system starts a library's dependents on its interface while its code
 ## generates).
@@ -399,7 +400,16 @@ export check_for_worker(
     stages: StringBuilder,
     times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
 ): Result<(sema.Module, sema.PassState), String> {
+    var start = os.Instant.now();
+    # What the build checks before sema, as `check_compilation_units` does:
+    # with the bodies of this compilation unit's files linked now, its
+    # linking and visibility errors come before what sema would make of them.
+    var errors = program.check_diagnostics();
+    if (errors.count > 0) {
+        return Result<(sema.Module, sema.PassState), String>.err(render_all(errors, sources));
+    }
     var t0 = os.Instant.now();
+    stages.append($"diagnostics {(t0 - start).milliseconds()}\n");
     var merged = merged_module(program, records, unit.reads);
     if (merged.is_err()) {
         return Result<(sema.Module, sema.PassState), String>.err(

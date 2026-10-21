@@ -634,6 +634,7 @@ _process_sys_fork(): io.IoResult<Child?> {
         return io.IoResult<Child?>.err(io.IoError(11, "cannot start a copy of this process"));
     }
     if (process_id == 0) {
+        _pep_mark_forked();
         return io.IoResult<Child?>.ok(Optional<Child>.Empty);
     }
     var child = Child();

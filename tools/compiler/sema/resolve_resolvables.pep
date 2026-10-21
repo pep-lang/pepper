@@ -6,6 +6,7 @@ import [error_at] from "common";
 import [Block, Expression, FunctionDef, Module] from "model";
 import "named_arguments";
 import [PassState] from "state";
+import [tuple_constructor_labels] from "tuple_literals";
 import "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
@@ -127,7 +128,7 @@ export resolve_resolvables(module: Module, report_missing: bool, state: PassStat
 
 _check_calls_in(function: FunctionDef, known: _Known, type_params: HashSet<String>, state: PassState) {
     if (function.body.is_value()) {
-        _check_calls_in_block(function.body.value(), _CallChecker(known, type_params, state));
+        _check_calls_in_block(function.body.value(), _CallChecker(known, type_params, state, function.is_generic_func));
     }
 }
 
@@ -167,11 +168,13 @@ struct _CallChecker {
     var known: _Known;
     var type_params: HashSet<String>;
     var state: PassState;
+    var generic_base: bool;
 
-    construct(known: _Known, type_params: HashSet<String>, state: PassState) {
+    construct(known: _Known, type_params: HashSet<String>, state: PassState, generic_base: bool = false) {
         this.known = known;
         this.type_params = type_params;
         this.state = state;
+        this.generic_base = generic_base;
     }
 
     rewrite(e: Expression): Expression {
@@ -184,13 +187,16 @@ struct _CallChecker {
                 or known.structs.contains(function)
                 or known.structs.contains(base);
             # Builtins (`_pep_*`, `trace_*`) and unresolved generic calls are
-            # left to later passes.
+            # left to later passes. A generic base keeps a tuple literal
+            # unspelled while an element's type depends on `T`; each
+            # specialization spells it.
             bool builtin = function.starts_with("_pep_")
                 or function.starts_with("trace_")
                 or function == "String"
                 or function == "__caller_location"
                 or open >= 0
-                or type_params.contains(function);
+                or type_params.contains(function)
+                or (generic_base and tuple_constructor_labels(function).is_value());
             if (!known_name and !builtin) {
                 state.report(error_at($"call to undeclared function '{function}'", call.loc));
             }

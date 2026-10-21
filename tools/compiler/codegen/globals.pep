@@ -71,6 +71,10 @@ const AARCH64_PREPARE = "\n    and x9, x0, #0xfffffffffffffff0\n    sub x9, x9, 
 ## it by its C symbol.
 export const EXPORT_PREFIX = "__export.";
 
+## What an extern's declaration is named, until `partition.prepare` names
+## it by its C symbol, when a Pepper function has that name too.
+export const EXTERN_PREFIX = "__extern.";
+
 ## The runtime functions (runtime/string.pep) that make a `String` from
 ## C's bytes, a C copy of a `String`, and free that copy.
 const STRING_FROM_C = "_pep_string_from_c";

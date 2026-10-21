@@ -4412,8 +4412,13 @@ struct Parser {
         if (text.byte_at(1) == '\\') {
             var bytes = Array<u8>();
             if (text.byte_at(2) == 'x') {
-                var value = ulong.parse(text.substr_bytes(3, 2), 16);
-                return Literal.Char(value.is_value() ? value.value() as u8 : 0 as u8);
+                # `'\xHH'`: both digits come before the closing quote.
+                var value = text.size == 6 ? ulong.parse(text.substr_bytes(3, 2), 16) : Optional<ulong>.Empty;
+                if (!value.is_value()) {
+                    _problem("expected two hex digits after '\\x'", Span(span.start + 1, span.start + text.size - 1));
+                    return Literal.Char(0 as u8);
+                }
+                return Literal.Char(value.value() as u8);
             }
             _escape(text, 1, span.start, bytes);
             return Literal.Char(bytes.count > 0 ? bytes[0] : 0 as u8);
@@ -4454,8 +4459,16 @@ struct Parser {
         } else if (c == '\\' or c == '"' or c == '\'') {
             bytes.append(c as u8);
         } else if (c == 'x') {
-            var value = ulong.parse(text.substr_bytes(offset + 2, 2), 16);
-            if (!value.is_value() or value.value() >= 0x80) {
+            # The literal's last byte is its closing quote; both digits come before it.
+            var value = offset + 4 < text.size ?
+                ulong.parse(text.substr_bytes(offset + 2, 2), 16) :
+                Optional<ulong>.Empty;
+            if (!value.is_value()) {
+                var end = offset + 4 < text.size ? offset + 4 : text.size - 1;
+                _problem("expected two hex digits after '\\x'", Span(at + offset, at + end));
+                return end;
+            }
+            if (value.value() >= 0x80) {
                 _problem(
                     "'\\x' escape must be ASCII (at most \\x7F); use '\\u{...}' for other characters",
                     Span(at + offset, at + offset + 4)
