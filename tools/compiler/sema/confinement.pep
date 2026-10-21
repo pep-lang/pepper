@@ -2804,8 +2804,7 @@ struct _RegionWalk {
                 # A `shared` function value reaches only thread-safe state
                 # besides its arguments, so its result links only those.
                 bool shared = is_shared_function(node.callee);
-                var callee = eval(node.callee);
-                long acc = shared ? -1 : callee;
+                var acc = eval(node.callee);
                 for (var arg in node.args) {
                     var r = eval(arg);
                     acc = link(acc, r, arg);

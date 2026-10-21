@@ -1,5 +1,6 @@
 # The result of a call through a `shared` function value is new, so a
-# `[Move]` parameter takes it, as it takes a named call's (#63).
+# `[Move]` parameter takes it, or a variable holding it, as it takes a
+# named call's (#63).
 import async;
 
 struct Box {
@@ -23,7 +24,8 @@ main(): int {
     var locals = async.ThreadLocal<Box>();
     shared () => Box app = make;
     shared (Box) => Box step = grow;
-    locals.set(app());
+    var fresh = app();
+    locals.set(move(fresh));
     with (var b = locals.enter()) {
         print($"{b.n}");
     }
