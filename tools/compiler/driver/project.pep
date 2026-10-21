@@ -149,17 +149,18 @@ export fetch_dependencies(entry: Path, locked: bool = false, offline: bool = fal
 }
 
 ## What a project lacks: the locked packages missing from `.pep/deps` or
-## checked out there at another commit, and whether `pep.toml`, or a `path`
-## dependency's, names a Git dependency `pep.lock` does not list.
+## checked out there at another commit, and the Git dependencies `pep.toml`,
+## or a `path` dependency's, names that `pep.lock` does not list.
 struct _Missing {
     var packages: link.LockedPackage[] = Array<link.LockedPackage>();
-    var unlocked: bool = false;
     ## The sources of the Git dependencies `pep.lock` does not list, fetched
     ## or not.
     var not_locked: String[] = Array<String>();
+    ## Those of `not_locked` that `.pep/deps` does not hold.
+    var not_fetched: String[] = Array<String>();
 
     is_empty(): bool {
-        return packages.is_empty and !unlocked;
+        return packages.is_empty and not_fetched.is_empty;
     }
 }
 
@@ -188,7 +189,9 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
         }
         if (!is_locked) {
             missing.not_locked.append(source);
-            missing.unlocked = missing.unlocked or !d.directory(project, project).is_directory();
+            if (!d.directory(project, project).is_directory()) {
+                missing.not_fetched.append(source);
+            }
         }
     }
     return Result<_Missing, String>.ok(missing);
@@ -213,7 +216,7 @@ _refuse(project: Path, missing: _Missing, locked: bool, offline: bool): Result<v
             absent.append($"{package.source()} {short}");
         }
     }
-    absent.append_all(missing.not_locked);
+    absent.append_all(missing.not_fetched);
     if (absent.is_empty) {
         return Result<void, String>.ok();
     }
@@ -253,7 +256,7 @@ _fetch_locked(project: Path, manifest: link.Manifest, checks: bool, offline: boo
         return Result<void, String>.ok();
     }
     var missing = needed.value().packages;
-    var unlocked = needed.value().unlocked;
+    var unlocked = !needed.value().not_fetched.is_empty;
     var tool = process.find_companion("pep-package");
     if (tool.is_value()) {
         var arguments = ["-C", project.to_string(), "fetch"];

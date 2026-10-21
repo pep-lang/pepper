@@ -217,6 +217,18 @@ locked_and_offline_builds_refuse_before_fetching() {
     expect_true(
         offline.error().contains("lacks github:nobody/net; run 'pepper package fetch' without --offline first")
     );
+    # Already in .pep/deps, though unlocked: a build fetches nothing, so
+    # --offline passes; --locked still fails.
+    var net = root
+        .join(Path(".pep"))
+        .join(Path("deps"))
+        .join(Path("github.com"))
+        .join(Path("nobody"))
+        .join(Path("net"));
+    Directory.create_all(net);
+    expect_true(driver.fetch_dependencies(entry, offline = true).is_ok());
+    expect_true(driver.fetch_dependencies(entry, locked = true).is_err());
+    Directory.remove_all(root.join(Path(".pep")));
 
     # A locked package not fetched yet: --offline fails without fetching it.
     File.write_text(

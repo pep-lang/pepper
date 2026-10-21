@@ -432,6 +432,8 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
             expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
             # Fetching again finds them in place.
             expect_exit(package_without_git(hosts, project.dir, ["fetch"], server), 0);
+            # Offline with git, the unpacked archives serve too.
+            expect_exit(hosts.package(project.dir, ["fetch", "--offline"]), 0);
 
             # A tampered archive: 1.3.1's commit serves 2.0.0's files.
             write_archive(hosts, archives, "other/numbers", "v2.0.0", numbers);
@@ -461,7 +463,12 @@ a_stale_lock_fails_under_locked() {
     var hosts = Hosts("locked");
     var project = Project("locked", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
-    var lock = project.lock();
+    # A fetch that changes nothing leaves pep.lock as it is, line endings
+    # and all (git's CRLF on Windows).
+    var lock = project.lock().replace("\n", "\r\n");
+    write_file(project.dir.join("pep.lock"), lock);
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_equal(project.lock(), lock);
     # An up-to-date lock passes.
     expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
 
@@ -512,6 +519,13 @@ an_unfetched_dependency_fails_under_offline() {
     # What .pep/deps holds is enough.
     expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
     expect_exit(unreachable("pep-package", ["fetch", "--frozen"]), 0);
+    # A checkout at another commit it already has moves back without the
+    # network.
+    var geometry = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("geometry");
+    git(geometry, ["checkout", "--quiet", "--detach", "v1.0.0"]);
+    expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
+    var head = run(process.Command("git").arguments(["rev-parse", "HEAD"]).working_directory(geometry));
+    expect_equal(head.stdout.trim(), hosts.commit_of("someone/geometry", "v1.1.0"));
 
     remove_tree(project.dir.join(".pep"));
     var refused = unreachable("pep-package", ["fetch", "--offline"]);

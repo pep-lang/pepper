@@ -229,12 +229,13 @@ export struct Resolver {
     # pep.lock records for that commit.
     _fetch(host: String, repository: String, dir: Path, commit: String): Result<(String, String)> {
         var source = host + ":" + repository;
+        var expected = _locked_sha256(source, commit);
+        var at = unpacked(dir);
+        # Offline, an unpacked archive serves even once git is installed.
+        if (at.is_value() and at.value() == commit and (offline or (!expected.is_empty and !has_git()))) {
+            return Result<(String, String)>.Ok((commit, expected));
+        }
         if (!has_git()) {
-            var expected = _locked_sha256(source, commit);
-            var at = unpacked(dir);
-            if (at.is_value() and at.value() == commit and (!expected.is_empty or offline)) {
-                return Result<(String, String)>.Ok((commit, expected));
-            }
             if (offline) {
                 return Result<(String, String)>.Err(not_held_offline(dir, commit));
             }
@@ -258,10 +259,10 @@ export struct Resolver {
         if (sha256.is_err()) {
             return Result<(String, String)>.Err(sha256.error().message);
         }
-        var expected = _locked_sha256(source, full);
-        if (!expected.is_empty and sha256.value() != expected) {
+        var recorded = _locked_sha256(source, full);
+        if (!recorded.is_empty and sha256.value() != recorded) {
             return Result<(String, String)>.Err(
-                $"the files of {source} {full.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {expected}"
+                $"the files of {source} {full.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {recorded}"
             );
         }
         return Result<(String, String)>.Ok((full, sha256.value()));
