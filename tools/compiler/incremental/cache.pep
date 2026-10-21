@@ -123,6 +123,45 @@ export struct Cache {
         );
     }
 
+    ## Returns the key the cache holds objects of compilation unit `unit`,
+    ## keyed `key`, under that link with the objects of the compilation units
+    ## it reads, and hold `file`; none when it holds none. Such objects only
+    ## declare what the objects below defined when they were compiled, the
+    ## names listed beside them (`NEEDS_FILE`), and a body edit below can drop
+    ## one of those without changing `key` (#24). So objects under `key` whose
+    ## needs `below` lacks are passed over for those under `key` with `below`
+    ## added (`unit_store_key`).
+    ##
+    ## @param unit the compilation unit's name in the cache (`+<name>`)
+    ## @param key its key
+    ## @param below what the objects of each compilation unit it reads define
+    ## @param file a file its objects' folder must hold
+    ## @returns the key of the objects to link, or none
+    unit_objects(unit: String, key: String, below: Array<HashSet<String>>, file: String): String? {
+        var folder = objects(unit, key);
+        if (used(folder) and folder.join(Path(file)).is_file() and _needs_met(folder, below)) {
+            return Optional<String>.Value(key);
+        }
+        var other = _with_below(key, below);
+        folder = objects(unit, other);
+        if (used(folder) and folder.join(Path(file)).is_file() and _needs_met(folder, below)) {
+            return Optional<String>.Value(other);
+        }
+        return Optional<String>.Empty;
+    }
+
+    ## Returns the key to store new objects of compilation unit `unit`, keyed
+    ## `key`, under: `key`, unless the cache holds objects under it already,
+    ## which then do not link with the objects below (`unit_objects`).
+    ##
+    ## @param unit the compilation unit's name in the cache (`+<name>`)
+    ## @param key its key
+    ## @param below what the objects of each compilation unit it reads define
+    ## @returns the key
+    unit_store_key(unit: String, key: String, below: Array<HashSet<String>>): String {
+        return objects(unit, key).is_directory() ? _with_below(key, below) : key;
+    }
+
     ## Moves `built`, a folder of objects just written, to where the objects
     ## of `unit` under `key` belong, and removes the unit's oldest keys beyond
     ## the few it keeps. When another build stored that key first, its
@@ -228,6 +267,57 @@ _unit_folder(unit: String): String {
 ## `_KEY_SIZE` digits.
 _key_name(key: String): String {
     return key.substr(0, _KEY_SIZE);
+}
+
+## The name of the file beside a compilation unit's objects listing what
+## they declare and the objects below them defined, a name a line
+## (`Cache.unit_objects`).
+export const NEEDS_FILE = "needs";
+
+## Whether every name the `needs` file in `folder` lists is in one of
+## `below`; not when it has none (objects of a build before it).
+_needs_met(folder: Path, below: Array<HashSet<String>>): bool {
+    var needs = File.read_to_string(folder.join(Path(NEEDS_FILE)));
+    if (needs.is_err()) {
+        return false;
+    }
+    for (var name in needs.value().split("\n")) {
+        if (name.is_empty) {
+            continue;
+        }
+        bool found = false;
+        for (var defined in below) {
+            if (defined.contains(name)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
+## `key` with every name `below` holds added, in order.
+_with_below(key: String, below: Array<HashSet<String>>): String {
+    var names = HashSet<String>();
+    for (var defined in below) {
+        for (var name in defined) {
+            names.insert(name);
+        }
+    }
+    var sorted = Array<String>();
+    for (var name in names) {
+        sorted.append(name);
+    }
+    sorted.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
+    var hasher = digest.Blake3();
+    hasher.update($"{key}\nbelow\n");
+    for (var name in sorted) {
+        hasher.update($"{name}\n");
+    }
+    return hasher.finish_hex();
 }
 
 ## Returns the cache a build uses: `$PEPPER_CACHE_DIR` when set, else

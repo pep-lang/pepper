@@ -3071,7 +3071,8 @@ library's dependents on its interface while its code generates, a worker leaves
 the record (`<k>.rec`, `<k>.own`, `<k>.warn`) and `<k>.checked` as soon as
 the compilation unit is stored, then waits for the `defines` of the compilation units it reads,
 leaves `<k>.compiling`, compiles, and leaves `<k>.defines` and `<k>.done`.
-The scheduler starts a compilation unit once the compilation units it reads are checked, and
+The scheduler starts a compilation unit once the compilation units it reads are checked (a
+hit, once they are done: below), and
 counts toward `jobs` only workers checking or compiling: one waiting for the
 objects below uses no processor (there are at most half again as many
 workers as jobs, and two more, since each holds the program). Workers' stages
@@ -3102,16 +3103,25 @@ a struct below (`_pep_copy_value`), which has no owner there
 (`own_function`), so it is `linkonce_odr`, as C++ emits an implicit special
 member in each object that uses it. A declaration keeps an owner (`DECLARED_ONLY` for an
 instantiation), so `prepare` gives it the linker spelling of its definition.
-The object is cached under the compilation unit's key (`_compilation_unit_object`:
+The object is cached under the compilation unit's key (`_store_unit`:
 `<cache>/v3/u/+<name>/<key>/0.o`, `1.o` and on for its other parts
-(`_unit_objects`), and `defines`; the key already
+(`_unit_objects`), `defines`, and `needs`, what it uses of what the objects below
+define (`_needs`); the key already
 holds the codegen options), and a compilation unit counts as done from the cache only
-when both its record and its object are there; a build marks the object
+when both its record and its object are there, and the object links with the
+objects below (`Cache.unit_objects`): a body edit below can stop it defining
+an instantiation without changing any key above, and an object that needs it
+then failed to link (#24). So the scheduler asks (`usable`) only once the
+compilation units a hit reads are done, an object whose `needs` the objects
+below no longer all define is passed over for one under its key with what
+they define added (`Cache.unit_store_key`), and one there is none of is
+compiled again and stored there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this
 one links. The last compilation unit is keyed like the others, and its objects, the
 last compilation unit's (`0.o` and on) and the entry points' (`entry.o`), are cached under its
 key with the program's `[Link]` arguments (`link`, `_link_attributes`) and
-its warnings (`_store_last`): a build whose last compilation unit has the same key
+its warnings (`_store_last`): a build whose last compilation unit has the same key,
+and whose objects link with those below,
 checks and generates nothing and links, as Go links a `main` package from
 its cache. The link takes the objects of the compilation units the last one
 reads, not every one: the module files an entry file never reaches are

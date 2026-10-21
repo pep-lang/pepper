@@ -504,6 +504,47 @@ workers_report_a_missing_import_in_an_included_module() {
     expect_false(built.value().stderr.contains("undeclared identifier"));
 }
 
+# A compilation unit's cached object only declares the instantiations the
+# objects below it define. A body edit below that stops using one
+# (`Array<Foo>`) leaves the keys above alone, so the objects above, a
+# worker's (`x.pep`) and the last's (`main.pep`), are compiled again rather
+# than linked without it: they failed on undefined symbols (#24).
+[Test]
+rebuilds_the_objects_that_need_what_an_edit_below_drops() {
+    var folder = _program(
+        "options_below_drops",
+        "import \"foo\";\nimport \"l\";\nimport \"x\";\n\nmain(): int {\n    var a = Array<Foo>();\n    a.append(Foo(3));\n    return a.count as int + x_value() - 4;\n}\n"
+    );
+    File.write_text(
+        folder.path.join(Path("foo.pep")),
+        "export struct Foo {\n    var v: int = 0;\n\n    construct(v: int) {\n        this.v = v;\n    }\n}\n"
+    );
+    File.write_text(
+        folder.path.join(Path("x.pep")),
+        "import \"foo\";\nimport \"l\";\n\nexport x_value(): int {\n    var a = Array<Foo>();\n    a.append(Foo(2));\n    return a.count as int + l_count() + 0;\n}\n"
+    );
+    var uses = "import \"foo\";\n\nexport l_count(): int {\n    var a = Array<Foo>();\n    a.append(Foo(1));\n    return a.count as int + 1;\n}\n";
+    var drops = "import \"foo\";\n\nexport l_count(): int {\n    return 2;\n}\n";
+    var program = "main" + toolchain.executable_suffix();
+    for (var source in [uses, drops, uses, drops]) {
+        File.write_text(folder.path.join(Path("l.pep")), source);
+        var command = process.Command(_compiler().to_string());
+        command.arguments(["main.pep", "-o", program, "--build", "build", "--cache", "cache"]);
+        # Compilation unit workers, which compile each unit's object, even on
+        # one CPU.
+        command.working_directory(folder.path).environment("PEPC_COMPILATION_UNIT_JOBS", "2");
+        command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+        var built = command.run();
+        expect_true(built.is_ok());
+        if (!built.value().status.success()) {
+            print(built.value().stdout + built.value().stderr);
+        }
+        expect_true(built.value().status.success());
+        var ran = process.Command(folder.path.join(Path(program)).to_string()).run();
+        expect_true(ran.is_ok() and ran.value().status.success());
+    }
+}
+
 # Every object (`.o`, `.obj`, `.bc`) under `folder`.
 _objects(folder: Path, out: Path[]) {
     var opened = Directory.open(folder);

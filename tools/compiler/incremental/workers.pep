@@ -95,8 +95,9 @@ struct _Worker {
 ##   a worker checked, when it began and ended, and the compilation units it
 ##   reads
 ## @param usable whether compilation unit `k`, found in the cache, can be used
-##   as it is: a build also needs its object (and gives the workers what it
-##   defines); one that is not is checked again
+##   as it is, asked once the compilation units it reads are done: a build
+##   also needs its object, one that links with theirs (and gives the
+##   workers what it defines); one that is not is checked again
 ## @returns nothing, or why a compilation unit could not be checked
 export check_in_workers(
     program: link.Program,
@@ -121,6 +122,10 @@ export check_in_workers(
     var checked = Array<bool>();
     var done = Array<bool>();
     var started = Array<bool>();
+    # Whether its key was computed and its record looked for, and the
+    # records found.
+    var looked = Array<bool>();
+    var hits = HashMap<ulong, (u8[], String, String)>();
     # With `-T time`, when each compilation unit a worker checked began and
     # ended, in milliseconds from the start, with the compilation units it reads
     # (`schedule`, as Ninja's `.ninja_log`): the chain of compilation units that
@@ -133,6 +138,7 @@ export check_in_workers(
         checked.append(false);
         done.append(false);
         started.append(false);
+        looked.append(false);
     }
     var ready = Array<ulong>();
     var workers = Array<_Worker>();
@@ -156,12 +162,28 @@ export check_in_workers(
             if (!reads_done) {
                 continue;
             }
+            if (!looked[k]) {
+                looked[k] = true;
+                units[k].key = compilation_unit_key(units, k, owns);
+                var found = find_checked(cache, program, units[k]);
+                if (found.is_value() and fields_still_match(cache, units[k], owns_read(units[k], owns))) {
+                    hits[k] = found.value();
+                }
+            }
+            # A hit's object declares what the objects of the compilation
+            # units it reads define, so whether it links with theirs
+            # (`usable`) waits for those objects.
+            bool objects_done = true;
+            for (var d in units[k].reads) {
+                objects_done = objects_done and done[d];
+            }
+            if (hits.contains(k) and !objects_done) {
+                continue;
+            }
             started[k] = true;
             progressed = true;
-            units[k].key = compilation_unit_key(units, k, owns);
-            var found = find_checked(cache, program, units[k]);
-            if (found.is_value() and usable(k) and fields_still_match(cache, units[k], owns_read(units[k], owns))) {
-                var (bytes, own, warned) = found.value();
+            if (hits.contains(k) and usable(k)) {
+                var (bytes, own, warned) = hits[k];
                 File.write_bytes(worker_file(dir, k, "rec"), bytes);
                 File.write_text(worker_file(dir, k, "own"), own);
                 owns[k] = own;
