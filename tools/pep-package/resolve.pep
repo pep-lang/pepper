@@ -222,7 +222,7 @@ export struct Resolver {
                 continue;
             }
             var graph = Graph();
-            var targets = _targets(wanted);
+            var targets = lock_targets(wanted);
             for (var (source, locked) in chosen) {
                 locked.dev = true;
                 for (var ask in wanted[source]) {
@@ -313,53 +313,6 @@ export struct Resolver {
             }
         }
         return Result<OrderedMap<String, Array<Wanted>>>.Ok(wanted);
-    }
-
-    # The condition under which a build needs each source of `wanted`: the
-    # `[target.'<condition>']` of each requirement on a way to it, all of
-    # which must hold, or else those of another way. Empty when a way has
-    # none: every build needs it.
-    _targets(wanted: OrderedMap<String, Array<Wanted>>): HashMap<String, String> {
-        # Each source's ways, each its conditions sorted; a way that holds
-        # another's conditions and more adds nothing, so a cycle settles.
-        var ways = HashMap<String, Array<Array<String>>>();
-        var changed = true;
-        while (changed) {
-            changed = false;
-            for (var (source, asks) in wanted) {
-                for (var ask in asks) {
-                    var from = ask.parent.is_empty ?
-                        [Array<String>()] :
-                        ways.try_get(ask.parent).value_or(Array<Array<String>>());
-                    for (var way in from) {
-                        var conditions = way.copy();
-                        var condition = ask.requirement.target;
-                        if (!condition.is_empty and !conditions.contains(condition)) {
-                            conditions.append(condition);
-                            conditions.sort((a, b) => a.compare(b));
-                        }
-                        if (!ways.contains(source)) {
-                            ways[source] = Array<Array<String>>();
-                        }
-                        changed = _add_way(ways[source], conditions) or changed;
-                    }
-                }
-            }
-        }
-        var targets = HashMap<String, String>();
-        for (var (source, alternatives) in ways) {
-            var texts = Array<String>();
-            for (var conditions in alternatives) {
-                if (conditions.is_empty) {
-                    texts = Array<String>();
-                    break;
-                }
-                texts.append(conditions.count == 1 ? conditions[0] : " && ".join(_parenthesized(conditions)));
-            }
-            texts.sort((a, b) => a.compare(b));
-            targets[source] = texts.count == 1 ? texts[0] : " || ".join(_parenthesized(texts));
-        }
-        return targets;
     }
 
     # The checksum pep.lock records for `commit` of `source`, if any.
@@ -617,6 +570,53 @@ export struct Resolver {
 export tag_version(tag: String): Optional<Version> {
     var parsed = semver.parse(tag.starts_with("v") ? tag.substr(1, tag.length) : tag);
     return parsed.is_ok() ? Optional<Version>.Value(parsed.value()) : Optional<Version>.Empty;
+}
+
+# The condition under which a build needs each source of `wanted`: the
+# `[target.'<condition>']` of each requirement on a way to it, all of
+# which must hold, or else those of another way. Empty when a way has
+# none: every build needs it.
+export lock_targets(wanted: OrderedMap<String, Array<Wanted>>): HashMap<String, String> {
+    # Each source's ways, each its conditions sorted; a way that holds
+    # another's conditions and more adds nothing, so a cycle settles.
+    var ways = HashMap<String, Array<Array<String>>>();
+    var changed = true;
+    while (changed) {
+        changed = false;
+        for (var (source, asks) in wanted) {
+            for (var ask in asks) {
+                var from = ask.parent.is_empty ?
+                    [Array<String>()] :
+                    ways.try_get(ask.parent).value_or(Array<Array<String>>());
+                for (var way in from) {
+                    var conditions = way.copy();
+                    var condition = ask.requirement.target;
+                    if (!condition.is_empty and !conditions.contains(condition)) {
+                        conditions.append(condition);
+                        conditions.sort((a, b) => a.compare(b));
+                    }
+                    if (!ways.contains(source)) {
+                        ways[source] = Array<Array<String>>();
+                    }
+                    changed = _add_way(ways[source], conditions) or changed;
+                }
+            }
+        }
+    }
+    var targets = HashMap<String, String>();
+    for (var (source, alternatives) in ways) {
+        var texts = Array<String>();
+        for (var conditions in alternatives) {
+            if (conditions.is_empty) {
+                texts = Array<String>();
+                break;
+            }
+            texts.append(conditions.count == 1 ? conditions[0] : " && ".join(_parenthesized(conditions)));
+        }
+        texts.sort((a, b) => a.compare(b));
+        targets[source] = texts.count == 1 ? texts[0] : " || ".join(_parenthesized(texts));
+    }
+    return targets;
 }
 
 # Adds `way` to `ways` unless one of them needs no more than it does,

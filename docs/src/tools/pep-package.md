@@ -66,8 +66,9 @@ fetches every platform's packages, those of
 
 `fetch <source>...` fetches only the locked packages named, at the commits
 `pep.lock` records, and resolves nothing. It is what a build runs when its
-lock lists every dependency: `pepper build` names the packages its target
-needs and `.pep/deps` lacks, so a build fetches no other platform's.
+lock lists every dependency and holds packages for other platforms:
+`pepper build` names the packages its target needs and `.pep/deps` lacks,
+so a build fetches no other platform's.
 
 ### `add <owner/name>[@<range>]`
 

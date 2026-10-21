@@ -92,6 +92,7 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
 ## Only what a build for `target` needs: a package `pep.lock` locks for
 ## other targets (`target = "OS(Windows)"`) is left out, unless pep.toml
 ## names a package the lock does not list, which resolves the whole graph.
+## A lock with no such package runs a full `pep-package fetch`, as before.
 ##
 ## Builds run side by side (`pepper test` builds every test program at
 ## once), and each would fetch into the same `.partial` folders: one at a
@@ -167,6 +168,8 @@ struct _Missing {
     ## Those of `not_locked` that the build needs and `.pep/deps` does not
     ## hold.
     var not_fetched: String[] = Array<String>();
+    ## Whether `pep.lock` holds a package the build's target does not need.
+    var skipped: bool = false;
 
     is_empty(): bool {
         return packages.is_empty and not_fetched.is_empty;
@@ -183,7 +186,9 @@ _needs_fetch(project: Path, manifest: link.Manifest, target: link.Target): Resul
     var missing = _Missing();
     for (var package in locked.value()) {
         var dir = link.package_directory(project, package.host, package.repository);
-        if (package.matches(target) and (!dir.is_directory() or _is_stale(dir, package))) {
+        if (!package.matches(target)) {
+            missing.skipped = true;
+        } else if (!dir.is_directory() or _is_stale(dir, package)) {
             missing.packages.append(package);
         }
     }
@@ -284,9 +289,9 @@ _fetch_locked(
         if (offline) {
             arguments.append("--offline");
         }
-        # A current lock: only the packages this build needs, not every
-        # target's, which resolving the graph would fetch.
-        if (!checks and needed.value().not_locked.is_empty) {
+        # A current lock with packages for other targets: only those this
+        # build needs, which resolving the graph would not leave out.
+        if (!checks and needed.value().not_locked.is_empty and needed.value().skipped) {
             for (var package in missing) {
                 arguments.append(package.source());
             }

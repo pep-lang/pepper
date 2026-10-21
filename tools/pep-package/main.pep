@@ -305,11 +305,15 @@ struct Project {
                 return fail($"pep.lock does not list '{source}'");
             }
             var (host, repository) = split_source(source);
-            var fetched = resolver.fetch(host, repository, package_dir(dir, host, repository), found.value().commit);
+            var package = package_dir(dir, host, repository);
+            var was_there = package.is_directory();
+            var fetched = resolver.fetch(host, repository, package, found.value().commit);
             if (fetched.is_err()) {
                 return fail($"cannot fetch {source}: {fetched.error().message}");
             }
-            say($"fetched {found.value().describe()} ({source})");
+            if (!was_there) {
+                say($"fetched {found.value().describe()} ({source})");
+            }
         }
         return 0;
     }

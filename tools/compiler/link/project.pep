@@ -521,8 +521,13 @@ struct _Reader {
             var key = keys[i];
             if (i == 0 and key == "target" and keys.count > 1) {
                 # `[target.'OS(Windows)'.dependencies]`: the condition, then
-                # the table after it.
-                var condition = text.find(keys[1]);
+                # the table after it. Quoted, so `OS(Windows)` is not found
+                # inside `'!OS(Windows)'`.
+                var condition = text.find("'" + keys[1] + "'");
+                if (condition < 0) {
+                    condition = text.find("\"" + keys[1] + "\"");
+                }
+                condition = condition >= 0 ? condition + 1 : text.find(keys[1]);
                 if (condition >= 0) {
                     at = condition as ulong + keys[1].size;
                     key_at = condition as ulong;

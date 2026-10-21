@@ -14,6 +14,8 @@ import [serve_folder] from tool_testing.server;
 import [TempFolder] from testing;
 import [expect_contains, expect_exit, read_file, run, tool, write_file] from tool_testing;
 import toolchain;
+import [Requirement] from "manifest";
+import [lock_targets, Wanted] from "resolve";
 import "tree";
 
 # The folder of bare repositories that stands in for github.com:
@@ -293,6 +295,39 @@ a_dependent_ignores_a_packages_dev_dependencies() {
     expect_false(project.lock().contains("2.0.0"));
     expect_false(project.lock().contains("dev = true"));
     expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
+}
+
+# What `parent` (empty for the project) asks of `source` under
+# `condition`, for `lock_targets`.
+ask(wanted: OrderedMap<String, Array<Wanted>>, parent: String, source: String, condition: String) {
+    var requirement = Requirement();
+    requirement.target = condition;
+    if (!wanted.contains(source)) {
+        wanted[source] = Array<Wanted>();
+    }
+    wanted[source].append(Wanted("", parent.is_empty, false, parent, requirement));
+}
+
+[Test]
+lock_targets_join_a_way_with_and_and_ways_with_or() {
+    var wanted = OrderedMap<String, Array<Wanted>>();
+    ask(wanted, "", "a", "A");
+    ask(wanted, "", "c", "C");
+    ask(wanted, "", "g", "");
+    ask(wanted, "a", "b", "B");
+    ask(wanted, "a", "e", "");
+    ask(wanted, "c", "e", "");
+    # A cycle settles.
+    ask(wanted, "a", "f", "");
+    ask(wanted, "f", "a", "");
+    # A way with no condition makes it needed everywhere.
+    ask(wanted, "a", "g", "B");
+    var targets = lock_targets(wanted);
+    expect_equal(targets["a"], "A");
+    expect_equal(targets["b"], "(A) && (B)");
+    expect_equal(targets["e"], "(A) || (C)");
+    expect_equal(targets["f"], "A");
+    expect_equal(targets["g"], "");
 }
 
 [Test]
