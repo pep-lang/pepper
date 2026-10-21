@@ -2,8 +2,9 @@
 # element read back through `Array`, `Optional`, a `HashMap` value, a user
 # generic, a trait, or a nesting of them answers to its labels, and so does
 # what a static method or an enum case called on the labeled type gives
-# (pepper#134). Two labelings of one tuple shape share a specialization,
-# and each keeps its own labels.
+# (pepper#134), and so does a generic function's result (pepper#140). Two
+# labelings of one tuple shape share a specialization, and each keeps its
+# own labels.
 trait Source<T> {
     take(): T;
 }
@@ -36,6 +37,12 @@ extend Box<T> with Source<T> {}
 
 identity<T>(value: T): T {
     return value;
+}
+
+repeat<T>(value: T): Array<T> {
+    var out = Array<T>();
+    out.append(value);
+    return out;
 }
 
 first(entries: Array<(name: String, count: int)>): int {
@@ -98,11 +105,16 @@ main(): int {
     if (made.get((p: 11, q: 12)).q != 12) {
         return 11;
     }
-    # A generic function's type argument is not a type: the call keeps
-    # its own name.
+    # A generic function's result takes the labels of its type arguments,
+    # written or inferred (pepper#140).
     var same = identity<(a: int, b: int)>((a: 3, b: 4));
-    if (same.1 != 4) {
+    var inferred = identity(same);
+    var listed = repeat<(x: int, y: int)>((x: 1, y: 2));
+    if (same.b != 4 or same.1 != 4 or inferred.a != 3 or listed[0].y != 2) {
         return 10;
+    }
+    if (identity<(a: int, b: int)>((a: 5, b: 6)).b != 6) {
+        return 12;
     }
     return 0;
 }

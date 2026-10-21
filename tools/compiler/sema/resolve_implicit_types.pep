@@ -1157,6 +1157,22 @@ struct _TypeScopes {
         return ret;
     }
 
+    # `ty`, the type of a call written with labeled type arguments
+    # `labeled`, with their labels: a generic function's declared result
+    # with them put in, else the type as written.
+    _labeled_call(ty: TypeName, labeled: TypeName?): TypeName {
+        if (!labeled.is_value()) {
+            return ty;
+        }
+        var name = labeled.value().name;
+        var signature = tables.generic_function(name);
+        var declared = signature.is_value() ? tables.function_of(name) : Optional<TypeName>.Empty;
+        if (declared.is_value()) {
+            return ty.labeled_through(labeled.value(), declared.value(), param_names(signature.value().params));
+        }
+        return ty.as_written(labeled);
+    }
+
     # The table key and type parameters of `receiver`'s generic
     # declaration (`Box<T>` and `T` for `Box<(a: int, b: int)>`) when its
     # type arguments have labels to give back; most receivers have none.
@@ -1521,7 +1537,7 @@ struct _TypeScopes {
                 return TypeName.void_pointer();
             }
             FunctionCall(node) => {
-                return _call_type(node, current).as_written(node.labeled);
+                return _labeled_call(_call_type(node, current), node.labeled);
             }
             Address(_, _) => {
                 return TypeName.named("u64");
@@ -2269,6 +2285,7 @@ struct _ImplicitResolver {
         var type_args = signature.value().infer(scopes.argument_types(call.args, current));
         if (type_args.is_value()) {
             scopes.edits += 1;
+            call.labeled = _labeled_arguments(call.function, type_args.value());
             call.function = specialization(call.function, type_args.value());
         }
     }
@@ -2291,10 +2308,19 @@ struct _ImplicitResolver {
             var specialized = specialization(written.name, type_args.value());
             if (call.function != specialized) {
                 call.function = specialized;
+                call.labeled = _labeled_arguments(written.name, type_args.value());
                 scopes.edits += 1;
             }
         }
     }
+}
+
+# Generic function `name` with type arguments `args`, when they have labels
+# for the call's type to take back (`_TypeScopes._labeled_call`): the
+# specialization's name spells them without.
+_labeled_arguments(name: String, args: TypeName[]): TypeName? {
+    var spelled = TypeName.with_args(name, args);
+    return spelled.labels_arguments() ? Optional<TypeName>.Value(spelled) : Optional<TypeName>.Empty;
 }
 
 extend _ImplicitResolver with Rewriter;

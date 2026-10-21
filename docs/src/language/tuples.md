@@ -51,8 +51,9 @@ so `p.line` and `p.0` read the same element:
   `Optional<(int, int)>`. A member takes back only the labels its declaration
   writes as a type parameter: a method of `Box<(a: int, b: int)>` declared to
   return `(int, int)` returns an unlabeled tuple. A generic function's result
-  takes none: `identity<(a: int, b: int)>(p)` is unlabeled, so declare the
-  variable's type to name its elements.
+  takes back the labels of its type arguments, written or inferred, the same
+  way: `identity<(a: int, b: int)>(p).b` and, for `p: (a: int, b: int)`,
+  `identity(p).b` read an element by its label.
 - `var p = (line: 3, column: 7);` gives `p` the labeled type
   `(line: int, column: int)`. A labeled value takes at least two elements.
 - A labeled value initializing or returned as a labeled type must use its
