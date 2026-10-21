@@ -9,7 +9,6 @@
 
 import async;
 import [Directory, File, Path] from io;
-import os;
 import process;
 import [serve_folder] from tool_testing.server;
 import [TempFolder] from testing;
@@ -813,16 +812,14 @@ publish_checks_tests_tags_and_pushes_the_version() {
     var bare = root.join("me").join("shapes.git");
     var clone = root.join("clone");
     git(root, ["clone", "--quiet", bare.to_string(), clone.to_string()]);
-    var path = home.join("bin").to_string()
-        + (toolchain.is_windows() ? ";" : ":")
-        + os.environment("PATH").value_or("");
+    # publish runs the home's `pepper`, whatever `pepper` the PATH has.
     var package = (arguments: Array<String>) => {
         return run(
             process
                 .Command(tool("pep-package").to_string())
                 .arguments(arguments)
                 .working_directory(clone)
-                .environment("PATH", path)
+                .environment("PEPPER_HOME", home.to_string())
                 .environment("PEPPER_TOOLCHAIN_PATH", "")
         );
     };
@@ -870,6 +867,16 @@ publish_checks_tests_tags_and_pushes_the_version() {
 
     # Pushed, --dry-run tests with 0.1.0 and the newest, and tags nothing.
     git(clone, ["push", "--quiet", "origin", "main"]);
+    # A home without a `pepper` cannot test it.
+    var homeless = run(
+        process
+            .Command(tool("pep-package").to_string())
+            .arguments(["publish", "--dry-run"])
+            .working_directory(clone)
+            .environment("PEPPER_HOME", root.join("no_home").to_string())
+    );
+    expect_exit(homeless, 1);
+    expect_contains(homeless.stderr, "publish tests with the Pepper home's pepper, and ");
     var dry = package(["publish", "--dry-run"]);
     expect_exit(dry, 0);
     expect_contains(

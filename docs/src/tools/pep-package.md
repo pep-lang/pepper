@@ -157,8 +157,9 @@ pep-package: error: cannot publish shapes 1.2.0:
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),
-so both toolchains must be installed (see
-[Toolchains: pep-install](pep-install.md)); `latest` is the newest
+with the Pepper home's own `pepper` (in the home `PEPPER_HOME` names,
+else the default one; see [Toolchains: pep-install](pep-install.md)), so
+both toolchains must be installed there; `latest` is the newest
 installed release, not a prerelease. A failing run stops it and shows
 what the tests printed. Last, it tags `HEAD` `v<version>` and pushes the
 tag to `origin`; when the push fails, it deletes the tag again.
@@ -308,6 +309,7 @@ them out, each once per run.
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
 | `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
 | `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |
+| `PEPPER_HOME` | The Pepper home whose `pepper` [`publish`](#publish) runs the tests with, as for `pep-install` |
 | `PEPPER_RUNTIME` | The runtime folder whose modules a dependency may not be named like, as for the compiler |
 
 ## Building it

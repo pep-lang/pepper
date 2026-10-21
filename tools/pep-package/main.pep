@@ -27,6 +27,7 @@ import semver;
 import [parse_range] from semver;
 import syntax;
 import toml;
+import toolchain;
 import "git";
 import "lock";
 import "manifest";
@@ -712,11 +713,22 @@ struct Project {
         if (!problems.is_empty) {
             return fail($"cannot publish {name} {package_version}:\n  " + "\n  ".join(problems));
         }
-        var toolchains = minimum.is_empty ? ["latest"] : [minimum, "latest"];
-        for (var toolchain in toolchains) {
-            say($"running 'pepper +{toolchain} test'");
-            if (!_succeeds(process.Command("pepper").arguments(["+" + toolchain, "test"]).working_directory(dir))) {
-                return fail($"'pepper +{toolchain} test' failed, so {name} {package_version} is not published");
+        # The home's own `pepper`, by its path: only it picks toolchains with
+        # `+`, and a search by name may find another (Windows looks beside
+        # this program before the PATH).
+        var pepper = toolchain.find_home().root.join("bin").join("pepper" + toolchain.executable_suffix());
+        if (!pepper.is_file()) {
+            return fail(
+                $"publish tests with the Pepper home's pepper, and {pepper.to_string()} does not exist; install Pepper with pep-install, or set PEPPER_HOME to its home"
+            );
+        }
+        var releases = minimum.is_empty ? ["latest"] : [minimum, "latest"];
+        for (var release in releases) {
+            say($"running 'pepper +{release} test'");
+            if (!_succeeds(
+                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(dir)
+            )) {
+                return fail($"'pepper +{release} test' failed, so {name} {package_version} is not published");
             }
         }
         var tag = "v" + package_version;
