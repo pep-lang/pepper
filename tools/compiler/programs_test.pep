@@ -5,14 +5,13 @@
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
 # database; `process`'s arguments, `exit` (and the `atexit` handlers it
 # runs), `main`'s arguments, children that are copies of the program, and
-# `exec`; and the error for a member a
-# value's type lacks inside an interpolation; string literals that hold
-# a NUL or sit in default arguments; a `match` in a generic method of
-# another module's struct; a `[Move]` argument called through a `shared`
-# function value; externs bound to C symbols Pepper functions are named
-# after, at each `-O` level; and the message a stack overflow prints on the
-# main thread, a `Thread` and a task. The
-# programs are in
+# `exec`; and the error for a member a value's type lacks inside an
+# interpolation or for another module's private extern; string literals
+# that hold a NUL or sit in default arguments; a `match` in a generic
+# method of another module's struct; a `[Move]` argument called through a
+# `shared` function value; externs bound to C symbols Pepper functions are
+# named after, at each `-O` level; and the message a stack overflow prints
+# on the main thread, a `Thread` and a task. The programs are in
 # `testdata/`.
 
 import [File, Path] from io;
@@ -98,6 +97,25 @@ an_unknown_member_in_an_interpolation_is_named() {
     var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
     expect_true(error.is_value(), "the program does not build");
     expect_contains(error.value(), "interpolation_unknown_member.pep:5:20: error: no member named 'count' in 'String'");
+}
+
+# ── visibility ──────────────────────────────────────────────────────────────
+
+# A module's private extern is not visible from another module, whose
+# compilation unit a worker checks (#51).
+[Test]
+another_modules_private_extern_is_not_visible() {
+    var folder = TempFolder("programs_private_extern");
+    write_file(
+        folder.path.join("lib").join("module.pep"),
+        "extern int abs(int value);\nexport one(): int {\n    return abs(-1);\n}\n"
+    );
+    write_file(folder.path.join("user").join("module.pep"), "export two(): int {\n    return abs(-2);\n}\n");
+    var source = folder.path.join("main.pep");
+    write_file(source, "import \"lib\";\nimport \"user\";\nmain(): int {\n    return lib.one() + user.two() - 3;\n}\n");
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(error.value(), "module.pep:2:12: error: 'abs' is internal to module 'lib'");
 }
 
 # ── match ───────────────────────────────────────────────────────────────────

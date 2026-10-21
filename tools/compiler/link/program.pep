@@ -164,8 +164,12 @@ export struct Program {
     ## `[__BuiltIn]` declaration outside the runtime; when there is none of
     ## those either, the visibility errors.
     ##
+    ## @param walked per file, whether to look for visibility errors in its
+    ##   bodies; empty: in every file `link_bodies` linked. A compilation unit
+    ##   worker names its unit's files, as the files of the units it checked
+    ##   before are linked too, and clean
     ## @returns the errors; empty when the program is well-formed
-    check_diagnostics(): Diagnostic[] {
+    check_diagnostics(walked: bool[] = Array<bool>()): Diagnostic[] {
         var errors = Array<Diagnostic>();
         for (var e in this.errors) {
             errors.append(e.to_diagnostic());
@@ -174,7 +178,7 @@ export struct Program {
             errors = built_in_errors();
         }
         if (errors.count == 0) {
-            for (var e in check_visibility(files, scopes, target, bodies)) {
+            for (var e in check_visibility(files, scopes, target, walked.count > 0 ? walked : bodies)) {
                 errors.append(e.to_diagnostic(files));
             }
         }
