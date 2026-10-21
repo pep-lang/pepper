@@ -473,6 +473,23 @@ reads_tuple_arrays() {
     );
 }
 
+# A local declared `Type name` may start with a tuple type (pepper#130).
+[Test]
+reads_locals_that_start_with_a_tuple_type() {
+    expect_formats(
+        "main(): int {\n"
+            + "    (int,String)[] a=q;\n"
+            + "    (line:int,column:int)? b;\n"
+            + "    (a,b)=(b,a);\n"
+            + "}\n",
+        "main(): int {\n"
+            + "    (int, String)[] a = q;\n"
+            + "    (line: int, column: int)? b;\n"
+            + "    (a, b) = (b, a);\n"
+            + "}\n"
+    );
+}
+
 [Test]
 formats_labeled_tuple_literals() {
     expect_formats(
