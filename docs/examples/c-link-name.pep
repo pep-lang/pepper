@@ -5,6 +5,11 @@
 [Link(name = "llabs")]
 extern i64 absolute(i64 value);
 
+# A Pepper function may be named after the C symbol: each call reaches its own.
+llabs(value: i64): i64 {
+    return value;
+}
+
 # C's long is 64 bits on Linux and macOS but 32 bits on Windows and
 # WebAssembly, so the 64-bit labs is only right on the first two.
 [Target(OS(Windows) || OS(Wasi))]
@@ -21,6 +26,7 @@ extern double cube_root(double value);
 
 main(): int {
     assert(absolute(-7) == 7, "absolute calls llabs");
+    assert(llabs(-7) == -7, "llabs calls the Pepper function");
     assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
     [Target(OS(Linux))]
     {

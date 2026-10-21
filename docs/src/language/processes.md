@@ -99,7 +99,10 @@ directory. The running process reads and changes its own environment with
 - `process.arguments()` returns the program's command-line arguments, the
   same array `main(args: String[])` receives (see
   [Functions](functions.md#command-line-arguments-and-exit)).
-- `process.exit(code)` ends the program at once with status `code`.
+- `process.exit(code)` ends the program at once with status `code`, as C's
+  `exit` does: the handlers registered with C's `atexit` run, and printed
+  output is flushed. In a copy `process.fork()` started, the handlers,
+  which are the parent's, are skipped.
 - `process.id()` is the process's id.
 - `process.executable_path()` is the absolute path of the running program's
   executable, so a tool can find files installed next to it.

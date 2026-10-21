@@ -411,6 +411,13 @@ extend Generator {
             }
             fn_type = llvm_fn_type(context, return_type.value(), param_types, false);
         }
+        # An extern bound to the C symbol this function is named after
+        # (`[Link(name = "exit")]` beside a Pepper `exit`) moves aside, so the
+        # function keeps its own name and `prepare` gives each its spelling.
+        var taken = ir.function(function.name);
+        if (taken.is_value() and taken.value().is_declaration()) {
+            taken.value().set_name($"{EXTERN_PREFIX}{function.name}");
+        }
         var fn_value = ir.add_function(function.name, fn_type);
         mark_cold(fn_value, function.attributes);
         set_private_linkage(fn_value, function.name);
