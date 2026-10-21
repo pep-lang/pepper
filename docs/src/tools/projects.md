@@ -36,6 +36,9 @@ shapes    = { path = "../shapes" }
 
 [dev-dependencies]
 fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
+
+[target.'OS(Windows)'.dependencies]
+winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
 ```
 
 A package is a project other projects depend on: a repository (or folder)
@@ -193,6 +196,55 @@ main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the fi
       |        ^~~~~~~~
 ```
 
+## `[target.'<condition>'.dependencies]`
+
+A package only some platforms need, such as a binding to a Windows API,
+goes in a `[target]` table whose key is the condition, written as in
+`[dependencies]`:
+
+```toml
+[target.'OS(Windows)'.dependencies]
+winapi = { github = "someone/winapi", version = "1" }
+
+[target.'OS(Linux) && Arch(x64)'.dependencies]
+epoll = { github = "someone/epoll", version = "0.3" }
+```
+
+- **The condition** is what `[Target(...)]` takes, `OS(...)`, `Arch(...)`
+  and `BuildOption(...)` with `&&`, `||` and `!` (see
+  [Platform selection](../language/platform-selection.md)), and it is
+  checked the same way: `OS(Darwin)` is an error at the key.
+- **Who sees them:** a build whose target the condition selects: the
+  machine building, or the platform `--target` names in a cross build.
+  Guard the import the same way, so other targets skip it:
+
+  ```pepper
+  [Target(OS(Windows))]
+  import winapi;
+  ```
+
+  An import a build for another target reaches is an error:
+
+  ```text
+  main.pep:1:8: error: 'winapi' is a dependency only for targets where 'OS(Windows)' holds, which this build's does not; put '[Target(OS(Windows))]' on the import
+      1 | import winapi;
+        |        ^~~~~~
+  ```
+
+- **Locked for every platform:** `pep.lock` lists every platform's
+  packages, so it is the same on each, and marks those only some need
+  with their `target` (see [pep.lock](pep-package.md#peplock)). A build
+  fetches only what its target needs; resolving a change to `pep.toml`,
+  or checking the lock with `--locked`, reads every package's `pep.toml`,
+  so it fetches every platform's.
+- **In a package:** a dependency's `[target]` tables apply to the
+  projects that use it, for their build's target.
+
+`pepper package add --target 'OS(Windows)'` adds one, and `pepper package
+remove` removes one (see [pep-package](pep-package.md#add-ownernamerange)).
+A name may be in only one of the dependency tables, and a `[target]` table
+holds only `dependencies`.
+
 ## `[fetch]`
 
 ```toml
@@ -214,9 +266,11 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
       | ^~
 ```
 
-- Two dependencies with the same name (in one table, or in both
-  `[dependencies]` and `[dev-dependencies]`), or a dependency named like a
-  runtime module (`io`, `async`), which it would otherwise hide.
+- Two dependencies with the same name (in one table, or in two of
+  `[dependencies]`, `[dev-dependencies]` and the `[target]` tables), or a
+  dependency named like a runtime module (`io`, `async`), which it would
+  otherwise hide.
+- A `[target]` condition `[Target(...)]` would reject.
 - A dependency name that is not an identifier (`fast-json`): it is the name
   `import` uses.
 - A dependency with no source or two, a repository not written `owner/name`,

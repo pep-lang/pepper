@@ -10,7 +10,10 @@
 # `minimum_toolchain` is newer than the toolchain resolving; any other
 # revision that needs a newer one is an error. Only the project's own
 # `[dev-dependencies]` are in its graph, not those of its dependencies, and
-# a package only they lead to is locked as `dev`.
+# a package only they lead to is locked as `dev`. Every platform's
+# `[target.'<condition>'.dependencies]` are in the graph, so pep.lock is
+# the same on each; a package only they lead to is locked with the
+# condition under which a build needs it (`target`).
 
 import [Path] from io;
 import semver;
@@ -28,14 +31,18 @@ export struct Wanted {
     var from_root: bool = false;
     # Whether a dev-dependency of the project leads to it.
     var dev: bool = false;
+    # The source of the package whose pep.toml asks; empty for the
+    # project's.
+    var parent: String = "";
     var requirement: Requirement = Requirement();
 
     construct() {}
 
-    construct(requirer: String, from_root: bool, dev: bool, requirement: Requirement) {
+    construct(requirer: String, from_root: bool, dev: bool, parent: String, requirement: Requirement) {
         this.requirer = requirer;
         this.from_root = from_root;
         this.dev = dev;
+        this.parent = parent;
         this.requirement = requirement;
     }
 
@@ -176,7 +183,7 @@ export struct Resolver {
                 }
                 var (host, repository) = split_source(source);
                 var dir = package_dir(project, host, repository);
-                var fetched = _fetch(host, repository, dir, pick.commit);
+                var fetched = fetch(host, repository, dir, pick.commit);
                 if (fetched.is_err()) {
                     return Result<Graph>.Err($"cannot fetch {source}: {fetched.error().message}");
                 }
@@ -215,11 +222,13 @@ export struct Resolver {
                 continue;
             }
             var graph = Graph();
+            var targets = _targets(wanted);
             for (var (source, locked) in chosen) {
                 locked.dev = true;
                 for (var ask in wanted[source]) {
                     locked.dev = locked.dev and ask.dev;
                 }
+                locked.target = targets.try_get(source).value_or("");
                 graph.packages.append(locked);
             }
             graph.notes = notes;
@@ -238,9 +247,9 @@ export struct Resolver {
         var wanted = OrderedMap<String, Array<Wanted>>();
         var name = root.name.is_empty ? "pep.toml" : root.name;
         # Each manifest to read, who it is, whether it is the project's,
-        # and whether a dev-dependency leads to it.
-        var queue = Array<(Manifest, String, bool, bool)>();
-        queue.append((root, name, true, false));
+        # whether a dev-dependency leads to it, and its source.
+        var queue = Array<(Manifest, String, bool, bool, String)>();
+        queue.append((root, name, true, false, ""));
         var read = HashSet<String>();
         ulong next = 0;
         var dev_queued = false;
@@ -250,9 +259,9 @@ export struct Resolver {
                     break;
                 }
                 dev_queued = true;
-                queue.append((root, name, true, true));
+                queue.append((root, name, true, true, ""));
             }
-            var (manifest, requirer, from_root, dev) = queue[next];
+            var (manifest, requirer, from_root, dev, parent) = queue[next];
             next += 1;
             for (var requirement in manifest.requirements) {
                 # The project's dev-dependencies once, last; never another
@@ -276,7 +285,7 @@ export struct Resolver {
                 if (!wanted.contains(source)) {
                     wanted[source] = Array<Wanted>();
                 }
-                wanted[source].append(Wanted(requirer, from_root, dev, requirement));
+                wanted[source].append(Wanted(requirer, from_root, dev, parent, requirement));
                 if (read.contains(source)) {
                     continue;
                 }
@@ -300,10 +309,57 @@ export struct Resolver {
                 if (dependency.is_err()) {
                     return Result<OrderedMap<String, Array<Wanted>>>.Err(dependency.error().message);
                 }
-                queue.append((dependency.value(), label, false, dev));
+                queue.append((dependency.value(), label, false, dev, source));
             }
         }
         return Result<OrderedMap<String, Array<Wanted>>>.Ok(wanted);
+    }
+
+    # The condition under which a build needs each source of `wanted`: the
+    # `[target.'<condition>']` of each requirement on a way to it, all of
+    # which must hold, or else those of another way. Empty when a way has
+    # none: every build needs it.
+    _targets(wanted: OrderedMap<String, Array<Wanted>>): HashMap<String, String> {
+        # Each source's ways, each its conditions sorted; a way that holds
+        # another's conditions and more adds nothing, so a cycle settles.
+        var ways = HashMap<String, Array<Array<String>>>();
+        var changed = true;
+        while (changed) {
+            changed = false;
+            for (var (source, asks) in wanted) {
+                for (var ask in asks) {
+                    var from = ask.parent.is_empty ?
+                        [Array<String>()] :
+                        ways.try_get(ask.parent).value_or(Array<Array<String>>());
+                    for (var way in from) {
+                        var conditions = way.copy();
+                        var condition = ask.requirement.target;
+                        if (!condition.is_empty and !conditions.contains(condition)) {
+                            conditions.append(condition);
+                            conditions.sort((a, b) => a.compare(b));
+                        }
+                        if (!ways.contains(source)) {
+                            ways[source] = Array<Array<String>>();
+                        }
+                        changed = _add_way(ways[source], conditions) or changed;
+                    }
+                }
+            }
+        }
+        var targets = HashMap<String, String>();
+        for (var (source, alternatives) in ways) {
+            var texts = Array<String>();
+            for (var conditions in alternatives) {
+                if (conditions.is_empty) {
+                    texts = Array<String>();
+                    break;
+                }
+                texts.append(conditions.count == 1 ? conditions[0] : " && ".join(_parenthesized(conditions)));
+            }
+            texts.sort((a, b) => a.compare(b));
+            targets[source] = texts.count == 1 ? texts[0] : " || ".join(_parenthesized(texts));
+        }
+        return targets;
     }
 
     # The checksum pep.lock records for `commit` of `source`, if any.
@@ -320,7 +376,7 @@ export struct Resolver {
     # git is on the PATH, else the host's archive of it. Returns the full
     # commit and the checksum of its files, which must match the one
     # pep.lock records for that commit.
-    _fetch(host: String, repository: String, dir: Path, commit: String): Result<(String, String)> {
+    fetch(host: String, repository: String, dir: Path, commit: String): Result<(String, String)> {
         var source = host + ":" + repository;
         var expected = _locked_sha256(source, commit);
         var at = unpacked(dir);
@@ -561,6 +617,44 @@ export struct Resolver {
 export tag_version(tag: String): Optional<Version> {
     var parsed = semver.parse(tag.starts_with("v") ? tag.substr(1, tag.length) : tag);
     return parsed.is_ok() ? Optional<Version>.Value(parsed.value()) : Optional<Version>.Empty;
+}
+
+# Adds `way` to `ways` unless one of them needs no more than it does,
+# dropping those that need more; whether `ways` changed.
+_add_way(ways: Array<Array<String>>, way: Array<String>): bool {
+    for (var other in ways) {
+        if (_all_in(other, way)) {
+            return false;
+        }
+    }
+    var index = ways.count;
+    while (index > 0) {
+        index -= 1;
+        if (_all_in(way, ways[index])) {
+            ways.remove_at(index);
+        }
+    }
+    ways.append(way);
+    return true;
+}
+
+# Whether every item of `some` is in `all`.
+_all_in(some: Array<String>, all: Array<String>): bool {
+    for (var item in some) {
+        if (!all.contains(item)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+# Each of `texts` in parentheses.
+_parenthesized(texts: Array<String>): Array<String> {
+    var out = Array<String>();
+    for (var text in texts) {
+        out.append("(" + text + ")");
+    }
+    return out;
 }
 
 _accepted(ranges: Array<VersionRange>, version: Version): bool {

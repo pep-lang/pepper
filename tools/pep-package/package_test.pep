@@ -8,6 +8,7 @@
 
 import async;
 import [Directory, File, Path] from io;
+import [system_name] from os;
 import process;
 import [serve_folder] from tool_testing.server;
 import [TempFolder] from testing;
@@ -292,6 +293,62 @@ a_dependent_ignores_a_packages_dev_dependencies() {
     expect_false(project.lock().contains("2.0.0"));
     expect_false(project.lock().contains("dev = true"));
     expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
+}
+
+[Test]
+target_dependencies_are_locked_for_every_platform_and_fetched_for_one() {
+    if (!has_git()) {
+        return;
+    }
+    # `someone/shapes` needs numbers only on Windows.
+    var hosts = Hosts("target");
+    add_version(
+        hosts.folder.path,
+        "someone/shapes",
+        "1.0.0",
+        [
+            "module.pep",
+            "export sides(): int {\n    return 4;\n}\n",
+            "pep.toml",
+            "[package]\nname = \"shapes\"\n\n[target.'OS(Windows)'.dependencies]\n"
+                + "numbers = { github = \"other/numbers\", version = \"1\" }\n"
+        ]
+    );
+    publish(hosts.folder.path, "someone/shapes");
+    var project = Project("target", "shapes = { github = \"someone/shapes\", version = \"1\" }\n");
+    write_file(
+        project.dir.join("main.pep"),
+        "import shapes;\n\n[Target(OS(Linux))]\nimport geometry;\n\nmain(): int {\n    print(shapes.sides());\n    return 0;\n}\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"1.3.1\"\ncommit = ");
+    expect_contains(project.lock(), "\ntarget = \"OS(Windows)\"\n");
+
+    # A way to it under another condition widens it; the lock is the same on
+    # every platform.
+    expect_exit(hosts.package(project.dir, ["add", "--target", "OS(Linux)", "someone/geometry@1"]), 0);
+    expect_contains(
+        project.manifest(),
+        "[target.\"OS(Linux)\".dependencies]\ngeometry = { github = \"someone/geometry\", version = \"1\" }\n"
+    );
+    expect_contains(project.lock(), "\ntarget = \"OS(Linux)\"\n");
+    expect_contains(project.lock(), "\ntarget = \"(OS(Linux)) || (OS(Windows))\"\n");
+
+    # A build fetches only what its target needs.
+    remove_tree(project.dir.join(".pep"));
+    expect_equal(hosts.build_and_run(project.dir), "4\n");
+    var deps = project.dir.join(".pep").join("deps").join("github.com");
+    expect_true(deps.join("someone").join("shapes").is_directory());
+    var system = system_name();
+    expect_equal(deps.join("someone").join("geometry").is_directory(), system == "linux");
+    expect_equal(deps.join("other").join("numbers").is_directory(), system == "linux" or system == "windows");
+
+    expect_exit(hosts.package(project.dir, ["remove", "geometry"]), 0);
+    expect_false(project.manifest().contains("geometry"));
+    expect_false(project.lock().contains("OS(Linux)"));
+    var both = hosts.package(project.dir, ["add", "--dev", "--target", "OS(Linux)", "someone/geometry"]);
+    expect_exit(both, 1);
+    expect_contains(both.stderr, "--dev and --target name different tables; give one");
 }
 
 [Test]

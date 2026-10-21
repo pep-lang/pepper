@@ -89,6 +89,9 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
 ## `pep.lock` lists, or a dependency `pep.toml` names that the lock does
 ## not. With `pep-package` beside the compiler or on the PATH, it fetches
 ## (and locks); without it, git checks out each missing locked package.
+## Only what a build for `target` needs: a package `pep.lock` locks for
+## other targets (`target = "OS(Windows)"`) is left out, unless pep.toml
+## names a package the lock does not list, which resolves the whole graph.
 ##
 ## Builds run side by side (`pepper test` builds every test program at
 ## once), and each would fetch into the same `.partial` folders: one at a
@@ -104,8 +107,12 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
 ## @param entry the file being built
 ## @param locked whether a stale `pep.lock` is an error (`--locked`)
 ## @param offline whether fetching over the network is an error (`--offline`)
+## @param target what the build is for (`--target`), which picks the
+##   packages it needs
 ## @returns nothing, or why fetching failed
-export fetch_dependencies(entry: Path, locked: bool = false, offline: bool = false): Result<void, String> {
+export fetch_dependencies(
+    entry: Path, locked: bool = false, offline: bool = false, target: link.Target = link.Target()
+): Result<void, String> {
     var project = link.find_project(entry);
     if (!project.is_value()) {
         return Result<void, String>.ok();
@@ -114,7 +121,7 @@ export fetch_dependencies(entry: Path, locked: bool = false, offline: bool = fal
     if (manifest.is_err()) {
         return Result<void, String>.ok();
     }
-    var needed = _needs_fetch(project.value(), manifest.value());
+    var needed = _needs_fetch(project.value(), manifest.value(), target);
     if (needed.is_err()) {
         return Result<void, String>.err(needed.error());
     }
@@ -143,20 +150,22 @@ export fetch_dependencies(entry: Path, locked: bool = false, offline: bool = fal
     if (held.is_err()) {
         return Result<void, String>.err($"cannot lock {lock_dir}: {held.error().message}");
     }
-    var fetched = _fetch_locked(project.value(), manifest.value(), checks, offline);
+    var fetched = _fetch_locked(project.value(), manifest.value(), checks, offline, target);
     lock.close();
     return fetched;
 }
 
-## What a project lacks: the locked packages missing from `.pep/deps` or
-## checked out there at another commit, and the Git dependencies `pep.toml`,
-## or a `path` dependency's, names that `pep.lock` does not list.
+## What a project lacks for a build: the locked packages it needs that are
+## missing from `.pep/deps` or checked out there at another commit, and the
+## Git dependencies `pep.toml`, or a `path` dependency's, names that
+## `pep.lock` does not list.
 struct _Missing {
     var packages: link.LockedPackage[] = Array<link.LockedPackage>();
     ## The sources of the Git dependencies `pep.lock` does not list, fetched
     ## or not.
     var not_locked: String[] = Array<String>();
-    ## Those of `not_locked` that `.pep/deps` does not hold.
+    ## Those of `not_locked` that the build needs and `.pep/deps` does not
+    ## hold.
     var not_fetched: String[] = Array<String>();
 
     is_empty(): bool {
@@ -164,8 +173,9 @@ struct _Missing {
     }
 }
 
-## What `project`, whose manifest is `manifest`, lacks, read afresh.
-_needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
+## What `project`, whose manifest is `manifest`, lacks for a build for
+## `target`, read afresh.
+_needs_fetch(project: Path, manifest: link.Manifest, target: link.Target): Result<_Missing, String> {
     var locked = link.read_lock(project.join(Path(link.LOCK_FILE)));
     if (locked.is_err()) {
         return Result<_Missing, String>.err(locked.error());
@@ -173,9 +183,14 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
     var missing = _Missing();
     for (var package in locked.value()) {
         var dir = link.package_directory(project, package.host, package.repository);
-        if (!dir.is_directory() or _is_stale(dir, package)) {
+        if (package.matches(target) and (!dir.is_directory() or _is_stale(dir, package))) {
             missing.packages.append(package);
         }
+    }
+    # pep.lock covers every target, so any dependency it lacks makes it stale.
+    var needed = HashSet<String>();
+    for (var d in manifest.git_dependencies(Optional<link.Target>.Value(target))) {
+        needed.insert(d.locked_source().value());
     }
     # A `path` dependency's own Git dependencies are fetched into this
     # project too.
@@ -189,7 +204,7 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
         }
         if (!is_locked) {
             missing.not_locked.append(source);
-            if (!d.directory(project, project).is_directory()) {
+            if (needed.contains(source) and !d.directory(project, project).is_directory()) {
                 missing.not_fetched.append(source);
             }
         }
@@ -246,9 +261,12 @@ _is_stale(dir: Path, package: link.LockedPackage): bool {
 
 ## Fetches what `project` lacks, holding the fetch lock: another build may
 ## have fetched it while this one waited. `checks` runs `pep-package fetch
-## --locked` even when nothing is missing.
-_fetch_locked(project: Path, manifest: link.Manifest, checks: bool, offline: bool): Result<void, String> {
-    var needed = _needs_fetch(project, manifest);
+## --locked` even when nothing is missing. With a lock that lists every
+## dependency, only the locked packages `target` needs are fetched.
+_fetch_locked(
+    project: Path, manifest: link.Manifest, checks: bool, offline: bool, target: link.Target
+): Result<void, String> {
+    var needed = _needs_fetch(project, manifest, target);
     if (needed.is_err()) {
         return Result<void, String>.err(needed.error());
     }
@@ -265,6 +283,13 @@ _fetch_locked(project: Path, manifest: link.Manifest, checks: bool, offline: boo
         }
         if (offline) {
             arguments.append("--offline");
+        }
+        # A current lock: only the packages this build needs, not every
+        # target's, which resolving the graph would fetch.
+        if (!checks and needed.value().not_locked.is_empty) {
+            for (var package in missing) {
+                arguments.append(package.source());
+            }
         }
         var ran = process.Command(tool.value().to_string()).arguments(arguments).run();
         if (ran.is_err()) {

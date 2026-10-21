@@ -58,6 +58,11 @@ The attribute goes before `export`, not after it:
 `[Target(OS(Windows))] export f()`. Writing `export [Target(OS(Windows))] f()`
 is a parse error.
 
+A project's `pep.toml` takes the same conditions for the packages only some
+platforms need (`[target.'OS(Windows)'.dependencies]`): a build sees them
+only for a target the condition selects, so guard their imports with it
+too. See [Projects: pep.toml](../tools/projects.md#targetconditiondependencies).
+
 ## Blocks inside a function
 
 Inside a function body, attach `[Target(...)]` to a block `{ ... }`. The block

@@ -2,21 +2,25 @@
 ## `pep.toml` marks the root of a project (or of a package, a project other
 ## projects depend on) and declares its metadata, how it is built, and its
 ## dependencies. Each key of `[dependencies]` (and of
-## `[dev-dependencies]`, which only the project's tests and examples see)
-## is the name source code imports; a fetched dependency lives in the
+## `[dev-dependencies]`, which only the project's tests and examples see,
+## and of `[target.'<condition>'.dependencies]`, which only a build for a
+## target the `[Target(...)]` condition selects sees) is the name source
+## code imports; a fetched dependency lives in the
 ## project's `.pep/deps/<host>/<repository>`, and `Packages` resolves the
 ## imports of every file of a program against the dependencies of the
 ## package that file belongs to.
 
-import [Span] from compiler.ast;
+import [Attribute, Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
 import os;
+import compiler.parse;
 import process;
 import toml;
 import [TomlValue] from toml;
 import "files" as files;
+import [Target, TEST_BUILD_OPTION] from "platform";
 
 ## The folder, in a project's `.pep`, that holds its fetched dependencies.
 export const DEPS_DIR = "deps";
@@ -107,6 +111,9 @@ export struct LockedPackage {
     var repository: String;
     ## The full commit to check out.
     var commit: String;
+    ## Its `target` condition: the platforms it is needed on, none when it
+    ## is needed on every one.
+    var condition: Attribute? = Optional<Attribute>.Empty;
 
     construct(host: Host, repository: String, commit: String) {
         this.host = host;
@@ -117,6 +124,11 @@ export struct LockedPackage {
     ## Its source as `pep.lock` writes it: `github:owner/name`.
     source(): String {
         return $"{host.key()}:{repository}";
+    }
+
+    ## Whether a build for `build` needs it.
+    matches(build: Target): bool {
+        return _selects(condition, build);
     }
 }
 
@@ -174,12 +186,27 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
         if (!host.is_value()) {
             return Result<LockedPackage[], String>.err(invalid);
         }
-        locked.append(LockedPackage(host.value(), repository, commit_string));
+        var entry = LockedPackage(host.value(), repository, commit_string);
+        var target = package.try_get("target");
+        if (target.is_value()) {
+            if (target.value() is String(t)) {
+                # One that does not parse is fetched: building it reports
+                # the error, at the key in its pep.toml.
+                var condition = target_condition(t);
+                if (condition.is_ok()) {
+                    entry.condition = Optional<Attribute>.Value(condition.value());
+                }
+            } else {
+                return Result<LockedPackage[], String>.err(invalid);
+            }
+        }
+        locked.append(entry);
     }
     return Result<LockedPackage[], String>.ok(locked);
 }
 
-## One entry of `[dependencies]` or `[dev-dependencies]`.
+## One entry of `[dependencies]`, `[dev-dependencies]` or
+## `[target.'<condition>'.dependencies]`.
 export struct Dependency {
     ## The key: the name source code imports.
     var name: String;
@@ -189,6 +216,11 @@ export struct Dependency {
     var host: Host?;
     ## `owner/name` on the host, or the folder relative to the `pep.toml`.
     var location: String;
+    ## The condition of the `[target.'<condition>'.dependencies]` table it
+    ## is in (`OS(Windows)`), or empty for every target.
+    var target: String = "";
+    ## `target` read as the body of a `[Target(...)]`.
+    var condition: Attribute? = Optional<Attribute>.Empty;
 
     construct(name: String, name_span: Span, host: Host?, location: String) {
         this.name = name;
@@ -204,6 +236,19 @@ export struct Dependency {
             return package_directory(project, host.value(), location);
         }
         return manifest_dir.join(Path(location));
+    }
+
+    ## Whether a build for `build` sees it: always, unless it is in a
+    ## `[target.'<condition>'.dependencies]` whose condition `build` does
+    ## not satisfy.
+    matches(build: Target): bool {
+        return _selects(condition, build);
+    }
+
+    ## The table it is in, as a message names it:
+    ## `target.'OS(Windows)'.dependencies`, else `dependencies`.
+    table(): String {
+        return target.is_empty ? "dependencies" : $"target.'{target}'.dependencies";
     }
 
     ## Its source as `pep.lock` writes it (`github:owner/name`), for a Git
@@ -275,8 +320,10 @@ export struct Manifest {
     ## dev-dependencies are not part of this project. A `path` dependency
     ## whose `pep.toml` cannot be read is skipped: importing it reports why.
     ##
+    ## @param build when given, only what a build for this target sees
+    ##   (`Dependency.matches`); else every platform's
     ## @returns the Git dependencies, this manifest's first
-    git_dependencies(): Dependency[] {
+    git_dependencies(build: Target? = Optional<Target>.Empty): Dependency[] {
         var out = Array<Dependency>();
         var pending = [this];
         var seen = HashSet<String>();
@@ -293,6 +340,9 @@ export struct Manifest {
                 own = false;
             }
             for (var d in named) {
+                if (build.is_value() and !d.matches(build.value())) {
+                    continue;
+                }
                 if (d.host.is_value()) {
                     out.append(d);
                     continue;
@@ -326,6 +376,36 @@ export struct Manifest {
         }
         return dirs;
     }
+}
+
+## Whether `condition`, a `[Target(...)]` body, holds for `build`; none
+## holds everywhere.
+_selects(condition: Attribute?, build: Target): bool {
+    return !condition.is_value() or build.keeps([condition.value()]);
+}
+
+## Reads `text`, a `[target.'<condition>']` key or a `pep.lock` `target`,
+## as the body of a `[Target(...)]` attribute: the expressions
+## `[Target(...)]` takes, checked as it checks them.
+##
+## @param text the condition, such as `OS(Windows)`
+## @returns the attribute, or why it is not a condition
+target_condition(text: String): Result<Attribute, String> {
+    var invalid = $"invalid target condition '{text}'; expected what '[Target(...)]' takes, such as 'OS(Windows)'";
+    # A declaration to hang the attribute on.
+    var parsed = parse.parse_declarations("[Target(" + text + ")]\n_target() {}\n");
+    if (parsed.is_err() or parsed.value().declarations.count != 1) {
+        return Result<Attribute, String>.err(invalid);
+    }
+    var attributes = parsed.value().declarations[0].attributes();
+    if (attributes.count != 1) {
+        return Result<Attribute, String>.err(invalid);
+    }
+    var checked = Target().check(attributes[0]);
+    if (checked.is_value()) {
+        return Result<Attribute, String>.err(checked.value().0);
+    }
+    return Result<Attribute, String>.ok(attributes[0]);
 }
 
 ## The dependency in `dependencies` named `name`, if any.
@@ -439,6 +519,25 @@ struct _Reader {
         ulong i = 0;
         while (i < keys.count) {
             var key = keys[i];
+            if (i == 0 and key == "target" and keys.count > 1) {
+                # `[target.'OS(Windows)'.dependencies]`: the condition, then
+                # the table after it.
+                var condition = text.find(keys[1]);
+                if (condition >= 0) {
+                    at = condition as ulong + keys[1].size;
+                    key_at = condition as ulong;
+                    i += 2;
+                    if (keys.count > 2) {
+                        var table = text.find(keys[2], at);
+                        if (table >= 0) {
+                            key_at = table as ulong;
+                            at = table as ulong + keys[2].size;
+                        }
+                        i += 1;
+                    }
+                    continue;
+                }
+            }
             if (i == 0) {
                 var header = text.find($"[{key}]");
                 if (header >= 0) {
@@ -710,11 +809,12 @@ struct _Reader {
         }
     }
 
-    ## The entries of the dependency table `table` (`dependencies` or
-    ## `dev-dependencies`), appended to `into`.
-    dependencies(table: String, into: Dependency[], members: OrderedMap<String, TomlValue>) {
+    ## The entries of the dependency table at `table` (`[dependencies]`,
+    ## `[dev-dependencies]`, `[target, condition, dependencies]`), appended
+    ## to `into`.
+    dependencies(table: String[], into: Dependency[], members: OrderedMap<String, TomlValue>) {
         for (var (name, value) in members) {
-            var path = [table, name];
+            var path = _at(table, name);
             if (!is_identifier(name)) {
                 error($"dependency name '{name}' is not an identifier; it is the name 'import' uses", key_span(path));
                 continue;
@@ -785,7 +885,10 @@ struct _Reader {
                 revision = field;
             } else {
                 unknown_key(
-                    path, field, path[0], ["github", "gitlab", "codeberg", "path", "version", "branch", "tag", "commit"]
+                    path,
+                    field,
+                    path.count > 2 ? $"target.'{path[1]}'.dependencies" : path[0],
+                    ["github", "gitlab", "codeberg", "path", "version", "branch", "tag", "commit"]
                 );
             }
         }
@@ -808,6 +911,42 @@ struct _Reader {
             return;
         }
         into.append(Dependency(name, key_span(path), host, location.value()));
+    }
+
+    ## The `[target]` table: each key a condition, holding a
+    ## `dependencies` table whose entries are appended to the manifest's
+    ## dependencies, marked with it.
+    targets(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        for (var (condition, value) in members) {
+            var at = ["target", condition];
+            var parsed = target_condition(condition);
+            if (parsed.is_err()) {
+                error(parsed.error(), key_span(at));
+                continue;
+            }
+            var tables = table(at, condition, value);
+            if (!tables.is_value()) {
+                continue;
+            }
+            for (var (key, inner) in tables.value()) {
+                var path = _at(at, key);
+                if (key != "dependencies") {
+                    unknown_key(at, key, $"target.'{condition}'", ["dependencies"]);
+                    continue;
+                }
+                var entries = table(path, key, inner);
+                if (!entries.is_value()) {
+                    continue;
+                }
+                var found = Array<Dependency>();
+                dependencies(path, found, entries.value());
+                for (var d in found) {
+                    d.target = condition;
+                    d.condition = Optional<Attribute>.Value(parsed.value());
+                    manifest.dependencies.append(d);
+                }
+            }
+        }
     }
 }
 
@@ -862,8 +1001,13 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             var table = reader.table(at, key, value);
             if (table.is_value()) {
                 reader.dependencies(
-                    key, key == "dependencies" ? manifest.dependencies : manifest.dev_dependencies, table.value()
+                    at, key == "dependencies" ? manifest.dependencies : manifest.dev_dependencies, table.value()
                 );
+            }
+        } else if (key == "target") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.targets(manifest, table.value());
             }
         } else if (key == "fetch") {
             var table = reader.table(at, key, value);
@@ -872,7 +1016,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]' and '[fetch]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]' and '[fetch]'",
                 reader.key_span(at)
             );
         }
@@ -880,10 +1024,18 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
     if (!package_seen) {
         reader.error("missing '[package]' table with the project's 'name'", Span(0, 0));
     }
+    for (var d in manifest.dependencies) {
+        var first = manifest.dependency(d.name).value();
+        if (first !== d) {
+            reader.error($"'{d.name}' is in both '[{first.table()}]' and '[{d.table()}]'; keep it in one", d.name_span);
+        }
+    }
     for (var d in manifest.dev_dependencies) {
-        if (manifest.dependency(d.name).is_value()) {
+        var other = manifest.dependency(d.name);
+        if (other.is_value()) {
             reader.error(
-                $"'{d.name}' is in both '[dependencies]' and '[dev-dependencies]'; keep it in one", d.name_span
+                $"'{d.name}' is in both '[{other.value().table()}]' and '[dev-dependencies]'; keep it in one",
+                d.name_span
             );
         }
     }
@@ -979,6 +1131,9 @@ export struct Packages {
     ## Whether the project's own files see its `[dev-dependencies]`: in a
     ## test build, and a build of a file in its `examples` folder.
     var dev: bool = false;
+    ## What the program is built for, which picks the
+    ## `[target.'<condition>'.dependencies]` it sees.
+    var target: Target = Target();
     ## Folder -> the manifest governing it, or why it could not be used, or
     ## Empty when none does.
     var _by_dir: HashMap<String, Result<Manifest, String>?> = HashMap<String, Result<Manifest, String>?>();
@@ -986,11 +1141,14 @@ export struct Packages {
     ## The packages of a program rooted at the file `root`.
     ##
     ## @param root the program's root file
-    ## @param test whether it is a test build, which sees the project's
-    ##   dev-dependencies, as a build of a file in its `examples` folder does
-    construct(root: Path, test: bool = false) {
+    ## @param target what it is built for: a test build (`TEST_BUILD_OPTION`)
+    ##   sees the project's dev-dependencies, as a build of a file in its
+    ##   `examples` folder does
+    construct(root: Path, target: Target = Target()) {
+        this.target = target;
         project = files.find_project(root);
-        dev = test or (project.is_value() and _in_examples(project.value(), root));
+        dev = target.build_options.contains(TEST_BUILD_OPTION)
+            or (project.is_value() and _in_examples(project.value(), root));
     }
 
     _manifest_for(dir: Path): Result<Manifest, String>? {
@@ -1073,6 +1231,11 @@ export struct Packages {
                     $"'{first}' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here"
                 );
             }
+        } else if (!dependency.value().matches(target)) {
+            var condition = dependency.value().target;
+            return Resolution.Missing(
+                $"'{first}' is a dependency only for targets where '{condition}' holds, which this build's does not; put '[Target({condition})]' on the import"
+            );
         }
         var package = dependency.value().directory(project.value(), manifest.dir());
         if (!package.is_directory()) {

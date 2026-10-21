@@ -1,6 +1,7 @@
 # pep.toml as the package manager reads it: the package's name, the oldest
-# toolchain it builds with, and its dependencies and dev-dependencies. The
-# compiler checks the rest of the file when it builds.
+# toolchain it builds with, and its dependencies, dev-dependencies and
+# `[target.'<condition>'.dependencies]`. The compiler checks the rest of the
+# file, the conditions included, when it builds.
 
 import [File, Path] from io;
 import toml;
@@ -10,7 +11,8 @@ export is_host(key: String): bool {
     return key == "github" or key == "gitlab" or key == "codeberg";
 }
 
-# One entry of `[dependencies]` or `[dev-dependencies]`.
+# One entry of `[dependencies]`, `[dev-dependencies]` or
+# `[target.'<condition>'.dependencies]`.
 export struct Requirement {
     # The key: the name source code imports.
     var name: String = "";
@@ -25,6 +27,9 @@ export struct Requirement {
     # Whether it is in `[dev-dependencies]`: only the project's own tests
     # and examples use it, so a project depending on this one ignores it.
     var dev: bool = false;
+    # The `[target.'<condition>']` it is under (`OS(Windows)`): the
+    # platforms that use it. Empty for every platform.
+    var target: String = "";
 
     construct() {}
 
@@ -38,9 +43,13 @@ export struct Requirement {
         return host == "path";
     }
 
-    # The table it is in: `dependencies` or `dev-dependencies`.
-    table(): String {
-        return dev ? "dev-dependencies" : "dependencies";
+    # Its key in pep.toml: `[dependencies, name]`, `[dev-dependencies,
+    # name]` or `[target, condition, dependencies, name]`.
+    key(): Array<String> {
+        if (!target.is_empty) {
+            return ["target", target, "dependencies", name];
+        }
+        return [dev ? "dev-dependencies" : "dependencies", name];
     }
 
     # The revision as pep.toml writes it, for messages: `1.2`, `branch main`.
@@ -152,6 +161,33 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             }
             requirement.value().dev = name == "dev-dependencies";
             manifest.requirements.append(requirement.value());
+        }
+    }
+    var targets = root.try_get("target");
+    if (targets.is_value()) {
+        var conditions = targets.value().as_table();
+        if (conditions.is_empty()) {
+            return Result<Manifest>.Err($"{path.to_string()}: '[target]' must be a table");
+        }
+        for (var (condition, tables) in conditions.value()) {
+            var dependencies = tables.try_get("dependencies");
+            if (dependencies.is_empty()) {
+                continue;
+            }
+            var table = dependencies.value().as_table();
+            if (table.is_empty()) {
+                return Result<Manifest>.Err(
+                    $"{path.to_string()}: '[target.'{condition}'.dependencies]' must be a table"
+                );
+            }
+            for (var (key, value) in table.value()) {
+                var requirement = _requirement(path, key, value);
+                if (requirement.is_err()) {
+                    return Result<Manifest>.Err(requirement.error().message);
+                }
+                requirement.value().target = condition;
+                manifest.requirements.append(requirement.value());
+            }
         }
     }
     return Result<Manifest>.Ok(manifest);
