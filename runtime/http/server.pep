@@ -29,7 +29,8 @@ export const MAX_REQUEST_BODY: ulong = 16777216;
 ## Large`; the connection then closes. A response whose reason phrase or
 ## field value holds CR, LF or NUL, or whose field name is not an RFC 9110
 ## token, is sent as `500 Internal Server Error` instead, since those
-## characters would split the response.
+## characters would split the response; the 500's text body names the
+## field (or the reason phrase) at fault.
 ##
 ## HTTP/2 is served to a client that chooses it through ALPN (see
 ## `bind_tls`) or that starts a plain TCP connection with the HTTP/2
@@ -275,10 +276,14 @@ _http_last_space(line: String): long {
 }
 
 # `response`, or a 500 when its reason phrase or a field cannot be sent as
-# it is: a CR or LF there would split the response.
+# it is: a CR or LF there would split the response. The 500's body says
+# which, so the handler's author sees it without a server log.
 _http_sendable(response: Response): Response {
-    if (!_http_is_field_value(response.reason) || _http_bad_fields(response.headers).is_value()) {
-        return Response(500);
+    var bad = _http_is_field_value(response.reason) ?
+        _http_bad_fields(response.headers) :
+        Optional<String>.Value("the reason phrase holds CR, LF or NUL");
+    if (bad.is_value()) {
+        return Response(500).set_text($"the response cannot be sent: {bad.value()}");
     }
     return response;
 }

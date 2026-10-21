@@ -53,8 +53,7 @@ private answer(request: http.Request): http.Response {
     }
     if (path == "/inject") {
         var injected = http.Response(303);
-        injected.headers["Location"] = "/next
-Set-Cookie: admin=1";
+        injected.headers["Location"] = "/next\r\nSet-Cookie: admin=1";
         return injected;
     }
     if (path == "/slow") {
@@ -120,6 +119,9 @@ requests_share_one_connection() {
             var injected = exchange(connection, http.Request("GET", base + "/inject"));
             expect_equal(injected.status, 500);  # a value with CR or LF is refused
             expect_false(injected.headers.has("location"));
+            expect_equal(
+                injected.text(), "the response cannot be sent: the value of the field 'location' holds CR, LF or NUL"
+            );
 
             var head = exchange(connection, http.Request("HEAD", base + "/hello"));
             expect_equal(head.status, 200);

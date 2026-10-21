@@ -76,17 +76,13 @@ handle(request: http.Request): http.Response {
         var injected = http.Response(303);
         var query = request.query();
         if (query == "cr") {
-            injected.headers["Location"] = "/next
-Set-Cookie: admin=1";
+            injected.headers["Location"] = "/next\r\nSet-Cookie: admin=1";
         } else if (query == "lf") {
-            injected.headers["Location"] = "/next
-Set-Cookie: admin=1";
+            injected.headers["Location"] = "/next\nSet-Cookie: admin=1";
         } else if (query == "name") {
-            injected.headers["Set-Cookie: admin=1
-X"] = "y";
+            injected.headers["Set-Cookie: admin=1\r\nX"] = "y";
         } else {
-            injected.reason = "See Other
-Set-Cookie: admin=1";
+            injected.reason = "See Other\r\nSet-Cookie: admin=1";
         }
         return injected;
     }
@@ -370,17 +366,26 @@ malformed_requests_get_an_error_status() {
 
 [Test]
 server_refuses_fields_that_would_split_the_response() {
-    async.run(() => {
-        var port = port_of(start_server());
-        for (var query in ["cr", "lf", "name", "reason"]) {
-            var reply = raw(port, "GET /inject?" + query + " HTTP/1.1
-Connection: close
-
-");
-            expect_true(reply.starts_with("HTTP/1.1 500 Internal Server Error"));
-            expect_false(reply.lower().contains("set-cookie"));
+    async.run(
+        () => {
+            var port = port_of(start_server());
+            # The 500's body says what was wrong.
+            var because = [
+                "the value of the field 'location' holds CR, LF or NUL",
+                "the value of the field 'location' holds CR, LF or NUL",
+                "a field name is not a token",
+                "the reason phrase holds CR, LF or NUL",
+            ];
+            ulong i = 0;
+            for (var query in ["cr", "lf", "name", "reason"]) {
+                var reply = raw(port, "GET /inject?" + query + " HTTP/1.1\r\nConnection: close\r\n\r\n");
+                expect_true(reply.starts_with("HTTP/1.1 500 Internal Server Error"));
+                expect_false(reply.lower().contains("set-cookie"));
+                expect_true(reply.ends_with("\r\n\r\nthe response cannot be sent: " + because[i]));
+                i += 1;
+            }
         }
-    });
+    );
 }
 
 [Test]
@@ -393,11 +398,9 @@ client_refuses_fields_that_would_split_the_request() {
             var base = start_server();
             var client = http.Client();
             var cr = http.Request("GET", base + "/headers");
-            cr.headers["X-Test"] = "a
-Set-Cookie: admin=1";
+            cr.headers["X-Test"] = "a\r\nSet-Cookie: admin=1";
             var lf = http.Request("GET", base + "/headers");
-            lf.headers["X-Test"] = "a
-Set-Cookie: admin=1";
+            lf.headers["X-Test"] = "a\nSet-Cookie: admin=1";
             var nul = http.Request("GET", base + "/headers");
             nul.headers["X-Test"] = "a" + String._from_bytes([0 as u8]) + "b";
             var name = http.Request("GET", base + "/headers");
@@ -409,8 +412,8 @@ Set-Cookie: admin=1";
                 expect_true(sent.error().is_invalid_input());
             }
             var fine = http.Request("GET", base + "/headers");
-            fine.headers["X-Test"] = "a	b";  # a tab is allowed
-            expect_equal(client.send(fine).value().text(), "a	b");
+            fine.headers["X-Test"] = "a\tb";  # a tab is allowed
+            expect_equal(client.send(fine).value().text(), "a\tb");
         }
     );
 }

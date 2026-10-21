@@ -358,12 +358,15 @@ _http_write_stream(connection: _HttpConnection, source: io.Reader, length: long,
 # Why `headers` cannot be sent, or none: a field name that is not a token,
 # or a value with CR, LF or NUL, would let it add fields or end the head
 # (RFC 9110 §5.1, §5.5).
+# It reads the fields in place: `names()` and `values()` would copy them.
 _http_bad_fields(headers: Headers): String? {
-    for (var name in headers.names()) {
+    for (var (name, values) in headers._fields) {
         if (!_http_is_token(name)) {
-            return Optional<String>.Value($"the field name '{name}' is not a token");
+            # Not quoted: a server's 500 shows this text, and the name may
+            # come from the request.
+            return Optional<String>.Value("a field name is not a token");
         }
-        for (var value in headers.values(name)) {
+        for (var value in values) {
             if (!_http_is_field_value(value)) {
                 return Optional<String>.Value($"the value of the field '{name}' holds CR, LF or NUL");
             }

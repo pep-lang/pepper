@@ -39,7 +39,8 @@ Too Large`, and one with a body over `MAX_REQUEST_BODY` `413 Content Too
 Large`; the connection then closes. A response whose reason phrase or
 field value holds CR, LF or NUL, or whose field name is not an RFC 9110
 token, is sent as `500 Internal Server Error` instead, since those
-characters would split the response.
+characters would split the response; the 500's text body names the
+field (or the reason phrase) at fault.
 
 HTTP/2 is served to a client that chooses it through ALPN (see
 `bind_tls`) or that starts a plain TCP connection with the HTTP/2
