@@ -3012,7 +3012,7 @@ then include `wait`. `<dir>` is `<build>/compilation-units.<pid>`, the build's o
 in one folder at once (`pepper test` builds its test programs side by side)
 must not share it. It is removed after the build, but kept with `-T time`,
 where each worker also leaves the time its compilation unit's stages took
-(`<k>.stages`: merge, index, check, finish, store, object), and the build
+(`<k>.stages`: diagnostics, merge, index, check, finish, store, object), and the build
 leaves `schedule`: for each compilation unit a worker checked, its number, name, when
 it began and ended (milliseconds from the start) and the compilation units it reads,
 as Ninja's `.ninja_log`, to find the chain of compilation units that bounds the
