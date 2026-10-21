@@ -3071,8 +3071,7 @@ library's dependents on its interface while its code generates, a worker leaves
 the record (`<k>.rec`, `<k>.own`, `<k>.warn`) and `<k>.checked` as soon as
 the compilation unit is stored, then waits for the `defines` of the compilation units it reads,
 leaves `<k>.compiling`, compiles, and leaves `<k>.defines` and `<k>.done`.
-The scheduler starts a compilation unit once the compilation units it reads are checked (a
-hit, once they are done: below), and
+The scheduler starts a compilation unit once the compilation units it reads are checked, and
 counts toward `jobs` only workers checking or compiling: one waiting for the
 objects below uses no processor (there are at most half again as many
 workers as jobs, and two more, since each holds the program). Workers' stages
@@ -3111,11 +3110,13 @@ holds the codegen options), and a compilation unit counts as done from the cache
 when both its record and its object are there, and the object links with the
 objects below (`Cache.unit_objects`): a body edit below can stop it defining
 an instantiation without changing any key above, and an object that needs it
-then failed to link (#24). So the scheduler asks (`usable`) only once the
-compilation units a hit reads are done, an object whose `needs` the objects
-below no longer all define is passed over for one under its key with what
-they define added (`Cache.unit_store_key`), and one there is none of is
-compiled again and stored there; a build marks the object
+then failed to link (#24). So the scheduler gives a hit's record to the
+compilation units reading it at once, but asks whether its object links
+(`usable`) only once the compilation units it reads are done; an object
+whose `needs` the objects below no longer all define is passed over for one
+under its key with what they define added (`Cache.unit_store_key`), and
+when there is none the hit is checked again in a worker, which keeps the
+record already given out and stores its new object there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this
 one links. The last compilation unit is keyed like the others, and its objects, the
 last compilation unit's (`0.o` and on) and the entry points' (`entry.o`), are cached under its
