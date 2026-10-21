@@ -463,7 +463,9 @@ export select_sites_each(module: Module, filters: Array<SiteFilter>, applied: Ar
 ## @param visitor what to do at each site
 export for_each_selected_site(tables: ModuleTables, selection: SiteSelection, visitor: SiteVisitor) {
     if (selection.any()) {
-        _sites_in_module(tables.module, tables.sites(), selection.applied, Optional<Array<bool>>.Value(selection.walk), visitor);
+        _sites_in_module(
+            tables.module, tables.sites(), selection.applied, Optional<Array<bool>>.Value(selection.walk), visitor
+        );
     }
 }
 

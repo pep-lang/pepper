@@ -9,16 +9,7 @@ import [unit_decls] from "checked";
 import [is_closure_struct] from "closures";
 import [Loc] from "loc";
 import [
-    Block,
-    Expression,
-    ExtensionDef,
-    GenericParam,
-    Module,
-    SpecRequest,
-    StructDef,
-    TypeFlags,
-    TypeName,
-    VariableDef
+    Block, Expression, ExtensionDef, GenericParam, Module, SpecRequest, StructDef, TypeFlags, TypeName, VariableDef
 ] from "model";
 import [concrete_overrides] from "overloads";
 import [for_each_place, Place, PlaceVisitor] from "places";

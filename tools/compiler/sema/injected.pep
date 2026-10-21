@@ -26,6 +26,7 @@ import [BinaryOp, Expression, MethodCallExpression, Module, Statement, TypeName]
 import [for_each_place, Place, PlaceVisitor, rewrite_places] from "places";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import [tuple_constructor_labels] from "tuple_literals";
 import "type_name";
 import [Rewriter] from "walk";
 
@@ -188,7 +189,7 @@ extend _Placeholders with Rewriter;
 ## Whether `function` is an injected construct's call that still lacks the
 ## types its operands give it.
 _is_placeholder_call(function: String): bool {
-    if (function == "__tuple" or function.starts_with("__tuple(")) {
+    if (tuple_constructor_labels(function).is_value()) {
         return true;
     }
     match (function) {
@@ -211,7 +212,9 @@ _untyped_locals(items: Statement[], finder: _Placeholders) {
         match (statement) {
             Declaration(declaration) => {
                 if (declaration is Variable(variable)) {
-                    if (variable.name.starts_with("__try_") and variable.ty.is_auto() and variable.default.is_value()
+                    if (variable.name.starts_with("__try_")
+                        and variable.ty.is_auto()
+                        and variable.default.is_value()
                         and finder.typed([variable.default.value()])) {
                         finder.note($"'?' operand '{variable.name}'", variable.loc);
                     }

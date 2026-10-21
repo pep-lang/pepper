@@ -128,7 +128,7 @@ export resolve_resolvables(module: Module, report_missing: bool, state: PassStat
 
 _check_calls_in(function: FunctionDef, known: _Known, type_params: HashSet<String>, state: PassState) {
     if (function.body.is_value()) {
-        _check_calls_in_block(function.body.value(), _CallChecker(known, type_params, state, function.is_generic_func));
+        _check_calls_in_block(function.body.value(), _CallChecker(known, type_params, state));
     }
 }
 
@@ -168,13 +168,11 @@ struct _CallChecker {
     var known: _Known;
     var type_params: HashSet<String>;
     var state: PassState;
-    var generic_base: bool;
 
-    construct(known: _Known, type_params: HashSet<String>, state: PassState, generic_base: bool = false) {
+    construct(known: _Known, type_params: HashSet<String>, state: PassState) {
         this.known = known;
         this.type_params = type_params;
         this.state = state;
-        this.generic_base = generic_base;
     }
 
     rewrite(e: Expression): Expression {
@@ -187,16 +185,16 @@ struct _CallChecker {
                 or known.structs.contains(function)
                 or known.structs.contains(base);
             # Builtins (`_pep_*`, `trace_*`) and unresolved generic calls are
-            # left to later passes. A generic base keeps a tuple literal
-            # unspelled while an element's type depends on `T`; each
-            # specialization spells it.
+            # left to later passes, and so is a tuple literal not yet spelled
+            # (`__tuple`): a generic base keeps one while an element's type
+            # depends on `T`, and `verify_injected` checks concrete code.
             bool builtin = function.starts_with("_pep_")
                 or function.starts_with("trace_")
                 or function == "String"
                 or function == "__caller_location"
                 or open >= 0
                 or type_params.contains(function)
-                or (generic_base and tuple_constructor_labels(function).is_value());
+                or tuple_constructor_labels(function).is_value();
             if (!known_name and !builtin) {
                 state.report(error_at($"call to undeclared function '{function}'", call.loc));
             }
