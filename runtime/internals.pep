@@ -1239,27 +1239,131 @@ export _pep_write_error(text: __ptr<char>) {
     _write(2, text, strlen(text) as uint);
 }
 
+## The function a panic runs before it prints its message: see
+## `set_panic_hook`. It receives the panic's message and its location
+## (`file:line:col`, or an empty string when the panic has none).
+export type PanicHook = shared (String, String) => void;
+
+# The installed hook, boxed so that its slot holds one counted reference,
+# which `__atomic_store` swaps and `__atomic_load` reads atomically, as
+# `async.Atomic` does (this file cannot import async).
+[Shared]
+struct _PanicHookBox {
+    const hook: PanicHook;
+
+    construct(hook: PanicHook) {
+        this.hook = hook;
+    }
+}
+
+# The process's panic hook: null until `set_panic_hook`.
+const _pep_panic_hook: __ptr<_PanicHookBox> = calloc(1, 8);
+
+# The message and location of the panic whose hook this thread is running
+# (the message is null while it runs none), so that a panic inside the
+# hook reports both and does not run the hook again.
+[ThreadLocal]
+var _pep_panic_hook_message: __ptr<char>;
+[ThreadLocal]
+var _pep_panic_hook_location: __ptr<char>;
+
+## Installs `hook` as the process's panic hook, replacing the one installed
+## before (take that one with `take_panic_hook` first to chain them).
+##
+## Every panic, on any thread, calls the hook on the panicking thread
+## before it prints its message and backtrace, then prints and aborts as
+## always: the hook cannot stop the panic. A full-screen terminal program
+## uses it to leave the alternate screen, so the message lands where the
+## user can read it. That covers `panic`, a failed `assert`, an index out
+## of range, an overflowing operator and every other check the compiler or
+## the runtime adds. A stack overflow skips the hook: the thread has no
+## stack left to run it on.
+##
+## A panic inside the hook does not run the hook again: it prints the
+## first panic's message, then its own, and aborts.
+##
+## @param hook runs with the panic's message and location
+## @example
+##     var previous = take_panic_hook();
+##     set_panic_hook((message, location) => {
+##         leave_alternate_screen();
+##         previous(message, location);
+##     });
+export set_panic_hook(hook: PanicHook) {
+    __atomic_store<_PanicHookBox>(_pep_panic_hook, _PanicHookBox(hook));
+}
+
+## Removes the process's panic hook and returns it, so that a panic again
+## only prints its message.
+##
+## @returns the hook `set_panic_hook` installed last, or one that does
+##   nothing when there is none
+## @example
+##     var hook = take_panic_hook();   # panics no longer run it
+##     set_panic_hook(hook);           # and now they do again
+export take_panic_hook(): PanicHook {
+    var current = __atomic_load<_PanicHookBox>(_pep_panic_hook);
+    while (!__atomic_cmpxchg<_PanicHookBox>(_pep_panic_hook, current, __default<_PanicHookBox>())) {
+        current = __atomic_load<_PanicHookBox>(_pep_panic_hook);
+    }
+    if (current === __null) {
+        return _pep_no_panic_hook;
+    }
+    return current.hook;
+}
+
+# What `take_panic_hook` returns when no hook is installed.
+_pep_no_panic_hook(message: String, location: String) {}
+
 # `panic` on NUL-terminated C strings: `message` (`__null` prints a generic
 # message) and `location` (`__null` for none). Compiler-generated checks
-# lower to this, so a panic never has to allocate.
+# lower to this, so a panic never has to allocate (its hook may).
 export _pep_panic(message: __ptr<char>, location: __ptr<char>) {
     # stdout is fully buffered when it is a pipe: flush it, or abort() drops
-    # what the program printed before the panic.
+    # what the program printed before the panic. Before the hook, so the
+    # output lands where the program meant it to (on a full-screen
+    # program's alternate screen, which the hook may leave).
     fflush(__null);
-    if (location != __null) {
-        # Without the mark of an `[Unsafe("bounds")]` caller.
-        _pep_write_error(location[0] == 1 ? location + 1 : location);
-        _pep_write_error(": ");
-    }
-    _pep_write_error("panic: ");
-    if (message == __null) {
-        _pep_write_error("Assertion failed with no additional information");
+    # Without the mark of an `[Unsafe("bounds")]` caller.
+    var shown = location != __null && location[0] == 1 ? location + 1 : location;
+    __ptr<char> text = message == __null ? "Assertion failed with no additional information" : message;
+    if (_pep_panic_hook_message != __null) {
+        _pep_write_panic(_pep_panic_hook_location, _pep_panic_hook_message, "panic: ");
+        _pep_write_panic(shown, text, "panic in the panic hook: ");
     } else {
-        _pep_write_error(message);
+        _pep_run_panic_hook(text, shown);
+        # What the hook printed.
+        fflush(__null);
+        _pep_write_panic(shown, text, "panic: ");
     }
-    _pep_write_error("\n");
     debug._debug_panic_backtrace();
     abort();
+}
+
+# Calls the process's panic hook, if there is one, for this thread's panic.
+_pep_run_panic_hook(message: __ptr<char>, location: __ptr<char>) {
+    # Null when a module-scope initializer panics before this one ran.
+    if (_pep_panic_hook == __null) {
+        return;
+    }
+    var installed = __atomic_load<_PanicHookBox>(_pep_panic_hook);
+    if (installed === __null) {
+        return;
+    }
+    _pep_panic_hook_message = message;
+    _pep_panic_hook_location = location;
+    installed.hook(String(message), location == __null ? String() : String(location));
+}
+
+# Writes `location: <kind><message>` and a newline to standard error.
+_pep_write_panic(location: __ptr<char>, message: __ptr<char>, kind: __ptr<char>) {
+    if (location != __null) {
+        _pep_write_error(location);
+        _pep_write_error(": ");
+    }
+    _pep_write_error(kind);
+    _pep_write_error(message);
+    _pep_write_error("\n");
 }
 
 # The panic backtrace's state: [0] is 1 when the build asks for a backtrace

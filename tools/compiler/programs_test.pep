@@ -11,8 +11,9 @@
 # method of another module's struct; a `[Move]` argument called through a
 # `shared` function value; externs bound to C symbols Pepper functions are
 # named after, at each `-O` level; reference chains 100,000 deep, released
-# without overflowing the stack; and the message a stack overflow prints
-# on the main thread, a `Thread` and a task. The programs are in
+# without overflowing the stack; the message a stack overflow prints on
+# the main thread, a `Thread` and a task; and the panic hook, which every
+# other kind of panic runs first. The programs are in
 # `testdata/`.
 
 import [File, Path] from io;
@@ -498,9 +499,55 @@ stack_overflow_reports_itself_as_a_panic() {
     expect_equal(safe.stdout, "1000\n");
     for (var where in ["main", "thread", "task"]) {
         var overflowed = run(process.Command(program).argument(where));
-        # Prefixed so that a failure names the thread.
+        # Prefixed so that a failure names the thread. No "hook" line: an
+        # overflow skips the program's panic hook.
         expect_equal($"{where}: {overflowed.stderr}", $"{where}: panic: stack overflow\n");
         expect_equal(overflowed.stdout, "");
         expect_false(overflowed.status.success());
     }
+}
+
+# ── panic hook ──────────────────────────────────────────────────────────────
+
+# Runs `panic_hook.pep` with `how` and checks what it wrote to standard
+# error: `before` (what a chained hook wrote), the hook's line for
+# `message`, then the panic's own, whose location ends with `at`.
+_expect_hooked(program: String, how: String, message: String, at: String, before: String = "") {
+    var output = run(process.Command(program).argument(how));
+    expect_false(output.status.success());
+    var text = output.stderr.replace("\r\n", "\n");
+    expect_starts_with(text, before);
+    var lines = text.substr_bytes(before.size, text.size - before.size).split("\n");
+    var location = lines[1].split(": panic: ")[0];
+    expect_ends_with(location, $"panic_hook.pep:{at}");
+    expect_equal(lines[0], $"hook: {message} at {location}");
+    expect_equal(lines[1], $"{location}: panic: {message}");
+}
+
+[Test]
+panic_hook_runs_before_the_message() {
+    var folder = TempFolder("programs_panic_hook");
+    var program = _build("panic_hook", folder.path).to_string();
+    _expect_hooked(program, "panic", "boom", "16:9");
+    _expect_hooked(program, "assert", "not empty", "18:9");
+    _expect_hooked(program, "bounds", "Array index read out of bounds", "21:18");
+    _expect_hooked(program, "overflow", "integer overflow in 'int' addition", "24:22");
+    # Set on the main thread, it runs on the thread that panics.
+    _expect_hooked(program, "thread", "on a thread", "33:34");
+    _expect_hooked(program, "chained", "chain", "40:9", "second\n");
+
+    # Taken, the hook no longer runs, and the caller has it.
+    var taken = run(process.Command(program).argument("taken"));
+    expect_false(taken.status.success());
+    var text = taken.stderr.replace("\r\n", "\n");
+    expect_starts_with(text, "hook: called at directly\n");
+    expect_contains(text, "panic_hook.pep:28:9: panic: no hook\n");
+    expect_equal(text.find("hook: no hook"), -1);
+
+    # A panic in the hook prints both messages and ends the program.
+    var nested = run(process.Command(program).argument("nested"));
+    expect_false(nested.status.success());
+    var lines = nested.stderr.replace("\r\n", "\n").split("\n");
+    expect_ends_with(lines[0], "panic_hook.pep:31:9: panic: first");
+    expect_ends_with(lines[1], "panic_hook.pep:30:47: panic in the panic hook: in the hook");
 }

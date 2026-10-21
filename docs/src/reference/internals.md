@@ -111,3 +111,64 @@ literal message picks this overload, so it allocates nothing.
 ```pepper
 panic("unreachable");
 ```
+
+## PanicHook
+
+```pepper
+type PanicHook = shared (String, String) => void
+```
+
+The function a panic runs before it prints its message: see
+`set_panic_hook`. It receives the panic's message and its location
+(`file:line:col`, or an empty string when the panic has none).
+
+## set_panic_hook
+
+```pepper
+set_panic_hook(hook: PanicHook)
+```
+
+Installs `hook` as the process's panic hook, replacing the one installed
+before (take that one with `take_panic_hook` first to chain them).
+
+Every panic, on any thread, calls the hook on the panicking thread
+before it prints its message and backtrace, then prints and aborts as
+always: the hook cannot stop the panic. A full-screen terminal program
+uses it to leave the alternate screen, so the message lands where the
+user can read it. That covers `panic`, a failed `assert`, an index out
+of range, an overflowing operator and every other check the compiler or
+the runtime adds. A stack overflow skips the hook: the thread has no
+stack left to run it on.
+
+A panic inside the hook does not run the hook again: it prints the
+first panic's message, then its own, and aborts.
+
+**Parameters**
+- `hook` — runs with the panic's message and location
+
+**Example**
+```pepper
+var previous = take_panic_hook();
+set_panic_hook((message, location) => {
+    leave_alternate_screen();
+    previous(message, location);
+});
+```
+
+## take_panic_hook
+
+```pepper
+take_panic_hook(): PanicHook
+```
+
+Removes the process's panic hook and returns it, so that a panic again
+only prints its message.
+
+**Returns**
+- the hook `set_panic_hook` installed last, or one that does nothing when there is none
+
+**Example**
+```pepper
+var hook = take_panic_hook();   # panics no longer run it
+set_panic_hook(hook);           # and now they do again
+```

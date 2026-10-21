@@ -294,11 +294,43 @@ panic: stack overflow
 ```
 
 The stack has no room left to format anything, so the message has no
-location and no backtrace, and the program's buffered output is not flushed.
+location and no backtrace, the program's buffered output is not flushed,
+and the [panic hook](#panic-hooks) does not run.
 Any other memory fault goes to the handler installed before the program's
 own (or crashes the program, when there is none), and a debugger sees the
 overflow first. WebAssembly has no guard
 pages, so a WASI program gets no such report.
+
+### Panic hooks
+
+`set_panic_hook(hook)` installs a function that every panic calls before it
+prints its message: a full-screen program uses it to restore the terminal,
+so the message lands where the user can read it. The hook is a
+`shared (String, String) => void` (the type alias `PanicHook`), called with
+the message and the location (`file:line:col`, or an empty string when the
+panic has none):
+
+```pepper
+{{#include ../../examples/functions-panic-hook.pep}}
+```
+
+- There is one hook for the whole process. Set on any thread, it runs on
+  the thread that panics, for every kind of panic: `panic`, a failed
+  `assert`, an index out of range, an overflowing operator, and every other
+  check. A stack overflow is the exception: it has no stack left to run the
+  hook on, so it prints its message alone.
+- The hook cannot stop the panic: when it returns, the message and the
+  backtrace print and the program aborts, as without one.
+- `set_panic_hook` replaces the hook installed before. `take_panic_hook()`
+  removes it and returns it (or a hook that does nothing, when there was
+  none), so a library can chain the one it found, as the example does.
+- A panic inside the hook does not run the hook again. It prints the
+  message of the panic that ran the hook, then its own, and aborts:
+
+  ```text
+  main.pep:9:5: panic: first
+  main.pep:4:28: panic in the panic hook: second
+  ```
 
 ## Command-line arguments and exit
 
