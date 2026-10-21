@@ -295,7 +295,8 @@ the value.
 The three forms are:
 
 - `var name = value;` infers the type from the value.
-- `Type name = value;` is the C style, with the type first.
+- `Type name = value;` is the C style, with the type first. Any type can come
+  first, a tuple type too: `(String, int)[] sizes = [];`.
 - `var name: Type = value;` puts the type after the name.
 
 A variable declared without a value starts out as zero: `0` for numbers,

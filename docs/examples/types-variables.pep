@@ -24,6 +24,7 @@ main(): int {
     # Write the type first, C style...
     int width = 80;
     float scale = 1.5;
+    (String, int)[] sizes = [("small", 1)];
 
     # ...or after the name with a colon.
     var height: int = 24;
@@ -45,6 +46,7 @@ main(): int {
     assert(answer + width + height == 146, "sum of ints");
     assert(ratio * 4 == 1.0 && scale == 1.5, "floating point");
     assert(ready && name == "Pepper", "bool and String");
+    assert(sizes[0].1 == 1, "a tuple type written first");
     assert(offset > 4000000000 && LIMIT == 3, "long and const");
     return 0;
 }
