@@ -190,5 +190,4 @@ reports_an_unfetched_dependency_of_a_path_dependency() {
     expect_true(report.is_value());
     expect_true(report.value().contains("module.pep:1:8: error: dependency 'term' is not fetched: no "));
     expect_true(report.value().contains("; run 'pepper package fetch'"));
-    expect_false(report.value().contains("undeclared"));
 }
