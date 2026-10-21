@@ -753,6 +753,13 @@ struct _TraitConversions {
         if (f.is_generic_func) {
             return;
         }
+        # A default flows into its parameter at each call that omits it.
+        for (var p in f.parameters) {
+            if (p.default.is_value()) {
+                var fallback = p.type_loc.is_none() ? p.loc : p.type_loc;
+                p.default = Optional<Expression>.Value(convert(expression(p.default.value()), p.ty, fallback));
+            }
+        }
         if (f.body.is_value()) {
             block(f.body.value(), f.ty);
         }
