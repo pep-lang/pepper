@@ -29,7 +29,8 @@ export enum PlaceKind {
     Global,
 }
 
-## One place, as `for_each_place` hands it out.
+## One place, as `for_each_place` hands it out: it moves on after the
+## visit, so a visitor keeps what it needs, not the place.
 export struct Place {
     ## What holds the code.
     var kind: PlaceKind;
@@ -68,6 +69,22 @@ export struct Place {
         this.function = function;
         this.variable = variable;
         this.extension = extension;
+    }
+
+    # `for_each_place` moves one place from code to code, so a walk
+    # allocates none per function.
+    _function(kind: PlaceKind, function: FunctionDef): Place {
+        this.kind = kind;
+        this.function = Optional<FunctionDef>.Value(function);
+        this.variable = Optional<VariableDef>.Empty;
+        return this;
+    }
+
+    _variable(kind: PlaceKind, variable: VariableDef): Place {
+        this.kind = kind;
+        this.function = Optional<FunctionDef>.Empty;
+        this.variable = Optional<VariableDef>.Value(variable);
+        return this;
     }
 
     ## Returns whether the code is a generic base: a generic free function,
@@ -148,54 +165,59 @@ export for_each_place(
         structs = decls.structs;
         functions = decls.functions;
     }
-    var none = Optional<StructDef>.Empty;
+    # One place, moved from code to code: a visitor reads it during its
+    # visit and keeps none.
+    var place = Place(PlaceKind.Member, Optional<StructDef>.Empty, Optional<TypeName>.Empty);
     for (var st in structs) {
-        var owner = Optional<StructDef>.Value(st);
-        var this_type = Optional<TypeName>.Value(st.ty);
-        for (var field in st.field_members) {
-            if (fields and field.default.is_value()) {
-                visitor.visit(Place(PlaceKind.Field, owner, this_type, variable = Optional<VariableDef>.Value(field)));
+        place.owner = Optional<StructDef>.Value(st);
+        place.this_type = Optional<TypeName>.Value(st.ty);
+        if (fields) {
+            for (var field in st.field_members) {
+                if (field.default.is_value()) {
+                    visitor.visit(place._variable(PlaceKind.Field, field));
+                }
             }
         }
         for (var method in st.method_members) {
-            visitor.visit(Place(PlaceKind.Member, owner, this_type, Optional<FunctionDef>.Value(method)));
+            visitor.visit(place._function(PlaceKind.Member, method));
         }
         for (var c in st.constructors) {
-            visitor.visit(Place(PlaceKind.Member, owner, this_type, Optional<FunctionDef>.Value(c)));
+            visitor.visit(place._function(PlaceKind.Member, c));
         }
-        visitor.visit(Place(PlaceKind.Member, owner, this_type, Optional<FunctionDef>.Value(st.destructor)));
+        visitor.visit(place._function(PlaceKind.Member, st.destructor));
         if (templates) {
             for (var method in st.generic_methods) {
-                visitor.visit(Place(PlaceKind.GenericMethod, owner, this_type, Optional<FunctionDef>.Value(method)));
+                visitor.visit(place._function(PlaceKind.GenericMethod, method));
             }
         }
     }
-    var no_type = Optional<TypeName>.Empty;
+    place.owner = Optional<StructDef>.Empty;
+    place.this_type = Optional<TypeName>.Empty;
     for (var function in functions) {
-        visitor.visit(Place(PlaceKind.Function, none, no_type, Optional<FunctionDef>.Value(function)));
+        visitor.visit(place._function(PlaceKind.Function, function));
     }
     if (extensions) {
         for (var ext in module.extensions) {
-            var target = Optional<TypeName>.Value(ext.target);
-            var extension = Optional<ExtensionDef>.Value(ext);
+            place.this_type = Optional<TypeName>.Value(ext.target);
+            place.extension = Optional<ExtensionDef>.Value(ext);
             for (var method in ext.methods) {
-                visitor.visit(
-                    Place(PlaceKind.Extension, none, target, Optional<FunctionDef>.Value(method), extension = extension)
-                );
+                visitor.visit(place._function(PlaceKind.Extension, method));
             }
         }
+        place.extension = Optional<ExtensionDef>.Empty;
     }
     if (templates) {
         for (var t in module.traits) {
-            var trait_type = Optional<TypeName>.Value(TypeName.named(t.name));
+            place.this_type = Optional<TypeName>.Value(TypeName.named(t.name));
             for (var method in t.methods) {
-                visitor.visit(Place(PlaceKind.TraitDefault, none, trait_type, Optional<FunctionDef>.Value(method)));
+                visitor.visit(place._function(PlaceKind.TraitDefault, method));
             }
         }
     }
+    place.this_type = Optional<TypeName>.Empty;
     for (var global in module.globals) {
         if (global.default.is_value()) {
-            visitor.visit(Place(PlaceKind.Global, none, no_type, variable = Optional<VariableDef>.Value(global)));
+            visitor.visit(place._variable(PlaceKind.Global, global));
         }
     }
 }
