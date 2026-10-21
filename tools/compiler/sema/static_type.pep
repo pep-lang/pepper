@@ -215,8 +215,11 @@ export struct StructTable {
         }
         var ret = info.value().returns.try_get(name);
         var params = info.value().params;
-        if (!ret.is_value() or params.count == 0 or params.count != ty.sub_types.count) {
+        if (!ret.is_value()) {
             return ret;
+        }
+        if (params.count == 0 or params.count != ty.sub_types.count) {
+            return Optional<TypeName>.Value(ret.value().labeled_through(ty));
         }
         var type_map = Array<(String, TypeName)>();
         for (var i in 0..params.count) {
@@ -363,7 +366,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
                     if (info.is_value()) {
                         var field = info.value().field(node.name);
                         if (field.is_value()) {
-                            return field;
+                            return _known(field.value().labeled_through(key));
                         }
                     }
                 }

@@ -570,6 +570,13 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     reads them back), so `resolve_implicit_types` gives an inferred `var` the labeled type
     (`labeled_tuple_literal_type`) before the rename drops the labels; the builder's
     `check_literal_labels` rejects labels that differ from a declared type's.
+    One specialization serves every labeling of its arguments, so its
+    members' types carry none: a field or method result read through a
+    receiver takes back the labels of the receiver's type arguments
+    (`TypeName.labeled_through`, in both `static_type`'s and
+    `resolve_implicit_types`' tables), and `var a = Array<(name: String,
+    count: int)>()` takes the constructor's type as written
+    (`_labeled_constructor`), since the call names it by its spelling.
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
     literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,

@@ -201,6 +201,27 @@ model_json_keeps_strings_apart_from_large_unsigned_values() {
     expect_equal(sema.canonical_json(object), "{\"count\":7,\"id\":18446744073709551615}");
 }
 
+# `labeled_through` gives a member's type the labels of the receiver's
+# tuple arguments (pepper#118): the one labeling that fits, none when two
+# do, and the type itself when the receiver labels nothing.
+[Test]
+labeled_through_takes_the_receivers_tuple_labels() {
+    var plain = sema.parse_type_string("__tuple<int, int>");
+    var point = plain.copy();
+    point.labels = ["x", "y"];
+    var span = plain.copy();
+    span.labels = ["start", "end"];
+    var element = sema.parse_type_string("Optional<__tuple<int, int>>");
+    expect_equal(
+        element.labeled_through(sema.TypeName.with_args("Array", [point])).display(), "Optional<(x: int, y: int)>"
+    );
+    expect_equal(
+        element.labeled_through(sema.TypeName.with_args("HashMap", [point, span])).display(), "Optional<(int, int)>"
+    );
+    var unlabeled = sema.TypeName.with_args("Array", [plain]);
+    expect_true(element.labeled_through(unlabeled) === element);
+}
+
 # `verify_injected` finds a construct whose type the compiler injects still
 # in its placeholder form: string literals in a parameter default before
 # `resolve_injected` (step 18), and nothing once every pass has run.

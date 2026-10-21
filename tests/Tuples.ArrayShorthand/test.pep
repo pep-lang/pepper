@@ -7,8 +7,7 @@ pairs(): (String, int)[] {
 total(entries: (name: String, count: int)[]): int {
     var sum = 0;
     for (var entry in entries) {
-        # `entry.1`: a type argument loses its labels (pepper#118).
-        sum += entry.1;
+        sum += entry.count;
     }
     return sum;
 }
