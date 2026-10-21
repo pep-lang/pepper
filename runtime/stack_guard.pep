@@ -17,14 +17,19 @@
 # since a fiber carries its own guarantee.
 #
 # Linux and macOS: a SIGSEGV and SIGBUS handler runs on an alternate signal
-# stack (`sigaltstack`, one per thread, mapped with a guard page of its own),
-# since the faulting stack has no room left. It reports an overflow only when
-# the fault address lies just below the running stack: the thread's own,
-# recorded when the thread starts, or the task fiber's, which the fiber
-# switch records (fiber_posix.pep). Any other fault goes to the handler that
-# was there before, or, when there was none, restores the default action and
-# returns, so the fault happens again and ends the program as it always did.
+# stack (`sigaltstack`, one per thread, from the C heap), since the faulting
+# stack has no room left. It reports an overflow only when the fault address
+# lies next to the stack pointer the signal's context saved, so it needs no
+# record of which stack (a thread's or a task fiber's) was running, and
+# switching fibers costs nothing extra. Any other fault goes to the handler
+# that was there before, or, when there was none, restores the default
+# action and returns, so the fault happens again and ends the program as it
+# always did.
+#
+# Nothing here runs on a hot path: once per program, once per `Thread`
+# start and end, and on Windows once per fiber stack (fibers are reused).
 
+extern void* malloc(ulong size);
 extern void* calloc(ulong count, ulong size);
 extern void free(void* p);
 extern ulong strlen(char* s);
@@ -101,34 +106,20 @@ extern int sigaction(int number, void* action, void* old);
 [Target(OS(Linux) || OS(Mac))]
 extern int sigaltstack(void* stack, void* old);
 [Target(OS(Linux) || OS(Mac))]
-extern long sysconf(int name);
+extern void* signal(int number, void* handler);
 [Target(OS(Linux) || OS(Mac))]
-extern void* mmap(void* address, ulong length, int protection, int flags, int descriptor, long offset);
-[Target(OS(Linux) || OS(Mac))]
-extern int mprotect(void* address, ulong length, int protection);
-[Target(OS(Linux) || OS(Mac))]
-extern int munmap(void* address, ulong length);
-[Target(OS(Linux) || OS(Mac))]
-extern ulong pthread_self();
+extern void memset(void* p, int c, ulong n);
 
-[Target(OS(Linux))]
-extern int pthread_getattr_np(ulong thread, void* attributes);
-[Target(OS(Linux))]
-extern int pthread_attr_getstack(void* attributes, void** address, ulong* size);
-[Target(OS(Linux))]
-extern int pthread_attr_destroy(void* attributes);
-[Target(OS(Mac))]
-extern void* pthread_get_stackaddr_np(ulong thread);
-[Target(OS(Mac))]
-extern ulong pthread_get_stacksize_np(ulong thread);
-
-# How far below a stack's lowest page a fault still counts as an overflow:
-# a frame larger than the guard page can step over it, and Linux keeps
-# 1 MiB unmapped below the main thread's stack.
+# How far from the faulting stack pointer a fault still counts as an
+# overflow: a call or push faults just below it, and a frame that moves the
+# stack pointer past the guard page faults above it, as far as the frame
+# reaches.
 [Target(OS(Linux) || OS(Mac))]
-const _STACK_GUARD_REACH: ulong = 1048576;
+const _STACK_GUARD_BELOW: ulong = 65536;
+[Target(OS(Linux) || OS(Mac))]
+const _STACK_GUARD_ABOVE: ulong = 1048576;
 
-# The handler's own stack, with a guard page below it.
+# The handler's own stack.
 [Target(OS(Linux) || OS(Mac))]
 const _STACK_SIGNAL_STACK_SIZE: ulong = 65536;
 
@@ -136,8 +127,8 @@ const _STACK_SIGNAL_STACK_SIZE: ulong = 65536;
 # sit. glibc puts the handler first and a 128-byte sigset_t before the flags;
 # bionic on 64-bit Android uses the kernel's layout, flags first; Apple's has
 # a 4-byte sigset_t. Then SA_SIGINFO | SA_ONSTACK, SA_SIGINFO, SIGBUS,
-# SS_DISABLE, _SC_PAGESIZE, MAP_PRIVATE | MAP_ANONYMOUS, si_addr's offset in
-# siginfo_t, and the offsets of ss_size and ss_flags in stack_t.
+# SS_DISABLE, si_addr's offset in siginfo_t, and the offsets of ss_size and
+# ss_flags in stack_t.
 [Target(OS(Linux) && !OS(Android))]
 const _STACK_ACTION_SIZE: ulong = 152;
 [Target(OS(Linux) && !OS(Android))]
@@ -158,10 +149,6 @@ const _STACK_SA_SIGINFO = 4;
 const _STACK_SIGBUS = 7;
 [Target(OS(Linux))]
 const _STACK_SS_DISABLE = 2;
-[Target(OS(Linux))]
-const _STACK_PAGE_SIZE_NAME = 30;
-[Target(OS(Linux))]
-const _STACK_MAP_FLAGS = 34;
 [Target(OS(Linux))]
 const _STACK_SI_ADDR: ulong = 16;
 [Target(OS(Linux))]
@@ -184,10 +171,6 @@ const _STACK_SIGBUS = 10;
 [Target(OS(Mac))]
 const _STACK_SS_DISABLE = 4;
 [Target(OS(Mac))]
-const _STACK_PAGE_SIZE_NAME = 29;
-[Target(OS(Mac))]
-const _STACK_MAP_FLAGS = 4098;
-[Target(OS(Mac))]
 const _STACK_SI_ADDR: ulong = 24;
 [Target(OS(Mac))]
 const _STACK_SS_SIZE: ulong = 8;
@@ -198,26 +181,17 @@ const _STACK_SS_FLAGS: ulong = 16;
 [Target(OS(Linux) || OS(Mac))]
 const _STACK_SIGSEGV = 11;
 
-[Target(OS(Linux) || OS(Mac))]
-const _pep_stack_page: ulong = sysconf(_STACK_PAGE_SIZE_NAME) as ulong;
-
 # The actions SIGSEGV and SIGBUS had before `_pep_stack_guard_start`, one
 # after the other: what a fault that is not an overflow goes to.
 [Target(OS(Linux) || OS(Mac))]
 const _pep_stack_old_actions: __ptr<u8> = calloc(2, _STACK_ACTION_SIZE);
 
-# The lowest address of the calling thread's stack, and the base of the
-# mapping of the fiber running on it (its guard page), or 0 while the thread
-# runs on its own stack.
+# 1 once `_pep_stack_guard_start` has installed the handler.
 [Target(OS(Linux) || OS(Mac))]
-[ThreadLocal]
-var _pep_stack_low: ulong;
-[Target(OS(Linux) || OS(Mac))]
-[ThreadLocal]
-var _pep_stack_fiber_base: ulong;
+const _pep_stack_installed: __ptr<int> = calloc(1, 4);
 
-# The calling thread's alternate signal stack mapping (guard page included),
-# or null.
+# The calling thread's alternate signal stack block (see
+# `_pep_stack_guard_thread_start`), or null.
 [Target(OS(Linux) || OS(Mac))]
 [ThreadLocal]
 var _pep_stack_signal_stack: __ptr<void>;
@@ -235,108 +209,108 @@ export _pep_stack_guard_start() {
     sigaction(_STACK_SIGSEGV, action, _pep_stack_old_actions);
     sigaction(_STACK_SIGBUS, action, _pep_stack_old_actions + _STACK_ACTION_SIZE);
     free(action);
+    _pep_stack_installed[0] = 1;
 }
 
-# Sets up the calling thread: records where its stack ends and gives it an
-# alternate signal stack. A thread the system cannot give one runs without.
+# Sends the faults on SIGSEGV or SIGBUS (`number`) that are not a stack
+# overflow to `handler`, in place of the action the signal had before the
+# program started, as `signal(number, handler)` would without the stack
+# guard. In a program whose `main` did not install the guard (a compiler
+# older than it), it calls `signal` itself. The test runner ends a test's
+# processes this way (testing/runner.pep).
 [Target(OS(Linux) || OS(Mac))]
-export _pep_stack_guard_thread_start() {
-    _pep_stack_low = _pep_stack_thread_low();
-    var length = _STACK_SIGNAL_STACK_SIZE + _pep_stack_page;
-    var base = mmap(__null, length, 3, _STACK_MAP_FLAGS, -1, 0);
-    if (unsafe_cast<long>(base) == -1) {
+export _pep_stack_guard_set_fallback(number: int, handler: extern (int) => void) {
+    if (_pep_stack_installed[0] == 0) {
+        signal(number, handler);
         return;
     }
-    mprotect(base, _pep_stack_page, 0);
-    __ptr<u8> stack = calloc(1, 24);
-    __ptr<__ptr<u8>> sp = stack;
-    __ptr<u8> bytes = base;
-    sp[0] = bytes + _pep_stack_page;
-    __ptr<ulong> size = stack + _STACK_SS_SIZE;
-    size[0] = _STACK_SIGNAL_STACK_SIZE;
-    if (sigaltstack(stack, __null) == 0) {
-        _pep_stack_signal_stack = base;
-    } else {
-        munmap(base, length);
+    __ptr<u8> old = _pep_stack_old_actions + (number == _STACK_SIGSEGV ? 0 : _STACK_ACTION_SIZE);
+    memset(old, 0, _STACK_ACTION_SIZE);
+    __ptr<extern (int) => void> slot = old + _STACK_ACTION_HANDLER;
+    slot[0] = handler;
+}
+
+# Gives the calling thread an alternate signal stack: one block from the C
+# heap (not zeroed) holding the stack_t that describes it, then the stack,
+# so a thread start costs one `malloc` and one `sigaltstack`. A thread the
+# system cannot give one runs without.
+[Target(OS(Linux) || OS(Mac))]
+export _pep_stack_guard_thread_start() {
+    __ptr<u8> block = malloc(32 + _STACK_SIGNAL_STACK_SIZE);
+    if (block == __null) {
+        return;
     }
-    free(stack);
+    __ptr<__ptr<u8>> sp = block;
+    sp[0] = block + 32;
+    __ptr<ulong> size = block + _STACK_SS_SIZE;
+    size[0] = _STACK_SIGNAL_STACK_SIZE;
+    __ptr<int> flags = block + _STACK_SS_FLAGS;
+    flags[0] = 0;
+    if (sigaltstack(block, __null) == 0) {
+        _pep_stack_signal_stack = block;
+    } else {
+        free(block);
+    }
 }
 
 # Undoes `_pep_stack_guard_thread_start` as a thread ends: turns its
-# alternate signal stack off and unmaps it.
+# alternate signal stack off and frees it.
 [Target(OS(Linux) || OS(Mac))]
 export _pep_stack_guard_thread_end() {
-    if (_pep_stack_signal_stack == __null) {
+    __ptr<u8> block = _pep_stack_signal_stack;
+    if (block == __null) {
         return;
     }
-    __ptr<u8> stack = calloc(1, 24);
-    __ptr<int> flags = stack + _STACK_SS_FLAGS;
+    __ptr<int> flags = block + _STACK_SS_FLAGS;
     flags[0] = _STACK_SS_DISABLE;
-    sigaltstack(stack, __null);
-    free(stack);
-    munmap(_pep_stack_signal_stack, _STACK_SIGNAL_STACK_SIZE + _pep_stack_page);
+    sigaltstack(block, __null);
+    free(block);
     _pep_stack_signal_stack = __null;
 }
 
-# Records the fiber about to run on the calling thread: `base` is its stack
-# mapping, whose lowest page is the guard, or null for the thread's own stack.
-[Target(OS(Linux) || OS(Mac))]
-export _pep_stack_guard_enter_fiber(base: __ptr<void>) {
-    _pep_stack_fiber_base = unsafe_cast<ulong>(base);
+# The stack pointer when the fault happened, from the handler's `context`
+# (a ucontext_t): Linux keeps it in uc_mcontext (x86-64 gregs[REG_RSP], or
+# AArch64's sigcontext.sp), macOS in the mcontext uc_mcontext points at
+# (after its 16-byte exception state: x86-64 __rsp, or AArch64 __sp).
+[Target(OS(Linux) && Arch(x64))]
+_pep_stack_pointer(context: __ptr<u8>): ulong {
+    __ptr<ulong> sp = context + 160;
+    return sp[0];
 }
 
-# The lowest address of the calling thread's stack.
-[Target(OS(Linux))]
-_pep_stack_thread_low(): ulong {
-    __ptr<u8> attributes = calloc(1, 128);
-    __ptr<__ptr<void>> address = calloc(1, 8);
-    __ptr<ulong> size = calloc(1, 8);
-    ulong low = 0;
-    if (pthread_getattr_np(pthread_self(), attributes) == 0) {
-        if (pthread_attr_getstack(attributes, address, size) == 0) {
-            low = unsafe_cast<ulong>(address[0]);
-        }
-        pthread_attr_destroy(attributes);
-    }
-    free(attributes);
-    free(address);
-    free(size);
-    return low;
+[Target(OS(Linux) && Arch(aarch64))]
+_pep_stack_pointer(context: __ptr<u8>): ulong {
+    __ptr<ulong> sp = context + 432;
+    return sp[0];
 }
 
-[Target(OS(Mac))]
-_pep_stack_thread_low(): ulong {
-    var thread = pthread_self();
-    return unsafe_cast<ulong>(pthread_get_stackaddr_np(thread)) - pthread_get_stacksize_np(thread);
+[Target(OS(Mac) && Arch(x64))]
+_pep_stack_pointer(context: __ptr<u8>): ulong {
+    __ptr<__ptr<u8>> machine = context + 48;
+    __ptr<ulong> sp = machine[0] + 72;
+    return sp[0];
 }
 
-# Whether a fault at `address` is an overflow of the stack whose lowest
-# usable address is `low` (0: none known): it lies in the reach below it, or
-# in its lowest page, where a glibc that counts the guard page reports it.
-[Target(OS(Linux) || OS(Mac))]
-[Unsafe("overflow")]
-_pep_stack_overflowed(address: ulong, low: ulong): bool {
-    return low != 0 && address < low + _pep_stack_page && address + _STACK_GUARD_REACH >= low;
+[Target(OS(Mac) && Arch(aarch64))]
+_pep_stack_pointer(context: __ptr<u8>): ulong {
+    __ptr<__ptr<u8>> machine = context + 48;
+    __ptr<ulong> sp = machine[0] + 264;
+    return sp[0];
 }
 
 # The SIGSEGV and SIGBUS handler, on the thread's alternate signal stack.
+# A fault next to the stack pointer is an overflow, whichever stack it is
+# (a thread's or a task fiber's), so nothing has to track which one runs.
 [Target(OS(Linux) || OS(Mac))]
 [Unsafe("overflow")]
 _pep_stack_overflow_handler(number: int, info: __ptr<void>, context: __ptr<void>) {
-    # A thread with no alternate stack (one C code started) never set the
-    # thread-locals, and reading one there can allocate on macOS: the
-    # context's uc_stack.ss_flags, at byte 24 on every target, says so.
-    __ptr<u8> interrupted = context;
-    __ptr<int> stack_flags = interrupted + 24;
-    if ((stack_flags[0] & _STACK_SS_DISABLE) == 0) {
-        __ptr<u8> bytes = info;
-        __ptr<ulong> fault = bytes + _STACK_SI_ADDR;
-        var fiber = _pep_stack_fiber_base;
-        var low = fiber != 0 ? fiber + _pep_stack_page : _pep_stack_low;
-        if (_pep_stack_overflowed(fault[0], low)) {
-            _pep_write_error(_STACK_OVERFLOW_MESSAGE);
-            abort();
-        }
+    __ptr<u8> bytes = info;
+    __ptr<ulong> fault = bytes + _STACK_SI_ADDR;
+    var address = fault[0];
+    var sp = _pep_stack_pointer(context);
+    if (address + _STACK_GUARD_BELOW >= sp && address < sp + _STACK_GUARD_ABOVE) {
+        _pep_write_error(_STACK_OVERFLOW_MESSAGE);
+        abort();
     }
     __ptr<u8> old = _pep_stack_old_actions + (number == _STACK_SIGSEGV ? 0 : _STACK_ACTION_SIZE);
     __ptr<ulong> old_handler = old + _STACK_ACTION_HANDLER;

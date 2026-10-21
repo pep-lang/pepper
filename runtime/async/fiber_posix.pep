@@ -52,10 +52,7 @@ const _FIBER_PAGE_SIZE_NAME = 29;
 # The calling thread as a context: what a fiber switches back to.
 [Target(OS(Linux) || OS(Mac))]
 _async_fiber_thread_context(): __ptr<void> {
-    __ptr<__ptr<void>> context = _pep_malloc(24);
-    # No mapping: the stack guard sees the thread's own stack.
-    context[1] = __null;
-    return context;
+    return _pep_malloc(24);
 }
 
 # Frees what `_async_fiber_thread_context` made.
@@ -96,12 +93,10 @@ _async_fiber_destroy(context: __ptr<void>) {
     _pep_free(context);
 }
 
-# Saves the running context into `from` and resumes `to`, telling the stack
-# guard (stack_guard.pep) whose stack runs. Returns when something switches
-# back to `from`.
+# Saves the running context into `from` and resumes `to`. Returns when
+# something switches back to `from`.
 [Target(OS(Linux) || OS(Mac))]
 _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     __ptr<__ptr<void>> resume = to;
-    _pep_stack_guard_enter_fiber(resume[1]);
     __switch_context(from, resume[0]);
 }

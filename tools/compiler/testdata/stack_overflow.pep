@@ -2,11 +2,16 @@ import async;
 import process;
 
 # Recurses `n` deep: far enough to overflow any stack when `n` is large.
+# The print after the call keeps an optimizer from making it a loop.
 depth(n: int): int {
     if (n == 0) {
         return 0;
     }
-    return 1 + depth(n - 1);
+    var below = depth(n - 1);
+    if (below < 0) {
+        print("unreachable");
+    }
+    return below + 1;
 }
 
 # Overflows the stack on the thread the argument names: `main`, `thread`
