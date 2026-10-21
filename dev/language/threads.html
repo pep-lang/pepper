@@ -675,7 +675,9 @@ threads may change right after.</li>
 </ul>
 <p><code>send</code> and <code>try_send</code> take a <strong>new</strong> value, which nothing on the sending
 thread references, and hand it to the receiver without copying it: a
-constructor call, a literal, a call that returns a fresh value,
+constructor call, a literal, a call that returns a fresh value (through a
+<code>shared</code> function value too, when its arguments are new: it reaches nothing
+else that is not thread-safe),
 <a href="memory.html#handing-a-reference-over-with-move"><code>move(x)</code></a> (a variable that
 holds the only reference) or <a href="memory.html#copying-a-value-with-copy"><code>copy(x)</code></a>
 (when the sender keeps using <code>x</code>). A <code>String</code>, an <code>Array</code> or a struct of them
