@@ -331,14 +331,7 @@ export serve_compilation_units(
         var unit = units[k];
         unit.key = parts[1];
         # Only its own files' bodies are read: what it reads comes as records.
-        var bodies = Array<bool>();
-        for (var _ in 0..program.files.count) {
-            bodies.append(false);
-        }
-        for (var file in unit.files) {
-            bodies[file] = true;
-        }
-        var unread = program.link_bodies(bodies);
+        var unread = program.link_bodies(_own_files(program, unit));
         if (unread.is_value()) {
             File.stderr().write_all($"pepc: {unread.value()}\n");
             return 1;
@@ -356,11 +349,6 @@ export serve_compilation_units(
             }
             records[d] = bytes.value();
         }
-        # Its files' references are checked as the build checks the files it
-        # links itself: another module's private extern is not visible.
-        if (!error.is_value()) {
-            error = program.check();
-        }
         if (!error.is_value()) {
             error = work(k, records);
         }
@@ -372,9 +360,21 @@ export serve_compilation_units(
     return 0;
 }
 
+# Per file of `program`, whether it is one of `unit`'s.
+_own_files(program: link.Program, unit: CompilationUnit): bool[] {
+    var own = Array<bool>();
+    for (var _ in 0..program.files.count) {
+        own.append(false);
+    }
+    for (var file in unit.files) {
+        own[file] = true;
+    }
+    return own;
+}
+
 ## Checks `unit` (number `k`) for a worker on the merged `records` of the
-## compilation units it reads, after the program's linking and visibility
-## errors (`Program.check_diagnostics`), stores its record in the cache, and
+## compilation units it reads, after the linking and visibility errors in
+## its files (`Program.check_diagnostics`), stores its record in the cache, and
 ## leaves it in `dir` (`<k>.rec`, `<k>.own`, `<k>.warn`), then `<k>.checked`: the compilation
 ## units that read it are checked on it while it compiles (pipelining, as a
 ## build system starts a library's dependents on its interface while its code
@@ -409,7 +409,9 @@ export check_for_worker(
     # What the build checks before sema, as `check_compilation_units` does:
     # with the bodies of this compilation unit's files linked now, its
     # linking and visibility errors come before what sema would make of them.
-    var errors = program.check_diagnostics();
+    # Only its own files are walked: those of the compilation units this
+    # worker checked before are linked too, and checked already.
+    var errors = program.check_diagnostics(_own_files(program, unit));
     if (errors.count > 0) {
         return Result<(sema.Module, sema.PassState), String>.err(render_all(errors, sources));
     }
