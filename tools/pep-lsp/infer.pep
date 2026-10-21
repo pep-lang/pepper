@@ -1381,12 +1381,15 @@ export struct Typer {
     }
 
     # The type sema inferred for the variable whose name starts at `start`
-    # in the document.
+    # in the document, its tuples' labels included.
     _sema_local(start: ulong): Ty? {
         if (model is Value(m)) {
             var ty = sema.local_type(m, 0, start);
             if (ty is Value(t)) {
-                return Ty.parse(t.to_string());
+                # `display()` keeps labels; the parser reads no `extern`
+                # function type, which `to_string()` spells as a name.
+                var shown = Ty.parse(t.display());
+                return shown.is_value() ? shown : Ty.parse(t.to_string());
             }
         }
         return Optional<Ty>.Empty;

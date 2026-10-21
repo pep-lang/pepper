@@ -1441,6 +1441,45 @@ tuple_labels() {
     all_passed(failed);
 }
 
+# A labeled tuple keeps its labels through a type argument (pepper#118)
+# and through what a static method or an enum case called on a labeled
+# type gives (pepper#134): hover names each element read by its label.
+[Test]
+tuple_labels_through_a_type_argument() {
+    var main = "struct Box<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n"
+        + "    static make(value: T): Box<T> { return Box<T>(value); }\n    get(): T { return value; }\n}\n"
+        + "first(entries: Array<(name: String, count: int)>): int {\n"
+        + "    var e = entries[0];\n    var sum = entries[0].count + e.count;\n"
+        + "    for (var entry in entries) {\n        sum += entry.count;\n    }\n"
+        + "    var made = Array<(word: String, total: int)>();\n    made.append((word: \"a\", total: 1));\n"
+        + "    var o = Optional<(left: int, right: int)>.Value((left: 5, right: 6));\n"
+        + "    var box = Box<(p: int, q: int)>.make((p: 1, q: 2));\n"
+        + "    return sum + made[0].total + o.value().right + box.get().q;\n}\n"
+        + "call(f: extern (int) => int): int {\n    var g = f;\n    return g(1);\n}\n";
+    var c = loaded("tuple_labels_generic", main, "main.pep");
+    var text = c.document.text;
+    var failed = Array<String>();
+    for (var (
+        label,
+        near,
+        element
+    ) in [
+        ("element", "count + e", "count"),
+        ("local", "count;\n    for", "count"),
+        ("for", "count;\n    }", "count"),
+        ("constructed", "total +", "total"),
+        ("enum case", "right +", "right"),
+        ("static method", "q;", "q")
+    ]) {
+        var h = hover_text(c, at(text, near, 0));
+        check(failed, label, h.starts_with($"`.{element}` — `int`"), h);
+    }
+    # Sema's type for a local that the type parser cannot read as shown.
+    var h = hover_text(c, at(text, "g = f", 0));
+    check(failed, "extern local", h.starts_with("`g` — `") and !h.contains("unknown"), h);
+    all_passed(failed);
+}
+
 [Test]
 lowered_calls_trait_defaults_and_bounds() {
     var main = "trait Named {\n    name(): String;\n    shout(): String { return name() + \"!\"; }\n}\n"
