@@ -6,7 +6,9 @@
 # every dependent. The project's own pep.toml overrides what dependencies
 # ask for: when it names a package, only its requirement counts. A locked
 # revision is kept while it still satisfies every requirement, unless the
-# package is being updated.
+# package is being updated. A range skips each version whose pep.toml's
+# `minimum_toolchain` is newer than the toolchain resolving; any other
+# revision that needs a newer one is an error.
 
 import [Path] from io;
 import semver;
@@ -76,8 +78,13 @@ export struct Resolver {
     var update_all: bool = false;
     # The sources to update.
     var update: Array<String> = __null;
+    # The toolchain release resolving, which each package's
+    # `minimum_toolchain` is checked against; empty checks none.
+    var toolchain: String = "";
     # What each repository offers, read once.
     var _refs: HashMap<String, Array<RemoteRef>> = __null;
+    # The `minimum_toolchain` each commit's pep.toml declares, read once.
+    var _minimums: HashMap<String, String> = __null;
 
     construct(project: Path, root: Manifest, previous: Array<Locked>) {
         this.project = project;
@@ -85,6 +92,52 @@ export struct Resolver {
         this.previous = previous;
         update = Array<String>();
         _refs = HashMap<String, Array<RemoteRef>>();
+        _minimums = HashMap<String, String>();
+    }
+
+    # Why this toolchain cannot build a package declaring `minimum`; empty
+    # when it can.
+    _shortfall(minimum: String): String {
+        if (minimum.is_empty or toolchain.is_empty) {
+            return "";
+        }
+        var needed = semver.parse(minimum);
+        if (needed.is_err()) {
+            return $"its minimum_toolchain '{minimum}' is not a version";
+        }
+        var active = semver.parse(toolchain);
+        if (active.is_err() or active.value().compare(needed.value()) >= 0) {
+            return "";
+        }
+        return $"needs toolchain {minimum}";
+    }
+
+    # The `minimum_toolchain` the pep.toml at `commit` of `source` declares,
+    # read from its clone in `.pep/deps` without checking it out.
+    _minimum_at(source: String, commit: String): Result<String> {
+        var known = _minimums.try_get(commit);
+        if (known.is_value()) {
+            return Result<String>.Ok(known.value());
+        }
+        var (host, repository) = split_source(source);
+        var text = file_at(
+            repository_url(host, repository), package_dir(project, host, repository), commit, "pep.toml"
+        );
+        if (text.is_err()) {
+            return Result<String>.Err(
+                $"cannot read the pep.toml of {source} {commit.substr(0, 12)}: {text.error().message}"
+            );
+        }
+        var minimum = "";
+        if (text.value().is_value()) {
+            # One the compiler rejects is its concern, at the build.
+            var manifest = parse_manifest(Path("pep.toml"), text.value().value());
+            if (manifest.is_ok()) {
+                minimum = manifest.value().minimum_toolchain;
+            }
+        }
+        _minimums[commit] = minimum;
+        return Result<String>.Ok(minimum);
     }
 
     # Chooses a revision of every package, checking each out into
@@ -122,7 +175,20 @@ export struct Resolver {
                 var (commit, sha256) = fetched.value();
                 pick.commit = commit;
                 pick.sha256 = sha256;
-                pick.name = _package_name(dir, repository);
+                var (name, minimum) = _name_and_minimum(dir, repository);
+                pick.name = name;
+                var shortfall = _shortfall(minimum);
+                if (!shortfall.is_empty) {
+                    var kept = _kept(source);
+                    if (kept.is_value() and kept.value().commit == commit) {
+                        return Result<Graph>.Err(
+                            $"pep.lock holds {pick.describe()} ({source}), which {shortfall}; this is {toolchain}: run 'pepper package update {name}', or use a newer toolchain"
+                        );
+                    }
+                    return Result<Graph>.Err(
+                        $"{pick.describe()} ({source}) {shortfall}; this is {toolchain}: choose another revision in pep.toml, or use a newer toolchain"
+                    );
+                }
                 chosen[source] = pick;
                 changed = true;
             }
@@ -368,7 +434,7 @@ export struct Resolver {
         if (refs.is_err()) {
             return Result<Locked>.Err(refs.error().message);
         }
-        var best = Optional<(Version, String)>.Empty;
+        var accepted = Array<(Version, String)>();
         var newest = Optional<Version>.Empty;
         var offered = Array<String>();
         for (var ref in refs.value()) {
@@ -386,15 +452,41 @@ export struct Resolver {
                     newest = Optional<Version>.Value(version);
                 }
             }
-            if (_accepted(ranges, version) and (best.is_empty() or version.compare(best.value().0) > 0)) {
-                best = Optional<(Version, String)>.Value((version, ref.commit));
+            if (_accepted(ranges, version)) {
+                accepted.append((version, ref.commit));
             }
         }
-        if (best.is_empty()) {
+        if (accepted.is_empty) {
             var available = offered.is_empty ? "it has no version tags" : "it offers " + ", ".join(offered);
             return Result<Locked>.Err(_conflict(source, asks, available));
         }
+        # The newest accepted version this toolchain builds: only the
+        # pep.toml of each newer one is read.
+        accepted.sort((a: (Version, String), b: (Version, String)) => b.0.compare(a.0));
+        var skipped = Array<String>();
+        var best = Optional<(Version, String)>.Empty;
+        for (var candidate in accepted) {
+            var minimum = toolchain.is_empty ? Result<String>.Ok("") : _minimum_at(source, candidate.1);
+            if (minimum.is_err()) {
+                return Result<Locked>.Err(minimum.error().message);
+            }
+            var shortfall = _shortfall(minimum.value());
+            if (shortfall.is_empty) {
+                best = Optional<(Version, String)>.Value(candidate);
+                break;
+            }
+            skipped.append($"{candidate.0.to_string()} {shortfall}");
+        }
+        if (best.is_empty()) {
+            return Result<Locked>.Err(
+                $"no version of {source} that every package accepts builds with toolchain {toolchain}: "
+                    + "; ".join(skipped)
+            );
+        }
         var (version, commit) = best.value();
+        if (!skipped.is_empty) {
+            notes.append($"{source} skipped {"; ".join(skipped)}: this is {toolchain}");
+        }
         # Why an updated package is not at its newest version.
         if ((update_all or update.contains(source)) and newest.is_value() and newest.value().compare(version) > 0) {
             var holders = Array<String>();
@@ -403,9 +495,11 @@ export struct Resolver {
                     holders.append(asks[index].describe());
                 }
             }
-            notes.append(
-                $"{source} stays at {version.to_string()}, not {newest.value().to_string()}: " + "; ".join(holders)
-            );
+            if (!holders.is_empty) {
+                notes.append(
+                    $"{source} stays at {version.to_string()}, not {newest.value().to_string()}: " + "; ".join(holders)
+                );
+            }
         }
         if (asks.count < all_asks.count) {
             for (var ask in all_asks) {
@@ -451,15 +545,20 @@ _conflict(source: String, asks: Array<Wanted>, available: String): String {
     return text + "\nset its revision in pep.toml to choose one for the whole project";
 }
 
-# The `[package]` name in `dir`'s pep.toml, else the repository's name.
-_package_name(dir: Path, repository: String): String {
+# The `[package]` name in `dir`'s pep.toml, else the repository's name,
+# and its `minimum_toolchain`.
+_name_and_minimum(dir: Path, repository: String): (String, String) {
     var file = dir.join("pep.toml");
+    var minimum = "";
     if (file.is_file()) {
         var manifest = read_manifest(file);
-        if (manifest.is_ok() and !manifest.value().name.is_empty) {
-            return manifest.value().name;
+        if (manifest.is_ok()) {
+            minimum = manifest.value().minimum_toolchain;
+            if (!manifest.value().name.is_empty) {
+                return (manifest.value().name, minimum);
+            }
         }
     }
     var parts = repository.split("/");
-    return parts[parts.count - 1];
+    return (parts[parts.count - 1], minimum);
 }

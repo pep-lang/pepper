@@ -19,7 +19,7 @@ import cli;
 import [Directory, File, Path] from io;
 import os;
 import process;
-import [Version, parse_range] from semver;
+import [parse_range] from semver;
 import toml;
 import "git";
 import "lock";
@@ -173,6 +173,7 @@ struct Project {
         var resolver = Resolver(dir, manifest.value(), previous.value());
         resolver.update_all = update_all;
         resolver.update = update;
+        resolver.toolchain = version();
         var graph = resolver.resolve();
         if (graph.is_err()) {
             return graph;
@@ -295,22 +296,21 @@ struct Project {
             }
             refs = read.value();
         }
+        # With no range, any release resolves, and pep.toml then names the
+        # one chosen (the newest this toolchain builds) as a caret range;
+        # with no version tags, the default branch.
+        var pin = false;
         if (range.is_empty) {
-            # The newest version, as a caret range; none when the
-            # repository has no version tags (then its default branch).
-            var newest = Optional<Version>.Empty;
             for (var ref in refs) {
                 if (ref.name.starts_with("refs/tags/")) {
                     var version = tag_version(ref.name.substr(10, ref.name.length));
-                    if (version.is_value()
-                        and version.value().prerelease.is_empty
-                        and (newest.is_empty() or version.value().compare(newest.value()) > 0)) {
-                        newest = version;
+                    if (version.is_value() and version.value().prerelease.is_empty) {
+                        pin = true;
                     }
                 }
             }
-            if (newest.is_value()) {
-                range = newest.value().to_string();
+            if (pin) {
+                range = "*";
             }
         }
         var entry = toml.TomlValue.table();
@@ -332,11 +332,27 @@ struct Project {
         if (written.is_err()) {
             return fail($"cannot write {manifest_path.to_string()}: {written.error().message}");
         }
-        var graph = _resolve(false, [host + ":" + rest]);
+        var source = host + ":" + rest;
+        var graph = _resolve(false, [source]);
         if (graph.is_err()) {
             # Leave pep.toml as it was.
             File.write_text(manifest_path, original);
             return fail(graph.error().message);
+        }
+        if (pin) {
+            for (var package in graph.value().packages) {
+                if (package.source == source) {
+                    entry["version"] = toml.TomlValue.String(package.version);
+                }
+            }
+            var reset = edited.set(["dependencies", name], entry, inline = true);
+            if (reset.is_err()) {
+                return fail(reset.error().to_string());
+            }
+            var pinned = File.write_text(manifest_path, edited.to_string());
+            if (pinned.is_err()) {
+                return fail($"cannot write {manifest_path.to_string()}: {pinned.error().message}");
+            }
         }
         _notes(graph.value());
         say($"'import {name};' now imports {host}:{rest}");
