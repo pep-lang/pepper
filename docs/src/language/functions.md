@@ -281,6 +281,21 @@ Written anywhere else, `__caller_location()` is its own location. A
 compiler-generated check with no single place to report, such as a call through
 a null trait value, prints the message alone.
 
+A stack overflow, from recursion that never ends for example, is reported the
+same way, on the main thread, a [thread](threads.md) or a
+[task](tasks.md):
+
+```text
+panic: stack overflow
+```
+
+The stack has no room left to format anything, so the message has no
+location and no backtrace, and the program's buffered output is not flushed.
+Any other memory fault goes to the handler installed before the program's
+own (or crashes the program, when there is none), and a debugger sees the
+overflow first. WebAssembly has no guard
+pages, so a WASI program gets no such report.
+
 ## Command-line arguments and exit
 
 `main` comes in two forms. `main(): int` takes nothing. `main(args:

@@ -9,8 +9,10 @@
 # interpolation or for another module's private extern; string literals
 # that hold a NUL or sit in default arguments; a `match` in a generic
 # method of another module's struct; a `[Move]` argument called through a
-# `shared` function value; and externs bound to C symbols Pepper functions
-# are named after, at each `-O` level. The programs are in `testdata/`.
+# `shared` function value; externs bound to C symbols Pepper functions are
+# named after, at each `-O` level; and the message a stack overflow prints
+# on the main thread, a `Thread` and a task. The programs are in
+# `testdata/`.
 
 import [File, Path] from io;
 import process;
@@ -441,7 +443,7 @@ string_literals_in_default_arguments_arrive_whole() {
     var program = _build("default_argument_literal", folder.path, ["-I", folder.path.to_string()]);
     var output = run(process.Command(program.to_string()));
     expect_exit(output, 0);
-    expect_equal(output.stdout, "3 default 4 5\n2 6 module\n");
+    expect_equal(output.stdout, "3 default 4 5\n7 rex\n2 6 module\n");
 }
 
 # ── moves ───────────────────────────────────────────────────────────────────
@@ -461,5 +463,23 @@ extern_bound_to_a_pepper_function_name_calls_the_c_symbol() {
         var folder = TempFolder("programs_extern_named_like_function");
         var program = _build("extern_named_like_function", folder.path, options);
         expect_exit(run(process.Command(program.to_string())), 100);
+    }
+}
+
+# ── stack overflow ──────────────────────────────────────────────────────────
+
+[Test]
+stack_overflow_reports_itself_as_a_panic() {
+    var folder = TempFolder("programs_stack_overflow");
+    var program = _build("stack_overflow", folder.path).to_string();
+    var safe = run(process.Command(program).argument("none"));
+    expect_exit(safe, 0);
+    expect_equal(safe.stdout, "1000\n");
+    for (var where in ["main", "thread", "task"]) {
+        var overflowed = run(process.Command(program).argument(where));
+        # Prefixed so that a failure names the thread.
+        expect_equal($"{where}: {overflowed.stderr}", $"{where}: panic: stack overflow\n");
+        expect_equal(overflowed.stdout, "");
+        expect_false(overflowed.status.success());
     }
 }

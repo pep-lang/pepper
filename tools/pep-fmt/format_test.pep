@@ -466,6 +466,14 @@ reads_optional_tuples() {
 }
 
 [Test]
+reads_tuple_arrays() {
+    expect_formats(
+        "find():(int,String)[] {\n" + "    var p:(line:int,column:int)[][]?=q;\n" + "    return r;\n" + "}\n",
+        "find(): (int, String)[] {\n" + "    var p: (line: int, column: int)[][]? = q;\n" + "    return r;\n" + "}\n"
+    );
+}
+
+[Test]
 formats_labeled_tuple_literals() {
     expect_formats(
         "f():(line:int,column:int) {\n"

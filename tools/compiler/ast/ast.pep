@@ -260,6 +260,12 @@ export struct TypeName {
         if (stars and c_pointer and generic_types.count == 1) {
             return generic_types[0]._text(true) + "*";
         }
+        # `(int, String)[]` and `Box<int>[]` keep `[]` in the name.
+        if (name.ends_with("[]") and generic_types.count > 0) {
+            var element = copy();
+            element.name = name.substr_bytes(0, name.size - 2);
+            return element._text(stars) + "[]";
+        }
         bool function = name == FUNCTION_TYPE or name == SHARED_FUNCTION_TYPE or name == EXTERN_FUNCTION_TYPE;
         if (function and generic_types.count > 0) {
             var prefix = "";

@@ -26,7 +26,11 @@ export const MAX_REQUEST_BODY: ulong = 16777216;
 ## when it will close). A request the server cannot parse gets `400 Bad
 ## Request`, one with header fields over 64 KiB `431 Request Header Fields
 ## Too Large`, and one with a body over `MAX_REQUEST_BODY` `413 Content Too
-## Large`; the connection then closes.
+## Large`; the connection then closes. A response whose reason phrase or
+## field value holds CR, LF or NUL, or whose field name is not an RFC 9110
+## token, is sent as `500 Internal Server Error` instead, since those
+## characters would split the response; the 500's text body names the
+## field (or the reason phrase) at fault.
 ##
 ## HTTP/2 is served to a client that chooses it through ALPN (see
 ## `bind_tls`) or that starts a plain TCP connection with the HTTP/2
@@ -232,7 +236,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         }
         return false;
     }
-    var response = handler(request);
+    var response = _http_sendable(handler(request));
     if (response._upgrade && !request._upgradable) {
         response = Response(501);  # HTTP/1.0 cannot switch protocols
     }
@@ -269,6 +273,19 @@ _http_last_space(line: String): long {
         }
     }
     return -1;
+}
+
+# `response`, or a 500 when its reason phrase or a field cannot be sent as
+# it is: a CR or LF there would split the response. The 500's body says
+# which, so the handler's author sees it without a server log.
+_http_sendable(response: Response): Response {
+    var bad = _http_is_field_value(response.reason) ?
+        _http_bad_fields(response.headers) :
+        Optional<String>.Value("the reason phrase holds CR, LF or NUL");
+    if (bad.is_value()) {
+        return Response(500).set_text($"the response cannot be sent: {bad.value()}");
+    }
+    return response;
 }
 
 # Answers a request the server will not serve, and closes.
