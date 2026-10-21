@@ -1,4 +1,5 @@
 import async;
+import [File] from io;
 import process;
 
 # Recurses `n` deep: far enough to overflow any stack when `n` is large.
@@ -17,6 +18,12 @@ depth(n: int): int {
 # Overflows the stack on the thread the argument names: `main`, `thread`
 # (a spawned Thread) or `task` (a task's fiber); `none` recurses safely.
 main(): int {
+    # Without the guard an overflow ends the program with no message, and
+    # the test would see only that: say why instead.
+    if (!_pep_stack_guard_installed()) {
+        File.stderr().write_all("main did not install the stack guard: built by a pep-build older than it?\n");
+        return 3;
+    }
     var where = process.arguments()[1];
     var n = where == "none" ? 1000 : 100000000;
     if (where == "thread") {
