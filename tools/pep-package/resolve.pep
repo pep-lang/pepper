@@ -76,6 +76,9 @@ export struct Resolver {
     var update_all: bool = false;
     # The sources to update.
     var update: Array<String> = __null;
+    # `--offline`: use only what `.pep/deps` holds, and fail on what needs
+    # the network.
+    var offline: bool = false;
     # What each repository offers, read once.
     var _refs: HashMap<String, Array<RemoteRef>> = __null;
 
@@ -229,8 +232,11 @@ export struct Resolver {
         if (!has_git()) {
             var expected = _locked_sha256(source, commit);
             var at = unpacked(dir);
-            if (at.is_value() and at.value() == commit and !expected.is_empty) {
+            if (at.is_value() and at.value() == commit and (!expected.is_empty or offline)) {
                 return Result<(String, String)>.Ok((commit, expected));
+            }
+            if (offline) {
+                return Result<(String, String)>.Err(not_held_offline(dir, commit));
             }
             if (commit.length != 40) {
                 return Result<(String, String)>.Err(
@@ -243,7 +249,7 @@ export struct Resolver {
             }
             return Result<(String, String)>.Ok((commit, fetched.value()));
         }
-        var checked = check_out(repository_url(host, repository), dir, commit);
+        var checked = check_out(repository_url(host, repository), dir, commit, offline);
         if (checked.is_err()) {
             return Result<(String, String)>.Err(checked.error().message);
         }
@@ -266,6 +272,11 @@ export struct Resolver {
         var known = _refs.try_get(source);
         if (known.is_value()) {
             return Result<Array<RemoteRef>>.Ok(known.value());
+        }
+        if (offline) {
+            return Result<Array<RemoteRef>>.Err(
+                $"--offline, and choosing a revision of {source} reads which ones it offers over the network; run the command without --offline (or PEPPER_OFFLINE) once to update pep.lock"
+            );
         }
         if (!has_git()) {
             return Result<Array<RemoteRef>>.Err(
@@ -322,7 +333,7 @@ export struct Resolver {
                 return Result<Locked>.Ok(Locked("", source, "", commit));
             }
             # A tag can move, so it is looked up again when git can.
-            if (kept.is_value() and (first.kind != "tag" or !has_git())) {
+            if (kept.is_value() and (first.kind != "tag" or offline or !has_git())) {
                 return Result<Locked>.Ok(Locked("", source, "", kept.value().commit));
             }
             var refs = _remote(source);

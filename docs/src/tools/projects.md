@@ -144,6 +144,12 @@ pepper package add someone/geometry       # adds it to pep.toml and fetches it
 pepper build
 ```
 
+In CI, `pepper build --locked` and `pepper test --locked` fail when
+`pep.lock` is out of date with `pep.toml` instead of updating it, and
+`--offline` builds with only what `.pep/deps` holds (`--frozen` is both;
+`PEPPER_LOCKED=1` and `PEPPER_OFFLINE=1` do the same). See
+[Reproducible builds](pep-package.md#reproducible-builds).
+
 ## `[fetch]`
 
 ```toml

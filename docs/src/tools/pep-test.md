@@ -46,8 +46,15 @@ pep-test [options] [path]...
 | `-I <dir>`, `--import-path <dir>` | A folder `pep-build` searches for imports; repeatable | |
 | `-L <dir>`, `--library-path <dir>` | A folder the linker searches for libraries, for `pep-build`; repeatable | |
 | `-D <option>`, `--define <option>` | A [build option](../language/build-options.md) for `pep-build`, `NAME` or `NAME=VALUE`; repeatable | |
+| `--locked` | Passed to `pep-build`: fail, rather than fetch, when the project's `pep.lock` is out of date (also `PEPPER_LOCKED=1`) | |
+| `--offline` | Passed to `pep-build`: fetch nothing over the network, building with what `.pep/deps` holds (also `PEPPER_OFFLINE=1`) | |
+| `--frozen` | Both `--locked` and `--offline` | |
 | `-h`, `--help` | Prints the usage and these options | |
 | `-V`, `--version` | Prints `pep-test` and its version | |
+
+`--locked`, `--offline` and `--frozen` govern the fetch each `pep-build`
+does for a project (see [pep-build](pep-build.md)); `pep-build` reads
+`PEPPER_LOCKED` and `PEPPER_OFFLINE` itself.
 
 The exit status is 0 when every test program builds and every test
 passes, 1 when a test fails or a program does not build, and 2 for a usage

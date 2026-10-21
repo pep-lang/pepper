@@ -453,6 +453,84 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
 }
 
 [Test]
+a_stale_lock_fails_under_locked() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("locked");
+    var project = Project("locked", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    var lock = project.lock();
+    # An up-to-date lock passes.
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
+
+    # pep.toml now asks for numbers 2, which pep.lock does not have.
+    write_file(
+        project.dir.join("pep.toml"), project.manifest() + "numbers = { github = \"other/numbers\", version = \"2\" }\n"
+    );
+    var refused = hosts.package(project.dir, ["fetch", "--locked"]);
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "pep.lock would change, and --locked keeps it as it is:\n  updated numbers: numbers 1.3.1 -> numbers 2.0.0\n"
+            + "run the command without --locked (or PEPPER_LOCKED), then commit pep.lock"
+    );
+    expect_equal(project.lock(), lock);
+    var by_variable = run(
+        hosts.command(tool("pep-package").to_string(), project.dir, ["fetch"]).environment("PEPPER_LOCKED", "1")
+    );
+    expect_exit(by_variable, 1);
+    expect_contains(by_variable.stderr, "pep.lock would change");
+    # `pep-build --locked` checks the lock too, though nothing is missing.
+    var built = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--locked"]));
+    expect_exit(built, 1);
+    expect_contains(built.stderr, "pep.lock would change");
+    expect_equal(project.lock(), lock);
+    # Without --locked, fetch updates it.
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"2.0.0\"");
+}
+
+[Test]
+an_unfetched_dependency_fails_under_offline() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("offline");
+    var project = Project("offline", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    # Every host is a folder that does not exist: a network attempt fails
+    # with git's error, not --offline's.
+    var unreachable = (program: String, arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool(program).to_string(), project.dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    # What .pep/deps holds is enough.
+    expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
+    expect_exit(unreachable("pep-package", ["fetch", "--frozen"]), 0);
+
+    Directory.remove_all(project.dir.join(".pep"));
+    var refused = unreachable("pep-package", ["fetch", "--offline"]);
+    expect_exit(refused, 1);
+    expect_contains(refused.stderr, "--offline, and ");
+    expect_contains(refused.stderr, " does not hold the commit ");
+    expect_contains(refused.stderr, "; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first");
+    expect_false(refused.stderr.contains("git clone"));
+    var built = unreachable("pep-build", ["--offline"]);
+    expect_exit(built, 1);
+    expect_contains(built.stderr, "lacks github:other/numbers ");
+    expect_false(project.dir.join(".pep").join("deps").exists());
+    var added = unreachable("pep-package", ["add", "other/numbers", "--name", "more", "--offline"]);
+    expect_exit(added, 1);
+    expect_contains(
+        added.stderr, "--offline, and adding 'other/numbers' reads which versions it offers over the network"
+    );
+}
+
+[Test]
 add_looks_a_repository_up_on_each_host() {
     if (!has_git()) {
         return;

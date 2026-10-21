@@ -127,6 +127,15 @@ main(args: String[]): int {
         "test",
         help = "Build the entry file's tests: keep its `[Test]` functions, define the build option `TEST`, and replace its `main` with one that lists or runs them (`--list`, `--run NAME`). Given several files of one folder, builds the tests of them all into one program, each file keeping the scope it has in any program. `pep-test` builds with it"
     );
+    var locked = parser.flag(
+        "locked",
+        help = "Fail, rather than fetch, when the project's `pep.lock` is out of date with its `pep.toml` (also `PEPPER_LOCKED=1`). The build checks the lock with `pep-package fetch --locked`"
+    );
+    var offline = parser.flag(
+        "offline",
+        help = "Fetch nothing over the network: build with what the project's `.pep/deps` holds, and fail on a locked dependency missing from it (also `PEPPER_OFFLINE=1`)"
+    );
+    var frozen = parser.flag("frozen", help = "Both `--locked` and `--offline`");
     var ir = parser.flag("emit-llvm", help = "Emit LLVM IR (optimized at the `-O` level)");
     var emit_static = parser.option<_StaticMode>(
         "emit-static",
@@ -423,7 +432,11 @@ main(args: String[]): int {
     }
     if (!(linked.is_set or checked.is_set or model.is_set or steps.is_set or ir.is_set)) {
         # A project builds with what pep.lock lists: fetch what is missing.
-        var fetched = driver.fetch_dependencies(entry);
+        var fetched = driver.fetch_dependencies(
+            entry,
+            locked = locked.is_set or frozen.is_set or os.environment_flag("PEPPER_LOCKED"),
+            offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE")
+        );
         if (fetched.is_err()) {
             File.stderr().write_all(fetched.error() + "\n");
             return 1;
@@ -572,12 +585,8 @@ main(args: String[]): int {
         }
         # `--verify-cache`, or `PEPPER_CACHE_VERIFY` set to anything but
         # empty or `0`, unless `--no-verify-cache`.
-        var named_verify = os.environment("PEPPER_CACHE_VERIFY");
         bool verifying = verify_cache.is_set
-            or (!no_verify_cache.is_set
-                and named_verify.is_value()
-                and !named_verify.value().is_empty
-                and named_verify.value() != "0");
+            or (!no_verify_cache.is_set and os.environment_flag("PEPPER_CACHE_VERIFY"));
         options.verify_cutoff = verifying;
         options.trace_time = traces.contains("time");
         options.trace_cache = traces.contains("cache");

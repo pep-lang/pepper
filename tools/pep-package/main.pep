@@ -9,6 +9,8 @@
 #     pepper package remove geometry
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
+#     pepper package fetch --locked             # fail rather than change pep.lock
+#     pepper package fetch --offline            # only what .pep/deps holds; --frozen is both
 #
 # Build it from the repository root; its pep.toml names the toml package it
 # needs, which `pepper build` fetches:
@@ -42,6 +44,17 @@ main(args: String[]): int {
         "the project: a folder at or below its pep.toml (default: the current one)",
         value_name = "DIR"
     );
+    var locked = parser.flag(
+        "locked",
+        help = "fail, leaving pep.lock as it is, when the command would change it (also PEPPER_LOCKED=1)",
+        global = true
+    );
+    var offline = parser.flag(
+        "offline",
+        help = "use only what .pep/deps holds, and fail on what needs the network (also PEPPER_OFFLINE=1)",
+        global = true
+    );
+    var frozen = parser.flag("frozen", help = "both --locked and --offline", global = true);
     var fetch = parser.command("fetch", "Fetches what pep.lock lists, resolving what pep.toml changed since");
     var add = parser.command("add", "Adds a dependency at its newest version, or at a range given after @");
     var add_package = add.positional(
@@ -66,6 +79,8 @@ main(args: String[]): int {
         return fail($"no pep.toml in {start.to_string()} or a folder above it");
     }
     var project = Project(found.value());
+    project.locked = locked.is_set or frozen.is_set or os.environment_flag("PEPPER_LOCKED");
+    project.offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE");
     if (fetch.is_selected) {
         return project.fetch();
     }
@@ -151,6 +166,10 @@ is_identifier(name: String): bool {
 struct Project {
     var manifest_path: Path = Path("pep.toml");
     var dir: Path = Path(".");
+    # `--locked`: fail rather than change pep.lock.
+    var locked: bool = false;
+    # `--offline`: use only what `.pep/deps` holds.
+    var offline: bool = false;
 
     construct(manifest_path: Path) {
         this.manifest_path = manifest_path;
@@ -173,20 +192,36 @@ struct Project {
         var resolver = Resolver(dir, manifest.value(), previous.value());
         resolver.update_all = update_all;
         resolver.update = update;
+        resolver.offline = offline;
         var graph = resolver.resolve();
         if (graph.is_err()) {
             return graph;
+        }
+        var changes = _changes(previous.value(), graph.value().packages);
+        # Unchanged, pep.lock is left as it is, line endings and all.
+        if (lock_text(graph.value().packages) == lock_text(previous.value())) {
+            return graph;
+        }
+        if (locked) {
+            return Result<Graph>.Err(
+                "pep.lock would change, and --locked keeps it as it is:\n  "
+                    + "\n  ".join(changes)
+                    + "\nrun the command without --locked (or PEPPER_LOCKED), then commit pep.lock"
+            );
         }
         var written = write_lock(lock_path(dir), graph.value().packages);
         if (written.is_err()) {
             return Result<Graph>.Err(written.error().message);
         }
-        _report(previous.value(), graph.value().packages);
+        for (var change in changes) {
+            say(change);
+        }
         return graph;
     }
 
-    # Says what changed between two locks.
-    _report(before: Array<Locked>, after: Array<Locked>) {
+    # What changed between two locks, one line each.
+    _changes(before: Array<Locked>, after: Array<Locked>): Array<String> {
+        var lines = Array<String>();
         for (var locked in after) {
             var old = Optional<Locked>.Empty;
             for (var candidate in before) {
@@ -195,9 +230,11 @@ struct Project {
                 }
             }
             if (old.is_empty()) {
-                say($"added {locked.describe()} ({locked.source})");
+                lines.append($"added {locked.describe()} ({locked.source})");
             } else if (old.value().commit != locked.commit) {
-                say($"updated {locked.name}: {old.value().describe()} -> {locked.describe()}");
+                lines.append($"updated {locked.name}: {old.value().describe()} -> {locked.describe()}");
+            } else if (lock_text([old.value()]) != lock_text([locked])) {
+                lines.append($"rewrote the entry of {locked.describe()} ({locked.source})");
             }
         }
         for (var locked in before) {
@@ -208,9 +245,10 @@ struct Project {
                 }
             }
             if (!kept) {
-                say($"removed {locked.describe()} ({locked.source})");
+                lines.append($"removed {locked.describe()} ({locked.source})");
             }
         }
+        return lines;
     }
 
     fetch(): int {
@@ -241,6 +279,11 @@ struct Project {
     }
 
     add(spec: String, given_name: String): int {
+        if (offline) {
+            return fail(
+                $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
+            );
+        }
         var host = "";
         var rest = spec;
         var prefixed = spec.split_once(":");
