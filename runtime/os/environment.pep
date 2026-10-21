@@ -44,6 +44,25 @@ export environment(name: String): String? {
     return value;
 }
 
+## Returns whether the environment variable `name` turns a switch on: it is
+## set to anything but the empty string or `0`, as `PEPPER_LOCKED=1` does.
+##
+## @param name the variable's name
+## @returns true when it is set to a value other than empty or `0`
+## @example
+##     import os;
+##
+##     main(): int {
+##         if (os.environment_flag("VERBOSE")) {
+##             print("verbose");
+##         }
+##         return 0;
+##     }
+export environment_flag(name: String): bool {
+    var value = environment(name);
+    return value.is_value() and !value.value().is_empty and value.value() != "0";
+}
+
 ## Sets the environment variable `name` to `value` for the running process,
 ## replacing any value it had.
 ##

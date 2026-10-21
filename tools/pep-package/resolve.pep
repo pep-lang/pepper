@@ -78,6 +78,9 @@ export struct Resolver {
     var update_all: bool = false;
     # The sources to update.
     var update: Array<String> = __null;
+    # `--offline`: use only what `.pep/deps` holds, and fail on what needs
+    # the network.
+    var offline: bool = false;
     # The toolchain release resolving, which each package's
     # `minimum_toolchain` is checked against; empty checks none.
     var toolchain: String = "";
@@ -121,7 +124,7 @@ export struct Resolver {
         }
         var (host, repository) = split_source(source);
         var text = file_at(
-            repository_url(host, repository), package_dir(project, host, repository), commit, "pep.toml"
+            repository_url(host, repository), package_dir(project, host, repository), commit, "pep.toml", offline
         );
         if (text.is_err()) {
             return Result<String>.Err(
@@ -292,11 +295,15 @@ export struct Resolver {
     # pep.lock records for that commit.
     _fetch(host: String, repository: String, dir: Path, commit: String): Result<(String, String)> {
         var source = host + ":" + repository;
+        var expected = _locked_sha256(source, commit);
+        var at = unpacked(dir);
+        # Offline, an unpacked archive serves even once git is installed.
+        if (at.is_value() and at.value() == commit and (offline or (!expected.is_empty and !has_git()))) {
+            return Result<(String, String)>.Ok((commit, expected));
+        }
         if (!has_git()) {
-            var expected = _locked_sha256(source, commit);
-            var at = unpacked(dir);
-            if (at.is_value() and at.value() == commit and !expected.is_empty) {
-                return Result<(String, String)>.Ok((commit, expected));
+            if (offline) {
+                return Result<(String, String)>.Err(not_held_offline(dir, commit));
             }
             if (commit.length != 40) {
                 return Result<(String, String)>.Err(
@@ -309,7 +316,7 @@ export struct Resolver {
             }
             return Result<(String, String)>.Ok((commit, fetched.value()));
         }
-        var checked = check_out(repository_url(host, repository), dir, commit);
+        var checked = check_out(repository_url(host, repository), dir, commit, offline);
         if (checked.is_err()) {
             return Result<(String, String)>.Err(checked.error().message);
         }
@@ -318,10 +325,10 @@ export struct Resolver {
         if (sha256.is_err()) {
             return Result<(String, String)>.Err(sha256.error().message);
         }
-        var expected = _locked_sha256(source, full);
-        if (!expected.is_empty and sha256.value() != expected) {
+        var recorded = _locked_sha256(source, full);
+        if (!recorded.is_empty and sha256.value() != recorded) {
             return Result<(String, String)>.Err(
-                $"the files of {source} {full.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {expected}"
+                $"the files of {source} {full.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {recorded}"
             );
         }
         return Result<(String, String)>.Ok((full, sha256.value()));
@@ -332,6 +339,11 @@ export struct Resolver {
         var known = _refs.try_get(source);
         if (known.is_value()) {
             return Result<Array<RemoteRef>>.Ok(known.value());
+        }
+        if (offline) {
+            return Result<Array<RemoteRef>>.Err(
+                $"--offline, and choosing a revision of {source} reads which ones it offers over the network; run the command without --offline (or PEPPER_OFFLINE) once to update pep.lock"
+            );
         }
         if (!has_git()) {
             return Result<Array<RemoteRef>>.Err(
@@ -388,7 +400,7 @@ export struct Resolver {
                 return Result<Locked>.Ok(Locked("", source, "", commit));
             }
             # A tag can move, so it is looked up again when git can.
-            if (kept.is_value() and (first.kind != "tag" or !has_git())) {
+            if (kept.is_value() and (first.kind != "tag" or offline or !has_git())) {
                 return Result<Locked>.Ok(Locked("", source, "", kept.value().commit));
             }
             var refs = _remote(source);

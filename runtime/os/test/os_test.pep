@@ -109,6 +109,18 @@ set_and_remove_environment_variables() {
 }
 
 [Test]
+environment_flag_is_on_unless_unset_empty_or_zero() {
+    var name = "PEPPER_OS_TEST_FLAG";
+    os.remove_environment(name);
+    expect_false(os.environment_flag(name));
+    for (var (value, on) in [("", false), ("0", false), ("1", true), ("yes", true)]) {
+        os.set_environment(name, value);
+        expect_equal(os.environment_flag(name), on);
+    }
+    os.remove_environment(name);
+}
+
+[Test]
 [ShouldPanic("cannot change environment variable 'A=B': its name contains '=' or a NUL byte")]
 set_environment_rejects_a_name_with_equals() {
     os.set_environment("A=B", "x");
