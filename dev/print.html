@@ -1310,7 +1310,7 @@ which values it accepts.</p>
 <tr><td><code>\\</code></td><td>a backslash</td></tr>
 <tr><td><code>\"</code></td><td>a double quote</td></tr>
 <tr><td><code>\'</code></td><td>a single quote</td></tr>
-<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code> (any byte in a <a href="language/types-and-variables.html#characters">character literal</a>)</td></tr>
+<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code> (any byte in a <a href="language/types-and-variables.html#characters">character literal</a>); always two digits, so <code>"\x4"</code> is an error</td></tr>
 <tr><td><code>\u{H...}</code></td><td>the Unicode code point with hexadecimal code <code>H...</code> (1 to 6 digits)</td></tr>
 </tbody></table>
 </div>
