@@ -323,14 +323,20 @@ _pep_stack_overflowed(address: ulong, low: ulong): bool {
 [Target(OS(Linux) || OS(Mac))]
 [Unsafe("overflow")]
 _pep_stack_overflow_handler(number: int, info: __ptr<void>, context: __ptr<void>) {
-    __ptr<u8> bytes = info;
-    __ptr<ulong> fault = bytes + _STACK_SI_ADDR;
-    var address = fault[0];
-    var fiber = _pep_stack_fiber_base;
-    var low = fiber != 0 ? fiber + _pep_stack_page : _pep_stack_low;
-    if (_pep_stack_overflowed(address, low)) {
-        _pep_write_error(_STACK_OVERFLOW_MESSAGE);
-        abort();
+    # A thread with no alternate stack (one C code started) never set the
+    # thread-locals, and reading one there can allocate on macOS: the
+    # context's uc_stack.ss_flags, at byte 24 on every target, says so.
+    __ptr<u8> interrupted = context;
+    __ptr<int> stack_flags = interrupted + 24;
+    if ((stack_flags[0] & _STACK_SS_DISABLE) == 0) {
+        __ptr<u8> bytes = info;
+        __ptr<ulong> fault = bytes + _STACK_SI_ADDR;
+        var fiber = _pep_stack_fiber_base;
+        var low = fiber != 0 ? fiber + _pep_stack_page : _pep_stack_low;
+        if (_pep_stack_overflowed(fault[0], low)) {
+            _pep_write_error(_STACK_OVERFLOW_MESSAGE);
+            abort();
+        }
     }
     __ptr<u8> old = _pep_stack_old_actions + (number == _STACK_SIGSEGV ? 0 : _STACK_ACTION_SIZE);
     __ptr<ulong> old_handler = old + _STACK_ACTION_HANDLER;
