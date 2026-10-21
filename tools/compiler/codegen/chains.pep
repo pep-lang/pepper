@@ -578,10 +578,32 @@ extend Generator {
     _chain_take_object(list: llvm.Value, object: llvm.Value, target: String, moved: llvm.Value?): Result<void> {
         var taken = context.append_block(builder.insert_block().parent(), "chain_taken");
         _chain_claim(object, target, moved, taken)?;
-        _chain_push(list, object, chain_release(target)?)?;
+        var release = chain_release(target)?;
+        if (moved.is_value() and _only_buffers(target)) {
+            # Moved out of a field no destructor sees, an `Array` is
+            # released at once: its elements go on the list, so this nests
+            # one call deep, and nothing sees it go before its holder.
+            builder.call(release.global_type(), release, [object, list], "");
+        } else {
+            _chain_push(list, object, release)?;
+        }
         builder.branch(taken);
         builder.position_at_end(taken);
         return Result<void>.ok();
+    }
+
+    ## Whether every chain field of struct `name` is a buffer (an `Array`).
+    _only_buffers(name: String): bool {
+        var fields = chain_fields.try_get(name);
+        if (!fields.is_value()) {
+            return false;
+        }
+        for (var field in fields.value()) {
+            if (field.kind != ChainKind.Buffer) {
+                return false;
+            }
+        }
+        return true;
     }
 
     ## Claims `object`, a `target`, for a chain, or branches to `skip`.
