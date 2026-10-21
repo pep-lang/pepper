@@ -24,7 +24,8 @@ value. Its main use is returning several values from a function:
 - `Tuple<A, B>` is another spelling of `(A, B)`, for places where a type in
   angle brackets reads better.
 - `(int, String)?` is an optional tuple, `Optional<(int, String)>` (see
-  [Optional values](optionals.md)).
+  [Optional values](optionals.md)), and `(int, String)[]` is an array of
+  tuples, `Array<(int, String)>`.
 
 ## Labels
 

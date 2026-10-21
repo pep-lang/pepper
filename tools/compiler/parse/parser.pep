@@ -955,26 +955,7 @@ struct Parser {
     # `Optional`, and each `*` wraps it in `__ptr`: C's `T*` is rewritten
     # here, so nothing after the parser sees a star in a type's name.
     _type_suffixes(out: TypeName): TypeName {
-        ulong end = out.span.end;
-        while (true) {
-            if (_at("[") and _peek_at(1).is(_source, "]")) {
-                _advance();
-                _advance();
-                out.name = out.name + "[]";
-                end = _last_end();
-                continue;
-            }
-            break;
-        }
-        while (_at("?") and (!_probing or _optional_suffix_in_probe())) {
-            _advance();
-            ulong question_end = _last_end();
-            var wrapped = TypeName(ast.OPTIONAL_TYPE, Span(out.span.start, question_end));
-            wrapped.generic_types.append(out);
-            out = wrapped;
-            end = end.max(question_end);
-        }
-        out.span = Span(out.span.start, end);
+        out = _optional_suffixes(_array_suffixes(out));
         while (_at("*") or _at("**")) {
             ulong stars = _text(_position).size;
             _advance();
@@ -1074,8 +1055,9 @@ struct Parser {
                 if (any_label) {
                     tuple.labels = labels;
                 }
-                # `(int, String)?`: an optional tuple.
-                return _optional_suffixes(tuple);
+                # `(int, String)[]` and `(int, String)?`. No `*`: a tuple has
+                # no C layout to point at.
+                return _optional_suffixes(_array_suffixes(tuple));
             }
             _fail("expected '=>'");
             return TypeName();
@@ -1093,7 +1075,18 @@ struct Parser {
         return out;
     }
 
-    # `?` optional suffixes after a tuple type, each wrapping it.
+    # `[]` array suffixes after the type `out`, each extending its name.
+    _array_suffixes(out: TypeName): TypeName {
+        while (_at("[") and _peek_at(1).is(_source, "]")) {
+            _advance();
+            _advance();
+            out.name = out.name + "[]";
+            out.span = Span(out.span.start, _last_end());
+        }
+        return out;
+    }
+
+    # `?` optional suffixes after the type `out`, each wrapping it.
     _optional_suffixes(out: TypeName): TypeName {
         while (_at("?") and (!_probing or _optional_suffix_in_probe())) {
             _advance();
