@@ -58,6 +58,18 @@ struct Counted {
     }
 }
 
+# Its destructor reads its chain field, so the field must still hold the
+# next link then.
+struct Watched {
+    var next: Watched;
+
+    destruct {
+        if (next !== __null) {
+            destroyed.fetch_add(1);
+        }
+    }
+}
+
 # A cycle through a tuple, which the last release does not steer.
 struct Pairs {
     var next: (Pairs, int);
@@ -138,6 +150,20 @@ counted_chain(depth: int): int {
     return destroyed.load();
 }
 
+watched_chain(depth: int): int {
+    destroyed.store(0);
+    {
+        var root = Watched();
+        var node = root;
+        for (var i in 0..depth) {
+            var child = Watched();
+            node.next = child;
+            node = child;
+        }
+    }
+    return destroyed.load();
+}
+
 closure_chain(depth: int): int {
     var f: () => int = () => 1;
     for (var i in 0..depth) {
@@ -194,6 +220,7 @@ main(): int {
     bag_chain(depth);
     print("bag chain released");
     print($"counted chain released {counted_chain(depth) == 2 * depth}");
+    print($"watched chain released {watched_chain(depth) == depth}");
     closure_chain(depth);
     print("closure chain released");
     suspended_destructor(depth);

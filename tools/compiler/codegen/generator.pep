@@ -121,8 +121,8 @@ export struct ChainField {
     var kind: ChainKind;
     ## The field's position in the struct.
     var position: uint;
-    ## The sema type of the slot an object is read from: the field's, or
-    ## for a buffer its element type.
+    ## The sema type of the slot an object is read from: the field's, for
+    ## a buffer its element type, and for `Closures` the function type.
     var ty: String;
     ## The structs of the cycle the slot can hold, by name.
     var targets: Array<String> = Array<String>();

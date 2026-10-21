@@ -385,9 +385,7 @@ extend Generator {
                 var check = context.append_block(function, "link_type");
                 builder.conditional_branch(builder.is_null(link, "no_link"), none, check);
                 builder.position_at_end(check);
-                var methods = traits[field.ty].methods.count as ulong;
-                var id_type = type_id_value("").value_type();
-                var id = builder.pointer_to_int(vtable_entry(value, VTABLE_METHODS + methods)?, id_type, "type_id");
+                var id = _trait_type_id(field.ty, value)?;
                 var matched = context.append_block(function, "link_check");
                 var same = builder.compare(llvm.IntPredicate.Equal, id, type_id_value(field.targets[0]), "same_type");
                 builder.conditional_branch(same, matched, none);
@@ -548,9 +546,7 @@ extend Generator {
             var check = context.append_block(function, "chain_type");
             builder.conditional_branch(builder.is_null(object, "no_link"), after, check);
             builder.position_at_end(check);
-            var methods = traits[ty].methods.count as ulong;
-            var id_type = type_id_value("").value_type();
-            var id = builder.pointer_to_int(vtable_entry(value, VTABLE_METHODS + methods)?, id_type, "type_id");
+            var id = _trait_type_id(ty, value)?;
             for (var target in targets) {
                 var matched = context.append_block(function, "chain_conformer");
                 var next = context.append_block(function, "chain_type");
@@ -590,6 +586,14 @@ extend Generator {
         builder.branch(taken);
         builder.position_at_end(taken);
         return Result<void>.ok();
+    }
+
+    ## The type id of the struct a non-null trait value `value`, of trait
+    ## `ty`, holds: the vtable's entry after the trait's methods.
+    _trait_type_id(ty: String, value: llvm.Value): Result<llvm.Value> {
+        var methods = traits[ty].methods.count as ulong;
+        var entry = vtable_entry(value, VTABLE_METHODS + methods)?;
+        return Result<llvm.Value>.ok(builder.pointer_to_int(entry, type_id_value("").value_type(), "type_id"));
     }
 
     ## Whether every chain field of struct `name` is a buffer (an `Array`).
@@ -734,6 +738,9 @@ _releases_fields_only(st: StructDef): bool {
         if (m.name != "__dtor") {
             continue;
         }
+        # A checked unit's body is decoded only when asked for; one the
+        # build cache dropped stays empty, and is not known to be this.
+        sema.full_body(m);
         if (!m.body.is_value()) {
             return false;
         }
