@@ -25,6 +25,9 @@ depth(n: int): int {
 
 [Test]
 starts_a_child_and_overflows_its_stack() {
+    # Without the guard the crash handler cannot run on the overflowed
+    # stack, the child outlives the test, and pep-test waits on it forever.
+    assert(_pep_stack_guard_installed(), "main did not install the stack guard: built by a pep-build older than it?");
     hang().spawn();
     expect_equal(depth(100000000), 0);
 }
