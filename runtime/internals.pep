@@ -977,9 +977,10 @@ export _pep_free(p: __ptr<void>) {
 # nested document) would recurse once per link and overflow the stack
 # (#65). A chain of structs that hold each other directly is destroyed in
 # a loop by the compiler's chain last release (`codegen/chains.pep`), whose
-# list grows with `_pep_release_list_grow`. A cycle of types that also
-# runs through a trait value, a container's buffer or a closure cannot be
-# steered from the destructor: the last release of such a struct calls
+# list grows with `_pep_release_list_grow`; so is one through a trait
+# value, an `Array`'s elements or a closure's captures. A cycle of types
+# that also runs through anything else (a tuple, another container's
+# buffer) cannot be steered from the destructor: the last release of such a struct calls
 # `_pep_release_last` with the struct's `__last_release`, which runs the
 # destructor and frees the memory. The outermost one on a thread sets a
 # floor `_RELEASE_STACK` bytes below its frame. Nested ones above the floor run as nested calls;

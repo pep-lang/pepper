@@ -141,7 +141,6 @@ extend Generator {
         }
         if (standard_release(st)) {
             desc.release_counts = Optional<bool>.Value(atomic_counts(st));
-            desc.standard = true;
             desc.immortal = immortal_cases(st);
             if (!desc.immortal) {
                 desc.inline_counts = desc.release_counts;
