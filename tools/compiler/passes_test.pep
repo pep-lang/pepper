@@ -452,6 +452,9 @@ specialized_error_programs(): String[] {
         "# expect: main.pep:4:18: error: cannot destructure 'String': it is not a tuple\nmain(): int {\n    var s = \"x\";\n    var (a, b) = s;\n    return 0;\n}\n",
         "# expect: main.pep:7:7: error: cannot assign to element 0 of tuple '(int, int)': tuple elements are immutable\npair(): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    var t = pair();\n    t.0 = 3;\n    return 0;\n}\n",
         "# expect: main.pep:7:14: error: no member named '2' in '(int, int)': its elements are '0' to '1'\npair(): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    var t = pair();\n    return t.2;\n}\n",
+        # A method's tuple that is not the type argument takes none of its
+        # labels.
+        "# expect: main.pep:9:23: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\nstruct Box<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n    pair(): (int, int) { return (1, 2); }\n}\nmain(): int {\n    var box = Box<(a: int, b: int)>((a: 1, b: 2));\n    return box.pair().a;\n}\n",
         # `[ThreadLocal]` on a field.
         "# expect: main.pep:3:5: error: 'ThreadLocal' applies only to a module-scope variable, not a field\nstruct Counter {\n    [ThreadLocal]\n    var hits: int;\n}\nmain(): int { return 0; }\n",
         # A struct value as a condition, and as an operand of `!`.

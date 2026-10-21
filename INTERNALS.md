@@ -575,11 +575,19 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `check_literal_labels` rejects labels that differ from a declared type's.
     One specialization serves every labeling of its arguments, so its
     members' types carry none: a field or method result read through a
-    receiver takes back the labels of the receiver's type arguments
-    (`TypeName.labeled_through`, in both `static_type`'s and
-    `resolve_implicit_types`' tables), and `var a = Array<(name: String,
-    count: int)>()` takes the constructor's type as written
-    (`_labeled_constructor`), since the call names it by its spelling.
+    receiver whose type arguments have labels is the member's type in the
+    generic declaration (the struct's or trait's own `T`, `T[]`, `T?`) with
+    the receiver's arguments, labels included, put in
+    (`TypeName.labeled_through`; `StructTable.generics` and
+    `_TypeScopes._generic` find the declaration), so a same-shape tuple the
+    declaration does not write as a parameter stays unlabeled. A call that
+    names a type spells it without labels, so the builder keeps the type
+    as written on the call (`FunctionCallExpression.labeled`, set only
+    when it has labels), and both tables type the call as that type
+    (`TypeName.as_written`): `var a = Array<(name: String, count: int)>()`
+    and the receiver of `Optional<(left: int, right: int)>.Value(...)` or
+    `Box<(p: int, q: int)>.make(...)`, whose result then takes the labels
+    back like any member.
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
     literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,
@@ -2159,18 +2167,30 @@ calls, a chain (a linked list, a deep document) would overflow the stack.
 the graph of what each struct's fields can hold (a struct, a trait's
 conformers, a pointer's or tuple's elements, a function type's closures,
 matched by their `__call`'s signature; never a weak reference). A struct
-in a cycle is `recursive`; a field holding a struct of its own cycle
-directly, both with the standard `__release`, is a chain field
-(`chain_fields`). A recursive struct with chain fields gets a different
-`T.__last_release`: one chain field of its own type (a list) is a loop
-that takes the next link (an extra reference, only when the field alone
-holds it), destroys the current one and moves on
-(`emit_list_last_release`); otherwise `T.__chain_destroy` pushes each
-taken link with its `__chain_release` on a list in the `__last_release`
-frame (eight entries on the stack, then `_pep_release_list_grow`'s heap
-buffer) and the frame drains it. A cycle with any other edge
-(`deep_recursive`: through a trait value, a buffer such as `Array`'s, or a
-closure) cannot be steered from the destructor, which is user code: its
+in a cycle is `recursive`. A field that holds structs of its own cycle,
+the field's struct and theirs both with a `__release` codegen generates
+(the standard one or a function type's), is a chain field (`ChainField`,
+`chain_fields`) of one `ChainKind`: a struct reference; a trait value,
+whose object is told apart by the vtable's type id; `Array`'s `_data`
+buffer of `_size` elements; or a function type's object, a closure told
+apart by its `__destroy` (the closure's `__dtor`), whose own chain fields
+(its captures) are taken. A recursive struct with chain fields gets a
+different `T.__last_release`: one chain field holding only its own type
+(a list, through a struct, a trait value, or a closure capturing one;
+`_list_field`) is a loop that takes the next link, destroys the current
+one and moves on (`emit_list_last_release`); otherwise
+`T.__chain_destroy` pushes each taken link with its `__chain_release` on a
+list in the `__last_release` frame (32 entries on the stack, then
+`_pep_release_list_grow`'s heap buffer) and the frame drains it. Taking a
+link (`_chain_claim`) moves the field's reference out and nulls the field
+when the struct's destructor only releases fields (`chain_moves`: no
+`destruct` body sees the field); otherwise it takes an extra reference,
+only when the field alone holds the link. An `Array` buffer's struct
+elements always move, and `_size` drops to 0, so `Array`'s destructor
+releases none of them; they are pushed last to first, so they are
+destroyed in index order. A cycle with any other edge (`deep_recursive`:
+through a tuple, a value struct such as `Optional`, or another container's
+buffer) cannot be steered from the destructor, which is user code: its
 last release is `_pep_release_last(object, T.__last_release)`
 (`runtime/internals.pep`), which calls it at once unless this thread's
 destructions already nest 16 KiB of stack below the outermost one; a

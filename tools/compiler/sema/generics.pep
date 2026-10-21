@@ -51,7 +51,11 @@ _contains_param(ty: TypeName, params: String[]): bool {
     return false;
 }
 
-_param_names(params: GenericParam[]): String[] {
+## Returns the names of `params`, in order.
+##
+## @param params a declaration's generic parameters
+## @returns their names
+export param_names(params: GenericParam[]): String[] {
     var out = Array<String>();
     for (var p in params) {
         out.append(p.name);
@@ -78,7 +82,7 @@ _extension_params(structs: StructDef[], ext: ExtensionDef): String[] {
                 i += 1;
             }
         }
-        return extends_base ? _param_names(st.generic_params) : Array<String>();
+        return extends_base ? param_names(st.generic_params) : Array<String>();
     }
     return Array<String>();
 }
@@ -159,7 +163,7 @@ struct _CallsIn {
             }
             Function => {
                 var function = place.function.value();
-                place.rewrite(_CallGatherer(functions, _param_names(function.generic_params), function.name, true));
+                place.rewrite(_CallGatherer(functions, param_names(function.generic_params), function.name, true));
             }
             Extension => {
                 var ext = place.extension.value();
@@ -172,7 +176,7 @@ struct _CallsIn {
             }
             else => {
                 var st = place.owner.value();
-                place.rewrite(_CallGatherer(functions, _param_names(st.generic_params), st.name, true));
+                place.rewrite(_CallGatherer(functions, param_names(st.generic_params), st.name, true));
             }
         }
     }
@@ -237,7 +241,7 @@ export gather_generics(module: Module) {
     # extended, ask for anything new.
     var decls = unit_decls(module);
     for (var st in decls.structs) {
-        var params = _param_names(st.generic_params);
+        var params = param_names(st.generic_params);
         for (var field in st.field_members) {
             if (_is_requested(field.ty, params)) {
                 structs.request(field.ty.to_string(), st.name, _written(field));
@@ -264,7 +268,7 @@ export gather_generics(module: Module) {
         }
     }
     for (var function in decls.functions) {
-        var params = _param_names(function.generic_params);
+        var params = param_names(function.generic_params);
         # A generic function's own parameters (`Array<U>` in `f<U>`) are
         # not a use; its specializations' concrete types are.
         if (_is_requested(function.ty, params)) {
@@ -289,7 +293,7 @@ export gather_generics(module: Module) {
     for_each_place(module, _CallsIn(functions, module), unit = true, fields = false);
     # Local declarations with no constructor call (`Array<int> a;`).
     for (var st in decls.structs) {
-        var params = _param_names(st.generic_params);
+        var params = param_names(st.generic_params);
         for (var method in st.method_members) {
             if (method.body.is_value()) {
                 _gather_locals(method.body.value(), structs, params, st.name);
@@ -303,7 +307,7 @@ export gather_generics(module: Module) {
     }
     for (var function in decls.functions) {
         if (function.body.is_value()) {
-            _gather_locals(function.body.value(), structs, _param_names(function.generic_params), function.name);
+            _gather_locals(function.body.value(), structs, param_names(function.generic_params), function.name);
         }
     }
     # Who asked for each, for the depth limit.

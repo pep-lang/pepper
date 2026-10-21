@@ -490,6 +490,20 @@ deep_chains_release_without_overflow_and_shallow_order_holds() {
     }
 }
 
+[Test]
+steered_chains_release_without_overflow_and_shallow_order_holds() {
+    var folder = TempFolder("programs_chain_release");
+    var program = _build("chain_release", folder.path).to_string();
+    var expected = "shape chain released\nbag chain released\ncounted chain released true\n"
+        + "watched chain released true\nclosure chain released\ntuple chain released while a task waits in a destructor\n"
+        + "destroy root\ndestroy shape\ndestroy first\ndestroy first.first\ndestroy second\n";
+    for (var depth in ["10", "100000"]) {
+        var output = run(process.Command(program).argument(depth));
+        expect_exit(output, 0);
+        expect_equal(output.stdout, expected);
+    }
+}
+
 # ── stack overflow ──────────────────────────────────────────────────────────
 
 [Test]

@@ -26,6 +26,7 @@ import [
     GenericFunctionSearch,
     GenericMethodSearch
 ] from "generic_values";
+import [param_names] from "generics";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -44,6 +45,7 @@ import [
     Statement,
     StructDef,
     SymbolRefExpression,
+    TraitDef,
     TypeName,
     UnaryExpression,
     UnaryOp,
@@ -623,6 +625,9 @@ export struct ImplicitTables {
     ## Struct declared name to its type.
     var struct_types: HashMap<String, TypeName> = HashMap<String, TypeName>();
     var properties: Properties;
+    ## The program's traits, whose generic declarations give a labeled
+    ## trait type's methods their labels.
+    var traits: TraitDef[] = Array<TraitDef>();
     ## What the callable being walked looked up that a run of the pass can
     ## change: `_type_read`, `_function_read` and `g:<global>` keys.
     var reads: HashSet<String> = HashSet<String>();
@@ -644,6 +649,7 @@ export struct ImplicitTables {
         _state = state;
         callees = Callees(module, state, Optional<TypeName[]>.Value(trait_types));
         properties = Properties(module);
+        traits = module.traits;
         bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         if (checked) {
             base = Optional<ImplicitTables>.Value(_checked_implicit(module, state, callees));
@@ -1087,7 +1093,7 @@ struct _TypeScopes {
         }
         for (var f in all[0]) {
             if (f.name == name) {
-                return Optional<TypeName>.Value(f.ty.labeled_through(ty));
+                return Optional<TypeName>.Value(_labeled_field(f.ty, ty, name));
             }
         }
         return Optional<TypeName>.Empty;
@@ -1101,10 +1107,73 @@ struct _TypeScopes {
         }
         for (var (m, ret) in all[0]) {
             if (m == name) {
-                return Optional<TypeName>.Value(ret.labeled_through(ty));
+                return Optional<TypeName>.Value(_labeled_return(ret, ty, name));
             }
         }
         return Optional<TypeName>.Empty;
+    }
+
+    # `ty`, the type of field `name` of `receiver`'s specialization,
+    # labeled as `receiver`'s type arguments are
+    # (`TypeName.labeled_through`).
+    _labeled_field(ty: TypeName, receiver: TypeName, name: String): TypeName {
+        var generic = _generic(receiver);
+        if (generic.is_value()) {
+            var (key, params) = generic.value();
+            for (var fields in field_tables(key)) {
+                for (var f in fields) {
+                    if (f.name == name) {
+                        return ty.labeled_through(receiver, f.ty, params);
+                    }
+                }
+            }
+        }
+        return ty;
+    }
+
+    # `ret`, what method `name` of `receiver`'s specialization (or trait
+    # type) returns, labeled as `receiver`'s type arguments are.
+    _labeled_return(ret: TypeName, receiver: TypeName, name: String): TypeName {
+        var generic = _generic(receiver);
+        if (generic.is_value()) {
+            var (key, params) = generic.value();
+            for (var methods in method_tables(key, name)) {
+                for (var (m, declared) in methods) {
+                    if (m == name) {
+                        return ret.labeled_through(receiver, declared, params);
+                    }
+                }
+            }
+            return ret;
+        }
+        var def = receiver.labels_arguments() ? trait_def(tables.traits, receiver) : Optional<TraitDef>.Empty;
+        if (def.is_value()) {
+            for (var m in def.value().methods) {
+                if (m.name == name) {
+                    return ret.labeled_through(receiver, m.ty, param_names(def.value().generic_params));
+                }
+            }
+        }
+        return ret;
+    }
+
+    # The table key and type parameters of `receiver`'s generic
+    # declaration (`Box<T>` and `T` for `Box<(a: int, b: int)>`) when its
+    # type arguments have labels to give back; most receivers have none.
+    _generic(receiver: TypeName): (String, String[])? {
+        var none = Optional<(String, String[])>.Empty;
+        if (!receiver.labels_arguments()) {
+            return none;
+        }
+        var generic = tables.struct_type_of(receiver.name);
+        if (!generic.is_value() or !generic.value().is_generic()) {
+            return none;
+        }
+        var params = Array<String>();
+        for (var p in generic.value().sub_types) {
+            params.append(p.name);
+        }
+        return Optional<(String, String[])>.Value((generic.value().to_string(), params));
     }
 
     ## Whether struct type `ty` declares a method `name`; an overloaded
@@ -1375,7 +1444,7 @@ struct _TypeScopes {
                 for (var fields in field_tables(lhs_type.to_string())) {
                     for (var f in fields) {
                         if (f.name == node.name) {
-                            return f.ty.labeled_through(lhs_type);
+                            return _labeled_field(f.ty, lhs_type, node.name);
                         }
                     }
                 }
@@ -1422,7 +1491,7 @@ struct _TypeScopes {
                 }
                 for (var (m, iterator) in all[0]) {
                     if (m == "iterate") {
-                        return iterator.labeled_through(source_type);
+                        return _labeled_return(iterator, source_type, m);
                     }
                 }
                 return source_type;
@@ -1452,7 +1521,7 @@ struct _TypeScopes {
                 return TypeName.void_pointer();
             }
             FunctionCall(node) => {
-                return _call_type(node, current);
+                return _call_type(node, current).as_written(node.labeled);
             }
             Address(_, _) => {
                 return TypeName.named("u64");
@@ -1597,12 +1666,15 @@ struct _TypeScopes {
         }
         if (overloads.is_method_set(this_type, node.method)) {
             var choice = select_method_overload(this_type, node.method, node.args, node.loc, current);
-            return choice.is_value() ? choice.value().ret.labeled_through(this_type) : TypeName.auto();
+            if (!choice.is_value()) {
+                return TypeName.auto();
+            }
+            return _labeled_return(choice.value().ret, this_type, choice.value().callee);
         }
         for (var methods in method_tables(text, node.method)) {
             for (var (m, ret) in methods) {
                 if (m == node.method) {
-                    return ret.labeled_through(this_type);
+                    return _labeled_return(ret, this_type, m);
                 }
             }
         }
