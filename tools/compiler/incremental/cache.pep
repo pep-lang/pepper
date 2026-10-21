@@ -326,15 +326,15 @@ _needs_met(folder: Path, below: Defines[]): bool {
     if (needs.is_err()) {
         return false;
     }
-    var lines = needs.value().split("\n");
-    if (lines.is_empty) {
+    var parts = needs.value().split_once("\n");
+    if (!parts.is_value()) {
         return false;
     }
-    if (lines[0] == stamp_of(below)) {
+    var (stamp, names) = parts.value();
+    if (stamp == stamp_of(below)) {
         return true;
     }
-    for (var i in 1..lines.count) {
-        var name = lines[i];
+    for (var name in names.split("\n")) {
         if (name.is_empty) {
             continue;
         }
