@@ -2,8 +2,8 @@
 # jobs (ci.yml): LLVM, the libraries the tests link, the toolchain to test
 # with, and PEPPER_TARGET_DIR. It restores the newest build cache an
 # earlier run saved for this OS and saves this run's after the job. With
-# `compiler`, the checkout's compiler is built, and PEPPER_COMPILER_DIR
-# names it.
+# `compiler` (ci.yml's `changes` job decides, and its summary says why),
+# the checkout's compiler is built, and PEPPER_COMPILER_DIR names it.
 name: Prepare the Pepper tests
 description: Provision a runner for scripts/pepper-tests.sh and restore its build cache
 

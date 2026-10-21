@@ -14,7 +14,9 @@
 # before it; Docs (`docs`) waits the same way. A failed release does not
 # stop them: they test with the newest build that did publish, and the run
 # shows the release's failure beside their results. A commit that changes
-# the compiler (tools/compiler/), or a dispatch on a branch other than main,
+# the compiler (tools/compiler/), a dispatch on a branch other than main, or
+# a commit whose compiler the published build lacks (main's run that would
+# have published it was cancelled; scripts/ci-published-compiler.sh)
 # is tested with its own compiler instead: each test and cross-link job
 # builds it with the installed pep-build (scripts/ci-build-compiler.sh,
 # the release's stage 1), and every later step uses it.
@@ -70,11 +72,13 @@ jobs:
       release: ${{ steps.classify.outputs.release }}
     steps:
       # Merges into main are squashed, and a pull request's checkout is a
-      # merge commit, so the commit's first parent is the base; depth 2 is
-      # enough to diff the two.
+      # merge commit, so the commit's first parent is the base. Every commit
+      # (without file contents), so scripts/ci-published-compiler.sh can
+      # find the published build of main on the commit's history.
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+          filter: blob:none
 
       - id: classify
         env:
@@ -83,50 +87,65 @@ jobs:
           DEFAULT: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            # A dispatch tests everything. On main it uses main's published
-            # compiler; on another branch it builds the branch's. A pull
-            # request is classified like a push: its checkout is a merge
-            # commit whose first parent is the base, so the diff below is
-            # the pull request's changes.
-            echo "code=true" >> "$GITHUB_OUTPUT"
-            if [ "$REF" = "$DEFAULT" ]; then
-              echo "compiler=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "compiler=true" >> "$GITHUB_OUTPUT"
-            fi
-            exit 0
-          fi
           code=false
           compiler=false
           release=false
-          # The runner's checkout persists between runs, and a shallow one
-          # can lack the parent: fetch it. Without the paths, everything is
-          # tested; classifying no paths would pass the change untested.
-          if ! git rev-parse -q --verify 'HEAD^1' >/dev/null; then
-            git fetch --no-tags --deepen=1 origin "$GITHUB_SHA" || true
-          fi
-          if ! paths=$(git diff --name-only 'HEAD^1' HEAD); then
-            echo "cannot diff the commit against its parent: testing everything"
-            paths=""
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # A dispatch tests everything. On main it uses main's published
+            # compiler (unless it is stale, below); on another branch it
+            # builds the branch's. A pull request is classified like a push:
+            # its checkout is a merge commit whose first parent is the base,
+            # so the diff below is the pull request's changes.
             code=true
-            compiler=true
-            release=true
+            if [ "$REF" != "$DEFAULT" ]; then
+              compiler=true
+              why="build the branch's compiler: a dispatch on a branch"
+            fi
+          else
+            # The runner's checkout persists between runs, and a shallow one
+            # can lack the parent: fetch it. Without the paths, everything is
+            # tested; classifying no paths would pass the change untested.
+            if ! git rev-parse -q --verify 'HEAD^1' >/dev/null; then
+              git fetch --no-tags --deepen=1 origin "$GITHUB_SHA" || true
+            fi
+            if ! paths=$(git diff --name-only 'HEAD^1' HEAD); then
+              echo "cannot diff the commit against its parent: testing everything"
+              paths=""
+              code=true
+              compiler=true
+              release=true
+              why="build the commit's compiler: it cannot be diffed against its parent"
+            fi
+            while IFS= read -r path; do
+              [ -n "$path" ] || continue
+              case "$path" in
+                tools/compiler/*)
+                  code=true
+                  compiler=true
+                  why="build the commit's compiler: it changes tools/compiler/"
+                  ;;
+                docs/src/SUMMARY.md|docs/src/reference/*) code=true ;;
+                .agents/*|.claude/*|*.md) ;;
+                *) code=true ;;
+              esac
+              # What the build of main is made from (release.yml).
+              case "$path" in
+                VERSION|runtime/*|tools/*|scripts/release-build.sh|scripts/release-smoke-test.sh|.github/workflows/release.yml) release=true ;;
+              esac
+              echo "$path"
+            done <<< "$paths"
           fi
-          while IFS= read -r path; do
-            [ -n "$path" ] || continue
-            case "$path" in
-              tools/compiler/*) code=true; compiler=true ;;
-              docs/src/SUMMARY.md|docs/src/reference/*) code=true ;;
-              .agents/*|.claude/*|*.md) ;;
-              *) code=true ;;
-            esac
-            # What the build of main is made from (release.yml).
-            case "$path" in
-              VERSION|runtime/*|tools/*|scripts/release-build.sh|scripts/release-smoke-test.sh|.github/workflows/release.yml) release=true ;;
-            esac
-            echo "$path"
-          done <<< "$paths"
+          # A commit that leaves the compiler alone still needs its own when
+          # the published build of main lacks a compiler change on its base
+          # (a cancelled run on main publishes nothing).
+          if [ "$code" = true ] && [ "$compiler" = false ]; then
+            if ! why=$(bash -euxo pipefail scripts/ci-published-compiler.sh HEAD); then
+              compiler=true
+            fi
+          fi
+          [ "$code" = true ] || why="no tests: the commit changes only prose"
+          echo "### Compiler" >> "$GITHUB_STEP_SUMMARY"
+          echo "$why" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "code=$code compiler=$compiler release=$release"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "compiler=$compiler" >> "$GITHUB_OUTPUT"
