@@ -6,6 +6,7 @@
 #     pepper package fetch                      # what pep.lock lists, resolving pep.toml's changes
 #     pepper package add someone/geometry       # the newest version, as 'geometry'
 #     pepper package add other/json@2.x --name fast_json
+#     pepper package add --dev someone/fixtures  # only for tests and examples
 #     pepper package remove geometry
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
@@ -64,6 +65,9 @@ main(args: String[]): int {
     var add_name = add.option(
         "name", "n", "the name source code imports it by (default: the repository's name)", value_name = "NAME"
     );
+    var add_dev = add.flag(
+        "dev", help = "add it to [dev-dependencies], which only the project's tests and examples import"
+    );
     var remove = parser.command("remove", "Removes a dependency");
     var remove_package = remove.positional("package", "the dependency's name, or its owner/name");
     var update = parser.command("update", "Moves dependencies to the newest versions their ranges allow");
@@ -86,7 +90,7 @@ main(args: String[]): int {
         return project.fetch();
     }
     if (add.is_selected) {
-        return project.add(add_package.value(), add_name.value_or(""));
+        return project.add(add_package.value(), add_name.value_or(""), add_dev.is_set);
     }
     if (remove.is_selected) {
         return project.remove(remove_package.value());
@@ -265,7 +269,7 @@ struct Project {
         return 0;
     }
 
-    add(spec: String, given_name: String): int {
+    add(spec: String, given_name: String, dev: bool): int {
         if (offline) {
             return fail(
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
@@ -353,7 +357,8 @@ struct Project {
             return fail(document.error().to_string());
         }
         var edited = document.value();
-        var set = edited.set(["dependencies", name], entry, inline = true);
+        var table = dev ? "dev-dependencies" : "dependencies";
+        var set = edited.set([table, name], entry, inline = true);
         if (set.is_err()) {
             return fail(set.error().to_string());
         }
@@ -374,7 +379,7 @@ struct Project {
                     entry["version"] = toml.TomlValue.String(package.version);
                 }
             }
-            var reset = edited.set(["dependencies", name], entry, inline = true);
+            var reset = edited.set([table, name], entry, inline = true);
             if (reset.is_err()) {
                 File.write_text(manifest_path, original);
                 return fail(reset.error().to_string());
@@ -436,13 +441,13 @@ struct Project {
         if (manifest.is_err()) {
             return fail(manifest.error().message);
         }
-        var names = Array<String>();
+        var keys = Array<Array<String>>();
         for (var requirement in manifest.value().requirements) {
             if (requirement.name == spec or requirement.repository == spec or requirement.source() == spec) {
-                names.append(requirement.name);
+                keys.append([requirement.table(), requirement.name]);
             }
         }
-        if (names.is_empty) {
+        if (keys.is_empty) {
             return fail($"pep.toml has no dependency '{spec}'");
         }
         var original = manifest.value().text;
@@ -451,8 +456,8 @@ struct Project {
             return fail(document.error().to_string());
         }
         var edited = document.value();
-        for (var name in names) {
-            var removed = edited.remove(["dependencies", name]);
+        for (var key in keys) {
+            var removed = edited.remove(key);
             if (removed.is_err()) {
                 return fail(removed.error().to_string());
             }

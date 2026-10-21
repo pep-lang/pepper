@@ -8,7 +8,9 @@
 # revision is kept while it still satisfies every requirement, unless the
 # package is being updated. A range skips each version whose pep.toml's
 # `minimum_toolchain` is newer than the toolchain resolving; any other
-# revision that needs a newer one is an error.
+# revision that needs a newer one is an error. Only the project's own
+# `[dev-dependencies]` are in its graph, not those of its dependencies, and
+# a package only they lead to is locked as `dev`.
 
 import [Path] from io;
 import semver;
@@ -24,13 +26,16 @@ export struct Wanted {
     var requirer: String = "";
     # Whether the project's own pep.toml asks it.
     var from_root: bool = false;
+    # Whether a dev-dependency of the project leads to it.
+    var dev: bool = false;
     var requirement: Requirement = Requirement();
 
     construct() {}
 
-    construct(requirer: String, from_root: bool, requirement: Requirement) {
+    construct(requirer: String, from_root: bool, dev: bool, requirement: Requirement) {
         this.requirer = requirer;
         this.from_root = from_root;
+        this.dev = dev;
         this.requirement = requirement;
     }
 
@@ -210,7 +215,11 @@ export struct Resolver {
                 continue;
             }
             var graph = Graph();
-            for (var (_, locked) in chosen) {
+            for (var (source, locked) in chosen) {
+                locked.dev = true;
+                for (var ask in wanted[source]) {
+                    locked.dev = locked.dev and ask.dev;
+                }
                 graph.packages.append(locked);
             }
             graph.notes = notes;
@@ -222,17 +231,35 @@ export struct Resolver {
     }
 
     # Every requirement in the graph, by source: the project's, then those
-    # of each package chosen so far (and of folders `path` names).
+    # of each package chosen so far (and of folders `path` names). What the
+    # project's dependencies lead to is read first, then what only its
+    # dev-dependencies do, which is marked `dev`.
     _gather(chosen: OrderedMap<String, Locked>): Result<OrderedMap<String, Array<Wanted>>> {
         var wanted = OrderedMap<String, Array<Wanted>>();
-        var queue = Array<(Manifest, String, bool)>();
-        queue.append((root, root.name.is_empty ? "pep.toml" : root.name, true));
+        var name = root.name.is_empty ? "pep.toml" : root.name;
+        # Each manifest to read, who it is, whether it is the project's,
+        # and whether a dev-dependency leads to it.
+        var queue = Array<(Manifest, String, bool, bool)>();
+        queue.append((root, name, true, false));
         var read = HashSet<String>();
         ulong next = 0;
-        while (next < queue.count) {
-            var (manifest, requirer, from_root) = queue[next];
+        var dev_queued = false;
+        while (true) {
+            if (next == queue.count) {
+                if (dev_queued) {
+                    break;
+                }
+                dev_queued = true;
+                queue.append((root, name, true, true));
+            }
+            var (manifest, requirer, from_root, dev) = queue[next];
             next += 1;
             for (var requirement in manifest.requirements) {
+                # The project's dev-dependencies once, last; never another
+                # package's.
+                if (requirement.dev != (from_root and dev)) {
+                    continue;
+                }
                 var source = requirement.source();
                 var package = Path(".");
                 if (requirement.is_path()) {
@@ -249,7 +276,7 @@ export struct Resolver {
                 if (!wanted.contains(source)) {
                     wanted[source] = Array<Wanted>();
                 }
-                wanted[source].append(Wanted(requirer, from_root, requirement));
+                wanted[source].append(Wanted(requirer, from_root, dev, requirement));
                 if (read.contains(source)) {
                     continue;
                 }
@@ -273,7 +300,7 @@ export struct Resolver {
                 if (dependency.is_err()) {
                     return Result<OrderedMap<String, Array<Wanted>>>.Err(dependency.error().message);
                 }
-                queue.append((dependency.value(), label, false));
+                queue.append((dependency.value(), label, false, dev));
             }
         }
         return Result<OrderedMap<String, Array<Wanted>>>.Ok(wanted);

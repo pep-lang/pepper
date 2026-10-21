@@ -33,6 +33,9 @@ json      = { gitlab = "group/pepper-json", version = "0.4.x" }
 fast_json = { github = "other/json", version = "2" }   # renamed: 'json' was taken
 http      = { codeberg = "someone/http", branch = "main" }
 shapes    = { path = "../shapes" }
+
+[dev-dependencies]
+fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
 ```
 
 A package is a project other projects depend on: a repository (or folder)
@@ -154,7 +157,41 @@ In CI, `pepper build --locked` and `pepper test --locked` fail when
 `pep.lock` is out of date with `pep.toml` instead of updating it, and
 `--offline` builds with only what `.pep/deps` holds (`--frozen` is both;
 `PEPPER_LOCKED=1` and `PEPPER_OFFLINE=1` do the same). See
-[Reproducible builds](pep-package.md#reproducible-builds).
+[Reproducible builds](pep-package.md#reproducible-builds). They apply to
+dev-dependencies as to the rest.
+
+## `[dev-dependencies]`
+
+A package the project's tests and examples use but its code does not, such
+as a test helper, goes in `[dev-dependencies]`, written as in
+`[dependencies]`:
+
+```toml
+[dev-dependencies]
+fixtures = { github = "someone/fixtures", version = "1" }
+```
+
+- **Who sees them:** a test build (`pepper test`, which builds with
+  `pep-build --test`) and a build of a file in the project's `examples`
+  folder, or a folder below it. Any other build of the project, such as
+  `pepper build`, does not: an import of one there is an error that says to
+  move it to `[dependencies]`.
+- **Not part of the package:** a project that depends on this package
+  neither fetches nor resolves its dev-dependencies, so one that conflicts
+  with the dependent's own dependencies does no harm.
+- **Locked with the rest:** `pep.lock` records them beside the other
+  packages, each that only dev-dependencies lead to marked `dev = true`,
+  and `pepper build` fetches them with the rest.
+
+`pepper package add --dev` adds one, and `pepper package remove` removes one
+from either table (see [pep-package](pep-package.md#add-ownernamerange)). A
+name may be in only one of the two tables.
+
+```text
+main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
+    1 | import fixtures;
+      |        ^~~~~~~~
+```
 
 ## `[fetch]`
 
@@ -177,8 +214,9 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
       | ^~
 ```
 
-- Two dependencies with the same name, or a dependency named like a runtime
-  module (`io`, `async`), which it would otherwise hide.
+- Two dependencies with the same name (in one table, or in both
+  `[dependencies]` and `[dev-dependencies]`), or a dependency named like a
+  runtime module (`io`, `async`), which it would otherwise hide.
 - A dependency name that is not an identifier (`fast-json`): it is the name
   `import` uses.
 - A dependency with no source or two, a repository not written `owner/name`,

@@ -1,11 +1,12 @@
 ## Projects: a
 ## `pep.toml` marks the root of a project (or of a package, a project other
 ## projects depend on) and declares its metadata, how it is built, and its
-## dependencies. Each key of `[dependencies]` is the name source code
-## imports; a fetched dependency lives in the project's
-## `.pep/deps/<host>/<repository>`, and `Packages` resolves the imports of
-## every file of a program against the dependencies of the package that
-## file belongs to.
+## dependencies. Each key of `[dependencies]` (and of
+## `[dev-dependencies]`, which only the project's tests and examples see)
+## is the name source code imports; a fetched dependency lives in the
+## project's `.pep/deps/<host>/<repository>`, and `Packages` resolves the
+## imports of every file of a program against the dependencies of the
+## package that file belongs to.
 
 import [Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
@@ -178,7 +179,7 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
     return Result<LockedPackage[], String>.ok(locked);
 }
 
-## One entry of `[dependencies]`.
+## One entry of `[dependencies]` or `[dev-dependencies]`.
 export struct Dependency {
     ## The key: the name source code imports.
     var name: String;
@@ -244,6 +245,9 @@ export struct Manifest {
     var link: String[] = Array<String>();
     ## In the order they are written.
     var dependencies: Dependency[] = Array<Dependency>();
+    ## `[dev-dependencies]`, in the order they are written: seen only by a
+    ## build of this project's tests or examples (`Packages.dev`).
+    var dev_dependencies: Dependency[] = Array<Dependency>();
 
     construct(path: Path, text: String) {
         this.path = path;
@@ -257,30 +261,38 @@ export struct Manifest {
 
     ## The dependency named `name`, if any.
     dependency(name: String): Dependency? {
-        for (var d in dependencies) {
-            if (d.name == name) {
-                return Optional<Dependency>.Value(d);
-            }
-        }
-        return Optional<Dependency>.Empty;
+        return _named(dependencies, name);
     }
 
-    ## Returns its Git dependencies and those of every `path` dependency it
-    ## reaches, which the project fetches into its own `.pep/deps`. A `path`
-    ## dependency whose `pep.toml` cannot be read is skipped: importing it
-    ## reports why.
+    ## The dev-dependency named `name`, if any.
+    dev_dependency(name: String): Dependency? {
+        return _named(dev_dependencies, name);
+    }
+
+    ## Returns its Git dependencies and dev-dependencies, and the Git
+    ## dependencies of every `path` dependency they reach, which the
+    ## project fetches into its own `.pep/deps`. Another package's
+    ## dev-dependencies are not part of this project. A `path` dependency
+    ## whose `pep.toml` cannot be read is skipped: importing it reports why.
     ##
     ## @returns the Git dependencies, this manifest's first
     git_dependencies(): Dependency[] {
         var out = Array<Dependency>();
         var pending = [this];
         var seen = HashSet<String>();
+        var own = true;
         while (!pending.is_empty) {
             var manifest = pending.remove_at(0);
             if (!seen.insert(manifest.dir().normalize().to_string())) {
                 continue;
             }
-            for (var d in manifest.dependencies) {
+            var named = manifest.dependencies.copy();
+            # Only this project's own dev-dependencies.
+            if (own) {
+                named.append_all(dev_dependencies);
+                own = false;
+            }
+            for (var d in named) {
                 if (d.host.is_value()) {
                     out.append(d);
                     continue;
@@ -314,6 +326,16 @@ export struct Manifest {
         }
         return dirs;
     }
+}
+
+## The dependency in `dependencies` named `name`, if any.
+_named(dependencies: Dependency[], name: String): Dependency? {
+    for (var d in dependencies) {
+        if (d.name == name) {
+            return Optional<Dependency>.Value(d);
+        }
+    }
+    return Optional<Dependency>.Empty;
 }
 
 ## Whether `text` names toolchain versions: `latest`, or one to three
@@ -688,9 +710,11 @@ struct _Reader {
         }
     }
 
-    dependencies(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+    ## The entries of the dependency table `table` (`dependencies` or
+    ## `dev-dependencies`), appended to `into`.
+    dependencies(table: String, into: Dependency[], members: OrderedMap<String, TomlValue>) {
         for (var (name, value) in members) {
-            var path = ["dependencies", name];
+            var path = [table, name];
             if (!is_identifier(name)) {
                 error($"dependency name '{name}' is not an identifier; it is the name 'import' uses", key_span(path));
                 continue;
@@ -704,11 +728,11 @@ struct _Reader {
                 );
                 continue;
             }
-            dependency(manifest, path, name, fields.value());
+            dependency(into, path, name, fields.value());
         }
     }
 
-    dependency(manifest: Manifest, path: String[], name: String, fields: OrderedMap<String, TomlValue>) {
+    dependency(into: Dependency[], path: String[], name: String, fields: OrderedMap<String, TomlValue>) {
         var before = errors.count;
         Host? host = Optional<Host>.Empty;
         String? location;
@@ -761,10 +785,7 @@ struct _Reader {
                 revision = field;
             } else {
                 unknown_key(
-                    path,
-                    field,
-                    "dependencies",
-                    ["github", "gitlab", "codeberg", "path", "version", "branch", "tag", "commit"]
+                    path, field, path[0], ["github", "gitlab", "codeberg", "path", "version", "branch", "tag", "commit"]
                 );
             }
         }
@@ -786,7 +807,7 @@ struct _Reader {
         if (errors.count != before) {
             return;
         }
-        manifest.dependencies.append(Dependency(name, key_span(path), host, location.value()));
+        into.append(Dependency(name, key_span(path), host, location.value()));
     }
 }
 
@@ -837,10 +858,12 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.build(manifest, table.value());
             }
-        } else if (key == "dependencies") {
+        } else if (key == "dependencies" or key == "dev-dependencies") {
             var table = reader.table(at, key, value);
             if (table.is_value()) {
-                reader.dependencies(manifest, table.value());
+                reader.dependencies(
+                    key, key == "dependencies" ? manifest.dependencies : manifest.dev_dependencies, table.value()
+                );
             }
         } else if (key == "fetch") {
             var table = reader.table(at, key, value);
@@ -849,13 +872,20 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]' and '[fetch]'",
                 reader.key_span(at)
             );
         }
     }
     if (!package_seen) {
         reader.error("missing '[package]' table with the project's 'name'", Span(0, 0));
+    }
+    for (var d in manifest.dev_dependencies) {
+        if (manifest.dependency(d.name).is_value()) {
+            reader.error(
+                $"'{d.name}' is in both '[dependencies]' and '[dev-dependencies]'; keep it in one", d.name_span
+            );
+        }
     }
     if (reader.errors.is_empty) {
         return Result<Manifest, ManifestError[]>.ok(manifest);
@@ -892,7 +922,9 @@ export load_manifest(path: Path, runtime_dirs: Path[]): Result<Manifest, String>
     }
     var manifest = parsed.value();
     var errors = Array<ManifestError>();
-    for (var d in manifest.dependencies) {
+    var named = manifest.dependencies.copy();
+    named.append_all(manifest.dev_dependencies);
+    for (var d in named) {
         for (var dir in runtime_dirs) {
             if (dir.join(Path(d.name)).join(Path(files.MODULE_FILE)).is_file()) {
                 errors.append(
@@ -944,13 +976,21 @@ export struct Packages {
     ## The project's root folder, whose `.pep/deps` holds fetched
     ## dependencies.
     var project: Path?;
+    ## Whether the project's own files see its `[dev-dependencies]`: in a
+    ## test build, and a build of a file in its `examples` folder.
+    var dev: bool = false;
     ## Folder -> the manifest governing it, or why it could not be used, or
     ## Empty when none does.
     var _by_dir: HashMap<String, Result<Manifest, String>?> = HashMap<String, Result<Manifest, String>?>();
 
     ## The packages of a program rooted at the file `root`.
-    construct(root: Path) {
+    ##
+    ## @param root the program's root file
+    ## @param test whether it is a test build, which sees the project's
+    ##   dev-dependencies, as a build of a file in its `examples` folder does
+    construct(root: Path, test: bool = false) {
         project = files.find_project(root);
+        dev = test or (project.is_value() and _in_examples(project.value(), root));
     }
 
     _manifest_for(dir: Path): Result<Manifest, String>? {
@@ -1019,7 +1059,20 @@ export struct Packages {
         var first = parts[0];
         var dependency = manifest.dependency(first);
         if (!dependency.is_value()) {
-            return Resolution.NotADependency;
+            dependency = manifest.dev_dependency(first);
+            if (!dependency.is_value()) {
+                return Resolution.NotADependency;
+            }
+            if (manifest.dir().normalize().to_string() != project.value().normalize().to_string()) {
+                return Resolution.Missing(
+                    $"'{first}' is a dev-dependency of the package '{manifest.name}', which only its own tests and examples import"
+                );
+            }
+            if (!dev) {
+                return Resolution.Missing(
+                    $"'{first}' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here"
+                );
+            }
         }
         var package = dependency.value().directory(project.value(), manifest.dir());
         if (!package.is_directory()) {
@@ -1045,6 +1098,31 @@ export struct Packages {
         }
         return Resolution.Missing($"package '{first}' has no module '{name}': no {module_file}");
     }
+}
+
+## Whether `file` is in the `examples` folder of the project at `project`,
+## or a folder below it.
+_in_examples(project: Path, file: Path): bool {
+    var absolute = file;
+    if (!absolute.is_absolute()) {
+        var cwd = process.working_directory();
+        if (cwd.is_ok()) {
+            absolute = cwd.value().join(file).normalize();
+        }
+    }
+    var at = files.dir_of(absolute);
+    while (true) {
+        var parent = at.parent();
+        if (!parent.is_value() or parent.value().to_string() == at.to_string()) {
+            return false;
+        }
+        if (parent.value().to_string() == project.to_string()) {
+            var name = at.file_name();
+            return name.is_value() and name.value() == "examples";
+        }
+        at = parent.value();
+    }
+    return false;
 }
 
 ## The `pep.toml` nearest `dir`: in it, or in the closest folder above it

@@ -96,7 +96,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]' and '[fetch]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -196,6 +196,106 @@ reports_an_unfetched_dependency_of_a_path_dependency() {
     expect_true(report.is_value());
     expect_true(report.value().contains("module.pep:1:8: error: dependency 'term' is not fetched: no "));
     expect_true(report.value().contains("; run 'pepper package fetch'"));
+}
+
+[Test]
+reads_dev_dependencies() {
+    var parsed = link.parse_manifest(
+        Path("/p/pep.toml"),
+        "[package]\nname = \"p\"\n[dependencies]\ngeo = { path = \"geo\" }\n[dev-dependencies]\n"
+            + "fixtures = { github = \"someone/fixtures\", version = \"1\" }\n"
+    );
+    expect_true(parsed.is_ok());
+    var m = parsed.value();
+    expect_equal(m.dependencies.count, 1);
+    expect_equal(m.dev_dependencies.count, 1);
+    expect_false(m.dependency("fixtures").is_value());
+    expect_equal(m.dev_dependency("fixtures").value().locked_source().value(), "github:someone/fixtures");
+    expect_equal(
+        errors(
+            "[package]\nname = \"a\"\n[dependencies]\njson = { github = \"x/json\" }\n[dev-dependencies]\njson = { github = \"x/json\" }\n"
+        ),
+        "json: 'json' is in both '[dependencies]' and '[dev-dependencies]'; keep it in one"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dev-dependencies]\njson = { github = \"x/json\", tags = \"v1\" }\n"),
+        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit'"
+    );
+}
+
+# What checking `file` reports, built as a test build when `test` is
+# set; empty when it builds.
+check_build(file: Path, test: bool): String {
+    var setup = link.Setup();
+    setup.runtime = false;
+    if (test) {
+        setup.target.build_options[link.TEST_BUILD_OPTION] = "1";
+    }
+    var program = link.load_program(file, setup);
+    expect_true(program.is_ok());
+    var report = program.value().check();
+    return report.is_value() ? report.value() : "";
+}
+
+[Test]
+only_tests_and_examples_see_dev_dependencies() {
+    var folder = TempFolder("dev_dependencies");
+    var lib = folder.path.join(Path("lib"));
+    var app = folder.path.join(Path("app"));
+    var fixtures = folder.path.join(Path("fixtures"));
+    Directory.create_all(lib.join(Path("examples")));
+    Directory.create_all(app);
+    Directory.create_all(fixtures);
+    File.write_text(fixtures.join(Path("module.pep")), "export answer(): int {\n    return 42;\n}\n");
+    File.write_text(
+        lib.join(Path("pep.toml")),
+        "[package]\nname = \"lib\"\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
+            + "term = { github = \"nobody/term\" }\n"
+    );
+    var uses = "import fixtures;\nmain(): int {\n    return fixtures.answer() - 42;\n}\n";
+    File.write_text(lib.join(Path("main.pep")), uses);
+    File.write_text(lib.join(Path("examples")).join(Path("demo.pep")), uses);
+    File.write_text(lib.join(Path("module.pep")), "import fixtures;\nexport answer(): int {\n    return 1;\n}\n");
+
+    # A test build and an example see them; any other build does not.
+    expect_equal(check_build(lib.join(Path("main.pep")), true), "");
+    expect_equal(check_build(lib.join(Path("examples")).join(Path("demo.pep")), false), "");
+    expect_true(
+        check_build(
+            lib.join(Path("main.pep")),
+            false
+        ).contains(
+            "main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here"
+        )
+    );
+
+    # A project that depends on lib neither fetches nor sees them, even in
+    # its own test build.
+    File.write_text(
+        app.join(Path("pep.toml")), "[package]\nname = \"app\"\n[dependencies]\nlib = { path = \"../lib\" }\n"
+    );
+    File.write_text(app.join(Path("main.pep")), "import lib;\nmain(): int {\n    return lib.answer() - 1;\n}\n");
+    expect_equal(link.load_manifest(lib.join(Path("pep.toml")), Array<Path>()).value().git_dependencies().count, 1);
+    expect_equal(link.load_manifest(app.join(Path("pep.toml")), Array<Path>()).value().git_dependencies().count, 0);
+    expect_true(
+        check_build(
+            app.join(Path("main.pep")),
+            true
+        ).contains(
+            "module.pep:1:8: error: 'fixtures' is a dev-dependency of the package 'lib', which only its own tests and examples import"
+        )
+    );
+
+    # A dev-dependency may not hide a runtime module either.
+    var runtime = folder.path.join(Path("runtime"));
+    Directory.create_all(runtime.join(Path("io")));
+    File.write_text(runtime.join(Path("io")).join(Path("module.pep")), "");
+    File.write_text(
+        app.join(Path("pep.toml")), "[package]\nname = \"app\"\n[dev-dependencies]\nio = { path = \"../fixtures\" }\n"
+    );
+    var hidden = link.load_manifest(app.join(Path("pep.toml")), [runtime]);
+    expect_true(hidden.is_err());
+    expect_true(hidden.error().contains("dependency 'io' has the name of the runtime module 'io'"));
 }
 
 [Test]

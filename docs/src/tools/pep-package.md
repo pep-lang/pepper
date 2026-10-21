@@ -6,6 +6,7 @@
 ```bash
 pepper package add someone/geometry          # the newest version, imported as 'geometry'
 pepper package add other/json@2.x --name fast_json
+pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -39,7 +40,8 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `fetch` | Fetches what `pep.lock` lists, and resolves what `pep.toml` changed since `pep.lock` was written |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
-| `remove <name>` | Removes a dependency, by its name or its `owner/name` |
+| `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
+| `remove <name>` | Removes a dependency or dev-dependency, by its name or its `owner/name` |
 | `update [<name>...]` | Moves dependencies to the newest versions their ranges allow; every one when none is named |
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -85,10 +87,14 @@ with `-` and `.` turned into `_` (`other/json` adds `json`); `--name` gives
 another. A name already in `pep.toml`, or the name of a runtime module
 (`io`, `async`), is an error that suggests `--name`.
 
+`--dev` adds it to `[dev-dependencies]` instead: only the project's tests
+and examples import it, and projects that depend on this one ignore it
+(see [Projects: pep.toml](projects.md#dev-dependencies)).
+
 ### `remove <name>`
 
-Removes the dependency with that name (or that `owner/name`) from
-`pep.toml`, and drops from `pep.lock` every package nothing needs any more.
+Removes the dependency or dev-dependency with that name (or that
+`owner/name`) from `pep.toml`, and drops from `pep.lock` every package nothing needs any more.
 
 ### `update [<name>...]`
 
@@ -126,6 +132,9 @@ version = "1.1.0"
 commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
 sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 ```
+
+A package that only the project's `[dev-dependencies]` lead to has
+`dev = true`; one that a dependency leads to as well does not.
 
 The checksum covers the files of the commit as the host's archive of it
 holds them, not the archive's bytes, which a host may compress
@@ -210,6 +219,9 @@ name each imports it by.
   declares, and `pep-package` says which requirement it overrode.
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
+- The project's own `[dev-dependencies]` are resolved with its
+  dependencies, as requirements of the project; a dependency's
+  `[dev-dependencies]` are not part of the graph at all.
 
 ### The toolchain a package needs
 
