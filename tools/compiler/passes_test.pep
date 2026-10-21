@@ -456,7 +456,7 @@ specialized_error_programs(): String[] {
         # labels.
         "# expect: main.pep:9:23: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\nstruct Box<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n    pair(): (int, int) { return (1, 2); }\n}\nmain(): int {\n    var box = Box<(a: int, b: int)>((a: 1, b: 2));\n    return box.pair().a;\n}\n",
         # Nor does a generic function's.
-        "# expect: main.pep:5:49: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\npair<T>(value: T): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    return pair<(a: int, b: int)>((a: 1, b: 2)).a;\n}\n",
+        "# expect: main.pep:6:49: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\npair<T>(value: T): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    return pair<(a: int, b: int)>((a: 1, b: 2)).a;\n}\n",
         # `[ThreadLocal]` on a field.
         "# expect: main.pep:3:5: error: 'ThreadLocal' applies only to a module-scope variable, not a field\nstruct Counter {\n    [ThreadLocal]\n    var hits: int;\n}\nmain(): int { return 0; }\n",
         # A struct value as a condition, and as an operand of `!`.
