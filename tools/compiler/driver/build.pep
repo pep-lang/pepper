@@ -28,6 +28,7 @@ import [
     worker_file,
     mark,
     NEEDS_FILE,
+    union_of,
     numbered_objects,
     serve_compilation_units,
     store_checked,
@@ -402,18 +403,6 @@ _below(ks: ulong[], dir: Path, read: HashMap<ulong, HashSet<String>>): Array<Has
     return out;
 }
 
-# Every name one of `below` holds, which a compilation unit's object only
-# declares (`codegen.generate`'s `declared`).
-_union(below: Array<HashSet<String>>): HashSet<String> {
-    var out = HashSet<String>();
-    for (var defined in below) {
-        for (var name in defined) {
-            out.insert(name);
-        }
-    }
-    return out;
-}
-
 # What `ir`, a compilation unit's code just generated, uses that the objects
 # below it define (`declared`), a name a line: its objects link only with
 # objects below that still define them (`Cache.unit_objects`).
@@ -446,6 +435,9 @@ _store_unit(
     if (stored.is_err()) {
         return Result<String, String>.err(stored.error());
     }
+    # shortcut: two builds at once with one key but other objects below
+    # both find the key free and one fails here; store under the other key
+    # instead if a shared cache across checkouts ever meets it.
     var key = cache.unit_objects(name, unit.key, below, file);
     if (!key.is_value()) {
         return Result<String, String>.err(
@@ -546,7 +538,7 @@ _compile_unit(
         }
     }
     var owners = HashMap<String, uint>();
-    var declared = _union(below);
+    var declared = union_of(below);
     var generated = codegen.generate(
         module, state, namespaces, unit.name, setup, owners, others, Optional<HashSet<String>>.Value(declared)
     );
@@ -1086,7 +1078,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                     others.insert(i as uint);
                 }
             }
-            var below = _union(last_below);
+            var below = union_of(last_below);
             setup.separate_locations = true;
             var generated = codegen.generate(
                 module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)

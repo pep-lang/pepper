@@ -299,16 +299,24 @@ _needs_met(folder: Path, below: Array<HashSet<String>>): bool {
     return true;
 }
 
-## `key` with every name `below` holds added, in order.
-_with_below(key: String, below: Array<HashSet<String>>): String {
-    var names = HashSet<String>();
+## Returns every name one of `below` holds.
+##
+## @param below sets of names
+## @returns their union
+export union_of(below: Array<HashSet<String>>): HashSet<String> {
+    var out = HashSet<String>();
     for (var defined in below) {
         for (var name in defined) {
-            names.insert(name);
+            out.insert(name);
         }
     }
+    return out;
+}
+
+## `key` with every name `below` holds added, in order.
+_with_below(key: String, below: Array<HashSet<String>>): String {
     var sorted = Array<String>();
-    for (var name in names) {
+    for (var name in union_of(below)) {
         sorted.append(name);
     }
     sorted.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
