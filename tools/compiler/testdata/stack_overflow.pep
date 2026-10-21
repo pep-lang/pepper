@@ -18,13 +18,13 @@ depth(n: int): int {
 # Overflows the stack on the thread the argument names: `main`, `thread`
 # (a spawned Thread) or `task` (a task's fiber); `none` recurses safely.
 main(): int {
+    var where = process.arguments()[1];
     # Without the guard an overflow ends the program with no message, and
-    # the test would see only that: say why instead.
-    if (!_pep_stack_guard_installed()) {
+    # the test would see only that: say why instead, in its stderr.
+    if (where != "none" and !_pep_stack_guard_installed()) {
         File.stderr().write_all("main did not install the stack guard: built by a pep-build older than it?\n");
         return 3;
     }
-    var where = process.arguments()[1];
     var n = where == "none" ? 1000 : 100000000;
     if (where == "thread") {
         async.Thread.spawn(() => print($"{depth(n)}")).join();
