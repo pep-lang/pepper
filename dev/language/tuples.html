@@ -229,7 +229,8 @@ instead: <code>t = (3, t.1);</code>.</li>
 <li><code>Tuple&lt;A, B&gt;</code> is another spelling of <code>(A, B)</code>, for places where a type in
 angle brackets reads better.</li>
 <li><code>(int, String)?</code> is an optional tuple, <code>Optional&lt;(int, String)&gt;</code> (see
-<a href="optionals.html">Optional values</a>).</li>
+<a href="optionals.html">Optional values</a>), and <code>(int, String)[]</code> is an array of
+tuples, <code>Array&lt;(int, String)&gt;</code>.</li>
 </ul>
 <h2 id="labels"><a class="header" href="#labels">Labels</a></h2>
 <p>A tuple type can name its elements: <code>(line: int, column: int)</code>, and so can a
@@ -388,8 +389,8 @@ yields <code>(key, value)</code> tuples:</p>
     }
     assert(total == 121, "every entry");
 
-    # An array of tuples.
-    var pairs = Array&lt;(String, int)&gt;();
+    # An array of tuples: `(String, int)[]` is `Array&lt;(String, int)&gt;`.
+    var pairs: (String, int)[] = [];
     pairs.append(("x", 1));
     pairs.append(("y", 2));
     for (var (name, count) in pairs) {

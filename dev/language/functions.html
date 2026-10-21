@@ -555,6 +555,17 @@ main(): int {
 <p>Written anywhere else, <code>__caller_location()</code> is its own location. A
 compiler-generated check with no single place to report, such as a call through
 a null trait value, prints the message alone.</p>
+<p>A stack overflow, from recursion that never ends for example, is reported the
+same way, on the main thread, a <a href="threads.html">thread</a> or a
+<a href="tasks.html">task</a>:</p>
+<pre><code class="language-text">panic: stack overflow
+</code></pre>
+<p>The stack has no room left to format anything, so the message has no
+location and no backtrace, and the program's buffered output is not flushed.
+Any other memory fault goes to the handler installed before the program's
+own (or crashes the program, when there is none), and a debugger sees the
+overflow first. WebAssembly has no guard
+pages, so a WASI program gets no such report.</p>
 <h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
 <p><code>main</code> comes in two forms. <code>main(): int</code> takes nothing. <code>main(args: String[]): int</code> receives the program's command-line arguments: element 0 is
 the program as it was started, and the arguments typed after it follow in

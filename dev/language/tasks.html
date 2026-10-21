@@ -836,8 +836,10 @@ registers. Switching tasks saves the running task's registers on its stack
 and restores the other's, a few instructions of assembly on Linux and macOS
 (the <code>__switch_context</code> intrinsic) and the Fibers API on Windows. A task's
 stack is reserved address space with a guard page below it; only the pages
-the task touches use memory, and a task that overflows its stack crashes the
-program as a thread would. Stacks are reused for later tasks.</p>
+the task touches use memory, and a task that overflows its stack ends the
+program with <code>panic: stack overflow</code>, as a thread does (see
+<a href="functions.html#assertions-and-panics">Assertions and panics</a>). Stacks are
+reused for later tasks.</p>
 <p>Each worker has its own ready queue, timers and backend. Workers talk
 through a queue of messages each (a spawned task finished, was cancelled, or
 was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends

@@ -3987,6 +3987,17 @@ main(): int {
 <p>Written anywhere else, <code>__caller_location()</code> is its own location. A
 compiler-generated check with no single place to report, such as a call through
 a null trait value, prints the message alone.</p>
+<p>A stack overflow, from recursion that never ends for example, is reported the
+same way, on the main thread, a <a href="language/threads.html">thread</a> or a
+<a href="language/tasks.html">task</a>:</p>
+<pre><code class="language-text">panic: stack overflow
+</code></pre>
+<p>The stack has no room left to format anything, so the message has no
+location and no backtrace, and the program's buffered output is not flushed.
+Any other memory fault goes to the handler installed before the program's
+own (or crashes the program, when there is none), and a debugger sees the
+overflow first. WebAssembly has no guard
+pages, so a WASI program gets no such report.</p>
 <h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
 <p><code>main</code> comes in two forms. <code>main(): int</code> takes nothing. <code>main(args: String[]): int</code> receives the program's command-line arguments: element 0 is
 the program as it was started, and the arguments typed after it follow in
@@ -4077,7 +4088,8 @@ instead: <code>t = (3, t.1);</code>.</li>
 <li><code>Tuple&lt;A, B&gt;</code> is another spelling of <code>(A, B)</code>, for places where a type in
 angle brackets reads better.</li>
 <li><code>(int, String)?</code> is an optional tuple, <code>Optional&lt;(int, String)&gt;</code> (see
-<a href="language/optionals.html">Optional values</a>).</li>
+<a href="language/optionals.html">Optional values</a>), and <code>(int, String)[]</code> is an array of
+tuples, <code>Array&lt;(int, String)&gt;</code>.</li>
 </ul>
 <h2 id="labels"><a class="header" href="#labels">Labels</a></h2>
 <p>A tuple type can name its elements: <code>(line: int, column: int)</code>, and so can a
@@ -4236,8 +4248,8 @@ yields <code>(key, value)</code> tuples:</p>
     }
     assert(total == 121, "every entry");
 
-    # An array of tuples.
-    var pairs = Array&lt;(String, int)&gt;();
+    # An array of tuples: `(String, int)[]` is `Array&lt;(String, int)&gt;`.
+    var pairs: (String, int)[] = [];
     pairs.append(("x", 1));
     pairs.append(("y", 2));
     for (var (name, count) in pairs) {
@@ -15561,8 +15573,10 @@ registers. Switching tasks saves the running task's registers on its stack
 and restores the other's, a few instructions of assembly on Linux and macOS
 (the <code>__switch_context</code> intrinsic) and the Fibers API on Windows. A task's
 stack is reserved address space with a guard page below it; only the pages
-the task touches use memory, and a task that overflows its stack crashes the
-program as a thread would. Stacks are reused for later tasks.</p>
+the task touches use memory, and a task that overflows its stack ends the
+program with <code>panic: stack overflow</code>, as a thread does (see
+<a href="language/functions.html#assertions-and-panics">Assertions and panics</a>). Stacks are
+reused for later tasks.</p>
 <p>Each worker has its own ready queue, timers and backend. Workers talk
 through a queue of messages each (a spawned task finished, was cancelled, or
 was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends
@@ -22760,7 +22774,8 @@ the panic must contain.</li>
 <code>FILE::NAME</code> with the file as <code>--list</code> gives it) and exits with 0 when it
 returns having released everything it allocated; a test that leaves an
 allocation behind (or releases one too many) exits with 1 and says so on
-standard error. A panic aborts the program; a test that runs past the timeout
+standard error. A panic aborts the program, and so does a stack overflow,
+after <code>panic: stack overflow</code>; a test that runs past the timeout
 ends it with exit status 124. However the program ends (the test returns,
 panics, crashes or times out), every process the test started ends with
 it (a job object on Windows, a process group elsewhere): one left running
