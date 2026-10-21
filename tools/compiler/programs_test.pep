@@ -3,12 +3,15 @@
 # environment each needs: what `cli`'s `parse` prints and the error for a
 # struct field `add_options` cannot declare; `os`'s environment and the
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
-# database; `process`'s arguments, `exit`, `main`'s arguments, children
-# that are copies of the program, and `exec`; and the error for a member a
+# database; `process`'s arguments, `exit` (and the `atexit` handlers it
+# runs), `main`'s arguments, children that are copies of the program, and
+# `exec`; and the error for a member a
 # value's type lacks inside an interpolation; string literals that hold
 # a NUL; a `match` in a generic method of another module's struct; a `[Move]`
-# argument called through a `shared` function value; and the message a stack
-# overflow prints on the main thread, a `Thread` and a task. The
+# argument called through a `shared` function value; externs bound to C
+# symbols Pepper functions are named after, at each `-O` level; and the
+# message a stack overflow prints on the main thread, a `Thread` and a
+# task. The
 # programs are in
 # `testdata/`.
 
@@ -325,6 +328,15 @@ process_exit_ends_with_the_code_and_keeps_printed_output() {
 }
 
 [Test]
+process_exit_runs_atexit_handlers_except_in_a_forked_copy() {
+    # Printed once, by the parent: the copy's exit skips the handler.
+    var output = _run("process_exit_atexit");
+    var first = toolchain.executable_suffix() == "" ? "child 5" : "no fork";
+    expect_equal(output.stdout, $"{first}\nexit handler ran\n");
+    expect_exit(output, 7);
+}
+
+[Test]
 process_main_receives_the_arguments_when_it_declares_them() {
     var output = _run("process_main_arguments", ["one", "two words", ""]);
     expect_equal(output.stdout, "[one]\n[two words]\n[]\n");
@@ -409,6 +421,17 @@ move_takes_a_call_through_a_shared_function_value() {
     var output = _run("move_shared_call");
     expect_exit(output, 0);
     expect_equal(output.stdout, "1\n6\n");
+}
+
+# ── externs ─────────────────────────────────────────────────────────────────
+
+[Test]
+extern_bound_to_a_pepper_function_name_calls_the_c_symbol() {
+    for (var options in [Array<String>(), ["-O"], ["-O", "--lto", "full"]]) {
+        var folder = TempFolder("programs_extern_named_like_function");
+        var program = _build("extern_named_like_function", folder.path, options);
+        expect_exit(run(process.Command(program.to_string())), 100);
+    }
 }
 
 # ── stack overflow ──────────────────────────────────────────────────────────
