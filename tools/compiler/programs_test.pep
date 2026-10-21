@@ -3,8 +3,9 @@
 # environment each needs: what `cli`'s `parse` prints and the error for a
 # struct field `add_options` cannot declare; `os`'s environment and the
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
-# database; `process`'s arguments, `exit`, `main`'s arguments, children
-# that are copies of the program, and `exec`; and the error for a member a
+# database; `process`'s arguments, `exit` (and the `atexit` handlers it
+# runs), `main`'s arguments, children that are copies of the program, and
+# `exec`; and the error for a member a
 # value's type lacks inside an interpolation; string literals that hold
 # a NUL; a `match` in a generic method of another module's struct; and a `[Move]`
 # argument called through a `shared` function value. The
@@ -320,6 +321,15 @@ process_exit_ends_with_the_code_and_keeps_printed_output() {
     # flush it.
     var output = _run("process_exit");
     expect_equal(output.stdout, "before\n");
+    expect_exit(output, 7);
+}
+
+[Test]
+process_exit_runs_atexit_handlers_except_in_a_forked_copy() {
+    # Printed once, by the parent: the copy's exit skips the handler.
+    var output = _run("process_exit_atexit");
+    var first = toolchain.executable_suffix() == "" ? "child 5" : "no fork";
+    expect_equal(output.stdout, $"{first}\nexit handler ran\n");
     expect_exit(output, 7);
 }
 

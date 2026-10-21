@@ -50,11 +50,16 @@ _process_arguments(): Array<String> {
 
 ## Ends the program at once with status `code`.
 ##
-## Flushes standard output and every other C output stream first, so text
-## printed so far is not lost. Nothing else runs: locals are not released,
-## destructors do not run, and other threads stop where they are. Returning
-## from `main` is the usual way to end; `exit` is for ending from deep inside
-## a call.
+## Ends as C's `exit` does, and as returning from `main` does: the
+## handlers registered with C's `atexit` run, then standard output and
+## every other C output stream are flushed, so text printed so far is not
+## lost. Nothing else runs: locals are not released, destructors do not
+## run, and other threads stop where they are. Returning from `main` is the
+## usual way to end; `exit` is for ending from deep inside a call.
+##
+## In the copy `fork()` starts, the `atexit` handlers, which are the
+## parent's, do not run: the streams are flushed and the copy ends, as C's
+## `_exit` ends a forked child.
 ##
 ## @param code the exit status: 0 for success, anything else for failure
 ##   (only its low 8 bits reach a POSIX parent)
@@ -76,7 +81,8 @@ _process_exit(code: int) {
 ## same memory, open files and code, and both go on from here. In the
 ## parent, returns the copy as a `Child` to wait for; in the copy, returns
 ## none. The copy has only the calling thread, so fork before starting
-## threads or tasks, and end the copy with `exit()`.
+## threads or tasks, and end the copy with `exit()`, which there skips the
+## parent's `atexit` handlers.
 ##
 ## The C standard streams are flushed first, so what `print` buffered is
 ## written once. Not on Windows or WASI, which start processes only from a

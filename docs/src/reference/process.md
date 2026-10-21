@@ -30,7 +30,7 @@ does.
 Deprecated: use `process.exit` instead.
 
 Ends the program at once with status `code`, as `process.exit(code)`
-does.
+does: C's `atexit` handlers run and the C output streams are flushed.
 
 **Parameters**
 - `code` — the exit status: 0 for success, anything else for failure
