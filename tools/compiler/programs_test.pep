@@ -6,8 +6,9 @@
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`; and the error for a member a
 # value's type lacks inside an interpolation; string literals that hold
-# a NUL; a `match` in a generic method of another module's struct; and a `[Move]`
-# argument called through a `shared` function value. The
+# a NUL; a `match` in a generic method of another module's struct; a `[Move]`
+# argument called through a `shared` function value; and reference chains a
+# million deep, released without overflowing the stack. The
 # programs are in
 # `testdata/`.
 
@@ -408,4 +409,19 @@ move_takes_a_call_through_a_shared_function_value() {
     var output = _run("move_shared_call");
     expect_exit(output, 0);
     expect_equal(output.stdout, "1\n6\n");
+}
+
+# ── releases ────────────────────────────────────────────────────────────────
+
+[Test]
+deep_chains_release_without_overflow_and_shallow_order_holds() {
+    var folder = TempFolder("programs_deep_release");
+    var program = _build("deep_release", folder.path).to_string();
+    var expected = "link chain released\ntrait chain released\nenum chain released\ntree released\n"
+        + "destroy root\ndestroy second\ndestroy first\ndestroy first.second\ndestroy first.first\n";
+    for (var depth in ["10", "1000000"]) {
+        var output = run(process.Command(program).argument(depth));
+        expect_exit(output, 0);
+        expect_equal(output.stdout, expected);
+    }
 }

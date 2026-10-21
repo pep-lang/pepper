@@ -663,8 +663,10 @@ extend Generator {
             var is_last = builder.compare(llvm.IntPredicate.Equal, after, zero, "is_last");
             builder.conditional_branch(is_last, last, done);
             builder.position_at_end(last);
+            # Through the runtime, which puts a destruction nested too deep
+            # on a list instead of recursing.
             var last_release_fn = last_release(ty_name, atomic)?;
-            builder.call(last_release_fn.global_type(), last_release_fn, [object], "");
+            call_function("_pep_release_last", [object, last_release_fn])?;
             builder.branch(done);
         }
         builder.position_at_end(done);
@@ -672,8 +674,8 @@ extend Generator {
     }
 
     ## `T.__last_release(this)`: what a standard `__release` does when the
-    ## strong count reaches 0, out of line (`cold`, never inlined). It
-    ## destroys the object, then gives up the strong references' weak
+    ## strong count reaches 0, out of line (`cold`, never inlined), called
+    ## through the runtime's `_pep_release_last`. It destroys the object, then gives up the strong references' weak
     ## reference and frees the memory when no weak reference remains.
     last_release(ty_name: String, atomic: bool): Result<llvm.Value> {
         var name = $"{ty_name}.__last_release";

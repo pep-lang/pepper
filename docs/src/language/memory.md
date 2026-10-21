@@ -58,6 +58,25 @@ destroy further objects in turn.
 {{#include ../../examples/memory-lifetime.pep}}
 ```
 
+Destroying an object first runs its destructor, then releases its fields in
+reverse declaration order; an object a field release destroys is destroyed
+completely, its own fields included, before the next field is released. So
+an object's destructor always runs before those of the objects it held.
+
+A chain of any length can be released: a linked list of a million links, or
+a document nested a million levels deep, is destroyed without running out
+of stack. Destruction nests as described above until it is about 64 KB of
+stack deeper than the release that started it; past that, each further
+object is put on a list for the current thread instead, and is destroyed
+when that outermost release has finished its own object: in the order they
+were released, each one's own nested objects before the next. Only the
+order of destructors that deep changes; every object is still destroyed
+before the release that started it returns.
+
+```pepper
+{{#include ../../examples/memory-deep-chains.pep}}
+```
+
 Concretely, a reference is released when:
 
 - **A local variable goes out of scope**, at the closing brace of the block

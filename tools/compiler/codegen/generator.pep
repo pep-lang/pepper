@@ -81,6 +81,13 @@ export struct StructDesc {
     ## atomically: none for a struct whose `__acquire`/`__release` are not
     ## the standard ones.
     var inline_counts: bool? = Optional<bool>.Empty;
+    ## Whether codegen generates `__release` itself, and whether its counts
+    ## step atomically: none for a struct whose `__release` is not the
+    ## standard one.
+    var release_counts: bool? = Optional<bool>.Empty;
+    ## Whether some objects of the struct are immortal (a reference enum's
+    ## cases that carry nothing), so `__release` leaves their counts alone.
+    var immortal: bool = false;
     ## Declared `[__Lazy]`: the zero-argument constructor is null, and a
     ## place holding null gets its object when first read for anything but
     ## a `[__Reads]` call or a field read (see `materialize`).

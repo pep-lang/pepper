@@ -916,7 +916,9 @@ for each struct:
   held by all strong references together, as in a C++ control block). It
   fills the `__acquire` body (null check, `++__refcount`, `trace_*` calls)
   and the `__release` body (null check, `--`, and at 0 a call to `__dtor`,
-  then `--__weakcount` and `_pep_free(this)` if that reached 0). Each step
+  then `--__weakcount` and `_pep_free(this)` if that reached 0; codegen
+  generates a struct's standard `__release` itself, through the runtime's
+  `_pep_release_last`, see §5). Each step
   is an `Expression.CountStep` node, which evaluates to the new count and
   is atomic when the struct is `[Shared]` or a `shared` function type (as
   codegen's `atomic_counts` decides too). Everything else, plain function
@@ -2111,16 +2113,27 @@ code that implements it. Every rule is emitted in
 which stand for `T.__acquire` and `T.__release`. Both are synthesized by
 `synthesize.apply_synthesized` and are null-safe.
 
-For a struct with the standard counts (`StructDesc.inline_counts`, set by
-`standard_counts`: not a weak view, a function type's object, or a
-reference enum with immortal cases, whose bodies differ), codegen inlines
+For a struct with the standard counts (`StructDesc.inline_counts`, set
+when `standard_release` holds: not a weak view or a function type's object,
+whose bodies differ; and not a reference enum with immortal cases
+(`immortal_cases`), whose release skips them), codegen inlines
 the step instead of calling (`inline_count_step`): a null check and the
 increment or decrement, atomic for a `[Shared]` struct (`count_step`, which
-`CountStep` also uses). Only a release that reaches 0 makes a call, to
-`T.__last_release`, a `cold`, `noinline` function that `last_release`
+`CountStep` also uses). Only a release that reaches 0 makes a call, to the
+runtime's `_pep_release_last(object, T.__last_release)`.
+`T.__last_release` is a `cold`, `noinline` function that `last_release`
 emits in each unit that needs it (no owner, so `linkonce_odr`): it calls
 `__dtor`, drops the strong references' weak reference, and frees the object
-when that reached 0, exactly as the zero branch of `__release`. So taking
+when that reached 0, as the zero branch of `__release` does.
+`_pep_release_last` (`runtime/internals.pep`) calls it at once unless this
+thread's destructions already nest 64 KiB of stack below the outermost
+one; a deeper one goes on a thread-local list the outermost drains, so
+releasing a chain of any length cannot overflow the stack (#65). Every
+struct with a standard `__release` (`StructDesc.release_counts`, immortal
+cases included) gets its `T.__release` from `emit_standard_release`, the
+same step with the immortal check (`guarded`) when `StructDesc.immortal`,
+in place of `synthesize`'s body, so a release through a trait thunk or a
+C handle reaches `_pep_release_last` too. So taking
 or dropping a reference costs no call even across units and at `-O0`, and
 the cache keys need nothing new: the step depends only on the head layout
 and `[Shared]`, which are part of the struct's interface. Tuples and trait
@@ -2314,7 +2327,7 @@ diagnostics"). The mechanics:
 
 | File | Contents |
 | --- | --- |
-| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call (`_pep_panic(message, location)` flushes stdout and writes `location: panic: message` to stderr with `write`/`_write`, then aborts), `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
+| `internals.pep` | C externs (`malloc`, `memcpy`, `puts`, …; none exported, so a runtime file that needs one declares it itself), `assert`/`panic` (each overloaded on a `String` or `__ptr<char>` message; a string literal picks the pointer one) and the internal `char*` forms `_pep_assert`/`_pep_panic` that compiler-generated checks call (`_pep_panic(message, location)` flushes stdout and writes `location: panic: message` to stderr with `write`/`_write`, then aborts), `_pep_malloc`/`_pep_free`/`_pep_realloc`/`_pep_live_allocs`, `_pep_release_last` (every last release, deferring one nested too deep; §5), `_pep_hash_bytes` (FNV-1a), and UTF-8 helpers. `print(text: String)` and `print<T>(value)` are ordinary functions in `string.pep`. |
 | `string.pep` | `String` (fields `_data`, `_length`, `_size`, `_version`), `StringConstant` (a string literal's `[Value]` type: `_data`, `_length`, `_size` over constant NUL-terminated bytes, with `String`'s read API), the private `_string_*` helpers over a span of bytes that both types' methods call (so `StringConstant.split`, `replace`, `lines` and the rest read its constant bytes without a `String` copy), `StringIterator`, `StringBuilder`, the `to_string` overloads (integers, `bool`, and the generic `to_string<T>` calling `value.to_string()`), the `ToString` trait, and `_pep_interpolate<T>`, which interpolated strings call. |
 | `float_parse.pep` | `_float_correct`, which `double.parse` runs on Windows only (`_number_strtod` in `number.pep`): the C runtime's `strtod` there is sometimes one unit in the last place off, so it compares the exact decimal with the midpoints around the result in 32-bit-limb big integers and steps to the nearest double, ties to even. Up to 15 digits with a power of 10 up to 22 take Clinger's fast path, computed in Pepper because the C runtime misses some of those too. |
 | `float_text.pep` | `_float_text`, the shortest text that reads back as a `float` or `double`, which `to_string` and interpolation call: a port of Ryu's `d2s.c` with its small tables (`_float_tables`, 125 words stored one by one at start-up, since module constants initialize before the allocation counter), run with a float's mantissa width and bias for a `float`, then laid out as Swift prints a number. |
