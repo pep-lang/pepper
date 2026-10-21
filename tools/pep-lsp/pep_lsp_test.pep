@@ -1454,7 +1454,8 @@ tuple_labels_through_a_type_argument() {
         + "    var made = Array<(word: String, total: int)>();\n    made.append((word: \"a\", total: 1));\n"
         + "    var o = Optional<(left: int, right: int)>.Value((left: 5, right: 6));\n"
         + "    var box = Box<(p: int, q: int)>.make((p: 1, q: 2));\n"
-        + "    return sum + made[0].total + o.value().right + box.get().q;\n}\n";
+        + "    return sum + made[0].total + o.value().right + box.get().q;\n}\n"
+        + "call(f: extern (int) => int): int {\n    var g = f;\n    return g(1);\n}\n";
     var c = loaded("tuple_labels_generic", main, "main.pep");
     var text = c.document.text;
     var failed = Array<String>();
@@ -1473,6 +1474,9 @@ tuple_labels_through_a_type_argument() {
         var h = hover_text(c, at(text, near, 0));
         check(failed, label, h.starts_with($"`.{element}` — `int`"), h);
     }
+    # Sema's type for a local that the type parser cannot read as shown.
+    var h = hover_text(c, at(text, "g = f", 0));
+    check(failed, "extern local", h.starts_with("`g` — `") and !h.contains("unknown"), h);
     all_passed(failed);
 }
 

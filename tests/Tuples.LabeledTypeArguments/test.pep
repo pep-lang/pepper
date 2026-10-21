@@ -23,6 +23,10 @@ struct Box<T> {
         return value;
     }
 
+    get(fallback: T): T {
+        return fallback;
+    }
+
     take(): T {
         return value;
     }
@@ -90,6 +94,9 @@ main(): int {
     var taken = source.take();
     if (taken.n != 14) {
         return 9;
+    }
+    if (made.get((p: 11, q: 12)).q != 12) {
+        return 11;
     }
     # A generic function's type argument is not a type: the call keeps
     # its own name.
