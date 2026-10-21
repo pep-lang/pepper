@@ -1,5 +1,5 @@
-# pep.toml as the package manager reads it: the package's name and its
-# dependencies. The compiler checks the rest of the file when it builds.
+# pep.toml as the package manager reads it: the package's name, the oldest
+# toolchain it builds with, and its dependencies. The compiler checks the rest of the file when it builds.
 
 import [File, Path] from io;
 import toml;
@@ -54,6 +54,9 @@ export struct Manifest {
     var text: String = "";
     # `[package]`'s `name`.
     var name: String = "";
+    # `[package]`'s `minimum_toolchain`: the oldest toolchain release that
+    # builds it, or empty.
+    var minimum_toolchain: String = "";
     var requirements: Array<Requirement> = __null;
     # `[fetch]`'s `hosts`: where `add` looks a repository up, in order.
     var hosts: Array<String> = __null;
@@ -102,6 +105,10 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
     var name = root.lookup("package.name");
     if (name.is_value() and name.value().as_string().is_value()) {
         manifest.name = name.value().as_string().value();
+    }
+    var minimum = root.lookup("package.minimum_toolchain");
+    if (minimum.is_value() and minimum.value().as_string().is_value()) {
+        manifest.minimum_toolchain = minimum.value().as_string().value();
     }
     var hosts = root.lookup("fetch.hosts");
     if (hosts.is_value()) {

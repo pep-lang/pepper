@@ -501,3 +501,59 @@ add_looks_a_repository_up_on_each_host() {
     expect_exit(missing, 1);
     expect_contains(missing.stderr, "no host has nobody/nothing (looked on github, gitlab, codeberg)");
 }
+
+[Test]
+resolution_skips_versions_that_need_a_newer_toolchain() {
+    if (!has_git()) {
+        return;
+    }
+    # `other/modern`: 1.0.0 declares no minimum, 1.1.0 needs 0.1.0, which
+    # every toolchain meets, 1.2.0 needs 99.0.0, which none does, and 1.3.0
+    # names no version.
+    var hosts = Hosts("toolchain");
+    for (var (version, minimum) in [("1.0.0", ""), ("1.1.0", "0.1.0"), ("1.2.0", "99.0.0"), ("1.3.0", "soon")]) {
+        var manifest = "[package]\nname = \"modern\"\n"
+            + (minimum.is_empty ? "" : $"minimum_toolchain = \"{minimum}\"\n");
+        add_version(hosts.folder.path, "other/modern", version, ["module.pep", "", "pep.toml", manifest]);
+    }
+    publish(hosts.folder.path, "other/modern");
+
+    # add picks the newest version this toolchain builds, and says why.
+    var project = Project("toolchain", "");
+    var added = hosts.package(project.dir, ["add", "other/modern"]);
+    expect_exit(added, 0);
+    expect_contains(project.manifest(), "modern = { github = \"other/modern\", version = \"1.1.0\" }");
+    var skipped = "github:other/modern skipped 1.3.0 (its minimum_toolchain 'soon' is not a version), 1.2.0 (needs toolchain 99.0.0); this is ";
+    expect_contains(added.stderr, skipped);
+
+    # A range only newer versions satisfy fails, naming each.
+    var exact = Project("toolchain_exact", "modern = { github = \"other/modern\", version = \"=1.2.0\" }\n");
+    var none = hosts.package(exact.dir, ["fetch"]);
+    expect_exit(none, 1);
+    expect_contains(none.stderr, "no version of github:other/modern that every package accepts builds with toolchain ");
+    expect_contains(none.stderr, ": 1.2.0 (needs toolchain 99.0.0)");
+
+    # A tag that needs a newer toolchain is an error.
+    var tagged = Project("toolchain_tag", "modern = { github = \"other/modern\", tag = \"v1.2.0\" }\n");
+    var tag = hosts.package(tagged.dir, ["fetch"]);
+    expect_exit(tag, 1);
+    expect_contains(tag.stderr, "modern 1.2.0 (github:other/modern) needs toolchain 99.0.0; this is ");
+
+    # So is a locked version; update moves it to one that builds.
+    var locked = Project("toolchain_lock", "modern = { github = \"other/modern\", version = \"1\" }\n");
+    write_file(
+        locked.dir.join("pep.lock"),
+        "version = 1\n\n[[package]]\nname = \"modern\"\nsource = \"github:other/modern\"\nversion = \"1.2.0\"\n"
+            + $"commit = \"{hosts.commit_of("other/modern", "v1.2.0")}\"\n"
+    );
+    var fetched = hosts.package(locked.dir, ["fetch"]);
+    expect_exit(fetched, 1);
+    expect_contains(
+        fetched.stderr, "pep.lock holds modern 1.2.0 (github:other/modern), which needs toolchain 99.0.0; this is "
+    );
+    expect_contains(fetched.stderr, ": run 'pepper package update modern', or use a newer toolchain");
+    var updated = hosts.package(locked.dir, ["update", "modern"]);
+    expect_exit(updated, 0);
+    expect_contains(updated.stderr, skipped);
+    expect_contains(locked.lock(), "source = \"github:other/modern\"\nversion = \"1.1.0\"");
+}
