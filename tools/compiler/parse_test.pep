@@ -69,6 +69,51 @@ parses_array_and_optional_suffixes_after_a_tuple_type() {
     expect_equal(return_type_of("f(): Box<int>[] {}"), ("Box<int>[]", 15 as ulong));
 }
 
+# Each statement of `source`'s first function: the type and name a local
+# declaration writes (`type name`), else `expression`.
+statements_of(source: String): String[] {
+    var out = Array<String>();
+    var module = parse.parse(source);
+    if (module.is_err()) {
+        out.append(module.error().message);
+        return out;
+    }
+    if (module.value().declarations[0] is Function(function)) {
+        for (var statement in function.body.value().statements) {
+            var shown = "other";
+            if (statement is Expression(_)) {
+                shown = "expression";
+            } else if (statement is Declaration(local)) {
+                if (local is Variable(variable)) {
+                    shown = $"{variable.type_name.to_string()} {variable.name}";
+                }
+            }
+            out.append(shown);
+        }
+    }
+    return out;
+}
+
+# A local declaration may start with a tuple type (pepper#130), and a
+# statement starting with `(` that declares nothing stays an expression.
+[Test]
+parses_a_local_declaration_that_starts_with_a_tuple_type() {
+    var source = "f() {\n"
+        + "    (String, int)[] a = [];\n"
+        + "    (int, String)? b;\n"
+        + "    (line: int, column: int) c = (1, 2);\n"
+        + "    (int) => int d = g;\n"
+        + "    (a, b) = (b, a);\n"
+        + "    (g)(x);\n"
+        + "    (x);\n"
+        + "}\n";
+    expect_equal(
+        "; ".join(statements_of(source)),
+        "(String, int)[] a; Optional<(int, String)> b; (line: int, column: int) c; (int) => int d; "
+            + "expression; expression; expression"
+    );
+}
+
 const PARSE_PARTS: ulong = 8;
 
 # Checks every `PARSE_PARTS`th source file of the repository, from the `part`th.

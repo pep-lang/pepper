@@ -27,6 +27,9 @@ short, and `pepper help build` runs it.
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
+| `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
+| `--offline` | Fetch no dependency over the network; fail on one `.pep/deps` lacks | off, or `PEPPER_OFFLINE` |
+| `--frozen` | Both `--locked` and `--offline` | off |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
@@ -107,6 +110,26 @@ running `pep-package fetch` (beside `pep-build`, else on the
 asks for `pepper package fetch` to move a checkout at another commit. A
 dependency checked out on a branch is left as it is. See
 [The package manager: pep-package](pep-package.md).
+
+### `--locked`, `--offline`, `--frozen`
+
+These make the fetch reproducible, for CI (see
+[Reproducible builds](pep-package.md#reproducible-builds)):
+
+- `--locked` (or `PEPPER_LOCKED=1`) fails when `pep.lock` is out of date
+  with `pep.toml`, instead of updating it. A Git dependency `pep.toml`
+  names that `pep.lock` does not list is an error before anything is
+  fetched; otherwise the build runs `pep-package fetch --locked`, even when
+  nothing is missing, so a changed range is caught too.
+- `--offline` (or `PEPPER_OFFLINE=1`) fetches nothing over the network: a
+  locked package `.pep/deps` lacks is an error that names it, and
+  `pep-package` runs with `--offline`.
+- `--frozen` is both.
+
+```text
+$ pepper build --offline
+--offline, and app/.pep/deps lacks github:someone/geometry 0582024b9cd7; run 'pepper package fetch' without --offline first
+```
 
 ### `-I <dir>`
 
@@ -656,6 +679,8 @@ rerun by hand (the build prints it).
 | `WASI_SDK_PATH` | The wasi-sdk for linking with `--target wasm32-wasip1`, when neither `--sysroot` nor `PEPPER_SYSROOT_WASM32_WASIP1` names one | `--sysroot` |
 | `PEPPER_CACHE_DIR` | The build cache folder | `--cache`, `--no-cache` |
 | `PEPPER_CACHE_VERIFY` | Anything but empty or `0` checks the build cache | `--no-verify-cache` |
+| `PEPPER_LOCKED` | Anything but empty or `0`: the same as `--locked` | |
+| `PEPPER_OFFLINE` | Anything but empty or `0`: the same as `--offline` | |
 | `PEPPER_LLVM_PREFIX` | The LLVM install whose `clang` and `lld` link the program | |
 | `LLVM_SYS_<major>1_PREFIX` | The same, when `PEPPER_LLVM_PREFIX` is not set (`LLVM_SYS_201_PREFIX` for LLVM 20) | |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Where a build fetching a project's locked dependencies clones that host's repositories from, when `pep-package` is not installed (see [pep-package](pep-package.md#environment-variables)) | |

@@ -125,13 +125,22 @@ export checked_out(directory: Path): Optional<String> {
     return Optional<String>.Value(head.value().trim());
 }
 
+# Why `--offline` cannot use `directory` for `commit`.
+export not_held_offline(directory: Path, commit: String): String {
+    return $"--offline, and {directory.to_string()} does not hold the commit {commit.substr(0, 12)}; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first";
+}
+
 # Makes `directory` a checkout of `commit` from `url`: clones it when it is
 # missing, fetches when the commit is not there yet, and checks the commit
-# out (detached). Returns the full commit.
-export check_out(url: String, directory: Path, commit: String): Result<String> {
+# out (detached). Returns the full commit. `offline` fails rather than
+# clone or fetch.
+export check_out(url: String, directory: Path, commit: String, offline: bool = false): Result<String> {
     var at = checked_out(directory);
     if (at.is_value() and at.value().starts_with(commit)) {
         return Result<String>.Ok(at.value());
+    }
+    if (at.is_empty() and offline) {
+        return Result<String>.Err(not_held_offline(directory, commit));
     }
     if (at.is_empty()) {
         if (directory.exists()) {
@@ -150,7 +159,7 @@ export check_out(url: String, directory: Path, commit: String): Result<String> {
         }
     }
     var dir = directory.to_string();
-    var fetched = _fetch_commit(url, dir, commit);
+    var fetched = _fetch_commit(url, directory, commit, offline);
     if (fetched.is_err()) {
         return Result<String>.Err(fetched.error().message);
     }
@@ -165,10 +174,15 @@ export check_out(url: String, directory: Path, commit: String): Result<String> {
     return Result<String>.Ok(head.value());
 }
 
-# Fetches from `url` into the clone `dir` unless it has `commit` already.
-_fetch_commit(url: String, dir: String, commit: String): Result<void> {
+# Fetches from `url` into the clone `directory` unless it has `commit`
+# already; `offline` fails rather than fetch.
+_fetch_commit(url: String, directory: Path, commit: String, offline: bool): Result<void> {
+    var dir = directory.to_string();
     if (git(["cat-file", "-e", commit + "^{commit}"], dir).is_ok()) {
         return Result<void>.ok();
+    }
+    if (offline) {
+        return Result<void>.Err(not_held_offline(directory, commit));
     }
     var fetched = git(["fetch", "--quiet", "--tags", url, "+refs/heads/*:refs/remotes/origin/*"], dir);
     if (fetched.is_err()) {
@@ -179,16 +193,19 @@ _fetch_commit(url: String, dir: String, commit: String): Result<void> {
 
 # The text of `file` at `commit` of `url`, read from the clone in
 # `directory` without checking the commit out (a missing clone is made by
-# checking `commit` out); none when the commit has no such file.
-export file_at(url: String, directory: Path, commit: String, file: String): Result<Optional<String>> {
+# checking `commit` out); none when the commit has no such file. `offline`
+# reads only what the clone holds.
+export file_at(
+    url: String, directory: Path, commit: String, file: String, offline: bool = false
+): Result<Optional<String>> {
     if (checked_out(directory).is_empty()) {
-        var checked = check_out(url, directory, commit);
+        var checked = check_out(url, directory, commit, offline);
         if (checked.is_err()) {
             return Result<Optional<String>>.Err(checked.error().message);
         }
     }
     var dir = directory.to_string();
-    var fetched = _fetch_commit(url, dir, commit);
+    var fetched = _fetch_commit(url, directory, commit, offline);
     if (fetched.is_err()) {
         return Result<Optional<String>>.Err(fetched.error().message);
     }

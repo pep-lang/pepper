@@ -69,6 +69,14 @@ main(args: String[]): int {
     var defines = parser.multiple(
         "define", "D", "a build option for pep-build: NAME or NAME=VALUE", value_name = "OPTION"
     );
+    var locked = parser.flag(
+        "locked", help = "fail, rather than fetch, when the project's pep.lock is out of date (also PEPPER_LOCKED=1)"
+    );
+    var offline = parser.flag(
+        "offline",
+        help = "fetch nothing over the network: build with what the project's .pep/deps holds (also PEPPER_OFFLINE=1)"
+    );
+    var frozen = parser.flag("frozen", help = "both --locked and --offline");
     var paths = parser.positionals(
         "path", "a .pep file, or a folder to search for files holding [Test] functions (default: the current folder)"
     );
@@ -80,6 +88,12 @@ main(args: String[]): int {
     options.imports = imports.values();
     options.library_dirs = library_dirs.values();
     options.defines = defines.values();
+    if (locked.is_set or frozen.is_set) {
+        options.fetch_flags.append("--locked");
+    }
+    if (offline.is_set or frozen.is_set) {
+        options.fetch_flags.append("--offline");
+    }
     var limit = ulong.parse(timeout.value());
     if (limit.is_empty()) {
         return usage_error(parser, $"'--timeout' must be a number of seconds, not '{timeout.value()}'");
@@ -136,6 +150,8 @@ struct Options {
     var imports: Array<String> = __null;
     var library_dirs: Array<String> = __null;
     var defines: Array<String> = __null;
+    # `--locked`, `--offline` and `--frozen`, as given, for pep-build.
+    var fetch_flags: Array<String> = __null;
     var jobs: ulong = 1;
     var timeout: ulong = 60;
     # `--shard I/N`: the run takes every test whose position in the list
@@ -148,6 +164,7 @@ struct Options {
         this.imports = Array<String>();
         this.library_dirs = Array<String>();
         this.defines = Array<String>();
+        this.fetch_flags = Array<String>();
     }
 }
 
@@ -412,6 +429,7 @@ build(compiler: String, files: Array<String>, program: String, options: Options)
         arguments.append("-D");
         arguments.append(define);
     }
+    arguments.append_all(options.fetch_flags);
     arguments.append("-o");
     arguments.append(program);
     var ran = process.Command(compiler).arguments(arguments).run();

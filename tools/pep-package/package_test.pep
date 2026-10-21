@@ -13,6 +13,7 @@ import [serve_folder] from tool_testing.server;
 import [TempFolder] from testing;
 import [expect_contains, expect_exit, read_file, run, tool, write_file] from tool_testing;
 import toolchain;
+import "tree";
 
 # The folder of bare repositories that stands in for github.com:
 # `other/numbers` (versions 1.0.0, 1.3.1, 2.0.0 and 3.0.0, which drops
@@ -303,7 +304,7 @@ builds_fetch_what_pep_lock_lists() {
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
     # A fresh clone has pep.toml and pep.lock, and no .pep: the build
     # fetches the locked commits.
-    Directory.remove_all(project.dir.join(".pep"));
+    remove_tree(project.dir.join(".pep"));
     expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
 }
 
@@ -330,7 +331,7 @@ builds_side_by_side_fetch_once() {
     var hosts = Hosts("parallel_fetch");
     var project = Project("parallel_fetch", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
-    Directory.remove_all(project.dir.join(".pep"));
+    remove_tree(project.dir.join(".pep"));
     # `pepper test` builds its test programs at once: each build
     # fetches what `.pep/deps` lacks, and none trips over another's
     # checkout.
@@ -504,17 +505,19 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
 
             # A fresh clone on a machine with no git: the archives of the
             # locked commits, whose files match pep.lock's checksums.
-            Directory.remove_all(project.dir.join(".pep"));
+            remove_tree(project.dir.join(".pep"));
             expect_exit(package_without_git(hosts, project.dir, ["fetch"], server), 0);
             # The lock stays as it was.
             expect_equal(project.lock(), locked);
             expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
             # Fetching again finds them in place.
             expect_exit(package_without_git(hosts, project.dir, ["fetch"], server), 0);
+            # Offline with git, the unpacked archives serve too.
+            expect_exit(hosts.package(project.dir, ["fetch", "--offline"]), 0);
 
             # A tampered archive: 1.3.1's commit serves 2.0.0's files.
             write_archive(hosts, archives, "other/numbers", "v2.0.0", numbers);
-            Directory.remove_all(project.dir.join(".pep"));
+            remove_tree(project.dir.join(".pep"));
             var tampered = package_without_git(hosts, project.dir, ["fetch"], server);
             expect_exit(tampered, 1);
             var expected = locked.split("source = \"github:other/numbers\"")[1].split("sha256 = \"")[1].split("\"")[0];
@@ -529,6 +532,96 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
             expect_exit(added, 1);
             expect_contains(added.stderr, "git is not on the PATH");
         }
+    );
+}
+
+[Test]
+a_stale_lock_fails_under_locked() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("locked");
+    var project = Project("locked", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    # A fetch that changes nothing leaves pep.lock as it is, line endings
+    # and all (git's CRLF on Windows).
+    var lock = project.lock().replace("\n", "\r\n");
+    write_file(project.dir.join("pep.lock"), lock);
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_equal(project.lock(), lock);
+    # An up-to-date lock passes.
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
+
+    # pep.toml now asks for numbers 2, which pep.lock does not have.
+    write_file(
+        project.dir.join("pep.toml"), project.manifest() + "numbers = { github = \"other/numbers\", version = \"2\" }\n"
+    );
+    var refused = hosts.package(project.dir, ["fetch", "--locked"]);
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "pep.lock would change, and --locked keeps it as it is:\n  updated numbers: numbers 1.3.1 -> numbers 2.0.0\n"
+            + "run the command without --locked (or PEPPER_LOCKED), then commit pep.lock"
+    );
+    expect_equal(project.lock(), lock);
+    var by_variable = run(
+        hosts.command(tool("pep-package").to_string(), project.dir, ["fetch"]).environment("PEPPER_LOCKED", "1")
+    );
+    expect_exit(by_variable, 1);
+    expect_contains(by_variable.stderr, "pep.lock would change");
+    # `pep-build --locked` checks the lock too, though nothing is missing.
+    var built = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--locked"]));
+    expect_exit(built, 1);
+    expect_contains(built.stderr, "pep.lock would change");
+    expect_equal(project.lock(), lock);
+    # Without --locked, fetch updates it.
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"2.0.0\"");
+}
+
+[Test]
+an_unfetched_dependency_fails_under_offline() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("offline");
+    var project = Project("offline", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    # Every host is a folder that does not exist: a network attempt fails
+    # with git's error, not --offline's.
+    var unreachable = (program: String, arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool(program).to_string(), project.dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    # What .pep/deps holds is enough.
+    expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
+    expect_exit(unreachable("pep-package", ["fetch", "--frozen"]), 0);
+    # A checkout at another commit it already has moves back without the
+    # network.
+    var geometry = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("geometry");
+    git(geometry, ["checkout", "--quiet", "--detach", "v1.0.0"]);
+    expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
+    var head = run(process.Command("git").arguments(["rev-parse", "HEAD"]).working_directory(geometry));
+    expect_equal(head.stdout.trim(), hosts.commit_of("someone/geometry", "v1.1.0"));
+
+    remove_tree(project.dir.join(".pep"));
+    var refused = unreachable("pep-package", ["fetch", "--offline"]);
+    expect_exit(refused, 1);
+    expect_contains(refused.stderr, "--offline, and ");
+    expect_contains(refused.stderr, " does not hold the commit ");
+    expect_contains(refused.stderr, "; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first");
+    expect_false(refused.stderr.contains("git clone"));
+    var built = unreachable("pep-build", ["--offline"]);
+    expect_exit(built, 1);
+    expect_contains(built.stderr, "lacks github:other/numbers ");
+    expect_false(project.dir.join(".pep").join("deps").exists());
+    var added = unreachable("pep-package", ["add", "other/numbers", "--name", "more", "--offline"]);
+    expect_exit(added, 1);
+    expect_contains(
+        added.stderr, "--offline, and adding 'other/numbers' reads which versions it offers over the network"
     );
 }
 
@@ -632,8 +725,33 @@ resolution_skips_versions_that_need_a_newer_toolchain() {
         fetched.stderr, "pep.lock holds modern 1.2.0 (github:other/modern), which needs toolchain 99.0.0; this is "
     );
     expect_contains(fetched.stderr, ": run 'pepper package update modern', or use a newer toolchain");
+    # --locked refuses the update that skips 1.2.0, and leaves pep.lock.
+    var stale = locked.lock();
+    var refused = hosts.package(locked.dir, ["update", "modern", "--locked"]);
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "pep.lock would change, and --locked keeps it as it is:\n  updated modern: modern 1.2.0 -> modern 1.1.0"
+    );
+    expect_equal(locked.lock(), stale);
     var updated = hosts.package(locked.dir, ["update", "modern"]);
     expect_exit(updated, 0);
     expect_contains(updated.stderr, skipped);
     expect_contains(locked.lock(), "source = \"github:other/modern\"\nversion = \"1.1.0\"");
+
+    # Offline, with no host to reach, the minimums come from the clone in
+    # .pep/deps: fetching passes, and choosing again fails.
+    var unreachable = (arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool("pep-package").to_string(), locked.dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    expect_exit(unreachable(["fetch", "--frozen"]), 0);
+    var offline_update = unreachable(["update", "modern", "--offline"]);
+    expect_exit(offline_update, 1);
+    expect_contains(
+        offline_update.stderr, "--offline, and choosing a revision of github:other/modern reads which ones it offers"
+    );
 }

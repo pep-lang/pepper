@@ -2262,7 +2262,10 @@ struct Parser {
             return _destructure();
         }
         var token = _peek();
-        bool declaration = token.is_word(_source, "var")
+        # A `(` may start a tuple type (`(String, int)[] a = ...;`) or an
+        # expression (`(a, b) = (b, a);`): the declaration is tried first.
+        bool declaration = token.is(_source, "(")
+            or token.is_word(_source, "var")
             or token.is_word(_source, "const")
             or (token.is_word(_source, "extern") and _peek_at(1).is(_source, "("))
             or (token.kind == TokenKind.Identifier and !is_statement_keyword(_source, token));

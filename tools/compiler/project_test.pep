@@ -1,7 +1,8 @@
 # The compiler's linker reads `pep.toml`: the manifest, its errors at the
-# keys they are about, and imports of a project's dependencies
-# resolved in the project.
+# keys they are about, imports of a project's dependencies resolved in
+# the project, and what `--locked` and `--offline` refuse to fetch.
 
+import compiler.driver;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -295,4 +296,58 @@ only_tests_and_examples_see_dev_dependencies() {
     var hidden = link.load_manifest(app.join(Path("pep.toml")), [runtime]);
     expect_true(hidden.is_err());
     expect_true(hidden.error().contains("dependency 'io' has the name of the runtime module 'io'"));
+}
+
+[Test]
+locked_and_offline_builds_refuse_before_fetching() {
+    var folder = TempFolder("project_locked_offline");
+    var root = folder.path;
+    File.write_text(
+        root.join(Path("pep.toml")), "[package]\nname = \"app\"\n[dependencies]\nnet = { github = \"nobody/net\" }\n"
+    );
+    File.write_text(root.join(Path("main.pep")), "main(): int {\n    return 0;\n}\n");
+    var entry = root.join(Path("main.pep"));
+
+    # pep.toml names a dependency pep.lock does not list.
+    var locked = driver.fetch_dependencies(entry, locked = true);
+    expect_true(locked.is_err());
+    expect_true(locked.error().contains("pep.lock is out of date: "));
+    expect_true(
+        locked.error().contains(
+            "names github:nobody/net, which pep.lock does not list; run 'pepper package fetch' without --locked, and commit pep.lock"
+        )
+    );
+    var offline = driver.fetch_dependencies(entry, offline = true);
+    expect_true(offline.is_err());
+    expect_true(
+        offline.error().contains("lacks github:nobody/net; run 'pepper package fetch' without --offline first")
+    );
+    # Already in .pep/deps, though unlocked: a build fetches nothing, so
+    # --offline passes; --locked still fails.
+    var net = root
+        .join(Path(".pep"))
+        .join(Path("deps"))
+        .join(Path("github.com"))
+        .join(Path("nobody"))
+        .join(Path("net"));
+    Directory.create_all(net);
+    expect_true(driver.fetch_dependencies(entry, offline = true).is_ok());
+    expect_true(driver.fetch_dependencies(entry, locked = true).is_err());
+    Directory.remove_all(root.join(Path(".pep")));
+
+    # A locked package not fetched yet: --offline fails without fetching it.
+    File.write_text(
+        root.join(Path("pep.lock")),
+        "version = 1\n\n[[package]]\nname = \"net\"\nsource = \"github:nobody/net\"\n"
+            + "commit = \"0123456789abcdef0123456789abcdef01234567\"\n"
+    );
+    var missing = driver.fetch_dependencies(entry, offline = true);
+    expect_true(missing.is_err());
+    expect_true(missing.error().starts_with("--offline, and "));
+    expect_true(
+        missing.error().contains(
+            "lacks github:nobody/net 0123456789ab; run 'pepper package fetch' without --offline first"
+        )
+    );
+    expect_false(root.join(Path(".pep")).join(Path("deps")).exists());
 }

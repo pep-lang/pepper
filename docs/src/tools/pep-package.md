@@ -14,7 +14,7 @@ pepper package fetch                         # what pep.lock lists
 ```
 
 ```text
-pep-package [-C <dir>] <command> [arguments]
+pep-package [-C <dir>] [--locked] [--offline] [--frozen] <command> [arguments]
 ```
 
 It works on the project whose `pep.toml` is in the current folder or the
@@ -34,6 +34,9 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | Command or option | What it does |
 | --- | --- |
 | `-C <dir>`, `--directory <dir>` | Works on the project at or above `<dir>` instead of the current folder |
+| `--locked` | Fails, leaving `pep.lock` as it is, when the command would change it (see [Reproducible builds](#reproducible-builds)) |
+| `--offline` | Uses only what `.pep/deps` holds, and fails on anything that needs the network |
+| `--frozen` | Both `--locked` and `--offline` |
 | `fetch` | Fetches what `pep.lock` lists, and resolves what `pep.toml` changed since `pep.lock` was written |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
@@ -44,8 +47,9 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `-h`, `--help` | Prints the options; after a command, that command's |
 | `-V`, `--version` | Prints the version |
 
-The exit status is 0 on success, 1 when a command fails, and 2 for a
-mistake on the command line.
+`--locked`, `--offline` and `--frozen` go before or after the command
+(`pepper package fetch --locked`). The exit status is 0 on success, 1 when
+a command fails, and 2 for a mistake on the command line.
 
 ### `fetch`
 
@@ -149,6 +153,37 @@ checksums:
 pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
 ```
 
+A command that leaves the graph as it was leaves `pep.lock` untouched, so
+a checkout with Windows line endings stays as git wrote it.
+
+## Reproducible builds
+
+CI builds want to fail rather than quietly change what they build:
+
+- **`--locked`** (or `PEPPER_LOCKED=1`): a command that would change
+  `pep.lock` fails instead, says what would change, and leaves `pep.lock`
+  as it was. `fetch --locked` passes only when `pep.lock` already matches
+  `pep.toml`; it may still check packages out into `.pep/deps`.
+- **`--offline`** (or `PEPPER_OFFLINE=1`): nothing is cloned, fetched,
+  downloaded or looked up. A package `.pep/deps` already holds at its
+  locked commit is used; one it lacks is an error, and so is anything that
+  must read which versions a repository offers (`add`, `update`, or a
+  `pep.toml` change `pep.lock` does not cover).
+- **`--frozen`**: both.
+
+```text
+$ pepper package fetch --locked
+pep-package: error: pep.lock would change, and --locked keeps it as it is:
+  updated numbers: numbers 1.3.1 -> numbers 2.0.0
+run the command without --locked (or PEPPER_LOCKED), then commit pep.lock
+
+$ pepper package fetch --offline
+pep-package: error: cannot fetch github:someone/geometry: --offline, and .pep/deps/github.com/someone/geometry does not hold the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+```
+
+`pepper build` and `pepper test` take the same three options for the
+fetch they do on their own (see [The compiler: pep-build](pep-build.md)).
+
 ## Fetching without git
 
 When git is not on the `PATH`, `pep-package` fetches each commit
@@ -219,6 +254,8 @@ them out, each once per run.
 | --- | --- |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Fetches that host's repositories from another address (a mirror, or a folder of repositories as a `file://` URL): `<address>/<owner>/<name>.git` |
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
+| `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
+| `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |
 | `PEPPER_RUNTIME` | The runtime folder whose modules a dependency may not be named like, as for the compiler |
 
 ## Building it
