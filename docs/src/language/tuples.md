@@ -44,11 +44,15 @@ so `p.line` and `p.0` read the same element:
   differ.
 - Labels pass through a type argument: an element of an
   `Array<(word: String, count: int)>`, a `HashMap` value or the `value()` of a
-  `(line: int, column: int)?` answers to its labels, though
+  `(line: int, column: int)?` answers to its labels, and so does what a static
+  method or an enum case called on the labeled type gives
+  (`var p = Optional<(line: int, column: int)>.Value(at);`), though
   `Optional<(line: int, column: int)>` is the same type as
-  `Optional<(int, int)>`. A variable typed by a static method's result, such
-  as `var p = Optional<(line: int, column: int)>.Value(at);`, has no labels:
-  declare its type to name the elements.
+  `Optional<(int, int)>`. A member takes back only the labels its declaration
+  writes as a type parameter: a method of `Box<(a: int, b: int)>` declared to
+  return `(int, int)` returns an unlabeled tuple. A generic function's result
+  takes none: `identity<(a: int, b: int)>(p)` is unlabeled, so declare the
+  variable's type to name its elements.
 - `var p = (line: 3, column: 7);` gives `p` the labeled type
   `(line: int, column: int)`. A labeled value takes at least two elements.
 - A labeled value initializing or returned as a labeled type must use its

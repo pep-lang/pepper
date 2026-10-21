@@ -178,46 +178,12 @@ export extend TypeName {
         return index.is_value() ? Optional<TypeName>.Value(sub_types[index.value()]) : Optional<TypeName>.Empty;
     }
 
-    ## Returns this type, read through a value of type `receiver` (one of
-    ## its fields, or what one of its methods returns), with the labels of
-    ## the tuples among `receiver`'s type arguments. Labels are not part of
-    ## a type's identity, so one specialization serves every labeling of
-    ## its arguments, and its members' types carry no labels.
+    ## Returns whether a tuple among this type's type arguments, at any
+    ## depth, has labels: whether a member read through a value of this
+    ## type can take labels back (`labeled_through`).
     ##
-    ## An unlabeled tuple here takes the labels of the one labeled tuple
-    ## argument it equals; when two labelings equal it, it stays
-    ## unlabeled.
-    ##
-    ## @param receiver the type the member is read through
-    ## @returns the type, labeled
-    labeled_through(receiver: TypeName): TypeName {
-        # Most receivers label nothing: they cost no allocation.
-        bool any = false;
-        for (var t in receiver.sub_types) {
-            any = any or t._has_labeled_tuple();
-        }
-        if (!any) {
-            return this;
-        }
-        # shortcut: a tuple is matched by its element types, so one the
-        # member's declaration does not spell as a type argument (`Box<(a:
-        # int, b: int)>`'s `pair(): (int, int)`) takes the argument's labels
-        # too; substitute the generic declaration's member type if that
-        # ever matters.
-        var labeled = Array<TypeName>();
-        for (var t in receiver.sub_types) {
-            t._labeled_tuples(labeled);
-        }
-        var out = copy();
-        out._take_labels(labeled);
-        return out;
-    }
-
-    # Whether a tuple in this type, this type included, has labels.
-    _has_labeled_tuple(): bool {
-        if (is_tuple() and labels.count > 0) {
-            return true;
-        }
+    ## @returns true for `Array<(name: String, count: int)>`
+    labels_arguments(): bool {
         for (var t in sub_types) {
             if (t._has_labeled_tuple()) {
                 return true;
@@ -226,35 +192,50 @@ export extend TypeName {
         return false;
     }
 
-    # Appends each labeled tuple in this type, this type included, to `out`.
-    _labeled_tuples(out: TypeName[]) {
-        if (is_tuple() and labels.count > 0) {
-            out.append(this);
+    ## Returns this type, a member's type in a specialization (a field's,
+    ## or what a method returns), read through a value of type `receiver`,
+    ## with the labels `receiver`'s type arguments are written with. Labels
+    ## are not part of a type's identity, so one specialization serves every
+    ## labeling of its arguments, and its members' types carry none: the
+    ## labeled type is `declared`, the member's type in the generic
+    ## declaration, with `receiver`'s type arguments in place of its
+    ## parameters `params`.
+    ##
+    ## @param receiver the type the member is read through
+    ## @param declared the member's type as the generic declaration writes it
+    ## @param params the generic declaration's type parameters
+    ## @returns the labeled type, or this type when `declared` with the
+    ##     arguments in place is not this type (another declaration's
+    ##     member, or a parameter left to its default)
+    labeled_through(receiver: TypeName, declared: TypeName, params: String[]): TypeName {
+        if (params.count != receiver.sub_types.count) {
+            return this;
         }
-        for (var t in sub_types) {
-            t._labeled_tuples(out);
+        var type_map = Array<(String, TypeName)>();
+        for (var i in 0..params.count) {
+            type_map.append((params[i], receiver.sub_types[i]));
         }
+        var out = declared.copy();
+        replace_map(out, type_map);
+        return out == this ? out : this;
     }
 
-    # Labels each unlabeled tuple in this type that one of `labeled` equals.
-    _take_labels(labeled: TypeName[]) {
-        if (is_tuple() and labels.count == 0) {
-            var found = Optional<TypeName>.Empty;
-            bool ambiguous = false;
-            for (var t in labeled) {
-                if (t == this) {
-                    ambiguous = ambiguous or (found.is_value() and found.value().display() != t.display());
-                    found = Optional<TypeName>.Value(t);
-                }
-            }
-            if (found.is_value() and !ambiguous) {
-                assign(found.value().copy());
-                return;
-            }
+    ## Returns `written` when it is this type: the type a call that names a
+    ## type is written with (`Array<(name: String, count: int)>()`), labels
+    ## included, which the call's spelling drops.
+    ##
+    ## @param written the type as written, if the call names one with labels
+    ## @returns `written`, or this type
+    as_written(written: TypeName?): TypeName {
+        return written.is_value() and written.value() == this ? written.value() : this;
+    }
+
+    # Whether a tuple in this type, this type included, has labels.
+    _has_labeled_tuple(): bool {
+        if (is_tuple() and labels.count > 0) {
+            return true;
         }
-        for (var t in sub_types) {
-            t._take_labels(labeled);
-        }
+        return labels_arguments();
     }
 
     ## Returns whether this is a function type, plain or thread-safe.

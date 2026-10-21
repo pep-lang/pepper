@@ -573,11 +573,19 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `check_literal_labels` rejects labels that differ from a declared type's.
     One specialization serves every labeling of its arguments, so its
     members' types carry none: a field or method result read through a
-    receiver takes back the labels of the receiver's type arguments
-    (`TypeName.labeled_through`, in both `static_type`'s and
-    `resolve_implicit_types`' tables), and `var a = Array<(name: String,
-    count: int)>()` takes the constructor's type as written
-    (`_labeled_constructor`), since the call names it by its spelling.
+    receiver whose type arguments have labels is the member's type in the
+    generic declaration (the struct's or trait's own `T`, `T[]`, `T?`) with
+    the receiver's arguments, labels included, put in
+    (`TypeName.labeled_through`; `StructTable.generics` and
+    `_TypeScopes._generic` find the declaration), so a same-shape tuple the
+    declaration does not write as a parameter stays unlabeled. A call that
+    names a type spells it without labels, so the builder keeps the type
+    as written on the call (`FunctionCallExpression.labeled`, set only
+    when it has labels), and both tables type the call as that type
+    (`TypeName.as_written`): `var a = Array<(name: String, count: int)>()`
+    and the receiver of `Optional<(left: int, right: int)>.Value(...)` or
+    `Box<(p: int, q: int)>.make(...)`, whose result then takes the labels
+    back like any member.
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
     literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,

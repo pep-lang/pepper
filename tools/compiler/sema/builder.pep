@@ -281,6 +281,12 @@ export tuple_constructor_name(labels: String[]): String {
     return $"{TUPLE}({",".join(labels)})";
 }
 
+## `ty`, built from `t`, when a tuple written in `t` labels its elements:
+## a call's function string spells `ty` without them.
+_labeled(t: ast.TypeName, ty: TypeName): TypeName? {
+    return _has_labels(t) ? Optional<TypeName>.Value(ty) : Optional<TypeName>.Empty;
+}
+
 ## Whether a tuple written in `t` labels its elements.
 _has_labels(t: ast.TypeName): bool {
     if (t.labels.count > 0) {
@@ -481,9 +487,12 @@ _method_call(receiver: Expression, method: String, args: Expression[], at: Loc):
     return Expression.MethodCall(MethodCallExpression(receiver, method = method, args = args, loc = at));
 }
 
-## `function(args)` at `at`.
-_call(function: String, args: Expression[], at: Loc): Expression {
-    return Expression.FunctionCall(FunctionCallExpression(function = function, args = args, loc = at));
+## `function(args)` at `at`; `labeled` is the type a call naming a type
+## is written with, when its tuples have labels.
+_call(function: String, args: Expression[], at: Loc, labeled: TypeName? = Optional<TypeName>.Empty): Expression {
+    return Expression.FunctionCall(
+        FunctionCallExpression(function = function, args = args, loc = at, labeled = labeled)
+    );
 }
 
 ## `lhs op rhs` at `at`.
@@ -1797,7 +1806,9 @@ struct _Builder {
             }
             TypeLiteral(type_name) => {
                 var ty = type_name_from(type_name);
-                return Built<Expression>.Ok(_call(ty.to_string(), Array<Expression>(), loc(type_name.span)));
+                return Built<Expression>.Ok(
+                    _call(ty.to_string(), Array<Expression>(), loc(type_name.span), _labeled(type_name, ty))
+                );
             }
             SizeOf(type_name) => {
                 return Built<Expression>.Ok(Expression.SizeOf(type_name_from(type_name)));
@@ -1965,9 +1976,12 @@ struct _Builder {
             else => {}
         }
         var name = "";
+        var labeled = Optional<TypeName>.Empty;
         match (function) {
             TypeLiteral(type_name) => {
-                name = type_name_from(type_name).to_string();
+                var ty = type_name_from(type_name);
+                name = ty.to_string();
+                labeled = _labeled(type_name, ty);
             }
             SymbolRef(id, _) => {
                 name = id;
@@ -1997,7 +2011,7 @@ struct _Builder {
         }
         record_literal_args(at, arguments);
         var args = call_arguments(arguments)?;
-        return Built<Expression>.Ok(_call(name, args, at));
+        return Built<Expression>.Ok(_call(name, args, at, labeled));
     }
 
     ## `unsafe_cast<T>(value)`: a reinterpret cast of `value` to `T`, located
@@ -2189,9 +2203,6 @@ struct _Builder {
             # `long[] a = [1, 2]`: the declared type types a collection literal.
             var built = typed_expression(decl.default_value.value(), Optional<TypeName>.Value(ty))?;
             default = Optional<Expression>.Value(built);
-            if (ty.is_auto()) {
-                ty = _labeled_constructor(decl.default_value.value(), ty);
-            }
         }
         return Built<VariableDef>.Ok(
             VariableDef(
@@ -2205,21 +2216,6 @@ struct _Builder {
                 is_const = decl.is_const
             )
         );
-    }
-
-    # `var a = Array<(name: String, count: int)>()` types `a` as the type
-    # its constructor is written with: the call names the constructor by
-    # its type's spelling, which has no labels. Any other value keeps
-    # `otherwise`.
-    _labeled_constructor(value: ast.Expression, otherwise: TypeName): TypeName {
-        if (value is FunctionCall(function, _, _)) {
-            if (function is TypeLiteral(type_name)) {
-                if (_has_labels(type_name)) {
-                    return type_name_from(type_name);
-                }
-            }
-        }
-        return otherwise;
     }
 
     block(b: ast.Block): Built<Block> {

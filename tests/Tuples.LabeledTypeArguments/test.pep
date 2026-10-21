@@ -1,7 +1,13 @@
 # A labeled tuple keeps its labels as a type argument (pepper#118): an
 # element read back through `Array`, `Optional`, a `HashMap` value, a user
-# generic, or a nesting of them answers to its labels. Two labelings of one
-# tuple shape share a specialization, and each keeps its own labels.
+# generic, a trait, or a nesting of them answers to its labels, and so does
+# what a static method or an enum case called on the labeled type gives
+# (pepper#134). Two labelings of one tuple shape share a specialization,
+# and each keeps its own labels.
+trait Source<T> {
+    take(): T;
+}
+
 struct Box<T> {
     var value: T;
 
@@ -9,9 +15,23 @@ struct Box<T> {
         this.value = value;
     }
 
+    static make(value: T): Box<T> {
+        return Box<T>(value);
+    }
+
     get(): T {
         return value;
     }
+
+    take(): T {
+        return value;
+    }
+}
+
+extend Box<T> with Source<T> {}
+
+identity<T>(value: T): T {
+    return value;
 }
 
 first(entries: Array<(name: String, count: int)>): int {
@@ -56,6 +76,26 @@ main(): int {
     nested.append(Optional<Box<(u: int, v: int)>>.Value(Box<(u: int, v: int)>((u: 11, v: 12))));
     if (nested[0].value().get().v != 12) {
         return 6;
+    }
+    var o = Optional<(left: int, right: int)>.Value((left: 5, right: 6));
+    var made = Box<(p: int, q: int)>.make((p: 9, q: 10));
+    var empty = Optional<(left: int, right: int)>.Empty;
+    if (o.value().right != 6 or made.get().q != 10 or empty.is_value()) {
+        return 7;
+    }
+    if (Optional<(left: int, right: int)>.Value((left: 5, right: 6)).value().left != 5) {
+        return 8;
+    }
+    var source: Source<(m: int, n: int)> = Box<(m: int, n: int)>((m: 13, n: 14));
+    var taken = source.take();
+    if (taken.n != 14) {
+        return 9;
+    }
+    # A generic function's type argument is not a type: the call keeps
+    # its own name.
+    var same = identity<(a: int, b: int)>((a: 3, b: 4));
+    if (same.1 != 4) {
+        return 10;
     }
     return 0;
 }
