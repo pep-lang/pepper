@@ -314,13 +314,10 @@ _own_the_process_tree() {
     _first_group.store(first);
     _tree_group.store(getpid());
     var handler: extern (int) => void = _end_the_process_tree_and_crash;
-    # SIGILL, SIGABRT, SIGFPE
-    for (var number in [4, 6, 8]) {
+    # SIGILL, SIGABRT, SIGFPE, SIGSEGV
+    for (var number in [4, 6, 8, 11]) {
         signal(number, handler);
     }
-    # SIGSEGV goes through the stack guard (stack_guard.pep), so an overflow
-    # still reports itself; its abort() then ends the tree through SIGABRT.
-    _pep_stack_guard_set_fallback(11, handler);
 }
 
 [Target(!OS(Windows) && !OS(Wasi))]

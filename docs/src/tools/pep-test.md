@@ -113,8 +113,7 @@ which `pep-test` runs with one of two requests:
   `FILE::NAME` with the file as `--list` gives it) and exits with 0 when it
   returns having released everything it allocated; a test that leaves an
   allocation behind (or releases one too many) exits with 1 and says so on
-  standard error. A panic aborts the program, and so does a stack overflow,
-  after `panic: stack overflow`; a test that runs past the timeout
+  standard error. A panic aborts the program; a test that runs past the timeout
   ends it with exit status 124. However the program ends (the test returns,
   panics, crashes or times out), every process the test started ends with
   it (a job object on Windows, a process group elsewhere): one left running

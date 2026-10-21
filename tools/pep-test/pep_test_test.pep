@@ -3,9 +3,8 @@
 # finds the files that hold `[Test]` functions, builds each folder's with
 # `pep-build --test`, runs every test in a process of its own, and
 # reports. `testdata/math_test.pep.txt` is a test file whose tests pass,
-# fail, panic as they should and as they should not, and time out, and
-# `testdata/overflow_test.pep.txt` one that overflows its stack; the names
-# keep the repository's own run from finding them.
+# fail, panic as they should and as they should not, and time out; its
+# name keeps the repository's own run from finding it.
 
 import [Directory, Path] from io;
 import process;
@@ -263,21 +262,6 @@ ends_what_a_test_that_panics_or_returns_started() {
     expect_exit(ran, 1);
     expect_contains(ran.stdout + ran.stderr, "panic: on purpose\n");
     expect_ends_with(ran.stdout, "1 passed, 1 failed\n");
-}
-
-[Test]
-reports_a_test_that_overflows_its_stack() {
-    # The runner's crash handler takes only the faults that are not an
-    # overflow, so the test reports it, and still ends its children.
-    var folder = TempFolder("pep_test_overflow");
-    write_file(
-        folder.path.join("overflow_test.pep"),
-        read_file(Path("pep-test").join("testdata").join("overflow_test.pep.txt"))
-    );
-    var ran = pep_test(folder.path, ["--timeout", "0"]);
-    expect_exit(ran, 1);
-    expect_contains(ran.stdout + ran.stderr, "panic: stack overflow\n");
-    expect_ends_with(ran.stdout, "0 passed, 1 failed\n");
 }
 
 [Test]

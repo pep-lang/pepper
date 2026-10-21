@@ -44,17 +44,7 @@ _async_fiber_release_thread_context(context: __ptr<void>) {
 # must never return.
 [Target(OS(Windows))]
 _async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
-    return CreateFiberEx(0, stack_size, _FIBER_FLOAT_SWITCH, __function_pointer(_async_fiber_start), entry);
-}
-
-# Every fiber's first function: keeps stack in reserve for the stack
-# overflow handler (stack_guard.pep), since each fiber has a guarantee of
-# its own, then calls `entry`, the one `_async_fiber_create` was given.
-[Target(OS(Windows))]
-_async_fiber_start(entry: __ptr<void>) {
-    _pep_stack_guard_thread_start();
-    var start = entry as extern (__ptr<void>) => void;
-    start(__null);
+    return CreateFiberEx(0, stack_size, _FIBER_FLOAT_SWITCH, entry, __null);
 }
 
 # Deletes a fiber and its stack. The fiber must not be the one running.
