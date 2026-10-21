@@ -4,7 +4,8 @@
 
 HMAC (RFC 2104): a message authentication code from a hash and a secret
 key, as webhook signatures, JWTs (HS256) and S3-style request signing
-use, and a constant-time comparison to check one.
+use, and a constant-time comparison to check one. Also PBKDF2, the
+password-based key derivation built on HMAC-SHA-256.
 
 Source: `runtime/digest/hmac.pep`
 
@@ -196,6 +197,78 @@ bytes of `key`.
 
 **Returns**
 - the 20-byte MAC
+
+## pbkdf2_sha256
+
+```pepper
+pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[]
+```
+
+Derives `length` bytes from `password` and `salt` with PBKDF2-HMAC-SHA256
+(RFC 8018), running `rounds` iterations of HMAC-SHA-256 for each 32-byte
+block of the output.
+
+This is SCRAM's `Hi()` (PostgreSQL, MongoDB and SASL logins), and it
+derives keys from passphrases for formats that specify it. To store new
+passwords, use Argon2id (`crypto.hash_password` in pepper-crypto)
+instead: PBKDF2 needs almost no memory, so GPUs and ASICs test guesses
+against it cheaply.
+Where PBKDF2 is required, give each password its own random salt of 16
+bytes or more, and as many rounds as the login can afford (OWASP suggests
+600,000).
+
+The time grows with `rounds` times the number of 32-byte blocks, so a
+`length` above 32 costs the caller more but an attacker, who needs only
+the first block, no more.
+
+**Parameters**
+- `password` — the password or passphrase
+- `salt` — the salt
+- `rounds` — the iteration count, at least 1
+- `length` — the number of bytes to derive; 0 returns none
+
+**Returns**
+- the `length`-byte derived key
+
+**Panics**
+- if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes, RFC 8018's limit
+
+**Example**
+```pepper
+import digest;
+
+var key = digest.pbkdf2_sha256("passwd".bytes(), "salt".bytes(), 1, 16);
+assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+```
+
+## pbkdf2_sha256
+
+```pepper
+pbkdf2_sha256(password: String, salt: u8[], rounds: ulong, length: ulong): u8[]
+```
+
+Derives `length` bytes from the UTF-8 bytes of `password` and `salt`
+with PBKDF2-HMAC-SHA256, as the `u8[]` overload does.
+
+**Parameters**
+- `password` — the password or passphrase
+- `salt` — the salt
+- `rounds` — the iteration count, at least 1
+- `length` — the number of bytes to derive; 0 returns none
+
+**Returns**
+- the `length`-byte derived key
+
+**Panics**
+- if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes, RFC 8018's limit
+
+**Example**
+```pepper
+import digest;
+
+var key = digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 16);
+assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+```
 
 ## equal_constant_time
 

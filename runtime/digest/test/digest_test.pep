@@ -1,6 +1,6 @@
-# The digest module: SHA-256, SHA-1 and BLAKE3, HMAC, and BLAKE3's keyed
-# hashing, key derivation and extended output, against published test
-# vectors (RFC 4231, RFC 2202, the BLAKE3 team's test_vectors.json) and
+# The digest module: SHA-256, SHA-1 and BLAKE3, HMAC, PBKDF2, and BLAKE3's
+# keyed hashing, key derivation and extended output, against published test
+# vectors (RFC 4231, RFC 2202, RFC 7914, the BLAKE3 team's test_vectors.json) and
 # digests from reference implementations (Python's hashlib and the blake3
 # package), one-shot and incremental in uneven pieces. They run
 # twice: with the portable code, and built with `-D USE_LIBCRYPTO`
@@ -319,6 +319,37 @@ hmac_matches_rfc_4231_and_rfc_2202() {
     var first = mac.finish();
     mac.update("what do ya want for nothing?");
     expect_true(digest.equal_constant_time(first, mac.finish()));
+}
+
+[Test]
+pbkdf2_sha256_matches_rfc_7914() {
+    expect_equal(
+        digest.to_hex(digest.pbkdf2_sha256("passwd".bytes(), "salt".bytes(), 1, 64)),
+        "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783"
+    );
+    expect_equal(
+        digest.to_hex(digest.pbkdf2_sha256("Password", "NaCl".bytes(), 80000, 64)),
+        "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d"
+    );
+    # A password over a block (hashed first), an empty salt, and a length
+    # that ends partway through a third block, against Python's hashlib.
+    expect_equal(
+        digest.to_hex(digest.pbkdf2_sha256(pattern(100), Array<u8>(), 3, 70)),
+        "bbbba2a6dead65a0684a7fd433196aea23fbc9cf73496ad93a63ef2689feb8ef4f25eeaf527fd48d4290560dcbd3a3590408d088b8af98bb9f29c69a7d98ad6a351e2312b9f2"
+    );
+    expect_equal(digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 0).count, 0 as ulong);
+}
+
+[Test]
+[ShouldPanic("pbkdf2_sha256: 'rounds' must be at least 1")]
+pbkdf2_sha256_with_no_rounds_panics() {
+    digest.pbkdf2_sha256("passwd", "salt".bytes(), 0, 32);
+}
+
+[Test]
+[ShouldPanic("pbkdf2_sha256: 'length' is over RFC 8018's limit")]
+pbkdf2_sha256_past_rfc_8018s_limit_panics() {
+    digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 0xffffffff * 32 + 1);
 }
 
 [Test]

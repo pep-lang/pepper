@@ -1,10 +1,12 @@
 ## HMAC (RFC 2104): a message authentication code from a hash and a secret
 ## key, as webhook signatures, JWTs (HS256) and S3-style request signing
-## use, and a constant-time comparison to check one.
+## use, and a constant-time comparison to check one. Also PBKDF2, the
+## password-based key derivation built on HMAC-SHA-256.
 
 import "hex";
 import "sha1";
 import "sha256";
+import "words";
 
 # The block size of SHA-256 and SHA-1, which sizes HMAC's padded key.
 const _HMAC_BLOCK_SIZE: ulong = 64;
@@ -114,6 +116,17 @@ export struct Hmac<T> {
         return mac;
     }
 
+    # Replaces the contents of `out` with the MAC, then resets: `finish`
+    # without allocating, for PBKDF2's rounds. Only `Sha256` has the
+    # `_finish_into` this needs.
+    _finish_into(out: u8[]) {
+        _inner._finish_into(out);
+        _outer.update(_outer_pad);
+        _outer.update(out);
+        _outer._finish_into(out);
+        reset();
+    }
+
     ## Returns the MAC as `finish` does, written as lowercase hexadecimal
     ## digits.
     ##
@@ -171,6 +184,95 @@ export hmac_sha1(key: u8[], message: u8[]): u8[] {
 ## @returns the 20-byte MAC
 export hmac_sha1(key: String, message: String): u8[] {
     return hmac_sha1(key.bytes(), message.bytes());
+}
+
+# RFC 8018's limit on PBKDF2's output: (2^32 - 1) blocks of HMAC-SHA-256's
+# 32 bytes.
+const _PBKDF2_SHA256_MAX_LENGTH: ulong = 0xffffffff * 32;
+
+## Derives `length` bytes from `password` and `salt` with PBKDF2-HMAC-SHA256
+## (RFC 8018), running `rounds` iterations of HMAC-SHA-256 for each 32-byte
+## block of the output.
+##
+## This is SCRAM's `Hi()` (PostgreSQL, MongoDB and SASL logins), and it
+## derives keys from passphrases for formats that specify it. To store new
+## passwords, use Argon2id (`crypto.hash_password` in pepper-crypto)
+## instead: PBKDF2 needs almost no memory, so GPUs and ASICs test guesses
+## against it cheaply.
+## Where PBKDF2 is required, give each password its own random salt of 16
+## bytes or more, and as many rounds as the login can afford (OWASP suggests
+## 600,000).
+##
+## The time grows with `rounds` times the number of 32-byte blocks, so a
+## `length` above 32 costs the caller more but an attacker, who needs only
+## the first block, no more.
+##
+## @param password the password or passphrase
+## @param salt the salt
+## @param rounds the iteration count, at least 1
+## @param length the number of bytes to derive; 0 returns none
+## @returns the `length`-byte derived key
+## @panics if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes,
+##     RFC 8018's limit
+## @example
+##     import digest;
+##
+##     var key = digest.pbkdf2_sha256("passwd".bytes(), "salt".bytes(), 1, 16);
+##     assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
+    assert(rounds > 0, "pbkdf2_sha256: 'rounds' must be at least 1");
+    assert(length <= _PBKDF2_SHA256_MAX_LENGTH, "pbkdf2_sha256: 'length' is over RFC 8018's limit");
+    var mac = Hmac<Sha256>(password);
+    var key = Array<u8>(length);
+    # One round's U_j, the XOR of a block's rounds (T_i), and INT(i). The
+    # rounds reuse them, so the portable path allocates nothing per round.
+    var round = Array<u8>(32);
+    var block = Array<u8>(32);
+    var counter = Array<u8>(4);
+    uint index = 1;
+    while (key.count < length) {
+        counter.clear();
+        _digest_append_be(counter, index);
+        mac.update(salt);
+        mac.update(counter);
+        mac._finish_into(round);
+        block.clear();
+        block.append_all(round);
+        ulong done = 1;
+        while (done < rounds) {
+            mac.update(round);
+            mac._finish_into(round);
+            ulong byte = 0;
+            while (byte < 32) {
+                block[byte] = block[byte] ^ round[byte];
+                byte += 1;
+            }
+            done += 1;
+        }
+        var left = length - key.count;
+        key.append_from(block._data, left < 32 ? left : 32);
+        index += 1;
+    }
+    return key;
+}
+
+## Derives `length` bytes from the UTF-8 bytes of `password` and `salt`
+## with PBKDF2-HMAC-SHA256, as the `u8[]` overload does.
+##
+## @param password the password or passphrase
+## @param salt the salt
+## @param rounds the iteration count, at least 1
+## @param length the number of bytes to derive; 0 returns none
+## @returns the `length`-byte derived key
+## @panics if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes,
+##     RFC 8018's limit
+## @example
+##     import digest;
+##
+##     var key = digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 16);
+##     assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+export pbkdf2_sha256(password: String, salt: u8[], rounds: ulong, length: ulong): u8[] {
+    return pbkdf2_sha256(password.bytes(), salt, rounds, length);
 }
 
 ## Returns whether `a` and `b` hold the same bytes, taking the same time
