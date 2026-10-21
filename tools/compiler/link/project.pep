@@ -265,6 +265,36 @@ export struct Manifest {
         return Optional<Dependency>.Empty;
     }
 
+    ## Returns its Git dependencies and those of every `path` dependency it
+    ## reaches, which the project fetches into its own `.pep/deps`. A `path`
+    ## dependency whose `pep.toml` cannot be read is skipped: importing it
+    ## reports why.
+    ##
+    ## @returns the Git dependencies, this manifest's first
+    git_dependencies(): Dependency[] {
+        var out = Array<Dependency>();
+        var pending = [this];
+        var seen = HashSet<String>();
+        while (!pending.is_empty) {
+            var manifest = pending.remove_at(0);
+            if (!seen.insert(manifest.dir().normalize().to_string())) {
+                continue;
+            }
+            for (var d in manifest.dependencies) {
+                if (d.host.is_value()) {
+                    out.append(d);
+                    continue;
+                }
+                var folder = manifest.dir().join(Path(d.location));
+                var nested = load_manifest(folder.join(Path(files.MANIFEST_FILE)), Array<Path>());
+                if (nested.is_ok()) {
+                    pending.append(nested.value());
+                }
+            }
+        }
+        return out;
+    }
+
     ## The `[build]` entry file: `entry`, else `main.pep`, in the project.
     entry(): Path {
         return dir().join(Path(entry_file.is_value() ? entry_file.value() : "main.pep"));
@@ -966,7 +996,9 @@ export struct Packages {
         var package = dependency.value().directory(project.value(), manifest.dir());
         if (!package.is_directory()) {
             if (dependency.value().host.is_value()) {
-                return Resolution.Missing($"dependency '{first}' is not fetched: no {package}");
+                return Resolution.Missing(
+                    $"dependency '{first}' is not fetched: no {package}; run 'pepper package fetch'"
+                );
             }
             return Resolution.Missing($"dependency '{first}' names the folder {package}, which does not exist");
         }

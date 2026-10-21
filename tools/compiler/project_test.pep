@@ -148,3 +148,47 @@ resolves_imports_of_a_projects_dependencies() {
     expect_true(report.is_value());
     expect_true(report.value().contains("dependency 'net' is not fetched: no "));
 }
+
+[Test]
+reports_an_unfetched_dependency_of_a_path_dependency() {
+    var folder = TempFolder("path_dependency_dependencies");
+    var lib = folder.path.join(Path("lib"));
+    var app = folder.path.join(Path("app"));
+    Directory.create_all(lib);
+    Directory.create_all(app);
+    # `lib` and `app` name each other: the walk stops at a folder seen.
+    File.write_text(
+        lib.join(Path("pep.toml")),
+        "[package]\nname = \"lib\"\n[dependencies]\nterm = { github = \"nobody/term\" }\napp = { path = \"../app\" }\n"
+    );
+    File.write_text(
+        lib.join(Path("module.pep")), "import term;\nexport reset(): String {\n    return term.RESET;\n}\n"
+    );
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[dependencies]\nlib = { path = \"../lib\" }\nnet = { github = \"nobody/net\" }\n"
+    );
+    File.write_text(app.join(Path("main.pep")), "import lib;\nmain(): int {\n    return lib.reset().size as int;\n}\n");
+
+    # `pepper build` fetches the path dependency's Git dependencies too.
+    var manifest = link.load_manifest(app.join(Path("pep.toml")), Array<Path>());
+    expect_true(manifest.is_ok());
+    var names = Array<String>();
+    for (var d in manifest.value().git_dependencies()) {
+        names.append(d.name);
+    }
+    expect_equal(names.count, 2);
+    expect_equal(names[0], "net");
+    expect_equal(names[1], "term");
+
+    # Unfetched, the error is at the path dependency's import.
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(app.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    var report = program.value().check();
+    expect_true(report.is_value());
+    expect_true(report.value().contains("module.pep:1:8: error: dependency 'term' is not fetched: no "));
+    expect_true(report.value().contains("; run 'pepper package fetch'"));
+    expect_false(report.value().contains("undeclared"));
+}
