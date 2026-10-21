@@ -10,7 +10,8 @@ environment variables, clocks and time, and the machine and user.
 `import [Instant, Duration] from os`.
 
 - [Environment](os-environment.md): `environment(name)`,
-  `environment_variables()`, `set_environment(name, value)` and
+  `environment_flag(name)`, `environment_variables()`,
+  `set_environment(name, value)` and
   `remove_environment(name)`
 - [Time](os-time.md): `Duration`, `Instant` (a monotonic clock, for
   measuring) and `SystemTime` (the wall clock)

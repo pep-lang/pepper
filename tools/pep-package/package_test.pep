@@ -13,6 +13,7 @@ import [serve_folder] from tool_testing.server;
 import [TempFolder] from testing;
 import [expect_contains, expect_exit, read_file, run, tool, write_file] from tool_testing;
 import toolchain;
+import "tree";
 
 # The folder of bare repositories that stands in for github.com:
 # `other/numbers` (versions 1.0.0, 1.3.1, 2.0.0 and 3.0.0, which drops
@@ -223,7 +224,7 @@ builds_fetch_what_pep_lock_lists() {
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
     # A fresh clone has pep.toml and pep.lock, and no .pep: the build
     # fetches the locked commits.
-    Directory.remove_all(project.dir.join(".pep"));
+    remove_tree(project.dir.join(".pep"));
     expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
 }
 
@@ -250,7 +251,7 @@ builds_side_by_side_fetch_once() {
     var hosts = Hosts("parallel_fetch");
     var project = Project("parallel_fetch", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
-    Directory.remove_all(project.dir.join(".pep"));
+    remove_tree(project.dir.join(".pep"));
     # `pepper test` builds its test programs at once: each build
     # fetches what `.pep/deps` lacks, and none trips over another's
     # checkout.
@@ -424,7 +425,7 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
 
             # A fresh clone on a machine with no git: the archives of the
             # locked commits, whose files match pep.lock's checksums.
-            Directory.remove_all(project.dir.join(".pep"));
+            remove_tree(project.dir.join(".pep"));
             expect_exit(package_without_git(hosts, project.dir, ["fetch"], server), 0);
             # The lock stays as it was.
             expect_equal(project.lock(), locked);
@@ -434,7 +435,7 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
 
             # A tampered archive: 1.3.1's commit serves 2.0.0's files.
             write_archive(hosts, archives, "other/numbers", "v2.0.0", numbers);
-            Directory.remove_all(project.dir.join(".pep"));
+            remove_tree(project.dir.join(".pep"));
             var tampered = package_without_git(hosts, project.dir, ["fetch"], server);
             expect_exit(tampered, 1);
             var expected = locked.split("source = \"github:other/numbers\"")[1].split("sha256 = \"")[1].split("\"")[0];
@@ -512,7 +513,7 @@ an_unfetched_dependency_fails_under_offline() {
     expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
     expect_exit(unreachable("pep-package", ["fetch", "--frozen"]), 0);
 
-    Directory.remove_all(project.dir.join(".pep"));
+    remove_tree(project.dir.join(".pep"));
     var refused = unreachable("pep-package", ["fetch", "--offline"]);
     expect_exit(refused, 1);
     expect_contains(refused.stderr, "--offline, and ");

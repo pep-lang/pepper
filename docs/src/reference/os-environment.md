@@ -47,6 +47,33 @@ main(): int {
 }
 ```
 
+## environment_flag
+
+```pepper
+environment_flag(name: String): bool
+```
+
+Returns whether the environment variable `name` turns a switch on: it is
+set to anything but the empty string or `0`, as `PEPPER_LOCKED=1` does.
+
+**Parameters**
+- `name` — the variable's name
+
+**Returns**
+- true when it is set to a value other than empty or `0`
+
+**Example**
+```pepper
+import os;
+
+main(): int {
+    if (os.environment_flag("VERBOSE")) {
+        print("verbose");
+    }
+    return 0;
+}
+```
+
 ## set_environment
 
 ```pepper
