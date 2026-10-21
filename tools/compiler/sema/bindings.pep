@@ -8,7 +8,7 @@ import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [Block, Expression, FunctionDef, Module, Statement, UnaryOp, VariableDef] from "model";
 import [PassState] from "state";
-import [Rewriter, rewrite_expression] from "walk";
+import [Rewriter, rewrite_children] from "walk";
 
 ## A visible binding: its name, and where it is declared when it is const.
 struct _LocalBinding {
@@ -40,9 +40,10 @@ struct _Scopes {
         this.fields = fields;
     }
 
-    declare(variable: VariableDef) {
+    # Declares `variable`, visible as `binding`, in the innermost scope.
+    declare(variable: VariableDef, binding: _LocalBinding) {
         # Synthesized locals (a loop's hidden iterator) carry no location.
-        if (declared.count > 0 and !variable.loc.is_none()) {
+        if (!variable.loc.is_none()) {
             var names = declared.last();
             for (var (name, previous) in names) {
                 if (name == variable.name) {
@@ -56,7 +57,7 @@ struct _Scopes {
             }
             names.append((variable.name, variable.loc));
         }
-        scopes.last().append(_local_binding(variable));
+        scopes.last().append(binding);
     }
 
     # The const declaration `name` resolves to, if it is const. Locals and
@@ -129,24 +130,41 @@ export check_bindings(module: Module, state: PassState) {
             _check_function(state, method, globals, fields);
         }
     }
+    # shortcut: an extension's or trait's fields are not known here, so these
+    # methods leave out the globals too, lest a field look like a const
+    # global; an assignment to a global there goes unreported until
+    # extensions are checked with their target's fields.
+    var none = Array<_LocalBinding>();
+    for (var extension in module.extensions) {
+        for (var method in extension.methods) {
+            _check_function(state, method, none, none);
+        }
+    }
+    for (var t in module.traits) {
+        for (var method in t.methods) {
+            _check_function(state, method, none, none);
+        }
+    }
 }
 
 _check_function(state: PassState, function: FunctionDef, globals: _LocalBinding[], fields: _LocalBinding[]) {
-    if (!function.body.is_value()) {
-        return;
-    }
-    var scopes = _Scopes(state, globals.copy(), fields);
-    var parameters = Array<_LocalBinding>();
-    for (var p in function.parameters) {
-        parameters.append(_LocalBinding(p.name, Optional<Loc>.Empty));
-    }
-    scopes.scopes.append(parameters);
-    _check_block(function.body.value(), scopes);
+    # A declaration without a body still may not repeat a parameter.
+    _check_body(function.parameters, function.body.value_or(Block()), _Scopes(state, globals.copy(), fields));
 }
 
 _check_block(block: Block, scopes: _Scopes) {
+    _check_body(Array<VariableDef>(), block, scopes);
+}
+
+# A function's or closure's parameters share its body's outermost scope, so
+# a local there that repeats one is a redefinition, as in C++.
+_check_body(parameters: VariableDef[], block: Block, scopes: _Scopes) {
     scopes.scopes.append(Array<_LocalBinding>());
     scopes.declared.append(Array<(String, Loc)>());
+    for (var p in parameters) {
+        # A parameter is never const here: assigning to one is allowed.
+        scopes.declare(p, _LocalBinding(p.name, Optional<Loc>.Empty));
+    }
     for (var statement in block.items) {
         _check_statement(statement, scopes);
     }
@@ -167,7 +185,7 @@ _check_statement(statement: Statement, scopes: _Scopes) {
                 if (variable.default.is_value()) {
                     _check_expression(variable.default.value(), scopes);
                 }
-                scopes.declare(variable);
+                scopes.declare(variable, _local_binding(variable));
             }
         }
         Branch(branch) => {
@@ -191,10 +209,11 @@ _check_statement(statement: Statement, scopes: _Scopes) {
 }
 
 _check_expression(e: Expression, scopes: _Scopes) {
-    rewrite_expression(e, _AssignmentCheck(scopes));
+    _AssignmentCheck(scopes).rewrite(e);
 }
 
-## Reports each assignment to a const binding the walk meets.
+## Reports each assignment to a const binding the walk meets, and checks
+## each closure's body in a scope of its own.
 struct _AssignmentCheck {
     var scopes: _Scopes;
 
@@ -203,6 +222,15 @@ struct _AssignmentCheck {
     }
 
     rewrite(e: Expression): Expression {
+        if (e is ClosureLiteral(closure)) {
+            _check_body(closure.parameters, closure.body, scopes);
+            return e;
+        }
+        _check_assignment(e);
+        return rewrite_children(e, this);
+    }
+
+    _check_assignment(e: Expression) {
         var target = Optional<Expression>.Empty;
         match (e) {
             Binary(node) => {
@@ -218,7 +246,7 @@ struct _AssignmentCheck {
             else => {}
         }
         if (!target.is_value()) {
-            return e;
+            return;
         }
         var name = "";
         var at = Loc.none();
@@ -231,14 +259,14 @@ struct _AssignmentCheck {
             }
             MemberRef(member) => {
                 if (!(member.lhs is ThisRef)) {
-                    return e;
+                    return;
                 }
                 name = member.name;
                 at = member.loc;
                 declared = scopes.const_field(member.name);
             }
             else => {
-                return e;
+                return;
             }
         }
         if (declared.is_value()) {
@@ -248,7 +276,6 @@ struct _AssignmentCheck {
                 ).with_note($"'{name}' declared const here", Optional<Location>.Value(location_of(declared.value())))
             );
         }
-        return e;
     }
 }
 
