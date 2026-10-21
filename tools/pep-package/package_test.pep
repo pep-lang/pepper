@@ -1,17 +1,21 @@
 # pep-package end to end, the one beside the test program or on the PATH
 # (scripts/pepper-tests.sh builds it, beside the `pep-build` that runs
-# it): it adds, removes, updates and fetches a project's dependencies, and
-# `pep-build` fetches what `pep.lock` lists and `.pep/deps` lacks. The
+# it): it adds, removes, updates and fetches a project's dependencies,
+# `pep-build` fetches what `pep.lock` lists and `.pep/deps` lacks, and
+# `publish` tags a release, testing it with stand-in toolchains. The
 # packages come from bare git repositories in a test folder, which
 # `PEPPER_PACKAGE_GITHUB_URL` points the tools at. The tests skip when
 # git is missing.
 
 import async;
 import [Directory, File, Path] from io;
+import os;
 import process;
 import [serve_folder] from tool_testing.server;
 import [TempFolder] from testing;
-import [expect_contains, expect_exit, read_file, run, tool, write_file] from tool_testing;
+import [
+    build_program, copy_executable, expect_contains, expect_exit, read_file, run, tool, write_file
+] from tool_testing;
 import toolchain;
 import "tree";
 
@@ -754,4 +758,137 @@ resolution_skips_versions_that_need_a_newer_toolchain() {
     expect_contains(
         offline_update.stderr, "--offline, and choosing a revision of github:other/modern reads which ones it offers"
     );
+}
+
+# The tags of the bare repository `bare`, one per line.
+tags_of(bare: Path): String {
+    return run(process.Command("git").arguments(["tag", "-l"]).working_directory(bare)).stdout;
+}
+
+[Test]
+publish_checks_tests_tags_and_pushes_the_version() {
+    if (!has_git()) {
+        return;
+    }
+    var folder = TempFolder("package_publish");
+    var root = folder.path;
+    var suffix = toolchain.executable_suffix();
+    # A Pepper home with toolchains 0.1.0 and 0.2.0, whose `pep-test`
+    # passes (a stand-in that prints its arguments), and 0.3.0 once a step
+    # below adds it, whose `pep-test` fails (a copy of `pepper`, which
+    # wants a command).
+    var home = root.join("home");
+    Directory.create_all(home.join("bin"));
+    copy_executable(tool("pepper"), home.join("bin").join("pepper" + suffix));
+    var passes = root.join("passes" + suffix);
+    var error = build_program(Path("pepper").join("testdata").join("echo.pep"), passes, root.join("build"));
+    if (error.is_value()) {
+        panic($"cannot build the stand-in pep-test:\n{error.value()}");
+    }
+    var add_toolchain = (release: String, test: Path) => {
+        var bin = home.join("toolchains").join(release).join("bin");
+        Directory.create_all(bin);
+        copy_executable(passes, bin.join("pep-build" + suffix));
+        copy_executable(test, bin.join("pep-test" + suffix));
+    };
+    add_toolchain("0.1.0", passes);
+    add_toolchain("0.2.0", passes);
+
+    # `me/shapes`, released at 1.0.0, and a clone to publish from.
+    var manifest = (version: String, rest: String) => {
+        return "[package]\nname = \"shapes\"\nversion = \""
+            + version
+            + "\"\ndescription = \"Shapes\"\n"
+            + rest
+            + "repository = \"https://example.com/me/shapes\"\nminimum_toolchain = \"0.1.0\"\n";
+    };
+    var licensed = "license = \"MIT\"\n";
+    add_version(
+        root,
+        "me/shapes",
+        "1.0.0",
+        ["pep.toml", manifest("1.0.0", licensed), "module.pep", "export sides(): int {\n    return 3;\n}\n"]
+    );
+    publish(root, "me/shapes");
+    var bare = root.join("me").join("shapes.git");
+    var clone = root.join("clone");
+    git(root, ["clone", "--quiet", bare.to_string(), clone.to_string()]);
+    var path = home.join("bin").to_string()
+        + (toolchain.is_windows() ? ";" : ":")
+        + os.environment("PATH").value_or("");
+    var package = (arguments: Array<String>) => {
+        return run(
+            process
+                .Command(tool("pep-package").to_string())
+                .arguments(arguments)
+                .working_directory(clone)
+                .environment("PATH", path)
+                .environment("PEPPER_TOOLCHAIN_PATH", "")
+        );
+    };
+    var release = (text: String) => {
+        write_file(clone.join("pep.toml"), text);
+        git(clone, ["commit", "--quiet", "-am", "release"]);
+    };
+
+    # Every problem at once: the version is already tagged, a field is
+    # missing, a dependency follows a branch, `[dev-dependencies]` needs a
+    # newer toolchain than the minimum, and the change is not committed. A
+    # dev-dependency may be a path.
+    write_file(
+        clone.join("pep.toml"),
+        manifest("1.0.0", "")
+            + "\n[dependencies]\nnumbers = { github = \"other/numbers\", branch = \"main\" }\n"
+            + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
+    );
+    var refused = package(["publish", "--dry-run"]);
+    expect_exit(refused, 1);
+    expect_contains(refused.stderr, "pep-package: error: cannot publish shapes 1.0.0:\n  ");
+    expect_contains(refused.stderr, "\n  '[package]' has no 'license'\n");
+    expect_contains(
+        refused.stderr,
+        "\n  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  'dev-dependencies' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
+    );
+    expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");
+    expect_contains(
+        refused.stderr, "\n  'version' 1.0.0 is not newer than the newest tag, 1.0.0; raise it in pep.toml\n"
+    );
+    expect_false(refused.stderr.contains("fixtures"));
+
+    # A commit origin does not have yet.
+    release(manifest("1.1.0", licensed));
+    var unpushed = package(["publish", "--dry-run"]);
+    expect_exit(unpushed, 1);
+    expect_contains(unpushed.stderr, "is not the tip of origin's default branch (");
+
+    # Pushed, --dry-run tests with 0.1.0 and the newest, and tags nothing.
+    git(clone, ["push", "--quiet", "origin", "main"]);
+    var dry = package(["publish", "--dry-run"]);
+    expect_exit(dry, 0);
+    expect_contains(
+        dry.stderr,
+        "pep-package: running 'pepper +0.1.0 test'\npep-package: running 'pepper +latest test'\n"
+            + "pep-package: shapes 1.1.0 is ready: without --dry-run, publish tags "
+    );
+    expect_equal(tags_of(bare), "v1.0.0\n");
+
+    var published = package(["publish"]);
+    expect_exit(published, 0);
+    expect_contains(published.stderr, "pep-package: published shapes 1.1.0: tagged ");
+    expect_equal(tags_of(bare), "v1.0.0\nv1.1.0\n");
+
+    # A newest toolchain whose tests fail stops it before the tag.
+    add_toolchain("0.3.0", tool("pepper"));
+    release(manifest("1.2.0", licensed));
+    git(clone, ["push", "--quiet", "origin", "main"]);
+    var failed = package(["publish"]);
+    expect_exit(failed, 1);
+    expect_contains(
+        failed.stderr, "pep-package: error: 'pepper +latest test' failed, so shapes 1.2.0 is not published\n"
+    );
+    expect_equal(tags_of(bare), "v1.0.0\nv1.1.0\n");
 }

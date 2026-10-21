@@ -11,6 +11,8 @@ pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
+pepper package publish --dry-run             # check and test the release pep.toml's version names
+pepper package publish                       # ... then tag it v<version> and push the tag
 ```
 
 ```text
@@ -44,6 +46,8 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `remove <name>` | Removes a dependency or dev-dependency, by its name or its `owner/name` |
 | `update [<name>...]` | Moves dependencies to the newest versions their ranges allow; every one when none is named |
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
+| `publish` | Checks the package and runs its tests, then tags its version and pushes the tag (see [`publish`](#publish)) |
+| `publish --dry-run` | Checks and tests, but neither tags nor pushes |
 | `-h`, `--help` | Prints the options; after a command, that command's |
 | `-V`, `--version` | Prints the version |
 
@@ -114,6 +118,54 @@ Updates one dependency at a time and runs `pep-build` (beside
 `pep-package`, else on the `PATH`) on the project after each. An update
 that does not build is rolled back, and the command lists those it rolled
 back.
+
+### `publish`
+
+Releases the package at the version `pep.toml`'s `[package]` `version`
+names: other projects then depend on it by that version (see
+[Resolving versions](#resolving-versions)). Raise `version`, commit,
+merge it to the default branch, then run it from the package's clone:
+
+```text
+$ pepper package publish
+pep-package: running 'pepper +0.11.0 test'
+pep-package: running 'pepper +latest test'
+pep-package: published shapes 1.2.0: tagged 3f9c2e01a7b4 v1.2.0 and pushed it to origin
+```
+
+First it checks, and lists every check that fails at once:
+
+- the work tree has no changes `git status` shows, and `HEAD` is the tip
+  of the default branch of `origin`, so the commit it tags is the one
+  that branch holds;
+- `version` is a version (`1.2.0`), newer than every version tag
+  `origin` has;
+- `[package]` has a `description`, `license` and `repository`;
+- every dependency asks for a version range, not a branch, tag, commit,
+  path or the default branch, so a project depending on this one can
+  resolve it with its other packages. A dev-dependency may be anything,
+  since a dependent ignores it;
+- `minimum_toolchain` is at least the release that reads each newer
+  `pep.toml` feature the package uses: `[dev-dependencies]` needs 0.11.0.
+
+```text
+pep-package: error: cannot publish shapes 1.2.0:
+  '[package]' has no 'license'
+  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
+```
+
+Then it runs the package's tests with `pepper +<minimum_toolchain> test`
+and `pepper +latest test` (only the second without a `minimum_toolchain`),
+so both toolchains must be installed (see
+[Toolchains: pep-install](pep-install.md)); `latest` is the newest
+installed release, not a prerelease. A failing run stops it and shows
+what the tests printed. Last, it tags `HEAD` `v<version>` and pushes the
+tag to `origin`; when the push fails, it deletes the tag again.
+
+`--dry-run` checks and tests, then says what it would tag, without
+tagging or pushing anything. `publish` neither creates a release page on
+the host nor needs `pep.lock`, which a dependent does not read.
 
 ## pep.lock
 
