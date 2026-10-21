@@ -7,9 +7,10 @@
 # runs), `main`'s arguments, children that are copies of the program, and
 # `exec`; and the error for a member a
 # value's type lacks inside an interpolation; string literals that hold
-# a NUL; a `match` in a generic method of another module's struct; a `[Move]`
-# argument called through a `shared` function value; and externs bound to
-# C symbols Pepper functions are named after, at each `-O` level. The
+# a NUL or sit in default arguments; a `match` in a generic method of
+# another module's struct; a `[Move]` argument called through a `shared`
+# function value; and externs bound to C symbols Pepper functions are named
+# after, at each `-O` level. The
 # programs are in
 # `testdata/`.
 
@@ -410,6 +411,20 @@ string_literal_with_nul_keeps_its_bytes_beside_its_prefix() {
     var output = _run("string_literal_nul");
     expect_exit(output, 0);
     expect_equal(output.stdout, "1 97\n3 97 0 98\n");
+}
+
+# A default argument is evaluated in the caller's compilation unit; its
+# string literals and its `[Implicit]` conversion must be made there too.
+[Test]
+string_literals_in_default_arguments_arrive_whole() {
+    var folder = TempFolder("programs_default_argument_literal");
+    var testdata = Path("compiler").join("testdata");
+    var module = Path("d").join("module.pep");
+    write_file(folder.path.join(module), read_file(testdata.join("default_argument_literal").join(module)));
+    var program = _build("default_argument_literal", folder.path, ["-I", folder.path.to_string()]);
+    var output = run(process.Command(program.to_string()));
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "3 default 4 5\n2 6 module\n");
 }
 
 # ── moves ───────────────────────────────────────────────────────────────────
