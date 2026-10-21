@@ -36,6 +36,7 @@ import "globals";
 import "lazy";
 import "operators";
 import "ops";
+import "partition";
 import "refs";
 import "simd";
 import "static_debug";
@@ -1050,6 +1051,8 @@ export generate_ir(
     if (generated.is_err()) {
         return Result<String, Diagnostic>.err(generated.error());
     }
+    # The IR shows each extern under its C symbol, as the build links it.
+    restore_extern_names(generated.value());
     if (opt_level > 0) {
         var optimized = generated.value().run_passes($"default<O{opt_level}>", machine.value());
         if (optimized.is_err()) {
