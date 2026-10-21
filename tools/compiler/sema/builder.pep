@@ -281,6 +281,19 @@ export tuple_constructor_name(labels: String[]): String {
     return $"{TUPLE}({",".join(labels)})";
 }
 
+## Whether a tuple written in `t` labels its elements.
+_has_labels(t: ast.TypeName): bool {
+    if (t.labels.count > 0) {
+        return true;
+    }
+    for (var a in t.generic_types) {
+        if (_has_labels(a)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 ## The arithmetic intrinsic a call to `name` stands for.
 _intrinsic(name: String): BinaryOp? {
     match (name) {
@@ -2176,6 +2189,9 @@ struct _Builder {
             # `long[] a = [1, 2]`: the declared type types a collection literal.
             var built = typed_expression(decl.default_value.value(), Optional<TypeName>.Value(ty))?;
             default = Optional<Expression>.Value(built);
+            if (ty.is_auto()) {
+                ty = _labeled_constructor(decl.default_value.value(), ty);
+            }
         }
         return Built<VariableDef>.Ok(
             VariableDef(
@@ -2189,6 +2205,21 @@ struct _Builder {
                 is_const = decl.is_const
             )
         );
+    }
+
+    # `var a = Array<(name: String, count: int)>()` types `a` as the type
+    # its constructor is written with: the call names the constructor by
+    # its type's spelling, which has no labels. Any other value keeps
+    # `otherwise`.
+    _labeled_constructor(value: ast.Expression, otherwise: TypeName): TypeName {
+        if (value is FunctionCall(function, _, _)) {
+            if (function is TypeLiteral(type_name)) {
+                if (_has_labels(type_name)) {
+                    return type_name_from(type_name);
+                }
+            }
+        }
+        return otherwise;
     }
 
     block(b: ast.Block): Built<Block> {

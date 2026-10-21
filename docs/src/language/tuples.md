@@ -42,9 +42,13 @@ so `p.line` and `p.0` read the same element:
   converts to the other freely.
 - Either every element has a label or none does, and labels in one tuple must
   differ.
-- Labels do not pass through a type argument: `Optional<(line: int, column: int)>`
-  is the same type as `Optional<(int, int)>`, so its `value()` returns an
-  unlabeled tuple. Declare a labeled variable to name the elements again.
+- Labels pass through a type argument: an element of an
+  `Array<(word: String, count: int)>`, a `HashMap` value or the `value()` of a
+  `(line: int, column: int)?` answers to its labels, though
+  `Optional<(line: int, column: int)>` is the same type as
+  `Optional<(int, int)>`. A variable typed by a static method's result, such
+  as `var p = Optional<(line: int, column: int)>.Value(at);`, has no labels:
+  declare its type to name the elements.
 - `var p = (line: 3, column: 7);` gives `p` the labeled type
   `(line: int, column: int)`. A labeled value takes at least two elements.
 - A labeled value initializing or returned as a labeled type must use its

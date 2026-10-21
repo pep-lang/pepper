@@ -24,5 +24,10 @@ main(): int {
     var t = Token();
     t.at = (5, 6);
     assert(t.at.column == 6, "a labeled field");
+
+    # Labels pass through a type argument.
+    var counts = Array<(word: String, count: int)>();
+    counts.append((word: "tuple", count: 2));
+    assert(counts[0].count == 2, "a labeled element");
     return 0;
 }

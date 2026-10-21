@@ -178,6 +178,85 @@ export extend TypeName {
         return index.is_value() ? Optional<TypeName>.Value(sub_types[index.value()]) : Optional<TypeName>.Empty;
     }
 
+    ## Returns this type, read through a value of type `receiver` (one of
+    ## its fields, or what one of its methods returns), with the labels of
+    ## the tuples among `receiver`'s type arguments. Labels are not part of
+    ## a type's identity, so one specialization serves every labeling of
+    ## its arguments, and its members' types carry no labels.
+    ##
+    ## An unlabeled tuple here takes the labels of the one labeled tuple
+    ## argument it equals; when two labelings equal it, it stays
+    ## unlabeled.
+    ##
+    ## @param receiver the type the member is read through
+    ## @returns the type, labeled
+    labeled_through(receiver: TypeName): TypeName {
+        # Most receivers label nothing: they cost no allocation.
+        bool any = false;
+        for (var t in receiver.sub_types) {
+            any = any or t._has_labeled_tuple();
+        }
+        if (!any) {
+            return this;
+        }
+        # shortcut: a tuple is matched by its element types, so one the
+        # member's declaration does not spell as a type argument (`Box<(a:
+        # int, b: int)>`'s `pair(): (int, int)`) takes the argument's labels
+        # too; substitute the generic declaration's member type if that
+        # ever matters.
+        var labeled = Array<TypeName>();
+        for (var t in receiver.sub_types) {
+            t._labeled_tuples(labeled);
+        }
+        var out = copy();
+        out._take_labels(labeled);
+        return out;
+    }
+
+    # Whether a tuple in this type, this type included, has labels.
+    _has_labeled_tuple(): bool {
+        if (is_tuple() and labels.count > 0) {
+            return true;
+        }
+        for (var t in sub_types) {
+            if (t._has_labeled_tuple()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    # Appends each labeled tuple in this type, this type included, to `out`.
+    _labeled_tuples(out: TypeName[]) {
+        if (is_tuple() and labels.count > 0) {
+            out.append(this);
+        }
+        for (var t in sub_types) {
+            t._labeled_tuples(out);
+        }
+    }
+
+    # Labels each unlabeled tuple in this type that one of `labeled` equals.
+    _take_labels(labeled: TypeName[]) {
+        if (is_tuple() and labels.count == 0) {
+            var found = Optional<TypeName>.Empty;
+            bool ambiguous = false;
+            for (var t in labeled) {
+                if (t == this) {
+                    ambiguous = ambiguous or (found.is_value() and found.value().display() != t.display());
+                    found = Optional<TypeName>.Value(t);
+                }
+            }
+            if (found.is_value() and !ambiguous) {
+                assign(found.value().copy());
+                return;
+            }
+        }
+        for (var t in sub_types) {
+            t._take_labels(labeled);
+        }
+    }
+
     ## Returns whether this is a function type, plain or thread-safe.
     ##
     ## @returns true for `(P...) => R` and `shared (P...) => R`

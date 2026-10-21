@@ -1087,7 +1087,7 @@ struct _TypeScopes {
         }
         for (var f in all[0]) {
             if (f.name == name) {
-                return Optional<TypeName>.Value(f.ty);
+                return Optional<TypeName>.Value(f.ty.labeled_through(ty));
             }
         }
         return Optional<TypeName>.Empty;
@@ -1101,7 +1101,7 @@ struct _TypeScopes {
         }
         for (var (m, ret) in all[0]) {
             if (m == name) {
-                return Optional<TypeName>.Value(ret);
+                return Optional<TypeName>.Value(ret.labeled_through(ty));
             }
         }
         return Optional<TypeName>.Empty;
@@ -1375,7 +1375,7 @@ struct _TypeScopes {
                 for (var fields in field_tables(lhs_type.to_string())) {
                     for (var f in fields) {
                         if (f.name == node.name) {
-                            return f.ty;
+                            return f.ty.labeled_through(lhs_type);
                         }
                     }
                 }
@@ -1422,7 +1422,7 @@ struct _TypeScopes {
                 }
                 for (var (m, iterator) in all[0]) {
                     if (m == "iterate") {
-                        return iterator;
+                        return iterator.labeled_through(source_type);
                     }
                 }
                 return source_type;
@@ -1597,12 +1597,12 @@ struct _TypeScopes {
         }
         if (overloads.is_method_set(this_type, node.method)) {
             var choice = select_method_overload(this_type, node.method, node.args, node.loc, current);
-            return choice.is_value() ? choice.value().ret : TypeName.auto();
+            return choice.is_value() ? choice.value().ret.labeled_through(this_type) : TypeName.auto();
         }
         for (var methods in method_tables(text, node.method)) {
             for (var (m, ret) in methods) {
                 if (m == node.method) {
-                    return ret;
+                    return ret.labeled_through(this_type);
                 }
             }
         }
