@@ -2564,6 +2564,14 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   it analyzed, the linked `Program`, and the checked `sema.Module` and
   `PassState` when the passes passed) to the server thread through a
   channel and `Client.wake`s it; `woken` keeps the last one per document.
+  A model checked whole (`check_whole`, `recheck_whole`) first drops the
+  bodies of the files outside the document's compilation unit
+  (`drop_unread_bodies`, `Analysis.bodies_read`): the server reads only
+  those (a model loaded from the cache's records decodes no others), and
+  the rest made the copy of `tools/compiler` take about 6 s, which an edit
+  right after the first analysis waited for. It cannot be moved instead:
+  sema's passes capture parts of the model in closures, so the
+  confinement check takes it as shared (#173).
 - `symbols.pep`: the outline of declarations and struct members.
 - `navigate.pep`: hover and definition. A `Context` is the current text's parse, plus the last
   analysis's program and model when that analysis is of the same text;

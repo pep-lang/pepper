@@ -1674,6 +1674,36 @@ a_program_checked_whole_passes_or_finds_its_error() {
     }
 }
 
+# Whether `analysis`'s model has a free function `name` with its body.
+has_body(analysis: Analysis, name: String): bool {
+    for (var function in analysis.model.value().functions) {
+        if (function.name == name) {
+            return function.body.is_value();
+        }
+    }
+    return false;
+}
+
+[Test]
+an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
+    # A model of the program checked whole holds every file's bodies; the
+    # copy the server's thread gets keeps those of `bodies_read` only, so
+    # handing it over costs the document's compilation unit, not the program.
+    var test = "unread_bodies";
+    var text = "import \"other\";\nmain(): int {\n    return twice(1);\n}\n";
+    var uri = fresh_file(test, "main.pep", text);
+    temp_file_in(test, "other.pep", "export twice(x: int): int {\n    return x * 2;\n}\n");
+    var analysis = analyze(uri, text);
+    expect_equal(outcome_of(analysis), "passed");
+    # Checked a compilation unit at a time: nothing to drop.
+    drop_unread_bodies(analysis);
+    expect_true(has_body(analysis, "main") and has_body(analysis, "twice"));
+    analysis.bodies_read.append(0);
+    drop_unread_bodies(analysis);
+    expect_true(has_body(analysis, "main"));
+    expect_false(has_body(analysis, "twice"));
+}
+
 [Test]
 an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
     # What an analysis does while a `--fill-cache` child fills the cache.

@@ -134,8 +134,14 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         );
         client.publish_diagnostics(analysis.uri, analysis.diagnostics);
         _publish_others(client, analysis, open, shown);
+        var handing = os.Instant.now();
+        # shortcut: a copy, since the confinement check refuses
+        # `move(analysis)` (#173); move it once that is lifted.
+        drop_unread_bodies(analysis);
         results.send(copy(analysis));
         client.wake();
+        var handed = (os.Instant.now() - handing).nanoseconds() / 1000000;
+        client.log_message(lsp.MESSAGE_LOG, $"handed {_file_name(uri)}'s analysis over in {handed} ms");
     }
 }
 
@@ -211,6 +217,54 @@ _file_name(uri: String): String {
     return slash < 0 ? uri : uri.substr_bytes(slash as ulong + 1, uri.size - slash as ulong - 1);
 }
 
+## Drops from `analysis`'s model the bodies the server's thread does not
+## read, when it holds every file's (`Analysis.bodies_read`): those of the
+## files outside the document's compilation unit, which a check on the
+## cache's records does not load either. Most of a program checked whole is
+## those bodies, so the copy that goes to the server's thread is the size of
+## the document's compilation unit, not of the program.
+##
+## @param analysis the analysis, its model changed in place
+export drop_unread_bodies(analysis: Analysis) {
+    if (analysis.bodies_read.is_empty or analysis.model.is_empty()) {
+        return;
+    }
+    var read = HashSet<ulong>();
+    for (var file in analysis.bodies_read) {
+        read.insert(file);
+    }
+    var model = analysis.model.value();
+    for (var function in model.functions) {
+        _drop_unread(function, read);
+    }
+    for (var st in model.structs) {
+        for (var function in st.constructors) {
+            _drop_unread(function, read);
+        }
+        for (var function in st.method_members) {
+            _drop_unread(function, read);
+        }
+        for (var function in st.generic_methods) {
+            _drop_unread(function, read);
+        }
+        _drop_unread(st.destructor, read);
+        _drop_unread(st.acquire, read);
+        _drop_unread(st.release, read);
+    }
+    for (var extension in model.extensions) {
+        for (var function in extension.methods) {
+            _drop_unread(function, read);
+        }
+    }
+}
+
+# Drops `function`'s body unless it is in a file of `read`.
+_drop_unread(function: sema.FunctionDef, read: HashSet<ulong>) {
+    if (!read.contains(function.loc.file as ulong)) {
+        sema.drop_body(function);
+    }
+}
+
 ## What analyzing a document found.
 export struct Analysis {
     ## The document.
@@ -237,6 +291,10 @@ export struct Analysis {
     ## How it went, for the log: "passed", "found an error", "did not
     ## load" or "did not parse".
     var outcome: String;
+    ## The files whose bodies the server's thread reads, those of the
+    ## document's compilation unit, when `model` holds the bodies of every
+    ## file (the program checked whole); empty when it holds only those.
+    var bodies_read: ulong[];
 
     construct(uri: String, text: String) {
         this.uri = uri;
@@ -250,6 +308,7 @@ export struct Analysis {
         this.os = "";
         this.files = 0;
         this.outcome = "did not load";
+        this.bodies_read = Array<ulong>();
     }
 }
 
@@ -371,7 +430,8 @@ export analyze(
         options,
         workers,
         filling,
-        warnings
+        warnings,
+        out.bodies_read
     );
     # Warnings of the program's files, and of its own compilation unit's
     # checking.
@@ -539,7 +599,9 @@ export struct Filling {
 
 # Checks `program`, whose compilation units are `units`, up to `own`, the
 # document's (the last when none), as `analyze` describes. The document is
-# `root`, whose text is `text`, in the project `folder`.
+# `root`, whose text is `text`, in the project `folder`. A model of the
+# program checked whole holds every file's bodies: then the files of the
+# document's compilation unit go to `bodies_read`.
 _check(
     program: link.Program,
     units: incremental.CompilationUnit[],
@@ -551,7 +613,8 @@ _check(
     build_options: HashMap<String, String>,
     workers: bool,
     filling: Filling,
-    warnings: Diagnostic[]
+    warnings: Diagnostic[],
+    bodies_read: ulong[]
 ): Result<incremental.Checked, incremental.CheckError> {
     # A runtime that cannot be checked alone has no compilation units.
     if (units.is_empty) {
@@ -567,6 +630,7 @@ _check(
     if (filling.running()) {
         var again = recheck_whole(program, cache, inputs, warnings);
         if (again.is_value()) {
+            bodies_read.append_all(units[below].files);
             return again.value();
         }
         filling.wait();
@@ -575,6 +639,7 @@ _check(
     # program is checked whole here while a `--fill-cache` child fills the
     # cache.
     if (_cold(units, cache, program)) {
+        bodies_read.append_all(units[below].files);
         var dir = _workers_folder(folder);
         if (_prepare_workers(dir, root, text, os_name, build_options).is_value()) {
             return check_whole(program, warnings);
