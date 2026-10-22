@@ -11,7 +11,8 @@
 ## - [BLAKE3](digest-blake3.md): `Blake3`, `blake3`, with keyed hashing,
 ##   key derivation and output of any length
 ## - [HMAC](digest-hmac.md): `Hmac`, `hmac_sha256`, `hmac_sha1`, and
-##   `equal_constant_time` to check a MAC
+##   `equal_constant_time` to check a MAC, and `pbkdf2_sha256`, PBKDF2
+##   over HMAC-SHA-256
 ## - [Hexadecimal](digest-hex.md): `to_hex` and `from_hex`
 ##
 ## The implementations are portable Pepper with no link dependency, unless
@@ -52,4 +53,5 @@ export from_hex;
 export Hmac;
 export hmac_sha256;
 export hmac_sha1;
+export pbkdf2_sha256;
 export equal_constant_time;

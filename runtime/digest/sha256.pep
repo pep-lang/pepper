@@ -59,6 +59,13 @@ export struct Sha256 {
         return out;
     }
 
+    # Replaces the contents of `out` with the digest, then resets: `finish`
+    # without allocating, for PBKDF2's rounds.
+    _finish_into(out: u8[]) {
+        out.clear();
+        _engine.finish(out);
+    }
+
     ## Returns the digest as `finish` does, written as 64 lowercase
     ## hexadecimal digits.
     ##
