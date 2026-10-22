@@ -10,6 +10,7 @@ import [JsonValue] from json;
 import compiler.link;
 import lsp;
 import compiler.parse;
+import compiler.sema;
 import "actions";
 import "analysis";
 import "arguments";
@@ -1677,7 +1678,8 @@ a_program_checked_whole_passes_or_finds_its_error() {
 # Whether `analysis`'s model has a free function `name` with its body.
 has_body(analysis: Analysis, name: String): bool {
     for (var function in analysis.model.value().functions) {
-        if (function.name == name) {
+        # Linking names a module's function `name@module`.
+        if (function.name == name or function.name.starts_with(name + "@")) {
             return function.body.is_value();
         }
     }
@@ -1693,9 +1695,14 @@ an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
     var text = "import \"other\";\nmain(): int {\n    return twice(1);\n}\n";
     var uri = fresh_file(test, "main.pep", text);
     temp_file_in(test, "other.pep", "export twice(x: int): int {\n    return x * 2;\n}\n");
-    var analysis = analyze(uri, text);
-    expect_equal(outcome_of(analysis), "passed");
-    # Checked a compilation unit at a time: nothing to drop.
+    var setup = link.Setup();
+    setup.defer_bodies = true;
+    var program = link.load_program(Path(lsp.uri_to_path(uri).value()), setup).value();
+    var checked = check_whole(program, Array<Diagnostic>());
+    expect_true(checked.is_ok());
+    var analysis = Analysis(uri, text);
+    analysis.model = Optional<sema.Module>.Value(checked.value().module);
+    # No files named: nothing to drop.
     drop_unread_bodies(analysis);
     expect_true(has_body(analysis, "main") and has_body(analysis, "twice"));
     analysis.bodies_read.append(0);

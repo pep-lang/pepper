@@ -260,6 +260,11 @@ export drop_unread_bodies(analysis: Analysis) {
             _drop_unread(function, read);
         }
     }
+    for (var declared in model.traits) {
+        for (var function in declared.methods) {
+            _drop_unread(function, read);
+        }
+    }
 }
 
 # Drops `function`'s body unless it is in a file of `read`.
