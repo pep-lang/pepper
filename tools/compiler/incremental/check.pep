@@ -1146,7 +1146,8 @@ _print_record_stats(name: String, base: sema.DeltaBase) {
     }
 }
 
-## Prints how long each stage of a build took (`-T time`).
+## Prints how long each stage of a build took, and the process's peak memory
+## after it (`-T time`).
 export struct Clock {
     ## Whether it prints.
     var on: bool;
@@ -1165,7 +1166,9 @@ export struct Clock {
             return;
         }
         var now = os.Instant.now();
-        File.stderr().write_all($"time: {stage} {(now - start).milliseconds()} ms\n");
+        File.stderr().write_all(
+            $"time: {stage} {(now - start).milliseconds()} ms, peak {os.peak_memory() / 1048576} MB\n"
+        );
         start = now;
     }
 }

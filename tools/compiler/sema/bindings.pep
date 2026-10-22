@@ -3,6 +3,7 @@
 ## struct's const fields also in its constructors).
 
 import [Location] from compiler.diagnostic;
+import [unit_decls] from "checked";
 import "closures";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
@@ -111,10 +112,14 @@ export check_bindings(module: Module, state: PassState) {
     for (var v in module.globals) {
         globals.append(_local_binding(v));
     }
-    for (var function in module.functions) {
+    # A checked declaration's bindings were checked with its compilation
+    # unit: walking the whole closure again made this the slowest pass of a
+    # unit's check (#167).
+    var own = unit_decls(module);
+    for (var function in own.functions) {
         _check_function(state, function, globals, Array<_LocalBinding>());
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         var fields = Array<_LocalBinding>();
         var unconstrained = Array<_LocalBinding>();
         for (var f in st.field_members) {
@@ -135,8 +140,8 @@ export check_bindings(module: Module, state: PassState) {
     # global; an assignment to a global there goes unreported until
     # extensions are checked with their target's fields.
     var none = Array<_LocalBinding>();
-    for (var extension in module.extensions) {
-        for (var method in extension.methods) {
+    for (var e in module.checked.extensions..module.extensions.count) {
+        for (var method in module.extensions[e].methods) {
             _check_function(state, method, none, none);
         }
     }

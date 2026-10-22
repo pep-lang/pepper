@@ -31,6 +31,10 @@ extern int GlobalMemoryStatusEx(void* status);
 [Target(OS(Windows))]
 extern void GetSystemInfo(void* info);
 [Target(OS(Windows))]
+extern void* GetCurrentProcess();
+[Target(OS(Windows))]
+extern int K32GetProcessMemoryInfo(void* process, void* counters, uint size);
+[Target(OS(Windows))]
 [Link("ntdll")]
 extern int RtlGetVersion(void* info);
 [Target(OS(Windows))]
@@ -188,6 +192,21 @@ _os_sys_total_memory(): ulong {
         bytes = fields[1];
     }
     _pep_free(status);
+    return bytes;
+}
+
+# PROCESS_MEMORY_COUNTERS: cb and PageFaultCount, then PeakWorkingSetSize
+# at byte 8 (72 bytes in all).
+[Target(OS(Windows))]
+_os_sys_peak_memory(): ulong {
+    __ptr<uint> counters = _pep_malloc(72);
+    counters[0] = 72;
+    var bytes: ulong = 0;
+    if (K32GetProcessMemoryInfo(GetCurrentProcess(), counters, 72) != 0) {
+        __ptr<ulong> fields = unsafe_cast<__ptr<ulong>>(counters);
+        bytes = fields[1];
+    }
+    _pep_free(counters);
     return bytes;
 }
 

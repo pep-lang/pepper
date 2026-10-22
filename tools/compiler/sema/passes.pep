@@ -181,9 +181,12 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
         }
     }
     steps.report();
-    # The checked declarations' tables hold signatures that hold the state:
-    # let them go with the run.
+    # The checked declarations' tables and members hold signatures
+    # (`GenericSignature`) that hold the state: let them go with the run, or
+    # the cycle keeps the state, and every checked declaration it reaches,
+    # alive after it (a compilation unit worker kept every unit's, #167).
     state.checked_implicit = Optional<PassMemo>.Empty;
+    state.trait_memo.members = HashMap<String, PassMemo>();
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
         return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));

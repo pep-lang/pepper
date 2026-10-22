@@ -46,6 +46,7 @@ pep-test [options] [path]...
 | `-I <dir>`, `--import-path <dir>` | A folder `pep-build` searches for imports; repeatable | |
 | `-L <dir>`, `--library-path <dir>` | A folder the linker searches for libraries, for `pep-build`; repeatable | |
 | `-D <option>`, `--define <option>` | A [build option](../language/build-options.md) for `pep-build`, `NAME` or `NAME=VALUE`; repeatable | |
+| `--build-environment <name>=<value>` | Sets an environment variable for each `pep-build` that builds a test program, and not for the tests, which run with `pep-test`'s environment; repeatable. For example, `--build-environment PEPC_NO_COMPILATION_UNITS=1` builds each test program as one, while tests that build programs of their own still use compilation units | |
 | `--locked` | Passed to `pep-build`: fail, rather than fetch, when the project's `pep.lock` is out of date (also `PEPPER_LOCKED=1`) | |
 | `--offline` | Passed to `pep-build`: fetch nothing over the network, building with what `.pep/deps` holds (also `PEPPER_OFFLINE=1`) | |
 | `--frozen` | Both `--locked` and `--offline` | |
