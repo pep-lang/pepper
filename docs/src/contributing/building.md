@@ -94,6 +94,15 @@ that file. With a valid install present it only rewrites the file, and
 `./scripts/setup-llvm.sh --check` reports what it would use, changing
 nothing.
 
+CI provisions LLVM with `scripts/ci-provision-llvm.sh`, through
+`.github/actions/provision-llvm`. On Linux, apt's 89 MB of packages come
+from the runner's Ubuntu mirror, which on a slow day took longer than the
+step's 15 minutes, so the action caches the `.deb` files apt downloaded
+(keyed on `scripts/setup-llvm.sh` and the Ubuntu release) and the script
+installs them with no download. Only main's runs save that cache. A set
+apt cannot install, or a miss, installs from the mirror, retrying a
+download that stalls for 30 seconds.
+
 Only the Windows archive path is large: budget roughly **5 GB** of disk for
 the tree plus its cached archive, and a few minutes for the first run.
 Everything lands outside the repository, under `%LOCALAPPDATA%\pepper` or

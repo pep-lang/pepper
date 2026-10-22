@@ -15,6 +15,14 @@
 #
 # which is why nothing here downloads an 11.6 GB tarball any more.
 #
+# On Linux those 4-8s are the runner's Ubuntu mirror on a good day: a slow
+# one once took longer than the step's 15 minutes for the 89 MB of .deb
+# files (#194). So with PEPPER_CI_LLVM_DEBS naming a folder
+# (.github/actions/provision-llvm caches it), the .deb files in it are
+# installed with no download, and when it holds none, the ones apt
+# downloads are copied into it for the cache to save. A cached set apt
+# cannot install (the image moved on) falls back to the mirror.
+#
 # Either way this ends by running the normal setup script, which validates the
 # prefix and writes .pep/llvm-prefix, so there is one source of truth for how
 # the scripts find LLVM. The LLVM is the one the setup scripts pin (LLVM 20).
@@ -23,6 +31,30 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
+
+# PEPPER_CI_LLVM_DEBS: install the cached .deb files, or fill the cache.
+if [ "$(uname -s)" = Linux ] && [ -n "${PEPPER_CI_LLVM_DEBS:-}" ]; then
+  debs=$PEPPER_CI_LLVM_DEBS
+  archives=/var/cache/apt/archives
+  list_debs() { find "$1" -maxdepth 1 -name '*.deb' 2>/dev/null | sort; }
+  if [ -n "$(list_debs "$debs")" ]; then
+    echo "Installing LLVM's packages from the cache in $debs:"
+    list_debs "$debs"
+    # --no-download: a package the cache lacks fails here, and the setup
+    # script then installs from the mirror, as on a miss.
+    sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-download "$debs"/*.deb \
+      || echo "The cached packages did not install; installing from the mirror." >&2
+    exec bash scripts/setup-llvm.sh
+  fi
+  echo "No cached LLVM packages in $debs; installing from the mirror."
+  before=$(list_debs "$archives")
+  bash scripts/setup-llvm.sh
+  mkdir -p "$debs"
+  comm -13 <(printf '%s\n' "$before") <(list_debs "$archives") | xargs -r cp -t "$debs"
+  echo "Cached for the next run, in $debs:"
+  list_debs "$debs"
+  exit 0
+fi
 
 case "$(uname -s)" in
   Darwin|Linux)
