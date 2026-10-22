@@ -75,8 +75,8 @@ memory() {
       page="$(sysctl -n hw.pagesize)"
       total=$(($(sysctl -n hw.memsize) / 1024))
       avail="$(vm_stat | awk -v p="$page" '/Pages (free|inactive|speculative)/ { gsub(/\./, "", $NF); n += $NF } END { print int(n * p / 1024) }')"
-      # "total = 2048.00M  used = 1024.00M  free = 1024.00M  ..."
-      swap="$(sysctl -n vm.swapusage | awk '{ gsub(/M/, ""); print int($3 * 1024), int($9 * 1024) }')"
+      # "total = 2048.00M  used = 1024.00M  free = 1024.00M  ...", or G
+      swap="$(sysctl -n vm.swapusage | awk 'function kb(v) { return int(v * (v ~ /G/ ? 1048576 : 1024)) } { print kb($3), kb($9) }')"
       echo "$total $avail $swap"
       ;;
     *)
