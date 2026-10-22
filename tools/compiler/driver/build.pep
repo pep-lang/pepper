@@ -20,6 +20,7 @@ import [
     compilation_units,
     merged_module,
     render_warnings,
+    nothing_reused,
     reuse,
     reuse_after_sema,
     Reused,
@@ -646,6 +647,15 @@ _compilation_unit_jobs(options: BuildOptions): ulong {
     return options.compilation_unit_jobs != 0 ? options.compilation_unit_jobs : async.logical_cpus();
 }
 
+# Whether the build checks and compiles `units` in compilation unit workers
+# (`_check_in_workers`).
+_in_workers(options: BuildOptions, units: CompilationUnit[]): bool {
+    return units.count > 2
+        and _compilation_unit_jobs(options) > 1
+        and !options.in_process
+        and !options.worker_args.is_empty;
+}
+
 # Checks every compilation unit but the last, the program's own, in up to `jobs`
 # `--compilation-unit-worker` children (`incremental.check_in_workers`), each of
 # which also compiles the compilation unit into its object, and puts in
@@ -759,8 +769,8 @@ export compilation_unit_worker(program: link.Program, options: BuildOptions, dir
     var translation_units = link.translation_units(program);
     var keys = Keys(program, translation_units, _build_text(options, triple));
     clock.lap("worker keys");
-    var triple_extension = _object_extension(options, triple);
-    var reused = Optional<Reused>.Value(reuse(program, translation_units, keys, cache, triple_extension));
+    # Its build links only compilation units' objects (`nothing_reused`).
+    var reused = Optional<Reused>.Value(nothing_reused(program, translation_units));
     clock.lap("worker reuse");
     var units = compilation_units(program, keys.base());
     clock.lap("worker compilation units");
@@ -870,16 +880,6 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # With LTO each part is bitcode, which the cache keeps as it keeps an
     # object.
     var triple_extension = _object_extension(options, triple);
-    # The units whose objects the cache has: sema skips their bodies.
-    var reused = Optional<Reused>.Empty;
-    if (keys.is_value()) {
-        reused = Optional<Reused>.Value(
-            reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension)
-        );
-        clock.lap("reuse");
-    }
-
-    var sources = program.sources();
     var units = Array<CompilationUnit>();
     # Debug info holds the positions a compilation unit's key leaves out, so a
     # build with `-g` keys each unit by its text (`Keys.exact_positions`)
@@ -887,6 +887,19 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
         units = compilation_units(program, keys.value().base());
     }
+    # The units whose objects the cache has: sema skips their bodies. A build
+    # in workers links only compilation units' objects, so it skips none.
+    var reused = Optional<Reused>.Empty;
+    if (keys.is_value()) {
+        reused = Optional<Reused>.Value(
+            _in_workers(options, units) ?
+                nothing_reused(program, translation_units) :
+                reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension)
+        );
+        clock.lap("reuse");
+    }
+
+    var sources = program.sources();
     # Checking compilation units links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
     if (units.count <= 1) {
@@ -911,8 +924,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var last_folder = Optional<Path>.Empty;
     if (units.count > 1) {
         var prechecked = HashMap<ulong, (u8[], String, String)>();
-        var jobs = _compilation_unit_jobs(options);
-        if (jobs > 1 and units.count > 2 and !options.in_process and !options.worker_args.is_empty) {
+        if (_in_workers(options, units)) {
+            var jobs = _compilation_unit_jobs(options);
             var parallel = _check_in_workers(program, units, options, jobs, prechecked, object_keys, last_below);
             if (parallel.is_err()) {
                 return Result<Built, String>.err(parallel.error());

@@ -131,6 +131,27 @@ reports_a_file_that_does_not_build() {
 }
 
 [Test]
+sets_the_build_environment_for_the_builds_only() {
+    var folder = TempFolder("pep_test_build_environment");
+    write_file(
+        folder.path.join("env_test.pep"),
+        "import os;\n\n[Test]\nsees_no_build_variable() {\n    expect_true(os.environment(\"PEP_TEST_BUILD_ONLY\").is_empty());\n}\n"
+    );
+    var ran = pep_test(folder.path, ["--build-environment", "PEP_TEST_BUILD_ONLY=1"]);
+    expect_exit(ran, 0);
+    expect_ends_with(ran.stdout, "1 passed, 0 failed\n");
+
+    # pep-build reads the variable.
+    var built = pep_test(folder.path, ["--build-environment", "PEPPER_OPT_LEVEL=9"]);
+    expect_exit(built, 1);
+    expect_contains(built.stdout + built.stderr, "PEPPER_OPT_LEVEL is '9'");
+
+    var wrong = pep_test(folder.path, ["--build-environment", "=1"]);
+    expect_exit(wrong, 2);
+    expect_contains(wrong.stderr, "'--build-environment' must be NAME=VALUE, not '=1'");
+}
+
+[Test]
 reports_a_test_that_leaks_or_over_releases() {
     # The runner counts live allocations around each test body
     # (runtime/testing/runner.pep): one left behind, or one freed that the
