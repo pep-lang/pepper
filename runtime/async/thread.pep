@@ -148,17 +148,17 @@ export struct Thread {
     ## `Thread.current()` is the `Thread` returned here.
     ##
     ## The stack the operating system gives a thread by default differs:
-    ## 8 MiB on Linux, 1 MiB on Windows, and 512 KiB on macOS. A thread
-    ## that recurses deeply, such as one walking a deeply nested tree,
-    ## passes `stack_size` to get the same stack everywhere. The stack is
-    ## reserved address space; memory is used only as the thread reaches
-    ## it.
+    ## usually 8 MiB on Linux (`ulimit -s`), 1 MiB on Windows, and 512 KiB
+    ## on macOS. A thread that recurses deeply, such as one walking a
+    ## deeply nested tree, passes `stack_size` to get the same stack
+    ## everywhere. The stack is reserved address space; memory is used
+    ## only as the thread reaches it.
     ##
     ## @param body the function to run on the new thread
     ## @param name a name for the thread, returned by `name()`; empty by default
     ## @param stack_size the bytes of stack the thread gets, rounded up to 64 KiB; 0, the default, for the system's default
     ## @returns the new thread, to `join()` or query
-    ## @panics if the operating system cannot create another thread
+    ## @panics if the operating system cannot create another thread, or refuses `stack_size`
     ## @example
     ##     var worker = Thread.spawn(do_work, "worker");
     ##     worker.join();

@@ -111,11 +111,11 @@ The new thread starts right away and runs until `body` returns. Its
 `Thread.current()` is the `Thread` returned here.
 
 The stack the operating system gives a thread by default differs:
-8 MiB on Linux, 1 MiB on Windows, and 512 KiB on macOS. A thread
-that recurses deeply, such as one walking a deeply nested tree,
-passes `stack_size` to get the same stack everywhere. The stack is
-reserved address space; memory is used only as the thread reaches
-it.
+usually 8 MiB on Linux (`ulimit -s`), 1 MiB on Windows, and 512 KiB
+on macOS. A thread that recurses deeply, such as one walking a
+deeply nested tree, passes `stack_size` to get the same stack
+everywhere. The stack is reserved address space; memory is used
+only as the thread reaches it.
 
 **Parameters**
 - `body` — the function to run on the new thread
@@ -126,7 +126,7 @@ it.
 - the new thread, to `join()` or query
 
 **Panics**
-- if the operating system cannot create another thread
+- if the operating system cannot create another thread, or refuses `stack_size`
 
 **Example**
 ```pepper
