@@ -182,6 +182,12 @@ fixtures = { github = "someone/fixtures", version = "1" }
 - **Locked with the rest:** `pep.lock` records them beside the other
   packages, each that only dev-dependencies lead to marked `dev = true`,
   and `pepper build` fetches them with the rest.
+- **Needs toolchain 0.11.0:** an older toolchain rejects a `pep.toml` with
+  `[dev-dependencies]` as an unknown table, a dependency's included. So a
+  package that has one sets `minimum_toolchain = "0.11.0"` (or later) in
+  `[package]`, and `pepper package` on an older toolchain skips its
+  versions instead of failing to build them. `pepper package publish`
+  checks it (see [pep-package](pep-package.md#publish)).
 
 `pepper package add --dev` adds one, and `pepper package remove` removes one
 from either table (see [pep-package](pep-package.md#add-ownernamerange)). A

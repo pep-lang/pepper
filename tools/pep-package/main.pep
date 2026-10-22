@@ -12,6 +12,7 @@
 #     pepper package update --verify            # one at a time, keeping those that build
 #     pepper package fetch --locked             # fail rather than change pep.lock
 #     pepper package fetch --offline            # only what .pep/deps holds; --frozen is both
+#     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
 #
 # Build it from the repository root; its pep.toml names the toml package it
 # needs, which `pepper build` fetches:
@@ -22,9 +23,11 @@ import cli;
 import [Directory, File, Path] from io;
 import os;
 import process;
+import semver;
 import [parse_range] from semver;
 import syntax;
 import toml;
+import toolchain;
 import "git";
 import "lock";
 import "manifest";
@@ -75,6 +78,10 @@ main(args: String[]): int {
     var verify = update.flag(
         "verify", help = "update one dependency at a time and build after each, keeping only the updates that build"
     );
+    var publish = parser.command(
+        "publish", "Checks the package and runs its tests, then tags its version and pushes the tag"
+    );
+    var dry_run = publish.flag("dry-run", help = "check and test, but neither tag nor push");
     if (!parser.parse(args)) {
         return 2;
     }
@@ -99,6 +106,9 @@ main(args: String[]): int {
         return verify.is_set ?
             project.update_verified(update_packages.values()) :
             project.update(update_packages.values());
+    }
+    if (publish.is_selected) {
+        return project.publish(dry_run.is_set);
     }
     print(parser.help());
     return 2;
@@ -592,15 +602,169 @@ struct Project {
                 compiler = beside.to_string();
             }
         }
-        var built = process.Command(compiler).working_directory(dir).run();
-        if (built.is_err()) {
-            say($"cannot run {compiler}: {built.error().message}");
+        return _succeeds(process.Command(compiler).working_directory(dir));
+    }
+
+    # Runs `command`, and whether it succeeded; prints what it printed when
+    # it did not.
+    _succeeds(command: process.Command): bool {
+        var ran = command.run();
+        if (ran.is_err()) {
+            say($"cannot run {command.program}: {ran.error().message}");
             return false;
         }
-        if (!built.value().status.success()) {
-            File.stderr().write_all(built.value().stderr);
+        if (!ran.value().status.success()) {
+            File.stderr().write_all(ran.value().stdout);
+            File.stderr().write_all(ran.value().stderr);
             return false;
         }
         return true;
     }
+
+    # Checks that the package is ready to release at pep.toml's `version`
+    # and runs its tests with its `minimum_toolchain` and the newest
+    # toolchain installed; then, unless `dry_run`, tags the commit
+    # `v<version>` and pushes the tag to `origin`.
+    publish(dry_run: bool): int {
+        if (offline) {
+            return fail(
+                "--offline, and publishing reads and pushes to the repository's remote; run 'pepper package publish' without --offline (or PEPPER_OFFLINE)"
+            );
+        }
+        var manifest = read_manifest(manifest_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        # read_manifest parsed it already.
+        var root = toml.parse(manifest.value().text).value();
+        var problems = Array<String>();
+        var package_version = _package_string(root, "version");
+        var parsed = semver.parse(package_version);
+        if (package_version.is_empty) {
+            problems.append("'[package]' has no 'version'");
+        } else if (parsed.is_err()) {
+            problems.append($"'version' '{package_version}' is not a version such as 1.2.0");
+        }
+        for (var key in ["description", "license", "repository"]) {
+            if (_package_string(root, key).is_empty) {
+                problems.append($"'[package]' has no '{key}'");
+            }
+        }
+        for (var requirement in manifest.value().requirements) {
+            # A dependent ignores dev-dependencies, so they may be anything.
+            if (requirement.dev or (requirement.kind == "version" and !requirement.is_path())) {
+                continue;
+            }
+            var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
+            problems.append(
+                $"dependency '{requirement.name}' names {what}, not a version range, so a dependent cannot resolve it"
+            );
+        }
+        var minimum = manifest.value().minimum_toolchain;
+        for (var (key, release) in newer_manifest_features()) {
+            if (root.lookup(key).is_value() and !_at_least(minimum, release)) {
+                problems.append(
+                    $"'{key}' needs toolchain {release}, and older ones reject it; set '[package]' minimum_toolchain = \"{release}\" or later"
+                );
+            }
+        }
+        var at = dir.to_string();
+        var changes = git(["status", "--porcelain"], at);
+        if (changes.is_err()) {
+            return fail(changes.error().message);
+        }
+        if (!changes.value().trim().is_empty) {
+            problems.append("the work tree has changes that are not committed:\n    " + changes.value().trim());
+        }
+        var head = git(["rev-parse", "HEAD"], at);
+        if (head.is_err()) {
+            return fail(head.error().message);
+        }
+        var commit = head.value().trim();
+        var refs = remote_refs("origin", at);
+        if (refs.is_err()) {
+            return fail(refs.error().message);
+        }
+        var newest = Optional<semver.Version>.Empty;
+        var has_head = false;
+        for (var ref in refs.value()) {
+            has_head = has_head or ref.name == "HEAD";
+            if (ref.name == "HEAD" and ref.commit != commit) {
+                problems.append(
+                    $"HEAD ({commit.substr(0, 12)}) is not the tip of origin's default branch ({ref.commit.substr(0, 12)}); push it, or check that branch out"
+                );
+            }
+            if (ref.name.starts_with("refs/tags/")) {
+                var tagged = tag_version(ref.name.substr(10, ref.name.length));
+                if (tagged.is_value() and (newest.is_empty() or tagged.value().compare(newest.value()) > 0)) {
+                    newest = tagged;
+                }
+            }
+        }
+        if (!has_head) {
+            problems.append("origin has no default branch (HEAD), so nothing shows the commit is pushed; push one");
+        }
+        if (parsed.is_ok() and newest.is_value() and parsed.value().compare(newest.value()) <= 0) {
+            problems.append(
+                $"'version' {package_version} is not newer than the newest tag, {newest.value().to_string()}; raise it in pep.toml"
+            );
+        }
+        var name = manifest.value().name;
+        if (!problems.is_empty) {
+            return fail($"cannot publish {name} {package_version}:\n  " + "\n  ".join(problems));
+        }
+        # The home's own `pepper`, by its path: only it picks toolchains with
+        # `+`, and a search by name may find another (Windows looks beside
+        # this program before the PATH).
+        var pepper = toolchain.find_home().root.join("bin").join("pepper" + toolchain.executable_suffix());
+        if (!pepper.is_file()) {
+            return fail(
+                $"publish tests with the Pepper home's pepper, and {pepper.to_string()} does not exist; install Pepper with pep-install, or set PEPPER_HOME to its home"
+            );
+        }
+        var releases = minimum.is_empty ? ["latest"] : [minimum, "latest"];
+        for (var release in releases) {
+            say($"running 'pepper +{release} test'");
+            if (!_succeeds(
+                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(dir)
+            )) {
+                return fail($"'pepper +{release} test' failed, so {name} {package_version} is not published");
+            }
+        }
+        var tag = "v" + package_version;
+        if (dry_run) {
+            say(
+                $"{name} {package_version} is ready: without --dry-run, publish tags {commit.substr(0, 12)} {tag} and pushes it"
+            );
+            return 0;
+        }
+        var tagged = git(["tag", tag], at);
+        if (tagged.is_err()) {
+            return fail(tagged.error().message);
+        }
+        var pushed = git(["push", "--quiet", "origin", "refs/tags/" + tag], at);
+        if (pushed.is_err()) {
+            # Leave no tag behind that a retry would trip over.
+            git(["tag", "-d", tag], at);
+            return fail(pushed.error().message);
+        }
+        say($"published {name} {package_version}: tagged {commit.substr(0, 12)} {tag} and pushed it to origin");
+        return 0;
+    }
+}
+
+# The string `[package]` gives `key`, or empty.
+_package_string(root: toml.TomlValue, key: String): String {
+    var value = root.lookup("package." + key);
+    if (value.is_empty() or value.value().as_string().is_empty()) {
+        return "";
+    }
+    return value.value().as_string().value();
+}
+
+# Whether `minimum`, a `minimum_toolchain`, is `release` or later; an empty
+# or malformed one is not.
+_at_least(minimum: String, release: String): bool {
+    var given = semver.parse(minimum);
+    return given.is_ok() and given.value().compare(semver.parse(release).value()) >= 0;
 }

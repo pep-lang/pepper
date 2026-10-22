@@ -157,6 +157,14 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
     return Result<Manifest>.Ok(manifest);
 }
 
+# What a pep.toml may use that an older toolchain rejects as unknown: each
+# table or key, as `toml`'s `lookup` names it, and the first release that
+# reads it. A package using one sets `minimum_toolchain` to that release
+# or later, which `publish` checks.
+export newer_manifest_features(): Array<(String, String)> {
+    return [("dev-dependencies", "0.11.0")];
+}
+
 # One `[dependencies]` or `[dev-dependencies]` entry.
 _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement> {
     var fields = value.as_table();
