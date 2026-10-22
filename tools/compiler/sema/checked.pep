@@ -36,6 +36,7 @@ export stash_bodies(module: Module, state: PassState) {
                 _take_body(state, key, function);
             }
         }
+        state.trait_memo.bodies_back = false;
         return;
     }
     for (var f in module.functions) {
@@ -206,6 +207,28 @@ export unit_decls(module: Module): UnitDecls {
     }
     module.own_decls = Optional<UnitDecls>.Value(out);
     return out;
+}
+
+## How many fields and methods `module`'s checked structs have, which tells
+## whether one changed: the counts over every struct less those over the
+## unit's own (`unit_decls`), so only the unit's own structs are looked up.
+##
+## @param module the module
+## @returns the fields and the methods
+export checked_member_counts(module: Module): (ulong, ulong) {
+    ulong fields = 0;
+    ulong methods = 0;
+    for (var st in module.structs) {
+        fields += st.field_members.count;
+        methods += st.method_members.count;
+    }
+    for (var st in unit_decls(module).structs) {
+        if (!module.checked.structs.contains(st.name)) {
+            fields -= st.field_members.count;
+            methods -= st.method_members.count;
+        }
+    }
+    return (fields, methods);
 }
 
 ## The checked declarations of `module` by name (`CheckedDecls`), built on

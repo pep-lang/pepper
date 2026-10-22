@@ -9,6 +9,7 @@
 import [demangle_name] from compiler.link;
 import [int_literal_type, is_numeric_type] from "arithmetic";
 import [has_bare_attribute, IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
+import [unit_decls] from "checked";
 import [
     for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
@@ -1499,7 +1500,7 @@ export struct FunctionValueSearch {
         this.module = module;
         this.state = state;
         this.trait_types = trait_types;
-        this.filter = _CandidateNames(module);
+        this.filter = _CandidateNames(module, state);
     }
 
     ## The overloads, built on first use: most runs find no site to bind.
@@ -1522,26 +1523,50 @@ export struct FunctionValueSearch {
 struct _CandidateNames {
     var sets: HashSet<String> = HashSet<String>();
     var method_set_names: HashSet<String> = HashSet<String>();
+    # The checked structs' names, found once per unit
+    # (`TraitTypeMemo.candidates`): a checked struct only gains methods, and
+    # then it is one of the unit's own (`unit_decls`) too.
+    var _base: _CandidateNames? = Optional<_CandidateNames>.Empty;
 
-    construct(module: Module) {
+    construct() {}
+
+    construct(module: Module, state: PassState) {
         for (var (set, _) in module.overload_sets) {
             sets.insert(set);
         }
-        for (var st in module.structs) {
-            for (var method in st.method_members) {
-                _method(method.name);
+        var memo = state.trait_memo;
+        bool checked = module.checked.structs.count > 0;
+        if (checked and !memo.candidates.is_value()) {
+            var base = _CandidateNames();
+            for (var st in module.structs) {
+                if (module.checked.structs.contains(st.name)) {
+                    base._struct(st);
+                }
             }
-            for (var method in st.generic_methods) {
-                _method(method.name);
-            }
-            if (!(st.ty.is_generic() and st.name == st.ty.name) and st.constructors.count > 1) {
-                sets.insert(st.ty.to_string());
-            }
+            memo.candidates = Optional<PassMemo>.Value(base);
+        }
+        if (checked) {
+            _base = memo.candidates.value() as? _CandidateNames;
+        }
+        for (var st in unit_decls(module).structs) {
+            _struct(st);
         }
         for (var t in module.traits) {
             for (var method in t.methods) {
                 _method(method.name);
             }
+        }
+    }
+
+    _struct(st: StructDef) {
+        for (var method in st.method_members) {
+            _method(method.name);
+        }
+        for (var method in st.generic_methods) {
+            _method(method.name);
+        }
+        if (!(st.ty.is_generic() and st.name == st.ty.name) and st.constructors.count > 1) {
+            sets.insert(st.ty.to_string());
         }
     }
 
@@ -1555,10 +1580,12 @@ struct _CandidateNames {
     wants(e: Expression): bool {
         match (e) {
             SymbolRef(node) => {
-                return node.ty.contains_auto() and sets.contains(node.id);
+                return node.ty.contains_auto()
+                    and (sets.contains(node.id) or (_base.is_value() and _base.value().sets.contains(node.id)));
             }
             MemberRef(node) => {
-                return method_set_names.contains(_method_set_name(node.name));
+                var set = _method_set_name(node.name);
+                return method_set_names.contains(set) or (_base.is_value() and _base.value().method_set_names.contains(set));
             }
             else => {}
         }
@@ -1567,6 +1594,7 @@ struct _CandidateNames {
 }
 
 extend _CandidateNames with SiteFilter;
+extend _CandidateNames with PassMemo;
 
 ## What `bind_function_values` looks for in `module`, if it has overloads.
 ##

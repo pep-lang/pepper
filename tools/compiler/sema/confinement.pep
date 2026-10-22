@@ -940,6 +940,7 @@ struct _Confinement {
             return none;
         }
         body.function.body = stashed;
+        state.trait_memo.bodies_back = true;
         _by_key()[key] = body;
         _restored[key] = body;
         bodies.insert(key);

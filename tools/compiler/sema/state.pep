@@ -215,6 +215,10 @@ export struct PassState {
     ## once per unit: an `ImplicitTables`, as `resolve_implicit_types`
     ## keeps it.
     var checked_implicit: PassMemo? = Optional<PassMemo>.Empty;
+    ## What a pass found in the checked declarations, by pass, built once
+    ## per compilation unit (`resolve_implicit_types`, `check_interpolations`,
+    ## ...): those stay as they are while the passes run.
+    var unit_memos: HashMap<String, PassMemo> = HashMap<String, PassMemo>();
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
@@ -401,11 +405,17 @@ export struct TraitTypeMemo {
     ## Each checked struct's overloaded methods for `Overloads`, by name,
     ## as `overload_select` keeps them.
     var members: HashMap<String, PassMemo> = HashMap<String, PassMemo>();
+    ## The names the checked structs' methods and constructors make
+    ## overload sets of, as `overload_select` keeps them.
+    var candidates: PassMemo? = Optional<PassMemo>.Empty;
     var checked_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
     ## Whether the checked declarations' bodies are stashed: from
     ## `stash_bodies` to `restore_bodies`. While they are, `used_trait_types`
     ## looks through the checked declarations once, into `checked_types`.
     var stashed: bool = false;
+    ## Whether `check_confinement` put a checked function's body back since
+    ## the bodies were stashed.
+    var bodies_back: bool = false;
     ## What `used_trait_types` found in the settled checked declarations
     ## (the trait types, and the names and types it looked through), with
     ## the checked structs it must look through each time (not settled),

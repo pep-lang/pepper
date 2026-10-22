@@ -187,6 +187,7 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
     # alive after it (a compilation unit worker kept every unit's, #167).
     state.checked_implicit = Optional<PassMemo>.Empty;
     state.trait_memo.members = HashMap<String, PassMemo>();
+    state.unit_memos = HashMap<String, PassMemo>();
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
         return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));
