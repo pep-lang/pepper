@@ -6,7 +6,7 @@
 import [FunctionDef, Module, Statement, StaticItem, StructDef, TypeName] from "model";
 import "replace_types";
 import [specialization_too_deep, rewrite_static_calls] from "specialize_structs";
-import [PassMemo, PassState] from "state";
+import [GrowingList, PassMemo, PassState] from "state";
 import [parse_type_string, replace_map] from "type_name";
 
 ## Clones each requested function specialization from its generic base.
@@ -81,57 +81,48 @@ export specialize_functions(module: Module, state: PassState) {
 
 ## What `specialize_functions` keeps for the compilation unit's next round
 ## (`PassState.unit_memos`): the structs' names and spelled types, the
-## functions' names, the first generic base of each name, each taken in up
-## to how many of its list it saw, and how many specs were done. Specs only
-## grow, at the end: a spec done is made, or cannot be, for good.
+## functions' names, the first generic base of each name, and how many specs
+## were done. Specs only grow, at the end: a spec done is made, or cannot
+## be, for good.
 struct _FunctionSpecsMemo {
     var structs: HashSet<String> = HashSet<String>();
     var functions: HashSet<String> = HashSet<String>();
     var bases: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
     var specs_done: ulong = 0;
-    var _structs: Array<StructDef> = Array<StructDef>();
-    var _structs_in: ulong = 0;
-    var _functions: Array<FunctionDef> = Array<FunctionDef>();
-    var _functions_in: ulong = 0;
-    var _bases_of: Array<FunctionDef> = Array<FunctionDef>();
-    var _bases_in: ulong = 0;
+    var _structs: GrowingList<StructDef> = GrowingList<StructDef>();
+    var _functions: GrowingList<FunctionDef> = GrowingList<FunctionDef>();
+    var _bases_of: GrowingList<FunctionDef> = GrowingList<FunctionDef>();
 
     construct() {}
 
     ## Takes in what was added to `module` since.
     update(module: Module) {
-        if (!(_structs === module.structs) or _structs_in > module.structs.count) {
-            _structs = module.structs;
-            _structs_in = 0;
+        var (structure, fresh_structs) = _structs.since(module.structs);
+        if (fresh_structs) {
             structs = HashSet<String>();
         }
-        while (_structs_in < _structs.count) {
-            var st = _structs[_structs_in];
+        for (var at in structure..module.structs.count) {
+            var st = module.structs[at];
             structs.insert(st.name);
             structs.insert(st.ty.to_string());
-            _structs_in += 1;
         }
-        if (!(_functions === module.functions) or _functions_in > module.functions.count) {
-            _functions = module.functions;
-            _functions_in = 0;
+        var (function, fresh_functions) = _functions.since(module.functions);
+        if (fresh_functions) {
             functions = HashSet<String>();
         }
-        while (_functions_in < _functions.count) {
-            functions.insert(_functions[_functions_in].name);
-            _functions_in += 1;
+        for (var at in function..module.functions.count) {
+            functions.insert(module.functions[at].name);
         }
         var of = module.templates.frozen ? module.templates.functions : module.functions;
-        if (!(_bases_of === of) or _bases_in > of.count) {
-            _bases_of = of;
-            _bases_in = 0;
+        var (base, fresh_bases) = _bases_of.since(of);
+        if (fresh_bases) {
             bases = HashMap<String, FunctionDef>();
         }
-        while (_bases_in < _bases_of.count) {
-            var f = _bases_of[_bases_in];
+        for (var at in base..of.count) {
+            var f = of[at];
             if (f.is_generic_func and !bases.contains(f.name)) {
                 bases[f.name] = f;
             }
-            _bases_in += 1;
         }
     }
 }

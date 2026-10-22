@@ -7,7 +7,7 @@
 import compiler.ast;
 import [SHARED_ATTRIBUTE] from "builder";
 import [Module, StructDef, TypeName] from "model";
-import [PassMemo, PassState] from "state";
+import [GrowingList, PassMemo, PassState] from "state";
 import [parse_type_string, SIMD] from "type_name";
 
 ## The names of the thread-safe structs.
@@ -58,33 +58,30 @@ export struct ThreadSafeStructs {
 }
 
 ## The `[Shared]` structs and shared function types of a module, by name,
-## and its value structs, taken in up to `_taken` of `_structs`.
+## and its value structs.
 struct _SharedStructs {
     var shared: HashSet<String> = HashSet<String>();
     var values: Array<StructDef> = Array<StructDef>();
-    var _structs: Array<StructDef> = Array<StructDef>();
-    var _taken: ulong = 0;
+    var _structs: GrowingList<StructDef> = GrowingList<StructDef>();
 
     construct() {}
 
     ## Takes in the structs added to `module` since; all of them again
     ## when a pass replaced the list.
     update(module: Module) {
-        if (!(_structs === module.structs) or _taken > module.structs.count) {
-            _structs = module.structs;
-            _taken = 0;
+        var (from, fresh) = _structs.since(module.structs);
+        if (fresh) {
             shared = HashSet<String>();
             values = Array<StructDef>();
         }
-        while (_taken < _structs.count) {
-            var st = _structs[_taken];
+        for (var at in from..module.structs.count) {
+            var st = module.structs[at];
             if (ast.has_attribute(st.attributes, SHARED_ATTRIBUTE) or st.ty.is_shared_function_type()) {
                 shared.insert(st.name);
             }
             if (st.is_value() and !(st.ty.is_generic() and st.name == st.ty.name)) {
                 values.append(st);
             }
-            _taken += 1;
         }
     }
 }

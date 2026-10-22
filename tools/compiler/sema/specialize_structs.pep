@@ -28,7 +28,7 @@ import [
     Withheld
 ] from "model";
 import [set_name] from "names";
-import [PassMemo, PassState] from "state";
+import [GrowingList, PassMemo, PassState] from "state";
 import [apply_synthesized] from "synthesize";
 import [replace_map, VOID] from "type_name";
 import [method_is_static, substitute_block, value_type_key] from "value_types";
@@ -60,45 +60,39 @@ export freeze_templates(module: Module): Templates {
 
 ## What `specialize_structs` keeps for the compilation unit's next round
 ## (`PassState.unit_memos`): the structs there are, by name and by spelled
-## type, taken in up to `_structs_in` of `_structs`; the first generic base
-## of each name, of `_bases_of`; and how many specs were done. Specs only
-## grow, at the end: a spec done is made, or has no base, for good.
+## type; the first generic base of each name; and how many specs were done.
+## Specs only grow, at the end: a spec done is made, or has no base, for
+## good.
 struct _StructSpecsMemo {
     var existing: HashSet<String> = HashSet<String>();
-    var _structs: Array<StructDef> = Array<StructDef>();
-    var _structs_in: ulong = 0;
     var bases: HashMap<String, StructDef> = HashMap<String, StructDef>();
-    var _bases_of: Array<StructDef> = Array<StructDef>();
-    var _bases_in: ulong = 0;
     var specs_done: ulong = 0;
+    var _structs: GrowingList<StructDef> = GrowingList<StructDef>();
+    var _bases_of: GrowingList<StructDef> = GrowingList<StructDef>();
 
     construct() {}
 
     ## Takes in what was added to `module` since.
     update(module: Module) {
-        if (!(_structs === module.structs) or _structs_in > module.structs.count) {
-            _structs = module.structs;
-            _structs_in = 0;
+        var (structure, fresh_structs) = _structs.since(module.structs);
+        if (fresh_structs) {
             existing = HashSet<String>();
         }
-        while (_structs_in < _structs.count) {
-            var st = _structs[_structs_in];
+        for (var at in structure..module.structs.count) {
+            var st = module.structs[at];
             existing.insert(st.name);
             existing.insert(st.ty.to_string());
-            _structs_in += 1;
         }
         var of = module.templates.frozen ? module.templates.structs : module.structs;
-        if (!(_bases_of === of) or _bases_in > of.count) {
-            _bases_of = of;
-            _bases_in = 0;
+        var (base, fresh_bases) = _bases_of.since(of);
+        if (fresh_bases) {
             bases = HashMap<String, StructDef>();
         }
-        while (_bases_in < _bases_of.count) {
-            var st = _bases_of[_bases_in];
+        for (var at in base..of.count) {
+            var st = of[at];
             if (st.ty.is_generic() and !bases.contains(st.name)) {
                 bases[st.name] = st;
             }
-            _bases_in += 1;
         }
     }
 }

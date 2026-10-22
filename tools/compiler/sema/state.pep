@@ -430,6 +430,34 @@ export struct TraitTypeMemo {
     construct() {}
 }
 
+## Follows a list the passes only append to (the module's structs and
+## functions, its specs), so a table a pass keeps from it for the
+## compilation unit takes in only what was appended since it last looked: all
+## of it again when a pass replaced the list.
+##
+## @typeParam T the list's items
+export struct GrowingList<T> {
+    var _list: T[] = Array<T>();
+    var _taken: ulong = 0;
+
+    construct() {}
+
+    ## Where the items of `list` not taken in yet start, and whether that is
+    ## its first (`list` is not the list taken from before, or is shorter):
+    ## the table kept from it then starts over. Every item counts as taken
+    ## once this returns.
+    ##
+    ## @param list the list as it is now
+    ## @returns the first item not taken in, and whether the list is a new one
+    since(list: T[]): (ulong, bool) {
+        bool fresh = !(_list === list) or _taken > list.count;
+        var from = fresh ? 0 : _taken;
+        _list = list;
+        _taken = list.count;
+        return (from, fresh);
+    }
+}
+
 ## What a run of `resolve_implicit_types` leaves for the next: what each
 ## callable looked up and its fingerprint after its last walk, and the
 ## fingerprints of the declarations the walks look up.
