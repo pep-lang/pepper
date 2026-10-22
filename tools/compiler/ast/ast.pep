@@ -384,6 +384,11 @@ struct _TypeText {
             }
             at += 1;
         }
+        if (at == start and at < text.size) {
+            # A byte no spelling puts here: taken, so every loop moves on,
+            # and the result does not spell back as `text`.
+            at += 1;
+        }
         var out = TypeName(text.substr_bytes(start, at - start), span);
         if (_skip("<")) {
             while (at < text.size and !_skip(">")) {

@@ -3,6 +3,7 @@
 # parser; the curated programs of link_test, sema_test and passes_test
 # now hold the compiler to its diagnostics.
 
+import [parse_type_text, Span] from compiler.ast;
 import io;
 import [Directory, File, Path] from io;
 import compiler.parse;
@@ -67,6 +68,27 @@ parses_array_and_optional_suffixes_after_a_tuple_type() {
     expect_equal(return_type_of("f(): (a: int, b: int)[][] {}"), ("(a: int, b: int)[][]", 25 as ulong));
     expect_equal(return_type_of("f(): (int, int)[]? {}"), ("Optional<(int, int)[]>", 18 as ulong));
     expect_equal(return_type_of("f(): Box<int>[] {}"), ("Box<int>[]", 15 as ulong));
+}
+
+# `parse_type_text` reads back each type as the parser spells it, as a
+# generic method's type arguments are kept (pepper#149), and stops on text
+# no spelling makes.
+[Test]
+reads_back_a_type_as_the_parser_spells_it() {
+    for (var written in [
+        "Box<(a: int, b: int)>",
+        "(int, String)[]",
+        "Box<int>[]",
+        "HashMap<String, (int) => bool>",
+        "shared (int, int) => (x: int, y: int)",
+        "extern () => int",
+        "Optional<(int, int)[]>",
+        "__ptr<int>"
+    ]) {
+        var (spelled, _) = return_type_of("f(): " + written + " {}");
+        expect_equal(parse_type_text(spelled, Span()).to_string(), spelled);
+    }
+    expect_true(parse_type_text("a<b c>", Span()).to_string() != "a<b c>");
 }
 
 # Each statement of `source`'s first function: the type and name a local
