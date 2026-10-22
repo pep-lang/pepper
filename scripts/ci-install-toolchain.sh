@@ -47,16 +47,30 @@ esac
 
 if [ -z "$version" ]; then
   # The API lists releases newest first (by the commit each tag is on).
+  # GitHub sometimes answers it with 200 and `[]` (#196), so a failed or
+  # empty answer is tried twice more before failing with what it was.
   url="https://api.github.com/repos/pep-lang/pepper/releases?per_page=100"
   token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-  if [ -n "$token" ]; then
-    releases="$(curl -fsSL -H "Authorization: Bearer $token" "$url")"
-  else
-    releases="$(curl -fsSL "$url")"
-  fi
+  for delay in 2 5 0; do
+    # The status goes on a line of its own after the body.
+    releases="$(curl -sSL -w '\n%{http_code}' ${token:+-H "Authorization: Bearer $token"} "$url")" || releases=$'\n0'
+    status="${releases##*$'\n'}"
+    releases="${releases%$'\n'*}"
+    if [ "$status" = 200 ] && grep -q '"tag_name"' <<< "$releases"; then
+      break
+    fi
+    if [ "$delay" = 0 ]; then
+      echo "error: GET $url answered HTTP $status: $(sed -n 's/.*"message": *"\([^"]*\)".*/\1/p' <<< "$releases" | head -1)" >&2
+      echo "error: no release in its ${#releases} bytes, which start: ${releases:0:200}" >&2
+      exit 1
+    fi
+    echo "warning: GET $url answered HTTP $status (${#releases} bytes, no release); trying again in ${delay}s" >&2
+    sleep "$delay"
+  done
   # The highest version, a release sorting after its own -dev: the -dev tag
-  # goes stale whenever main holds a release's version.
-  version="$(sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*\(-dev\)\{0,1\}\)".*/\1/p' <<< "$releases" \
+  # goes stale whenever main holds a release's version. One field per line,
+  # whether the JSON comes pretty-printed or compact.
+  version="$(tr ',' '\n' <<< "$releases" | sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*\(-dev\)\{0,1\}\)".*/\1/p' \
     | awk -F'[.-]' '{ print $1, $2, $3, ($4 == "dev" ? 0 : 1), $0 }' \
     | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -d' ' -f5)"
   [ -n "$version" ] || { echo "error: no toolchain (vX.Y.Z release or vX.Y.Z-dev prerelease) is published" >&2; exit 1; }

@@ -83,18 +83,44 @@ function Get-Url([string]$Uri, [string]$OutFile, [string]$Accept = '*/*') {
     Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $OutFile -Headers $headers
 }
 
+# Gets the API URL $Uri into $OutFile, which must answer with a release.
+# GitHub sometimes answers the list of releases with 200 and `[]`, so a
+# failed or empty answer is tried twice more, after 2 and then 5 seconds; a
+# 404 is not. Fails after the last try with the HTTP status and the API's
+# message.
+function Get-Api([string]$Uri, [string]$OutFile) {
+    foreach ($delay in 2, 5, 0) {
+        try {
+            Get-Url $Uri $OutFile
+            $status = 200
+            $body = "$(Get-Content -Raw $OutFile)"
+            if ($body -match '"tag_name"') { return }
+            $flat = $body -replace '\s+', ' '
+            $message = "no release in its $($body.Length) characters, which start $($flat.Substring(0, [Math]::Min(60, $flat.Length)))"
+        } catch {
+            $failure = $_
+            $status = if ($failure.Exception.Response) { [int]$failure.Exception.Response.StatusCode } else { 0 }
+            $message = $(try { ($failure.ErrorDetails.Message | ConvertFrom-Json).message } catch { $null })
+            if (-not $message) { $message = $failure.Exception.Message }
+            if ($status -eq 404) { break }
+        }
+        if ($delay) {
+            Warn "GET $Uri answered HTTP $status ($message); trying again in ${delay}s"
+            Start-Sleep -Seconds $delay
+        }
+    }
+    if (-not $Token -and $status -eq 404) { Warn 'while the repository is private, set GITHUB_TOKEN to a token that can read it' }
+    Fail "GET $Uri answered HTTP ${status}: $message"
+}
+
 # The release to install: the newest v<x.y.z> one, or -Version's, with this
 # target's toolchain and installer archives. The repository also has
 # vsix-* and llvm-* releases.
 function Find-Release([string]$Work) {
     $list = Join-Path $Work 'releases.json'
-    try {
-        Get-Url "https://api.github.com/repos/$Repo/releases?per_page=100" $list
-    } catch {
-        if (-not $Token) { Warn 'while the repository is private, set GITHUB_TOKEN to a token that can read it' }
-        Fail "cannot list the releases of ${Repo}: $_"
-    }
     $wanted = if ($Version) { "v$($Version.TrimStart('v'))" } else { '' }
+    if ($wanted) { Get-Api "https://api.github.com/repos/$Repo/releases/tags/$wanted" $list }
+    else { Get-Api "https://api.github.com/repos/$Repo/releases?per_page=100" $list }
     $releases = Get-Content -Raw $list | ConvertFrom-Json
     foreach ($release in $releases) {
         if ($release.tag_name -notmatch '^v\d+\.\d+\.\d+') { continue }

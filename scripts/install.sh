@@ -59,24 +59,46 @@ token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
 
 # Downloads $1 to $2, with the token when there is one; $3, when given,
 # is the Accept header (the API serves an asset's bytes for
-# application/octet-stream).
+# application/octet-stream). Sets status to the HTTP status (0 when no
+# answer came) and fails unless it is 2xx; an error's body stays in $2.
 fetch() {
   accept="${3:-*/*}"
   if command -v curl >/dev/null 2>&1; then
     if [ -n "$token" ]; then
-      curl -fsSL -H "Authorization: Bearer $token" -H "Accept: $accept" -o "$2" "$1"
+      status=$(curl -sSL -w '%{http_code}' -H "Authorization: Bearer $token" -H "Accept: $accept" -o "$2" "$1") || status=0
     else
-      curl -fsSL -H "Accept: $accept" -o "$2" "$1"
+      status=$(curl -sSL -w '%{http_code}' -H "Accept: $accept" -o "$2" "$1") || status=0
     fi
   elif command -v wget >/dev/null 2>&1; then
+    # -S prints each response's status line, the last one after redirects.
     if [ -n "$token" ]; then
-      wget -q --header="Authorization: Bearer $token" --header="Accept: $accept" -O "$2" "$1"
+      status=$(wget -S --header="Authorization: Bearer $token" --header="Accept: $accept" -O "$2" "$1" 2>&1 | awk '/^ *HTTP\// { s = $2 } END { print s + 0 }')
     else
-      wget -q --header="Accept: $accept" -O "$2" "$1"
+      status=$(wget -S --header="Accept: $accept" -O "$2" "$1" 2>&1 | awk '/^ *HTTP\// { s = $2 } END { print s + 0 }')
     fi
   else
     die "neither curl nor wget is installed"
   fi
+  [ "$status" -ge 200 ] && [ "$status" -lt 300 ]
+}
+
+# Gets the API url $1 into $2, which must answer with a release. GitHub
+# sometimes answers the list of releases with 200 and `[]`, so a failed or
+# empty answer is tried twice more, after 2 and then 5 seconds; a 404 is
+# not. Dies after the last try with the HTTP status and the API's message.
+api_get() {
+  for delay in 2 5 0; do
+    if fetch "$1" "$2"; then
+      grep -q '"tag_name"' "$2" && return
+      message="no release in its $(wc -c < "$2" | tr -d ' ') bytes, which start $(tr -d '\n' < "$2" | cut -c1-60)"
+    else
+      message=$(sed -n 's/.*"message": *"\([^"]*\)".*/\1/p' "$2" 2>/dev/null | head -1)
+      [ "$status" != 404 ] || break
+    fi
+    [ "$delay" = 0 ] || { warn "GET $1 answered HTTP $status${message:+ ($message)}; trying again in ${delay}s"; sleep "$delay"; }
+  done
+  [ -n "$token" ] || [ "$status" != 404 ] || warn "while the repository is private, set GITHUB_TOKEN to a token that can read it"
+  die "GET $1 answered HTTP $status${message:+: $message}"
 }
 
 # This machine's archive name: linux-x64, macos-arm64 or macos-x64.
@@ -104,20 +126,24 @@ detect_target() {
   echo "$os-$arch"
 }
 
-# Lists the releases (newest first; the repository also has `vsix-*` and
-# `llvm-*` ones) as one line per asset in $work/assets.txt:
-# <tag> <API url> <download link>.
+# Lists the assets of --version's release, else of every release (newest
+# first; the repository also has `vsix-*` and `llvm-*` ones), as one line
+# per asset in $work/assets.txt: <tag> <API url> <download link>.
 list_assets() {
   releases="$work/releases.json"
-  if ! fetch "https://api.github.com/repos/$REPO/releases?per_page=100" "$releases"; then
-    [ -n "$token" ] || warn "while the repository is private, set GITHUB_TOKEN to a token that can read it"
-    die "cannot list the releases of $REPO"
+  if [ -n "$wanted_version" ]; then
+    api_get "https://api.github.com/repos/$REPO/releases/tags/v$wanted_version" "$releases"
+  else
+    api_get "https://api.github.com/repos/$REPO/releases?per_page=100" "$releases"
   fi
-  awk '
-    /"tag_name":/ { gsub(/.*"tag_name": *"|".*/, ""); tag = $0 }
-    /"url": *"[^"]*\/releases\/assets\// { gsub(/.*"url": *"|".*/, ""); api = $0 }
-    /"browser_download_url":/ { gsub(/.*"browser_download_url": *"|".*/, ""); print tag, api, $0 }
-  ' "$releases" > "$work/assets.txt"
+  # One field per line, whether the JSON comes pretty-printed or compact;
+  # value(key) is the string after `"key":` on the line.
+  tr ',' '\n' < "$releases" | awk '
+    function value(key) { sub(".*\"" key "\": *\"", ""); sub(/".*/, ""); return $0 }
+    /"tag_name":/ { tag = value("tag_name") }
+    /"url": *"[^"]*\/releases\/assets\// { api = value("url") }
+    /"browser_download_url":/ { print tag, api, value("browser_download_url") }
+  ' > "$work/assets.txt"
 }
 
 # Where to download the asset $2 of the release $1 from, or nothing when it
@@ -160,7 +186,7 @@ fetch_asset() {
   for name in "$1" "$1.sha256"; do
     url=$(asset_url "$tag" "$name")
     [ -n "$url" ] || die "release $tag has no $name"
-    fetch "$url" "$work/$name" application/octet-stream || die "cannot download $name"
+    fetch "$url" "$work/$name" application/octet-stream || die "cannot download $name (HTTP $status)"
   done
 }
 

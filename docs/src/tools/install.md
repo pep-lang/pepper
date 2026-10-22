@@ -39,6 +39,14 @@ which:
 5. builds and runs a small program with the new install, and fails if it
    cannot.
 
+With `--version` (`-Version`) the script asks GitHub's API for that
+release by its tag; without, it lists the releases. GitHub sometimes
+answers the list with no releases, so an answer that fails or names no
+release is asked again twice, 2 and then 5 seconds apart. When the last
+one fails too, or the release does not exist (404), the script stops with
+the HTTP status and the API's message, such as
+`GET .../releases/tags/v9.9.9 answered HTTP 404: Not Found`.
+
 The script downloads the toolchain itself, rather than leaving it to
 `pep-install`, because `pep-install` downloads with OpenSSL 3, which a fresh
 Mac and RHEL 8 do not have.
