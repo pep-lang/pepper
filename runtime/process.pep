@@ -159,12 +159,28 @@ export _pep_win_narrow(w: __ptr<u16>, n: int): String {
     if (n <= 0) {
         return String();
     }
-    var size = WideCharToMultiByte(65001, 0, w, n, __null, 0, __null, __null);  # CP_UTF8
+    # A unit takes at most 3 bytes (a pair 4), so one call fills the buffer.
+    var capacity = n * 3;
+    __ptr<char> buffer = _pep_malloc(capacity as ulong);
+    # ASCII, the usual case, is copied without the call.
+    var ascii = 0;
+    while (ascii < n) {
+        if (w[ascii] >= 128) {
+            break;
+        }
+        buffer[ascii] = w[ascii] as char;
+        ascii = ascii + 1;
+    }
+    if (ascii == n) {
+        var copied = String(buffer, n as ulong, n as ulong);
+        _pep_free(buffer);
+        return copied;
+    }
+    var size = WideCharToMultiByte(65001, 0, w, n, buffer, capacity, __null, __null);  # CP_UTF8
     if (size <= 0) {
+        _pep_free(buffer);
         return String();
     }
-    __ptr<char> buffer = _pep_malloc(size as ulong);
-    WideCharToMultiByte(65001, 0, w, n, buffer, size, __null, __null);
     var result = String(buffer, size as ulong);
     _pep_free(buffer);
     return result;
