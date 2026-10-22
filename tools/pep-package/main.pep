@@ -8,6 +8,7 @@
 #     pepper package add other/json@2.x --name fast_json
 #     pepper package add --dev someone/fixtures  # only for tests and examples
 #     pepper package add --target 'OS(Windows)' someone/winapi  # only on Windows
+#     pepper package add --optional --features simd someone/zlib  # for a feature to turn on
 #     pepper package remove geometry
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
@@ -83,6 +84,18 @@ main(args: String[]): int {
         "add it to [target.'CONDITION'.dependencies], which only builds for the targets CONDITION selects use; CONDITION is what [Target(...)] takes, such as OS(Windows)",
         value_name = "CONDITION"
     );
+    var add_optional = add.flag(
+        "optional", help = "mark it 'optional = true': a build uses it only when a feature in [features] turns it on"
+    );
+    var add_features = add.multiple(
+        "features",
+        "F",
+        "the dependency's features to turn on, written to its 'features': a comma-separated list, or repeat the option",
+        value_name = "NAMES"
+    );
+    var add_no_default_features = add.flag(
+        "no-default-features", help = "leave the dependency's default feature off: 'default-features = false'"
+    );
     var remove = parser.command("remove", "Removes a dependency");
     var remove_package = remove.positional("package", "the dependency's name, or its owner/name");
     var update = parser.command("update", "Moves dependencies to the newest versions their ranges allow");
@@ -112,7 +125,28 @@ main(args: String[]): int {
         if (add_dev.is_set and add_target.is_set) {
             return fail("--dev and --target name different tables; give one");
         }
-        return project.add(add_package.value(), add_name.value_or(""), add_dev.is_set, add_target.value_or(""));
+        if (add_dev.is_set and add_optional.is_set) {
+            return fail("a dev-dependency cannot be optional; give --dev or --optional");
+        }
+        var features = Array<toml.TomlValue>();
+        for (var names in add_features.values()) {
+            for (var name in names.split(",")) {
+                if (!name.trim().is_empty) {
+                    features.append(toml.TomlValue.String(name.trim()));
+                }
+            }
+        }
+        var extra = toml.TomlValue.table();
+        if (add_optional.is_set) {
+            extra["optional"] = toml.TomlValue.Boolean(true);
+        }
+        if (!features.is_empty) {
+            extra["features"] = toml.TomlValue.array(features);
+        }
+        if (add_no_default_features.is_set) {
+            extra["default-features"] = toml.TomlValue.Boolean(false);
+        }
+        return project.add(add_package.value(), add_name.value_or(""), add_dev.is_set, add_target.value_or(""), extra);
     }
     if (remove.is_selected) {
         return project.remove(remove_package.value());
@@ -328,7 +362,9 @@ struct Project {
         return 0;
     }
 
-    add(spec: String, given_name: String, dev: bool, target: String): int {
+    # `extra` holds the entry's keys beyond its source and version
+    # (`optional`, `features`, `default-features`).
+    add(spec: String, given_name: String, dev: bool, target: String, extra: toml.TomlValue): int {
         if (offline) {
             return fail(
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
@@ -409,6 +445,9 @@ struct Project {
         entry[host] = toml.TomlValue.String(rest);
         if (!range.is_empty) {
             entry["version"] = toml.TomlValue.String(range);
+        }
+        for (var (key, value) in extra.as_table().value()) {
+            entry[key] = value;
         }
         var original = manifest.value().text;
         var document = toml.parse_document(original, path = manifest_path.to_string());
@@ -717,6 +756,13 @@ struct Project {
             if (root.lookup(key).is_value() and !_at_least(minimum, release)) {
                 problems.append(
                     $"'{key}' needs toolchain {release}, and older ones reject it; set '[package]' minimum_toolchain = \"{release}\" or later"
+                );
+            }
+        }
+        for (var requirement in manifest.value().requirements) {
+            if (!requirement.feature_keys.is_empty and !_at_least(minimum, DEPENDENCY_FEATURES_RELEASE)) {
+                problems.append(
+                    $"'{requirement.feature_keys[0]}' of dependency '{requirement.name}' needs toolchain {DEPENDENCY_FEATURES_RELEASE}, and older ones reject it; set '[package]' minimum_toolchain = \"{DEPENDENCY_FEATURES_RELEASE}\" or later"
                 );
             }
         }

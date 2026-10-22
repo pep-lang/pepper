@@ -81,11 +81,11 @@ struct Hosts {
         return run(command(tool("pep-package").to_string(), dir, arguments));
     }
 
-    # Builds the project in `dir` as `pep-build` with no file does, which
-    # fetches what it lacks, and returns what the program prints, or the
-    # build's output when it fails.
-    build_and_run(dir: Path): String {
-        var built = run(command(tool("pep-build").to_string(), dir, Array<String>()));
+    # Builds the project in `dir` as `pep-build` with no file (and
+    # `arguments`) does, which fetches what it lacks, and returns what the
+    # program prints, or the build's output when it fails.
+    build_and_run(dir: Path, arguments: Array<String> = Array<String>()): String {
+        var built = run(command(tool("pep-build").to_string(), dir, arguments));
         if (!built.status.success()) {
             return $"the build failed:\n{built.stdout}{built.stderr}";
         }
@@ -387,6 +387,47 @@ target_dependencies_are_locked_for_every_platform_and_fetched_for_one() {
     var both = hosts.package(project.dir, ["add", "--dev", "--target", "OS(Linux)", "someone/geometry"]);
     expect_exit(both, 1);
     expect_contains(both.stderr, "--dev and --target name different tables; give one");
+}
+
+[Test]
+optional_dependencies_are_locked_and_built_only_with_their_feature() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("optional");
+    var project = Project("optional", "");
+    expect_exit(
+        hosts.package(
+            project.dir, ["add", "--optional", "--features", "fast", "--no-default-features", "other/numbers@1"]
+        ),
+        0
+    );
+    expect_contains(
+        project.manifest(),
+        "numbers = { github = \"other/numbers\", version = \"1\", optional = true, features = [\"fast\"], default-features = false }\n"
+    );
+    # Locked as any dependency is, whichever features a build turns on.
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    var both = hosts.package(project.dir, ["add", "--dev", "--optional", "someone/geometry"]);
+    expect_exit(both, 1);
+    expect_contains(both.stderr, "a dev-dependency cannot be optional; give --dev or --optional");
+
+    # A feature that turns it on: only a build asking for it imports it.
+    write_file(
+        project.dir.join("pep.toml"),
+        "[package]\nname = \"app\"\n\n[dependencies]\n"
+            + "numbers = { github = \"other/numbers\", version = \"1\", optional = true }\n"
+            + "\n[features]\ncount = [\"dep:numbers\"]\n"
+    );
+    write_file(
+        project.dir.join("main.pep"),
+        "[Target(BuildOption(app_count))]\nimport numbers;\n\n"
+            + "[Target(BuildOption(app_count))]\ndescribe(): String {\n    return numbers.numbers_version();\n}\n\n"
+            + "[Target(!BuildOption(app_count))]\ndescribe(): String {\n    return \"off\";\n}\n\n"
+            + "main(): int {\n    print(describe());\n    return 0;\n}\n"
+    );
+    expect_equal(hosts.build_and_run(project.dir), "off\n");
+    expect_equal(hosts.build_and_run(project.dir, ["--features", "count"]), "1.3.1\n");
 }
 
 [Test]
@@ -929,6 +970,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
         manifest("1.0.0", "")
             + "\n[dependencies]\nnumbers = { github = \"other/numbers\", branch = \"main\" }\n"
             + "near = { path = \"../near\", version = \"1\" }\n"
+            + "zlib = { github = \"someone/zlib\", version = \"1\", optional = true }\n"
+            + "\n[features]\ngzip = [\"dep:zlib\"]\n"
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
             + "\n[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
     );
@@ -949,6 +992,14 @@ publish_checks_tests_tags_and_pushes_the_version() {
     expect_contains(
         refused.stderr,
         "\n  'target' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  'features' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  'optional' of dependency 'zlib' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
     );
     expect_false(refused.stderr.contains("winapi"));
     expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");

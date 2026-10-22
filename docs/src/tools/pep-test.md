@@ -49,6 +49,8 @@ pep-test [options] [path]...
 | `--locked` | Passed to `pep-build`: fail, rather than fetch, when the project's `pep.lock` is out of date (also `PEPPER_LOCKED=1`) | |
 | `--offline` | Passed to `pep-build`: fetch nothing over the network, building with what `.pep/deps` holds (also `PEPPER_OFFLINE=1`) | |
 | `--frozen` | Both `--locked` and `--offline` | |
+| `-F <names>`, `--features <names>` | Passed to `pep-build`: features of the project's package to turn on, comma-separated; repeatable (see [Features](projects.md#features)) | the `default` feature |
+| `--no-default-features` | Passed to `pep-build`: leave the project's package's `default` feature off | |
 | `-h`, `--help` | Prints the usage and these options | |
 | `-V`, `--version` | Prints `pep-test` and its version | |
 
