@@ -7,7 +7,7 @@
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [CAST_VALUE, enum_method_name, enum_this_parameter, payload_field] from "builder";
-import [is_checked_function] from "checked";
+import [is_checked_function, unit_decls] from "checked";
 import "common";
 import [Loc] from "loc";
 import [
@@ -101,6 +101,9 @@ export resolve_enum_cases(module: Module, state: PassState) {
         }
     }
     for (var global in module.globals) {
+        if (module.checked.globals.contains(global.name)) {
+            continue;
+        }
         if (!global.default.is_value()) {
             global.default = default_expression(state, global.ty);
         }
@@ -118,11 +121,14 @@ _resolve_defaults(function: FunctionDef, resolver: Rewriter) {
     }
 }
 
-## Every function body and method body in the module: structs' methods,
-## constructors, destructors and count methods, then extensions' and traits'
-## methods, then free functions; each first gets its enum locals' defaults.
+## Every function body and method body of the compilation unit's own code (a
+## checked declaration's cases were resolved with its unit): structs'
+## methods, constructors, destructors and count methods, then extensions' and
+## traits' methods, then free functions; each first gets its enum locals'
+## defaults.
 _for_each_body(module: Module, resolver: _CaseResolver) {
-    for (var st in module.structs) {
+    var own = unit_decls(module);
+    for (var st in own.structs) {
         var methods = Array<FunctionDef>();
         methods.append_all(st.method_members);
         methods.append_all(st.generic_methods);
@@ -134,8 +140,8 @@ _for_each_body(module: Module, resolver: _CaseResolver) {
             _in_body(method, resolver);
         }
     }
-    for (var ext in module.extensions) {
-        for (var method in ext.methods) {
+    for (var e in module.checked.extensions..module.extensions.count) {
+        for (var method in module.extensions[e].methods) {
             _in_body(method, resolver);
         }
     }
@@ -144,7 +150,7 @@ _for_each_body(module: Module, resolver: _CaseResolver) {
             _in_body(method, resolver);
         }
     }
-    for (var function in module.functions) {
+    for (var function in own.functions) {
         _in_body(function, resolver);
     }
 }

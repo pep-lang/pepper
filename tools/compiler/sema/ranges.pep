@@ -20,7 +20,7 @@ const _RANGE_FUNCTION = "_range";
 ## @param module the model
 ## @param state the passes' state, which takes the first error
 export check_ranges(module: Module, state: PassState) {
-    rewrite_concrete_places(module, _RangeChecker(state));
+    rewrite_concrete_places(module, _RangeChecker(state), unit = true);
 }
 
 struct _RangeChecker {

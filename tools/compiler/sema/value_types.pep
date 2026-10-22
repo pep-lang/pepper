@@ -9,6 +9,7 @@
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [enum_method_name, enum_this_parameter] from "builder";
+import [unit_decls] from "checked";
 import [TRAIT_SELF] from "closures";
 import "common";
 import [
@@ -339,14 +340,16 @@ struct _StaticCalls {
 
 extend _StaticCalls with Rewriter;
 
-## Applies `rewriter` to every expression in the module: field defaults, the
-## parameter defaults and bodies of methods, constructors, destructors and
-## functions, extension methods, and globals.
+## Applies `rewriter` to every expression in the compilation unit's own code
+## (a checked declaration's were rewritten with its unit): field defaults,
+## the parameter defaults and bodies of methods, constructors, destructors
+## and functions, extension methods, and globals.
 ##
 ## @param module the model, changed in place
 ## @param rewriter what to do at each expression
 export for_each_expression(module: Module, rewriter: Rewriter) {
-    for (var st in module.structs) {
+    var own = unit_decls(module);
+    for (var st in own.structs) {
         for (var field in st.field_members) {
             if (field.default.is_value()) {
                 field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
@@ -360,16 +363,16 @@ export for_each_expression(module: Module, rewriter: Rewriter) {
             _walk_function(method, rewriter, true);
         }
     }
-    for (var function in module.functions) {
+    for (var function in own.functions) {
         _walk_function(function, rewriter, true);
     }
-    for (var ext in module.extensions) {
-        for (var method in ext.methods) {
+    for (var e in module.checked.extensions..module.extensions.count) {
+        for (var method in module.extensions[e].methods) {
             _walk_function(method, rewriter, false);
         }
     }
     for (var global in module.globals) {
-        if (global.default.is_value()) {
+        if (global.default.is_value() and !module.checked.globals.contains(global.name)) {
             global.default = Optional<Expression>.Value(rewrite_expression(global.default.value(), rewriter));
         }
     }

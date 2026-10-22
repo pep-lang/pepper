@@ -84,7 +84,7 @@ export is_text_conversion(function: String): bool {
 ## @param state the passes' state, which takes the first error
 export check_interpolations(module: Module, state: PassState) {
     # Generic bases are checked through their specializations.
-    rewrite_concrete_places(module, _InterpolationChecker(module, state));
+    rewrite_concrete_places(module, _InterpolationChecker(module, state), unit = true);
 }
 
 struct _InterpolationChecker {
