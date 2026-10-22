@@ -1490,6 +1490,24 @@ tuple_labels_through_a_type_argument() {
     all_passed(failed);
 }
 
+# A tuple inferred from literals through a generic function or method names
+# its elements as programs do, `int` and not `i32` (pepper#156).
+[Test]
+inferred_tuple_names_numbers_as_written() {
+    var main = "struct Box {\n    var n: int = 0;\n    pass<T>(value: T): T { return value; }\n}\n"
+        + "identity<T>(value: T): T {\n    return value;\n}\n"
+        + "main(): int {\n    var g = identity((1, 2));\n    var box = Box();\n    var h = box.pass((1, 2.5));\n"
+        + "    return g.0 + h.0;\n}\n";
+    var c = loaded("inferred_tuple_numbers", main, "main.pep");
+    var text = c.document.text;
+    var failed = Array<String>();
+    var g = hover_text(c, at(text, "g = identity", 0));
+    check(failed, "generic function", g.starts_with("`g` — `(int, int)`"), g);
+    var h = hover_text(c, at(text, "h = box", 0));
+    check(failed, "generic method", h.starts_with("`h` — `(int, double)`"), h);
+    all_passed(failed);
+}
+
 [Test]
 lowered_calls_trait_defaults_and_bounds() {
     var main = "trait Named {\n    name(): String;\n    shout(): String { return name() + \"!\"; }\n}\n"

@@ -1003,7 +1003,7 @@ struct _MatchLowering {
         }
         var found = matched_of(ty);
         if (!found.is_value()) {
-            var shown = ty.is_auto() ? "an unknown type" : $"'{ty.to_string()}'";
+            var shown = ty.is_auto() ? "an unknown type" : $"'{_shown_type(ty)}'";
             report(
                 _error_at_known(
                     $"cannot match on a value of {shown}: 'match' needs an enum, an integer, 'char', 'bool' or 'String'",

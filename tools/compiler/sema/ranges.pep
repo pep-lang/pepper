@@ -36,7 +36,9 @@ struct _RangeChecker {
             if (node.function.starts_with(prefix) and node.function.ends_with(">")) {
                 var bound = node.function.substr_bytes(prefix.size, node.function.size - prefix.size - 1);
                 if (!_is_range_integer(bound)) {
-                    state.report(error_at($"range bounds must be integers, not '{bound}'", node.loc));
+                    state.report(
+                        error_at($"range bounds must be integers, not '{common_number_name(bound)}'", node.loc)
+                    );
                 }
             }
         }

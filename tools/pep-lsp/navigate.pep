@@ -838,7 +838,7 @@ _symbol_type(context: Context, symbol: Symbol): String {
     if (context.model is Value(model)) {
         var inferred = sema.local_type(model, 0, symbol.name_span.start);
         if (inferred is Value(t)) {
-            return t.to_string();
+            return t.display();
         }
     }
     return "unknown";

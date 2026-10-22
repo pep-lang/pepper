@@ -2,7 +2,7 @@
 ## extension.
 
 import [Diagnostic, Location] from compiler.diagnostic;
-import [constraint_spelled, error_at, location_of] from "common";
+import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module, TypeName, Withheld] from "model";
 import [set_name] from "names";
@@ -147,7 +147,7 @@ struct _WithheldCalls {
                     $"no member named '{member}' in '{owner}'",
                     loc
                 ).with_note(
-                    $"'{member}' requires '{constraint_spelled(w.arg)}' to conform to '{constraint_spelled(w.bound)}'",
+                    $"'{member}' requires '{w.arg.display()}' to conform to '{w.bound.display()}'",
                     Optional<Location>.Value(location_of(w.at))
                 )
             );

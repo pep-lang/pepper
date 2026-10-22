@@ -15,7 +15,7 @@ import [set_name] from "names";
 import [rewrite_concrete_places] from "places";
 import "resolve_implicit_types";
 import [PassState] from "state";
-import [parse_type_string] from "type_name";
+import [common_number_name, parse_type_string] from "type_name";
 import [Rewriter] from "walk";
 
 const _TO_STRING = "to_string";
@@ -178,7 +178,7 @@ struct _InterpolationChecker {
             return e;
         }
         var (base, ty) = split.value();
-        var shown = demangle(ty);
+        var shown = demangle(common_number_name(ty));
         # The runtime's `print<T>(value)` prints `to_string(value)`.
         if (demangle_name(set_name(base)) == _PRINT) {
             if (!_convertible(ty)) {

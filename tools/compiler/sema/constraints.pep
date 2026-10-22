@@ -374,7 +374,7 @@ export struct Conformance {
                 if (!_conforms(a, copy, none)) {
                     return Optional<(String, Loc)>.Value(
                         (
-                            $"'{constraint_spelled(arg)}' conforms to '{constraint_spelled(required)}' only when '{constraint_spelled(a)}' conforms to '{constraint_spelled(copy)}'",
+                            $"'{arg.display()}' conforms to '{required.display()}' only when '{a.display()}' conforms to '{copy.display()}'",
                             loc
                         )
                     );
@@ -386,7 +386,7 @@ export struct Conformance {
 
     ## The error for `bound`, a constraint that names no trait.
     _not_a_trait(bound: Bound, params: GenericParam[]): Diagnostic {
-        var name = constraint_spelled(bound.ty);
+        var name = bound.ty.display();
         var param = Optional<GenericParam>.Empty;
         if (bound.ty.sub_types.count == 0) {
             for (var p in params) {
@@ -479,15 +479,13 @@ export struct Conformance {
             return Optional<String>.Empty;
         }
         var u = found.value();
-        return Optional<String>.Value(
-            $"'{constraint_spelled(u.arg)}' does not conform to '{constraint_spelled(u.required)}'"
-        );
+        return Optional<String>.Value($"'{u.arg.display()}' does not conform to '{u.required.display()}'");
     }
 
     ## The error for `unmet`, a constraint of `generic`, at `at`.
     _error(unmet: Unmet, generic: String, at: Loc, module: Module, scope: HashMap<String, _InScope>): Diagnostic {
-        var arg = constraint_spelled(unmet.arg);
-        var required = constraint_spelled(unmet.required);
+        var arg = unmet.arg.display();
+        var required = unmet.required.display();
         bool shared = is_shared_bound(unmet.required);
         var kind = shared ? "" : "trait ";
         var error = error_at(
@@ -522,7 +520,7 @@ export struct Conformance {
             }
             if (_is_trait(part.value())) {
                 return error.with_note(
-                    $"a value of trait type '{constraint_spelled(part.value())}' may refer to any struct, which need not be thread-safe",
+                    $"a value of trait type '{part.value().display()}' may refer to any struct, which need not be thread-safe",
                     Optional<Location>.Empty
                 );
             }
@@ -1030,8 +1028,8 @@ _check_conditional_members(module: Module, state: PassState): bool {
                 }
                 var (i, bound) = needed[0].value();
                 var param = i < st.generic_params.count ? st.generic_params[i].name : "";
-                var trait_shown = constraint_spelled(trait_name);
-                var bound_shown = constraint_spelled(bound.ty);
+                var trait_shown = trait_name.display();
+                var bound_shown = bound.ty.display();
                 state.report(
                     error_at(
                         $"'{st.name}' conforms to '{trait_shown}' for every '{param}', but its '{set}' exists only when '{param}' conforms to '{bound_shown}'",

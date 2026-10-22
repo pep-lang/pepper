@@ -17,7 +17,7 @@
 
 import llvm;
 import compiler.sema;
-import [display_name, is_pointer_name, parse_type_string, pointee_name] from compiler.sema;
+import [common_number_name, display_name, is_pointer_name, parse_type_string, pointee_name] from compiler.sema;
 import [DebugInfo] from "debug";
 import [Generator] from "generator";
 import [simd_shape] from "types";
@@ -69,38 +69,7 @@ _scalar(name: String): (ulong, llvm.DwarfEncoding)? {
 ## The name a program writes for a numeric type sema spells by width (an
 ## integer literal's `i32` is an `int`).
 _written(name: String): String {
-    match (name) {
-        "i1" => {
-            return "bool";
-        }
-        "i16" => {
-            return "short";
-        }
-        "u16" => {
-            return "ushort";
-        }
-        "i32" => {
-            return "int";
-        }
-        "u32" => {
-            return "uint";
-        }
-        "i64" => {
-            return "long";
-        }
-        "u64" => {
-            return "ulong";
-        }
-        "f32" => {
-            return "float";
-        }
-        "f64" => {
-            return "double";
-        }
-        else => {
-            return name;
-        }
-    }
+    return name == "i1" ? "bool" : common_number_name(name);
 }
 
 ## A type's name as the user writes it: `Point@geo` is `Point`, and the

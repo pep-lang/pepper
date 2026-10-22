@@ -254,11 +254,11 @@ late_pass_programs(): String[] {
         # values; and two that pass.
         "# expect: main.pep:5:5: error: match on 'Color' does not handle 'Blue'\nenum Color { Red, Green, Blue }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red => { return 1; }\n        Green => { return 2; }\n    }\n    return 0;\n}\n",
         "# expect: main.pep:7:9: error: case 'Red' is already handled\nenum Color { Red, Green, Blue }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red => { return 1; }\n        Red => { return 2; }\n        else => { return 3; }\n    }\n}\n",
-        "# expect: main.pep:4:5: error: match on 'i32' needs an 'else' arm\nmain(): int {\n    var n = 3;\n    match (n) {\n        0 => { return 1; }\n        1 => { return 2; }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:4:5: error: match on 'int' needs an 'else' arm\nmain(): int {\n    var n = 3;\n    match (n) {\n        0 => { return 1; }\n        1 => { return 2; }\n    }\n    return 0;\n}\n",
         "# expect: main.pep:6:9: error: pattern '5..8' is already handled\nmain(): int {\n    var n = 3;\n    match (n) {\n        0..10 => { return 1; }\n        5..8 => { return 2; }\n        else => { return 3; }\n    }\n}\n",
         "# expect: main.pep:6:5: error: match on 'Pick' does not handle 'Some(Green)'\nenum Color { Red, Green }\nenum Pick { Nothing, Some(c: Color) }\nmain(): int {\n    var p = Pick.Some(Color.Red);\n    match (p) {\n        Nothing => { return 0; }\n        Some(Red) => { return 1; }\n    }\n    return 2;\n}\n",
         "# expect: main.pep:5:5: error: match on '(bool, bool)' does not handle '(false, false)'\nmain(): int {\n    var a = true;\n    var b = false;\n    match ((a, b)) {\n        (true, _) => { return 1; }\n        (false, true) => { return 2; }\n    }\n    return 0;\n}\n",
-        "# expect: main.pep:5:50: error: 'match' arm has a value of type 'Color', but the first arm's is 'i32'\nenum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    var x = match (c) { Red => 1, Green => Color.Red };\n    return 0;\n}\n",
+        "# expect: main.pep:5:50: error: 'match' arm has a value of type 'Color', but the first arm's is 'int'\nenum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    var x = match (c) { Red => 1, Green => Color.Red };\n    return 0;\n}\n",
         "# expect: main.pep:6:9: error: no case named 'Blue' in 'Color'\nenum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Blue => { return 1; }\n        else => { return 0; }\n    }\n}\n",
         "# expect: main.pep:7:12: error: cannot match on a value of 'S': 'match' needs an enum, an integer, 'char', 'bool' or 'String'\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    match (s) {\n        else => { return 0; }\n    }\n}\n",
         "# expect: main.pep:6:13: error: case 'Red' of 'Color' carries no values to bind\nenum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red(x) => { return 1; }\n        else => { return 0; }\n    }\n}\n",
@@ -459,6 +459,10 @@ specialized_error_programs(): String[] {
         "# expect: main.pep:6:49: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\npair<T>(value: T): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    return pair<(a: int, b: int)>((a: 1, b: 2)).a;\n}\n",
         # Nor does a generic method's.
         "# expect: main.pep:8:51: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\nstruct S {\n    var n: int = 0;\n    pair<T>(value: T): (int, int) { return (1, 2); }\n}\nmain(): int {\n    var s = S();\n    return s.pair<(a: int, b: int)>((a: 1, b: 2)).a;\n}\n",
+        # A tuple inferred from literals names its elements as programs do:
+        # `int`, not the `i32` a literal is typed (#156).
+        "# expect: main.pep:7:14: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\npass<T>(value: T): T {\n    return value;\n}\nmain(): int {\n    var g = pass((1, 2));\n    return g.a;\n}\n",
+        "# expect: main.pep:8:29: error: no member named 'a' in '(int, double)': its elements are '0' to '1'\nstruct S {\n    var n: int = 0;\n    pass<T>(value: T): T { return value; }\n}\nmain(): int {\n    var s = S();\n    return s.pass((1, 2.5)).a;\n}\n",
         # `[ThreadLocal]` on a field.
         "# expect: main.pep:3:5: error: 'ThreadLocal' applies only to a module-scope variable, not a field\nstruct Counter {\n    [ThreadLocal]\n    var hits: int;\n}\nmain(): int { return 0; }\n",
         # A struct value as a condition, and as an operand of `!`.
@@ -626,19 +630,19 @@ error_programs(): String[] {
         "# expect: main.pep:5:11: error: cannot initialize variable 's' of type 'S' with a value of type '__ptr<void>'\nstruct S { int x = 0; }\nmain(): int {\n    var p: __ptr<void> = __null;\n    S s = p;\n    return 0;\n}\n",
         "# expect: main.pep:4:32: error: cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'\nmain(): int {\n    var g = () => {};\n    var f: shared () => void = g;\n    return 0;\n}\n",
         "# expect: main.pep:4:34: error: cannot initialize variable 'f' of type 'extern (int) => int' with a value of type '(int) => int'; only a named function or a closure that captures nothing converts to a C function pointer\nmain(): int {\n    var g: (int) => int = (x) => x;\n    var f: extern (int) => int = g;\n    return 0;\n}\n",
-        "# expect: main.pep:3:28: error: cannot initialize variable 't' of type '(int, String)' with a value of type '(i32, i32)'\nmain(): int {\n    var t: (int, String) = (1, 2);\n    return 0;\n}\n",
+        "# expect: main.pep:3:28: error: cannot initialize variable 't' of type '(int, String)' with a value of type '(int, int)'\nmain(): int {\n    var t: (int, String) = (1, 2);\n    return 0;\n}\n",
         "# expect: main.pep:4:19: error: cannot initialize variable 'x' of type 'int' with a value of type 'Color'\nenum Color { Red }\nmain(): int {\n    int x = Color.Red;\n    return x;\n}\n",
         "# expect: main.pep:10:26: error: cannot initialize variable 'circle' of type 'Circle' with a value of type 'T'\ntrait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nstruct Circle {\n}\nkeep<T: Shape>(item: T): int {\n    var shape: Shape = item;\n    var circle: Circle = item;\n    return 0;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:6:48: error: invalid operands to binary expression ('T' and 'T')\ntrait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nsmaller<T: Shape>(a: T, b: T): bool { return a < b; }\nmain(): int { return 0; }\n",
         "# expect: main.pep:7:11: error: invalid operands to binary expression ('T' and 'T')\ntrait Addable {\n    +(other: this): this;\n}\ngrow<T: Addable>(a: T, b: T): T {\n    var total = a;\n    total += b;\n    return total;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:4:18: error: cannot use a value of type 'void' as variable 'x'\nf() {}\nmain(): int {\n    var x: int = f();\n    return 0;\n}\n",
-        "# expect: main.pep:6:12: error: cannot return a value of type 'i32' from 'f', which returns 'S'\nstruct S {\n    var x: int;\n}\nf(): S {\n    return 1;\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:6:12: error: cannot return a value of type 'int' from 'f', which returns 'S'\nstruct S {\n    var x: int;\n}\nf(): S {\n    return 1;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:7:24: error: cannot initialize variable 'w' of type '__weak<S>' with a value of type 'S'; use '__weak_from<S>(...)' to make one\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var w: __weak<S> = s;\n    return 0;\n}\n",
         "# expect: main.pep:7:14: error: cannot compare 'S' with an integer\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    return s == 1 ? 1 : 0;\n}\n",
         "# expect: main.pep:8:20: error: cannot initialize variable 'n' of type 'int' with a value of type '() => int'; call it with '()'\nstruct S {\n    var x: int;\n    get(): int { return x; }\n}\nmain(): int {\n    var s = S();\n    var n: int = s.get;\n    return n;\n}\n",
         "# expect: main.pep:7:14: error: cannot compare a value of type 'Color' with a value of type 'Size'\nenum Color { Red, Green }\nenum Size { Small, Large }\nmain(): int {\n    var c = Color.Red;\n    var s = Size.Small;\n    return c == s ? 1 : 0;\n}\n",
         "# expect: main.pep:9:17: error: cannot pass a value of type 'long' as argument 1 of 'take', which has type 'Meters'\nstruct Meters {\n    var v: long;\n    construct(v: long) { this.v = v; }\n}\ntake(m: Meters): long { return m.v; }\nmain(): int {\n    long n = 2;\n    return take(n) as int;\n}\n",
-        "# expect: error: incompatible operand types ('S' and 'i32')\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var n = true ? s : 1;\n    return 0;\n}\n",
+        "# expect: error: incompatible operand types ('S' and 'int')\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var n = true ? s : 1;\n    return 0;\n}\n",
         "# expect: main.pep:5:13: error: invalid operand to unary expression ('Color'): an enum only compares with '==' and '!='\nenum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    var d = -c;\n    return 0;\n}\n",
         # Struct values in trait slots they do not conform to, trait values
         # of another trait, a number as a trait value, a static trait member
@@ -841,7 +845,7 @@ error_programs(): String[] {
         "# expect: main.pep:5:34: error: invalid argument type 'T' to unary expression\ntrait Shape {\n    area(): int;\n}\nflip<T: Shape>(a: T): T { return -a; }\nmain(): int { return 0; }\n",
         "# expect: main.pep:5:36: error: type 'T' cannot be indexed\ntrait Shape {\n    area(): int;\n}\npick<T: Shape>(a: T): int { return a[0]; }\nmain(): int { return 0; }\n",
         # Range bounds must be integers.
-        "# expect: main.pep:4:16: error: range bounds must be integers, not 'f64'\n_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = 1.5..3.0;\n    return 0;\n}\n",
+        "# expect: main.pep:4:16: error: range bounds must be integers, not 'double'\n_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = 1.5..3.0;\n    return 0;\n}\n",
         "# expect: main.pep:4:16: error: cannot infer the type arguments of '_range' from its arguments; write them: _range<T>(...)\n_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = \"a\"..>\"z\";\n    return 0;\n}\n",
         # A generic method's constraints, at its specialization.
         "# expect: main.pep:10:23: error: 'int' does not conform to trait 'Named', required by 'T' in 'get'\ntrait Named {\n    name(): int;\n}\nstruct Box {\n    get<T: Named>(x: T): int { return 0; }\n}\nmain(): int {\n    var b = Box();\n    return b.get<int>(1);\n}\n",
