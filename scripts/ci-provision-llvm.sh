@@ -15,6 +15,15 @@
 #
 # which is why nothing here downloads an 11.6 GB tarball any more.
 #
+# On Linux those 4-8s are the runner's Ubuntu mirror on a good day: a slow
+# one once took longer than the step's 15 minutes for the 89 MB of .deb
+# files (#194). So with PEPPER_CI_LLVM_DEBS naming a folder
+# (.github/actions/provision-llvm caches it), the .deb files in it are put
+# in apt's archive first, so apt downloads none it already has. When apt
+# did download some (an empty folder, or a set the image has moved past),
+# the folder is refilled with the installed packages' files for the cache
+# to save.
+#
 # Either way this ends by running the normal setup script, which validates the
 # prefix and writes .pep/llvm-prefix, so there is one source of truth for how
 # the scripts find LLVM. The LLVM is the one the setup scripts pin (LLVM 20).
@@ -23,6 +32,46 @@ set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$repo_root"
+
+# PEPPER_CI_LLVM_DEBS: install the cached .deb files, or fill the cache.
+if [ "$(uname -s)" = Linux ] && [ -n "${PEPPER_CI_LLVM_DEBS:-}" ]; then
+  debs=$PEPPER_CI_LLVM_DEBS
+  archives=/var/cache/apt/archives
+  list_debs() { find "$1" -maxdepth 1 -name '*.deb' 2>/dev/null | sort; }
+  # Whether the .deb file $1 is the installed version of its package.
+  installed() {
+    [ "$(dpkg-query -W -f '${Version}' "$(dpkg-deb -f "$1" Package)" 2>/dev/null)" \
+      = "$(dpkg-deb -f "$1" Version)" ]
+  }
+  image=$(list_debs "$archives")
+  # Seed apt's own archive: apt then downloads only what the index wants and
+  # the seed lacks. (`apt-get install ./x.deb` does not do this: with the
+  # same version in the index it fetches that one, failing --no-download.)
+  if [ -n "$(list_debs "$debs")" ]; then
+    echo "Seeding $archives with the cached packages in $debs:"
+    list_debs "$debs"
+    sudo cp "$debs"/*.deb "$archives"/
+  else
+    echo "No cached LLVM packages in $debs; installing from the mirror."
+  fi
+  seeded=$(list_debs "$archives")
+  bash scripts/setup-llvm.sh
+  if [ "$(list_debs "$archives")" = "$seeded" ]; then
+    echo "apt downloaded no packages; the cache in $debs stays as it is."
+    exit 0
+  fi
+  # A miss, or a set the image has moved past: cache what is installed now.
+  rm -rf "$debs"
+  mkdir -p "$debs"
+  comm -13 <(printf '%s\n' "$image") <(list_debs "$archives") | while read -r deb; do
+    if installed "$deb"; then cp "$deb" "$debs"/; fi
+  done
+  echo "Cached for the next run, in $debs:"
+  list_debs "$debs"
+  # The action saves the folder only when it was filled here.
+  [ -z "${GITHUB_OUTPUT:-}" ] || echo "filled=true" >> "$GITHUB_OUTPUT"
+  exit 0
+fi
 
 case "$(uname -s)" in
   Darwin|Linux)
