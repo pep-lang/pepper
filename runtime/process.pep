@@ -18,6 +18,23 @@ extern void* _NSGetArgv();
 extern int* __p___argc();
 [Target(OS(Windows))]
 extern void* __p___argv();
+[Target(OS(Windows))]
+extern void* __p___wargv();
+# The Universal CRT fills `__wargv` only for a `wmain`, or when asked here.
+[Target(OS(Windows))]
+extern int _configure_wide_argv(int mode);
+[Target(OS(Windows))]
+extern ulong wcslen(ushort* text);
+[Target(OS(Windows))]
+extern void* malloc(ulong size);
+[Target(OS(Windows))]
+extern void free(void* pointer);
+[Target(OS(Windows))]
+extern void memcpy(void* dest, void* src, ulong n);
+[Target(OS(Windows))]
+extern int WideCharToMultiByte(
+    uint codepage, uint flags, ushort* src, int src_len, char* dst, int dst_len, void* default_char, int* used_default
+);
 [Target(OS(Wasi))]
 extern ushort __wasi_args_sizes_get(void* count, void* buffer_size);
 [Target(OS(Wasi))]
@@ -115,11 +132,100 @@ _arguments(): Array<String> {
     return _arguments_from(_NSGetArgc()[0], values[0]);
 }
 
+# Windows' `argv` is in the ANSI code page, which cannot hold every
+# character and is not UTF-8: read the UTF-16 one, split by the same rules.
 [Target(OS(Windows))]
 _arguments(): Array<String> {
-    __ptr<void> raw = __p___argv();
-    __ptr<__ptr<__ptr<char>>> values = raw;
-    return _arguments_from(__p___argc()[0], values[0]);
+    return _arguments_from(__p___argc()[0], _utf8_argv());
+}
+
+# The UTF-8 `argv` `_arguments` reads, converted on the first call and kept
+# for the program's life, so a later call costs what the C `argv` does.
+[Target(OS(Windows))]
+const _pep_utf8_argv: __ptr<ulong> = _pep_new_utf8_argv_slot();
+
+[Target(OS(Windows))]
+_pep_new_utf8_argv_slot(): __ptr<ulong> {
+    __ptr<ulong> slot = _pep_malloc(8);
+    slot[0] = 0;
+    return slot;
+}
+
+[Target(OS(Windows))]
+_utf8_argv(): __ptr<__ptr<char>> {
+    var kept = __atomic_load<ulong>(_pep_utf8_argv);
+    if (kept != 0) {
+        return unsafe_cast<__ptr<__ptr<char>>>(kept);
+    }
+    __ptr<void> raw = __p___wargv();
+    __ptr<__ptr<__ptr<u16>>> wide = raw;
+    if (wide[0] == __null) {
+        _configure_wide_argv(1);  # _crt_argv_unexpanded_arguments
+    }
+    if (wide[0] == __null) {
+        # Out of memory: the ANSI arguments are better than none.
+        __ptr<void> narrow = __p___argv();
+        __ptr<__ptr<__ptr<char>>> values = narrow;
+        return values[0];
+    }
+    # C's `malloc`, not `_pep_malloc`: kept for good, it is no test's leak.
+    var count = __p___argc()[0] as ulong;
+    __ptr<__ptr<char>> values = malloc(count * sizeof<__ptr<char>>() + 1);
+    ulong index = 0;
+    while (index < count) {
+        var value = wide[0][index];
+        var text = _pep_win_narrow(value, wcslen(value) as int);
+        __ptr<char> copy = malloc(text.size + 1);
+        memcpy(copy, text.c_str(), text.size + 1);
+        values[index] = copy;
+        index = index + 1;
+    }
+    var made = unsafe_cast<ulong>(values);
+    if (!__atomic_cmpxchg<ulong>(_pep_utf8_argv, 0, made)) {
+        # Another thread kept its copy first.
+        index = 0;
+        while (index < count) {
+            free(values[index]);
+            index = index + 1;
+        }
+        free(values);
+        return unsafe_cast<__ptr<__ptr<char>>>(__atomic_load<ulong>(_pep_utf8_argv));
+    }
+    return values;
+}
+
+# `n` UTF-16 units at `w` as a UTF-8 String, each unpaired surrogate
+# becoming U+FFFD: `io`'s `_io_win_narrow`, here so `_arguments` can use it.
+[Target(OS(Windows))]
+export _pep_win_narrow(w: __ptr<u16>, n: int): String {
+    if (n <= 0) {
+        return String();
+    }
+    # A unit takes at most 3 bytes (a pair 4), so one call fills the buffer.
+    var capacity = n * 3;
+    __ptr<char> buffer = _pep_malloc(capacity as ulong);
+    # ASCII, the usual case, is copied without the call.
+    var ascii = 0;
+    while (ascii < n) {
+        if (w[ascii] >= 128) {
+            break;
+        }
+        buffer[ascii] = w[ascii] as char;
+        ascii = ascii + 1;
+    }
+    if (ascii == n) {
+        var copied = String(buffer, n as ulong, n as ulong);
+        _pep_free(buffer);
+        return copied;
+    }
+    var size = WideCharToMultiByte(65001, 0, w, n, buffer, capacity, __null, __null);  # CP_UTF8
+    if (size <= 0) {
+        _pep_free(buffer);
+        return String();
+    }
+    var result = String(buffer, size as ulong);
+    _pep_free(buffer);
+    return result;
 }
 
 # WASI hands the arguments to the program through `args_get`, into memory

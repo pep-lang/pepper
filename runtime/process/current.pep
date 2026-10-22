@@ -7,8 +7,8 @@
 ## - `arguments(): Array<String>` returns the program's command-line
 ##   arguments: element 0 is the program as it was started, and the
 ##   arguments typed after it follow in order. `main` receives the same array
-##   when it is declared `main(args: String[]): int`. On Windows they are in
-##   the process's ANSI code page.
+##   when it is declared `main(args: String[]): int`. On Windows they are
+##   read as UTF-16 and converted to valid UTF-8.
 ## - `exit(code: int)` ends the program at once with status `code` (only its
 ##   low 8 bits reach a POSIX parent), as C's `exit` does: the handlers
 ##   registered with C's `atexit` run, then standard output and the other C
@@ -28,8 +28,11 @@ import "sys_windows";
 ## arguments typed after it follow in order, as the shell passed them: a
 ## quoted argument with spaces is one element. Each call builds a new array.
 ##
-## On Windows the arguments are in the process's ANSI code page, so text
-## outside it is not preserved.
+## On Windows the arguments are read as UTF-16 and converted to UTF-8, so
+## every character arrives whole and each element is valid UTF-8 (an
+## unpaired surrogate becomes U+FFFD). On POSIX an argument is whatever
+## bytes the parent passed; one that is not valid UTF-8 is returned as it
+## is.
 ##
 ## `main` receives the same array when it is declared
 ## `main(args: String[]): int`; `arguments()` reads it anywhere else.
