@@ -258,9 +258,10 @@ app -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1
 ### `outdated`
 
 Lists each locked package that is behind, with its locked version, the
-revision `update` would move it to (`wanted`: the newest version every
-range on it allows and this toolchain builds, or a branch's newest
-commit), and the newest version it offers (`latest`, not a prerelease):
+revision its requirements now choose (`wanted`: the newest version
+every range on it in the locked graph allows and this toolchain builds,
+or a branch's newest commit; updating a package that depends on it can
+change those ranges), and the newest version it offers (`latest`, not a prerelease):
 
 ```text
 $ pepper package outdated

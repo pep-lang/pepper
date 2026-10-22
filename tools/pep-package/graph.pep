@@ -105,10 +105,10 @@ export struct LockedGraph {
         if (level > depth) {
             return;
         }
-        var edges = children(parent);
-        for (var index in 0..edges.count) {
-            var edge = edges[index];
-            var last = index + 1 == edges.count;
+        var listed = children(parent);
+        for (var index in 0..listed.count) {
+            var edge = listed[index];
+            var last = index + 1 == listed.count;
             var line = prefix + (last ? "`-- " : "|-- ") + label(edge);
             var below = !children(edge.source).is_empty;
             if (below and shown.contains(edge.source)) {
@@ -244,7 +244,14 @@ export read_graph(dir: Path, manifest: Manifest, offline: bool): Result<LockedGr
     var packages = OrderedMap<String, Locked>();
     for (var package in locked.value()) {
         var (host, repository) = split_source(package.source);
-        var fetched = resolver.fetch(host, repository, package_dir(dir, host, repository), package.commit);
+        var at = package_dir(dir, host, repository);
+        # A checkout at the commit already is used as it is, without
+        # hashing its files again.
+        if (checked_out(at).value_or("") == package.commit) {
+            packages[package.source] = package;
+            continue;
+        }
+        var fetched = resolver.fetch(host, repository, at, package.commit);
         if (fetched.is_err()) {
             return Result<LockedGraph>.Err($"cannot fetch {package.source}: {fetched.error().message}");
         }

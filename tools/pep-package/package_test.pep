@@ -863,6 +863,13 @@ app -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1
     var offline = hosts.package(project.dir, ["outdated", "--offline"]);
     expect_exit(offline, 1);
     expect_contains(offline.stderr, "--offline, and 'outdated' reads which versions each package offers");
+    # A dependency pep.lock does not list yet: fetch resolves it first.
+    write_file(
+        project.dir.join("pep.toml"), project.manifest() + "\n[dependencies.more]\ngithub = \"other/unlisted\"\n"
+    );
+    var stale = hosts.package(project.dir, ["tree"]);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "pep.lock does not list github:other/unlisted");
 }
 
 [Test]
