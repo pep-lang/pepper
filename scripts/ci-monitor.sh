@@ -124,7 +124,7 @@ sample() {
     read -r total avail swap_total swap_free < <(memory || true) || true
     list="$(processes || true)"
     builds="$(printf '%s\n' "$list" | awk '$2 == "pep-build" { n++ } END { print n + 0 }')"
-    top="$(printf '%s\n' "$list" | sort -rn | head -3 | awk '{ printf "%s%s %.1f GB", (NR > 1 ? ", " : ""), $2, $1 / 1048576 }')"
+    top="$(printf '%s\n' "$list" | sort -rn | head -3 | awk '{ printf "%s%s %.1f GB", (NR > 1 ? ", " : ""), $2, $1 / 1048576 }' || true)"
     disk="$(df -Pk "$dir" 2>/dev/null | awk 'NR == 2 { printf "%d", $4 / 1048576 }' || true)"
     echo "monitor $(date -u +%H:%M:%S) avail $(gb "${avail:-0}") GB of $(gb "${total:-0}"), swap $(gb $((${swap_total:-0} - ${swap_free:-0})))/$(gb "${swap_total:-0}") GB, load $(load || true), disk free ${disk:-?} GB, $builds pep-build, top: $top" | tee -a "$file"
     sleep "$interval"
