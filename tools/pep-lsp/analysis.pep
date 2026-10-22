@@ -417,7 +417,7 @@ export analyze(
         out.outcome = "found an error";
         return out;
     }
-    var units = _compilation_units(program);
+    var units = compilation_units_of(program);
     # The document's own compilation unit is checked last: the compilation units
     # after it (its importers, in a cycle with a module file) do not change what
     # it shows.
@@ -553,9 +553,27 @@ _declares_tests(module: ast.Module): bool {
     return false;
 }
 
-# `program`'s compilation units, keyed for the language server: its own compiler
-# identity, no code generation.
-_compilation_units(program: link.Program): incremental.CompilationUnit[] {
+## The files of the document's compilation unit: the one holding file 0,
+## the document, else the last. Of a model checked whole, the server's
+## thread reads only their bodies (`Analysis.bodies_read`).
+##
+## @param units the program's compilation units (`compilation_units_of`)
+## @returns the files, by index in the program
+export document_unit_files(units: incremental.CompilationUnit[]): ulong[] {
+    for (var unit in units) {
+        if (unit.files.contains(0)) {
+            return unit.files;
+        }
+    }
+    return units.is_empty ? Array<ulong>() : units[units.count - 1].files;
+}
+
+## `program`'s compilation units, keyed for the language server: its own
+## compiler identity, no code generation.
+##
+## @param program the program
+## @returns its compilation units, the runtime's first
+export compilation_units_of(program: link.Program): incremental.CompilationUnit[] {
     var keys = incremental.Keys(program, link.translation_units(program), "pep-lsp");
     return incremental.compilation_units(program, keys.base(), root_last = false);
 }
@@ -639,7 +657,7 @@ _check(
     if (filling.running()) {
         var again = recheck_whole(program, cache, inputs, warnings);
         if (again.is_value()) {
-            bodies_read.append_all(units[below].files);
+            bodies_read.append_all(document_unit_files(units));
             return again.value();
         }
         filling.wait();
@@ -648,7 +666,7 @@ _check(
     # program is checked whole here while a `--fill-cache` child fills the
     # cache.
     if (_cold(units, cache, program)) {
-        bodies_read.append_all(units[below].files);
+        bodies_read.append_all(document_unit_files(units));
         var dir = _workers_folder(folder);
         if (_prepare_workers(dir, root, text, os_name, build_options).is_value()) {
             return check_whole(program, warnings);
@@ -991,7 +1009,7 @@ export fill_cache(dir: Path): int {
         return 1;
     }
     var (program, root) = loaded.value();
-    var units = _compilation_units(program);
+    var units = compilation_units_of(program);
     var below = units.count - 1;
     for (var k in 0..units.count) {
         if (units[k].files.contains(0)) {
@@ -1034,7 +1052,7 @@ export compilation_unit_worker(dir: Path): int {
         return 1;
     }
     var (program, root) = loaded.value();
-    var units = _compilation_units(program);
+    var units = compilation_units_of(program);
     var cache = incremental.default_cache(_project_folder(root));
     var sources = program.sources();
     return incremental.serve_compilation_units(

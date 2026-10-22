@@ -1705,7 +1705,12 @@ an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
     # No files named: nothing to drop.
     drop_unread_bodies(analysis);
     expect_true(has_body(analysis, "main") and has_body(analysis, "twice"));
-    analysis.bodies_read.append(0);
+    # What `_check` records for a model checked whole: the document's
+    # compilation unit's files, not the runtime's or `other`'s module.
+    var files = document_unit_files(compilation_units_of(program));
+    expect_true(files.contains(0));
+    expect_false(files.contains(1));
+    analysis.bodies_read.append_all(files);
     drop_unread_bodies(analysis);
     expect_true(has_body(analysis, "main"));
     expect_false(has_body(analysis, "twice"));
