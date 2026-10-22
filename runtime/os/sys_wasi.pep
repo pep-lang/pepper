@@ -110,6 +110,11 @@ _os_sys_total_memory(): ulong {
     return 0;
 }
 
+[Target(OS(Wasi))]
+_os_sys_peak_memory(): ulong {
+    return 0;
+}
+
 # WebAssembly's page: linear memory grows 64 KiB at a time.
 [Target(OS(Wasi))]
 _os_sys_page_size(): ulong {

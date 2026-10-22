@@ -16,6 +16,11 @@ import "utf8";
 export struct Utf16 {
     ## Returns the UTF-16 bytes of `value`.
     ##
+    ## A `String` holds UTF-8, but one made from C memory may not be valid:
+    ## each byte that does not start a valid UTF-8 sequence (see
+    ## `Utf8.is_valid`) is encoded as U+FFFD, as `Utf8.decode_lossy` reads
+    ## it, so the result is always valid UTF-16.
+    ##
     ## @param value the text to encode
     ## @param big_endian whether each code unit's high byte comes first;
     ##   false (little-endian) by default
@@ -26,8 +31,15 @@ export struct Utf16 {
         var size = value.size;
         ulong index = 0;
         while (index < size) {
-            # A String holds valid UTF-8, so every sequence has a length.
             var run = String._utf8_sequence(data, index, size);
+            if (run == 0) {
+                # A String made from C memory can hold invalid UTF-8: each
+                # byte that starts no sequence becomes U+FFFD, as in
+                # `Utf8.decode_lossy`.
+                _text_append_unit(out, 65533, big_endian);
+                index = index + 1;
+                continue;
+            }
             var point = _text_code_point(data, index, run);
             if (point >= 65536) {
                 var rest = point - 65536;

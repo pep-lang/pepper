@@ -69,14 +69,28 @@ main(args: String[]): int {
     var defines = parser.multiple(
         "define", "D", "a build option for pep-build: NAME or NAME=VALUE", value_name = "OPTION"
     );
+    var build_environment = parser.multiple(
+        "build-environment",
+        help = "set an environment variable for pep-build only, not for the tests it builds",
+        value_name = "NAME=VALUE"
+    );
     var locked = parser.flag(
         "locked", help = "fail, rather than fetch, when the project's pep.lock is out of date (also PEPPER_LOCKED=1)"
     );
     var offline = parser.flag(
         "offline",
-        help = "fetch nothing over the network: build with what the project's .pep/deps holds (also PEPPER_OFFLINE=1)"
+        help = "fetch nothing over the network: build with what the project's .pep/deps and the download cache hold (also PEPPER_OFFLINE=1)"
     );
     var frozen = parser.flag("frozen", help = "both --locked and --offline");
+    var features = parser.multiple(
+        "features",
+        "F",
+        "features of the project's package to turn on, for pep-build: a comma-separated list, or repeat the option",
+        value_name = "NAMES"
+    );
+    var no_default_features = parser.flag(
+        "no-default-features", help = "leave the default feature of the project's package off, for pep-build"
+    );
     var paths = parser.positionals(
         "path", "a .pep file, or a folder to search for files holding [Test] functions (default: the current folder)"
     );
@@ -88,11 +102,24 @@ main(args: String[]): int {
     options.imports = imports.values();
     options.library_dirs = library_dirs.values();
     options.defines = defines.values();
+    for (var given in build_environment.values()) {
+        var split = given.split_once("=");
+        if (split.is_empty() or split.value().0.is_empty) {
+            return usage_error(parser, $"'--build-environment' must be NAME=VALUE, not '{given}'");
+        }
+        options.build_environment.append(split.value());
+    }
     if (locked.is_set or frozen.is_set) {
-        options.fetch_flags.append("--locked");
+        options.build_flags.append("--locked");
     }
     if (offline.is_set or frozen.is_set) {
-        options.fetch_flags.append("--offline");
+        options.build_flags.append("--offline");
+    }
+    for (var names in features.values()) {
+        options.build_flags.append_all(["--features", names]);
+    }
+    if (no_default_features.is_set) {
+        options.build_flags.append("--no-default-features");
     }
     var limit = ulong.parse(timeout.value());
     if (limit.is_empty()) {
@@ -150,8 +177,11 @@ struct Options {
     var imports: Array<String> = __null;
     var library_dirs: Array<String> = __null;
     var defines: Array<String> = __null;
-    # `--locked`, `--offline` and `--frozen`, as given, for pep-build.
-    var fetch_flags: Array<String> = __null;
+    # `--locked`, `--offline`, `--frozen`, `--features` and
+    # `--no-default-features`, as given, for pep-build.
+    var build_flags: Array<String> = __null;
+    # `--build-environment`'s variables: each pep-build's, not the tests'.
+    var build_environment: Array<(String, String)> = __null;
     var jobs: ulong = 1;
     var timeout: ulong = 60;
     # `--shard I/N`: the run takes every test whose position in the list
@@ -164,7 +194,8 @@ struct Options {
         this.imports = Array<String>();
         this.library_dirs = Array<String>();
         this.defines = Array<String>();
-        this.fetch_flags = Array<String>();
+        this.build_flags = Array<String>();
+        this.build_environment = Array<(String, String)>();
     }
 }
 
@@ -429,10 +460,14 @@ build(compiler: String, files: Array<String>, program: String, options: Options)
         arguments.append("-D");
         arguments.append(define);
     }
-    arguments.append_all(options.fetch_flags);
+    arguments.append_all(options.build_flags);
     arguments.append("-o");
     arguments.append(program);
-    var ran = process.Command(compiler).arguments(arguments).run();
+    var command = process.Command(compiler).arguments(arguments);
+    for (var (name, value) in options.build_environment) {
+        command.environment(name, value);
+    }
+    var ran = command.run();
     if (ran.is_err()) {
         return $"cannot run pep-build: {ran.error().message}\n";
     }

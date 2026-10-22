@@ -74,10 +74,6 @@ extern uint GetLastError();
 extern uint FormatMessageW(uint flags, void* source, uint id, uint language, ushort* buf, uint size, void* args);
 [Target(OS(Windows))]
 extern int MultiByteToWideChar(uint codepage, uint flags, char* src, int src_len, ushort* dst, int dst_len);
-[Target(OS(Windows))]
-extern int WideCharToMultiByte(
-    uint codepage, uint flags, ushort* src, int src_len, char* dst, int dst_len, void* default_char, int* used_default
-);
 
 # ── UTF-8 <-> UTF-16 ─────────────────────────────────────────────────────────
 
@@ -107,18 +103,7 @@ export _io_win_wide_len(w: __ptr<u16>): int {
 # `n` UTF-16 units at `w` as a UTF-8 String.
 [Target(OS(Windows))]
 export _io_win_narrow(w: __ptr<u16>, n: int): String {
-    if (n <= 0) {
-        return String();
-    }
-    var size = WideCharToMultiByte(65001, 0, w, n, __null, 0, __null, __null);
-    if (size <= 0) {
-        return String();
-    }
-    var buf = _pep_malloc(size as ulong) as __ptr<char>;
-    WideCharToMultiByte(65001, 0, w, n, buf, size, __null, __null);
-    var s = _io_string_from(buf, size as ulong);
-    _pep_free(buf);
-    return s;
+    return _pep_win_narrow(w, n);
 }
 
 # ── Errors ───────────────────────────────────────────────────────────────────

@@ -72,6 +72,16 @@ main(args: String[]): int {
         "Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value (a bare `NAME` is `NAME=1`, as in C). `[BuildOption(\"NAME\")]` and `BuildOption(NAME)` in `[Target(...)]` select code by it, and `static` blocks read it with `reflect.build_option`. Repeat for more options; of two that name one option, the later wins",
         "NAME[=VALUE]"
     );
+    var features = parser.multiple(
+        "features",
+        "F",
+        "Turn on features of the project's package, from its `[features]` in pep.toml: a comma-separated list, or repeat the option. Each feature on defines the build option `<package>_<feature>` and turns on what it lists",
+        "NAMES"
+    );
+    var no_default_features = parser.flag(
+        "no-default-features",
+        help = "Leave the `default` feature of the project's package off; its dependencies' defaults are still on, unless their entries say `default-features = false`"
+    );
     var output = parser.option(
         "",
         "o",
@@ -133,7 +143,7 @@ main(args: String[]): int {
     );
     var offline = parser.flag(
         "offline",
-        help = "Fetch nothing over the network: build with what the project's `.pep/deps` holds, and fail on a locked dependency missing from it (also `PEPPER_OFFLINE=1`)"
+        help = "Fetch nothing over the network: build with what the project's `.pep/deps` and pep-package's download cache hold, and fail on a locked dependency missing from both (also `PEPPER_OFFLINE=1`)"
     );
     var frozen = parser.flag("frozen", help = "Both `--locked` and `--offline`");
     var ir = parser.flag("emit-llvm", help = "Emit LLVM IR (optimized at the `-O` level)");
@@ -292,6 +302,14 @@ main(args: String[]): int {
         parsed.build_options = setup.target.build_options;
         setup.target = parsed;
     }
+    for (var given in features.values()) {
+        for (var name in given.split(",")) {
+            if (!name.trim().is_empty) {
+                setup.target.features.append(name.trim());
+            }
+        }
+    }
+    setup.target.default_features = !no_default_features.is_set;
     # Without `-O`, `PEPPER_OPT_LEVEL` picks the level, as in pep-build, so a
     # whole test suite can run optimized.
     if (!opt_level.is_value()) {
@@ -350,6 +368,9 @@ main(args: String[]): int {
         # A test build keeps the `[Test]` functions, loads `testing` into
         # every file, and adds the `main` that runs them.
         setup.target.build_options[link.TEST_BUILD_OPTION] = "1";
+        # The test `main` lists the `[Test]`s a feature's build option keeps;
+        # loading the program turns the features on again and reports errors.
+        link.Packages(entry, setup.target).turn_on_features();
         if (!setup.forced_imports.contains(driver.TESTING_MODULE)) {
             setup.forced_imports.append(driver.TESTING_MODULE);
         }

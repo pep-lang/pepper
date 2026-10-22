@@ -98,7 +98,9 @@ directory. The running process reads and changes its own environment with
 
 - `process.arguments()` returns the program's command-line arguments, the
   same array `main(args: String[])` receives (see
-  [Functions](functions.md#command-line-arguments-and-exit)).
+  [Functions](functions.md#command-line-arguments-and-exit)). On Windows
+  they are read as UTF-16, so every character arrives as UTF-8; on POSIX
+  an argument is whatever bytes the parent passed.
 - `process.exit(code)` ends the program at once with status `code`, as C's
   `exit` does: the handlers registered with C's `atexit` run, and printed
   output is flushed. In a copy `process.fork()` started, the handlers,

@@ -39,6 +39,10 @@ fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and ex
 
 [target.'OS(Windows)'.dependencies]
 winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
+
+[features]
+default   = ["tls"]
+tls       = ["dep:openssl"]          # a build with it defines 'my_app_tls' and uses openssl
 ```
 
 A package is a project other projects depend on: a repository (or folder)
@@ -108,6 +112,9 @@ main(): int {
 | `branch` | A branch |
 | `tag` | A tag |
 | `commit` | A commit |
+| `optional` | `true`: a build uses it only when a [feature](#features) turns it on |
+| `features` | An array of the dependency's features to turn on |
+| `default-features` | `false` leaves the dependency's `default` feature off |
 
 A dependency has exactly one source, and at most one of `version`, `branch`,
 `tag` and `commit`; with none, it follows the repository's default branch.
@@ -158,7 +165,8 @@ pepper build
 
 In CI, `pepper build --locked` and `pepper test --locked` fail when
 `pep.lock` is out of date with `pep.toml` instead of updating it, and
-`--offline` builds with only what `.pep/deps` holds (`--frozen` is both;
+`--offline` builds with only what `.pep/deps` and the shared
+[download cache](pep-package.md#the-download-cache) hold (`--frozen` is both;
 `PEPPER_LOCKED=1` and `PEPPER_OFFLINE=1` do the same). See
 [Reproducible builds](pep-package.md#reproducible-builds). They apply to
 dev-dependencies as to the rest.
@@ -256,6 +264,80 @@ remove` removes one (see [pep-package](pep-package.md#add-ownernamerange)).
 A name may be in only one of the dependency tables, and a `[target]` table
 holds only `dependencies`.
 
+## `[features]`
+
+A package with optional parts, such as TLS support in a client, names
+them in `[features]`, so a project that does not want one neither builds
+its code nor its dependencies. Each key is a feature, and its value lists
+what turning it on turns on:
+
+```toml
+[package]
+name = "http"
+
+[dependencies]
+openssl = { github = "someone/openssl", version = "3", optional = true }
+zlib    = { github = "someone/zlib", version = "1", optional = true }
+
+[features]
+default = ["tls"]
+tls     = ["dep:openssl"]                  # the optional dependency openssl
+gzip    = ["dep:zlib", "zlib/simd"]        # zlib, and zlib's feature 'simd'
+full    = ["tls", "gzip"]                  # other features of this package
+```
+
+- **Code reads a feature as a build option:** a feature that is on defines
+  the build option `<package>_<feature>`, the package's `name` and the
+  feature joined with `_` (`http_tls`), so `[Target(BuildOption(...))]`,
+  `[BuildOption("...")]` and `reflect.build_option` select code by it, as
+  for a `-D` option (see [Build options](../language/build-options.md)).
+  A feature name is an identifier. The names join with a bare `_`, so two
+  packages of one build should not share a `name`: their features would
+  define the same options.
+- **What a feature lists:** another feature of the package (`tls`); an
+  optional dependency, `dep:<name>`; or a feature of a dependency,
+  `<name>/<feature>`, which turns the dependency on too when it is
+  optional. Each is checked against the package's own `pep.toml`.
+- **`default`** is the feature a package has on unless it is asked not
+  to: `--no-default-features` on `pepper build` and `pepper test` for the
+  project's package, `default-features = false` in a dependency's entry
+  for that dependency.
+- **Turning features on:** `pepper build --features tls,gzip` (and
+  `pepper test --features`) for the project's package; a dependency's
+  entry, `features = ["gzip"]`, for that package. Features are additive
+  and unified across the graph, as in Cargo: a package that two others
+  depend on has every feature either turns on, and there is one copy of
+  it in the build.
+- **Optional dependencies** (`optional = true`) are seen only by a build
+  with a feature that turns them on; guard the import with the feature's
+  build option, so a build without it skips the import:
+
+  ```pepper
+  [Target(BuildOption(http_tls))]
+  import openssl;
+  ```
+
+  An import of one that no feature this build turns on lists is an error:
+
+  ```text
+  module.pep:1:8: error: 'openssl' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:openssl' on the import
+  ```
+
+  A dev-dependency cannot be optional.
+- **Locked whatever the features:** `pep.lock` records optional
+  dependencies like the rest, and a build fetches them whether or not a
+  feature turns them on, so the lock does not depend on which features a
+  build picks, as it does not on the platform.
+- **Needs toolchain 0.11.0:** an older toolchain rejects `[features]`, and
+  a dependency's `optional`, `features` and `default-features`, so a
+  package that uses them sets `minimum_toolchain = "0.11.0"` (or later),
+  as for [`[dev-dependencies]`](#dev-dependencies); `pepper package
+  publish` checks it.
+
+`pepper package add --optional`, `--features` and `--no-default-features`
+write a dependency's `optional`, `features` and `default-features` (see
+[pep-package](pep-package.md#add-ownernamerange)).
+
 ## `[fetch]`
 
 ```toml
@@ -282,6 +364,11 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
   dependency named like a runtime module (`io`, `async`), which it would
   otherwise hide.
 - A `[target]` condition `[Target(...)]` would reject.
+- A feature that lists a feature the package lacks, a `dep:` that names
+  no optional dependency, or a `<name>/<feature>` whose dependency does
+  not exist; a dependency's `features` asking for one its package lacks
+  (`package 'zlib' has no feature 'smid'`), which a build reports once
+  the package is fetched.
 - A dependency name that is not an identifier (`fast-json`): it is the name
   `import` uses.
 - A dependency with no source or two, a repository not written `owner/name`,

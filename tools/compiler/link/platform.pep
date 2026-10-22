@@ -65,6 +65,11 @@ export struct Target {
     ## The build options by name, each with its value as written (`"1"`
     ## for a bare `-D NAME`).
     var build_options: HashMap<String, String> = HashMap<String, String>();
+    ## The `[features]` of the project's package that `--features` turns on.
+    var features: String[] = Array<String>();
+    ## Whether the project's package's `default` feature is on: false
+    ## with `--no-default-features`.
+    var default_features: bool = true;
 
     ## Creates the target the compiler runs on, with no build options.
     construct() {

@@ -28,6 +28,8 @@ extern long sysconf(int name);
 [Target(OS(Mac))]
 extern int sysctlbyname(char* name, void* value, void* size, void* new_value, ulong new_size);
 [Target(OS(Linux) || OS(Mac))]
+extern int getrusage(int who, void* usage);
+[Target(OS(Linux) || OS(Mac))]
 extern uint geteuid();
 [Target(OS(Linux) || OS(Mac))]
 extern int getpwuid_r(uint uid, void* entry, char* buffer, ulong size, void* result);
@@ -217,6 +219,27 @@ _os_sys_total_memory(): ulong {
     _pep_free(value);
     _pep_free(size);
     return bytes;
+}
+
+# RUSAGE_SELF's struct rusage: two timevals, then ru_maxrss at byte 32 (144
+# bytes in all), in kilobytes on Linux.
+[Target(OS(Linux))]
+_os_sys_peak_memory(): ulong {
+    return _os_sys_max_rss() * 1024;
+}
+
+# macOS gives ru_maxrss in bytes.
+[Target(OS(Mac))]
+_os_sys_peak_memory(): ulong {
+    return _os_sys_max_rss();
+}
+
+[Target(OS(Linux) || OS(Mac))]
+_os_sys_max_rss(): ulong {
+    __ptr<long> usage = _pep_malloc(144);
+    var peak = getrusage(0, usage) == 0 && usage[4] > 0 ? usage[4] as ulong : 0;
+    _pep_free(usage);
+    return peak;
 }
 
 # _SC_PAGESIZE: 30 on Linux, 29 on macOS.

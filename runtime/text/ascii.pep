@@ -24,10 +24,11 @@ export struct Ascii {
     }
 
     ## Returns the ASCII bytes of `value`, with `?` for each code point past
-    ## 127.
+    ## 127, and for each byte that does not start a valid UTF-8 sequence
+    ## (a `String` made from C memory may hold one).
     ##
     ## @param value the text to encode
-    ## @returns a new array of one byte per code point
+    ## @returns a new array of one byte per code point or invalid byte
     static encode_lossy(value: String): u8[] {
         var out = Array<u8>(value.size);
         __ptr<u8> data = unsafe_cast<__ptr<u8>>(value._data);
@@ -40,7 +41,8 @@ export struct Ascii {
             } else {
                 out.append(63);  # '?'
             }
-            index = index + run;
+            # A byte that starts no valid sequence is one `?`.
+            index = index + (run == 0 ? 1 : run);
         }
         return out;
     }

@@ -140,6 +140,18 @@ export total_memory(): ulong {
     return _os_sys_total_memory();
 }
 
+## Returns the most physical memory this process has held at once since it
+## started: its peak resident set size (`ru_maxrss` on Linux and macOS, the
+## peak working set on Windows). WASI does not report it.
+##
+## @returns the peak resident set size in bytes; 0 when the system does not
+##   report it
+## @example
+##     var megabytes = os.peak_memory() / 1048576;
+export peak_memory(): ulong {
+    return _os_sys_peak_memory();
+}
+
 ## Returns the size of a page of virtual memory in bytes: the unit the
 ## operating system maps memory in, usually 4096 (16384 on Apple silicon;
 ## 65536, WebAssembly's page, on WASI).

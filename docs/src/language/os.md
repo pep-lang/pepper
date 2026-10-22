@@ -90,6 +90,7 @@ be negative.
 | `hostname()` | the machine's host name |
 | `logical_cpus()`, `physical_cpus()` | processor counts, the same as `async`'s, capped by a Linux container's CPU quota |
 | `total_memory()`, `page_size()` | physical memory, or a Linux container's lower memory limit, and the virtual memory page size, in bytes |
+| `peak_memory()` | the most physical memory the process has held at once (its peak resident set), in bytes; 0 on WASI |
 | `user_name()` | the user the program runs as, or none |
 | `home_directory()` | `HOME` (on Windows `USERPROFILE`), or the user database's entry, or none |
 | `temp_directory()` | the directory for temporary files, the same as `io.Directory.temp()` |

@@ -453,6 +453,40 @@ builds_an_entry_inside_a_modules_folder_with_the_cache() {
     }
 }
 
+# A build in compilation unit workers links after a whole-program build
+# filled the cache: it compiled every body itself, rather than skipping the
+# bodies whose whole-program objects the cache held and linking none of them.
+[Test]
+builds_in_compilation_units_after_a_whole_program_build_with_the_cache() {
+    var folder = _program(
+        "options_whole_then_units", "import geo;\n\nmain(): int {\n    return geo.area(2, 3) - 6;\n}\n"
+    );
+    Directory.create_all(folder.path.join(Path("geo")));
+    File.write_text(
+        folder.path.join(Path("geo")).join(Path("module.pep")),
+        "export area(w: int, h: int): int {\n    return w * h;\n}\n"
+    );
+    for (var whole in [true, false]) {
+        var program = (whole ? "whole" : "units") + toolchain.executable_suffix();
+        var command = process.Command(_compiler().to_string());
+        command.arguments(["main.pep", "-I", ".", "-o", program, "--build", program + ".build", "--cache", "cache"]);
+        command.working_directory(folder.path).stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+        if (whole) {
+            command.environment("PEPC_NO_COMPILATION_UNITS", "1");
+        } else {
+            command.remove_environment("PEPC_NO_COMPILATION_UNITS").environment("PEPC_COMPILATION_UNIT_JOBS", "2");
+        }
+        var built = command.run();
+        expect_true(built.is_ok());
+        if (!built.value().status.success()) {
+            print(built.value().stderr);
+        }
+        expect_true(built.value().status.success());
+        var ran = process.Command(folder.path.join(Path(program)).to_string()).run();
+        expect_true(ran.is_ok() and ran.value().status.success());
+    }
+}
+
 # A program of several compilation units with location strings (an index's
 # bounds check) builds with link-time optimization and runs: a part that
 # only declares a location string once kept it in a comdat, and the linked
