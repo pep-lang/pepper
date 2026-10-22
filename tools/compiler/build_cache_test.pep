@@ -715,7 +715,10 @@ links_an_object_built_in_a_program_with_more_conformers() {
     );
     _build_with_runtime(root, "with.pep");
     var without = _build_with_runtime(root, "without.pep");
-    expect_true(without.hits.contains("source"));
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var program = link.load_program(root.join(Path("without.pep")), setup);
+    expect_true(without.hits.contains(_unit_of(program.value(), "source.pep")));
 }
 
 # Writes a program whose `a.pep` returns `a_body`, and whose `main.pep`

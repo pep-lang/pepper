@@ -513,7 +513,8 @@ main(args: String[]): int {
             opt_level.value(),
             frame_pointers.is_set,
             runtime_checks,
-            debug.is_set ? driver.gdb_printers(program.value()) : ""
+            debug.is_set ? driver.gdb_printers(program.value()) : "",
+            Optional<link.Program>.Value(program.value())
         );
         if (generated.is_err()) {
             File.stderr().write_all(render_all([generated.error()], program.value().sources()) + "\n");

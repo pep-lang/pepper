@@ -1082,6 +1082,8 @@ export generate(
 ##   generated
 ## @param frame_pointers whether every function keeps its frame pointer
 ## @param runtime_checks the runtime checks the code keeps
+## @param gdb_printers the GDB pretty printers' script embedded with `-g`
+## @param program the program the module was checked from (`generate`)
 ## @returns the IR, or the first error
 export generate_ir(
     module: Module,
@@ -1093,7 +1095,8 @@ export generate_ir(
     opt_level: uint = 0,
     frame_pointers: bool = false,
     runtime_checks: RuntimeChecks = RuntimeChecks.all(),
-    gdb_printers: String = ""
+    gdb_printers: String = "",
+    program: link.Program? = Optional<link.Program>.Empty
 ): Result<String, Diagnostic> {
     var triple = target_triple(state.target);
     var cpu = chosen.is_value() ? chosen.value() : Cpu.default_for(triple);
@@ -1109,7 +1112,7 @@ export generate_ir(
     setup.frame_pointers = frame_pointers;
     setup.runtime_checks = runtime_checks;
     setup.gdb_printers = gdb_printers;
-    var generated = generate(module, state, namespaces, name, setup);
+    var generated = generate(module, state, namespaces, name, setup, program = program);
     if (generated.is_err()) {
         return Result<String, Diagnostic>.err(generated.error());
     }
