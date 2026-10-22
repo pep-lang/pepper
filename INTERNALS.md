@@ -3143,7 +3143,9 @@ then failed to link (#24). So the scheduler gives a hit's record to the
 compilation units reading it at once, but asks whether its object links
 (`usable`) only once the compilation units it reads are done; an object
 whose `needs` the objects below no longer all define is passed over for one
-under its key with that stamp added (`Cache.unit_store_key`), and
+under its key with that stamp added (`Cache.store_unit`, which stores there
+when the key holds other objects, even another build's stored a moment
+before: a key's folder appears by a rename that fails when it is there), and
 when there is none the hit is checked again in a worker, which keeps the
 record already given out and stores its new object there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this

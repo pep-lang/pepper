@@ -367,6 +367,47 @@ keeps_the_objects_another_build_stored_first() {
     expect_false(second.metadata().is_ok());
 }
 
+# A folder of a compilation unit's objects, as a build compiled them.
+_unit_built(root: Path, name: String): Path {
+    var built = root.join(Path(name));
+    Directory.create_all(built);
+    File.write_text(built.join(Path("0.o")), name);
+    return built;
+}
+
+# Builds sharing one cache that compile one compilation unit under one key
+# on objects below that differ each store it, whichever stores first, even
+# at the same moment: all a build that stores second sees is the key's
+# folder there, so this stores one after another (pep-lang/pepper#152).
+[Test]
+stores_a_unit_another_build_stored_first_on_other_objects_below() {
+    var folder = TempFolder("store_unit_twice");
+    var root = folder.path;
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var below_f = [incremental.Defines("f\n")];
+    var below_g = [incremental.Defines("g\n")];
+    var first = cache.store_unit(_unit_built(root, "first"), "+unit", "key", "f\n", below_f, "0.o");
+    expect_equal(first.value(), "key");
+
+    # Needing `g`, which the first's objects below lack: its own objects go
+    # under the other key, and the first's stay.
+    var second = cache.store_unit(_unit_built(root, "second"), "+unit", "key", "g\n", below_g, "0.o");
+    expect_true(second.is_ok());
+    expect_true(second.value() != "key");
+    expect_equal(File.read_to_string(cache.objects("+unit", second.value()).join(Path("0.o"))).value(), "second");
+    expect_equal(File.read_to_string(cache.objects("+unit", "key").join(Path("0.o"))).value(), "first");
+
+    # On objects below the first's link with, it links those, and so with
+    # the second's; its own go.
+    var both = [incremental.Defines("f\ng\n")];
+    var third = _unit_built(root, "third");
+    expect_equal(cache.store_unit(third, "+unit", "key", "f\n", both, "0.o").value(), "key");
+    expect_false(third.metadata().is_ok());
+    var fourth = _unit_built(root, "fourth");
+    expect_equal(cache.store_unit(fourth, "+unit", "key", "g\n", below_g, "0.o").value(), second.value());
+    expect_false(fourth.metadata().is_ok());
+}
+
 # A build links the objects of a compilation unit it found in the cache
 # from there, and never links without them: a key's folder gone by then
 # (another build pruning the unit moves it aside, and back when it was
