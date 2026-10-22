@@ -28,7 +28,7 @@ short, and `pepper help build` runs it.
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
-| `--offline` | Fetch no dependency over the network; fail on one `.pep/deps` lacks | off, or `PEPPER_OFFLINE` |
+| `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
 | `--frozen` | Both `--locked` and `--offline` | off |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
@@ -123,14 +123,17 @@ These make the fetch reproducible, for CI (see
   names that `pep.lock` does not list is an error before anything is
   fetched; otherwise the build runs `pep-package fetch --locked`, even when
   nothing is missing, so a changed range is caught too.
-- `--offline` (or `PEPPER_OFFLINE=1`) fetches nothing over the network: a
-  locked package `.pep/deps` lacks is an error that names it, and
-  `pep-package` runs with `--offline`.
+- `--offline` (or `PEPPER_OFFLINE=1`) fetches nothing over the network:
+  `pep-package` runs with `--offline`, taking a locked package `.pep/deps`
+  lacks from the [download cache](pep-package.md#the-download-cache), and
+  failing on one the cache lacks too. Without `pep-package`, a locked
+  package `.pep/deps` lacks is an error that names it.
 - `--frozen` is both.
 
 ```text
 $ pepper build --offline
---offline, and app/.pep/deps lacks github:someone/geometry 0582024b9cd7; run 'pepper package fetch' without --offline first
+fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 ```
 
 ### `-I <dir>`
@@ -647,8 +650,11 @@ scratch. A failure names the cached objects that differ.
 `-T` turns on a trace channel, which prints to standard error. Repeat it for
 more channels; `--Tall` turns on every one.
 
-- `-T time` prints how long each stage of the compile took
-  (`time: check and build    470.763 ms`).
+- `-T time` prints how long each stage of the compile took, and the
+  compiler's peak memory once it ended (`time: link bodies 1395 ms, peak
+  400 MB`). A build in compilation units keeps its workers' timings in
+  `compilation-units.<pid>/<k>.stages` in the build folder, each ending
+  with that worker's peak memory.
 - `-T passes` prints how long each pass of the checker took, summed over its
   runs, slowest first (`pass:  3116.171 ms   16x resolve_implicit_types`),
   the passes run checking the runtime and each module included.
