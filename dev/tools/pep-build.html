@@ -203,7 +203,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
-<tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one <code>.pep/deps</code> lacks</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
+<tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
@@ -286,13 +286,16 @@ with <code>pep.toml</code>, instead of updating it. A Git dependency <code>pep.t
 names that <code>pep.lock</code> does not list is an error before anything is
 fetched; otherwise the build runs <code>pep-package fetch --locked</code>, even when
 nothing is missing, so a changed range is caught too.</li>
-<li><code>--offline</code> (or <code>PEPPER_OFFLINE=1</code>) fetches nothing over the network: a
-locked package <code>.pep/deps</code> lacks is an error that names it, and
-<code>pep-package</code> runs with <code>--offline</code>.</li>
+<li><code>--offline</code> (or <code>PEPPER_OFFLINE=1</code>) fetches nothing over the network:
+<code>pep-package</code> runs with <code>--offline</code>, taking a locked package <code>.pep/deps</code>
+lacks from the <a href="pep-package.html#the-download-cache">download cache</a>, and
+failing on one the cache lacks too. Without <code>pep-package</code>, a locked
+package <code>.pep/deps</code> lacks is an error that names it.</li>
 <li><code>--frozen</code> is both.</li>
 </ul>
 <pre><code class="language-text">$ pepper build --offline
---offline, and app/.pep/deps lacks github:someone/geometry 0582024b9cd7; run 'pepper package fetch' without --offline first
+fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 </code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
@@ -705,8 +708,10 @@ scratch. A failure names the cached objects that differ.</p>
 <p><code>-T</code> turns on a trace channel, which prints to standard error. Repeat it for
 more channels; <code>--Tall</code> turns on every one.</p>
 <ul>
-<li><code>-T time</code> prints how long each stage of the compile took
-(<code>time: check and build    470.763 ms</code>).</li>
+<li><code>-T time</code> prints how long each stage of the compile took, and the
+compiler's peak memory once it ended (<code>time: link bodies 1395 ms, peak 400 MB</code>). A build in compilation units keeps its workers' timings in
+<code>compilation-units.&lt;pid&gt;/&lt;k&gt;.stages</code> in the build folder, each ending
+with that worker's peak memory.</li>
 <li><code>-T passes</code> prints how long each pass of the checker took, summed over its
 runs, slowest first (<code>pass:  3116.171 ms   16x resolve_implicit_types</code>),
 the passes run checking the runtime and each module included.</li>

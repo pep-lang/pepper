@@ -341,6 +341,19 @@ returned instead, as the JVM does. WASI does not report it.</p>
 <ul>
 <li>the total physical memory, or the container's memory limit when that is lower, in bytes; 0 when the system does not report it</li>
 </ul>
+<h2 id="peak_memory"><a class="header" href="#peak_memory">peak_memory</a></h2>
+<pre><code class="language-pepper">peak_memory(): ulong
+</code></pre>
+<p>Returns the most physical memory this process has held at once since it
+started: its peak resident set size (<code>ru_maxrss</code> on Linux and macOS, the
+peak working set on Windows). WASI does not report it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peak resident set size in bytes; 0 when the system does not report it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var megabytes = os.peak_memory() / 1048576;
+</code></pre>
 <h2 id="page_size"><a class="header" href="#page_size">page_size</a></h2>
 <pre><code class="language-pepper">page_size(): ulong
 </code></pre>

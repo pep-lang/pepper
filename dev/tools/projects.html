@@ -320,7 +320,8 @@ pepper build
 </code></pre>
 <p>In CI, <code>pepper build --locked</code> and <code>pepper test --locked</code> fail when
 <code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
-<code>--offline</code> builds with only what <code>.pep/deps</code> holds (<code>--frozen</code> is both;
+<code>--offline</code> builds with only what <code>.pep/deps</code> and the shared
+<a href="pep-package.html#the-download-cache">download cache</a> hold (<code>--frozen</code> is both;
 <code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
 <a href="pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
 dev-dependencies as to the rest.</p>

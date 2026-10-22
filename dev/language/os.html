@@ -328,6 +328,7 @@ main(): int {
 <tr><td><code>hostname()</code></td><td>the machine's host name</td></tr>
 <tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>'s, capped by a Linux container's CPU quota</td></tr>
 <tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory, or a Linux container's lower memory limit, and the virtual memory page size, in bytes</td></tr>
+<tr><td><code>peak_memory()</code></td><td>the most physical memory the process has held at once (its peak resident set), in bytes; 0 on WASI</td></tr>
 <tr><td><code>user_name()</code></td><td>the user the program runs as, or none</td></tr>
 <tr><td><code>home_directory()</code></td><td><code>HOME</code> (on Windows <code>USERPROFILE</code>), or the user database's entry, or none</td></tr>
 <tr><td><code>temp_directory()</code></td><td>the directory for temporary files, the same as <code>io.Directory.temp()</code></td></tr>

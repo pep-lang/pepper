@@ -17445,6 +17445,7 @@ main(): int {
 <tr><td><code>hostname()</code></td><td>the machine's host name</td></tr>
 <tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>'s, capped by a Linux container's CPU quota</td></tr>
 <tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory, or a Linux container's lower memory limit, and the virtual memory page size, in bytes</td></tr>
+<tr><td><code>peak_memory()</code></td><td>the most physical memory the process has held at once (its peak resident set), in bytes; 0 on WASI</td></tr>
 <tr><td><code>user_name()</code></td><td>the user the program runs as, or none</td></tr>
 <tr><td><code>home_directory()</code></td><td><code>HOME</code> (on Windows <code>USERPROFILE</code>), or the user database's entry, or none</td></tr>
 <tr><td><code>temp_directory()</code></td><td>the directory for temporary files, the same as <code>io.Directory.temp()</code></td></tr>
@@ -21812,7 +21813,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
-<tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one <code>.pep/deps</code> lacks</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
+<tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
@@ -21895,13 +21896,16 @@ with <code>pep.toml</code>, instead of updating it. A Git dependency <code>pep.t
 names that <code>pep.lock</code> does not list is an error before anything is
 fetched; otherwise the build runs <code>pep-package fetch --locked</code>, even when
 nothing is missing, so a changed range is caught too.</li>
-<li><code>--offline</code> (or <code>PEPPER_OFFLINE=1</code>) fetches nothing over the network: a
-locked package <code>.pep/deps</code> lacks is an error that names it, and
-<code>pep-package</code> runs with <code>--offline</code>.</li>
+<li><code>--offline</code> (or <code>PEPPER_OFFLINE=1</code>) fetches nothing over the network:
+<code>pep-package</code> runs with <code>--offline</code>, taking a locked package <code>.pep/deps</code>
+lacks from the <a href="tools/pep-package.html#the-download-cache">download cache</a>, and
+failing on one the cache lacks too. Without <code>pep-package</code>, a locked
+package <code>.pep/deps</code> lacks is an error that names it.</li>
 <li><code>--frozen</code> is both.</li>
 </ul>
 <pre><code class="language-text">$ pepper build --offline
---offline, and app/.pep/deps lacks github:someone/geometry 0582024b9cd7; run 'pepper package fetch' without --offline first
+fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 </code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
@@ -22314,8 +22318,10 @@ scratch. A failure names the cached objects that differ.</p>
 <p><code>-T</code> turns on a trace channel, which prints to standard error. Repeat it for
 more channels; <code>--Tall</code> turns on every one.</p>
 <ul>
-<li><code>-T time</code> prints how long each stage of the compile took
-(<code>time: check and build    470.763 ms</code>).</li>
+<li><code>-T time</code> prints how long each stage of the compile took, and the
+compiler's peak memory once it ended (<code>time: link bodies 1395 ms, peak 400 MB</code>). A build in compilation units keeps its workers' timings in
+<code>compilation-units.&lt;pid&gt;/&lt;k&gt;.stages</code> in the build folder, each ending
+with that worker's peak memory.</li>
 <li><code>-T passes</code> prints how long each pass of the checker took, summed over its
 runs, slowest first (<code>pass:  3116.171 ms   16x resolve_implicit_types</code>),
 the passes run checking the runtime and each module included.</li>
@@ -22509,7 +22515,8 @@ pepper build
 </code></pre>
 <p>In CI, <code>pepper build --locked</code> and <code>pepper test --locked</code> fail when
 <code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
-<code>--offline</code> builds with only what <code>.pep/deps</code> holds (<code>--frozen</code> is both;
+<code>--offline</code> builds with only what <code>.pep/deps</code> and the shared
+<a href="tools/pep-package.html#the-download-cache">download cache</a> hold (<code>--frozen</code> is both;
 <code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
 <a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
 dev-dependencies as to the rest.</p>
@@ -22884,6 +22891,8 @@ pepper package update --verify               # one at a time, keeping the update
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
+pepper package cache info                    # the download cache every project shares
+pepper package cache clean
 </code></pre>
 <pre><code class="language-text">pep-package [-C &lt;dir&gt;] [--locked] [--offline] [--frozen] &lt;command&gt; [arguments]
 </code></pre>
@@ -22896,12 +22905,14 @@ Without git, <code>pep-package</code> downloads the host's archive of each commi
 <code>pep.lock</code> pins over HTTPS instead (see <a href="tools/pep-package.html#fetching-without-git">Fetching without git</a>),
 so a project with a <code>pep.lock</code> builds on a machine with no git.</p>
 <p><code>pepper build</code> fetches on its own what <code>pep.lock</code> lists and <code>.pep/deps</code>
-lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.</p>
+lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.
+Every package is downloaded once per machine, into a
+<a href="tools/pep-package.html#the-download-cache">download cache</a> that all projects share.</p>
 <h2 id="options-and-commands-1"><a class="header" href="#options-and-commands-1">Options and commands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>-C &lt;dir&gt;</code>, <code>--directory &lt;dir&gt;</code></td><td>Works on the project at or above <code>&lt;dir&gt;</code> instead of the current folder</td></tr>
 <tr><td><code>--locked</code></td><td>Fails, leaving <code>pep.lock</code> as it is, when the command would change it (see <a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>)</td></tr>
-<tr><td><code>--offline</code></td><td>Uses only what <code>.pep/deps</code> holds, and fails on anything that needs the network</td></tr>
+<tr><td><code>--offline</code></td><td>Uses only what <code>.pep/deps</code> and the <a href="tools/pep-package.html#the-download-cache">download cache</a> hold, and fails on anything that needs the network</td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td></tr>
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
 <tr><td><code>fetch &lt;source&gt;...</code></td><td>Fetches only those locked packages (<code>github:owner/name</code>), at their locked commits, resolving nothing</td></tr>
@@ -22917,6 +22928,8 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
 <tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="tools/pep-package.html#publish"><code>publish</code></a>)</td></tr>
 <tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
+<tr><td><code>cache info</code></td><td>Prints the <a href="tools/pep-package.html#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
+<tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
@@ -23091,7 +23104,9 @@ as it was. <code>fetch --locked</code> passes only when <code>pep.lock</code> al
 <code>pep.toml</code>; it may still check packages out into <code>.pep/deps</code>.</li>
 <li><strong><code>--offline</code></strong> (or <code>PEPPER_OFFLINE=1</code>): nothing is cloned, fetched,
 downloaded or looked up. A package <code>.pep/deps</code> already holds at its
-locked commit is used; one it lacks is an error, and so is anything that
+locked commit is used, or else one the
+<a href="tools/pep-package.html#the-download-cache">download cache</a> holds; one neither holds is an
+error, and so is anything that
 must read which versions a repository offers (<code>add</code>, <code>update</code>, or a
 <code>pep.toml</code> change <code>pep.lock</code> does not cover).</li>
 <li><strong><code>--frozen</code></strong>: both.</li>
@@ -23102,13 +23117,47 @@ pep-package: error: pep.lock would change, and --locked keeps it as it is:
 run the command without --locked (or PEPPER_LOCKED), then commit pep.lock
 
 $ pepper package fetch --offline
-pep-package: error: cannot fetch github:someone/geometry: --offline, and .pep/deps/github.com/someone/geometry does not hold the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither .pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 </code></pre>
 <p><code>pepper build</code> and <code>pepper test</code> take the same three options for the
 fetch they do on their own (see <a href="tools/pep-build.html">The compiler: pep-build</a>).</p>
+<h2 id="the-download-cache"><a class="header" href="#the-download-cache">The download cache</a></h2>
+<p>Each package is downloaded once per machine, into a cache in the Pepper
+home that every project shares, as Cargo's <code>~/.cargo/registry</code> and Go's
+module cache are: <code>cache/packages</code> in the home <code>PEPPER_HOME</code> names, else
+<code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere (see
+<a href="tools/pep-install.html">Toolchains: pep-install</a>). It holds, for each package,</p>
+<ul>
+<li><code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;.git</code>: a bare git repository of every commit any
+project has fetched, fetched from the host only when it lacks the commit
+a project needs;</li>
+<li><code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code>: each archive fetched without
+git (see <a href="tools/pep-package.html#fetching-without-git">Fetching without git</a>).</li>
+</ul>
+<p>A project's <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> is a clone of the cache's
+repository (its <code>origin</code> is still the host's address). Git hard-links
+the objects of a clone from a folder on the same drive, so it takes
+little space, and copies them from another drive. A clone is complete on
+its own, so deleting the cache never breaks a project: it builds from
+what <code>.pep/deps</code> holds, and the next fetch that needs a commit the
+project lacks downloads it into the cache again. Checking out a cached
+package still checks its files against <code>pep.lock</code>'s <code>sha256</code>.</p>
+<p>Processes take turns at a package: each holds a lock on
+<code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;.lock</code> while it fetches it, so projects fetching
+the same package at once each wait for the other and fetch it once.
+<code>cache clean</code> takes each package's lock before it removes the package,
+and keeps one a fetch is using, saying so; the lock files themselves stay.</p>
+<pre><code class="language-text">$ pepper package cache info
+/home/me/.pepper/cache/packages
+github.com/other/numbers
+github.com/someone/geometry
+$ pepper package cache clean
+pep-package: removed 2 packages from /home/me/.pepper/cache/packages
+</code></pre>
 <h2 id="fetching-without-git"><a class="header" href="#fetching-without-git">Fetching without git</a></h2>
 <p>When git is not on the <code>PATH</code>, <code>pep-package</code> fetches each commit
-<code>pep.lock</code> pins as the host's archive of it, over HTTPS, checks its files
+<code>pep.lock</code> pins as the host's archive of it, over HTTPS, into the
+<a href="tools/pep-package.html#the-download-cache">download cache</a> (once per machine), checks its files
 against the lock's <code>sha256</code> and unpacks it, without its top-level folder,
 into <code>.pep/deps</code>:</p>
 <div class="table-wrapper"><table><thead><tr><th>Host</th><th>Archive</th></tr></thead><tbody>
@@ -23174,7 +23223,7 @@ them out, each once per run.</p>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
-<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home whose <code>pepper</code> <a href="tools/pep-package.html#publish"><code>publish</code></a> runs the tests with, as for <code>pep-install</code></td></tr>
+<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home that holds the <a href="tools/pep-package.html#the-download-cache">download cache</a>, and whose <code>pepper</code> <a href="tools/pep-package.html#publish"><code>publish</code></a> runs the tests with, as for <code>pep-install</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody></table>
 </div>
@@ -23505,8 +23554,9 @@ finds it and it finds the compiler:</p>
 <tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
 <tr><td><code>-L &lt;dir&gt;</code>, <code>--library-path &lt;dir&gt;</code></td><td>A folder the linker searches for libraries, for <code>pep-build</code>; repeatable</td><td></td></tr>
 <tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="tools/../language/build-options.html">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
+<tr><td><code>--build-environment &lt;name&gt;=&lt;value&gt;</code></td><td>Sets an environment variable for each <code>pep-build</code> that builds a test program, and not for the tests, which run with <code>pep-test</code>'s environment; repeatable. For example, <code>--build-environment PEPC_NO_COMPILATION_UNITS=1</code> builds each test program as one, while tests that build programs of their own still use compilation units</td><td></td></tr>
 <tr><td><code>--locked</code></td><td>Passed to <code>pep-build</code>: fail, rather than fetch, when the project's <code>pep.lock</code> is out of date (also <code>PEPPER_LOCKED=1</code>)</td><td></td></tr>
-<tr><td><code>--offline</code></td><td>Passed to <code>pep-build</code>: fetch nothing over the network, building with what <code>.pep/deps</code> holds (also <code>PEPPER_OFFLINE=1</code>)</td><td></td></tr>
+<tr><td><code>--offline</code></td><td>Passed to <code>pep-build</code>: fetch nothing over the network, building with what <code>.pep/deps</code> and the <a href="tools/pep-package.html#the-download-cache">download cache</a> hold (also <code>PEPPER_OFFLINE=1</code>)</td><td></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Passed to <code>pep-build</code>: features of the project's package to turn on, comma-separated; repeatable (see <a href="tools/projects.html#features">Features</a>)</td><td>the <code>default</code> feature</td></tr>
 <tr><td><code>--no-default-features</code></td><td>Passed to <code>pep-build</code>: leave the project's package's <code>default</code> feature off</td><td></td></tr>
@@ -48787,6 +48837,19 @@ returned instead, as the JVM does. WASI does not report it.</p>
 <ul>
 <li>the total physical memory, or the container's memory limit when that is lower, in bytes; 0 when the system does not report it</li>
 </ul>
+<h2 id="peak_memory"><a class="header" href="#peak_memory">peak_memory</a></h2>
+<pre><code class="language-pepper">peak_memory(): ulong
+</code></pre>
+<p>Returns the most physical memory this process has held at once since it
+started: its peak resident set size (<code>ru_maxrss</code> on Linux and macOS, the
+peak working set on Windows). WASI does not report it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peak resident set size in bytes; 0 when the system does not report it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var megabytes = os.peak_memory() / 1048576;
+</code></pre>
 <h2 id="page_size"><a class="header" href="#page_size">page_size</a></h2>
 <pre><code class="language-pepper">page_size(): ulong
 </code></pre>
