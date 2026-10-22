@@ -138,10 +138,14 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         # shortcut: a copy, since the confinement check refuses
         # `move(analysis)` (#173); move it once that is lifted.
         drop_unread_bodies(analysis);
+        var dropped = (os.Instant.now() - handing).nanoseconds() / 1000000;
         results.send(copy(analysis));
         client.wake();
         var handed = (os.Instant.now() - handing).nanoseconds() / 1000000;
-        client.log_message(lsp.MESSAGE_LOG, $"handed {_file_name(uri)}'s analysis over in {handed} ms");
+        client.log_message(
+            lsp.MESSAGE_LOG,
+            $"handed {_file_name(uri)}'s analysis over in {handed} ms ({dropped} ms dropping unread bodies)"
+        );
     }
 }
 
