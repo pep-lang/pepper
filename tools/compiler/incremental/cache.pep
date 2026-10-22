@@ -145,11 +145,13 @@ export struct Cache {
     }
 
     ## Returns `objects`, each one this cache holds replaced by a hard link
-    ## to it in `folder` (a copy across volumes), for the link. A build
-    ## pruning a unit can move a key's folder aside (`_prune`) after this
-    ## build's last look at it, and the linker opens the objects later; the
-    ## link keeps the file wherever the folder goes (#178). An object found
-    ## missing is looked for again (`look_again`).
+    ## to it in `folder`, for the link. A build pruning a unit can move a
+    ## key's folder aside (`_prune`) after this build's last look at it, and
+    ## the linker opens the objects later; the link keeps the file wherever
+    ## the folder goes (#178). An object found missing is looked for again
+    ## (`look_again`). One that cannot be linked but is there (`folder` on
+    ## another volume) stays where it is: a copy of every object would slow
+    ## every build to close a rare race.
     ##
     ## @param objects the objects to link
     ## @param folder a folder of this build's own, created here
@@ -165,13 +167,15 @@ export struct Cache {
             }
             var pin = folder.join(Path($"{pinned.count}.{object.file_name().value()}"));
             var made = look_again(() => {
-                bool done = File.hard_link(object, pin).is_ok() or File.copy(object, pin).is_ok();
-                return done ? Optional<bool>.Value(true) : Optional<bool>.Empty;
+                if (File.hard_link(object, pin).is_ok()) {
+                    return Optional<Path>.Value(pin);
+                }
+                return object.is_file() ? Optional<Path>.Value(object) : Optional<Path>.Empty;
             });
             if (!made.is_value()) {
                 return Result<Path[], String>.err($"the build cache no longer holds {object}; build again");
             }
-            pinned.append(pin);
+            pinned.append(made.value());
         }
         return Result<Path[], String>.ok(pinned);
     }

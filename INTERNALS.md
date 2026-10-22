@@ -1953,8 +1953,8 @@ changed.
   it moves it straight back. Such a prune may stall between its check and
   its rename past the build's last look, so the link does not read the
   cache's objects where they are: `Cache.pin` hard-links each into the
-  build's folder (`pinned/`; a copy when the cache is on another volume),
-  looking again while one is missing, and the linker reads the links,
+  build's folder (`pinned/`), looking again while one is missing (one on
+  another volume than the build's folder stays where it is), and the linker reads the links,
   which keep the files wherever the folder goes (#178). A hard link costs
   no copy, and the build's folder is removed after the link. A grace
   period alone cannot close this: the prune's check and its rename are two
