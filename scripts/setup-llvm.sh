@@ -242,7 +242,9 @@ apt_install() {
 # side): dpkg's lock is waited for up to 5 minutes, and `update`'s list lock,
 # which no option waits for, by retrying up to 10 times. A download that
 # stalls for 30 seconds is retried, up to 3 times, rather than left to hang
-# on a slow mirror (#194).
+# on a slow mirror (#194). apt has no low-speed limit, though: a mirror that
+# trickles a byte every few seconds never trips the timeout, and only the CI
+# step's own timeout-minutes ends it.
 apt_get() {
     local tries=0
     until $sudo apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Acquire::http::Timeout=30 "$@"; do

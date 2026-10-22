@@ -4,8 +4,11 @@
 # took longer than the step's 15 minutes (#194). The cache holds the .deb
 # files the last miss downloaded, keyed on the setup script (which pins the
 # LLVM) and the image's Ubuntu release, and the script installs them with
-# no download. Only main saves it, so pull requests cannot fill the
-# repository's 10 GB of caches with copies.
+# no download. The key ends in the run's id and is restored by prefix, so
+# the newest entry wins and a set that stops installing (a newer image) is
+# replaced: the script refills the folder from the mirror and says so, and
+# only then is it saved. Only main saves it, so pull requests cannot fill
+# the repository's 10 GB of caches with copies.
 #
 # The caller bounds it with timeout-minutes; a composite step cannot.
 name: Provision LLVM
@@ -34,9 +37,13 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: ${{ runner.temp }}/llvm-debs
-        key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}
+        key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}
+        restore-keys: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-
 
+    # Writes filled=true when it (re)filled the folder from the mirror: on a
+    # miss, or when the restored set no longer installs.
     - name: Provision LLVM
+      id: provision
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -44,8 +51,8 @@ runs:
       run: bash scripts/ci-provision-llvm.sh
 
     - name: Save LLVM's apt packages
-      if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
+      if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.provision.outputs.filled == 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.temp }}/llvm-debs
-        key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}
+        key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}

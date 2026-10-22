@@ -21,7 +21,8 @@
 # (.github/actions/provision-llvm caches it), the .deb files in it are
 # installed with no download, and when it holds none, the ones apt
 # downloads are copied into it for the cache to save. A cached set apt
-# cannot install (the image moved on) falls back to the mirror.
+# cannot install (the image moved on) is replaced the same way, from the
+# mirror.
 #
 # Either way this ends by running the normal setup script, which validates the
 # prefix and writes .pep/llvm-prefix, so there is one source of truth for how
@@ -40,19 +41,28 @@ if [ "$(uname -s)" = Linux ] && [ -n "${PEPPER_CI_LLVM_DEBS:-}" ]; then
   if [ -n "$(list_debs "$debs")" ]; then
     echo "Installing LLVM's packages from the cache in $debs:"
     list_debs "$debs"
-    # --no-download: a package the cache lacks fails here, and the setup
-    # script then installs from the mirror, as on a miss.
-    sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-download "$debs"/*.deb \
-      || echo "The cached packages did not install; installing from the mirror." >&2
-    exec bash scripts/setup-llvm.sh
+    # --no-download: a package the cache lacks fails here.
+    if sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-download "$debs"/*.deb; then
+      exec bash scripts/setup-llvm.sh
+    fi
+    # Refill the folder from the mirror, so main saves a set that installs.
+    echo "The cached packages did not install; installing from the mirror." >&2
+    rm -rf "$debs"
+  else
+    echo "No cached LLVM packages in $debs; installing from the mirror."
   fi
-  echo "No cached LLVM packages in $debs; installing from the mirror."
   before=$(list_debs "$archives")
   bash scripts/setup-llvm.sh
   mkdir -p "$debs"
   comm -13 <(printf '%s\n' "$before") <(list_debs "$archives") | xargs -r cp -t "$debs"
+  if [ -z "$(list_debs "$debs")" ]; then
+    echo "apt left no new .deb files in $archives; nothing to cache." >&2
+    exit 0
+  fi
   echo "Cached for the next run, in $debs:"
   list_debs "$debs"
+  # The action saves the folder only when it was filled here.
+  [ -z "${GITHUB_OUTPUT:-}" ] || echo "filled=true" >> "$GITHUB_OUTPUT"
   exit 0
 fi
 
