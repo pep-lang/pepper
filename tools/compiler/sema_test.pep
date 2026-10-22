@@ -202,24 +202,23 @@ model_json_keeps_strings_apart_from_large_unsigned_values() {
 }
 
 # `labeled_through` gives a member's type the labels of the receiver's
-# tuple arguments (pepper#118): the one labeling that fits, none when two
-# do, and the type itself when the receiver labels nothing.
+# tuple arguments (pepper#118) by putting them into the member's type as
+# the generic declaration writes it: a same-shape tuple the declaration
+# does not write as a parameter stays unlabeled, and a declared type that
+# is not the member's gives the member back.
 [Test]
-labeled_through_takes_the_receivers_tuple_labels() {
+labeled_through_substitutes_the_receivers_type_arguments() {
     var plain = sema.parse_type_string("__tuple<int, int>");
     var point = plain.copy();
     point.labels = ["x", "y"];
-    var span = plain.copy();
-    span.labels = ["start", "end"];
+    var receiver = sema.TypeName.with_args("Box", [point]);
     var element = sema.parse_type_string("Optional<__tuple<int, int>>");
     expect_equal(
-        element.labeled_through(sema.TypeName.with_args("Array", [point])).display(), "Optional<(x: int, y: int)>"
+        element.labeled_through(receiver, sema.parse_type_string("Optional<T>"), ["T"]).display(),
+        "Optional<(x: int, y: int)>"
     );
-    expect_equal(
-        element.labeled_through(sema.TypeName.with_args("HashMap", [point, span])).display(), "Optional<(int, int)>"
-    );
-    var unlabeled = sema.TypeName.with_args("Array", [plain]);
-    expect_true(element.labeled_through(unlabeled) === element);
+    expect_equal(plain.labeled_through(receiver, plain, ["T"]).display(), "(int, int)");
+    expect_true(element.labeled_through(receiver, sema.parse_type_string("T"), ["T"]) === element);
 }
 
 # `verify_injected` finds a construct whose type the compiler injects still

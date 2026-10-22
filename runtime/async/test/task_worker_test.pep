@@ -6,21 +6,37 @@
 
 import async;
 import io;
+import os;
 import [has_io_uring] from "backends";
 
 const running = async.Atomic<long>(0);
 const overlapped = async.Atomic<long>(0);
 private const total = async.Atomic<long>(0);
 
+# How long a test waits for something another thread must do: long enough
+# for a busy machine, short enough that a regression fails rather than hangs.
+const PATIENCE_SECONDS = 10;
+
+# Waits until `ready` returns true, for up to PATIENCE_SECONDS; false if it
+# never did.
+wait_until(ready: () => bool): bool {
+    var start = os.Instant.now();
+    while (!ready()) {
+        if (start.elapsed() > os.Duration.from_seconds(PATIENCE_SECONDS)) {
+            return false;
+        }
+        async.Thread.sleep(1);
+    }
+    return true;
+}
+
 # Waits (without yielding) until another task runs at the same time, for up
-# to two seconds: only another worker can run it meanwhile.
+# to PATIENCE_SECONDS: only another worker can run it meanwhile.
 meet(): long {
     running.fetch_add(1);
     var until = async.Thread.current().id();
-    long spins = 0;
-    while (running.load() < 2 && spins < 200000000) {
-        spins = spins + 1;
-    }
+    var start = os.Instant.now();
+    while (running.load() < 2 && start.elapsed() < os.Duration.from_seconds(PATIENCE_SECONDS)) {}
     if (running.load() >= 2) {
         overlapped.fetch_add(1);
     }
@@ -197,13 +213,21 @@ const most = async.Atomic<long>(0);
 const finished = async.Atomic<long>(0);
 private const ticks = async.Atomic<long>(0);
 const served = async.Atomic<long>(0);
+# Set when a call to `block_for` gave up waiting for another to overlap it.
+private const alone = async.Atomic<long>(0);
 
-# Blocks its thread for `milliseconds`, counting how many run at once.
-block_for(milliseconds: ulong): long {
+# Blocks its thread for `milliseconds`, counting how many run at once. With
+# `overlap`, it first waits until two calls have been inside at once, so a
+# busy machine cannot run them one after another.
+block_for(milliseconds: ulong, overlap: bool = false): long {
     var now = inside.fetch_add(1) + 1;
     var seen = most.load();
     while (now > seen && !most.compare_exchange(seen, now)) {
         seen = most.load();
+    }
+    # Once one call gives up, the rest do not wait too.
+    if (overlap && !wait_until(() => { return most.load() >= 2 || alone.load() != 0; })) {
+        alone.store(1);
     }
     async.Thread.sleep(milliseconds);
     inside.fetch_sub(1);
@@ -211,13 +235,15 @@ block_for(milliseconds: ulong): long {
     return milliseconds as long;
 }
 
-# Runs `count` blocking calls from as many tasks at once.
-block_many(count: int) {
+# Runs `count` blocking calls from as many tasks at once; with `overlap`,
+# two of them must overlap (see `block_for`).
+block_many(count: int, overlap: bool = false) {
+    alone.store(0);
     var tasks = Array<async.Task<long>>();
     var i = 0;
     while (i < count) {
         tasks.append(async.Task<long>.spawn_local(() => {
-            return async.run_blocking<long>(() => { return block_for(30); });
+            return async.run_blocking<long>(() => { return block_for(30, overlap); });
         }));
         i = i + 1;
     }
@@ -238,9 +264,8 @@ blocking_calls_and_shared_sockets_on(backend: async.Backend) {
                     ticks.fetch_add(1);
                 }
             });
-            expect_equal(async.run_blocking<long>(() => { return block_for(100); }), 100);
-            # The worker ran other tasks meanwhile.
-            expect_true(ticks.load() > 0);
+            # The worker runs other tasks while the pool thread waits for them.
+            expect_true(async.run_blocking<bool>(() => { return wait_until(() => { return ticks.load() > 0; }); }));
             ticker.join();
 
             async.run_blocking<void>(() => {
@@ -253,12 +278,20 @@ blocking_calls_and_shared_sockets_on(backend: async.Backend) {
             });
             expect_equal(nested, 3);
 
-            # Neither a cancel nor a timeout cuts the body short.
+            # Neither a cancel nor a timeout cuts the body short. The body
+            # waits to be released, so the cancel comes while it runs.
+            var started = async.Channel<long>();
+            var release = async.Channel<long>();
             var cancelled = async.Task<long>.spawn_local(() => {
-                return async.run_blocking<long>(() => { return block_for(40); });
+                return async.run_blocking<long>(() => {
+                    started.close();
+                    release.receive_for(PATIENCE_SECONDS * 1000);
+                    return block_for(40);
+                });
             });
-            async.sleep(5);
+            started.receive_for(PATIENCE_SECONDS * 1000);
             cancelled.cancel();
+            release.close();
             # The task still reports the cancel.
             expect_true(cancelled.join().error().is_cancelled());
             with (var deadline = async.timeout(5)) {
@@ -268,7 +301,7 @@ blocking_calls_and_shared_sockets_on(backend: async.Backend) {
 
             # Calls run in parallel on the pool.
             most.store(0);
-            block_many(8);
+            block_many(8, true);
             expect_true(most.load() >= 2);
         }
     );

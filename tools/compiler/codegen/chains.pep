@@ -5,25 +5,29 @@
 ##
 ## A struct no cycle runs through keeps the plain last release, a call to
 ## `T.__last_release`. In a cycle, each field that holds a struct of the
-## same cycle directly is a chain field: before the destructor runs, the
-## last release takes an extra reference to each chain field's object that
-## nothing else holds, and pushes it on a list local to the outermost
-## `T.__last_release` frame (eight entries on the stack, then the heap).
+## same cycle is a chain field: before the destructor runs, the last
+## release takes each chain field's object (its reference moved out of the
+## field when no destructor body can see the field, else an extra one,
+## when nothing else holds it), and pushes it on a list local to the outermost
+## `T.__last_release` frame (32 entries on the stack, then the heap).
 ## The destructor's own release of the field then leaves it alive, and the
-## loop releases it once the parent is freed. A cycle that also runs
-## through a trait value, a container's buffer or a closure cannot be
-## steered from the destructor; its last release goes through the
-## runtime's `_pep_release_last`, which bounds the nesting on the stack.
+## loop releases it once the parent is freed. A chain field holds its
+## objects directly, through a trait value (told apart by the vtable's
+## type id), as an `Array`'s elements, or as a function type's closure
+## (told apart by its `__destroy`), whose captures are taken. A cycle that
+## also runs through anything else (a tuple, another container's buffer)
+## cannot be steered from the destructor; its last release goes through
+## the runtime's `_pep_release_last`, which bounds the nesting on the stack.
 
 import llvm;
 import compiler.sema;
-import [CountField, StructDef, TypeName, VariableDef] from compiler.sema;
+import [CountField, Statement, StructDef, TypeName, VariableDef] from compiler.sema;
 import "address";
 import "calls";
 import "checks";
 import "expressions";
 import "functions";
-import [Generator, StructDesc] from "generator";
+import [ChainField, ChainKind, Generator, StructDesc] from "generator";
 import "generator";
 import "globals";
 import "lazy";
@@ -34,19 +38,29 @@ import "simd";
 import "traits";
 import "types";
 
-## Entries of a chain list held on the stack before it moves to the heap.
-const _CHAIN_INLINE_ENTRIES: ulong = 8;
+## Entries of a chain list held on the stack before it moves to the heap:
+## enough for an `Array` tree of 8 children per node, 3 levels deep (the
+## entries waiting are a node's siblings at each level).
+const _CHAIN_INLINE_ENTRIES: ulong = 32;
 
-## One field edge of the struct graph: the struct it reaches, and whether
-## that is a chain field (its owner and target both have the standard
-## counts, and it holds the target directly).
+## One edge of the struct graph: the struct a field can hold, and whether
+## the field steers it (its owner and target both have counts codegen
+## generates, and the field holds the target in a way `ChainKind` names).
 struct _Edge {
     var target: ulong;
     var direct: bool;
+    var kind: ChainKind;
+    ## The field's position in its struct.
+    var position: uint;
+    ## The sema type of the slot holding the target.
+    var ty: String;
 
-    construct(target: ulong, direct: bool) {
+    construct(target: ulong, direct: bool, kind: ChainKind, position: uint, ty: String) {
         this.target = target;
         this.direct = direct;
+        this.kind = kind;
+        this.position = position;
+        this.ty = ty;
     }
 }
 
@@ -92,16 +106,25 @@ extend Generator {
         for (var st in nodes) {
             var out = Array<_Edge>();
             bool owner = _chain_owner(st.name);
+            # `Array`'s destructor releases `_size` elements of `_data`, so
+            # its last release can take them out first.
+            bool array = st.ty.name == "Array" and _field_position(structs[st.name], "_size").is_value();
+            uint position = 0;
             for (var field in st.field_members) {
-                _type_edges(field.ty, owner, index, conformers, out);
+                bool buffer = array and field.name == "_data" and field.ty.is_pointer();
+                var kind = buffer ? ChainKind.Buffer : ChainKind.Struct;
+                _type_edges(field.ty, owner, kind, position, nodes, index, conformers, out);
+                position += 1;
             }
             if (st.ty.is_function_type()) {
                 var ret = st.ty.function_return();
                 var key = _signature_key(ret.is_value() ? ret.value() : TypeName.void(), st.ty.function_params());
                 var found = closures.try_get(key);
+                var destroy = _field_position(structs[st.name], "__destroy");
                 if (found.is_value()) {
                     for (var c in found.value()) {
-                        out.append(_Edge(c, false));
+                        bool direct = owner and destroy.is_value() and _chain_owner(nodes[c].name);
+                        out.append(_Edge(c, direct, ChainKind.Closures, destroy.value_or(0), st.name));
                     }
                 }
             }
@@ -109,7 +132,7 @@ extend Generator {
         }
         var component = _components(edges);
         # A component is recursive when it has an edge inside it; deep when
-        # one of those is not a chain field.
+        # one of those is not steered.
         var cyclic = HashSet<ulong>();
         var deep = HashSet<ulong>();
         for (var from in 0..nodes.count) {
@@ -132,36 +155,46 @@ extend Generator {
             if (deep.contains(c)) {
                 deep_recursive.insert(name);
             }
-            var fields = Array<(uint, String)>();
-            uint position = 0;
-            for (var field in nodes[at].field_members) {
-                var ty = field.ty.to_string();
-                var target = index.try_get(ty);
-                if (_chain_owner(name) and target.is_value() and component[target.value()] == c and _chain_owner(ty)) {
-                    fields.append((position, ty));
+            # One chain field per steered field, in declaration order.
+            var fields = Array<ChainField>();
+            for (var edge in edges[at]) {
+                if (!edge.direct or component[edge.target] != c) {
+                    continue;
                 }
-                position += 1;
+                if (fields.count == 0 or fields[fields.count - 1].position != edge.position) {
+                    fields.append(ChainField(edge.kind, edge.position, edge.ty));
+                }
+                fields[fields.count - 1].targets.append(nodes[edge.target].name);
             }
             if (fields.count > 0) {
                 chain_fields[name] = fields;
+                if (_releases_fields_only(nodes[at])) {
+                    chain_moves.insert(name);
+                }
             }
         }
     }
 
-    ## Whether struct `name` has the standard `__release`, so its last
-    ## release may take its chain fields out (see `standard_release`).
+    ## Whether struct `name`'s `__release` is one codegen generates (the
+    ## standard one, or a function type's), so its last release may take
+    ## its chain fields out (see `standard_release`).
     _chain_owner(name: String): bool {
         var desc = structs.try_get(name);
-        return desc.is_value() and desc.value().standard;
+        return desc.is_value() and desc.value().release_counts.is_value();
     }
 
-    ## Appends to `out` the structs a slot of type `ty` can hold: the
-    ## struct it names (a chain edge when `owner` and the struct has the
-    ## standard counts), a trait's conformers, a pointer's or tuple's
-    ## elements. A weak reference owns nothing.
+    ## Appends to `out` the structs a slot of type `ty`, field `position`
+    ## of its struct, can hold: the struct it names, a trait's conformers,
+    ## a pointer's or tuple's elements. Each is steered (`_Edge.direct`)
+    ## when `owner` and the target has counts codegen generates, as `kind`;
+    ## a pointer's elements only as a `Buffer`, never a tuple's. A weak
+    ## reference owns nothing.
     _type_edges(
         ty: TypeName,
         owner: bool,
+        kind: ChainKind,
+        position: uint,
+        nodes: Array<StructDef>,
         index: HashMap<String, ulong>,
         conformers: HashMap<String, Array<ulong>>,
         out: Array<_Edge>
@@ -170,22 +203,25 @@ extend Generator {
             return;
         }
         if (ty.is_pointer() or ty.is_tuple()) {
+            bool steered = owner and kind == ChainKind.Buffer and ty.is_pointer();
             for (var element in ty.sub_types) {
-                _type_edges(element, false, index, conformers, out);
+                bool slot = steered and !element.is_pointer() and !element.is_tuple();
+                _type_edges(element, slot, ChainKind.Buffer, position, nodes, index, conformers, out);
             }
             return;
         }
         var name = ty.to_string();
         var found = conformers.try_get(name);
         if (found.is_value()) {
+            var through = kind == ChainKind.Buffer ? ChainKind.Buffer : ChainKind.Trait;
             for (var c in found.value()) {
-                out.append(_Edge(c, false));
+                out.append(_Edge(c, owner and _chain_owner(nodes[c].name), through, position, name));
             }
             return;
         }
         var target = index.try_get(name);
         if (target.is_value()) {
-            out.append(_Edge(target.value(), owner and _chain_owner(name)));
+            out.append(_Edge(target.value(), owner and _chain_owner(name), kind, position, name));
         }
     }
 
@@ -196,9 +232,9 @@ extend Generator {
     ## listed object's `__chain_release` until the list is empty, and the
     ## list's heap buffer freed if it grew.
     emit_chain_last_release(ty_name: String, object: llvm.Value): Result<void> {
-        var fields = chain_fields[ty_name];
-        if (fields.count == 1 and fields[0].1 == ty_name) {
-            return emit_list_last_release(ty_name, object, fields[0].0);
+        var list_field = _list_field(ty_name);
+        if (list_field.is_value()) {
+            return emit_list_last_release(ty_name, object, list_field.value());
         }
         var function = builder.insert_block().parent();
         var pointer = context.pointer_type();
@@ -251,45 +287,53 @@ extend Generator {
         return Result<void>.ok();
     }
 
-    ## `T.__last_release(object)` for a struct whose one chain field, at
-    ## `position`, holds its own type (a linked list): no list, a loop that
-    ## takes the next link, destroys the current one, and moves on while
-    ## the taken link's count reaches 0.
-    emit_list_last_release(ty_name: String, object: llvm.Value, position: uint): Result<void> {
+    ## The one chain field of struct `ty_name` that holds only its own type
+    ## (a linked list, through a struct or trait field, or a closure whose
+    ## one chain capture is `ty_name`), if that is its only chain field.
+    _list_field(ty_name: String): ChainField? {
+        var fields = chain_fields[ty_name];
+        if (fields.count != 1 or fields[0].targets.count != 1) {
+            return Optional<ChainField>.Empty;
+        }
+        var field = fields[0];
+        if (field.kind == ChainKind.Closures) {
+            var captures = chain_fields.try_get(field.targets[0]);
+            if (!captures.is_value() or captures.value().count != 1) {
+                return Optional<ChainField>.Empty;
+            }
+            var capture = captures.value()[0];
+            if (capture.kind == ChainKind.Buffer or capture.targets.count != 1 or capture.targets[0] != ty_name) {
+                return Optional<ChainField>.Empty;
+            }
+        } else if (field.kind == ChainKind.Buffer or field.targets[0] != ty_name) {
+            return Optional<ChainField>.Empty;
+        }
+        return Optional<ChainField>.Value(field);
+    }
+
+    ## `T.__last_release(object)` for a struct whose one chain field holds
+    ## its own type (`_list_field`): no list, a loop that takes the next
+    ## link (`_list_link`), destroys the current one, and moves on while the
+    ## taken link's count reaches 0.
+    emit_list_last_release(ty_name: String, object: llvm.Value, field: ChainField): Result<void> {
         var function = builder.insert_block().parent();
-        var desc = structs[ty_name];
-        bool atomic = desc.release_counts.value();
+        bool atomic = structs[ty_name].release_counts.value();
         var pointer = context.pointer_type();
         var i32_type = context.int32_type();
         var entry = builder.insert_block();
         var loop = context.append_block(function, "link_loop");
-        var check = context.append_block(function, "link_check");
-        var take = context.append_block(function, "link_take");
         var destroy = context.append_block(function, "link_destroy");
         var release = context.append_block(function, "link_release");
         var done = context.append_block(function, "link_done");
         builder.branch(loop);
         builder.position_at_end(loop);
         var current = builder.phi(pointer, "current");
-        var link = builder.load(
-            pointer, builder.field_pointer(desc.llvm_type, current, position, "chain_field"), "link"
-        );
-        builder.conditional_branch(builder.is_null(link, "no_link"), destroy, check);
-        builder.position_at_end(check);
-        # Only a link the field alone holds is taken (see `chain_destroy`).
-        var count = builder.load(i32_type, head_count_ptr(link, CountField.Strong)?, "link_count");
-        if (atomic) {
-            count.set_ordering(_MONOTONIC);
-        }
-        builder.conditional_branch(
-            builder.compare(llvm.IntPredicate.Equal, count, i32_type.const_uint(1), "alone"), take, destroy
-        );
-        builder.position_at_end(take);
-        count_step(link, CountField.Strong, true, atomic, true)?;
-        builder.branch(destroy);
+        var links = Array<llvm.Value>();
+        var from = Array<llvm.BasicBlock>();
+        _list_link(ty_name, current, field, destroy, links, from)?;
         builder.position_at_end(destroy);
         var taken = builder.phi(pointer, "taken");
-        taken.add_incoming([pointer.zero(), pointer.zero(), link], [loop, check, take]);
+        taken.add_incoming(links, from);
         destroy_object(ty_name, current, atomic)?;
         builder.conditional_branch(builder.is_null(taken, "none_taken"), done, release);
         builder.position_at_end(release);
@@ -302,6 +346,69 @@ extend Generator {
         return Result<void>.ok();
     }
 
+    ## Branches to `destroy` with the link `current` (an `owner`) holds in
+    ## `field`, claimed (`_chain_claim`), or with null when there is none
+    ## to take; appends each to `links`, and its block to `from`.
+    _list_link(
+        owner: String,
+        current: llvm.Value,
+        field: ChainField,
+        destroy: llvm.BasicBlock,
+        links: Array<llvm.Value>,
+        from: Array<llvm.BasicBlock>
+    ): Result<void> {
+        var function = builder.insert_block().parent();
+        var pointer = context.pointer_type();
+        var desc = structs[owner];
+        var none = context.append_block(function, "link_none");
+        if (field.kind == ChainKind.Closures) {
+            var destroy_field = builder.load(
+                pointer, builder.field_pointer(desc.llvm_type, current, field.position, "destroy_slot"), "destroy"
+            );
+            var closure = field.targets[0];
+            var dtor = functions.try_get($"{closure}.__dtor");
+            if (!dtor.is_value()) {
+                builder.branch(none);
+            } else {
+                var matched = context.append_block(function, "closure_match");
+                var same = builder.compare(llvm.IntPredicate.Equal, destroy_field, dtor.value(), "same_closure");
+                builder.conditional_branch(same, matched, none);
+                builder.position_at_end(matched);
+                _list_link(closure, current, chain_fields[closure][0], destroy, links, from)?;
+            }
+        } else {
+            var slot = builder.field_pointer(desc.llvm_type, current, field.position, "chain_field");
+            llvm.Value link;
+            if (is_trait_name(field.ty)) {
+                var value = builder.load(types.get(field.ty).value(), slot, "link");
+                link = object_pointer(value)?;
+                var check = context.append_block(function, "link_type");
+                builder.conditional_branch(builder.is_null(link, "no_link"), none, check);
+                builder.position_at_end(check);
+                var id = _trait_type_id(field.ty, value)?;
+                var matched = context.append_block(function, "link_check");
+                var same = builder.compare(llvm.IntPredicate.Equal, id, type_id_value(field.targets[0]), "same_type");
+                builder.conditional_branch(same, matched, none);
+                builder.position_at_end(matched);
+            } else {
+                link = builder.load(pointer, slot, "link");
+                var check = context.append_block(function, "link_check");
+                builder.conditional_branch(builder.is_null(link, "no_link"), none, check);
+                builder.position_at_end(check);
+            }
+            var moved = chain_moves.contains(owner) ? Optional<llvm.Value>.Value(slot) : Optional<llvm.Value>.Empty;
+            _chain_claim(link, field.targets[0], moved, none)?;
+            links.append(link);
+            from.append(builder.insert_block());
+            builder.branch(destroy);
+        }
+        builder.position_at_end(none);
+        links.append(pointer.zero());
+        from.append(none);
+        builder.branch(destroy);
+        return Result<void>.ok();
+    }
+
     ## `{ data, count, capacity, inline data }`: a chain list, whose
     ## entries are pairs of an object and its `__chain_release`.
     _chain_header_type(): llvm.Type {
@@ -311,9 +418,10 @@ extend Generator {
     }
 
     ## `T.__chain_destroy(object, list)`: what the last release of `T` does
-    ## once the count is 0. Pushes each chain field's object that only the
-    ## field holds on `list`, with a reference of the list's own, then runs
-    ## the destructor and frees the memory (`destroy_object`).
+    ## once the count is 0. Pushes each object of its cycle that only one of
+    ## its chain fields holds on `list`, with a reference of the list's own
+    ## (`_chain_take_fields`), then runs the destructor and frees the memory
+    ## (`destroy_object`).
     chain_destroy(ty_name: String): Result<llvm.Value> {
         var name = $"{ty_name}.__chain_destroy";
         var existing = ir.function(name);
@@ -326,34 +434,7 @@ extend Generator {
         var resume = builder.insert_block();
         builder.position_at_end(context.append_block(function, "entry"));
         var object = function.param(0);
-        var list = function.param(1);
-        var i32_type = context.int32_type();
-        for (var (position, field_type) in chain_fields[ty_name]) {
-            var target = structs[field_type];
-            bool atomic = target.release_counts.value();
-            var value = builder.load(
-                pointer, builder.field_pointer(desc.llvm_type, object, position, "chain_field"), "link"
-            );
-            var check = context.append_block(function, "chain_check");
-            var take = context.append_block(function, "chain_take");
-            var after = context.append_block(function, "chain_after");
-            builder.conditional_branch(builder.is_null(value, "no_link"), after, check);
-            builder.position_at_end(check);
-            # Only an object the field alone holds is taken: one another
-            # slot holds is not this chain's to destroy, and an immortal
-            # one's count is far above 1.
-            var count = builder.load(i32_type, head_count_ptr(value, CountField.Strong)?, "link_count");
-            if (atomic) {
-                count.set_ordering(_MONOTONIC);
-            }
-            var alone = builder.compare(llvm.IntPredicate.Equal, count, i32_type.const_uint(1), "alone");
-            builder.conditional_branch(alone, take, after);
-            builder.position_at_end(take);
-            count_step(value, CountField.Strong, true, atomic, true)?;
-            _chain_push(list, value, chain_release(field_type)?)?;
-            builder.branch(after);
-            builder.position_at_end(after);
-        }
+        _chain_take_fields(ty_name, object, function.param(1))?;
         destroy_object(ty_name, object, desc.release_counts.value())?;
         builder.return_void();
         if (!resume.is_null()) {
@@ -427,6 +508,274 @@ extend Generator {
         builder.store(builder.add(count, i64_type.const_uint(1), "count"), count_slot);
         return Result<void>.ok();
     }
+
+    ## Takes into `list` each object of `ty_name`'s cycle that one of its
+    ## chain fields holds, in `object` (a `ty_name`): moved out of the field
+    ## when nothing sees it again (`chain_moves`), else only one the field
+    ## alone holds, with an extra reference.
+    _chain_take_fields(ty_name: String, object: llvm.Value, list: llvm.Value): Result<void> {
+        var found = chain_fields.try_get(ty_name);
+        if (!found.is_value()) {
+            return Result<void>.ok();
+        }
+        var desc = structs[ty_name];
+        bool move = chain_moves.contains(ty_name);
+        for (var field in found.value()) {
+            if (field.kind == ChainKind.Buffer) {
+                _chain_take_buffer(desc, object, field, list)?;
+            } else if (field.kind == ChainKind.Closures) {
+                _chain_take_closures(desc, object, field, list)?;
+            } else {
+                var slot = builder.field_pointer(desc.llvm_type, object, field.position, "chain_field");
+                _chain_take(list, slot, field.ty, field.targets, move)?;
+            }
+        }
+        return Result<void>.ok();
+    }
+
+    ## Takes into `list` the object in `slot`, of sema type `ty` (a struct
+    ## or a trait), when it is one of `targets` (`_chain_take_object`). A
+    ## trait value's object is told apart by its vtable's type id.
+    _chain_take(list: llvm.Value, slot: llvm.Value, ty: String, targets: String[], move: bool): Result<void> {
+        var function = builder.insert_block().parent();
+        var after = context.append_block(function, "chain_after");
+        var moved = move ? Optional<llvm.Value>.Value(slot) : Optional<llvm.Value>.Empty;
+        if (is_trait_name(ty)) {
+            var value = builder.load(types.get(ty).value(), slot, "link");
+            var object = object_pointer(value)?;
+            var check = context.append_block(function, "chain_type");
+            builder.conditional_branch(builder.is_null(object, "no_link"), after, check);
+            builder.position_at_end(check);
+            var id = _trait_type_id(ty, value)?;
+            for (var target in targets) {
+                var matched = context.append_block(function, "chain_conformer");
+                var next = context.append_block(function, "chain_type");
+                var same = builder.compare(llvm.IntPredicate.Equal, id, type_id_value(target), "same_type");
+                builder.conditional_branch(same, matched, next);
+                builder.position_at_end(matched);
+                _chain_take_object(list, object, target, moved)?;
+                builder.branch(after);
+                builder.position_at_end(next);
+            }
+        } else {
+            var object = builder.load(context.pointer_type(), slot, "link");
+            var check = context.append_block(function, "chain_check");
+            builder.conditional_branch(builder.is_null(object, "no_link"), after, check);
+            builder.position_at_end(check);
+            _chain_take_object(list, object, ty, moved)?;
+        }
+        builder.branch(after);
+        builder.position_at_end(after);
+        return Result<void>.ok();
+    }
+
+    ## Takes `object`, a `target`, into `list` with its `__chain_release`
+    ## when `_chain_claim` claims it. Leaves the builder after it.
+    _chain_take_object(list: llvm.Value, object: llvm.Value, target: String, moved: llvm.Value?): Result<void> {
+        var taken = context.append_block(builder.insert_block().parent(), "chain_taken");
+        _chain_claim(object, target, moved, taken)?;
+        var release = chain_release(target)?;
+        if (moved.is_value() and _only_buffers(target)) {
+            # Moved out of a field no destructor sees, an `Array` is
+            # released at once: its elements go on the list, so this nests
+            # one call deep, and nothing sees it go before its holder.
+            builder.call(release.global_type(), release, [object, list], "");
+        } else {
+            _chain_push(list, object, release)?;
+        }
+        builder.branch(taken);
+        builder.position_at_end(taken);
+        return Result<void>.ok();
+    }
+
+    ## The type id of the struct a non-null trait value `value`, of trait
+    ## `ty`, holds: the vtable's entry after the trait's methods.
+    _trait_type_id(ty: String, value: llvm.Value): Result<llvm.Value> {
+        var methods = traits[ty].methods.count as ulong;
+        var entry = vtable_entry(value, VTABLE_METHODS + methods)?;
+        return Result<llvm.Value>.ok(builder.pointer_to_int(entry, type_id_value("").value_type(), "type_id"));
+    }
+
+    ## Whether every chain field of struct `name` is a buffer (an `Array`).
+    _only_buffers(name: String): bool {
+        var fields = chain_fields.try_get(name);
+        if (!fields.is_value()) {
+            return false;
+        }
+        for (var field in fields.value()) {
+            if (field.kind != ChainKind.Buffer) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    ## Claims `object`, a `target`, for a chain, or branches to `skip`.
+    ## With `moved`, the slot holding it: the slot's reference becomes the
+    ## chain's and the slot becomes null (its object half, for a trait
+    ## value), unless the object is immortal. Without, only an object whose
+    ## count is 1 is claimed, with an extra reference: one another slot
+    ## holds is not this chain's to destroy, and an immortal one's count is
+    ## far above 1. Leaves the builder where it is claimed.
+    _chain_claim(object: llvm.Value, target: String, moved: llvm.Value?, skip: llvm.BasicBlock): Result<void> {
+        var desc = structs[target];
+        bool atomic = desc.release_counts.value();
+        var i32_type = context.int32_type();
+        var take = context.append_block(builder.insert_block().parent(), "chain_take");
+        if (moved.is_value() and !desc.immortal) {
+            builder.branch(take);
+        } else {
+            var count = builder.load(i32_type, head_count_ptr(object, CountField.Strong)?, "link_count");
+            if (atomic) {
+                count.set_ordering(_MONOTONIC);
+            }
+            llvm.Value takes;
+            if (moved.is_value()) {
+                var limit = i32_type.const_uint(sema.STATIC_REFCOUNT as ulong);
+                takes = builder.compare(llvm.IntPredicate.UnsignedLess, count, limit, "mortal");
+            } else {
+                takes = builder.compare(llvm.IntPredicate.Equal, count, i32_type.const_uint(1), "alone");
+            }
+            builder.conditional_branch(takes, take, skip);
+        }
+        builder.position_at_end(take);
+        if (moved.is_value()) {
+            builder.store(context.pointer_type().zero(), moved.value());
+        } else {
+            count_step(object, CountField.Strong, true, atomic, true)?;
+        }
+        return Result<void>.ok();
+    }
+
+    ## Takes into `list` the elements of an `Array` (`desc`) at `object`,
+    ## last to first, so the list destroys the first one first, as `Array`'s
+    ## destructor would. Elements of a struct with no immortal objects move
+    ## to the list with the buffer's references, and `_size` drops to 0 so
+    ## the destructor releases none of them; otherwise only those the
+    ## buffer alone holds are taken, with an extra reference each.
+    _chain_take_buffer(desc: StructDesc, object: llvm.Value, field: ChainField, list: llvm.Value): Result<void> {
+        var size_position = _field_position(desc, "_size").value();
+        var function = builder.insert_block().parent();
+        var data_slot = builder.field_pointer(desc.llvm_type, object, field.position, "buffer_slot");
+        var data = builder.load(context.pointer_type(), data_slot, "buffer");
+        var size_type = desc.llvm_type.field(size_position);
+        var size_slot = builder.field_pointer(desc.llvm_type, object, size_position, "size_slot");
+        var size = builder.load(size_type, size_slot, "size");
+        var element_type = slot_type(context, types.get(field.ty).value());
+        var target = structs.try_get(field.ty);
+        bool move = target.is_value() and !target.value().immortal;
+        var entry = builder.insert_block();
+        var loop = context.append_block(function, "buffer_loop");
+        var body = context.append_block(function, "buffer_take");
+        var done = context.append_block(function, "buffer_done");
+        builder.branch(loop);
+        builder.position_at_end(loop);
+        var index = builder.phi(size_type, "index");
+        builder.conditional_branch(
+            builder.compare(llvm.IntPredicate.Equal, index, size_type.zero(), "empty"), done, body
+        );
+        builder.position_at_end(body);
+        var last = builder.sub(index, size_type.const_uint(1), "last");
+        var slot = builder.element_pointer(element_type, data, [last], true, "element");
+        if (move) {
+            var element = builder.load(context.pointer_type(), slot, "element");
+            var push = context.append_block(function, "buffer_move");
+            var next = context.append_block(function, "buffer_next");
+            builder.conditional_branch(builder.is_null(element, "no_element"), next, push);
+            builder.position_at_end(push);
+            _chain_push(list, element, chain_release(field.ty)?)?;
+            builder.branch(next);
+            builder.position_at_end(next);
+        } else {
+            _chain_take(list, slot, field.ty, field.targets, false)?;
+        }
+        index.add_incoming([size, last], [entry, builder.insert_block()]);
+        builder.branch(loop);
+        builder.position_at_end(done);
+        if (move) {
+            builder.store(size_type.zero(), size_slot);
+        }
+        return Result<void>.ok();
+    }
+
+    ## Takes into `list` the captures of the closure a function type's
+    ## object (`desc`, at `object`) is, when its `__destroy` is the
+    ## `__dtor` of one of `field.targets`. Identical code folding may give
+    ## two closures' `__dtor`s one address, but only when they release the
+    ## same captures in the same places, so either's are taken correctly.
+    _chain_take_closures(desc: StructDesc, object: llvm.Value, field: ChainField, list: llvm.Value): Result<void> {
+        var function = builder.insert_block().parent();
+        var destroy = builder.load(
+            context.pointer_type(),
+            builder.field_pointer(desc.llvm_type, object, field.position, "destroy_slot"),
+            "destroy"
+        );
+        var after = context.append_block(function, "closure_after");
+        for (var target in field.targets) {
+            var dtor = functions.try_get($"{target}.__dtor");
+            if (!dtor.is_value()) {
+                continue;
+            }
+            var matched = context.append_block(function, "closure_match");
+            var next = context.append_block(function, "closure_next");
+            var same = builder.compare(llvm.IntPredicate.Equal, destroy, dtor.value(), "same_closure");
+            builder.conditional_branch(same, matched, next);
+            builder.position_at_end(matched);
+            _chain_take_fields(target, object, list)?;
+            builder.branch(after);
+            builder.position_at_end(next);
+        }
+        builder.branch(after);
+        builder.position_at_end(after);
+        return Result<void>.ok();
+    }
+}
+
+## Whether `st`'s destructor only releases fields, as `release_field_refs`
+## writes it (`this.field.__release()`), with no `destruct` body before.
+_releases_fields_only(st: StructDef): bool {
+    for (var m in st.method_members) {
+        if (m.name != "__dtor") {
+            continue;
+        }
+        # A checked unit's body is decoded only when asked for; one the
+        # build cache dropped stays empty, and is not known to be this.
+        sema.full_body(m);
+        if (!m.body.is_value()) {
+            return false;
+        }
+        for (var item in m.body.value().items) {
+            if (!_is_field_release(item)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+## Whether `item` is `this.field.__release()`.
+_is_field_release(item: Statement): bool {
+    if (item is Expression(e)) {
+        if (e is MethodCall(call)) {
+            if (call.method == "__release" and call.args.count == 0) {
+                if (call.this_value is MemberRef(member)) {
+                    return member.lhs is ThisRef;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+## The position of the field named `name` in struct `desc`, if it has one.
+_field_position(desc: StructDesc, name: String): uint? {
+    for (var at in 0..desc.fields.count) {
+        if (desc.fields[at].0 == name) {
+            return Optional<uint>.Value(at as uint);
+        }
+    }
+    return Optional<uint>.Empty;
 }
 
 ## The key a function type and a closure's `__call` share: its return and

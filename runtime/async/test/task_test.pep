@@ -135,9 +135,12 @@ tasks_are_cancelled_and_awaited() {
             expect_true(r.is_err());
             expect_true(r.error().is_cancelled());
 
-            # A joiner cancelled while it waits stops waiting.
+            # A joiner cancelled while it waits stops waiting. The joined task
+            # waits to be released (for up to ten seconds), so it is still
+            # running when the cancel comes.
+            var release = async.Channel<int>();
             var slow = async.Task<int>.spawn_local(() => {
-                async.sleep(50);
+                release.receive_for(10000);
                 return 2;
             });
             var joiner = async.Task<bool>.spawn_local(() => {
@@ -146,6 +149,7 @@ tasks_are_cancelled_and_awaited() {
             async.yield_now();
             joiner.cancel();
             expect_true(joiner.join().is_err());
+            release.close();
             # The joined task was not cancelled.
             expect_equal(slow.join().value(), 2);
 

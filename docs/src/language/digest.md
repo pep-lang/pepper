@@ -78,6 +78,13 @@ S3-style request signing all use HMAC.
 - **Extended output**: every `Blake3` hasher's `finish(length)` returns
   `length` bytes, in any of the three modes. The first 32 are the digest
   `finish()` returns.
+- **PBKDF2** (RFC 8018): `digest.pbkdf2_sha256(password, salt, rounds,
+  length)` derives `length` bytes from a password (`u8[]` or `String`) and
+  a `u8[]` salt, with `rounds` iterations of HMAC-SHA-256 per 32-byte
+  block. It is SCRAM's `Hi()`, as PostgreSQL, MongoDB and SASL logins use.
+  To store new passwords, use Argon2id (pepper-crypto's `crypto.hash_password`) instead,
+  which costs an attacker's GPUs memory as well as time. It panics when
+  `rounds` is 0 or `length` is over RFC 8018's limit.
 
 ## Using the system's crypto library
 

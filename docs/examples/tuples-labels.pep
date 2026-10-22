@@ -29,5 +29,7 @@ main(): int {
     var counts = Array<(word: String, count: int)>();
     counts.append((word: "tuple", count: 2));
     assert(counts[0].count == 2, "a labeled element");
+    var found = Optional<(line: int, column: int)>.Value(p);
+    assert(found.value().column == 7, "through an enum case");
     return 0;
 }

@@ -6,7 +6,10 @@
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import "closures";
 import [case_value_type, FieldTypes] from "enums";
-import [BinaryOp, Expression, FunctionDef, Module, StructDef, TraitType, TypeName, UnaryOp] from "model";
+import [param_names] from "generics";
+import [
+    BinaryOp, Expression, FunctionCallExpression, FunctionDef, Module, StructDef, TraitType, TypeName, UnaryOp
+] from "model";
 import [is_comparison, is_overflow_test, op_name, weak_result] from "operators";
 import [PassMemo, PassState, TraitTypeMemo] from "state";
 import [StructInfo] from "struct_info";
@@ -84,6 +87,9 @@ export struct StructTable {
     var structs: HashMap<String, StructInfo> = HashMap<String, StructInfo>();
     ## Free-function and extern name to return type.
     var functions: HashMap<String, TypeName> = HashMap<String, TypeName>();
+    ## Generic declaration's name to its entry, whose types are written in
+    ## its own parameters (`Box` to `Box<T>`'s).
+    var generics: HashMap<String, StructInfo> = HashMap<String, StructInfo>();
     # With a memo, the checked declarations' table, shared by the passes:
     # this one holds the rest and looks there for what it lacks.
     var _base: StructTable? = Optional<StructTable>.Empty;
@@ -119,7 +125,12 @@ export struct StructTable {
         }
         for (var def in module.traits) {
             if (!_has(def.name)) {
-                structs[def.name] = _trait_info(instance(def, TypeName.named(def.name)));
+                var info = _trait_info(instance(def, TypeName.named(def.name)));
+                structs[def.name] = info;
+                if (def.generic_params.count > 0) {
+                    info.params = param_names(def.generic_params);
+                    generics[def.name] = info;
+                }
             }
         }
         for (var f in module.functions) {
@@ -163,6 +174,9 @@ export struct StructTable {
             structs[st.ty.name] = info;
         }
         structs[name] = info;
+        if (st.generic_params.count > 0 and st.name == st.ty.name) {
+            generics[st.name] = info;
+        }
     }
 
     # Whether this table, or the checked one under it, files `name`.
@@ -177,6 +191,41 @@ export struct StructTable {
             return own;
         }
         return _base.value().functions.try_get(name);
+    }
+
+    ## Returns `field`, the type of field `name` of `receiver`'s
+    ## specialization, labeled as `receiver`'s type arguments are
+    ## (`TypeName.labeled_through`).
+    ##
+    ## @param field the field's type in the specialization
+    ## @param receiver the type the field is read through
+    ## @param name the field's name
+    ## @returns the type, labeled
+    labeled_field(field: TypeName, receiver: TypeName, name: String): TypeName {
+        var generic = _generic(receiver);
+        var declared = generic.is_value() ? generic.value().field(name) : Optional<TypeName>.Empty;
+        return declared.is_value() ? field.labeled_through(receiver, declared.value(), generic.value().params) : field;
+    }
+
+    # `ret`, what method `name` of `receiver`'s specialization returns,
+    # labeled as `receiver`'s type arguments are.
+    _labeled_return(ret: TypeName, receiver: TypeName, name: String): TypeName {
+        var generic = _generic(receiver);
+        var declared = generic.is_value() ? generic.value().returns.try_get(name) : Optional<TypeName>.Empty;
+        return declared.is_value() ? ret.labeled_through(receiver, declared.value(), generic.value().params) : ret;
+    }
+
+    # The entry of `receiver`'s generic declaration when its type arguments
+    # have labels to give back; most receivers have none.
+    _generic(receiver: TypeName): StructInfo? {
+        if (!receiver.labels_arguments()) {
+            return Optional<StructInfo>.Empty;
+        }
+        var own = generics.try_get(receiver.name);
+        if (own.is_value() or !_base.is_value()) {
+            return own;
+        }
+        return _base.value().generics.try_get(receiver.name);
     }
 
     ## Returns the struct info filed under `name`.
@@ -219,7 +268,7 @@ export struct StructTable {
             return ret;
         }
         if (params.count == 0 or params.count != ty.sub_types.count) {
-            return Optional<TypeName>.Value(ret.value().labeled_through(ty));
+            return Optional<TypeName>.Value(_labeled_return(ret.value(), ty, name));
         }
         var type_map = Array<(String, TypeName)>();
         for (var i in 0..params.count) {
@@ -263,6 +312,43 @@ _returns_own_parameter(f: FunctionDef): bool {
 
 _known(ty: TypeName): TypeName? {
     return Optional<TypeName>.Value(ty);
+}
+
+# The type of call `node`, before the labels it is written with.
+_call_type(node: FunctionCallExpression, table: StructTable, current: TypeName?, state: PassState): TypeName? {
+    if (tuple_constructor_labels(node.function).is_value()) {
+        var types = Array<TypeName>();
+        for (var a in node.args) {
+            var t = static_type_of(a, table, current, state);
+            types.append(t.is_value() ? t.value() : TypeName.auto());
+        }
+        return labeled_tuple_literal_type(node.function, types);
+    }
+    if (node.function.starts_with("__tuple<")) {
+        return _known(parse_type_string(node.function));
+    }
+    var declared = table.function(node.function);
+    if (declared.is_value()) {
+        return declared;
+    }
+    # A constructor-style call `Name<...>(...)`, or one of several
+    # overloaded constructors (`Name$2`).
+    var name = node.function;
+    var dollar = name.rfind("$");
+    if (dollar >= 0) {
+        var index = name.substr_bytes(dollar as ulong + 1, name.size - dollar as ulong - 1);
+        bool digits = index.size > 0;
+        for (var b in index.bytes()) {
+            if (b < 48 or b > 57) {
+                digits = false;
+            }
+        }
+        if (digits) {
+            name = name.substr_bytes(0, dollar as ulong);
+        }
+    }
+    var ty = parse_type_string(name);
+    return table.lookup(ty).is_value() ? _known(ty) : Optional<TypeName>.Empty;
 }
 
 ## Returns the static type of `e` as well as it can be told, or none.
@@ -366,7 +452,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
                     if (info.is_value()) {
                         var field = info.value().field(node.name);
                         if (field.is_value()) {
-                            return _known(field.value().labeled_through(key));
+                            return _known(table.labeled_field(field.value(), key, node.name));
                         }
                     }
                 }
@@ -427,39 +513,8 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             return pointee.is_value() ? _known(pointee.value().copy()) : none;
         }
         FunctionCall(node) => {
-            if (tuple_constructor_labels(node.function).is_value()) {
-                var types = Array<TypeName>();
-                for (var a in node.args) {
-                    var t = static_type_of(a, table, current, state);
-                    types.append(t.is_value() ? t.value() : TypeName.auto());
-                }
-                return labeled_tuple_literal_type(node.function, types);
-            }
-            if (node.function.starts_with("__tuple<")) {
-                return _known(parse_type_string(node.function));
-            }
-            var declared = table.function(node.function);
-            if (declared.is_value()) {
-                return declared;
-            }
-            # A constructor-style call `Name<...>(...)`, or one of several
-            # overloaded constructors (`Name$2`).
-            var name = node.function;
-            var dollar = name.rfind("$");
-            if (dollar >= 0) {
-                var index = name.substr_bytes(dollar as ulong + 1, name.size - dollar as ulong - 1);
-                bool digits = index.size > 0;
-                for (var b in index.bytes()) {
-                    if (b < 48 or b > 57) {
-                        digits = false;
-                    }
-                }
-                if (digits) {
-                    name = name.substr_bytes(0, dollar as ulong);
-                }
-            }
-            var ty = parse_type_string(name);
-            return table.lookup(ty).is_value() ? _known(ty) : none;
+            var ty = _call_type(node, table, current, state);
+            return ty.is_value() ? _known(ty.value().as_written(node.labeled)) : ty;
         }
         Binary(node) => {
             if (_is_assignment(node.op)) {

@@ -84,9 +84,10 @@ export struct RemoteRef {
 }
 
 # The references `url` offers (`git ls-remote`), with an annotated tag
-# naming the commit it points to.
-export remote_refs(url: String): Result<Array<RemoteRef>> {
-    var listed = git(["ls-remote", url]);
+# naming the commit it points to. `url` may be a remote of the repository
+# in `directory`, such as `origin`.
+export remote_refs(url: String, directory: String = ""): Result<Array<RemoteRef>> {
+    var listed = git(["ls-remote", url], directory);
     if (listed.is_err()) {
         return Result<Array<RemoteRef>>.Err(listed.error().message);
     }
