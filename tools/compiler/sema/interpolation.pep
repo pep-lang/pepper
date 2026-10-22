@@ -6,16 +6,16 @@
 ## `{name}`, as are values `print<T>` cannot print and format
 ## specifications a value's type does not take.
 
-import [demangle, Location] from compiler.diagnostic;
+import [Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module] from "model";
-import [set_name] from "names";
+import [display_name, set_name] from "names";
 import [rewrite_concrete_places] from "places";
 import "resolve_implicit_types";
 import [PassState] from "state";
-import [common_number_name, parse_type_string] from "type_name";
+import [parse_type_string] from "type_name";
 import [Rewriter] from "walk";
 
 const _TO_STRING = "to_string";
@@ -56,6 +56,11 @@ _split_generic(name: String): (String, String)? {
 ## Whether `function` declares a `to_string()` an instance can call.
 _is_to_string_method(function: FunctionDef): bool {
     return set_name(function.name) == _TO_STRING and !function.is_static and function.parameters.count == 0;
+}
+
+## The type argument `ty` of a print or format call as messages show it.
+_shown(ty: String): String {
+    return display_name(parse_type_string(ty).display());
 }
 
 _base_of(ty: String): String {
@@ -178,7 +183,6 @@ struct _InterpolationChecker {
             return e;
         }
         var (base, ty) = split.value();
-        var shown = demangle(common_number_name(ty));
         # The runtime's `print<T>(value)` prints `to_string(value)`.
         if (demangle_name(set_name(base)) == _PRINT) {
             if (!_convertible(ty)) {
@@ -188,7 +192,7 @@ struct _InterpolationChecker {
                 }
                 state.report(
                     error_at(
-                        $"cannot print a value of type '{shown}': it has no 'to_string()' method and no 'to_string' overload",
+                        $"cannot print a value of type '{_shown(ty)}': it has no 'to_string()' method and no 'to_string' overload",
                         at
                     )
                 );
@@ -199,7 +203,7 @@ struct _InterpolationChecker {
             if (!_is_float_name(ty)) {
                 state.report(
                     error_at(
-                        $"cannot format a value of type '{shown}' with a precision; only 'float' and 'double' take one",
+                        $"cannot format a value of type '{_shown(ty)}' with a precision; only 'float' and 'double' take one",
                         call.loc
                     )
                 );
@@ -208,7 +212,7 @@ struct _InterpolationChecker {
         }
         if (base == _FORMAT_INTEGER_FUNCTION) {
             if (ty == "bool" or _is_float_name(ty) or !_to_string_overload(ty)) {
-                state.report(error_at($"cannot format a value of type '{shown}' as an integer", call.loc));
+                state.report(error_at($"cannot format a value of type '{_shown(ty)}' as an integer", call.loc));
             }
             return e;
         }
@@ -216,13 +220,13 @@ struct _InterpolationChecker {
             return e;
         }
         var error = error_at(
-            $"cannot interpolate a value of type '{shown}': it has no 'to_string()' method and no 'to_string' overload",
+            $"cannot interpolate a value of type '{_shown(ty)}': it has no 'to_string()' method and no 'to_string' overload",
             call.loc
         );
         var declared = struct_locs.try_get(ty);
         if (declared.is_value()) {
             error = error.with_note(
-                $"declare 'to_string(): String' in '{shown}', or implement 'ToString' with 'extend {shown} with ToString'",
+                $"declare 'to_string(): String' in '{_shown(ty)}', or implement 'ToString' with 'extend {_shown(ty)} with ToString'",
                 Optional<Location>.Value(location_of(declared.value()))
             );
         }

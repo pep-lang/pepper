@@ -45,6 +45,50 @@ export is_integral_name(name: String): bool {
     }
 }
 
+## Returns the sized name of a number type (`i32` for `int`), and any
+## other name unchanged: `common_number_name` the other way, so the two
+## change together.
+##
+## @param name the type's name
+## @returns the sized name
+export sized_number_name(name: String): String {
+    match (name) {
+        "char" => {
+            return "i8";
+        }
+        "byte" => {
+            return "u8";
+        }
+        "short" => {
+            return "i16";
+        }
+        "ushort" => {
+            return "u16";
+        }
+        "int" => {
+            return "i32";
+        }
+        "uint" => {
+            return "u32";
+        }
+        "long" => {
+            return "i64";
+        }
+        "ulong" => {
+            return "u64";
+        }
+        "float" => {
+            return "f32";
+        }
+        "double" => {
+            return "f64";
+        }
+        else => {
+            return name;
+        }
+    }
+}
+
 ## Returns the name programs commonly write for a number type sema spells
 ## by width (`int` for `i32`), and any other name unchanged.
 ##

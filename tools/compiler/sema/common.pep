@@ -7,7 +7,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import "builder";
 import [Loc] from "loc";
 import [Expression, StructDef, TypeName] from "model";
-import [parse_type_string] from "type_name";
+import [parse_type_string, sized_number_name] from "type_name";
 
 ## Returns `loc` as a diagnostic's location.
 ##
@@ -150,40 +150,7 @@ _expression_loc(e: Expression): Loc {
 ## `int`), a pointer `__ptr<T>` among them.
 _canonical(ty: TypeName): TypeName {
     var parsed = parse_type_string(ty.to_string());
-    var name = parsed.name;
-    match (name) {
-        "int" => {
-            name = "i32";
-        }
-        "uint" => {
-            name = "u32";
-        }
-        "long" => {
-            name = "i64";
-        }
-        "ulong" => {
-            name = "u64";
-        }
-        "short" => {
-            name = "i16";
-        }
-        "ushort" => {
-            name = "u16";
-        }
-        "char" => {
-            name = "i8";
-        }
-        "byte" => {
-            name = "u8";
-        }
-        "float" => {
-            name = "f32";
-        }
-        "double" => {
-            name = "f64";
-        }
-        else => {}
-    }
+    var name = sized_number_name(parsed.name);
     var args = Array<TypeName>();
     for (var t in parsed.sub_types) {
         args.append(_canonical(t));
