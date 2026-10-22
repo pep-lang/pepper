@@ -1911,7 +1911,11 @@ changed.
   hit whose link summaries were recorded marks its files in
   `Module.cached_files`, so `strip_bodies` skips their bodies and codegen
   only declares them (`Generator.stripped`); never `main`'s, which the
-  entry part, compiled every build, defines. After sema, `reuse_after_sema`
+  entry part, compiled every build, defines. A build that checks
+  compilation units in workers (`_in_workers`) links only their objects,
+  so it and its workers look nothing up here (`nothing_reused`): a body it
+  skipped for a translation unit's object, which a whole-program build
+  left in the cache, would be defined nowhere. After sema, `reuse_after_sema`
   hashes the other files' interfaces from their tokens and
   `summaries_to_record`, keys the remaining units, and a unit that hits
   then generates no objects. A function whose link summary calls through a

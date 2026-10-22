@@ -744,6 +744,27 @@ const _INTERFACES = "interfaces";
 ## per line, relative to the cache's folder (`Cache.part`).
 const _PARTS = "parts";
 
+## A `Reused` that found none of `units` in the cache: every body is
+## checked and compiled. A build that compiles compilation units in
+## workers uses it, since it links only the compilation units' objects, so
+## a file's body that it skipped would be defined nowhere.
+##
+## @param program the program
+## @param units its units
+## @returns a `Reused` with no unit found
+export nothing_reused(program: link.Program, units: link.TranslationUnit[]): Reused {
+    var reused = Reused();
+    for (var _ in program.files) {
+        reused.files.append(false);
+        reused.interfaces.append(Optional<String>.Empty);
+    }
+    for (var _ in units) {
+        reused.keys.append(Optional<String>.Empty);
+        reused.objects.append(Array<Path>());
+    }
+    return reused;
+}
+
 ## Finds `units` in `cache` before sema. Units resolve bottom up: a unit's
 ## key is known once the interfaces of the files it reads from other units
 ## are, which a hit's record gives. A hit's objects are used as they are,
@@ -758,15 +779,7 @@ const _PARTS = "parts";
 export reuse(
     program: link.Program, units: link.TranslationUnit[], keys: Keys, cache: Cache, extension: String
 ): Reused {
-    var reused = Reused();
-    for (var _ in program.files) {
-        reused.files.append(false);
-        reused.interfaces.append(Optional<String>.Empty);
-    }
-    for (var _ in units) {
-        reused.keys.append(Optional<String>.Empty);
-        reused.objects.append(Array<Path>());
-    }
+    var reused = nothing_reused(program, units);
     var file_of = _files_by_namespace(program);
     bool progress = true;
     while (progress) {
