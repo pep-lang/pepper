@@ -5,6 +5,14 @@ import k;
 
 const LOCAL = "local";
 
+struct Box<T> {
+    var v: T;
+
+    construct(v: T) {
+        this.v = v;
+    }
+}
+
 same<T>(a: T, b: T): bool {
     return a == b;
 }
@@ -21,6 +29,8 @@ main(): int {
     var kind = Optional<String>.Value("quickfix");
     print(same(kind.value(), k.QUICK_FIX));
     print(same(kind.value(), LOCAL));
+    # A field of a specialization not made yet types from its declaration.
+    print(same(Box<String>("local").v, LOCAL));
     var copy = k.QUICK_FIX;
     print(show(copy));
     print(show(k.QUICK_FIX));

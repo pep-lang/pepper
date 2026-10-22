@@ -545,7 +545,9 @@ const_string_types_alike_whole_and_in_units() {
         }
         var output = run(process.Command(program.to_string()));
         expect_exit(output, 0);
-        expect_equal(output.stdout, "true\nfalse\nStringConstant quickfix\nStringConstant quickfix\nquickfix/local\n");
+        expect_equal(
+            output.stdout, "true\nfalse\ntrue\nStringConstant quickfix\nStringConstant quickfix\nquickfix/local\n"
+        );
     }
 }
 
