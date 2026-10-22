@@ -205,6 +205,10 @@ assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
 <p>Returns the UTF-16 bytes of <code>value</code>.</p>
+<p>A <code>String</code> holds UTF-8, but one made from C memory may not be valid:
+each byte that does not start a valid UTF-8 sequence (see
+<code>Utf8.is_valid</code>) is encoded as U+FFFD, as <code>Utf8.decode_lossy</code> reads
+it, so the result is always valid UTF-16.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the text to encode</li>

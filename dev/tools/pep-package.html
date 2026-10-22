@@ -189,6 +189,7 @@
 pepper package add other/json@2.x --name fast_json
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
+pepper package add --optional --features simd someone/zlib  # only a feature turns it on
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -220,6 +221,9 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
 <tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
 <tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use</td></tr>
+<tr><td><code>add ... --optional</code></td><td>Marks it <code>optional = true</code>: a build uses it only when a feature turns it on</td></tr>
+<tr><td><code>add ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The dependency's features to turn on, written to its <code>features</code>: a comma-separated list, or repeat the option</td></tr>
+<tr><td><code>add ... --no-default-features</code></td><td>Leaves the dependency's <code>default</code> feature off: <code>default-features = false</code></td></tr>
 <tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
@@ -275,6 +279,10 @@ only a build for a target the condition selects sees it. The condition is
 what <code>[Target(...)]</code> takes (<code>OS(Windows)</code>, <code>OS(Linux) &amp;&amp; Arch(x64)</code>; see
 <a href="../language/platform-selection.html">Platform selection</a>); quote it for the
 shell. It cannot be given with <code>--dev</code>.</p>
+<p><code>--optional</code>, <code>--features &lt;names&gt;</code> and <code>--no-default-features</code> write the
+entry's <code>optional = true</code>, <code>features = [...]</code> and <code>default-features = false</code> (see <a href="projects.html#features">Features</a>). A dev-dependency cannot be
+optional. The package's features are not checked until a build turns
+them on.</p>
 <h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
 <p>Removes the dependency with that name (or that <code>owner/name</code>) from
 <code>pep.toml</code>, whichever table it is in, and drops from <code>pep.lock</code> every
@@ -314,8 +322,9 @@ path or the default branch, so a project depending on this one can
 resolve it with its other packages. A dev-dependency may be anything,
 since a dependent ignores it;</li>
 <li><code>minimum_toolchain</code> is at least the release that reads each newer
-<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code> and
-<code>[target]</code> tables need 0.11.0.</li>
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>
+and <code>[features]</code> tables, and a dependency's <code>optional</code>, <code>features</code> and
+<code>default-features</code>, need 0.11.0.</li>
 </ul>
 <pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
@@ -349,6 +358,10 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
 <p>A package that only the project's <code>[dev-dependencies]</code> lead to has
 <code>dev = true</code>; one that a dependency leads to as well does not.</p>
+<p>Features do not change the lock: an optional dependency is resolved,
+locked and fetched like any other, whether or not a build turns it on, so
+<code>pep.lock</code> is the same whichever <code>--features</code> a build gives (see
+<a href="projects.html#features">Features</a>).</p>
 <p><code>pep.lock</code> lists every platform's packages, so it is the same whichever
 system writes it, as <code>Cargo.lock</code> is: a project locked on Linux builds on
 Windows with no change to the lock, and <code>--locked</code> passes on both. A

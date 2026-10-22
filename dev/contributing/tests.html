@@ -239,11 +239,14 @@ libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a fo
 holding <code>zlib.lib</code>, and is skipped without it);</li>
 <li>in <code>tools/</code>, the tools' tests, each under its tool's <code>pep.toml</code>.</li>
 </ul>
+<p><code>PEPPER_TESTS_PART</code> runs part of them: <code>compiler</code> the compiler's tests
+(<code>tools/compiler/</code>), <code>others</code> everything else; unset or <code>all</code>, both.</p>
 <p>The tools' run, the longest, starts as soon as the tools its tests run
 (<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>,
 <code>pep-run</code>, <code>pep-new</code> and <code>pep-init</code>) are
-built, and runs beside the runtime's runs; its output is printed after
-theirs.</p>
+built, and runs beside the runtime's runs. Its output is interleaved with
+theirs as it comes, each line starting <code>tools| </code>, so a slow test shows
+while it runs.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
 <pre><code class="language-bash">cd runtime
 pepper test                       # every runtime test
@@ -261,10 +264,21 @@ The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writ
 files uses a fresh folder under the system's temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
 <p>CI runs <code>scripts/pepper-tests.sh</code> with the installed build of main on
-Linux, macOS and Windows, one job on each, starting from the build cache
-the previous run saved. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
+Linux, macOS and Windows, in two jobs on each: one runs the compiler's
+tests (<code>PEPPER_TESTS_PART=compiler</code>), the other everything else
+(<code>PEPPER_TESTS_PART=others</code>), and every build in a job shares one build
+cache. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
 that compiler instead: CI builds it with the build of main first
-(<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
+(<code>scripts/ci-build-compiler.sh</code>, from a build cache CI keeps between runs,
+keyed on the build of main's contents) and runs the suite with it. Each
+job has
+a time limit a little above its slowest passing runs, and prints the
+runner's memory, swap, disk and biggest processes every minute beside the
+tests (<code>scripts/ci-monitor.sh</code>). A job that fails, is cancelled or runs out
+of time ends with a Diagnostics step (<code>scripts/ci-monitor.sh --report</code>):
+the samples with the least memory free, every process still running with
+its age and size (a hung build or test is the old one), the disks, and on
+Linux the kernel's out-of-memory kills.</p>
 <p>CI also builds the compiler for a commit that leaves <code>tools/compiler/</code>
 alone when the published build of main is stale. The build of main
 publishes only after main's CI passes, so a run cancelled by the next

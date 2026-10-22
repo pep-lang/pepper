@@ -17228,7 +17228,9 @@ main(args: String[]): int {
 <ul>
 <li><code>process.arguments()</code> returns the program's command-line arguments, the
 same array <code>main(args: String[])</code> receives (see
-<a href="language/functions.html#command-line-arguments-and-exit">Functions</a>).</li>
+<a href="language/functions.html#command-line-arguments-and-exit">Functions</a>). On Windows
+they are read as UTF-16, so every character arrives as UTF-8; on POSIX
+an argument is whatever bytes the parent passed.</li>
 <li><code>process.exit(code)</code> ends the program at once with status <code>code</code>, as C's
 <code>exit</code> does: the handlers registered with C's <code>atexit</code> run, and printed
 output is flushed. In a copy <code>process.fork()</code> started, the handlers,
@@ -20314,7 +20316,10 @@ the command line with <code>-D</code>, as in C compilers, and the code tests the
 one wins.</li>
 </ul>
 <p><code>pep-build --test</code> defines <code>TEST</code>, which keeps the <code>[Test]</code> functions and
-can mark code only tests use (see <a href="language/testing.html#test-builds">Unit tests</a>).</p>
+can mark code only tests use (see <a href="language/testing.html#test-builds">Unit tests</a>).
+A package's <code>[features]</code> that a build turns on define options too, named
+<code>&lt;package&gt;_&lt;feature&gt;</code> (<code>http_tls</code>; see
+<a href="language/../tools/projects.html#features">Features</a>).</p>
 <p>A name is a letter or <code>_</code>, then letters, digits and <code>_</code>. Any other name is
 an error:</p>
 <pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'
@@ -21830,6 +21835,8 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
 <tr><td><code>--MSVC</code></td><td>Use the MSVC linker (not ported)</td><td>off</td></tr>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
+<tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
+<tr><td><code>--no-default-features</code></td><td>Leave the project's package's <code>default</code> feature off</td><td>off</td></tr>
 <tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
 <tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project's folder when building it)</td></tr>
@@ -22237,6 +22244,15 @@ the same option, the later wins. A name must be an identifier
 See <a href="tools/../language/build-options.html">Build options</a>.</p>
 <pre><code class="language-bash">pepper build main.pep -D USE_ZLIB -D LOG_LEVEL=2
 </code></pre>
+<h3 id="-f-names---features-names---no-default-features"><a class="header" href="#-f-names---features-names---no-default-features"><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code>, <code>--no-default-features</code></a></h3>
+<p><code>--features</code> turns on features of the project's package, from the
+<code>[features]</code> of its <code>pep.toml</code>: a comma-separated list (<code>--features tls,gzip</code>), or the option repeated. Its <code>default</code> feature is on unless
+<code>--no-default-features</code> is given. Each feature on defines the build option
+<code>&lt;package&gt;_&lt;feature&gt;</code> (<code>http_tls</code>), and turns on what it lists, across the
+whole dependency graph; see <a href="tools/projects.html#features">Features</a>. A feature
+the package does not have is an error that lists those it has:</p>
+<pre><code class="language-text">unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
+</code></pre>
 <h2 id="runtime-checks"><a class="header" href="#runtime-checks">Runtime checks</a></h2>
 <h3 id="--no-runtime-checkslist"><a class="header" href="#--no-runtime-checkslist"><code>--no-runtime-checks=&lt;list&gt;</code></a></h3>
 <p>Integer overflow, division by zero, an oversized shift, an index out of
@@ -22390,6 +22406,10 @@ fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and ex
 
 [target.'OS(Windows)'.dependencies]
 winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
+
+[features]
+default   = ["tls"]
+tls       = ["dep:openssl"]          # a build with it defines 'my_app_tls' and uses openssl
 </code></pre>
 <p>A package is a project other projects depend on: a repository (or folder)
 with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
@@ -22446,6 +22466,9 @@ main(): int {
 <tr><td><code>branch</code></td><td>A branch</td></tr>
 <tr><td><code>tag</code></td><td>A tag</td></tr>
 <tr><td><code>commit</code></td><td>A commit</td></tr>
+<tr><td><code>optional</code></td><td><code>true</code>: a build uses it only when a <a href="tools/projects.html#features">feature</a> turns it on</td></tr>
+<tr><td><code>features</code></td><td>An array of the dependency's features to turn on</td></tr>
+<tr><td><code>default-features</code></td><td><code>false</code> leaves the dependency's <code>default</code> feature off</td></tr>
 </tbody></table>
 </div>
 <p>A dependency has exactly one source, and at most one of <code>version</code>, <code>branch</code>,
@@ -22576,6 +22599,83 @@ checks it.</p>
 <p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="tools/pep-package.html#add-ownernamerange">pep-package</a>).
 A name may be in only one of the dependency tables, and a <code>[target]</code> table
 holds only <code>dependencies</code>.</p>
+<h2 id="features"><a class="header" href="#features"><code>[features]</code></a></h2>
+<p>A package with optional parts, such as TLS support in a client, names
+them in <code>[features]</code>, so a project that does not want one neither builds
+its code nor its dependencies. Each key is a feature, and its value lists
+what turning it on turns on:</p>
+<pre><code class="language-toml">[package]
+name = "http"
+
+[dependencies]
+openssl = { github = "someone/openssl", version = "3", optional = true }
+zlib    = { github = "someone/zlib", version = "1", optional = true }
+
+[features]
+default = ["tls"]
+tls     = ["dep:openssl"]                  # the optional dependency openssl
+gzip    = ["dep:zlib", "zlib/simd"]        # zlib, and zlib's feature 'simd'
+full    = ["tls", "gzip"]                  # other features of this package
+</code></pre>
+<ul>
+<li>
+<p><strong>Code reads a feature as a build option:</strong> a feature that is on defines
+the build option <code>&lt;package&gt;_&lt;feature&gt;</code>, the package's <code>name</code> and the
+feature joined with <code>_</code> (<code>http_tls</code>), so <code>[Target(BuildOption(...))]</code>,
+<code>[BuildOption("...")]</code> and <code>reflect.build_option</code> select code by it, as
+for a <code>-D</code> option (see <a href="tools/../language/build-options.html">Build options</a>).
+A feature name is an identifier. The names join with a bare <code>_</code>, so two
+packages of one build should not share a <code>name</code>: their features would
+define the same options.</p>
+</li>
+<li>
+<p><strong>What a feature lists:</strong> another feature of the package (<code>tls</code>); an
+optional dependency, <code>dep:&lt;name&gt;</code>; or a feature of a dependency,
+<code>&lt;name&gt;/&lt;feature&gt;</code>, which turns the dependency on too when it is
+optional. Each is checked against the package's own <code>pep.toml</code>.</p>
+</li>
+<li>
+<p><strong><code>default</code></strong> is the feature a package has on unless it is asked not
+to: <code>--no-default-features</code> on <code>pepper build</code> and <code>pepper test</code> for the
+project's package, <code>default-features = false</code> in a dependency's entry
+for that dependency.</p>
+</li>
+<li>
+<p><strong>Turning features on:</strong> <code>pepper build --features tls,gzip</code> (and
+<code>pepper test --features</code>) for the project's package; a dependency's
+entry, <code>features = ["gzip"]</code>, for that package. Features are additive
+and unified across the graph, as in Cargo: a package that two others
+depend on has every feature either turns on, and there is one copy of
+it in the build.</p>
+</li>
+<li>
+<p><strong>Optional dependencies</strong> (<code>optional = true</code>) are seen only by a build
+with a feature that turns them on; guard the import with the feature's
+build option, so a build without it skips the import:</p>
+<pre><code class="language-pepper">[Target(BuildOption(http_tls))]
+import openssl;
+</code></pre>
+<p>An import of one that no feature this build turns on lists is an error:</p>
+<pre><code class="language-text">module.pep:1:8: error: 'openssl' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:openssl' on the import
+</code></pre>
+<p>A dev-dependency cannot be optional.</p>
+</li>
+<li>
+<p><strong>Locked whatever the features:</strong> <code>pep.lock</code> records optional
+dependencies like the rest, and a build fetches them whether or not a
+feature turns them on, so the lock does not depend on which features a
+build picks, as it does not on the platform.</p>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects <code>[features]</code>, and
+a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code>, so a
+package that uses them sets <code>minimum_toolchain = "0.11.0"</code> (or later),
+as for <a href="tools/projects.html#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pepper package publish</code> checks it.</p>
+</li>
+</ul>
+<p><code>pepper package add --optional</code>, <code>--features</code> and <code>--no-default-features</code>
+write a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code> (see
+<a href="tools/pep-package.html#add-ownernamerange">pep-package</a>).</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -22596,6 +22696,11 @@ hosts = ["codeberg", "github"]
 dependency named like a runtime module (<code>io</code>, <code>async</code>), which it would
 otherwise hide.</li>
 <li>A <code>[target]</code> condition <code>[Target(...)]</code> would reject.</li>
+<li>A feature that lists a feature the package lacks, a <code>dep:</code> that names
+no optional dependency, or a <code>&lt;name&gt;/&lt;feature&gt;</code> whose dependency does
+not exist; a dependency's <code>features</code> asking for one its package lacks
+(<code>package 'zlib' has no feature 'smid'</code>), which a build reports once
+the package is fetched.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
@@ -22772,6 +22877,7 @@ to reclaim the space.</p>
 pepper package add other/json@2.x --name fast_json
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
+pepper package add --optional --features simd someone/zlib  # only a feature turns it on
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -22803,6 +22909,9 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
 <tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
 <tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use</td></tr>
+<tr><td><code>add ... --optional</code></td><td>Marks it <code>optional = true</code>: a build uses it only when a feature turns it on</td></tr>
+<tr><td><code>add ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The dependency's features to turn on, written to its <code>features</code>: a comma-separated list, or repeat the option</td></tr>
+<tr><td><code>add ... --no-default-features</code></td><td>Leaves the dependency's <code>default</code> feature off: <code>default-features = false</code></td></tr>
 <tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
@@ -22858,6 +22967,10 @@ only a build for a target the condition selects sees it. The condition is
 what <code>[Target(...)]</code> takes (<code>OS(Windows)</code>, <code>OS(Linux) &amp;&amp; Arch(x64)</code>; see
 <a href="tools/../language/platform-selection.html">Platform selection</a>); quote it for the
 shell. It cannot be given with <code>--dev</code>.</p>
+<p><code>--optional</code>, <code>--features &lt;names&gt;</code> and <code>--no-default-features</code> write the
+entry's <code>optional = true</code>, <code>features = [...]</code> and <code>default-features = false</code> (see <a href="tools/projects.html#features">Features</a>). A dev-dependency cannot be
+optional. The package's features are not checked until a build turns
+them on.</p>
 <h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
 <p>Removes the dependency with that name (or that <code>owner/name</code>) from
 <code>pep.toml</code>, whichever table it is in, and drops from <code>pep.lock</code> every
@@ -22897,8 +23010,9 @@ path or the default branch, so a project depending on this one can
 resolve it with its other packages. A dev-dependency may be anything,
 since a dependent ignores it;</li>
 <li><code>minimum_toolchain</code> is at least the release that reads each newer
-<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code> and
-<code>[target]</code> tables need 0.11.0.</li>
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>
+and <code>[features]</code> tables, and a dependency's <code>optional</code>, <code>features</code> and
+<code>default-features</code>, need 0.11.0.</li>
 </ul>
 <pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
@@ -22932,6 +23046,10 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
 <p>A package that only the project's <code>[dev-dependencies]</code> lead to has
 <code>dev = true</code>; one that a dependency leads to as well does not.</p>
+<p>Features do not change the lock: an optional dependency is resolved,
+locked and fetched like any other, whether or not a build turns it on, so
+<code>pep.lock</code> is the same whichever <code>--features</code> a build gives (see
+<a href="tools/projects.html#features">Features</a>).</p>
 <p><code>pep.lock</code> lists every platform's packages, so it is the same whichever
 system writes it, as <code>Cargo.lock</code> is: a project locked on Linux builds on
 Windows with no change to the lock, and <code>--locked</code> passes on both. A
@@ -23390,6 +23508,8 @@ finds it and it finds the compiler:</p>
 <tr><td><code>--locked</code></td><td>Passed to <code>pep-build</code>: fail, rather than fetch, when the project's <code>pep.lock</code> is out of date (also <code>PEPPER_LOCKED=1</code>)</td><td></td></tr>
 <tr><td><code>--offline</code></td><td>Passed to <code>pep-build</code>: fetch nothing over the network, building with what <code>.pep/deps</code> holds (also <code>PEPPER_OFFLINE=1</code>)</td><td></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
+<tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Passed to <code>pep-build</code>: features of the project's package to turn on, comma-separated; repeatable (see <a href="tools/projects.html#features">Features</a>)</td><td>the <code>default</code> feature</td></tr>
+<tr><td><code>--no-default-features</code></td><td>Passed to <code>pep-build</code>: leave the project's package's <code>default</code> feature off</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
 </tbody></table>
@@ -47516,8 +47636,8 @@ names the deprecated prelude functions still hold:</p>
 <li><code>arguments(): Array&lt;String&gt;</code> returns the program's command-line
 arguments: element 0 is the program as it was started, and the
 arguments typed after it follow in order. <code>main</code> receives the same array
-when it is declared <code>main(args: String[]): int</code>. On Windows they are in
-the process's ANSI code page.</li>
+when it is declared <code>main(args: String[]): int</code>. On Windows they are
+read as UTF-16 and converted to valid UTF-8.</li>
 <li><code>exit(code: int)</code> ends the program at once with status <code>code</code> (only its
 low 8 bits reach a POSIX parent), as C's <code>exit</code> does: the handlers
 registered with C's <code>atexit</code> run, then standard output and the other C
@@ -52166,6 +52286,10 @@ assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
 <p>Returns the UTF-16 bytes of <code>value</code>.</p>
+<p>A <code>String</code> holds UTF-8, but one made from C memory may not be valid:
+each byte that does not start a valid UTF-8 sequence (see
+<code>Utf8.is_valid</code>) is encoded as U+FFFD, as <code>Utf8.decode_lossy</code> reads
+it, so the result is always valid UTF-16.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the text to encode</li>
@@ -52236,14 +52360,15 @@ point past 127.</p>
 <pre><code class="language-pepper">static encode_lossy(value: String): u8[]
 </code></pre>
 <p>Returns the ASCII bytes of <code>value</code>, with <code>?</code> for each code point past
-127.</p>
+127, and for each byte that does not start a valid UTF-8 sequence
+(a <code>String</code> made from C memory may hold one).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the text to encode</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new array of one byte per code point</li>
+<li>a new array of one byte per code point or invalid byte</li>
 </ul>
 <h4 id="is_ascii-2"><a class="header" href="#is_ascii-2">is_ascii</a></h4>
 <pre><code class="language-pepper">static is_ascii(value: String): bool
@@ -59145,11 +59270,14 @@ libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a fo
 holding <code>zlib.lib</code>, and is skipped without it);</li>
 <li>in <code>tools/</code>, the tools' tests, each under its tool's <code>pep.toml</code>.</li>
 </ul>
+<p><code>PEPPER_TESTS_PART</code> runs part of them: <code>compiler</code> the compiler's tests
+(<code>tools/compiler/</code>), <code>others</code> everything else; unset or <code>all</code>, both.</p>
 <p>The tools' run, the longest, starts as soon as the tools its tests run
 (<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>,
 <code>pep-run</code>, <code>pep-new</code> and <code>pep-init</code>) are
-built, and runs beside the runtime's runs; its output is printed after
-theirs.</p>
+built, and runs beside the runtime's runs. Its output is interleaved with
+theirs as it comes, each line starting <code>tools| </code>, so a slow test shows
+while it runs.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
 <pre><code class="language-bash">cd runtime
 pepper test                       # every runtime test
@@ -59167,10 +59295,21 @@ The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writ
 files uses a fresh folder under the system's temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
 <p>CI runs <code>scripts/pepper-tests.sh</code> with the installed build of main on
-Linux, macOS and Windows, one job on each, starting from the build cache
-the previous run saved. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
+Linux, macOS and Windows, in two jobs on each: one runs the compiler's
+tests (<code>PEPPER_TESTS_PART=compiler</code>), the other everything else
+(<code>PEPPER_TESTS_PART=others</code>), and every build in a job shares one build
+cache. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
 that compiler instead: CI builds it with the build of main first
-(<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
+(<code>scripts/ci-build-compiler.sh</code>, from a build cache CI keeps between runs,
+keyed on the build of main's contents) and runs the suite with it. Each
+job has
+a time limit a little above its slowest passing runs, and prints the
+runner's memory, swap, disk and biggest processes every minute beside the
+tests (<code>scripts/ci-monitor.sh</code>). A job that fails, is cancelled or runs out
+of time ends with a Diagnostics step (<code>scripts/ci-monitor.sh --report</code>):
+the samples with the least memory free, every process still running with
+its age and size (a hung build or test is the old one), the disks, and on
+Linux the kernel's out-of-memory kills.</p>
 <p>CI also builds the compiler for a commit that leaves <code>tools/compiler/</code>
 alone when the published build of main is stale. The build of main
 publishes only after main's CI passes, so a run cancelled by the next

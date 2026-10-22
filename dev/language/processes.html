@@ -337,7 +337,9 @@ main(args: String[]): int {
 <ul>
 <li><code>process.arguments()</code> returns the program's command-line arguments, the
 same array <code>main(args: String[])</code> receives (see
-<a href="functions.html#command-line-arguments-and-exit">Functions</a>).</li>
+<a href="functions.html#command-line-arguments-and-exit">Functions</a>). On Windows
+they are read as UTF-16, so every character arrives as UTF-8; on POSIX
+an argument is whatever bytes the parent passed.</li>
 <li><code>process.exit(code)</code> ends the program at once with status <code>code</code>, as C's
 <code>exit</code> does: the handlers registered with C's <code>atexit</code> run, and printed
 output is flushed. In a copy <code>process.fork()</code> started, the handlers,

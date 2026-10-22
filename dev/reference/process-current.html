@@ -192,8 +192,8 @@ names the deprecated prelude functions still hold:</p>
 <li><code>arguments(): Array&lt;String&gt;</code> returns the program's command-line
 arguments: element 0 is the program as it was started, and the
 arguments typed after it follow in order. <code>main</code> receives the same array
-when it is declared <code>main(args: String[]): int</code>. On Windows they are in
-the process's ANSI code page.</li>
+when it is declared <code>main(args: String[]): int</code>. On Windows they are
+read as UTF-16 and converted to valid UTF-8.</li>
 <li><code>exit(code: int)</code> ends the program at once with status <code>code</code> (only its
 low 8 bits reach a POSIX parent), as C's <code>exit</code> does: the handlers
 registered with C's <code>atexit</code> run, then standard output and the other C

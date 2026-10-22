@@ -217,6 +217,10 @@ fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and ex
 
 [target.'OS(Windows)'.dependencies]
 winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
+
+[features]
+default   = ["tls"]
+tls       = ["dep:openssl"]          # a build with it defines 'my_app_tls' and uses openssl
 </code></pre>
 <p>A package is a project other projects depend on: a repository (or folder)
 with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
@@ -273,6 +277,9 @@ main(): int {
 <tr><td><code>branch</code></td><td>A branch</td></tr>
 <tr><td><code>tag</code></td><td>A tag</td></tr>
 <tr><td><code>commit</code></td><td>A commit</td></tr>
+<tr><td><code>optional</code></td><td><code>true</code>: a build uses it only when a <a href="#features">feature</a> turns it on</td></tr>
+<tr><td><code>features</code></td><td>An array of the dependency's features to turn on</td></tr>
+<tr><td><code>default-features</code></td><td><code>false</code> leaves the dependency's <code>default</code> feature off</td></tr>
 </tbody></table>
 </div>
 <p>A dependency has exactly one source, and at most one of <code>version</code>, <code>branch</code>,
@@ -403,6 +410,83 @@ checks it.</p>
 <p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="pep-package.html#add-ownernamerange">pep-package</a>).
 A name may be in only one of the dependency tables, and a <code>[target]</code> table
 holds only <code>dependencies</code>.</p>
+<h2 id="features"><a class="header" href="#features"><code>[features]</code></a></h2>
+<p>A package with optional parts, such as TLS support in a client, names
+them in <code>[features]</code>, so a project that does not want one neither builds
+its code nor its dependencies. Each key is a feature, and its value lists
+what turning it on turns on:</p>
+<pre><code class="language-toml">[package]
+name = "http"
+
+[dependencies]
+openssl = { github = "someone/openssl", version = "3", optional = true }
+zlib    = { github = "someone/zlib", version = "1", optional = true }
+
+[features]
+default = ["tls"]
+tls     = ["dep:openssl"]                  # the optional dependency openssl
+gzip    = ["dep:zlib", "zlib/simd"]        # zlib, and zlib's feature 'simd'
+full    = ["tls", "gzip"]                  # other features of this package
+</code></pre>
+<ul>
+<li>
+<p><strong>Code reads a feature as a build option:</strong> a feature that is on defines
+the build option <code>&lt;package&gt;_&lt;feature&gt;</code>, the package's <code>name</code> and the
+feature joined with <code>_</code> (<code>http_tls</code>), so <code>[Target(BuildOption(...))]</code>,
+<code>[BuildOption("...")]</code> and <code>reflect.build_option</code> select code by it, as
+for a <code>-D</code> option (see <a href="../language/build-options.html">Build options</a>).
+A feature name is an identifier. The names join with a bare <code>_</code>, so two
+packages of one build should not share a <code>name</code>: their features would
+define the same options.</p>
+</li>
+<li>
+<p><strong>What a feature lists:</strong> another feature of the package (<code>tls</code>); an
+optional dependency, <code>dep:&lt;name&gt;</code>; or a feature of a dependency,
+<code>&lt;name&gt;/&lt;feature&gt;</code>, which turns the dependency on too when it is
+optional. Each is checked against the package's own <code>pep.toml</code>.</p>
+</li>
+<li>
+<p><strong><code>default</code></strong> is the feature a package has on unless it is asked not
+to: <code>--no-default-features</code> on <code>pepper build</code> and <code>pepper test</code> for the
+project's package, <code>default-features = false</code> in a dependency's entry
+for that dependency.</p>
+</li>
+<li>
+<p><strong>Turning features on:</strong> <code>pepper build --features tls,gzip</code> (and
+<code>pepper test --features</code>) for the project's package; a dependency's
+entry, <code>features = ["gzip"]</code>, for that package. Features are additive
+and unified across the graph, as in Cargo: a package that two others
+depend on has every feature either turns on, and there is one copy of
+it in the build.</p>
+</li>
+<li>
+<p><strong>Optional dependencies</strong> (<code>optional = true</code>) are seen only by a build
+with a feature that turns them on; guard the import with the feature's
+build option, so a build without it skips the import:</p>
+<pre><code class="language-pepper">[Target(BuildOption(http_tls))]
+import openssl;
+</code></pre>
+<p>An import of one that no feature this build turns on lists is an error:</p>
+<pre><code class="language-text">module.pep:1:8: error: 'openssl' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:openssl' on the import
+</code></pre>
+<p>A dev-dependency cannot be optional.</p>
+</li>
+<li>
+<p><strong>Locked whatever the features:</strong> <code>pep.lock</code> records optional
+dependencies like the rest, and a build fetches them whether or not a
+feature turns them on, so the lock does not depend on which features a
+build picks, as it does not on the platform.</p>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects <code>[features]</code>, and
+a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code>, so a
+package that uses them sets <code>minimum_toolchain = "0.11.0"</code> (or later),
+as for <a href="#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pepper package publish</code> checks it.</p>
+</li>
+</ul>
+<p><code>pepper package add --optional</code>, <code>--features</code> and <code>--no-default-features</code>
+write a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code> (see
+<a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -423,6 +507,11 @@ hosts = ["codeberg", "github"]
 dependency named like a runtime module (<code>io</code>, <code>async</code>), which it would
 otherwise hide.</li>
 <li>A <code>[target]</code> condition <code>[Target(...)]</code> would reject.</li>
+<li>A feature that lists a feature the package lacks, a <code>dep:</code> that names
+no optional dependency, or a <code>&lt;name&gt;/&lt;feature&gt;</code> whose dependency does
+not exist; a dependency's <code>features</code> asking for one its package lacks
+(<code>package 'zlib' has no feature 'smid'</code>), which a build reports once
+the package is fetched.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,

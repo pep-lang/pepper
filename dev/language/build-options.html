@@ -197,7 +197,10 @@ the command line with <code>-D</code>, as in C compilers, and the code tests the
 one wins.</li>
 </ul>
 <p><code>pep-build --test</code> defines <code>TEST</code>, which keeps the <code>[Test]</code> functions and
-can mark code only tests use (see <a href="testing.html#test-builds">Unit tests</a>).</p>
+can mark code only tests use (see <a href="testing.html#test-builds">Unit tests</a>).
+A package's <code>[features]</code> that a build turns on define options too, named
+<code>&lt;package&gt;_&lt;feature&gt;</code> (<code>http_tls</code>; see
+<a href="../tools/projects.html#features">Features</a>).</p>
 <p>A name is a letter or <code>_</code>, then letters, digits and <code>_</code>. Any other name is
 an error:</p>
 <pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'

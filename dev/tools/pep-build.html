@@ -226,6 +226,8 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
 <tr><td><code>--MSVC</code></td><td>Use the MSVC linker (not ported)</td><td>off</td></tr>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
+<tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
+<tr><td><code>--no-default-features</code></td><td>Leave the project's package's <code>default</code> feature off</td><td>off</td></tr>
 <tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
 <tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project's folder when building it)</td></tr>
@@ -632,6 +634,15 @@ the same option, the later wins. A name must be an identifier
 (<code>-D 2FAST</code> is an error). Build options are part of the build cache's key.
 See <a href="../language/build-options.html">Build options</a>.</p>
 <pre><code class="language-bash">pepper build main.pep -D USE_ZLIB -D LOG_LEVEL=2
+</code></pre>
+<h3 id="-f-names---features-names---no-default-features"><a class="header" href="#-f-names---features-names---no-default-features"><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code>, <code>--no-default-features</code></a></h3>
+<p><code>--features</code> turns on features of the project's package, from the
+<code>[features]</code> of its <code>pep.toml</code>: a comma-separated list (<code>--features tls,gzip</code>), or the option repeated. Its <code>default</code> feature is on unless
+<code>--no-default-features</code> is given. Each feature on defines the build option
+<code>&lt;package&gt;_&lt;feature&gt;</code> (<code>http_tls</code>), and turns on what it lists, across the
+whole dependency graph; see <a href="projects.html#features">Features</a>. A feature
+the package does not have is an error that lists those it has:</p>
+<pre><code class="language-text">unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
 </code></pre>
 <h2 id="runtime-checks"><a class="header" href="#runtime-checks">Runtime checks</a></h2>
 <h3 id="--no-runtime-checkslist"><a class="header" href="#--no-runtime-checkslist"><code>--no-runtime-checks=&lt;list&gt;</code></a></h3>

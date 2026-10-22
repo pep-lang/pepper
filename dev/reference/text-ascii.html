@@ -215,14 +215,15 @@ point past 127.</p>
 <pre><code class="language-pepper">static encode_lossy(value: String): u8[]
 </code></pre>
 <p>Returns the ASCII bytes of <code>value</code>, with <code>?</code> for each code point past
-127.</p>
+127, and for each byte that does not start a valid UTF-8 sequence
+(a <code>String</code> made from C memory may hold one).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>value</code> — the text to encode</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>a new array of one byte per code point</li>
+<li>a new array of one byte per code point or invalid byte</li>
 </ul>
 <h4 id="is_ascii"><a class="header" href="#is_ascii">is_ascii</a></h4>
 <pre><code class="language-pepper">static is_ascii(value: String): bool
