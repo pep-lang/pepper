@@ -109,14 +109,15 @@ export struct Cache {
     ## @returns what `find` found, or none when it found nothing for about a
     ##   second
     look_again<T>(find: () => T?): T? {
-        for (var _ in 0.._REUSE_TRIES) {
-            var found = find();
+        var found = find();
+        for (var _ in 1.._REUSE_TRIES) {
             if (found.is_value()) {
                 return found;
             }
             async.Thread.sleep(_REUSE_WAIT);
+            found = find();
         }
-        return Optional<T>.Empty;
+        return found;
     }
 
     ## Returns the objects of `unit` under `key` (`numbered_objects`),
@@ -462,6 +463,11 @@ export default_cache(work: Path): Cache {
 ## missing meanwhile, so every later read of a key a build decided to
 ## reuse looks again (`Cache.look_again`).
 _prune(folder: Path) {
+    # shortcut: the linker opens a reused key's objects after the last look,
+    # so a prune that read a key's time before a build marked it, then
+    # stalled past that build's last look, can move it aside while a link
+    # opens it; pin the objects (hard links into the build's folder) if that
+    # is ever seen.
     var entries = Directory.open(folder);
     if (entries.is_err()) {
         return;

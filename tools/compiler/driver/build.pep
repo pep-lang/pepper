@@ -463,6 +463,12 @@ _store_last(
     return Result<Path, String>.ok(cache.objects($"+{last.name}", key.value()));
 }
 
+# Why a build stops when the cache lost the objects of `unit`, which it
+# decided to reuse.
+_cache_lost(unit: CompilationUnit): String {
+    return $"the build cache no longer holds the objects of compilation unit '{unit.name}'; build again";
+}
+
 # One look at the last compilation unit's objects in the cache's `folder`
 # (`_store_last`), marked as reused: its parts' and entry's objects, its
 # warnings and its `[Link]` arguments; none while any is missing.
@@ -706,9 +712,7 @@ _check_in_workers(
             var below = _below(units[k].reads, dir, read);
             var key = cache.look_again(() => cache.unit_objects(name, unit_key, below, $"0.{extension}"));
             if (!key.is_value()) {
-                checked = Result<void, String>.err(
-                    $"the build cache no longer holds the objects of compilation unit '{units[k].name}'; build again"
-                );
+                checked = Result<void, String>.err(_cache_lost(units[k]));
                 break;
             }
             object_keys[k] = key.value();
@@ -808,9 +812,7 @@ _work_on(
         return Optional<String>.Value(compiled.error());
     }
     if (!_copy_defines(cache, compiled.value(), dir, k)) {
-        return Optional<String>.Value(
-            $"the build cache no longer holds the objects of compilation unit '{unit.name}'; build again"
-        );
+        return Optional<String>.Value(_cache_lost(unit));
     }
     var t7 = os.Instant.now();
     stages.append($"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\n");
@@ -1139,9 +1141,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         var kept = cache.look_again(() => _last_kept(cache, folder, extension));
         if (!kept.is_value()) {
             Directory.remove_all(work);
-            return Result<Built, String>.err(
-                $"the build cache no longer holds the objects of compilation unit '{last.name}'; build again"
-            );
+            return Result<Built, String>.err(_cache_lost(last));
         }
         var (found, warned, links) = kept.value();
         if (cached) {
