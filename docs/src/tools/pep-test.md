@@ -47,7 +47,7 @@ pep-test [options] [path]...
 | `-L <dir>`, `--library-path <dir>` | A folder the linker searches for libraries, for `pep-build`; repeatable | |
 | `-D <option>`, `--define <option>` | A [build option](../language/build-options.md) for `pep-build`, `NAME` or `NAME=VALUE`; repeatable | |
 | `--locked` | Passed to `pep-build`: fail, rather than fetch, when the project's `pep.lock` is out of date (also `PEPPER_LOCKED=1`) | |
-| `--offline` | Passed to `pep-build`: fetch nothing over the network, building with what `.pep/deps` holds (also `PEPPER_OFFLINE=1`) | |
+| `--offline` | Passed to `pep-build`: fetch nothing over the network, building with what `.pep/deps` and the [download cache](pep-package.md#the-download-cache) hold (also `PEPPER_OFFLINE=1`) | |
 | `--frozen` | Both `--locked` and `--offline` | |
 | `-F <names>`, `--features <names>` | Passed to `pep-build`: features of the project's package to turn on, comma-separated; repeatable (see [Features](projects.md#features)) | the `default` feature |
 | `--no-default-features` | Passed to `pep-build`: leave the project's package's `default` feature off | |

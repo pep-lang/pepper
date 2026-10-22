@@ -90,8 +90,8 @@ export struct Resolver {
     var update_all: bool = false;
     # The sources to update.
     var update: Array<String> = __null;
-    # `--offline`: use only what `.pep/deps` holds, and fail on what needs
-    # the network.
+    # `--offline`: use only what `.pep/deps` and the download cache hold,
+    # and fail on what needs the network.
     var offline: bool = false;
     # The toolchain release resolving, which each package's
     # `minimum_toolchain` is checked against; empty checks none.

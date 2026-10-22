@@ -74,7 +74,7 @@ main(args: String[]): int {
     );
     var offline = parser.flag(
         "offline",
-        help = "fetch nothing over the network: build with what the project's .pep/deps holds (also PEPPER_OFFLINE=1)"
+        help = "fetch nothing over the network: build with what the project's .pep/deps and the download cache hold (also PEPPER_OFFLINE=1)"
     );
     var frozen = parser.flag("frozen", help = "both --locked and --offline");
     var features = parser.multiple(

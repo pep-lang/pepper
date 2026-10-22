@@ -313,7 +313,7 @@ struct Project {
     var dir: Path = Path(".");
     # `--locked`: fail rather than change pep.lock.
     var locked: bool = false;
-    # `--offline`: use only what `.pep/deps` holds.
+    # `--offline`: use only what `.pep/deps` and the download cache hold.
     var offline: bool = false;
 
     construct(manifest_path: Path) {
