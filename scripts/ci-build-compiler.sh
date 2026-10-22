@@ -42,23 +42,28 @@ export PEPPER_RUNTIME="$root/runtime"
 echo "=== building tools/compiler with $("$stage0/pep-build$exe" --version)"
 # Fetched up front, so a failed fetch shows pep-package's own error.
 "$stage0/pep-package$exe" -C tools/compiler fetch
-# In compilation units, from a build cache of its own beside the compiler
-# (ci.yml saves it from main and restores it), so a change to a few files
-# rebuilds only their units. Its keys name stage 0 by its contents, not
-# by its path, size and time: each job installs stage 0 afresh, with a new
-# time, which would miss every key.
+# From a build cache of its own beside the compiler, which ci.yml carries
+# between runs. Its keys name stage 0 by its contents, not by its path,
+# size and time: each job installs stage 0 afresh, with a new time, which
+# would miss every key.
+#
+# shortcut: the whole of pepc is one compilation unit
+# (PEPC_NO_COMPILATION_UNITS), so the cache only helps a build of the same
+# sources (a rerun, or a pull request that leaves the compiler and runtime
+# alone); any other change rebuilds it all, about 8 minutes. In compilation
+# units a change would rebuild only its units, but a cold build of pepc
+# that way does not fit a hosted runner: two workers took down Linux
+# runners (16 GB) and failed on Windows, macOS timed out, and checking in
+# the build's process (PEPC_COMPILATION_UNIT_JOBS=1) grew past 50 GB.
+# Build in units once #167 is fixed.
 identity="stage0 $(git hash-object "$stage0/pep-build$exe")"
 echo "=== stage 0 identity: $identity"
-# Two compilation units at once by default: one worker checking pepc
-# grows to several GB, and the hosted runners have 7 to 16.
 log="$out/build.log"
-PEPC_COMPILER_IDENTITY="$identity" PEPPER_CACHE_DIR="$out/cache" \
-  PEPC_COMPILATION_UNIT_JOBS="${PEPC_COMPILATION_UNIT_JOBS:-2}" \
+PEPC_NO_COMPILATION_UNITS=1 PEPC_COMPILER_IDENTITY="$identity" PEPPER_CACHE_DIR="$out/cache" \
   "$stage0/pep-build$exe" -O tools/compiler/main.pep -T time -T cache \
   -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}" 2> "$log" || { cat "$log" >&2; exit 1; }
 # The stages' times, and how many objects the cache supplied.
 grep '^time:' "$log" || true
-grep 'compilation units checked already' "$log" || true
 grep -oE '^cache: (hit|miss)' "$log" | sort | uniq -c || true
 # pepc loads LLVM-C.dll from its own folder.
 if [ -n "$exe" ]; then

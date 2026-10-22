@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Samples a CI runner's memory, swap, disk and busiest processes every
-# INTERVAL seconds until it is killed, for the test jobs (ci.yml): a job
+# INTERVAL seconds while COMMAND runs, for the test jobs (ci.yml): a job
 # whose runner dies mid-test, out of memory or disk, shows in its live log
 # what it was running out of. Each sample is one line, printed and appended
 # to FILE, which the job's diagnostics step reads back:
 #
 #   monitor 01:23:45 avail 6.1 GB of 15.6, swap 0.0/4.0 GB, load 7.9, disk free 52 GB, 31 pep-build, top: pep-build 1.4 GB, ...
 #
-#   scripts/ci-monitor.sh <interval> <file> [dir]
+#   scripts/ci-monitor.sh <interval> <file> <dir> -- <command>...
 #   scripts/ci-monitor.sh --report <file> [dir]
 #
-# dir is the folder whose disk is reported (default: the current one). The
+# It exits with COMMAND's status. dir is the folder whose disk is reported.
+# Samples from several commands can go to one file. The
 # first line describes the machine: CPUs, and on Linux whether
 # systemd-oomd, which kills whole services under memory pressure, runs.
 #
@@ -60,7 +61,9 @@ fi
 
 interval="$1"
 file="$2"
-dir="${3:-.}"
+dir="$3"
+[ "${4:-}" = -- ] || { echo "usage: ci-monitor.sh <interval> <file> <dir> -- <command>..." >&2; exit 2; }
+shift 4
 
 gb() { awk -v k="$1" 'BEGIN { printf "%.1f", k / 1048576 }'; }
 
@@ -106,22 +109,31 @@ load() {
   esac
 }
 
-case "$os" in
-  Linux)
-    oomd="$(systemctl is-active systemd-oomd 2>/dev/null || true)"
-    echo "monitor: $(nproc) CPUs ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')), systemd-oomd ${oomd:-absent}" | tee -a "$file"
-    ;;
-  Darwin) echo "monitor: $(sysctl -n hw.ncpu) CPUs ($(sysctl -n machdep.cpu.brand_string))" | tee -a "$file" ;;
-  *) echo "monitor: $(nproc) CPUs" | tee -a "$file" ;;
-esac
+sample() {
+  case "$os" in
+    Linux)
+      oomd="$(systemctl is-active systemd-oomd 2>/dev/null || true)"
+      echo "monitor: $(nproc) CPUs ($(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | sed 's/^ //')), systemd-oomd ${oomd:-absent}" | tee -a "$file"
+      ;;
+    Darwin) echo "monitor: $(sysctl -n hw.ncpu) CPUs ($(sysctl -n machdep.cpu.brand_string))" | tee -a "$file" ;;
+    *) echo "monitor: $(nproc) CPUs" | tee -a "$file" ;;
+  esac
 
-while true; do
-  # A probe that fails leaves its field empty rather than ending the monitor.
-  read -r total avail swap_total swap_free < <(memory || true) || true
-  list="$(processes || true)"
-  builds="$(printf '%s\n' "$list" | awk '$2 == "pep-build" { n++ } END { print n + 0 }')"
-  top="$(printf '%s\n' "$list" | sort -rn | head -3 | awk '{ printf "%s%s %.1f GB", (NR > 1 ? ", " : ""), $2, $1 / 1048576 }')"
-  disk="$(df -Pk "$dir" 2>/dev/null | awk 'NR == 2 { printf "%d", $4 / 1048576 }' || true)"
-  echo "monitor $(date -u +%H:%M:%S) avail $(gb "${avail:-0}") GB of $(gb "${total:-0}"), swap $(gb $((${swap_total:-0} - ${swap_free:-0})))/$(gb "${swap_total:-0}") GB, load $(load || true), disk free ${disk:-?} GB, $builds pep-build, top: $top" | tee -a "$file"
-  sleep "$interval"
-done
+  while true; do
+    # A probe that fails leaves its field empty rather than ending the monitor.
+    read -r total avail swap_total swap_free < <(memory || true) || true
+    list="$(processes || true)"
+    builds="$(printf '%s\n' "$list" | awk '$2 == "pep-build" { n++ } END { print n + 0 }')"
+    top="$(printf '%s\n' "$list" | sort -rn | head -3 | awk '{ printf "%s%s %.1f GB", (NR > 1 ? ", " : ""), $2, $1 / 1048576 }')"
+    disk="$(df -Pk "$dir" 2>/dev/null | awk 'NR == 2 { printf "%d", $4 / 1048576 }' || true)"
+    echo "monitor $(date -u +%H:%M:%S) avail $(gb "${avail:-0}") GB of $(gb "${total:-0}"), swap $(gb $((${swap_total:-0} - ${swap_free:-0})))/$(gb "${swap_total:-0}") GB, load $(load || true), disk free ${disk:-?} GB, $builds pep-build, top: $top" | tee -a "$file"
+    sleep "$interval"
+  done
+}
+
+sample &
+sampler=$!
+status=0
+"$@" || status=$?
+kill "$sampler" 2>/dev/null || true
+exit "$status"

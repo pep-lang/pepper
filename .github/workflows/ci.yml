@@ -216,10 +216,8 @@ jobs:
           # tools' test programs built, and three runners died.
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
-          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" &
-          monitor=$!
-          trap 'kill "$monitor"' EXIT
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
+            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`pep-doc reference`) in the same
@@ -282,10 +280,8 @@ jobs:
           # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
-          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" &
-          monitor=$!
-          trap 'kill "$monitor"' EXIT
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
+          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
+            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
 
       # A failed, cancelled or timed-out job: the samples with the least
       # memory free, and every process, its age and size, the disks, and
@@ -339,10 +335,8 @@ jobs:
           # tools' test programs built, and three runners died.
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
-          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" &
-          monitor=$!
-          trap 'kill "$monitor"' EXIT
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
+            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and

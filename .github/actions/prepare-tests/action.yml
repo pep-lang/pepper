@@ -4,9 +4,9 @@
 # (ci.yml's `changes` job decides, and its summary says why), the
 # checkout's compiler is built, and PEPPER_COMPILER_DIR names it.
 #
-# Only the changed compiler's own build cache is carried between runs:
-# saved from main, restored by every run, so a pull request rebuilds only
-# the compilation units of pepc it changes. The tests' builds start from
+# Only the changed compiler's own build cache is carried between runs, a
+# few hundred MB, so a rerun, or a run whose compiler sources a run before
+# it built, takes seconds (scripts/ci-build-compiler.sh). The tests' builds start from
 # an empty cache: their keys name the compiler that builds them, new in
 # nearly every run (a PR's own, or the build of main a merge publishes),
 # so carrying them saved no time, while restoring and saving 0.5 to 2 GB
@@ -108,8 +108,8 @@ runs:
 
     # The compiler's build cache is keyed on stage 0, the installed
     # pep-build, by its contents (scripts/ci-build-compiler.sh names it so):
-    # the newest entry made with this stage 0, else any, whose units
-    # stage 0 then does not reuse.
+    # the newest entry made with this stage 0. One made with another stage
+    # 0 has no key this build can use.
     - name: Name stage 0
       id: stage0
       if: inputs.compiler == 'true'
@@ -127,7 +127,6 @@ runs:
         key: pepper-compiler-${{ runner.os }}-${{ steps.stage0.outputs.hash }}-${{ github.run_id }}
         restore-keys: |
           pepper-compiler-${{ runner.os }}-${{ steps.stage0.outputs.hash }}-
-          pepper-compiler-${{ runner.os }}-
 
     # A change to the compiler is tested with that compiler, built with
     # the installed one (scripts/ci-build-compiler.sh, the release's stage
@@ -135,13 +134,12 @@ runs:
     - name: Build the changed compiler
       if: inputs.compiler == 'true'
       shell: bash
-      run: bash -euxo pipefail scripts/ci-build-compiler.sh
+      run: bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- bash -euxo pipefail scripts/ci-build-compiler.sh
 
-    # Saved from main only: the repository keeps 10 GB of caches, and every
-    # pull request's runs saving theirs evicted main's, which every pull
-    # request restores.
+    # Saved by every run, pull requests' too, since it is small: the
+    # repository keeps 10 GB of caches, which the tests' caches used to fill.
     - name: Save the compiler's build cache
-      if: inputs.compiler == 'true' && (github.event_name == 'push' || github.head_ref == 'ci-timeouts-and-speed')
+      if: inputs.compiler == 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.workspace }}/target-test/compiler

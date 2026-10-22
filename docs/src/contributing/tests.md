@@ -65,6 +65,9 @@ and runs `pepper test`:
   holding `zlib.lib`, and is skipped without it);
 - in `tools/`, the tools' tests, each under its tool's `pep.toml`.
 
+`PEPPER_TESTS_PART` runs part of them: `compiler` the compiler's tests
+(`tools/compiler/`), `others` everything else; unset or `all`, both.
+
 The tools' run, the longest, starts as soon as the tools its tests run
 (`pepper`, `pep-test`, `pep-fmt`, `pep-profile`, `pep-package`,
 `pep-run`, `pep-new` and `pep-init`) are
@@ -97,10 +100,14 @@ files uses a fresh folder under the system's temporary folder
 (`TempFolder` in the `testing` module makes and removes one).
 
 CI runs `scripts/pepper-tests.sh` with the installed build of main on
-Linux, macOS and Windows, one job on each, every build in a job sharing
-one build cache. A PR that changes the compiler (`tools/compiler/`) is tested with
+Linux, macOS and Windows, in two jobs on each: one runs the compiler's
+tests (`PEPPER_TESTS_PART=compiler`), the other everything else
+(`PEPPER_TESTS_PART=others`), and every build in a job shares one build
+cache. A PR that changes the compiler (`tools/compiler/`) is tested with
 that compiler instead: CI builds it with the build of main first
-(`scripts/ci-build-compiler.sh`) and runs the suite with it. Each job has
+(`scripts/ci-build-compiler.sh`, from a build cache CI keeps between runs,
+keyed on the build of main's contents) and runs the suite with it. Each
+job has
 a time limit a little above its slowest passing runs, and prints the
 runner's memory, swap, disk and biggest processes every minute beside the
 tests (`scripts/ci-monitor.sh`). A job that fails, is cancelled or runs out
