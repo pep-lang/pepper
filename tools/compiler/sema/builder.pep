@@ -483,9 +483,14 @@ _symbol(id: String, at: Loc): Expression {
     return Expression.SymbolRef(SymbolRefExpression(id = id, ty = TypeName.auto(), loc = at));
 }
 
-## `receiver.method(args)` at `at`.
-_method_call(receiver: Expression, method: String, args: Expression[], at: Loc): Expression {
-    return Expression.MethodCall(MethodCallExpression(receiver, method = method, args = args, loc = at));
+## `receiver.method(args)` at `at`; `labeled` is the method as written,
+## when its type arguments' tuples have labels.
+_method_call(
+    receiver: Expression, method: String, args: Expression[], at: Loc, labeled: TypeName? = Optional<TypeName>.Empty
+): Expression {
+    return Expression.MethodCall(
+        MethodCallExpression(receiver, method = method, args = args, loc = at, labeled = labeled)
+    );
 }
 
 ## `function(args)` at `at`; `labeled` is the type a call naming a type
@@ -1881,7 +1886,7 @@ struct _Builder {
                     return Built<Expression>.Err(_error(message, loc(name_span)));
                 }
                 var left = expression(lhs)?;
-                return Built<Expression>.Ok(_member(left, name, loc(name_span)));
+                return Built<Expression>.Ok(_member(left, member_name(name, name_span).0, loc(name_span)));
             }
             FunctionCall(function, arguments, _) => {
                 return function_call(function, arguments);
@@ -1965,7 +1970,8 @@ struct _Builder {
             record_literal_args(loc(name_span), arguments);
             var receiver = expression(lhs)?;
             var args = call_arguments(arguments)?;
-            return Built<Expression>.Ok(_method_call(receiver, name, args, loc(name_span)));
+            var (method, labeled) = member_name(name, name_span);
+            return Built<Expression>.Ok(_method_call(receiver, method, args, loc(name_span), labeled));
         }
         match (function) {
             TypeLiteral(type_name) => {
@@ -2019,6 +2025,28 @@ struct _Builder {
         record_literal_args(at, arguments);
         var args = call_arguments(arguments)?;
         return Built<Expression>.Ok(_call(name, args, at, labeled));
+    }
+
+    ## Member `name` as sema spells it, and as written when its type
+    ## arguments' tuples have labels: the parser keeps a generic method's
+    ## type arguments in the name as source writes them
+    ## (`pass<(a: int, b: int)>`), which sema spells as types
+    ## (`pass<__tuple<int, int>>`).
+    member_name(name: String, span: ast.Span): (String, TypeName?) {
+        var none = Optional<TypeName>.Empty;
+        if (!name.contains("<")) {
+            return (name, none);
+        }
+        var written = ast.parse_type_text(name, span);
+        if (written.generic_types.count == 0 or written.to_string() != name) {
+            return (name, none);
+        }
+        var args = Array<TypeName>();
+        for (var a in written.generic_types) {
+            args.append(type_name_from(a));
+        }
+        var ty = TypeName.with_args(written.name, args);
+        return (ty.to_string(), ty.labels_arguments() ? Optional<TypeName>.Value(ty) : none);
     }
 
     ## `unsafe_cast<T>(value)`: a reinterpret cast of `value` to `T`, located

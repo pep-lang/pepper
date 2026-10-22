@@ -1443,12 +1443,14 @@ tuple_labels() {
 
 # A labeled tuple keeps its labels through a type argument (pepper#118)
 # and through what a static method or an enum case called on a labeled
-# type gives (pepper#134), and through a generic function's result
-# (pepper#140): hover names each element read by its label.
+# type gives (pepper#134), and through a generic function's or method's
+# result (pepper#140, pepper#149): hover names each element read by its
+# label.
 [Test]
 tuple_labels_through_a_type_argument() {
     var main = "struct Box<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n"
-        + "    static make(value: T): Box<T> { return Box<T>(value); }\n    get(): T { return value; }\n}\n"
+        + "    static make(value: T): Box<T> { return Box<T>(value); }\n    get(): T { return value; }\n"
+        + "    pass<U>(value: U): U { return value; }\n}\n"
         + "identity<T>(value: T): T {\n    return value;\n}\n"
         + "first(entries: Array<(name: String, count: int)>): int {\n"
         + "    var e = entries[0];\n    var sum = entries[0].count + e.count;\n"
@@ -1457,7 +1459,8 @@ tuple_labels_through_a_type_argument() {
         + "    var o = Optional<(left: int, right: int)>.Value((left: 5, right: 6));\n"
         + "    var box = Box<(p: int, q: int)>.make((p: 1, q: 2));\n"
         + "    var same = identity<(m: int, n: int)>((m: 1, n: 2));\n    var guessed = identity(same);\n"
-        + "    return sum + made[0].total + o.value().right + box.get().q + same.n + guessed.m;\n}\n"
+        + "    var sent = box.pass<(s: int, t: int)>((s: 1, t: 2));\n    var echoed = box.pass(sent);\n"
+        + "    return sum + made[0].total + o.value().right + box.get().q + same.n + guessed.m + sent.t + echoed.s;\n}\n"
         + "call(f: extern (int) => int): int {\n    var g = f;\n    return g(1);\n}\n";
     var c = loaded("tuple_labels_generic", main, "main.pep");
     var text = c.document.text;
@@ -1474,7 +1477,9 @@ tuple_labels_through_a_type_argument() {
         ("enum case", "right +", "right"),
         ("static method", "q +", "q"),
         ("generic function", "n +", "n"),
-        ("inferred", "m;", "m")
+        ("inferred", "m + sent", "m"),
+        ("generic method", "t + echoed", "t"),
+        ("inferred method", "s;\n}", "s")
     ]) {
         var h = hover_text(c, at(text, near, 0));
         check(failed, label, h.starts_with($"`.{element}` — `int`"), h);
@@ -1659,16 +1664,32 @@ an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
     var cache = incremental.Cache(folder);
     var warnings = Array<Diagnostic>();
     var keep = Optional<(incremental.Cache, String)>.Value((cache, "inputs"));
-    var program = loaded_program("recheck_whole", "main.pep", "main(): int {\n    return 2;\n}\n");
+    var old = "[Deprecated(\"use 'main' instead\", \"main\")]\nold(): int {\n    return 2;\n}\n";
+    var program = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    return 2;\n}\n");
     expect_true(check_whole(program, warnings, keep).is_ok());
-    var edited = loaded_program("recheck_whole", "main.pep", "main(): int {\n    var x = 3;\n    return x;\n}\n");
+    expect_true(warnings.is_empty);
+    var edited = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    var x = 3;\n    return x;\n}\n");
     var again = recheck_whole(edited, cache, "inputs", warnings);
     expect_true(again.is_value() and again.value().is_ok());
     # Checked with other build options: no record to start from.
     expect_true(recheck_whole(edited, cache, "other", warnings).is_empty());
-    # An error is left to the check after the cache fills.
-    var wrong = loaded_program("recheck_whole", "main.pep", "main(): int {\n    return \"two\";\n}\n");
-    expect_true(recheck_whole(wrong, cache, "inputs", warnings).is_empty());
+    # An error or a warning shows without waiting for the cache to fill.
+    var wrong = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    return \"two\";\n}\n");
+    var error = recheck_whole(wrong, cache, "inputs", warnings);
+    expect_true(error.is_value() and error.value().is_err());
+    match (error.value().error()) {
+        Checking(found) => {
+            expect_true(found.message.contains("String"));
+        }
+        else => {
+            expect_true(false);
+        }
+    }
+    var deprecated = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    return old();\n}\n");
+    var warned = recheck_whole(deprecated, cache, "inputs", warnings);
+    expect_true(warned.is_value() and warned.value().is_ok());
+    expect_equal(warnings.count, 1);
+    expect_true(warnings[0].message.contains("deprecated"));
     Directory.remove_all(folder);
 }
 

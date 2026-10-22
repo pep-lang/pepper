@@ -123,6 +123,45 @@ export struct Cache {
         );
     }
 
+    ## Returns the key the cache holds objects of compilation unit `unit`,
+    ## keyed `key`, under that link with the objects of the compilation units
+    ## it reads, and hold `file`; none when it holds none. Such objects only
+    ## declare what the objects below defined when they were compiled, the
+    ## names listed beside them (`NEEDS_FILE`), and a body edit below can drop
+    ## one of those without changing `key` (#24). So objects under `key` whose
+    ## needs `below` lacks are passed over for those under `key` with `below`
+    ## added (`unit_store_key`).
+    ##
+    ## @param unit the compilation unit's name in the cache (`+<name>`)
+    ## @param key its key
+    ## @param below what the objects of each compilation unit it reads define
+    ## @param file a file its objects' folder must hold
+    ## @returns the key of the objects to link, or none
+    unit_objects(unit: String, key: String, below: Defines[], file: String): String? {
+        var folder = objects(unit, key);
+        if (used(folder) and folder.join(Path(file)).is_file() and _needs_met(folder, below)) {
+            return Optional<String>.Value(key);
+        }
+        var other = _with_below(key, below);
+        folder = objects(unit, other);
+        if (used(folder) and folder.join(Path(file)).is_file() and _needs_met(folder, below)) {
+            return Optional<String>.Value(other);
+        }
+        return Optional<String>.Empty;
+    }
+
+    ## Returns the key to store new objects of compilation unit `unit`, keyed
+    ## `key`, under: `key`, unless the cache holds objects under it already,
+    ## which then do not link with the objects below (`unit_objects`).
+    ##
+    ## @param unit the compilation unit's name in the cache (`+<name>`)
+    ## @param key its key
+    ## @param below what the objects of each compilation unit it reads define
+    ## @returns the key
+    unit_store_key(unit: String, key: String, below: Defines[]): String {
+        return objects(unit, key).is_directory() ? _with_below(key, below) : key;
+    }
+
     ## Moves `built`, a folder of objects just written, to where the objects
     ## of `unit` under `key` belong, and removes the unit's oldest keys beyond
     ## the few it keeps. When another build stored that key first, its
@@ -228,6 +267,108 @@ _unit_folder(unit: String): String {
 ## `_KEY_SIZE` digits.
 _key_name(key: String): String {
     return key.substr(0, _KEY_SIZE);
+}
+
+## The name of the file beside a compilation unit's objects listing what
+## they use of what the objects below them define: the stamp of those
+## (`stamp_of`), then a name a line (`Cache.unit_objects`).
+export const NEEDS_FILE = "needs";
+
+## What the objects of one compilation unit define for those above: their
+## `defines` file, a name a line.
+export struct Defines {
+    ## The file's text.
+    var text: String;
+    ## The hash of `text`.
+    var hash: String;
+    var _names: HashSet<String>? = Optional<HashSet<String>>.Empty;
+
+    ## @param text the `defines` file's text
+    construct(text: String) {
+        this.text = text;
+        this.hash = digest.to_hex(digest.blake3(text));
+    }
+
+    ## Returns the names `text` lists, read the first time.
+    ##
+    ## @returns the names
+    names(): HashSet<String> {
+        if (!_names.is_value()) {
+            var out = HashSet<String>();
+            for (var line in text.split("\n")) {
+                if (!line.is_empty) {
+                    out.insert(line);
+                }
+            }
+            _names = Optional<HashSet<String>>.Value(out);
+        }
+        return _names.value();
+    }
+}
+
+## Returns what identifies `below`: each one's hash, in order.
+##
+## @param below what the objects of each compilation unit one reads define
+## @returns the hashes, a space apart
+export stamp_of(below: Defines[]): String {
+    var hashes = Array<String>();
+    for (var defined in below) {
+        hashes.append(defined.hash);
+    }
+    return " ".join(hashes);
+}
+
+## Whether every name the `needs` file in `folder` lists is in one of
+## `below`: at once when its stamp is theirs, the objects below unchanged;
+## not when it has none (objects of a build before it).
+_needs_met(folder: Path, below: Defines[]): bool {
+    var needs = File.read_to_string(folder.join(Path(NEEDS_FILE)));
+    if (needs.is_err()) {
+        return false;
+    }
+    var parts = needs.value().split_once("\n");
+    if (!parts.is_value()) {
+        return false;
+    }
+    var (stamp, names) = parts.value();
+    if (stamp == stamp_of(below)) {
+        return true;
+    }
+    for (var name in names.split("\n")) {
+        if (name.is_empty) {
+            continue;
+        }
+        bool found = false;
+        for (var defined in below) {
+            if (defined.names().contains(name)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
+}
+
+## Returns every name one of `below` holds.
+##
+## @param below what the objects of each compilation unit one reads define
+## @returns their union
+export union_of(below: Defines[]): HashSet<String> {
+    var out = HashSet<String>();
+    for (var defined in below) {
+        for (var name in defined.names()) {
+            out.insert(name);
+        }
+    }
+    return out;
+}
+
+## `key` with what identifies `below` added (`stamp_of`).
+_with_below(key: String, below: Defines[]): String {
+    return digest.to_hex(digest.blake3($"{key}\nbelow {stamp_of(below)}\n"));
 }
 
 ## Returns the cache a build uses: `$PEPPER_CACHE_DIR` when set, else

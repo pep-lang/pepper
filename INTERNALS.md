@@ -218,8 +218,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   re-exports, then **rewrites each imported spelling in the AST**
   (`m.sqrt`, an alias `power`, a qualified type `m.Point`) to the name of the
   declaration it denotes. The type arguments of a generic method call
-  (`b.run<S>(...)`), which the parser keeps in the member name, are
-  rewritten the same way (`_member_type`). It also gives each file's
+  (`b.run<S>(...)`), which the parser keeps in the member name as source
+  writes them (`pass<(a: int, b: int)>`), are read back
+  (`ast.parse_type_text`) and rewritten the same way (`_member_type`); the
+  builder spells them as sema types (`_Builder.member_name`). It also gives each file's
   **private** top-level declarations, and every reference to them, a
   mangled name
   (`names.mangle`: `helper@io/file`), keyed on the
@@ -591,7 +593,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     return type with the call's type arguments put in the same way
     (`StructTable.labeled_call`, `_TypeScopes._labeled_call`); type
     arguments that `resolve_implicit_types` infers or completes go in
-    `FunctionCallExpression.labeled` too when they have labels.
+    `FunctionCallExpression.labeled` too when they have labels. A generic
+    method call keeps them in `MethodCallExpression.labeled`, and its
+    result is the method's declared return type with them put in
+    (`StructTable.labeled_method_call`, `_TypeScopes._labeled_method_call`).
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
     literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,
@@ -2531,8 +2536,10 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   `pep-lsp-whole` keyed by `_whole_inputs` (the runtime unit's key, the
   document, its OS and build options); while the child runs, an analysis
   checks the edit again on that record (`recheck_whole`,
-  `incremental.recheck_compilation_unit`) and waits for the child only when
-  the record does not fit the edit. Otherwise the compilation units below the
+  `incremental.recheck_compilation_unit` with `report`, so the edit's error
+  or warnings show rather than give up: the record warned of nothing, so
+  they are all the edit's) and waits for the child only when the record
+  does not fit the edit. Otherwise the compilation units below the
   document's that the cache lacks are
   checked first in `pep-lsp --compilation-unit-worker <dir>` children
   (`incremental.check_in_workers`, `serve_compilation_units`, `check_for_worker`),
@@ -3134,16 +3141,28 @@ a struct below (`_pep_copy_value`), which has no owner there
 (`own_function`), so it is `linkonce_odr`, as C++ emits an implicit special
 member in each object that uses it. A declaration keeps an owner (`DECLARED_ONLY` for an
 instantiation), so `prepare` gives it the linker spelling of its definition.
-The object is cached under the compilation unit's key (`_compilation_unit_object`:
+The object is cached under the compilation unit's key (`_store_unit`:
 `<cache>/v3/u/+<name>/<key>/0.o`, `1.o` and on for its other parts
-(`_unit_objects`), and `defines`; the key already
+(`_unit_objects`), `defines`, and `needs`, what it uses of what the objects below
+define (`_needs`), after the hashes of their `defines` (`stamp_of`), so a hit
+whose objects below are unchanged compares one line; the key already
 holds the codegen options), and a compilation unit counts as done from the cache only
-when both its record and its object are there; a build marks the object
+when both its record and its object are there, and the object links with the
+objects below (`Cache.unit_objects`): a body edit below can stop it defining
+an instantiation without changing any key above, and an object that needs it
+then failed to link (#24). So the scheduler gives a hit's record to the
+compilation units reading it at once, but asks whether its object links
+(`usable`) only once the compilation units it reads are done; an object
+whose `needs` the objects below no longer all define is passed over for one
+under its key with that stamp added (`Cache.unit_store_key`), and
+when there is none the hit is checked again in a worker, which keeps the
+record already given out and stores its new object there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this
 one links. The last compilation unit is keyed like the others, and its objects, the
 last compilation unit's (`0.o` and on) and the entry points' (`entry.o`), are cached under its
 key with the program's `[Link]` arguments (`link`, `_link_attributes`) and
-its warnings (`_store_last`): a build whose last compilation unit has the same key
+its warnings (`_store_last`): a build whose last compilation unit has the same key,
+and whose objects link with those below,
 checks and generates nothing and links, as Go links a `main` package from
 its cache. The link takes the objects of the compilation units the last one
 reads, not every one: the module files an entry file never reaches are
@@ -3244,7 +3263,9 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    specializations they newly ask for.
 
 It gives up, and `check_compilation_unit` checks the compilation unit from
-its files, on an error or a warning, or when a changed function's return
+its files, on an error or a warning (unless given `report`, as pep-lsp's
+`recheck_whole` does: then a warning goes there, and an error goes there
+before it gives up), or when a changed function's return
 type or link summary (`summary_without_place`) came out other than the
 record's: code the record keeps was checked against them. Specializations
 only the old bodies asked for stay in the record as dead code. A body edit

@@ -328,6 +328,128 @@ export struct TypeName {
     }
 }
 
+## Returns the type `text` spells as `TypeName.to_string` writes it
+## (`Box<(a: int, b: int)>`, `(int) => bool`, `(int, String)[]`), every
+## part at `span`. The parser keeps a generic method's type arguments that
+## way in the member's name (`pass<(a: int, b: int)>`).
+##
+## @param text the type's text
+## @param span where every part is
+## @returns the type; `to_string` spells it back as `text` only when
+##     `text` is a type so spelled
+export parse_type_text(text: String, span: Span): TypeName {
+    var reader = _TypeText(text, span);
+    return reader.read();
+}
+
+# Reads a type from its `TypeName.to_string` spelling.
+struct _TypeText {
+    var text: String;
+    var span: Span;
+    var at: ulong = 0;
+
+    construct(text: String, span: Span) {
+        this.text = text;
+        this.span = span;
+    }
+
+    read(): TypeName {
+        var function = FUNCTION_TYPE;
+        if (_skip("shared (")) {
+            function = SHARED_FUNCTION_TYPE;
+            at -= 1;
+        } else if (_skip("extern (")) {
+            function = EXTERN_FUNCTION_TYPE;
+            at -= 1;
+        }
+        if (_skip("(")) {
+            var elements = Array<TypeName>();
+            var labels = Array<String>();
+            bool labeled = false;
+            while (at < text.size and !_skip(")")) {
+                var label = _label();
+                labeled = labeled or !label.is_empty;
+                labels.append(label);
+                elements.append(read());
+                _skip(", ");
+            }
+            if (_skip(" => ")) {
+                var out = TypeName(function, span);
+                out.generic_types.append(read());
+                out.generic_types.append_all(elements);
+                return out;
+            }
+            var tuple = TypeName(TUPLE_TYPE, span);
+            tuple.generic_types = elements;
+            if (labeled) {
+                tuple.labels = labels;
+            }
+            return _arrays(tuple);
+        }
+        ulong start = at;
+        while (at < text.size) {
+            var b = text.byte_at(at);
+            if (b == '<' or b == '>' or b == ',' or b == '(' or b == ')' or b == ' ') {
+                break;
+            }
+            at += 1;
+        }
+        if (at == start and at < text.size) {
+            # A byte no spelling puts here: taken, so every loop moves on,
+            # and the result does not spell back as `text`.
+            at += 1;
+        }
+        var out = TypeName(text.substr_bytes(start, at - start), span);
+        if (_skip("<")) {
+            while (at < text.size and !_skip(">")) {
+                out.generic_types.append(read());
+                _skip(", ");
+            }
+            return _arrays(out);
+        }
+        return out;
+    }
+
+    # `label: ` at the reader, taken; empty when there is none.
+    _label(): String {
+        ulong end = at;
+        while (end < text.size) {
+            var b = text.byte_at(end);
+            if (!((b >= 'a' and b <= 'z')
+                or (b >= 'A' and b <= 'Z')
+                or (b >= '0' and b <= '9')
+                or b == '_'
+                or b >= 128)) {
+                break;
+            }
+            end += 1;
+        }
+        if (end == at or !text.substr_bytes(end, text.size - end).starts_with(": ")) {
+            return "";
+        }
+        var label = text.substr_bytes(at, end - at);
+        at = end + 2;
+        return label;
+    }
+
+    # `[]` suffixes after `out`'s `>` or `)`, which extend its name.
+    _arrays(out: TypeName): TypeName {
+        while (_skip("[]")) {
+            out.name = out.name + "[]";
+        }
+        return out;
+    }
+
+    # Takes `word` when the reader is at it.
+    _skip(word: String): bool {
+        if (!text.substr_bytes(at, text.size - at).starts_with(word)) {
+            return false;
+        }
+        at += word.size;
+        return true;
+    }
+}
+
 ## The attribute that declares a compiler built-in in the runtime
 ## (`[__BuiltIn]`): the compiler ignores the declaration.
 export const BUILT_IN_ATTRIBUTE = "__BuiltIn";

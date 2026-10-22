@@ -95,8 +95,10 @@ struct _Worker {
 ##   a worker checked, when it began and ended, and the compilation units it
 ##   reads
 ## @param usable whether compilation unit `k`, found in the cache, can be used
-##   as it is: a build also needs its object (and gives the workers what it
-##   defines); one that is not is checked again
+##   as it is, asked once the compilation units it reads are done (those
+##   reading it start on its record before): a build also needs its object,
+##   one that links with theirs (and gives the workers what it defines); one
+##   that is not is checked again, which compiles it
 ## @returns nothing, or why a compilation unit could not be checked
 export check_in_workers(
     program: link.Program,
@@ -121,6 +123,8 @@ export check_in_workers(
     var checked = Array<bool>();
     var done = Array<bool>();
     var started = Array<bool>();
+    # The hits whose objects are not yet known to link (`usable`).
+    var linking = Array<ulong>();
     # With `-T time`, when each compilation unit a worker checked began and
     # ended, in milliseconds from the start, with the compilation units it reads
     # (`schedule`, as Ninja's `.ninja_log`): the chain of compilation units that
@@ -160,19 +164,41 @@ export check_in_workers(
             progressed = true;
             units[k].key = compilation_unit_key(units, k, owns);
             var found = find_checked(cache, program, units[k]);
-            if (found.is_value() and usable(k) and fields_still_match(cache, units[k], owns_read(units[k], owns))) {
+            if (found.is_value() and fields_still_match(cache, units[k], owns_read(units[k], owns))) {
                 var (bytes, own, warned) = found.value();
                 File.write_bytes(worker_file(dir, k, "rec"), bytes);
                 File.write_text(worker_file(dir, k, "own"), own);
                 owns[k] = own;
                 prechecked[k] = (bytes, own, warned);
                 checked[k] = true;
+                linking.append(k);
+            } else {
+                ready.append(k);
+            }
+        }
+        # A hit's object declares what the objects of the compilation units
+        # it reads define, so whether it links with theirs (`usable`) waits
+        # for those objects, while the compilation units reading its record
+        # start. One that does not is checked again, which compiles it.
+        var waiting = Array<ulong>();
+        for (var k in linking) {
+            bool objects_done = true;
+            for (var d in units[k].reads) {
+                objects_done = objects_done and done[d];
+            }
+            if (!objects_done) {
+                waiting.append(k);
+                continue;
+            }
+            progressed = true;
+            if (usable(k)) {
                 done[k] = true;
                 left -= 1;
             } else {
                 ready.append(k);
             }
         }
+        linking = waiting;
         # Each ready compilation unit to an idle worker, starting one while
         # fewer than `jobs` are checking or compiling: one waiting for the
         # objects of the compilation units it reads uses no processor, but holds
@@ -457,10 +483,14 @@ export check_for_worker(
     var (bytes, own) = store_checked(cache, program, unit, checked_unit, base, warned, kept, read_owns);
     var t5 = os.Instant.now();
     stages.append($"store {(t5 - t4).milliseconds()}\n");
-    File.write_bytes(worker_file(dir, k, "rec"), bytes);
-    File.write_text(worker_file(dir, k, "own"), own);
-    if (!warned.is_empty) {
-        File.write_text(worker_file(dir, k, "warn"), warned);
+    # A hit checked again for its object (`check_in_workers`) keeps the record
+    # the build left, which the compilation units reading it may be reading.
+    if (!worker_file(dir, k, "rec").is_file()) {
+        File.write_bytes(worker_file(dir, k, "rec"), bytes);
+        File.write_text(worker_file(dir, k, "own"), own);
+        if (!warned.is_empty) {
+            File.write_text(worker_file(dir, k, "warn"), warned);
+        }
     }
     mark(dir, k, "checked");
     return Result<(sema.Module, sema.PassState), String>.ok((after, state));

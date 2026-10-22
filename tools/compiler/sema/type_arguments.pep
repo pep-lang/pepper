@@ -76,6 +76,8 @@ export struct GenericSignature {
     var params: GenericParam[];
     ## Its parameters' declared types.
     var parameter_types: TypeName[];
+    ## Its declared return type.
+    var returns: TypeName;
     ## How many of the parameters (from the front) have no default.
     var required: ulong;
     ## The passes' state, for the conformances.
@@ -89,6 +91,7 @@ export struct GenericSignature {
     construct(function: FunctionDef, state: PassState) {
         params = function.generic_params;
         parameter_types = Array<TypeName>();
+        returns = function.ty;
         required = 0;
         for (var p in function.parameters) {
             parameter_types.append(p.ty);

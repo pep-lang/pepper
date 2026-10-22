@@ -2,9 +2,9 @@
 # element read back through `Array`, `Optional`, a `HashMap` value, a user
 # generic, a trait, or a nesting of them answers to its labels, and so does
 # what a static method or an enum case called on the labeled type gives
-# (pepper#134), and so does a generic function's result (pepper#140). Two
-# labelings of one tuple shape share a specialization, and each keeps its
-# own labels.
+# (pepper#134), and so does a generic function's or method's result
+# (pepper#140, pepper#149). Two labelings of one tuple shape share a
+# specialization, and each keeps its own labels.
 trait Source<T> {
     take(): T;
 }
@@ -30,6 +30,28 @@ struct Box<T> {
 
     take(): T {
         return value;
+    }
+
+    pass<U>(value: U): U {
+        return value;
+    }
+}
+
+struct Relay {
+    var n: int = 0;
+
+    pass<T>(value: T): T {
+        return value;
+    }
+
+    listed<T>(value: T): Array<T> {
+        var out = Array<T>();
+        out.append(value);
+        return out;
+    }
+
+    second<T, U>(first: T, second: U): U {
+        return second;
     }
 }
 
@@ -115,6 +137,26 @@ main(): int {
     }
     if (identity<(a: int, b: int)>((a: 5, b: 6)).b != 6) {
         return 12;
+    }
+    # So does a generic method's, and a type argument written to one may
+    # be any type: a tuple, a function type, a nesting (pepper#149).
+    var relay = Relay();
+    var passed = relay.pass<(a: int, b: int)>((a: 3, b: 4));
+    var guessed = relay.pass(passed);
+    var wrapped = relay.listed<(x: int, y: int)>((x: 1, y: 2));
+    var completed = relay.second<(c: int, d: int)>((c: 1, d: 2), passed);
+    if (passed.b != 4 or guessed.a != 3 or wrapped[0].y != 2 or completed.b != 4) {
+        return 13;
+    }
+    var plain = relay.pass<(int, int)>((7, 8));
+    var step = relay.pass<(int) => int>((v: int) => v + 1);
+    var found = relay.pass<Optional<(m: int, n: int)>>(Optional<(m: int, n: int)>.Value((m: 1, n: 2)));
+    var as_value = relay.pass<(int, int)[]>;
+    if (plain.1 != 8 or step(1) != 2 or found.value().n != 2 or as_value([(5, 6)])[0].1 != 6) {
+        return 14;
+    }
+    if (box.pass<(g: int, h: int)>((g: 1, h: 2)).h != 2 or box.pass(passed).b != 4) {
+        return 15;
     }
     return 0;
 }

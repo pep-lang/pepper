@@ -457,6 +457,8 @@ specialized_error_programs(): String[] {
         "# expect: main.pep:9:23: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\nstruct Box<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n    pair(): (int, int) { return (1, 2); }\n}\nmain(): int {\n    var box = Box<(a: int, b: int)>((a: 1, b: 2));\n    return box.pair().a;\n}\n",
         # Nor does a generic function's.
         "# expect: main.pep:6:49: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\npair<T>(value: T): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    return pair<(a: int, b: int)>((a: 1, b: 2)).a;\n}\n",
+        # Nor does a generic method's.
+        "# expect: main.pep:8:51: error: no member named 'a' in '(int, int)': its elements are '0' to '1'\nstruct S {\n    var n: int = 0;\n    pair<T>(value: T): (int, int) { return (1, 2); }\n}\nmain(): int {\n    var s = S();\n    return s.pair<(a: int, b: int)>((a: 1, b: 2)).a;\n}\n",
         # `[ThreadLocal]` on a field.
         "# expect: main.pep:3:5: error: 'ThreadLocal' applies only to a module-scope variable, not a field\nstruct Counter {\n    [ThreadLocal]\n    var hits: int;\n}\nmain(): int { return 0; }\n",
         # A struct value as a condition, and as an operand of `!`.
@@ -724,6 +726,8 @@ error_programs(): String[] {
         # `reflect.error` and `reflect.assert`, and a module-scope block.
         "# expect: main.pep:4:31: error: 'name' takes 1 type argument: 'reflect.name<T>()'\nmain(): int {\n    static {\n        reflect.print(reflect.name<int, int>());\n    }\n    return 0;\n}\n",
         "# expect: main.pep:4:26: error: nope\nmain(): int {\n    static {\n        reflect.assert(1 == 2, \"nope\");\n    }\n    return 0;\n}\n",
+        # A type argument with commas of its own (pepper#149).
+        "# expect: main.pep:4:17: error: (int, (String) => bool)\nmain(): int {\n    static {\n        reflect.error(reflect.name<(int, (String) => bool)>());\n    }\n    return 0;\n}\n",
         "# expect: main.pep:4:9: error: 'reflect' is used through its functions, such as 'reflect.properties<T>()'\nmain(): int {\n    static {\n        reflect = 3;\n    }\n    return 0;\n}\n",
         "# expect: main.pep:4:31: error: build option 'NOPE' is not defined\nmain(): int {\n    static {\n        reflect.print(reflect.build_option(\"NOPE\"));\n    }\n    return 0;\n}\n",
         "# expect: main.pep:4:48: error: invalid build option name '1x'; a name is a letter or '_' followed by letters, digits and '_'\nmain(): int {\n    static {\n        reflect.print(reflect.has_build_option(\"1x\"));\n    }\n    return 0;\n}\n",

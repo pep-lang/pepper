@@ -693,10 +693,9 @@ export check_whole(
 ## @param cache the build cache `check_whole` kept the record in
 ## @param inputs what the program is checked with (`_whole_inputs`)
 ## @param warnings where the warnings of the files edited go
-## @returns the module checked and its passes' state, or a linking error;
-##   nothing when there is no record, or it does not fit the edits (any
-##   but those to bodies and additions, or one that gives an error or a
-##   warning)
+## @returns the module checked and its passes' state, or the error the
+##   edits give; nothing when there is no record, or it does not fit the
+##   edits (any but those to bodies and additions)
 export recheck_whole(
     program: link.Program, cache: incremental.Cache, inputs: String, warnings: Diagnostic[]
 ): Result<incremental.Checked, incremental.CheckError>? {
@@ -731,13 +730,28 @@ export recheck_whole(
         );
     }
     var empty = incremental.merged_module(program, HashMap<ulong, u8[]>(), Array<ulong>());
+    # The record had no warning, so the passes' warnings are all the edits'.
+    var reported = Array<Diagnostic>();
     var again = incremental.recheck_compilation_unit(
-        program, empty.value(), whole, base, Optional<incremental.Reused>.Empty, program.sources()
+        program,
+        empty.value(),
+        whole,
+        base,
+        Optional<incremental.Reused>.Empty,
+        program.sources(),
+        report = Optional<Diagnostic[]>.Value(reported)
     );
     if (again.is_empty()) {
-        return none;
+        # Given up on, `reported` holds the error, if that was why.
+        if (reported.is_empty) {
+            return none;
+        }
+        return Optional<Result<incremental.Checked, incremental.CheckError>>.Value(
+            Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Checking(reported[0]))
+        );
     }
     warnings.append_all(program.warnings());
+    warnings.append_all(reported);
     var (module, state, _) = again.value();
     return Optional<Result<incremental.Checked, incremental.CheckError>>.Value(
         Result<incremental.Checked, incremental.CheckError>.ok(incremental.Checked(module, state))

@@ -21,7 +21,9 @@
 ## imported.
 
 import compiler.ast;
-import [Attribute, Declaration, Expression, FunctionDecl, Module, Pattern, Span, TypeName] from compiler.ast;
+import [
+    Attribute, Declaration, Expression, FunctionDecl, Module, parse_type_text, Pattern, Span, TypeName
+] from compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
@@ -2397,7 +2399,7 @@ export sort_errors(errors: ModuleError[]) {
 # A generic method's member name (`run<S>`) as a type, every part at
 # `span`, or none when it does not spell back the same way.
 _member_type(name: String, span: Span): TypeName? {
-    var parsed = names.parse_type_string(name, span);
+    var parsed = parse_type_text(name, span);
     if (parsed.to_string() != name) {
         return Optional<TypeName>.Empty;
     }
