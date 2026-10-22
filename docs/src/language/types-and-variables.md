@@ -392,6 +392,12 @@ const requests = async.Atomic<long>(0);   # changed with requests.fetch_add(1)
 var depth: int = 0;                       # one per thread
 ```
 
+A global whose initializer is a literal (a number, a `bool`, `__null`, or a
+string literal) is set when the program loads, with no code run. One that
+nothing reads, like a function nothing calls, is left out of the executable,
+so a module's data tables cost only the programs that use them. A Windows
+build with `-g` keeps them all.
+
 ## Casting with `as`
 
 `value as Type` converts a value to another type explicitly, like `static_cast`

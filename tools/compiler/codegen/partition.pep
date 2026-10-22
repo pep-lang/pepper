@@ -39,6 +39,9 @@ import [forget_global_debug_info] from "debug";
 import "globals";
 
 extern void LLVMSetComdat(void* global, void* comdat);
+extern void* LLVMGetComdat(void* global);
+extern void LLVMSetComdatSelectionKind(void* comdat, int kind);
+extern char* LLVMGetSection(void* global);
 
 ## A program's symbols assigned to parts.
 export struct Partition {
@@ -323,6 +326,45 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>, t
     }
     _trace(trace, "split: done");
     return Result<void>.ok();
+}
+
+## LLVM's `LLVMNoDeduplicateComdatSelectionKind`.
+const _NO_DEDUPLICATE: int = 3;
+
+## Puts each definition of `ir`, a part about to be written as an object,
+## that is not in a comdat in a comdat of its own that keeps every copy, so
+## it gets a section of its own, as clang's `-ffunction-sections
+## -fdata-sections` do: the linker (`/OPT:REF`, `--gc-sections`) then drops
+## what nothing uses, such as an unread constant's bytes (pepper#155).
+## Mach-O needs none: `-dead_strip` drops each unused symbol. WebAssembly
+## gives each its own segment already.
+##
+## @param ir the part's module
+## @param triple the triple of the machine writing the object, which
+##   decides its format: `ir`'s own may be unset
+export section_each_definition(ir: llvm.Module, triple: String) {
+    if (triple.contains("apple") or triple.starts_with("wasm")) {
+        return;
+    }
+    var values = Array<llvm.Value>();
+    values.append_all(ir.functions());
+    values.append_all(ir.globals());
+    for (var value in values) {
+        if (value.is_declaration() or value.has_comdat() or value.name().starts_with("llvm.")) {
+            continue;
+        }
+        # A global placed in a named section (`.debug_gdb_scripts`) stays
+        # as it is.
+        if (!value.is_function() and !String(LLVMGetSection(value.ref)).is_empty) {
+            continue;
+        }
+        # A COFF comdat's symbol cannot be private.
+        if (value.linkage() == llvm.Linkage.Private) {
+            value.set_linkage(llvm.Linkage.Internal);
+        }
+        value.set_comdat(value.name());
+        LLVMSetComdatSelectionKind(LLVMGetComdat(value.ref), _NO_DEDUPLICATE);
+    }
 }
 
 _trace(trace: bool, line: String) {

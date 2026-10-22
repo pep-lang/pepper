@@ -1315,7 +1315,9 @@ as one module, recording in `owners` the file that declares each symbol;
    == st.ty.name` with generic `ty`, or `is_generic_func`) are skipped;
    sema has already cloned the concrete specializations.
 2. **`emit_globals`.** Module-scope variables become LLVM globals. A
-   constant initializer is set directly. Other initializers go into
+   constant initializer is set directly, a string constant's included
+   (`const X = "text";`, `string_constant_value`), so nothing reaches an
+   unread one and the linker drops it. Other initializers go into
    `__pep_global_init`, registered in `llvm.global_ctors`, in the order of
    `module.globals` (see `initialization_order`, `sema/program.pep`). A `[ThreadLocal]`
    global (`is_thread_local`; `codegen/globals.pep`) is an LLVM
@@ -1698,7 +1700,12 @@ a part of their own (`codegen.prepare`'s `locations_part`), so a line shift
 recompiles that small part, not the code below the edit (a part that uses
 one declares it outside its comdat, `keep_parts`: a declaration in a
 comdat does not verify, and under `--lto=full` would claim the comdat
-from the defining part). And a file that
+from the defining part). Just before a part's object is written
+(`driver/parts.pep`, and the in-process LTO object), each definition not
+in a comdat goes in a `nodeduplicate` comdat of its own on COFF and ELF,
+as the writing machine's triple says (`section_each_definition`, private
+ones made internal, as a COFF comdat's symbol must be named), clang's `-ffunction-sections
+-fdata-sections`, so the link drops what nothing uses (pepper#155). And a file that
 `_split` gave a part alone spreads its symbols over a power of two of
 parts (`_spread`, about `_SPREAD_SIZE` each, at most `_MAX_SPREAD`) by its
 symbol's hash, so an edit to one function recompiles one of them.
@@ -1746,7 +1753,9 @@ NDK's own clang (`AndroidNdk.locate`: `--sysroot` naming the NDK or its
 `sysroot`, else `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` or the newest
 `$ANDROID_HOME/ndk/<version>`), which brings its lld, compiler-rt and
 libunwind. The default system libraries and the debug options
-follow the target's OS.
+follow the target's OS. Every link drops the sections nothing uses:
+`/OPT:REF` on Windows (not with `-g`, whose `/DEBUG` turns it off),
+`--gc-sections` on ELF, `-dead_strip` on Apple targets.
 
 **Optimization** (`codegen/target.pep`). `BuildOptions.opt_level` is `-O0` through
 `-O3`: `-O<n>`, else `PEPPER_OPT_LEVEL`, else `-O0` (a bare `-O` is `-O2`,
