@@ -13,7 +13,7 @@
 ## compilation unit's objects are kept the same way, as unit `+<name>`. Each is
 ## written to a folder of the build and moved into place as one, and never
 ## changed after, since the same key gives the same objects. So builds share the cache with no lock, and link
-## the objects where they are. Each unit keeps its newest few keys
+## hard links to the objects (`Cache.pin`). Each unit keeps its newest few keys
 ## (`_KEEP`), so switching between builds that differ (`-O` levels,
 ## programs with other overrides) does not rebuild every time; reusing a key
 ## makes it the newest, and a key stored or reused lately (`_GRACE`) is
@@ -142,6 +142,38 @@ export struct Cache {
             );
         }
         return Result<Path[], String>.ok(found.value());
+    }
+
+    ## Returns `objects`, each one this cache holds replaced by a hard link
+    ## to it in `folder` (a copy across volumes), for the link. A build
+    ## pruning a unit can move a key's folder aside (`_prune`) after this
+    ## build's last look at it, and the linker opens the objects later; the
+    ## link keeps the file wherever the folder goes (#178). An object found
+    ## missing is looked for again (`look_again`).
+    ##
+    ## @param objects the objects to link
+    ## @param folder a folder of this build's own, created here
+    ## @returns the objects to link, or why the cache no longer holds one
+    pin(objects: Path[], folder: Path): Result<Path[], String> {
+        Directory.create_all(folder);
+        var root = dir.to_string();
+        var pinned = Array<Path>();
+        for (var object in objects) {
+            if (!object.to_string().starts_with(root)) {
+                pinned.append(object);
+                continue;
+            }
+            var pin = folder.join(Path($"{pinned.count}.{object.file_name().value()}"));
+            var made = look_again(() => {
+                bool done = File.hard_link(object, pin).is_ok() or File.copy(object, pin).is_ok();
+                return done ? Optional<bool>.Value(true) : Optional<bool>.Empty;
+            });
+            if (!made.is_value()) {
+                return Result<Path[], String>.err($"the build cache no longer holds {object}; build again");
+            }
+            pinned.append(pin);
+        }
+        return Result<Path[], String>.ok(pinned);
     }
 
     ## Returns the key the cache holds objects of compilation unit `unit`,
@@ -461,13 +493,10 @@ export default_cache(work: Path): Cache {
 ## here is put back: that build checks its objects after marking it, so
 ## either it finds the key gone and compiles, or the key stays. It is
 ## missing meanwhile, so every later read of a key a build decided to
-## reuse looks again (`Cache.look_again`).
+## reuse looks again (`Cache.look_again`), and the link reads hard links to
+## the objects (`Cache.pin`), which a prune that stalled between its
+## check and its rename cannot move.
 _prune(folder: Path) {
-    # shortcut: the linker opens a reused key's objects after the last look,
-    # so a prune that read a key's time before a build marked it, then
-    # stalled past that build's last look, can move it aside while a link
-    # opens it; pin the objects (hard links into the build's folder) if that
-    # is ever seen.
     var entries = Directory.open(folder);
     if (entries.is_err()) {
         return;
