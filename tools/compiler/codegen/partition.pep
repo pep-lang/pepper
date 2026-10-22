@@ -340,8 +340,9 @@ const _NO_DEDUPLICATE: int = 3;
 ## gives each its own segment already.
 ##
 ## @param ir the part's module
-export section_each_definition(ir: llvm.Module) {
-    var triple = ir.target_triple();
+## @param triple the triple of the machine writing the object, which
+##   decides its format: `ir`'s own may be unset
+export section_each_definition(ir: llvm.Module, triple: String) {
     if (triple.contains("apple") or triple.starts_with("wasm")) {
         return;
     }

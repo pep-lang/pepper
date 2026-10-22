@@ -564,5 +564,7 @@ an_unused_string_constant_is_left_out_of_the_program() {
     expect_true(unused < without + 20000);
     var reads = "main(): int {\n    print(TABLE.size);\n    print(TABLE[99999]);\n    return 0;\n}\n";
     var used = _built_size(folder.path, "used", $"const TABLE = \"{table}\";\n\n{reads}", "100000\na\n");
-    expect_true(used > without + 100000);
+    # Less than the 100,000 bytes on macOS, whose segments round to 16 KB
+    # pages: the text segment's slack can hold part of them.
+    expect_true(used > without + 80000);
 }

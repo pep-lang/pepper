@@ -1687,10 +1687,11 @@ a part of their own (`codegen.prepare`'s `locations_part`), so a line shift
 recompiles that small part, not the code below the edit (a part that uses
 one declares it outside its comdat, `keep_parts`: a declaration in a
 comdat does not verify, and under `--lto=full` would claim the comdat
-from the defining part). Last, `keep_parts` puts each definition not
-in a comdat in a `nodeduplicate` comdat of its own on COFF and ELF
-(`_section_each_definition`, private ones made internal, as a COFF
-comdat's symbol must be named), clang's `-ffunction-sections
+from the defining part). Just before a part's object is written
+(`driver/parts.pep`, and the in-process LTO object), each definition not
+in a comdat goes in a `nodeduplicate` comdat of its own on COFF and ELF,
+as the writing machine's triple says (`section_each_definition`, private
+ones made internal, as a COFF comdat's symbol must be named), clang's `-ffunction-sections
 -fdata-sections`, so the link drops what nothing uses (pepper#155). And a file that
 `_split` gave a part alone spreads its symbols over a power of two of
 parts (`_spread`, about `_SPREAD_SIZE` each, at most `_MAX_SPREAD`) by its
