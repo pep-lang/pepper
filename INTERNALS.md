@@ -50,7 +50,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tools/pep-run` | `pep-run`: builds a program with `pep-build` into `<Pepper home>/run/<hash of folder and options>/` with the shared build cache, then execs it in the caller's folder. |
 | `tools/pep-profile` | `pep-profile`: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). |
 | `tools/pep-test` | `pep-test`: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). |
-| `tools/pep-package` | `pep-package`, the package manager, itself a `pep.toml` project that depends on `pep-lang/pepper-semver` for versions and ranges (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, checkouts), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides; only the project's own `[dev-dependencies]` are gathered, after its dependencies, and what only they reach is locked `dev = true`; every `[target.'<condition>'.dependencies]` is gathered whatever the platform, and what only they reach is locked with `target`, the conditions on each way to it joined with `&&` and the ways with `||`; a range skips versions whose `minimum_toolchain` is newer than pep-package's own release, reading each candidate's `pep.toml` with `git show` from its clone), `graph.pep` (`tree`, `why` and `outdated`: the edges `Resolver.gather` reads from the locked packages, and `Resolver.choose` for the revision `update` would pick). The compiler's `driver/project.pep` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package the build's target needs (`pep-package fetch <source>...`, fetching only those, when `pep.lock` lists every dependency and holds packages for other targets), or checks the commits out with git itself when `pep-package` is not installed. |
+| `tools/pep-package` | `pep-package`, the package manager, itself a `pep.toml` project that depends on `pep-lang/pepper-semver` for versions and ranges (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, and checkouts cloned from the download cache in the Pepper home, `cache/packages/<host>/<owner>/<name>.git`, a bare repository each fetches into under a per-package lock file), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, kept in the same cache, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides; only the project's own `[dev-dependencies]` are gathered, after its dependencies, and what only they reach is locked `dev = true`; every `[target.'<condition>'.dependencies]` is gathered whatever the platform, and what only they reach is locked with `target`, the conditions on each way to it joined with `&&` and the ways with `||`; a range skips versions whose `minimum_toolchain` is newer than pep-package's own release, reading each candidate's `pep.toml` with `git show` from its clone), `graph.pep` (`tree`, `why` and `outdated`: the edges `Resolver.gather` reads from the locked packages, and `Resolver.choose` for the revision `update` would pick). The compiler's `driver/project.pep` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package the build's target needs (`pep-package fetch <source>...`, fetching only those, when `pep.lock` lists every dependency and holds packages for other targets), or checks the commits out with git itself when `pep-package` is not installed. |
 | `tools/pep-install` | `pep-install`, run as `pepper install`: installs release toolchains side by side in the Pepper home and sets the default. `releases.pep` (GitHub's release list, streamed archive downloads checked against their `.sha256`), `zip.pep` (unpacks the Windows `.zip` releases), `commands.pep` (each command against a `toolchain.Home`), `setup.pep` (`setup` and `uninstall`: the PATH, prerequisites and the check program, which the install scripts bootstrap through). |
 | `tools/toolchain` | The module `pepper` and `pep-install` share: toolchain versions and the versions a command names (`version.pep`), the Pepper home's layout (`home.pep`), and which toolchain a folder uses (`choose.pep`: `+<version>`, `PEPPER_TOOLCHAIN`, `pep.toml`'s `toolchain`, the default). |
 | `tools/pepper` | `pepper`, the entry point: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler); run from a Pepper home, it runs the tools of the toolchain `tools/toolchain` picks. |
@@ -1911,7 +1911,11 @@ changed.
   hit whose link summaries were recorded marks its files in
   `Module.cached_files`, so `strip_bodies` skips their bodies and codegen
   only declares them (`Generator.stripped`); never `main`'s, which the
-  entry part, compiled every build, defines. After sema, `reuse_after_sema`
+  entry part, compiled every build, defines. A build that checks
+  compilation units in workers (`_in_workers`) links only their objects,
+  so it and its workers look nothing up here (`nothing_reused`): a body it
+  skipped for a translation unit's object, which a whole-program build
+  left in the cache, would be defined nowhere. After sema, `reuse_after_sema`
   hashes the other files' interfaces from their tokens and
   `summaries_to_record`, keys the remaining units, and a unit that hits
   then generates no objects. A function whose link summary calls through a
@@ -1934,11 +1938,19 @@ changed.
   hit marks its parts reused too, so a build storing newer keys of a part
   does not remove one another build is about to link. Pruning reads a
   key's time again just before it moves the folder aside, and moves it
-  back when it was reused meanwhile; a build links the objects of a
-  compilation unit it found in the cache through `Cache.reused_objects`,
-  which looks again for about a second while the folder is away and fails
-  the build rather than link without them (a link short of a unit's
-  objects fails on undefined symbols, #24). A unit's folder
+  back when it was reused meanwhile, so a key a build decided to reuse can
+  be missing for a moment. Every read of such a key's folder after the
+  decision goes through `Cache.look_again`, which looks again for about a
+  second while the folder is away: the objects of the compilation units the
+  last reads (`_check_in_workers`, #172, and `Cache.reused_objects`), what
+  they define (`_copy_defines`), and the last's own objects, warnings and
+  `[Link]` arguments (`_last_kept`). A build fails rather than link without
+  them (a link short of a unit's objects fails on undefined symbols, #24).
+  `numbered_objects` reads a folder's objects from one listing, so a folder
+  moved aside and back between two looks cannot end the list early. Once a
+  build marked a key, a prune that reads its time later keeps it, so only a
+  prune already past that check when the build marked it can move it, and
+  it moves it straight back. A unit's folder
   spells the `/` of its name as `.` (`u/process.command#0/`), so each
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
@@ -2569,6 +2581,14 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   it analyzed, the linked `Program`, and the checked `sema.Module` and
   `PassState` when the passes passed) to the server thread through a
   channel and `Client.wake`s it; `woken` keeps the last one per document.
+  A model checked whole (`check_whole`, `recheck_whole`) first drops the
+  bodies of the files outside the document's compilation unit
+  (`drop_unread_bodies`, `Analysis.bodies_read`): the server reads only
+  those (a model loaded from the cache's records decodes no others), and
+  the rest made the copy of `tools/compiler` take about 6 s, which an edit
+  right after the first analysis waited for. It cannot be moved instead:
+  sema's passes capture parts of the model in closures, so the
+  confinement check takes it as shared (#173).
 - `symbols.pep`: the outline of declarations and struct members.
 - `navigate.pep`: hover and definition. A `Context` is the current text's parse, plus the last
   analysis's program and model when that analysis is of the same text;
@@ -3137,7 +3157,8 @@ then include `wait`. `<dir>` is `<build>/compilation-units.<pid>`, the build's o
 in one folder at once (`pepper test` builds its test programs side by side)
 must not share it. It is removed after the build, but kept with `-T time`,
 where each worker also leaves the time its compilation unit's stages took
-(`<k>.stages`: diagnostics, merge, index, check, finish, store, object), and the build
+(`<k>.stages`: diagnostics, merge, index, check, finish, store, object, and
+the worker's peak memory, `os.peak_memory`), and the build
 leaves `schedule`: for each compilation unit a worker checked, its number, name, when
 it began and ended (milliseconds from the start) and the compilation units it reads,
 as Ninja's `.ninja_log`, to find the chain of compilation units that bounds the
@@ -3295,7 +3316,13 @@ in `sema/builder.pep` builds in about 12 s instead of 24 s this way.
 `PEPC_TRACE_COMPILATION_UNITS` says why one was not.
 
 The modules of the closures are rebuilt from bytes for each compilation unit checked.
-Loading a record costs a read and a merge, not a check.
+Loading a record costs a read and a merge, not a check. A worker, and a build
+with one job, checks one compilation unit after another in one process, so
+nothing a check makes may outlive it: `run_steps_with` drops the memos of
+`PassState` that hold `GenericSignature`s (`checked_implicit`,
+`trait_memo.members`), which hold the state. That cycle once kept every
+unit's state and the closure it reached alive, 8 GB in a worker and over 50
+GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
 **Records.** A record lives at `<cache>/v3/c16/<name>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new

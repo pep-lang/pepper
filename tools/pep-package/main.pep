@@ -13,12 +13,14 @@
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
 #     pepper package fetch --locked             # fail rather than change pep.lock
-#     pepper package fetch --offline            # only what .pep/deps holds; --frozen is both
+#     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
 #     pepper package tree [--depth 1]           # the locked graph
 #     pepper package why numbers                # every path from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
+#     pepper package cache info                 # the download cache every project shares
+#     pepper package cache clean
 #
 # Build it from the repository root; its pep.toml names the toml package it
 # needs, which `pepper build` fetches:
@@ -27,6 +29,7 @@
 
 import cli;
 import [Directory, File, Path] from io;
+import io;
 import os;
 import process;
 import semver;
@@ -39,6 +42,7 @@ import "graph";
 import "lock";
 import "manifest";
 import "resolve";
+import "tree";
 
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
@@ -63,7 +67,7 @@ main(args: String[]): int {
     );
     var offline = parser.flag(
         "offline",
-        help = "use only what .pep/deps holds, and fail on what needs the network (also PEPPER_OFFLINE=1)",
+        help = "use only what .pep/deps and the download cache hold, and fail on what needs the network (also PEPPER_OFFLINE=1)",
         global = true
     );
     var frozen = parser.flag("frozen", help = "both --locked and --offline", global = true);
@@ -124,8 +128,14 @@ main(args: String[]): int {
         "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
+    var cache = parser.command("cache", "Shows or empties the download cache every project shares");
+    var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
+    cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
     if (!parser.parse(args)) {
         return 2;
+    }
+    if (cache.is_selected) {
+        return cache_info.is_selected ? show_cache() : clean_cache();
     }
     var start = directory.is_set ? Path(directory.value()) : Path(".");
     var found = find_manifest(start);
@@ -195,6 +205,92 @@ fail(message: String): int {
     return 1;
 }
 
+# Prints the download cache's folder, then each package it holds
+# (`github.com/other/numbers`).
+show_cache(): int {
+    var root = cache_dir();
+    print(root.to_string());
+    var packages = Array<String>();
+    _list_cached(root, "", packages);
+    packages.sort((a, b) => a.compare(b));
+    for (var package in packages) {
+        var base = _cached_base(root, package);
+        if (Path(base.to_string() + ".git").is_directory() or base.is_directory()) {
+            print(package);
+        }
+    }
+    return 0;
+}
+
+# Adds to `packages` each package under `dir`, the cache's folder `prefix`
+# (`github.com/other`), that has a lock file (`numbers.lock`): a fetch
+# takes its package's lock before it writes anything.
+_list_cached(dir: Path, prefix: String, packages: Array<String>) {
+    var opened = Directory.open(dir);
+    if (opened.is_err()) {
+        return;
+    }
+    var listed = opened.value().entries();
+    if (listed.is_err()) {
+        return;
+    }
+    for (var entry in listed.value()) {
+        var name = entry.path.file_name().value_or("");
+        var path = prefix.is_empty ? name : prefix + "/" + name;
+        if (entry.is_file and name.ends_with(".lock")) {
+            packages.append(path.substr(0, path.length - 5));
+        } else if (entry.is_directory and !name.ends_with(".git") and !name.ends_with(".partial")) {
+            # Not into a bare repository, whose own `.lock` files are git's.
+            _list_cached(entry.path, path, packages);
+        }
+    }
+}
+
+# The cache's path for `package` (`github.com/other/numbers`) under `root`:
+# its lock file and bare repository add `.lock` and `.git`.
+_cached_base(root: Path, package: String): Path {
+    var base = root;
+    for (var part in package.split("/")) {
+        base = base.join(part);
+    }
+    return base;
+}
+
+# Removes what the download cache holds, one package at a time, each under
+# its lock, and keeps a package a fetch holds the lock of, saying so. The
+# lock files stay: removing one a fetch waits on would let a second fetch
+# lock a new file beside it.
+clean_cache(): int {
+    var root = cache_dir();
+    var packages = Array<String>();
+    _list_cached(root, "", packages);
+    packages.sort((a, b) => a.compare(b));
+    var removed = 0;
+    for (var package in packages) {
+        var base = _cached_base(root, package);
+        var lock = io.OpenOptions().write(true).open(Path(base.to_string() + ".lock"));
+        if (lock.is_err()) {
+            return fail($"cannot open the lock of {package}: {lock.error().message}");
+        }
+        var held = lock.value().try_lock();
+        if (held.is_err() or !held.value()) {
+            say($"kept {package}: a fetch holds its lock");
+            continue;
+        }
+        for (var path in [Path(base.to_string() + ".git"), Path(base.to_string() + ".git.partial"), base]) {
+            if (path.exists()) {
+                var gone = remove_tree(path);
+                if (gone.is_err()) {
+                    return fail($"cannot remove {path.to_string()}: {gone.error().message}");
+                }
+            }
+        }
+        removed += 1;
+    }
+    say($"removed {removed} packages from {root.to_string()}");
+    return 0;
+}
+
 # Prints `message` as progress.
 say(message: String) {
     File.stderr().write_all($"pep-package: {message}\n");
@@ -243,7 +339,7 @@ struct Project {
     var dir: Path = Path(".");
     # `--locked`: fail rather than change pep.lock.
     var locked: bool = false;
-    # `--offline`: use only what `.pep/deps` holds.
+    # `--offline`: use only what `.pep/deps` and the download cache hold.
     var offline: bool = false;
 
     construct(manifest_path: Path) {

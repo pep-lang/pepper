@@ -434,6 +434,38 @@ links_a_reused_units_objects_or_fails() {
     expect_true(gone.error().starts_with("the build cache no longer holds the objects of '+unit'"));
 }
 
+# A key a build decided to reuse that a build pruning its unit has moved
+# aside, to move it back since it was reused (`_prune`), is found once it
+# is back, not taken for gone (pep-lang/pepper#172): the look that misses
+# it here puts it back, as the prune would between two looks.
+[Test]
+finds_a_reused_key_a_prune_moves_aside_and_back() {
+    var folder = TempFolder("look_again");
+    var root = folder.path;
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var below = [incremental.Defines("f\n")];
+    expect_equal(cache.store_unit(_unit_built(root, "built"), "+unit", "key", "f\n", below, "0.o").value(), "key");
+    var kept = cache.objects("+unit", "key");
+    var aside = kept.parent().value().join(Path(".removing.1.0"));
+    expect_true(File.rename(kept, aside).is_ok());
+
+    var looks = Array<int>();
+    var found = cache.look_again(() => {
+        looks.append(0);
+        var key = cache.unit_objects("+unit", "key", below, "0.o");
+        if (!key.is_value()) {
+            File.rename(aside, kept);
+        }
+        return key;
+    });
+    expect_equal(found.value(), "key");
+    expect_equal(looks.count, 2 as ulong);
+    expect_equal(cache.reused_objects("+unit", "key", "o").value().count, 1 as ulong);
+
+    # A key gone for good is not found, after about a second of looks.
+    expect_false(cache.look_again(() => cache.unit_objects("+unit", "other", below, "0.o")).is_value());
+}
+
 # A key reused by a build counts as the unit's newest, and no key stored
 # or reused lately is pruned, so a build linking it at the same time finds
 # its objects.

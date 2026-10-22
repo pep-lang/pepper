@@ -20,6 +20,7 @@ import [
     compilation_units,
     merged_module,
     render_warnings,
+    nothing_reused,
     reuse,
     reuse_after_sema,
     Reused,
@@ -351,12 +352,20 @@ _defines(partition: codegen.Partition, objects: Path[]): Result<String, String> 
 
 # Leaves the symbols compilation unit number `k`'s objects, in the cache's
 # `folder`, define in `dir` as `<k>.defines`, for the workers of the
-# compilation units that read it.
-_copy_defines(folder: Path, dir: Path, k: ulong) {
-    var text = File.read_to_string(folder.join(Path("defines")));
+# compilation units that read it. Returns whether the cache still holds
+# them (`Cache.look_again`).
+_copy_defines(cache: Cache, folder: Path, dir: Path, k: ulong): bool {
+    var text = cache.look_again(() => {
+        var read = File.read_to_string(folder.join(Path("defines")));
+        return read.is_ok() ? Optional<String>.Value(read.value()) : Optional<String>.Empty;
+    });
+    if (!text.is_value()) {
+        return false;
+    }
     var partial = worker_file(dir, k, $"defines.{process.id()}");
-    File.write_text(partial, text.is_ok() ? text.value() : "");
+    File.write_text(partial, text.value());
     File.rename(partial, worker_file(dir, k, "defines"));
+    return true;
 }
 
 # The symbols the objects of compilation unit number `k` define (`_defines`),
@@ -453,6 +462,31 @@ _store_last(
         return Result<Path, String>.err(key.error());
     }
     return Result<Path, String>.ok(cache.objects($"+{last.name}", key.value()));
+}
+
+# Why a build stops when the cache lost the objects of `unit`, which it
+# decided to reuse.
+_cache_lost(unit: CompilationUnit): String {
+    return $"the build cache no longer holds the objects of compilation unit '{unit.name}'; build again";
+}
+
+# One look at the last compilation unit's objects in the cache's `folder`
+# (`_store_last`), marked as reused: its parts' and entry's objects, its
+# warnings and its `[Link]` arguments; none while any is missing.
+_last_kept(cache: Cache, folder: Path, extension: String): (Path[], String, String)? {
+    var none = Optional<(Path[], String, String)>.Empty;
+    if (!cache.used(folder)) {
+        return none;
+    }
+    var objects = numbered_objects(folder, extension);
+    var entry = folder.join(Path($"entry.{extension}"));
+    var warned = File.read_to_string(folder.join(Path("warn")));
+    var links = File.read_to_string(folder.join(Path("link")));
+    if (objects.is_empty or !entry.is_file() or warned.is_err() or links.is_err()) {
+        return none;
+    }
+    objects.append(entry);
+    return Optional<(Path[], String, String)>.Value((objects, warned.value(), links.value()));
 }
 
 # Compiles `module`, the compilation unit `unit` just checked, into its object
@@ -613,6 +647,15 @@ _compilation_unit_jobs(options: BuildOptions): ulong {
     return options.compilation_unit_jobs != 0 ? options.compilation_unit_jobs : async.logical_cpus();
 }
 
+# Whether the build checks and compiles `units` in compilation unit workers
+# (`_check_in_workers`).
+_in_workers(options: BuildOptions, units: CompilationUnit[]): bool {
+    return units.count > 2
+        and _compilation_unit_jobs(options) > 1
+        and !options.in_process
+        and !options.worker_args.is_empty;
+}
+
 # Checks every compilation unit but the last, the program's own, in up to `jobs`
 # `--compilation-unit-worker` children (`incremental.check_in_workers`), each of
 # which also compiles the compilation unit into its object, and puts in
@@ -665,21 +708,21 @@ _check_in_workers(
             if (!key.is_value()) {
                 return false;
             }
-            _copy_defines(cache.objects($"+{units[k].name}", key.value()), dir, k);
-            return true;
+            return _copy_defines(cache, cache.objects($"+{units[k].name}", key.value()), dir, k);
         }
     );
     if (checked.is_ok()) {
         var last = units[units.count - 1];
         last_below.append_all(_below(last.reads, dir, read));
         for (var k in last.reads) {
-            var key = cache.unit_objects(
-                $"+{units[k].name}", units[k].key, _below(units[k].reads, dir, read), $"0.{extension}"
-            );
+            # Found or stored by this build: a miss now is a prune moving it
+            # aside a moment (`Cache.look_again`), not a key to compile.
+            var name = $"+{units[k].name}";
+            var unit_key = units[k].key;
+            var below = _below(units[k].reads, dir, read);
+            var key = cache.look_again(() => cache.unit_objects(name, unit_key, below, $"0.{extension}"));
             if (!key.is_value()) {
-                checked = Result<void, String>.err(
-                    $"the build cache no longer holds the objects of compilation unit '{units[k].name}'; build again"
-                );
+                checked = Result<void, String>.err(_cache_lost(units[k]));
                 break;
             }
             object_keys[k] = key.value();
@@ -726,8 +769,8 @@ export compilation_unit_worker(program: link.Program, options: BuildOptions, dir
     var translation_units = link.translation_units(program);
     var keys = Keys(program, translation_units, _build_text(options, triple));
     clock.lap("worker keys");
-    var triple_extension = _object_extension(options, triple);
-    var reused = Optional<Reused>.Value(reuse(program, translation_units, keys, cache, triple_extension));
+    # Its build links only compilation units' objects (`nothing_reused`).
+    var reused = Optional<Reused>.Value(nothing_reused(program, translation_units));
     clock.lap("worker reuse");
     var units = compilation_units(program, keys.base());
     clock.lap("worker compilation units");
@@ -778,9 +821,13 @@ _work_on(
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
     }
-    _copy_defines(compiled.value(), dir, k);
+    if (!_copy_defines(cache, compiled.value(), dir, k)) {
+        return Optional<String>.Value(_cache_lost(unit));
+    }
     var t7 = os.Instant.now();
-    stages.append($"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\n");
+    stages.append(
+        $"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\npeak {os.peak_memory() / 1048576} MB\n"
+    );
     if (options.trace_time) {
         File.write_text(worker_file(dir, k, "stages"), stages.to_string());
     }
@@ -835,16 +882,6 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # With LTO each part is bitcode, which the cache keeps as it keeps an
     # object.
     var triple_extension = _object_extension(options, triple);
-    # The units whose objects the cache has: sema skips their bodies.
-    var reused = Optional<Reused>.Empty;
-    if (keys.is_value()) {
-        reused = Optional<Reused>.Value(
-            reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension)
-        );
-        clock.lap("reuse");
-    }
-
-    var sources = program.sources();
     var units = Array<CompilationUnit>();
     # Debug info holds the positions a compilation unit's key leaves out, so a
     # build with `-g` keys each unit by its text (`Keys.exact_positions`)
@@ -852,6 +889,19 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
         units = compilation_units(program, keys.value().base());
     }
+    # The units whose objects the cache has: sema skips their bodies. A build
+    # in workers links only compilation units' objects, so it skips none.
+    var reused = Optional<Reused>.Empty;
+    if (keys.is_value()) {
+        reused = Optional<Reused>.Value(
+            _in_workers(options, units) ?
+                nothing_reused(program, translation_units) :
+                reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension)
+        );
+        clock.lap("reuse");
+    }
+
+    var sources = program.sources();
     # Checking compilation units links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
     if (units.count <= 1) {
@@ -876,8 +926,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var last_folder = Optional<Path>.Empty;
     if (units.count > 1) {
         var prechecked = HashMap<ulong, (u8[], String, String)>();
-        var jobs = _compilation_unit_jobs(options);
-        if (jobs > 1 and units.count > 2 and !options.in_process and !options.worker_args.is_empty) {
+        if (_in_workers(options, units)) {
+            var jobs = _compilation_unit_jobs(options);
             var parallel = _check_in_workers(program, units, options, jobs, prechecked, object_keys, last_below);
             if (parallel.is_err()) {
                 return Result<Built, String>.err(parallel.error());
@@ -1015,17 +1065,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var link_text = "";
     if (unit_objects) {
         var last = units[units.count - 1];
-        if (last_folder.is_value()) {
-            # The cache has the last compilation unit's objects: its warnings
-            # and `[Link]` arguments are kept beside them.
-            var warned = File.read_to_string(last_folder.value().join(Path("warn")));
-            if (warned.is_ok() and !warned.value().is_empty) {
-                File.stderr().write_all(warned.value());
-            }
-            var links = File.read_to_string(last_folder.value().join(Path("link")));
-            link_text = links.is_ok() ? links.value() : "";
-            options.cache.value().used(last_folder.value());
-        } else {
+        # Whether the cache had the last compilation unit's objects: its
+        # warnings and `[Link]` arguments are kept beside them.
+        bool cached = last_folder.is_value();
+        if (!cached) {
             # The compilation unit workers compiled every compilation unit but
             # the last: only the last compilation unit's files and the entry
             # points are generated here, and what the compilation units below
@@ -1106,8 +1149,23 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             }
             objects.append_all(found.value());
         }
-        objects.append_all(numbered_objects(last_folder.value(), extension));
-        objects.append(last_folder.value().join(Path($"entry.{extension}")));
+        # Read at once, and looked for again while missing
+        # (`Cache.look_again`): another build's, when it stored them first.
+        var cache = options.cache.value();
+        var folder = last_folder.value();
+        var kept = cache.look_again(() => _last_kept(cache, folder, extension));
+        if (!kept.is_value()) {
+            Directory.remove_all(work);
+            return Result<Built, String>.err(_cache_lost(last));
+        }
+        var (found, warned, links) = kept.value();
+        if (cached) {
+            if (!warned.is_empty) {
+                File.stderr().write_all(warned);
+            }
+            link_text = links;
+        }
+        objects.append_all(found);
         clock.lap("objects");
     } else {
         # The bodies of units whose objects the cache holds are only declared.
