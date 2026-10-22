@@ -51,6 +51,8 @@ short, and `pepper help build` runs it.
 | `-L <dir>` | Add a folder the linker searches | `PEPPER_LIBRARY_PATH` |
 | `--MSVC` | Use the MSVC linker (not ported) | off |
 | `-D <name>[=<value>]` | Define a build option | none |
+| `-F <names>`, `--features <names>` | Turn on features of the project's package | its `default` feature |
+| `--no-default-features` | Leave the project's package's `default` feature off | off |
 | `--no-runtime-checks=<list>` | Remove kinds of runtime check | every check on |
 | `--no-cache` | Do not use the build cache | the cache is used |
 | `--cache <dir>` | Folder for the build cache | `PEPPER_CACHE_DIR`, else `.pep/cache` (in a project's folder when building it) |
@@ -551,6 +553,20 @@ See [Build options](../language/build-options.md).
 
 ```bash
 pepper build main.pep -D USE_ZLIB -D LOG_LEVEL=2
+```
+
+### `-F <names>`, `--features <names>`, `--no-default-features`
+
+`--features` turns on features of the project's package, from the
+`[features]` of its `pep.toml`: a comma-separated list (`--features
+tls,gzip`), or the option repeated. Its `default` feature is on unless
+`--no-default-features` is given. Each feature on defines the build option
+`<package>_<feature>` (`http_tls`), and turns on what it lists, across the
+whole dependency graph; see [Features](projects.md#features). A feature
+the package does not have is an error that lists those it has:
+
+```text
+unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
 ```
 
 ## Runtime checks

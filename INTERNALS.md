@@ -84,12 +84,17 @@ link.load_program(entry, setup)                                   (link/program.
                                    [build] include dirs follow -I, its deps resolve
     search paths                   -I dirs, then runtime dirs
     forced imports                 --import NAME → prelude, ahead of the runtime
+    features                       Packages.turn_on_features: --features (Target.features)
+                                   and each package's default, unified over the graph;
+                                   each feature on defines -D <package>_<feature> in the
+                                   target, and turns on the optional dependencies it lists
     the import walk                parse every reachable file; resolve imports
                                    (a dependency through Packages, else the search paths;
                                    the root project's dev-dependencies only in a TEST
                                    build or for a root file under its examples/; a
                                    [target.'<condition>'.dependencies] entry only when
-                                   the condition, read as [Target(...)]'s, holds)
+                                   the condition, read as [Target(...)]'s, holds; an
+                                   optional dependency only once a feature turns it on)
     link.link                      bind imports/exports; rewrite m.x, aliases; mangle
                                    private names (helper@io/file) → FileScope
   Program.check()                  linking errors, then visibility

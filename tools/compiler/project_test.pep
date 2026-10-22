@@ -96,7 +96,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]' and '[fetch]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]' and '[fetch]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -219,7 +219,7 @@ reads_dev_dependencies() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[dev-dependencies]\njson = { github = \"x/json\", tags = \"v1\" }\n"),
-        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit'"
+        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features'"
     );
 }
 
@@ -342,7 +342,7 @@ reads_target_dependencies() {
         errors(
             "[package]\nname = \"a\"\n[target.'OS(Windows)'.dependencies]\nx = { github = \"a/x\", tags = \"v1\" }\n"
         ),
-        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit'"
+        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features'"
     );
 }
 
@@ -472,4 +472,116 @@ locked_and_offline_builds_refuse_before_fetching() {
         )
     );
     expect_false(root.join(Path(".pep")).join(Path("deps")).exists());
+}
+
+[Test]
+reads_features() {
+    var parsed = link.parse_manifest(
+        Path("/p/pep.toml"),
+        "[package]\nname = \"http\"\n[dependencies]\n"
+            + "zlib = { path = \"zlib\", optional = true, features = [\"simd\"], default-features = false }\n"
+            + "[features]\ndefault = [\"gzip\"]\ngzip = [\"dep:zlib\", \"zlib/fast\"]\n"
+    );
+    expect_true(parsed.is_ok());
+    var m = parsed.value();
+    expect_equal(", ".join(m.feature("gzip").value().enables), "dep:zlib, zlib/fast");
+    expect_equal(m.build_option("gzip"), "http_gzip");
+    var zlib = m.dependency("zlib").value();
+    expect_true(zlib.optional);
+    expect_false(zlib.default_features);
+    expect_equal(", ".join(zlib.features), "simd");
+
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[features]\nx = [\"dep:y\"]\n"),
+        "\"dep:y\": 'dep:y' names no dependency; 'dep:' turns on an optional dependency"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dependencies]\ny = { path = \"y\" }\n[features]\nx = [\"dep:y\"]\n"),
+        "\"dep:y\": dependency 'y' is not optional; give it 'optional = true' for 'dep:y' to turn it on"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[features]\nx = [\"z\"]\n"),
+        "\"z\": no feature named 'z' in '[features]'; a feature turns on features, 'dep:name' or 'name/feature'"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dev-dependencies]\ny = { path = \"y\", optional = true }\n"),
+        "optional: dev-dependency 'y' cannot be optional; only '[dependencies]' are"
+    );
+}
+
+[Test]
+features_turn_on_build_options_and_optional_dependencies() {
+    var folder = TempFolder("features");
+    var app = folder.path.join(Path("app"));
+    var http = folder.path.join(Path("http"));
+    var zlib = folder.path.join(Path("zlib"));
+    Directory.create_all(app);
+    Directory.create_all(http);
+    Directory.create_all(zlib);
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[dependencies]\nhttp = { path = \"../http\" }\n[features]\nfast = [\"http/gzip\"]\n"
+    );
+    File.write_text(
+        http.join(Path("pep.toml")),
+        "[package]\nname = \"http\"\n[dependencies]\nzlib = { path = \"../zlib\", optional = true }\n"
+            + "[features]\ndefault = [\"tls\"]\ntls = []\ngzip = [\"dep:zlib\"]\n"
+    );
+    File.write_text(
+        http.join(Path("module.pep")),
+        "[Target(BuildOption(http_gzip))]\nimport zlib;\nexport level(): int {\n    return 1;\n}\n"
+    );
+    File.write_text(zlib.join(Path("module.pep")), "export z(): int {\n    return 0;\n}\n");
+    var main = app.join(Path("main.pep"));
+    File.write_text(main, "import http;\nmain(): int {\n    return http.level() - 1;\n}\n");
+
+    # A dependency's default features are on; the others only when asked.
+    var plain = load_with(main, Array<String>());
+    expect_true(plain.target.build_options.contains("http_tls"));
+    expect_false(plain.target.build_options.contains("http_gzip"));
+    expect_false(plain.check().is_value());
+    var fast = load_with(main, ["fast"]);
+    expect_true(fast.target.build_options.contains("app_fast"));
+    expect_true(fast.target.build_options.contains("http_gzip"));
+    expect_false(fast.check().is_value());
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.target.features = ["nope"];
+    var unknown = link.load_program(main, setup);
+    expect_true(unknown.is_err());
+    expect_equal(unknown.error(), "unknown feature 'nope' in '--features': package 'app' has 'fast'");
+
+    # An optional dependency no feature turns on cannot be imported.
+    File.write_text(
+        http.join(Path("module.pep")), "import zlib;\nexport level(): int {\n    return 1 + zlib.z();\n}\n"
+    );
+    expect_true(load_with(main, Array<String>()).check().value().contains("'zlib' is an optional dependency"));
+    expect_false(load_with(main, ["fast"]).check().is_value());
+
+    # `default-features = false` leaves the dependency's default off, and a
+    # feature it lacks is an error at the entry asking for it.
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[dependencies]\nhttp = { path = \"../http\", default-features = false, features = [\"nope\"] }\n"
+    );
+    setup = link.Setup();
+    setup.runtime = false;
+    var missing = link.load_program(main, setup);
+    expect_true(missing.is_err());
+    expect_true(missing.error().contains("error: package 'http' has no feature 'nope'"));
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[dependencies]\nhttp = { path = \"../http\", default-features = false }\n"
+    );
+    expect_false(load_with(main, Array<String>()).target.build_options.contains("http_tls"));
+}
+
+# `file`'s program, loaded with the project's `features` turned on.
+load_with(file: Path, features: String[]): link.Program {
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.target.features = features;
+    var program = link.load_program(file, setup);
+    expect_true(program.is_ok());
+    return program.value();
 }
