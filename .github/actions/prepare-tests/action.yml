@@ -121,6 +121,7 @@ runs:
         [ ! -f "$compiler.exe" ] || compiler="$compiler.exe"
         echo "hash=$(git hash-object "$compiler")" >> "$GITHUB_OUTPUT"
     - name: Restore the compiler's build cache
+      id: restore
       if: inputs.compiler == 'true'
       uses: actions/cache/restore@v6
       with:
@@ -139,8 +140,9 @@ runs:
 
     # Saved by every run, pull requests' too, since it is small: the
     # repository keeps 10 GB of caches, which the tests' caches used to fill.
+    # Not after a rerun, which restored this very key.
     - name: Save the compiler's build cache
-      if: inputs.compiler == 'true'
+      if: inputs.compiler == 'true' && steps.restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.workspace }}/target-test/compiler
