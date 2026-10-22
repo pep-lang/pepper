@@ -60,7 +60,7 @@ Every package is downloaded once per machine, into a
 | `publish` | Checks the package and runs its tests, then tags its version and pushes the tag (see [`publish`](#publish)) |
 | `publish --dry-run` | Checks and tests, but neither tags nor pushes |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
-| `cache clean` | Removes the download cache; projects keep what their `.pep/deps` holds |
+| `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
 | `-V`, `--version` | Prints the version |
 
@@ -327,7 +327,8 @@ package still checks its files against `pep.lock`'s `sha256`.
 Processes take turns at a package: each holds a lock on
 `<host>/<owner>/<name>.lock` while it fetches it, so projects fetching
 the same package at once each wait for the other and fetch it once.
-`cache clean` removes those locks too, so run it when no fetch is running.
+`cache clean` takes each package's lock before it removes the package,
+and keeps one a fetch is using, saying so; the lock files themselves stay.
 
 ```text
 $ pepper package cache info
@@ -335,7 +336,7 @@ $ pepper package cache info
 github.com/other/numbers
 github.com/someone/geometry
 $ pepper package cache clean
-pep-package: removed /home/me/.pepper/cache/packages
+pep-package: removed 2 packages from /home/me/.pepper/cache/packages
 ```
 
 ## Fetching without git

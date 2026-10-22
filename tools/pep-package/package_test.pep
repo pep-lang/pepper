@@ -8,7 +8,7 @@
 # git is missing.
 
 import async;
-import [Directory, File, Path] from io;
+import [Directory, File, OpenOptions, Path] from io;
 import [system_name] from os;
 import process;
 import [serve_folder] from tool_testing.server;
@@ -811,9 +811,22 @@ projects_share_the_download_cache() {
     expect_exit(unreachable(second.dir, ["fetch", "github:someone/geometry", "github:other/numbers"]), 0);
     expect_equal(hosts.build_and_run(second.dir), "1.1.0 1.3.1\n");
 
+    # `clean` keeps a package whose lock a fetch holds, and says so.
+    var numbers = hosts.cache().join("github.com").join("other").join("numbers");
+    var geometry = hosts.cache().join("github.com").join("someone").join("geometry");
+    var lock = OpenOptions().write(true).open(Path(numbers.to_string() + ".lock")).value();
+    expect_true(lock.lock().is_ok());
+    var kept = hosts.package(first.dir, ["cache", "clean"]);
+    expect_exit(kept, 0);
+    expect_contains(kept.stderr, "kept github.com/other/numbers: a fetch holds its lock");
+    expect_true(Path(numbers.to_string() + ".git").is_directory());
+    expect_false(Path(geometry.to_string() + ".git").exists());
+    lock.close();
+
     # A project's checkout does not need the cache once it is made.
     expect_exit(hosts.package(first.dir, ["cache", "clean"]), 0);
-    expect_false(hosts.cache().exists());
+    expect_false(Path(numbers.to_string() + ".git").exists());
+    expect_equal(hosts.package(first.dir, ["cache", "info"]).stdout, hosts.cache().to_string() + "\n");
     expect_equal(hosts.build_and_run(first.dir), "1.1.0 1.3.1\n");
 
     # Two projects fetching at once take turns at the cache.

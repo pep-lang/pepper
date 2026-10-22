@@ -26,6 +26,7 @@
 
 import cli;
 import [Directory, File, Path] from io;
+import io;
 import os;
 import process;
 import semver;
@@ -112,7 +113,7 @@ main(args: String[]): int {
     var dry_run = publish.flag("dry-run", help = "check and test, but neither tag nor push");
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
-    cache.command("clean", "Removes the cache; projects keep what .pep/deps holds");
+    cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
     if (!parser.parse(args)) {
         return 2;
     }
@@ -187,14 +188,17 @@ show_cache(): int {
     _list_cached(root, "", packages);
     packages.sort((a, b) => a.compare(b));
     for (var package in packages) {
-        print(package);
+        var base = _cached_base(root, package);
+        if (Path(base.to_string() + ".git").is_directory() or base.is_directory()) {
+            print(package);
+        }
     }
     return 0;
 }
 
 # Adds to `packages` each package under `dir`, the cache's folder `prefix`
-# (`github.com/other`): a bare repository (`numbers.git`), or a folder
-# holding archives (`numbers/<commit>.tar.gz`).
+# (`github.com/other`), that has a lock file (`numbers.lock`): a fetch
+# takes its package's lock before it writes anything.
 _list_cached(dir: Path, prefix: String, packages: Array<String>) {
     var opened = Directory.open(dir);
     if (opened.is_err()) {
@@ -207,30 +211,57 @@ _list_cached(dir: Path, prefix: String, packages: Array<String>) {
     for (var entry in listed.value()) {
         var name = entry.path.file_name().value_or("");
         var path = prefix.is_empty ? name : prefix + "/" + name;
-        var package = "";
-        if (entry.is_directory and name.ends_with(".git")) {
-            package = path.substr(0, path.length - 4);
-        } else if (entry.is_file and name.ends_with(".tar.gz")) {
-            package = prefix;
-        } else if (entry.is_directory) {
+        if (entry.is_file and name.ends_with(".lock")) {
+            packages.append(path.substr(0, path.length - 5));
+        } else if (entry.is_directory and !name.ends_with(".git") and !name.ends_with(".partial")) {
+            # Not into a bare repository, whose own `.lock` files are git's.
             _list_cached(entry.path, path, packages);
-        }
-        if (!package.is_empty and !packages.contains(package)) {
-            packages.append(package);
         }
     }
 }
 
-# Removes the download cache.
+# The cache's path for `package` (`github.com/other/numbers`) under `root`:
+# its lock file and bare repository add `.lock` and `.git`.
+_cached_base(root: Path, package: String): Path {
+    var base = root;
+    for (var part in package.split("/")) {
+        base = base.join(part);
+    }
+    return base;
+}
+
+# Removes what the download cache holds, one package at a time, each under
+# its lock, and keeps a package a fetch holds the lock of, saying so. The
+# lock files stay: removing one a fetch waits on would let a second fetch
+# lock a new file beside it.
 clean_cache(): int {
     var root = cache_dir();
-    if (root.exists()) {
-        var removed = remove_tree(root);
-        if (removed.is_err()) {
-            return fail($"cannot remove {root.to_string()}: {removed.error().message}");
+    var packages = Array<String>();
+    _list_cached(root, "", packages);
+    packages.sort((a, b) => a.compare(b));
+    var removed = 0;
+    for (var package in packages) {
+        var base = _cached_base(root, package);
+        var lock = io.OpenOptions().write(true).open(Path(base.to_string() + ".lock"));
+        if (lock.is_err()) {
+            return fail($"cannot open the lock of {package}: {lock.error().message}");
         }
+        var held = lock.value().try_lock();
+        if (held.is_err() or !held.value()) {
+            say($"kept {package}: a fetch holds its lock");
+            continue;
+        }
+        for (var path in [Path(base.to_string() + ".git"), Path(base.to_string() + ".git.partial"), base]) {
+            if (path.exists()) {
+                var gone = remove_tree(path);
+                if (gone.is_err()) {
+                    return fail($"cannot remove {path.to_string()}: {gone.error().message}");
+                }
+            }
+        }
+        removed += 1;
     }
-    say($"removed {root.to_string()}");
+    say($"removed {removed} packages from {root.to_string()}");
     return 0;
 }
 
