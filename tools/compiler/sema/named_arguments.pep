@@ -1264,14 +1264,18 @@ export bind_calls(module: Module, state: PassState) {
         globals.insert(g.name);
     }
     var none = Optional<HashMap<String, Callee[]>>.Empty;
-    for (var function in module.functions) {
+    # A checked declaration's calls were bound with its compilation unit:
+    # binding the closure's defaults again cost each unit's check more than
+    # its own code (#167).
+    var own = unit_decls(module);
+    for (var function in own.functions) {
         # Only bodies and defaults are bound (a checked runtime's bodies
         # are stashed).
         if (function.body.is_value() or _has_default(function)) {
             _bind_in(function, none, callees, globals, state);
         }
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         var members = Array<FunctionDef>();
         members.append_all(st.constructors);
         members.append_all(st.method_members);
@@ -1309,7 +1313,7 @@ export bind_calls(module: Module, state: PassState) {
     }
     var binder = _GlobalBinder(callees, state);
     for (var g in module.globals) {
-        if (g.default.is_value()) {
+        if (g.default.is_value() and !module.checked.globals.contains(g.name)) {
             g.default = Optional<Expression>.Value(rewrite_expression(g.default.value(), binder));
         }
     }
