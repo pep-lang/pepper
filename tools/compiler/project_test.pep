@@ -451,11 +451,12 @@ a_build_fetches_only_its_targets_packages() {
     var entry = root.join(Path("main.pep"));
     var linux = link.Target.parse("x86_64-unknown-linux-gnu").value();
     var windows = link.Target.parse("x86_64-pc-windows-msvc").value();
-    # Offline, a build fails only on what its target needs and lacks.
+    # Offline, a build fails only on what its target needs and neither
+    # .pep/deps nor pep-package's download cache holds.
     expect_true(driver.fetch_dependencies(entry, offline = true, target = linux).is_ok());
     var missing = driver.fetch_dependencies(entry, offline = true, target = windows);
     expect_true(missing.is_err());
-    expect_true(missing.error().contains("lacks github:nobody/net 0123456789ab"));
+    expect_true(missing.error().contains("nor the package cache holds the commit 0123456789ab"));
     # Unlocked, it is stale for every target.
     File.remove(root.join(Path("pep.lock")));
     expect_true(driver.fetch_dependencies(entry, locked = true, target = linux).is_err());
@@ -484,7 +485,9 @@ locked_and_offline_builds_refuse_before_fetching() {
     var offline = driver.fetch_dependencies(entry, offline = true);
     expect_true(offline.is_err());
     expect_true(
-        offline.error().contains("lacks github:nobody/net; run 'pepper package fetch' without --offline first")
+        offline.error().contains(
+            "--offline, and choosing a revision of github:nobody/net reads which ones it offers over the network"
+        )
     );
     # Already in .pep/deps, though unlocked: a build fetches nothing, so
     # --offline passes; --locked still fails.
@@ -499,7 +502,8 @@ locked_and_offline_builds_refuse_before_fetching() {
     expect_true(driver.fetch_dependencies(entry, locked = true).is_err());
     Directory.remove_all(root.join(Path(".pep")));
 
-    # A locked package not fetched yet: --offline fails without fetching it.
+    # A locked package not fetched yet, nor in the download cache: --offline
+    # fails without fetching it.
     File.write_text(
         root.join(Path("pep.lock")),
         "version = 1\n\n[[package]]\nname = \"net\"\nsource = \"github:nobody/net\"\n"
@@ -507,10 +511,10 @@ locked_and_offline_builds_refuse_before_fetching() {
     );
     var missing = driver.fetch_dependencies(entry, offline = true);
     expect_true(missing.is_err());
-    expect_true(missing.error().starts_with("--offline, and "));
+    expect_true(missing.error().contains("--offline, and neither "));
     expect_true(
         missing.error().contains(
-            "lacks github:nobody/net 0123456789ab; run 'pepper package fetch' without --offline first"
+            "nor the package cache holds the commit 0123456789ab; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first"
         )
     );
     expect_false(root.join(Path(".pep")).join(Path("deps")).exists());
