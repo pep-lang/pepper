@@ -289,7 +289,8 @@ extend Generator {
         if (found.is_value()) {
             var through = kind == ChainKind.Buffer ? ChainKind.Buffer : ChainKind.Trait;
             for (var c in found.value()) {
-                bool direct = owner and _chain_owner(nodes[c].name) and views.sees(from, c);                out.append(_Edge(c, direct, through, position, name));
+                bool direct = owner and _chain_owner(nodes[c].name) and views.sees(from, c);
+                out.append(_Edge(c, direct, through, position, name));
             }
             return;
         }
