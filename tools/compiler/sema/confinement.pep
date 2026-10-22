@@ -2143,6 +2143,10 @@ struct _RegionWalk {
     var moves: ulong = 0;
     ## How many loops the walk is inside.
     var loops: ulong = 0;
+    ## On a loop's second pass, the lock its first pass made for the next
+    ## `with` block, which stays the same lock.
+    var relock: ulong = 0;
+    var relocking: bool = false;
 
     construct(program: _Confinement, checking: bool, current: TypeName?) {
         this.program = program;
@@ -2524,7 +2528,12 @@ struct _RegionWalk {
         }
         declare(scope.name, -1, scope.ty);
         var index = locks.count;
-        locks.append(lock);
+        if (relocking) {
+            index = relock;
+            relock += 1;
+        } else {
+            locks.append(lock);
+        }
         long r = -1;
         if (program.has_region(binding.ty) or binding.ty.is_auto()) {
             r = region(_RegionPart.Locked(index));
@@ -2568,12 +2577,16 @@ struct _RegionWalk {
                 # time: links only add up, so the first pass made them all.
                 var moved = moves;
                 var outermost = checking and loops == 0;
+                var first_lock = locks.count;
                 loops += 1;
                 eval(loop.condition);
                 block(loop.block);
                 if (outermost and moves != moved) {
+                    relock = first_lock;
+                    relocking = true;
                     eval(loop.condition);
                     block(loop.block);
+                    relocking = false;
                 }
                 loops -= 1;
             }
