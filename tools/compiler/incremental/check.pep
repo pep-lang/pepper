@@ -1166,7 +1166,9 @@ export struct Clock {
             return;
         }
         var now = os.Instant.now();
-        File.stderr().write_all($"time: {stage} {(now - start).milliseconds()} ms, peak {os.peak_memory() / 1048576} MB\n");
+        File.stderr().write_all(
+            $"time: {stage} {(now - start).milliseconds()} ms, peak {os.peak_memory() / 1048576} MB\n"
+        );
         start = now;
     }
 }

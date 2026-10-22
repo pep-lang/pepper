@@ -3129,7 +3129,8 @@ then include `wait`. `<dir>` is `<build>/compilation-units.<pid>`, the build's o
 in one folder at once (`pepper test` builds its test programs side by side)
 must not share it. It is removed after the build, but kept with `-T time`,
 where each worker also leaves the time its compilation unit's stages took
-(`<k>.stages`: diagnostics, merge, index, check, finish, store, object), and the build
+(`<k>.stages`: diagnostics, merge, index, check, finish, store, object, and
+the worker's peak memory, `os.peak_memory`), and the build
 leaves `schedule`: for each compilation unit a worker checked, its number, name, when
 it began and ended (milliseconds from the start) and the compilation units it reads,
 as Ninja's `.ninja_log`, to find the chain of compilation units that bounds the
@@ -3287,7 +3288,13 @@ in `sema/builder.pep` builds in about 12 s instead of 24 s this way.
 `PEPC_TRACE_COMPILATION_UNITS` says why one was not.
 
 The modules of the closures are rebuilt from bytes for each compilation unit checked.
-Loading a record costs a read and a merge, not a check.
+Loading a record costs a read and a merge, not a check. A worker, and a build
+with one job, checks one compilation unit after another in one process, so
+nothing a check makes may outlive it: `run_steps_with` drops the memos of
+`PassState` that hold `GenericSignature`s (`checked_implicit`,
+`trait_memo.members`), which hold the state. That cycle once kept every
+unit's state and the closure it reached alive, 8 GB in a worker and over 50
+GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
 **Records.** A record lives at `<cache>/v3/c16/<name>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new
