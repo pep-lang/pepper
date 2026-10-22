@@ -174,6 +174,8 @@ export struct Checked {
 ##   unit
 ## @param last_extension the objects' extension when the cache may hold the
 ##   last compilation unit's objects (`driver`'s `_store_last`), else empty
+## @param last_below what the objects of each compilation unit the last reads
+##   define, which the last's objects must link with (`Cache.unit_objects`)
 ## @param stop the compilation unit to check last, whose record is neither
 ##   loaded nor stored; none for the last compilation unit
 ## @param times where the time each pass took goes (`-T passes`), if anywhere
@@ -191,6 +193,7 @@ export check_compilation_units(
     verify: bool,
     prechecked: HashMap<ulong, (u8[], String, String)> = HashMap<ulong, (u8[], String, String)>(),
     last_extension: String = "",
+    last_below: Defines[] = Array<Defines>(),
     stop: ulong? = Optional<ulong>.Empty,
     times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
 ): Result<Checked, CheckError> {
@@ -257,10 +260,10 @@ export check_compilation_units(
         # its key (`_store_last`): nothing is checked or generated, as Go links
         # a `main` package whose inputs did not change from its cache.
         if (k == last and !last_extension.is_empty) {
-            var folder = cache.objects($"+{unit.name}", unit.key);
-            if (cache.used(folder) and folder.join(Path($"entry.{last_extension}")).is_file()) {
+            var key = cache.unit_objects($"+{unit.name}", unit.key, last_below, $"entry.{last_extension}");
+            if (key.is_value()) {
                 var out = Checked(module, state);
-                out.last = Optional<Path>.Value(folder);
+                out.last = Optional<Path>.Value(cache.objects($"+{unit.name}", key.value()));
                 return Result<Checked, CheckError>.ok(out);
             }
         }

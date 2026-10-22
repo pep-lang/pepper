@@ -27,6 +27,10 @@ import [
     check_in_workers,
     worker_file,
     mark,
+    Defines,
+    NEEDS_FILE,
+    stamp_of,
+    union_of,
     numbered_objects,
     serve_compilation_units,
     store_checked,
@@ -361,35 +365,81 @@ _defines(partition: codegen.Partition, objects: Path[]): Result<String, String> 
     return Result<String, String>.ok(out.to_string());
 }
 
-# Leaves the symbols compilation unit `unit` (number `k`)'s object defines,
-# which the cache keeps, in `dir` as `<k>.defines`, for the workers of the
+# Leaves the symbols compilation unit number `k`'s objects, in the cache's
+# `folder`, define in `dir` as `<k>.defines`, for the workers of the
 # compilation units that read it.
-_copy_defines(cache: Cache, unit: CompilationUnit, dir: Path, k: ulong) {
-    var text = File.read_to_string(cache.objects($"+{unit.name}", unit.key).join(Path("defines")));
+_copy_defines(folder: Path, dir: Path, k: ulong) {
+    var text = File.read_to_string(folder.join(Path("defines")));
     var partial = worker_file(dir, k, $"defines.{process.id()}");
     File.write_text(partial, text.is_ok() ? text.value() : "");
     File.rename(partial, worker_file(dir, k, "defines"));
 }
 
-# The symbols the objects of the compilation units numbered `ks` define
-# (`_defines`), from `<k>.defines` in `dir` or, with no `dir`, from the cache.
-_defined_by(cache: Cache, units: CompilationUnit[], ks: ulong[], dir: Path?): HashSet<String> {
-    var out = HashSet<String>();
+# The symbols the objects of compilation unit number `k` define (`_defines`),
+# from `<k>.defines` in `dir`; read once each, into `read`.
+_defined_by(k: ulong, dir: Path, read: HashMap<ulong, Defines>): Defines {
+    var known = read.try_get(k);
+    if (known.is_value()) {
+        return known.value();
+    }
+    var text = File.read_to_string(worker_file(dir, k, "defines"));
+    var out = Defines(text.ok_or(""));
+    read[k] = out;
+    return out;
+}
+
+# What the objects of each compilation unit numbered `ks` define
+# (`_defined_by`).
+_below(ks: ulong[], dir: Path, read: HashMap<ulong, Defines>): Defines[] {
+    var out = Array<Defines>();
     for (var k in ks) {
-        var path = dir.is_value() ?
-            worker_file(dir.value(), k, "defines") :
-            cache.objects($"+{units[k].name}", units[k].key).join(Path("defines"));
-        var text = File.read_to_string(path);
-        if (text.is_err()) {
-            continue;
-        }
-        for (var line in text.value().split("\n")) {
-            if (!line.is_empty) {
-                out.insert(line);
-            }
-        }
+        out.append(_defined_by(k, dir, read));
     }
     return out;
+}
+
+# What `ir`, a compilation unit's code just generated, uses that the objects
+# below it define (`declared`), a name a line: its objects link only with
+# objects below that still define them (`Cache.unit_objects`).
+_needs(ir: llvm.Module, declared: HashSet<String>): String {
+    var out = StringBuilder();
+    var values = Array<llvm.Value>();
+    values.append_all(ir.functions());
+    values.append_all(ir.globals());
+    for (var value in values) {
+        if (value.is_declaration() and value.has_uses() and declared.contains(value.name())) {
+            out.append($"{value.name()}\n");
+        }
+    }
+    return out.to_string();
+}
+
+# Keeps `folder`, compilation unit `unit`'s objects just compiled on objects
+# below it that define `below`, in the build cache, with what they declare of
+# those (`needs`, from `_needs`), under the key `Cache.unit_store_key` gives.
+# Returns the key of the objects to link, which hold `file`: those, or
+# another build's under that key that also link with the objects below.
+_store_unit(
+    cache: Cache, unit: CompilationUnit, folder: Path, needs: String, below: Defines[], file: String
+): Result<String, String> {
+    if (File.write_text(folder.join(Path(NEEDS_FILE)), $"{stamp_of(below)}\n{needs}").is_err()) {
+        return Result<String, String>.err($"cannot write to {folder}");
+    }
+    var name = $"+{unit.name}";
+    var stored = cache.store(folder, name, cache.unit_store_key(name, unit.key, below));
+    if (stored.is_err()) {
+        return Result<String, String>.err(stored.error());
+    }
+    # shortcut: two builds at once with one key but other objects below
+    # both find the key free and one fails here; store under the other key
+    # instead if a shared cache across checkouts ever meets it.
+    var key = cache.unit_objects(name, unit.key, below, file);
+    if (!key.is_value()) {
+        return Result<String, String>.err(
+            $"the build cache's objects of compilation unit '{unit.name}' do not link with those below it; build again"
+        );
+    }
+    return Result<String, String>.ok(key.value());
 }
 
 # How the units are compiled, as text for their keys: the target, the CPU
@@ -411,43 +461,49 @@ _object_extension(options: BuildOptions, triple: String): String {
     return triple.contains("-windows") ? "obj" : "o";
 }
 
-# The first object of `unit` in the build cache, under its key: its files'
-# code and what it instantiated, as a compilation unit worker compiles it.
-_compilation_unit_object(cache: Cache, unit: CompilationUnit, extension: String): Path {
-    return cache.objects($"+{unit.name}", unit.key).join(Path($"0.{extension}"));
-}
-
 # Keeps the last compilation unit's objects, `folder`'s parts' (`0.<ext>` and
-# on) and `entry.<ext>`, in the build cache under its key, with the program's `[Link]`
+# on) and `entry.<ext>`, in the build cache under its key (`_store_unit`), with the program's `[Link]`
 # arguments (`link`) and the warnings checking it gave (`warn`), rendered: a
 # later build whose last compilation unit has the same key links them, as Go
 # links a `main` package from its cache, and prints the warnings again. Returns
 # where the cache keeps them.
 _store_last(
-    cache: Cache, last: CompilationUnit, folder: Path, link_text: String, warned: String
+    cache: Cache,
+    last: CompilationUnit,
+    folder: Path,
+    link_text: String,
+    warned: String,
+    needs: String,
+    below: Defines[],
+    extension: String
 ): Result<Path, String> {
     if (File.write_text(folder.join(Path("link")), link_text).is_err()
         or File.write_text(folder.join(Path("warn")), warned).is_err()) {
         return Result<Path, String>.err($"cannot write to {folder}");
     }
-    return cache.store(folder, $"+{last.name}", last.key);
+    var key = _store_unit(cache, last, folder, needs, below, $"entry.{extension}");
+    if (key.is_err()) {
+        return Result<Path, String>.err(key.error());
+    }
+    return Result<Path, String>.ok(cache.objects($"+{last.name}", key.value()));
 }
 
 # Compiles `module`, the compilation unit `unit` just checked, into its object
-# and keeps that in the build cache (`_compilation_unit_object`): the
+# and keeps that in the build cache (`_store_unit`): the
 # compilation unit's files' own code and what it instantiated; everything else,
-# what the compilation units below made (`below`) and the other files' code, is
-# only declared, since their objects define it. `dir` holds the work.
+# what the compilation units below made (`below`, by compilation unit) and the
+# other files' code, is only declared, since their objects define it. `dir`
+# holds the work. Returns the cache's folder of the object.
 _compile_unit(
     program: link.Program,
     unit: CompilationUnit,
     module: sema.Module,
     state: sema.PassState,
-    below: HashSet<String>,
+    below: Defines[],
     options: BuildOptions,
     cache: Cache,
     dir: Path
-): String? {
+): Result<Path, String> {
     var triple = codegen.target_triple(program.target);
     var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
     var extension = _object_extension(options, triple);
@@ -455,7 +511,7 @@ _compile_unit(
     codegen.initialize_backends();
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
     if (machine.is_err()) {
-        return Optional<String>.Value(machine.error().message);
+        return Result<Path, String>.err(machine.error().message);
     }
     var setup = codegen.Build(machine.value(), cpu);
     setup.opt_level = options.opt_level;
@@ -477,12 +533,14 @@ _compile_unit(
         }
     }
     var owners = HashMap<String, uint>();
+    var declared = union_of(below);
     var generated = codegen.generate(
-        module, state, namespaces, unit.name, setup, owners, others, Optional<HashSet<String>>.Value(below)
+        module, state, namespaces, unit.name, setup, owners, others, Optional<HashSet<String>>.Value(declared)
     );
     if (generated.is_err()) {
-        return Optional<String>.Value(render_all([generated.error()], program.sources()));
+        return Result<Path, String>.err(render_all([generated.error()], program.sources()));
     }
+    var needs = _needs(generated.value(), declared);
     # The program's entry points are the last compilation unit's to compile.
     var (part_of_file, spread, parts) = _unit_parts(program, unit.files, generated.value(), owners, options.part_size);
     var partition = codegen.prepare(
@@ -507,20 +565,20 @@ _compile_unit(
         Optional<PartCache>.Value(PartCache(cache, $"+{unit.name}"))
     );
     if (compiled.is_err()) {
-        return Optional<String>.Value(compiled.error());
+        return Result<Path, String>.err(compiled.error());
     }
     var defines = _defines(partition, numbered_objects(folder, extension));
     if (defines.is_err()) {
-        return Optional<String>.Value(defines.error());
+        return Result<Path, String>.err(defines.error());
     }
     if (File.write_text(folder.join(Path("defines")), defines.value()).is_err()) {
-        return Optional<String>.Value($"cannot write to {folder}");
+        return Result<Path, String>.err($"cannot write to {folder}");
     }
-    var kept = cache.store(folder, $"+{unit.name}", unit.key);
+    var kept = _store_unit(cache, unit, folder, needs, below, $"0.{extension}");
     if (kept.is_err()) {
-        return Optional<String>.Value(kept.error());
+        return Result<Path, String>.err(kept.error());
     }
-    return Optional<String>.Empty;
+    return Result<Path, String>.ok(cache.objects($"+{unit.name}", kept.value()));
 }
 
 ## Starts a compilation unit worker for a build with `args` (this compiler's, as
@@ -592,13 +650,17 @@ _compilation_unit_jobs(options: BuildOptions): ulong {
 # `--compilation-unit-worker` children (`incremental.check_in_workers`), each of
 # which also compiles the compilation unit into its object, and puts in
 # `prechecked` the record, own interface and warnings of every compilation unit,
-# found in the cache or checked.
+# found in the cache or checked, in `object_keys` the key of the objects of
+# each compilation unit the last reads (`Cache.unit_objects`), and in
+# `last_below` what those objects define, by compilation unit.
 _check_in_workers(
     program: link.Program,
     units: CompilationUnit[],
     options: BuildOptions,
     jobs: ulong,
-    prechecked: HashMap<ulong, (u8[], String, String)>
+    prechecked: HashMap<ulong, (u8[], String, String)>,
+    object_keys: HashMap<ulong, String>,
+    last_below: Defines[]
 ): Result<void, String> {
     # A folder of this build's own: builds in one folder at once (`pepper
     # test` builds its test programs side by side) share `build_dir`. Kept
@@ -611,6 +673,8 @@ _check_in_workers(
     }
     var cache = options.cache.value();
     var extension = _object_extension(options, codegen.target_triple(program.target));
+    # What each compilation unit's objects define, read once.
+    var read = HashMap<ulong, Defines>();
     var checked = check_in_workers(
         program,
         units,
@@ -623,17 +687,37 @@ _check_in_workers(
         options.early_worker,
         options.trace_time,
         (k) => {
-            # Reused now, so no build pruning the cache removes it before this
-            # one links it. A compilation unit's object goes with its record:
-            # one without it (pruned, say) is checked again, which compiles it.
-            if (!cache.used(cache.objects($"+{units[k].name}", units[k].key))
-                or !_compilation_unit_object(cache, units[k], extension).is_file()) {
+            # Reused now (`unit_objects`), so no build pruning the cache
+            # removes it before this one links it. A compilation unit's object
+            # goes with its record: one without it (pruned, or declaring what
+            # the objects below no longer define) is checked again, which
+            # compiles it.
+            var key = cache.unit_objects(
+                $"+{units[k].name}", units[k].key, _below(units[k].reads, dir, read), $"0.{extension}"
+            );
+            if (!key.is_value()) {
                 return false;
             }
-            _copy_defines(cache, units[k], dir, k);
+            _copy_defines(cache.objects($"+{units[k].name}", key.value()), dir, k);
             return true;
         }
     );
+    if (checked.is_ok()) {
+        var last = units[units.count - 1];
+        last_below.append_all(_below(last.reads, dir, read));
+        for (var k in last.reads) {
+            var key = cache.unit_objects(
+                $"+{units[k].name}", units[k].key, _below(units[k].reads, dir, read), $"0.{extension}"
+            );
+            if (!key.is_value()) {
+                checked = Result<void, String>.err(
+                    $"the build cache no longer holds the objects of compilation unit '{units[k].name}'; build again"
+                );
+                break;
+            }
+            object_keys[k] = key.value();
+        }
+    }
     # With `-T passes`, the time each worker's passes took (`<k>.passes`).
     if (options.pass_times.is_value()) {
         for (var k in 0..units.count) {
@@ -718,16 +802,16 @@ _work_on(
             async.Thread.sleep(2);
         }
     }
-    var below = _defined_by(cache, Array<CompilationUnit>(), unit.reads, Optional<Path>.Value(dir));
+    var below = _below(unit.reads, dir, HashMap<ulong, Defines>());
     var t6 = os.Instant.now();
     stages.append($"wait {(t6 - t5).milliseconds()}\n");
     mark(dir, k, "compiling");
     # Its object, which code generation of the program does not make again.
     var compiled = _compile_unit(program, unit, after, state, below, options, cache, dir);
-    if (compiled.is_value()) {
-        return compiled;
+    if (compiled.is_err()) {
+        return Optional<String>.Value(compiled.error());
     }
-    _copy_defines(cache, unit, dir, k);
+    _copy_defines(compiled.value(), dir, k);
     var t7 = os.Instant.now();
     stages.append($"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\n");
     if (options.trace_time) {
@@ -813,9 +897,13 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var module = sema.Module();
     var state = sema.PassState(program.target);
     # Whether compilation unit workers compiled every compilation unit but the
-    # last into its object (`_compilation_unit_object`), and what those
+    # last into its object (`_store_unit`), and what those
     # compilation units made.
     bool unit_objects = false;
+    # The keys of the objects of the compilation units the last reads, and
+    # what those define, by compilation unit (`_check_in_workers`).
+    var object_keys = HashMap<ulong, String>();
+    var last_below = Array<Defines>();
     # The cache's folder of the last compilation unit's objects, when it has
     # them (`_store_last`).
     var last_folder = Optional<Path>.Empty;
@@ -823,7 +911,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         var prechecked = HashMap<ulong, (u8[], String, String)>();
         var jobs = _compilation_unit_jobs(options);
         if (jobs > 1 and units.count > 2 and !options.in_process and !options.worker_args.is_empty) {
-            var parallel = _check_in_workers(program, units, options, jobs, prechecked);
+            var parallel = _check_in_workers(program, units, options, jobs, prechecked, object_keys, last_below);
             if (parallel.is_err()) {
                 return Result<Built, String>.err(parallel.error());
             }
@@ -846,6 +934,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             options.verify_cutoff,
             prechecked,
             unit_objects ? triple_extension : "",
+            last_below = last_below,
             times = options.pass_times
         );
         # The warnings of the compilation units loaded, as checking them gave
@@ -984,7 +1073,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                     others.insert(i as uint);
                 }
             }
-            var below = _defined_by(options.cache.value(), units, last.reads, Optional<Path>.Empty);
+            var below = union_of(last_below);
             setup.separate_locations = true;
             var generated = codegen.generate(
                 module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)
@@ -993,6 +1082,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 return Result<Built, String>.err(render_all([generated.error()], sources));
             }
             clock.lap("codegen");
+            var needs = _needs(generated.value(), below);
             var (
                 part_of_file, spread, parts
             ) = _unit_parts(program, last.files, generated.value(), owners, options.part_size);
@@ -1024,7 +1114,14 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             _drop_defines(jobs);
             link_text = _link_attributes(module);
             var stored = _store_last(
-                options.cache.value(), last, folder, link_text, render_warnings(warnings_in(warnings, last), sources)
+                options.cache.value(),
+                last,
+                folder,
+                link_text,
+                render_warnings(warnings_in(warnings, last), sources),
+                needs,
+                last_below,
+                extension
             );
             if (stored.is_err()) {
                 Directory.remove_all(work);
@@ -1035,7 +1132,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         # Only the compilation units the program's own reads: others, files of
         # the entry's module it never reaches, are not linked.
         for (var k in last.reads) {
-            var found = options.cache.value().reused_objects($"+{units[k].name}", units[k].key, extension);
+            var found = options.cache.value().reused_objects($"+{units[k].name}", object_keys[k], extension);
             if (found.is_err()) {
                 Directory.remove_all(work);
                 return Result<Built, String>.err(found.error());
