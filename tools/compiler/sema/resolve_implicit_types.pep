@@ -1082,6 +1082,43 @@ struct _TypeScopes {
             return out;
         }
         out.append_all(tables.method_lists(key));
+        if (out.count == 0) {
+            return _unspecialized_method_tables(key, name);
+        }
+        return out;
+    }
+
+    # The method tables of `key`, a specialization not made yet: its
+    # generic declaration's, with its type arguments substituted. So
+    # `opt.value()` types the same before `Optional<String>` is made (a
+    # whole-program build) as after (a build in units loads it with the
+    # runtime), and a generic call infers its type arguments alike (#175).
+    _unspecialized_method_tables(key: String, name: String): Array<Array<(String, TypeName)>> {
+        var out = Array<Array<(String, TypeName)>>();
+        var ty = parse_type_string(key);
+        var generic = ty.sub_types.count == 0 ? Optional<TypeName>.Empty : tables.struct_type_of(ty.name);
+        if (!generic.is_value() or generic.value().sub_types.count != ty.sub_types.count) {
+            return out;
+        }
+        var generic_key = generic.value().to_string();
+        if (generic_key == key) {
+            return out;
+        }
+        var map = Array<(String, TypeName)>();
+        ulong i = 0;
+        while (i < ty.sub_types.count) {
+            map.append((generic.value().sub_types[i].name, ty.sub_types[i]));
+            i += 1;
+        }
+        for (var methods in method_tables(generic_key, name)) {
+            var substituted = Array<(String, TypeName)>();
+            for (var (m, ret) in methods) {
+                var copy = ret.copy();
+                replace_map(copy, map);
+                substituted.append((m, copy));
+            }
+            out.append(substituted);
+        }
         return out;
     }
 

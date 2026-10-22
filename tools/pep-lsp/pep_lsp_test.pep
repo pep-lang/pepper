@@ -492,8 +492,7 @@ syntax_offers_quick_fixes() {
     var at = (line: int, character: int) => lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
     var actions = code_actions(document, none, Array<lsp.CodeAction>(), at(2, 5));
     expect_equal(action_list(actions), "Replace `new` with `construct` [2:4-2:7 construct]");
-    # `<String>`: a whole-program build infers `StringConstant` (#175).
-    expect_equal<String>(actions[0].kind.value(), lsp.QUICK_FIX);
+    expect_equal(actions[0].kind.value(), lsp.QUICK_FIX);
     var shown = actions[0].diagnostics.value()[0];
     expect_equal(shown.severity.value(), lsp.SEVERITY_WARNING);
     expect_equal(shown.tags.value()[0], lsp.TAG_DEPRECATED);
