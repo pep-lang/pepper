@@ -574,6 +574,19 @@ features_turn_on_build_options_and_optional_dependencies() {
         "[package]\nname = \"app\"\n[dependencies]\nhttp = { path = \"../http\", default-features = false }\n"
     );
     expect_false(load_with(main, Array<String>()).target.build_options.contains("http_tls"));
+
+    # The project's own `default`, unless `--no-default-features`.
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[dependencies]\nhttp = { path = \"../http\" }\n[features]\ndefault = [\"fast\"]\nfast = []\n"
+    );
+    expect_true(load_with(main, Array<String>()).target.build_options.contains("app_fast"));
+    setup = link.Setup();
+    setup.runtime = false;
+    setup.target.default_features = false;
+    var without = link.load_program(main, setup).value();
+    expect_false(without.target.build_options.contains("app_fast"));
+    expect_true(without.target.build_options.contains("http_tls"));
 }
 
 # `file`'s program, loaded with the project's `features` turned on.

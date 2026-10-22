@@ -290,7 +290,9 @@ full    = ["tls", "gzip"]                  # other features of this package
   feature joined with `_` (`http_tls`), so `[Target(BuildOption(...))]`,
   `[BuildOption("...")]` and `reflect.build_option` select code by it, as
   for a `-D` option (see [Build options](../language/build-options.md)).
-  A feature name is an identifier.
+  A feature name is an identifier. The names join with a bare `_`, so two
+  packages of one build should not share a `name`: their features would
+  define the same options.
 - **What a feature lists:** another feature of the package (`tls`); an
   optional dependency, `dep:<name>`; or a feature of a dependency,
   `<name>/<feature>`, which turns the dependency on too when it is
