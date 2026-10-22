@@ -86,6 +86,15 @@ main(args: String[]): int {
     var no_default_features = parser.flag(
         "no-default-features", help = "leave the default feature of the project's package off, for pep-build"
     );
+    var all_members = parser.flag(
+        "all", help = "test every member of the project's workspace, with their features unified, for pep-build"
+    );
+    var member_names = parser.multiple(
+        "package",
+        "p",
+        "test this member of the project's workspace (its package name); repeat for more, whose features are then unified",
+        value_name = "NAME"
+    );
     var paths = parser.positionals(
         "path", "a .pep file, or a folder to search for files holding [Test] functions (default: the current folder)"
     );
@@ -129,7 +138,26 @@ main(args: String[]): int {
         return usage_error(parser, $"'--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard.value()}'");
     }
 
+    var compiler = process.find_companion("pep-build");
+    if (compiler.is_empty()) {
+        return fail("cannot find pep-build next to pep-test or on the PATH");
+    }
     var roots = paths.values();
+    if (all_members.is_set or member_names.is_set) {
+        if (!roots.is_empty) {
+            return usage_error(parser, "'--all' and '-p' test workspace members, so give no paths with them");
+        }
+        var members = workspace_members(compiler.value().to_string(), all_members.is_set, member_names.values());
+        if (members.is_err()) {
+            return fail(members.error());
+        }
+        var names = Array<String>();
+        for (var (name, dir) in members.value()) {
+            names.append(name);
+            roots.append(dir);
+        }
+        options.build_flags.append_all(["--members", ",".join(names)]);
+    }
     if (roots.is_empty) {
         roots.append(".");
     }
@@ -145,10 +173,6 @@ main(args: String[]): int {
         return 0;
     }
 
-    var compiler = process.find_companion("pep-build");
-    if (compiler.is_empty()) {
-        return fail("cannot find pep-build next to pep-test or on the PATH");
-    }
     var scratch = Directory.temp().join($"pep-test-{process.id()}");
     var made = Directory.create_all(scratch);
     if (made.is_err()) {
@@ -157,6 +181,33 @@ main(args: String[]): int {
     var status = build_and_run(options, list.is_set, files, compiler.value().to_string(), scratch);
     Directory.remove_all(scratch);
     return status;
+}
+
+# The name and folder of each workspace member `--all` (`all`) or `-p`
+# (`names`) selects, as `compiler --print-members` lists them.
+workspace_members(compiler: String, all: bool, names: Array<String>): Result<Array<(String, String)>, String> {
+    var arguments = ["--print-members"];
+    if (all) {
+        arguments.append("--all");
+    }
+    for (var name in names) {
+        arguments.append_all(["-p", name]);
+    }
+    var ran = process.Command(compiler).arguments(arguments).run();
+    if (ran.is_err()) {
+        return Result<Array<(String, String)>, String>.err($"cannot run {compiler}: {ran.error().message}");
+    }
+    if (!ran.value().status.success()) {
+        return Result<Array<(String, String)>, String>.err(ran.value().stderr.trim());
+    }
+    var members = Array<(String, String)>();
+    for (var line in ran.value().stdout.trim().split("\n")) {
+        var split = line.trim().split_once("\t");
+        if (split.is_value()) {
+            members.append(split.value());
+        }
+    }
+    return Result<Array<(String, String)>, String>.ok(members);
 }
 
 # What to build and run, from the command line.

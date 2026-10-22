@@ -53,6 +53,8 @@ short, and `pepper help build` runs it.
 | `-D <name>[=<value>]` | Define a build option | none |
 | `-F <names>`, `--features <names>` | Turn on features of the project's package | its `default` feature |
 | `--no-default-features` | Leave the project's package's `default` feature off | off |
+| `--all` | Build every member of the project's workspace | the project alone, or every member in a root with no `[package]` |
+| `-p <name>`, `--package <name>` | Build this workspace member; repeatable | |
 | `--no-runtime-checks=<list>` | Remove kinds of runtime check | every check on |
 | `--no-cache` | Do not use the build cache | the cache is used |
 | `--cache <dir>` | Folder for the build cache | `PEPPER_CACHE_DIR`, else `.pep/cache` (in a project's folder when building it) |
@@ -60,7 +62,7 @@ short, and `pepper help build` runs it.
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
 | `-v`, `--verbose` | Accepted; prints nothing more yet | off |
-| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>` | Internal: what a build runs in the children it starts | |
+| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--print-members` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
 | `-h`, `--help` | Print the options | |
 | `-V`, `--version` | Print the version | |
 
@@ -569,6 +571,25 @@ the package does not have is an error that lists those it has:
 unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
 ```
 
+### `--all`, `-p <name>`, `--package <name>`
+
+In a [workspace](projects.md#workspaces-workspace), `--all` builds every
+member and `-p` (repeated for more) the members it names by package
+name, from the root or any member. Each member builds into its own
+output, as `pepper build` in its folder would, one after another, and
+the first that fails stops the rest; a member with no `[build]` entry
+and no `main.pep`, a library, is skipped. Their features are unified:
+the build of each turns on what every selected member turns on in a
+package they share, and `--features` turns a feature on in each member
+that has it. In a workspace's root with no `[package]` of its own,
+`pepper build` builds every member. `-o` names one output, so it takes
+one member.
+
+```bash
+pepper build --all          # every member
+pepper build -p app -O      # the member named app, optimized
+```
+
 ## Runtime checks
 
 ### `--no-runtime-checks=<list>`
@@ -679,6 +700,12 @@ rerun by hand (the build prints it).
 - `--compilation-unit-worker <dir>`, after the build's own arguments, checks
   the compilation units the build passes through `<dir>` and compiles their
   objects.
+- `--members <names>` names, comma-separated, the workspace members a
+  build of several (`--all`, `-p`) builds together, so each child unifies
+  its features with theirs. With a file, `--all` and `-p` do the same.
+- `--print-members` prints the package name and folder of each member
+  `--all` or `-p` selects, a tab between them, a line each, and builds
+  nothing; `pep-test --all` and `-p` run it.
 
 ## Help and version
 

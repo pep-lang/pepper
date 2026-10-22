@@ -234,6 +234,10 @@ export struct Dependency {
     ## `default-features`: whether it turns on the dependency's `default`
     ## feature.
     var default_features: bool = true;
+    ## `workspace = true`: its source and revision are the entry of the same
+    ## name in the workspace's `[workspace.dependencies]`, which loading
+    ## the manifest fills in (`load_manifest`).
+    var inherits: bool = false;
 
     construct(name: String, name_span: Span, host: Host?, location: String) {
         this.name = name;
@@ -326,6 +330,22 @@ export struct Manifest {
     var dev_dependencies: Dependency[] = Array<Dependency>();
     ## `[features]`, in the order they are written.
     var features: Feature[] = Array<Feature>();
+    ## Whether it has a `[workspace]` table: it is the root of a workspace.
+    var is_workspace: bool = false;
+    ## `[workspace]`'s `members` as written: folders, or globs of them,
+    ## relative to the root.
+    var members: String[] = Array<String>();
+    ## Where each of `members` is written.
+    var member_spans: Span[] = Array<Span>();
+    ## `[workspace.dependencies]`, which a member's `workspace = true` entry
+    ## takes its source and revision from.
+    var workspace_dependencies: Dependency[] = Array<Dependency>();
+    ## A workspace root's member packages other than itself, as
+    ## `load_manifest` reads them.
+    var member_manifests: Manifest[] = Array<Manifest>();
+    ## The root folder of the workspace it belongs to (its own, for a
+    ## root), whose `.pep/deps` and `pep.lock` serve every member.
+    var workspace_dir: Path? = Optional<Path>.Empty;
 
     construct(path: Path, text: String) {
         this.path = path;
@@ -335,6 +355,23 @@ export struct Manifest {
     ## The folder holding the `pep.toml`: the project's root.
     dir(): Path {
         return files.dir_of(path);
+    }
+
+    ## The folder whose `.pep/deps` and `pep.lock` serve it: its
+    ## workspace's root, else its own.
+    deps_root(): Path {
+        return workspace_dir.is_value() ? workspace_dir.value() : dir();
+    }
+
+    ## A workspace root's packages: itself when it has a `[package]`, then
+    ## its members.
+    workspace_packages(): Manifest[] {
+        var out = Array<Manifest>();
+        if (!name.is_empty) {
+            out.append(this);
+        }
+        out.append_all(member_manifests);
+        return out;
     }
 
     ## The dependency named `name`, if any.
@@ -365,9 +402,10 @@ export struct Manifest {
 
     ## Returns its Git dependencies and dev-dependencies, and the Git
     ## dependencies of every `path` dependency they reach, which the
-    ## project fetches into its own `.pep/deps`. Another package's
-    ## dev-dependencies are not part of this project. A `path` dependency
-    ## whose `pep.toml` cannot be read is skipped: importing it reports why.
+    ## project fetches into its own `.pep/deps`; for a workspace root,
+    ## those of every member too. Another package's dev-dependencies are
+    ## not part of this project. A `path` dependency whose `pep.toml`
+    ## cannot be read is skipped: importing it reports why.
     ##
     ## @param build when given, only what a build for this target sees
     ##   (`Dependency.matches`); else every platform's
@@ -375,18 +413,21 @@ export struct Manifest {
     git_dependencies(build: Target? = Optional<Target>.Empty): Dependency[] {
         var out = Array<Dependency>();
         var pending = [this];
+        pending.append_all(member_manifests);
+        # The first `own` are the project's packages: only their
+        # dev-dependencies are its own.
+        var own = pending.count;
         var seen = HashSet<String>();
-        var own = true;
         while (!pending.is_empty) {
             var manifest = pending.remove_at(0);
+            var is_own = own > 0;
+            own = is_own ? own - 1 : 0;
             if (!seen.insert(manifest.dir().normalize().to_string())) {
                 continue;
             }
             var named = manifest.dependencies.copy();
-            # Only this project's own dev-dependencies.
-            if (own) {
-                named.append_all(dev_dependencies);
-                own = false;
+            if (is_own) {
+                named.append_all(manifest.dev_dependencies);
             }
             for (var d in named) {
                 if (build.is_value() and !d.matches(build.value())) {
@@ -589,6 +630,16 @@ struct _Reader {
                         }
                         i += 1;
                     }
+                    continue;
+                }
+            }
+            if (i == 0 and keys.count > 1) {
+                # A table header naming two keys: `[workspace.dependencies]`.
+                var nested = text.find($"[{key}.{keys[1]}]");
+                if (nested >= 0) {
+                    key_at = nested as ulong + key.size + 2;
+                    at = key_at + keys[1].size;
+                    i += 2;
                     continue;
                 }
             }
@@ -903,9 +954,33 @@ struct _Reader {
         var features = Array<String>();
         var feature_spans = Array<Span>();
         var default_features = true;
+        var inherits = false;
+        var in_workspace = path[0] == "workspace";
         for (var (field, value) in fields) {
             var field_path = _at(path, field);
             var field_host = host_named(field);
+            if (in_workspace
+                and (field == "workspace"
+                    or field == "optional"
+                    or field == "features"
+                    or field == "default-features")) {
+                error(
+                    $"'{field}' is not for '[workspace.dependencies]', which gives a source and a revision; give it in the member's entry",
+                    key_span(field_path)
+                );
+                continue;
+            }
+            if (field == "workspace") {
+                var given = boolean(field_path, field, value);
+                if (given.is_value() and !given.value()) {
+                    error(
+                        $"'workspace' is true or absent; give dependency '{name}' a source instead",
+                        value_span(field_path)
+                    );
+                }
+                inherits = given.value_or(false);
+                continue;
+            }
             if (field_host.is_value() or field == "path") {
                 var given = string(field_path, field, value);
                 if (!given.is_value()) {
@@ -986,10 +1061,31 @@ struct _Reader {
                         "commit",
                         "optional",
                         "features",
-                        "default-features"
+                        "default-features",
+                        "workspace"
                     ]
                 );
             }
+        }
+        if (inherits) {
+            var given = location.is_value() ? (host.is_value() ? host.value().key() : "path") : revision;
+            if (!given.is_empty) {
+                error(
+                    $"'{given}' and 'workspace = true' both choose where '{name}' comes from; keep one",
+                    key_span(_at(path, given))
+                );
+                return;
+            }
+            if (errors.count == before) {
+                var inherited = Dependency(name, key_span(path), Optional<Host>.Empty, "");
+                inherited.inherits = true;
+                inherited.optional = optional;
+                inherited.features = features;
+                inherited.feature_spans = feature_spans;
+                inherited.default_features = default_features;
+                into.append(inherited);
+            }
+            return;
         }
         if (!location.is_value()) {
             if (errors.count == before) {
@@ -1000,9 +1096,10 @@ struct _Reader {
             }
             return;
         }
-        if (!host.is_value() and !revision.is_empty) {
+        # A `path` may have a `version`: the release `publish` names it by.
+        if (!host.is_value() and !revision.is_empty and revision != "version") {
             error(
-                $"dependency '{name}' is a 'path'; a folder has no versions, branches, tags or commits",
+                $"dependency '{name}' is a 'path'; a folder has no branches, tags or commits, only a 'version' for 'publish'",
                 key_span(_at(path, revision))
             );
         }
@@ -1076,6 +1173,37 @@ struct _Reader {
                         at
                     );
                 }
+            }
+        }
+    }
+
+    ## The `[workspace]` table: its `members`, folders or globs of them,
+    ## which `load_manifest` reads, and `[workspace.dependencies]`.
+    workspace(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        manifest.is_workspace = true;
+        for (var (key, value) in members) {
+            var path = ["workspace", key];
+            if (key == "members") {
+                # Each after the one before, so a member listed twice is
+                # found where it is listed again.
+                var from = value_span(path).start;
+                for (var member in strings(path, key, value)) {
+                    var at = item_span(path, member);
+                    var found = text.find($"\"{member}\"", from);
+                    if (found >= 0) {
+                        at = Span(found as ulong, found as ulong + member.size + 2);
+                        from = at.end;
+                    }
+                    manifest.members.append(member);
+                    manifest.member_spans.append(at);
+                }
+            } else if (key == "dependencies") {
+                var entries = table(path, key, value);
+                if (entries.is_value()) {
+                    dependencies(path, manifest.workspace_dependencies, entries.value());
+                }
+            } else {
+                unknown_key(["workspace"], key, "workspace", ["members", "dependencies"]);
             }
         }
     }
@@ -1186,14 +1314,20 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.features(manifest, table.value());
             }
+        } else if (key == "workspace") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.workspace(manifest, table.value());
+            }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]' and '[fetch]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[fetch]' and '[workspace]'",
                 reader.key_span(at)
             );
         }
     }
-    if (!package_seen) {
+    # A workspace's root need not be a package itself.
+    if (!package_seen and !manifest.is_workspace) {
         reader.error("missing '[package]' table with the project's 'name'", Span(0, 0));
     }
     reader.check_features(manifest);
@@ -1229,7 +1363,8 @@ export render_manifest_errors(path: Path, text: String, errors: ManifestError[])
     return render_all(diagnostics, [SourceText(path.to_string(), text)]);
 }
 
-## Reads the project file at `path` and checks it against the runtime in
+## Reads the project file at `path`, puts it in its workspace
+## (`join_workspace`), and checks it against the runtime in
 ## `runtime_dirs`: a dependency may not be named like a runtime module,
 ## which it would otherwise hide. Problems are rendered clang-style.
 ##
@@ -1237,19 +1372,17 @@ export render_manifest_errors(path: Path, text: String, errors: ManifestError[])
 ## @param runtime_dirs the runtime's folders
 ## @returns the manifest, or its problems
 export load_manifest(path: Path, runtime_dirs: Path[]): Result<Manifest, String> {
-    var text = File.read_to_string(path);
-    if (text.is_err()) {
-        return Result<Manifest, String>.err($"cannot read {path}: {text.error().message}");
+    var read = _read_manifest(path);
+    if (read.is_err()) {
+        return read;
     }
-    var parsed = parse_manifest(path, text.value());
-    if (parsed.is_err()) {
-        return Result<Manifest, String>.err(render_manifest_errors(path, text.value(), parsed.error()));
+    var joined = join_workspace(read.value());
+    if (joined.is_err()) {
+        return Result<Manifest, String>.err(joined.error());
     }
-    var manifest = parsed.value();
+    var manifest = read.value();
     var errors = Array<ManifestError>();
-    var named = manifest.dependencies.copy();
-    named.append_all(manifest.dev_dependencies);
-    for (var d in named) {
+    for (var d in _all_dependencies(manifest)) {
         for (var dir in runtime_dirs) {
             if (dir.join(Path(d.name)).join(Path(files.MODULE_FILE)).is_file()) {
                 errors.append(
@@ -1266,6 +1399,204 @@ export load_manifest(path: Path, runtime_dirs: Path[]): Result<Manifest, String>
         return Result<Manifest, String>.ok(manifest);
     }
     return Result<Manifest, String>.err(render_manifest_errors(path, manifest.text, errors));
+}
+
+## Reads and parses the `pep.toml` at `path`, its problems rendered
+## clang-style.
+_read_manifest(path: Path): Result<Manifest, String> {
+    var text = File.read_to_string(path);
+    if (text.is_err()) {
+        return Result<Manifest, String>.err($"cannot read {path}: {text.error().message}");
+    }
+    var parsed = parse_manifest(path, text.value());
+    if (parsed.is_err()) {
+        return Result<Manifest, String>.err(render_manifest_errors(path, text.value(), parsed.error()));
+    }
+    return Result<Manifest, String>.ok(parsed.value());
+}
+
+## Puts `manifest` in its workspace. A workspace's root reads its members
+## (`Manifest.member_manifests`); any other package looks for the nearest
+## `[workspace]` above it, not past a `.pep` folder, and is a member when
+## that workspace lists it. A root and its members get `workspace_dir`,
+## and their `workspace = true` dependencies the source the root's
+## `[workspace.dependencies]` gives.
+##
+## @param manifest the parsed `pep.toml`, which this changes
+## @returns nothing, or the problems of the workspace, rendered clang-style:
+##   a member that is not a package, is listed twice or is a workspace
+##   itself, or a `workspace = true` with nothing to inherit
+join_workspace(manifest: Manifest): Result<void, String> {
+    var problems = "";
+    if (manifest.is_workspace) {
+        problems = _load_members(manifest);
+    } else {
+        var root = _enclosing_workspace(manifest.dir());
+        if (root.is_err()) {
+            return Result<void, String>.err(root.error());
+        }
+        if (root.value().is_value()) {
+            manifest.workspace_dir = root.value().value().workspace_dir;
+            problems = _inherit(manifest, root.value().value());
+        } else {
+            var errors = Array<ManifestError>();
+            for (var d in _all_dependencies(manifest)) {
+                if (d.inherits) {
+                    errors.append(
+                        ManifestError(
+                            $"dependency '{d.name}' has 'workspace = true', and no workspace lists this package; give it a source",
+                            d.name_span
+                        )
+                    );
+                }
+            }
+            if (!errors.is_empty) {
+                problems = render_manifest_errors(manifest.path, manifest.text, errors);
+            }
+        }
+    }
+    return problems.is_empty ? Result<void, String>.ok() : Result<void, String>.err(problems);
+}
+
+## `manifest`'s dependencies and dev-dependencies.
+_all_dependencies(manifest: Manifest): Dependency[] {
+    var named = manifest.dependencies.clone();
+    named.append_all(manifest.dev_dependencies);
+    return named;
+}
+
+## The workspace above `dir` that lists it: the nearest folder above it
+## whose `pep.toml` has `[workspace]`, read with its members, when one of
+## them is `dir`. None past a `.pep` folder: a fetched package is in no
+## workspace of the project's.
+_enclosing_workspace(dir: Path): Result<Manifest?, String> {
+    var at = files.absolute(dir).normalize();
+    var key = at.to_string();
+    while (true) {
+        var parent = at.parent();
+        if (!parent.is_value() or parent.value().to_string() == at.to_string()) {
+            return Result<Manifest?, String>.ok(Optional<Manifest>.Empty);
+        }
+        var name = at.file_name();
+        if (name.is_value() and name.value() == ".pep") {
+            return Result<Manifest?, String>.ok(Optional<Manifest>.Empty);
+        }
+        at = parent.value();
+        var file = at.join(Path(files.MANIFEST_FILE));
+        var text = File.read_to_string(file);
+        # Only a `pep.toml` that may have the table is parsed.
+        if (text.is_err() or !text.value().contains("[workspace")) {
+            continue;
+        }
+        var root = _read_manifest(file);
+        if (root.is_err()) {
+            return Result<Manifest?, String>.err(root.error());
+        }
+        if (!root.value().is_workspace) {
+            continue;
+        }
+        var problems = _load_members(root.value());
+        if (!problems.is_empty) {
+            return Result<Manifest?, String>.err(problems);
+        }
+        for (var member in root.value().member_manifests) {
+            if (member.dir().to_string() == key) {
+                return Result<Manifest?, String>.ok(Optional<Manifest>.Value(root.value()));
+            }
+        }
+        return Result<Manifest?, String>.ok(Optional<Manifest>.Empty);
+    }
+    return Result<Manifest?, String>.ok(Optional<Manifest>.Empty);
+}
+
+## Reads the members of `root`, a workspace's root, into its
+## `member_manifests`, and fills in the `workspace = true` dependencies of
+## each and of the root. A member is a folder or a glob of folders
+## (`crates/*`), relative to the root; the root itself, when a package,
+## is one without being listed.
+##
+## @returns the problems, rendered clang-style; empty when there are none
+_load_members(root: Manifest): String {
+    var root_dir = files.absolute(root.dir()).normalize();
+    root.workspace_dir = Optional<Path>.Value(root_dir);
+    var errors = Array<ManifestError>();
+    var others = _inherit(root, root);
+    var seen = HashSet<String>();
+    for (var i in 0..root.members.count) {
+        var pattern = root.members[i];
+        var at = root.member_spans[i];
+        var dirs = Array<Path>();
+        if (pattern.contains("*") or pattern.contains("?") or pattern.contains("[") or pattern.contains("{")) {
+            # The glob's separators are `/` on every platform.
+            for (var found in io.glob(root_dir.to_string().replace("\\", "/") + "/" + pattern)) {
+                if (found.is_directory()) {
+                    dirs.append(found.normalize());
+                }
+            }
+        } else {
+            dirs.append(root_dir.join(Path(pattern)).normalize());
+        }
+        for (var dir in dirs) {
+            if (dir.to_string() == root_dir.to_string()) {
+                continue;
+            }
+            if (!seen.insert(dir.to_string())) {
+                errors.append(ManifestError($"workspace member '{pattern}' is listed twice", at));
+                continue;
+            }
+            var file = dir.join(Path(files.MANIFEST_FILE));
+            if (!file.is_file()) {
+                errors.append(ManifestError($"workspace member '{pattern}' is not a package: no {file}", at));
+                continue;
+            }
+            var member = _read_manifest(file);
+            if (member.is_err()) {
+                others += member.error();
+                continue;
+            }
+            if (member.value().is_workspace) {
+                errors.append(
+                    ManifestError($"workspace member '{pattern}' is a workspace itself; workspaces do not nest", at)
+                );
+                continue;
+            }
+            member.value().workspace_dir = root.workspace_dir;
+            others += _inherit(member.value(), root);
+            root.member_manifests.append(member.value());
+        }
+    }
+    var problems = errors.is_empty ? "" : render_manifest_errors(root.path, root.text, errors);
+    return problems + others;
+}
+
+## Fills in each `workspace = true` dependency of `manifest` from the
+## entry of the same name in `root`'s `[workspace.dependencies]`; a
+## `path` there is relative to the root.
+##
+## @returns the problems, rendered clang-style; empty when there are none
+_inherit(manifest: Manifest, root: Manifest): String {
+    var errors = Array<ManifestError>();
+    for (var d in _all_dependencies(manifest)) {
+        if (!d.inherits) {
+            continue;
+        }
+        var from = _named(root.workspace_dependencies, d.name);
+        if (!from.is_value()) {
+            errors.append(
+                ManifestError(
+                    $"dependency '{d.name}' has 'workspace = true', and '[workspace.dependencies]' of {root.path} has no '{d.name}'",
+                    d.name_span
+                )
+            );
+            continue;
+        }
+        d.host = from.value().host;
+        d.location = from.value().location;
+        if (!d.host.is_value()) {
+            d.location = files.absolute(root.dir()).join(Path(d.location)).normalize().to_string();
+        }
+    }
+    return errors.is_empty ? "" : render_manifest_errors(manifest.path, manifest.text, errors);
 }
 
 ## The 1-based line and column of byte `offset` in `text`.
@@ -1298,9 +1629,12 @@ export enum Resolution {
 ## The packages of a program: which `pep.toml` each file falls under, and
 ## where the dependencies it names are.
 export struct Packages {
-    ## The project's root folder, whose `.pep/deps` holds fetched
-    ## dependencies.
+    ## The project's root folder: the package whose files see its
+    ## dev-dependencies and whose features `--features` turns on.
     var project: Path?;
+    ## The folder whose `.pep/deps` holds fetched dependencies: the
+    ## project's workspace's root, else the project's own.
+    var deps_root: Path?;
     ## Whether the project's own files see its `[dev-dependencies]`: in a
     ## test build, and a build of a file in its `examples` folder.
     var dev: bool = false;
@@ -1328,6 +1662,13 @@ export struct Packages {
     construct(root: Path, target: Target = Target()) {
         this.target = target;
         project = files.find_project(root);
+        deps_root = project;
+        if (project.is_value()) {
+            var manifest = _manifest_at(project.value());
+            if (manifest.is_value()) {
+                deps_root = Optional<Path>.Value(manifest.value().deps_root());
+            }
+        }
         dev = target.build_options.contains(TEST_BUILD_OPTION)
             or (project.is_value() and _in_examples(project.value(), root));
     }
@@ -1340,7 +1681,10 @@ export struct Packages {
     ## and what each feature on lists. Each feature on defines its build
     ## option (`Manifest.build_option`) in `target`, and an optional
     ## dependency is seen (`resolve`) only once a feature turns it on. A
-    ## dependency not on disk yet is skipped.
+    ## dependency not on disk yet is skipped. The workspace members
+    ## `target.members` names are built with the project, so their
+    ## features are unified with its: their defaults and dependencies are
+    ## turned on too, and `target.features` in each that has them.
     ##
     ## @returns nothing, or why a feature cannot be turned on
     turn_on_features(): Result<void, String> {
@@ -1357,14 +1701,30 @@ export struct Packages {
             return Result<void, String>.ok();
         }
         var manifest = root.value();
-        _visit(manifest);
-        var asked = Array<String>();
-        if (target.default_features and manifest.feature("default").is_value()) {
-            asked.append("default");
+        var built = [manifest];
+        var workspace = _manifest_at(deps_root.value());
+        if (!target.members.is_empty and workspace.is_value()) {
+            for (var member in workspace.value().workspace_packages()) {
+                if (target.members.contains(member.name) and _key(member) != _key(manifest)) {
+                    built.append(member);
+                }
+            }
         }
-        asked.append_all(target.features);
-        for (var name in asked) {
-            if (!manifest.feature(name).is_value()) {
+        for (var package in built) {
+            _visit(package);
+            if (target.default_features and package.feature("default").is_value()) {
+                _enable(package, "default");
+            }
+        }
+        for (var name in target.features) {
+            var found = false;
+            for (var package in built) {
+                if (package.feature(name).is_value()) {
+                    _enable(package, name);
+                    found = true;
+                }
+            }
+            if (!found) {
                 var known = Array<String>();
                 for (var f in manifest.features) {
                     known.append($"'{f.name}'");
@@ -1374,7 +1734,6 @@ export struct Packages {
                         + (known.is_empty ? "no features" : ", ".join(known))
                 );
             }
-            _enable(manifest, name);
         }
         if (_feature_error.is_value()) {
             return Result<void, String>.err(_feature_error.value());
@@ -1420,7 +1779,7 @@ export struct Packages {
             return Optional<Manifest>.Empty;
         }
         var first = _on.insert(_key(manifest) + "\n" + d.name);
-        var found = _manifest_at(d.directory(project.value(), manifest.dir()));
+        var found = _manifest_at(d.directory(deps_root.value(), manifest.dir()));
         if (found.is_value() and first) {
             _visit(found.value());
             if (d.default_features and found.value().feature("default").is_value()) {
@@ -1497,7 +1856,14 @@ export struct Packages {
                         Result<Manifest, String>.err($"{path}:{line}:{column}: {first.message}")
                     );
                 } else {
-                    found = Optional<Result<Manifest, String>>.Value(Result<Manifest, String>.ok(parsed.value()));
+                    # shortcut: each member reads its workspace's root again; cache the root when
+                    # workspaces grow large.
+                    var joined = join_workspace(parsed.value());
+                    found = Optional<Result<Manifest, String>>.Value(
+                        joined.is_err() ?
+                            Result<Manifest, String>.err(joined.error()) :
+                            Result<Manifest, String>.ok(parsed.value())
+                    );
                 }
             }
         } else {
@@ -1565,7 +1931,7 @@ export struct Packages {
                 $"'{first}' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:{first}' on the import"
             );
         }
-        var package = dependency.value().directory(project.value(), manifest.dir());
+        var package = dependency.value().directory(deps_root.value(), manifest.dir());
         if (!package.is_directory()) {
             if (dependency.value().host.is_value()) {
                 return Resolution.Missing(

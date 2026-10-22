@@ -85,6 +85,130 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
     return Result<ProjectSetup, String>.ok(setup);
 }
 
+## The members of the workspace around the current folder that a build
+## selects: every one with `all`, else those `names` names (package
+## names). With neither, every one when the current folder's `pep.toml`
+## is a workspace's root with no `[package]`, else none: the build is of
+## the project alone.
+##
+## @param all `--all`
+## @param names the `-p` names
+## @returns the members' manifests, or why they cannot be selected
+export select_members(all: bool, names: String[]): Result<link.Manifest[], String> {
+    var none = Array<link.Manifest>();
+    var cwd = process.working_directory();
+    var here = cwd.is_ok() ? cwd.value() : Path(".");
+    var found = link.find_manifest(here);
+    var asked = all or !names.is_empty;
+    if (!found.is_value()) {
+        if (asked) {
+            return Result<link.Manifest[], String>.err(
+                $"'--all' and '-p' build members of a workspace, and there is no {link.MANIFEST_FILE} in {here} or a folder above it"
+            );
+        }
+        return Result<link.Manifest[], String>.ok(none);
+    }
+    var manifest = link.load_manifest(found.value(), Array<Path>());
+    if (manifest.is_err()) {
+        # The build reports it.
+        return asked ? Result<link.Manifest[], String>.err(manifest.error()) : Result<link.Manifest[], String>.ok(none);
+    }
+    var root = manifest.value();
+    if (!asked) {
+        return Result<link.Manifest[], String>.ok(
+            root.is_workspace and root.name.is_empty ? root.workspace_packages() : none
+        );
+    }
+    if (!root.workspace_dir.is_value()) {
+        return Result<link.Manifest[], String>.err(
+            $"'--all' and '-p' build members of a workspace, and no workspace lists {found.value()}"
+        );
+    }
+    if (!root.is_workspace) {
+        var loaded = link.load_manifest(root.workspace_dir.value().join(Path(link.MANIFEST_FILE)), Array<Path>());
+        if (loaded.is_err()) {
+            return Result<link.Manifest[], String>.err(loaded.error());
+        }
+        root = loaded.value();
+    }
+    var packages = root.workspace_packages();
+    if (all) {
+        return Result<link.Manifest[], String>.ok(packages);
+    }
+    var selected = Array<link.Manifest>();
+    for (var name in names) {
+        var known = Array<String>();
+        for (var package in packages) {
+            if (package.name == name) {
+                selected.append(package);
+            }
+            known.append($"'{package.name}'");
+        }
+        if (selected.is_empty or selected[selected.count - 1].name != name) {
+            return Result<link.Manifest[], String>.err(
+                $"no workspace member named '{name}' in '-p'; the members are {", ".join(known)}"
+            );
+        }
+    }
+    return Result<link.Manifest[], String>.ok(selected);
+}
+
+## Builds each of `members` in a child `pep-build` run in its folder, with
+## this build's `arguments` but `--all` and `-p`, and `--members` naming
+## them all, so their features are unified. A member with no `[build]`
+## entry and no `main.pep`, a library, is skipped. Stops at the first that
+## fails.
+##
+## @param arguments this build's command line, the program first
+## @param members the members to build
+## @returns the exit status: the first failing child's, else 0
+export build_members(arguments: String[], members: link.Manifest[]): int {
+    var executable = process.executable_path();
+    if (executable.is_err()) {
+        File.stderr().write_all($"pepc: cannot find this program to build each member: {executable.error().message}\n");
+        return 1;
+    }
+    var passed = Array<String>();
+    var names = Array<String>();
+    for (var member in members) {
+        names.append(member.name);
+    }
+    ulong i = 1;
+    while (i < arguments.count) {
+        var argument = arguments[i];
+        i += 1;
+        if (argument == "-p" or argument == "--package") {
+            i += 1;
+        } else if (argument != "--all" and !argument.starts_with("--package=")) {
+            passed.append(argument);
+        }
+    }
+    passed.append_all(["--members", ",".join(names)]);
+    for (var member in members) {
+        # A library's root is its `module.pep`: nothing to build alone.
+        if (!member.entry_file.is_value() and !member.entry().is_file()) {
+            File.stderr().write_all($"pepc: skipping {member.name}: no entry file to build ({member.entry()})\n");
+            continue;
+        }
+        File.stderr().write_all($"pepc: building {member.name} ({member.dir()})\n");
+        var ran = process
+            .Command(executable.value().to_string())
+            .arguments(passed)
+            .working_directory(member.dir())
+            .stdout(process.Stream.Inherit)
+            .stderr(process.Stream.Inherit)
+            .run();
+        if (ran.is_err()) {
+            File.stderr().write_all($"pepc: cannot run {executable.value()}: {ran.error().message}\n");
+            return 1;
+        }
+        if (!ran.value().status.success()) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 ## Fetches what the project of `entry` needs and is missing: what
 ## `pep.lock` lists, or a dependency `pep.toml` names that the lock does
 ## not. With `pep-package` beside the compiler or on the PATH, it fetches
@@ -121,6 +245,15 @@ export fetch_dependencies(
     var manifest = link.load_manifest(project.value().join(Path(link.MANIFEST_FILE)), Array<Path>());
     if (manifest.is_err()) {
         return Result<void, String>.ok();
+    }
+    # A workspace's members share the root's pep.lock and `.pep/deps`.
+    var root = manifest.value().deps_root();
+    if (root.to_string() != manifest.value().dir().to_string()) {
+        project = Optional<Path>.Value(root);
+        manifest = link.load_manifest(root.join(Path(link.MANIFEST_FILE)), Array<Path>());
+        if (manifest.is_err()) {
+            return Result<void, String>.ok();
+        }
     }
     var needed = _needs_fetch(project.value(), manifest.value(), target);
     if (needed.is_err()) {

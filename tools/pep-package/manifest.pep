@@ -5,7 +5,7 @@
 # do not change what is locked: an optional dependency is resolved and
 # locked like any other.
 
-import [File, Path] from io;
+import [File, glob, Path] from io;
 import toml;
 
 # Whether `key` names a Git host a dependency can come from.
@@ -32,9 +32,12 @@ export struct Requirement {
     # The `[target.'<condition>']` it is under (`OS(Windows)`): the
     # platforms that use it. Empty for every platform.
     var target: String = "";
-    # Which of `optional`, `features` and `default-features` it sets, as
-    # pep.toml writes them, which only newer toolchains read.
+    # Which of `optional`, `features`, `default-features` and `workspace`
+    # it sets, as pep.toml writes them, which only newer toolchains read.
     var feature_keys: Array<String> = __null;
+    # `workspace = true`: its source and revision are those of the entry of
+    # the same name in the workspace's `[workspace.dependencies]`.
+    var inherits: bool = false;
 
     construct() {
         feature_keys = Array<String>();
@@ -85,10 +88,23 @@ export struct Manifest {
     var requirements: Array<Requirement> = __null;
     # `[fetch]`'s `hosts`: where `add` looks a repository up, in order.
     var hosts: Array<String> = __null;
+    # Whether it has `[workspace]`: it is a workspace's root.
+    var is_workspace: bool = false;
+    # `[workspace]`'s `members` as written: folders, or globs of them.
+    var members: Array<String> = __null;
+    # `[workspace.dependencies]`, which `workspace = true` entries take
+    # their source and revision from.
+    var workspace_requirements: Array<Requirement> = __null;
+    # A workspace root's members other than itself, as `read_project`
+    # reads them.
+    var member_manifests: Array<Manifest> = __null;
 
     construct() {
         requirements = Array<Requirement>();
         hosts = ["github", "gitlab", "codeberg"];
+        members = Array<String>();
+        workspace_requirements = Array<Requirement>();
+        member_manifests = Array<Manifest>();
     }
 
     # The folder holding it: the package's root.
@@ -152,6 +168,27 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             manifest.hosts.append(host.value());
         }
     }
+    if (root.try_get("workspace").is_value()) {
+        manifest.is_workspace = true;
+        var members = root.lookup("workspace.members");
+        if (members.is_value() and members.value().as_array().is_value()) {
+            for (var member in members.value().as_array().value()) {
+                if (member.as_string().is_value()) {
+                    manifest.members.append(member.as_string().value());
+                }
+            }
+        }
+        var shared = root.lookup("workspace.dependencies");
+        if (shared.is_value() and shared.value().as_table().is_value()) {
+            for (var (key, value) in shared.value().as_table().value()) {
+                var requirement = _requirement(path, key, value);
+                if (requirement.is_err()) {
+                    return Result<Manifest>.Err(requirement.error().message);
+                }
+                manifest.workspace_requirements.append(requirement.value());
+            }
+        }
+    }
     for (var name in ["dependencies", "dev-dependencies"]) {
         var dependencies = root.try_get(name);
         if (dependencies.is_empty()) {
@@ -205,12 +242,12 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
 # reads it. A package using one sets `minimum_toolchain` to that release
 # or later, which `publish` checks.
 export newer_manifest_features(): Array<(String, String)> {
-    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0")];
+    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0"), ("workspace", "0.11.0")];
 }
 
-# The first release that reads a dependency's `optional`, `features` and
-# `default-features`, which `newer_manifest_features` cannot name: they sit
-# under each dependency's own key.
+# The first release that reads a dependency's `optional`, `features`,
+# `default-features` and `workspace`, which `newer_manifest_features`
+# cannot name: they sit under each dependency's own key.
 export const DEPENDENCY_FEATURES_RELEASE = "0.11.0";
 
 # One `[dependencies]` or `[dev-dependencies]` entry.
@@ -223,8 +260,9 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
     requirement.name = key;
     for (var (field, field_value) in fields.value()) {
         # The compiler checks these.
-        if (field == "optional" or field == "features" or field == "default-features") {
+        if (field == "optional" or field == "features" or field == "default-features" or field == "workspace") {
             requirement.feature_keys.append(field);
+            requirement.inherits = requirement.inherits or field == "workspace";
             continue;
         }
         var text = field_value.as_string();
@@ -239,12 +277,168 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
             requirement.value = text.value();
         }
     }
-    if (requirement.host.is_empty) {
+    if (requirement.host.is_empty and !requirement.inherits) {
         return Result<Requirement>.Err(
             $"{path.to_string()}: dependency '{key}' needs a source: 'github', 'gitlab' or 'codeberg' (\"owner/name\"), or 'path'"
         );
     }
     return Result<Requirement>.Ok(requirement);
+}
+
+# Reads the pep.toml at `path` in its workspace: a workspace's root with
+# its members (`member_manifests`), and a root's or member's
+# `workspace = true` entries filled in from the root's
+# `[workspace.dependencies]`, a `path` there made absolute. The compiler
+# checks the workspace itself, reporting its problems at their keys.
+export read_project(path: Path): Result<Manifest> {
+    var manifest = read_manifest(path);
+    if (manifest.is_err()) {
+        return manifest;
+    }
+    var root_path = find_workspace(path);
+    if (root_path.is_empty()) {
+        for (var requirement in manifest.value().requirements) {
+            if (requirement.inherits) {
+                return Result<Manifest>.Err(
+                    $"{path.to_string()}: dependency '{requirement.name}' has 'workspace = true', and no workspace lists this package"
+                );
+            }
+        }
+        return manifest;
+    }
+    var root = manifest.value();
+    if (!root.is_workspace) {
+        var read = read_manifest(root_path.value());
+        if (read.is_err()) {
+            return read;
+        }
+        root = read.value();
+    }
+    var inherited = _inherit(manifest.value(), root);
+    if (inherited.is_value()) {
+        return Result<Manifest>.Err(inherited.value());
+    }
+    if (!manifest.value().is_workspace) {
+        return manifest;
+    }
+    var own = root.dir().canonicalize();
+    for (var dir in _member_dirs(root)) {
+        if (own.is_ok() and dir.to_string() == own.value().to_string()) {
+            continue;
+        }
+        var member = read_manifest(dir.join("pep.toml"));
+        if (member.is_err()) {
+            return member;
+        }
+        var problem = _inherit(member.value(), root);
+        if (problem.is_value()) {
+            return Result<Manifest>.Err(problem.value());
+        }
+        root.member_manifests.append(member.value());
+    }
+    return manifest;
+}
+
+# The pep.toml of the workspace `path`, a pep.toml, is in: itself for a
+# workspace's root, else the nearest one above it with `[workspace]`, not
+# past a `.pep` folder, when that lists it; none when it is in no
+# workspace.
+export find_workspace(path: Path): Optional<Path> {
+    var manifest = read_manifest(path);
+    if (manifest.is_ok() and manifest.value().is_workspace) {
+        return Optional<Path>.Value(path);
+    }
+    var dir = manifest.is_ok() ?
+        manifest.value().dir().canonicalize() :
+        path.parent().value_or(Path(".")).canonicalize();
+    if (dir.is_err()) {
+        return Optional<Path>.Empty;
+    }
+    var at = dir.value();
+    while (true) {
+        var name = at.file_name();
+        var parent = at.parent();
+        if ((name.is_value() and name.value() == ".pep")
+            or parent.is_empty()
+            or parent.value().to_string() == at.to_string()) {
+            return Optional<Path>.Empty;
+        }
+        at = parent.value();
+        var candidate = at.join("pep.toml");
+        var text = File.read_to_string(candidate);
+        if (text.is_err() or !text.value().contains("[workspace")) {
+            continue;
+        }
+        var root = read_manifest(candidate);
+        if (root.is_err() or !root.value().is_workspace) {
+            continue;
+        }
+        for (var member in _member_dirs(root.value())) {
+            if (member.to_string() == dir.value().to_string()) {
+                return Optional<Path>.Value(candidate);
+            }
+        }
+        return Optional<Path>.Empty;
+    }
+    return Optional<Path>.Empty;
+}
+
+# The folders `root`'s `members` name, each canonical: a folder, or a glob
+# of folders, relative to the root.
+_member_dirs(root: Manifest): Array<Path> {
+    var dirs = Array<Path>();
+    var base = root.dir().canonicalize();
+    if (base.is_err()) {
+        return dirs;
+    }
+    for (var pattern in root.members) {
+        var found = Array<Path>();
+        if (pattern.contains("*") or pattern.contains("?") or pattern.contains("[") or pattern.contains("{")) {
+            # The glob's separators are `/` on every platform.
+            found = glob(base.value().to_string().replace("\\", "/") + "/" + pattern);
+        } else {
+            found.append(base.value().join(pattern));
+        }
+        for (var dir in found) {
+            var canonical = dir.canonicalize();
+            if (canonical.is_ok() and canonical.value().join("pep.toml").is_file()) {
+                dirs.append(canonical.value());
+            }
+        }
+    }
+    return dirs;
+}
+
+# Fills in `manifest`'s `workspace = true` entries from `root`'s
+# `[workspace.dependencies]`; why one cannot be, if so.
+_inherit(manifest: Manifest, root: Manifest): Optional<String> {
+    for (var requirement in manifest.requirements) {
+        if (!requirement.inherits) {
+            continue;
+        }
+        var found = Optional<Requirement>.Empty;
+        for (var shared in root.workspace_requirements) {
+            if (shared.name == requirement.name) {
+                found = Optional<Requirement>.Value(shared);
+            }
+        }
+        if (found.is_empty()) {
+            return Optional<String>.Value(
+                $"{manifest.path.to_string()}: dependency '{requirement.name}' has 'workspace = true', and '[workspace.dependencies]' of {root.path.to_string()} has no '{requirement.name}'"
+            );
+        }
+        requirement.host = found.value().host;
+        requirement.repository = found.value().repository;
+        requirement.kind = found.value().kind;
+        requirement.value = found.value().value;
+        if (requirement.is_path()) {
+            var folder = root.dir().join(requirement.repository).canonicalize();
+            if (folder.is_ok()) {
+                requirement.repository = folder.value().to_string();
+            }
+        }
+    }
+    return Optional<String>.Empty;
 }
 
 # The nearest pep.toml in `dir` or a folder above it.

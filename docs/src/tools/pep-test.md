@@ -51,6 +51,8 @@ pep-test [options] [path]...
 | `--frozen` | Both `--locked` and `--offline` | |
 | `-F <names>`, `--features <names>` | Passed to `pep-build`: features of the project's package to turn on, comma-separated; repeatable (see [Features](projects.md#features)) | the `default` feature |
 | `--no-default-features` | Passed to `pep-build`: leave the project's package's `default` feature off | |
+| `--all` | Test every member of the project's [workspace](projects.md#workspaces-workspace), with their features unified; no `<path>` with it | |
+| `-p <name>`, `--package <name>` | Test this workspace member, by package name; repeatable, the members' features then unified | |
 | `-h`, `--help` | Prints the usage and these options | |
 | `-V`, `--version` | Prints `pep-test` and its version | |
 
