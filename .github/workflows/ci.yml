@@ -192,7 +192,7 @@ jobs:
     # A 4-core runner (3 on macOS). The bounds are the slowest passing
     # runs plus a fifth (scripts/ci-monitor.sh's samples and the
     # Diagnostics step say what a job that hit one was doing).
-    timeout-minutes: 90
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
@@ -207,7 +207,7 @@ jobs:
       # processes printed beside them each minute (scripts/ci-monitor.sh):
       # a runner that dies mid-test leaves what it ran out of in the log.
       - name: Pepper tests
-        timeout-minutes: 70
+        timeout-minutes: 55
         shell: bash
         env:
           PEPPER_TESTS_PART: ${{ matrix.part }}
@@ -256,7 +256,7 @@ jobs:
     # A 4-core runner (3 on macOS). The bounds are the slowest passing
     # runs plus a fifth (scripts/ci-monitor.sh's samples and the
     # Diagnostics step say what a job that hit one was doing).
-    timeout-minutes: 90
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
@@ -271,7 +271,7 @@ jobs:
       # processes printed beside them each minute (scripts/ci-monitor.sh):
       # a runner that dies mid-test leaves what it ran out of in the log.
       - name: Pepper tests
-        timeout-minutes: 70
+        timeout-minutes: 55
         shell: bash
         env:
           PEPPER_TESTS_PART: ${{ matrix.part }}
@@ -311,7 +311,7 @@ jobs:
     # A 4-core runner (3 on macOS). The bounds are the slowest passing
     # runs plus a fifth (scripts/ci-monitor.sh's samples and the
     # Diagnostics step say what a job that hit one was doing).
-    timeout-minutes: 90
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
@@ -326,7 +326,7 @@ jobs:
       # processes printed beside them each minute (scripts/ci-monitor.sh):
       # a runner that dies mid-test leaves what it ran out of in the log.
       - name: Pepper tests
-        timeout-minutes: 70
+        timeout-minutes: 55
         shell: bash
         env:
           PEPPER_TESTS_PART: ${{ matrix.part }}
