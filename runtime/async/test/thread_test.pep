@@ -1,4 +1,4 @@
-# Threads: spawning and joining, thread names and ids, `[ThreadLocal]`
+# Threads: spawning and joining, stack sizes, thread names and ids, `[ThreadLocal]`
 # variables and ThreadLocal values,
 # processor counts, closures and `shared` functions as thread bodies, and
 # `[Shared]` objects and exported globals used from many threads at once.
@@ -52,6 +52,30 @@ threads_spawn_and_join() {
     var anonymous = async.Thread.spawn(body);
     anonymous.join();
     expect_equal(anonymous.name(), "");
+}
+
+# Recurses `depth` deep; the shift keeps the recursion from becoming a loop.
+nest(depth: ulong): ulong {
+    if (depth == 0) {
+        return 0;
+    }
+    return (nest(depth - 1) >> 1) ^ depth;
+}
+
+[Test]
+spawn_with_a_stack_size() {
+    # About 3 MiB of stack optimized, more unoptimized: past the 1 MiB
+    # Windows and 512 KiB macOS give a thread by default.
+    ulong depth = 100000;
+    var expected: ulong = 0;
+    for (var i in 1..depth + 1) {
+        expected = (expected >> 1) ^ i;
+    }
+    var found = async.Atomic<ulong>(0);
+    async.Thread.spawn(() => {
+        found.store(nest(depth));
+    }, "deep", 33554432).join();
+    expect_equal(found.load(), expected);
 }
 
 [Test]

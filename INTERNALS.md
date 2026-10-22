@@ -2535,7 +2535,11 @@ inlay hints, quick fixes and dimmed code for other platforms. A request
 slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
-  document's newest text once edits settle (250 ms). It loads the
+  document's newest text once edits settle (250 ms). It runs on an 8 MiB
+  stack (`ANALYSIS_STACK_SIZE`), since the parser and sema recurse per
+  level of nesting and an unoptimized build needs about 10 KiB a level;
+  `deepest_source_fits_the_server_stack` checks the deepest source in
+  half of it. It loads the
   program rooted at the document, with the editor's text in
   `Setup.sources`, and publishes the diagnostics through the `[Shared]`
   `lsp.Client`. A document edited again while it was analyzed is analyzed

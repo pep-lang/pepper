@@ -102,7 +102,7 @@ directly is not attached to any thread and cannot be joined.
 #### spawn
 
 ```pepper
-static spawn(body: ThreadBody, name: String = ""): Thread
+static spawn(body: ThreadBody, name: String = "", stack_size: ulong = 0): Thread
 ```
 
 Starts a new thread that runs `body`.
@@ -110,9 +110,17 @@ Starts a new thread that runs `body`.
 The new thread starts right away and runs until `body` returns. Its
 `Thread.current()` is the `Thread` returned here.
 
+The stack the operating system gives a thread by default differs:
+8 MiB on Linux, 1 MiB on Windows, and 512 KiB on macOS. A thread
+that recurses deeply, such as one walking a deeply nested tree,
+passes `stack_size` to get the same stack everywhere. The stack is
+reserved address space; memory is used only as the thread reaches
+it.
+
 **Parameters**
 - `body` — the function to run on the new thread
 - `name` — a name for the thread, returned by `name()`; empty by default
+- `stack_size` — the bytes of stack the thread gets, rounded up to 64 KiB; 0, the default, for the system's default
 
 **Returns**
 - the new thread, to `join()` or query
@@ -124,6 +132,8 @@ The new thread starts right away and runs until `body` returns. Its
 ```pepper
 var worker = Thread.spawn(do_work, "worker");
 worker.join();
+var deep = Thread.spawn(walk_tree, "walker", 8388608);   # 8 MiB
+deep.join();
 ```
 
 #### current

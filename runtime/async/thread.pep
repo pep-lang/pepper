@@ -147,19 +147,29 @@ export struct Thread {
     ## The new thread starts right away and runs until `body` returns. Its
     ## `Thread.current()` is the `Thread` returned here.
     ##
+    ## The stack the operating system gives a thread by default differs:
+    ## 8 MiB on Linux, 1 MiB on Windows, and 512 KiB on macOS. A thread
+    ## that recurses deeply, such as one walking a deeply nested tree,
+    ## passes `stack_size` to get the same stack everywhere. The stack is
+    ## reserved address space; memory is used only as the thread reaches
+    ## it.
+    ##
     ## @param body the function to run on the new thread
     ## @param name a name for the thread, returned by `name()`; empty by default
+    ## @param stack_size the bytes of stack the thread gets, rounded up to 64 KiB; 0, the default, for the system's default
     ## @returns the new thread, to `join()` or query
     ## @panics if the operating system cannot create another thread
     ## @example
     ##     var worker = Thread.spawn(do_work, "worker");
     ##     worker.join();
-    static spawn(body: ThreadBody, name: String = ""): Thread {
+    ##     var deep = Thread.spawn(walk_tree, "walker", 8388608);   # 8 MiB
+    ##     deep.join();
+    static spawn(body: ThreadBody, name: String = "", stack_size: ulong = 0): Thread {
         var thread = Thread(name, body);
         # The new thread's own reference, which its entry point takes over.
         __ptr<Thread> start = _pep_malloc(8);
         start[0] = thread;
-        var handle = _async_sys_spawn(__function_pointer(_async_thread_main), start);
+        var handle = _async_sys_spawn(__function_pointer(_async_thread_main), start, stack_size);
         if (handle == __null) {
             start[0] = __default<Thread>();
             _pep_free(start);
