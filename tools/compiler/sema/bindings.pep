@@ -140,8 +140,8 @@ export check_bindings(module: Module, state: PassState) {
     # global; an assignment to a global there goes unreported until
     # extensions are checked with their target's fields.
     var none = Array<_LocalBinding>();
-    for (var extension in module.extensions) {
-        for (var method in extension.methods) {
+    for (var e in module.checked.extensions..module.extensions.count) {
+        for (var method in module.extensions[e].methods) {
             _check_function(state, method, none, none);
         }
     }

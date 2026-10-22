@@ -1301,8 +1301,8 @@ export bind_calls(module: Module, state: PassState) {
             _bind_in(m, own, callees, globals, state);
         }
     }
-    for (var ext in module.extensions) {
-        for (var m in ext.methods) {
+    for (var e in module.checked.extensions..module.extensions.count) {
+        for (var m in module.extensions[e].methods) {
             _bind_in(m, none, callees, globals, state);
         }
     }
