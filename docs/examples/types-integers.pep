@@ -36,6 +36,12 @@ main(): int {
 
     # Hexadecimal literals.
     assert(0xFF == 255, "0xFF is 255");
+
+    # A decimal literal past long's range is a ulong.
+    u64 top = 18446744073709551615;
+    assert(top == 0xFFFFFFFFFFFFFFFF, "the largest ulong, in decimal");
+    long lowest = -9223372036854775808;
+    assert(lowest < 0, "long's minimum is written with its sign");
     assert(count + big > 0 && mask > 0 && huge > 0 && port > 0, "all in range");
     return 0;
 }

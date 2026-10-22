@@ -18,7 +18,7 @@ import "files" as files;
 import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
-import [Target, TEST_BUILD_OPTION, undefined_build_option_comparisons] from "platform";
+import [Target, undefined_build_option_comparisons] from "platform";
 import [load_manifest, Packages] from "project";
 import "project";
 import [check_visibility] from "visibility";
@@ -458,7 +458,7 @@ export load(
     # Resolved import keys per file, mapped to indices once all are loaded.
     var resolved = Array<Array<String?>>();
     # The `pep.toml` each file falls under, for the dependencies it imports.
-    var packages = Packages(root, test = target.build_options.contains(TEST_BUILD_OPTION));
+    var packages = Packages(root, target);
     var project = packages.project;
     if (!project.is_value()) {
         var cwd = process.working_directory();
@@ -698,19 +698,8 @@ _describe_paths(paths: Path[]): String {
     return ", ".join(parts);
 }
 
-# A parse error as the compiler reports it: `file:line:column: error: ...`.
+# A parse error as the compiler reports it: `file:line:column: error: ...`
+# and the line, with a caret under the span.
 _render(name: String, source: String, span: Span, message: String): String {
-    ulong line = 1;
-    ulong column = 1;
-    ulong i = 0;
-    while (i < span.start and i < source.size) {
-        if (source.byte_at(i) == '\n') {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-        i += 1;
-    }
-    return $"{name}:{line}:{column}: error: {message}";
+    return Diagnostic.error(message).at(Location(0, span)).render([SourceText(name, source)]);
 }

@@ -8,8 +8,9 @@
 # `exec`; and the error for a member a value's type lacks inside an
 # interpolation or for another module's private extern; string literals
 # that hold a NUL or sit in default arguments; a `match` in a generic
-# method of another module's struct; a `[Move]` argument called through a
-# `shared` function value; externs bound to C symbols Pepper functions are
+# method of another module's struct, and a `match` arm in a module's file
+# whose case shares its name with a type of the module; a `[Move]`
+# argument called through a `shared` function value; externs bound to C symbols Pepper functions are
 # named after, at each `-O` level; reference chains 100,000 deep, released
 # without overflowing the stack; the message a stack overflow prints on
 # the main thread, a `Thread` and a task; and the panic hook, which every
@@ -103,6 +104,23 @@ an_unknown_member_in_an_interpolation_is_named() {
     expect_contains(error.value(), "interpolation_unknown_member.pep:5:20: error: no member named 'count' in 'String'");
 }
 
+# A syntax error in a function body, read after the declarations, is a
+# diagnostic like any other: the line with a caret, and no `pepc:` (#158).
+[Test]
+a_syntax_error_in_a_body_shows_its_line() {
+    var folder = TempFolder("programs_body_literal_too_large");
+    var source = folder.path.join("body_literal_too_large.pep");
+    # Written here: in testdata/, the repository's parse test would read it.
+    write_file(source, "main(): int {\n    ulong a = 18446744073709551616;\n    return 0;\n}\n");
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(
+        error.value(),
+        "body_literal_too_large.pep:2:15: error: integer literal is too large to be represented in a 64-bit integer\n    2 |     ulong a = 18446744073709551616;\n      |               ^~~~~~~~~~~~~~~~~~~~"
+    );
+    expect_true(!error.value().contains("pepc:"), "no 'pepc:' prefix");
+}
+
 # ── visibility ──────────────────────────────────────────────────────────────
 
 # A module's private extern is not visible from another module, whose
@@ -134,6 +152,44 @@ a_match_in_another_modules_generic_method_is_lowered() {
     write_file(folder.path.join(module), read_file(testdata.join("match_in_other_module").join(module)));
     var program = _build("match_in_other_module", folder.path, ["-I", folder.path.to_string()]);
     expect_exit(run(process.Command(program.to_string())), 3);
+}
+
+# Writes `testdata/case_named_like_module_type/demo/` into `folder`.
+_write_demo(folder: Path) {
+    var testdata = Path("compiler").join("testdata").join("case_named_like_module_type");
+    for (var name in ["module.pep", "shapes.pep", "main.pep", "missing_case.pep"]) {
+        var file = Path("demo").join(name);
+        write_file(folder.join(file), read_file(testdata.join(file)));
+    }
+}
+
+# In a file of a module that does not import the module's file declaring
+# a type `Circle`, a `Circle(radius)` arm names the matched enum's case.
+[Test]
+a_case_named_like_a_type_of_its_module_matches_the_case() {
+    var folder = TempFolder("programs_case_named_like_module_type");
+    _write_demo(folder.path);
+    var program = folder.path.join("demo_main" + toolchain.executable_suffix());
+    var error = build_program(
+        folder.path.join("demo").join("main.pep"), program, folder.path.join("build"), ["-I", folder.path.to_string()]
+    );
+    expect_equal(error.value_or(""), "");
+    expect_exit(run(process.Command(program.to_string())), 143);
+}
+
+# The same match without an arm for one case reports that case.
+[Test]
+a_case_named_like_a_type_of_its_module_is_missing_from_a_match() {
+    var folder = TempFolder("programs_case_named_like_module_type_missing");
+    _write_demo(folder.path);
+    var error = build_program(
+        folder.path.join("demo").join("missing_case.pep"),
+        folder.path.join("never"),
+        folder.path.join("build"),
+        ["-I", folder.path.to_string()]
+    );
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(error.value_or(""), "error: match on 'Shape' does not handle 'Dot'");
 }
 
 # ── os ──────────────────────────────────────────────────────────────────────

@@ -50,7 +50,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tools/pep-run` | `pep-run`: builds a program with `pep-build` into `<Pepper home>/run/<hash of folder and options>/` with the shared build cache, then execs it in the caller's folder. |
 | `tools/pep-profile` | `pep-profile`: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). |
 | `tools/pep-test` | `pep-test`: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). |
-| `tools/pep-package` | `pep-package`, the package manager, itself a `pep.toml` project that depends on `pep-lang/pepper-semver` for versions and ranges (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, checkouts), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides; only the project's own `[dev-dependencies]` are gathered, after its dependencies, and what only they reach is locked `dev = true`; a range skips versions whose `minimum_toolchain` is newer than pep-package's own release, reading each candidate's `pep.toml` with `git show` from its clone). The compiler's `driver/project.pep` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package, or checks the commits out with git itself when `pep-package` is not installed. |
+| `tools/pep-package` | `pep-package`, the package manager, itself a `pep.toml` project that depends on `pep-lang/pepper-semver` for versions and ranges (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, checkouts), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides; only the project's own `[dev-dependencies]` are gathered, after its dependencies, and what only they reach is locked `dev = true`; every `[target.'<condition>'.dependencies]` is gathered whatever the platform, and what only they reach is locked with `target`, the conditions on each way to it joined with `&&` and the ways with `||`; a range skips versions whose `minimum_toolchain` is newer than pep-package's own release, reading each candidate's `pep.toml` with `git show` from its clone). The compiler's `driver/project.pep` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package the build's target needs (`pep-package fetch <source>...`, fetching only those, when `pep.lock` lists every dependency and holds packages for other targets), or checks the commits out with git itself when `pep-package` is not installed. |
 | `tools/pep-install` | `pep-install`, run as `pepper install`: installs release toolchains side by side in the Pepper home and sets the default. `releases.pep` (GitHub's release list, streamed archive downloads checked against their `.sha256`), `zip.pep` (unpacks the Windows `.zip` releases), `commands.pep` (each command against a `toolchain.Home`), `setup.pep` (`setup` and `uninstall`: the PATH, prerequisites and the check program, which the install scripts bootstrap through). |
 | `tools/toolchain` | The module `pepper` and `pep-install` share: toolchain versions and the versions a command names (`version.pep`), the Pepper home's layout (`home.pep`), and which toolchain a folder uses (`choose.pep`: `+<version>`, `PEPPER_TOOLCHAIN`, `pep.toml`'s `toolchain`, the default). |
 | `tools/pepper` | `pepper`, the entry point: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler); run from a Pepper home, it runs the tools of the toolchain `tools/toolchain` picks. |
@@ -87,7 +87,9 @@ link.load_program(entry, setup)                                   (link/program.
     the import walk                parse every reachable file; resolve imports
                                    (a dependency through Packages, else the search paths;
                                    the root project's dev-dependencies only in a TEST
-                                   build or for a root file under its examples/)
+                                   build or for a root file under its examples/; a
+                                   [target.'<condition>'.dependencies] entry only when
+                                   the condition, read as [Target(...)]'s, holds)
     link.link                      bind imports/exports; rewrite m.x, aliases; mangle
                                    private names (helper@io/file) → FileScope
   Program.check()                  linking errors, then visibility
@@ -568,7 +570,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `is_tuple`), displayed as `(A, B)`; `t.0` is a `MemberRef` named `"0"`.
     `Tuple<A, B>` builds the same type. Labels (`(line: int, column: int)`)
     ride on `TypeName.labels`, which equality, hashing and `Display` ignore
-    (`display()` shows them); `check_labels` rejects a partly labeled or
+    (`display()` shows them, and names each number type as programs
+    commonly do, `int` for the `i32` a literal is typed, through
+    `common_number_name`; `display_stored()` keeps the stored spelling for
+    `reflect.name`, which gives a type as written); `check_labels` rejects a partly labeled or
     duplicate set, and `lower_destructures` renames `p.line` to `p.0`
     (`tuple_index`). A labeled literal `(line: 3, column: 7)` is built as
     a call to `__tuple(line,column)` (`tuple_literals.tuple_constructor_labels`
@@ -759,6 +764,12 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `Cast { IntLiteral(byte), byte }` (`CastKind.Synthesized`), so it is
     typed `byte` where nothing else gives it a type and widens like any
     `byte` value.
+  - A decimal literal past `long`'s range (`ast.Literal.Unsigned`, which
+    the parser makes for 2^63 to 2^64-1; `-9223372036854775808` it reads
+    as one `Integer`) becomes `Cast { IntLiteral(bits), ulong }`
+    (`CastKind.Synthesized`, located; `literals.make_unsigned_literal`), so
+    it is typed `ulong`. `convert_to_traits` reports it flowing into a
+    narrower integer slot (`literals.unsigned_literal` finds it).
   - `x as T` becomes `Cast` with `CastKind.Static`, located at the `as`
     keyword (`ast.Expression.Cast.keyword_span`), and the intrinsic
     `unsafe_cast<T>(x)` becomes `Cast` with `CastKind.Unsafe`, located at
@@ -1185,7 +1196,7 @@ is a field of the `PassState`.
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
 | final | `shared_functions`, `synthesize_function_types` | Reports a C function pointer type (`__extern_function<R, P…>`, `TypeName.is_extern_function_type`; not a refcounted type, it lowers to `ptr`) declared with a type C cannot pass (a struct). Where a value flows into a C function pointer slot, replaces a `FunctionRef`, or a `MakeClosure` whose closure captures nothing (its `__call` copied into a free function `<closure>_c_function`), with `Cast(FunctionPointer, slot type)`; reports a closure or bound method that captures (`sync_closures` inferred its parameter types from the slot's plain signature, `_extern_as_function`). Where a function value flows into a `shared` function-typed slot, retypes a `FunctionRef` or `MakeClosure` to the `shared` type, reporting a capture that `shared_types.unsafe_part_in` finds not thread-safe (at its first use in the closure, with a note at the captured local). Where a `shared` value flows into a plain slot of the same signature, wraps it in a new plain adapter closure (`__inner`, `__call` forwarding to it; its destructor releases `__inner`), so plain counts never touch a shared object. Any other plain value in a `shared` slot is left for `check_function_types`. |
 | final | `value_structs.check_value_structs` (`sema/value_structs.pep`) | Records the program's `[Value]` structs in `PassState.value_structs` (as `synthesize` does too; `PassState.is_value_struct` answers by base name) and reports what a value cannot do: `===`/`!==` and `__null` on one, `__weak<V>`, `__refcount`, a value struct in an `extern` signature, and one that contains itself (`_check_recursion`, an explicit-stack walk over value-typed fields, a note per step). Infers each value struct's mutating methods (`_mutating_methods`, a fixpoint: a method that assigns a field of `this`, or of a value field of it, or calls a mutating method on either) and, walking each body with its scopes (`_Uses`, an explicit statement stack), reports a change that would land in a copy or a `const`: a field of a call's result assigned or a mutating method called on one (`Root.Temporary`, with a note at the call that made the copy), the same on a `const` variable, and a change to a closure's `__this`. `__address` stays allowed: on a value it hashes the fields (§4.5). The builder rejects `destruct` and `[Shared]` on a value struct (`check_value_attributes`). A `for` over a `const` value iterator (no `iterate()`) is reported as a mutating `next` call. |
-| final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`convert_to_traits`' `_Implicit` table) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. A string literal (the `String(raw, size, length)` call `resolve_injected` made, matched by the literal's loc) flowing into a `char`, `u8`, or `void` pointer slot is unwrapped back to its raw literal, in each arm of a ternary too; flowing into a `StringConstant` slot it becomes `StringConstant(raw, size, length)` (`_constant_string_literal`), a `[Value]` over the literal's constant bytes. A `StringConstant` value flowing into a `String` slot becomes `value.to_string()`, and into a C string slot `value.c_str()` (`convert_constant`): the conversion `String` would make with an `[Implicit]` constructor, built in so that `String` keeps its one constructor (a second one would make every `String(...)` call, the literals' included, an overload set), and `String(text)` of a `StringConstant` is `text.to_string()` too. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
+| final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`convert_to_traits`' `_Implicit` table) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. A decimal literal past `long`'s range flowing into an integer slot other than `ulong` is an error (`integer literal is too large for type 'long'`). A string literal (the `String(raw, size, length)` call `resolve_injected` made, matched by the literal's loc) flowing into a `char`, `u8`, or `void` pointer slot is unwrapped back to its raw literal, in each arm of a ternary too; flowing into a `StringConstant` slot it becomes `StringConstant(raw, size, length)` (`_constant_string_literal`), a `[Value]` over the literal's constant bytes. A `StringConstant` value flowing into a `String` slot becomes `value.to_string()`, and into a C string slot `value.c_str()` (`convert_constant`): the conversion `String` would make with an `[Implicit]` constructor, built in so that `String` keeps its one constructor (a second one would make every `String(...)` call, the literals' included, an overload set), and `String(text)` of a `StringConstant` is `text.to_string()` too. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number or a raw pointer where a struct is expected or the reverse (a struct may pass as `void*`, but `void*` is never a struct; a string literal in a pointer slot is its `char*` global), or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). A C function pointer slot takes only the same C function pointer type (`extern_flows_into`, with a hint saying what converts), and a C function pointer converts only to `void*`. An extern call's arguments are checked here only for its function-typed parameters; codegen checks the rest. It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
 | final | `check_casts` (`sema/casts.pep`) | Reports each `as` or `unsafe_cast` whose conversion `casts.check` rejects, at the `as` or the `unsafe_cast` name (`cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret`). Runs after `convert_to_traits`, which turns an `s as Trait` into the `ToTrait` a trait-typed slot gets. A cast whose operand `static_type_of` cannot type, or whose type still names a parameter of the generic base (`function_types_check._Bases`), is left to codegen: `codegen_cast` asks `casts.check` again with the operand's exact type, and lowers an `unsafe_cast` between a float and an integer as a `bitcast` and an integer to a pointer as `inttoptr`. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). A `[ThreadLocal]` variable is exempt from the `const` rule (each thread has its own copy) but keeps the type rule, since a non-thread-safe value parked in one from under a lock would escape `check_confinement`, and its initializer must fold to a constant (`thread_local_constant`), the image every thread starts from. The builder rejects `[ThreadLocal]` on a field or parameter (`reject_thread_local`). |
@@ -1307,7 +1318,9 @@ as one module, recording in `owners` the file that declares each symbol;
    == st.ty.name` with generic `ty`, or `is_generic_func`) are skipped;
    sema has already cloned the concrete specializations.
 2. **`emit_globals`.** Module-scope variables become LLVM globals. A
-   constant initializer is set directly. Other initializers go into
+   constant initializer is set directly, a string constant's included
+   (`const X = "text";`, `string_constant_value`), so nothing reaches an
+   unread one and the linker drops it. Other initializers go into
    `__pep_global_init`, registered in `llvm.global_ctors`, in the order of
    `module.globals` (see `initialization_order`, `sema/program.pep`). A `[ThreadLocal]`
    global (`is_thread_local`; `codegen/globals.pep`) is an LLVM
@@ -1690,7 +1703,12 @@ a part of their own (`codegen.prepare`'s `locations_part`), so a line shift
 recompiles that small part, not the code below the edit (a part that uses
 one declares it outside its comdat, `keep_parts`: a declaration in a
 comdat does not verify, and under `--lto=full` would claim the comdat
-from the defining part). And a file that
+from the defining part). Just before a part's object is written
+(`driver/parts.pep`, and the in-process LTO object), each definition not
+in a comdat goes in a `nodeduplicate` comdat of its own on COFF and ELF,
+as the writing machine's triple says (`section_each_definition`, private
+ones made internal, as a COFF comdat's symbol must be named), clang's `-ffunction-sections
+-fdata-sections`, so the link drops what nothing uses (pepper#155). And a file that
 `_split` gave a part alone spreads its symbols over a power of two of
 parts (`_spread`, about `_SPREAD_SIZE` each, at most `_MAX_SPREAD`) by its
 symbol's hash, so an edit to one function recompiles one of them.
@@ -1738,7 +1756,9 @@ NDK's own clang (`AndroidNdk.locate`: `--sysroot` naming the NDK or its
 `sysroot`, else `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` or the newest
 `$ANDROID_HOME/ndk/<version>`), which brings its lld, compiler-rt and
 libunwind. The default system libraries and the debug options
-follow the target's OS.
+follow the target's OS. Every link drops the sections nothing uses:
+`/OPT:REF` on Windows (not with `-g`, whose `/DEBUG` turns it off),
+`--gc-sections` on ELF, `-dead_strip` on Apple targets.
 
 **Optimization** (`codegen/target.pep`). `BuildOptions.opt_level` is `-O0` through
 `-O3`: `-O<n>`, else `PEPPER_OPT_LEVEL`, else `-O0` (a bare `-O` is `-O2`,
@@ -3148,7 +3168,9 @@ then failed to link (#24). So the scheduler gives a hit's record to the
 compilation units reading it at once, but asks whether its object links
 (`usable`) only once the compilation units it reads are done; an object
 whose `needs` the objects below no longer all define is passed over for one
-under its key with that stamp added (`Cache.unit_store_key`), and
+under its key with that stamp added (`Cache.store_unit`, which stores there
+when the key holds other objects, even another build's stored a moment
+before: a key's folder appears by a rename that fails when it is there), and
 when there is none the hit is checked again in a worker, which keeps the
 record already given out and stores its new object there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this

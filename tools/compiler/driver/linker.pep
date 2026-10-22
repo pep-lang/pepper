@@ -784,6 +784,14 @@ export link_objects(
             command.argument("-Xlinker").argument(flag);
         }
     }
+    # Drop the code and data nothing uses, as `/OPT:REF` does on Windows:
+    # each definition has a section of its own (`codegen`'s partition), so
+    # an unread constant costs nothing (pepper#155).
+    if (target.is_apple()) {
+        command.argument("-Wl,-dead_strip");
+    } else if (target.os != "windows") {
+        command.argument("-Wl,--gc-sections");
+    }
     # The objects go in a response file: a program's many parts overflow
     # Windows' 32,767-character command line.
     var listing = Path($"{output}.objects");

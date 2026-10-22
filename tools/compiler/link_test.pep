@@ -170,6 +170,29 @@ reports_linking_errors() {
             "import \"c\";\nextend Shelf { shelf_room(): int { return n; } }\n",
             "deps/shop/b.pep",
             "import \"c\";\ncount(s: Shelf): int { return s.shelf_room(); }\nexport use(): int { return count(Shelf()); }\n"
+        ],
+        # A match on a trait value names a struct of another file of the
+        # module, which this file does not import.
+        [
+            "main.pep",
+            "# expect: deps/shop/b.pep:2:41: error: 'Circle' is declared in deps/shop/c.pep, another file of this module, which this file does not import; add an import for it\nimport [use] from shop;\nmain(): int { return 0; }\n",
+            "deps/shop/module.pep",
+            "import \"c\";\nexport * from \"b\";\n",
+            "deps/shop/a.pep",
+            "export trait Shape { area(): int; }\n",
+            "deps/shop/c.pep",
+            "import \"a\";\nexport struct Circle { var r: int = 0; }\nextend Circle with Shape { area(): int { return r; } }\n",
+            "deps/shop/b.pep",
+            "import \"a\";\nexport use(s: Shape): int { match (s) { Circle(c) => { return c.r; } else => { return 0; } } }\n"
+        ],
+        # An enum's case shares its name with a struct two imports provide.
+        [
+            "main.pep",
+            "# expect: accepted\nimport \"a\";\nimport \"b\";\nenum Shape { Circle(radius: int), Dot }\nmain(): int { match (Shape.Dot) { Circle(radius) => { return radius; } Dot => { return 0; } } }\n",
+            "a.pep",
+            "export struct Circle {}\n",
+            "b.pep",
+            "export struct Circle {}\n"
         ]
     ];
     expect_equal(check_trees(folder, trees, outcome), 0 as ulong);

@@ -7,7 +7,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import "builder";
 import [Loc] from "loc";
 import [Expression, StructDef, TypeName] from "model";
-import [parse_type_string] from "type_name";
+import [parse_type_string, sized_number_name] from "type_name";
 
 ## Returns `loc` as a diagnostic's location.
 ##
@@ -150,40 +150,7 @@ _expression_loc(e: Expression): Loc {
 ## `int`), a pointer `__ptr<T>` among them.
 _canonical(ty: TypeName): TypeName {
     var parsed = parse_type_string(ty.to_string());
-    var name = parsed.name;
-    match (name) {
-        "int" => {
-            name = "i32";
-        }
-        "uint" => {
-            name = "u32";
-        }
-        "long" => {
-            name = "i64";
-        }
-        "ulong" => {
-            name = "u64";
-        }
-        "short" => {
-            name = "i16";
-        }
-        "ushort" => {
-            name = "u16";
-        }
-        "char" => {
-            name = "i8";
-        }
-        "byte" => {
-            name = "u8";
-        }
-        "float" => {
-            name = "f32";
-        }
-        "double" => {
-            name = "f64";
-        }
-        else => {}
-    }
+    var name = sized_number_name(parsed.name);
     var args = Array<TypeName>();
     for (var t in parsed.sub_types) {
         args.append(_canonical(t));
@@ -215,56 +182,4 @@ _compare_bytes(a: String, b: String): long {
         return 0;
     }
     return a.size < b.size ? -1 : 1;
-}
-
-## `ty` as the programmer spells it: `int` rather than the `i32` a literal
-## is typed.
-##
-## @param ty the type
-## @returns its display spelling
-export constraint_spelled(ty: TypeName): String {
-    var copy = ty.copy();
-    _rename_sized(copy);
-    return copy.display();
-}
-
-## `ty` with its integer and float types by the names programs use
-## (`int` for `i32`): `_canonical` the other way.
-_rename_sized(ty: TypeName) {
-    match (ty.name) {
-        "i8" => {
-            ty.name = "char";
-        }
-        "u8" => {
-            ty.name = "byte";
-        }
-        "i16" => {
-            ty.name = "short";
-        }
-        "u16" => {
-            ty.name = "ushort";
-        }
-        "i32" => {
-            ty.name = "int";
-        }
-        "u32" => {
-            ty.name = "uint";
-        }
-        "i64" => {
-            ty.name = "long";
-        }
-        "u64" => {
-            ty.name = "ulong";
-        }
-        "f32" => {
-            ty.name = "float";
-        }
-        "f64" => {
-            ty.name = "double";
-        }
-        else => {}
-    }
-    for (var t in ty.sub_types) {
-        _rename_sized(t);
-    }
 }

@@ -6,6 +6,7 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [deprecation_of, is_deprecation] from compiler.link;
+import [make_unsigned_literal] from "literals";
 import [Loc] from "loc";
 import [
     AccessorKind,
@@ -588,6 +589,9 @@ _constant_integer(e: ast.Expression): long? {
                 Integer(v) => {
                     return Optional<long>.Value(v);
                 }
+                Unsigned(v) => {
+                    return Optional<long>.Value(unsafe_cast<long>(v));
+                }
                 Char(v) => {
                     return Optional<long>.Value(v as long);
                 }
@@ -598,7 +602,7 @@ _constant_integer(e: ast.Expression): long? {
             if (prefix and op == "-") {
                 var inner = _constant_integer(operand);
                 if (inner.is_value()) {
-                    return Optional<long>.Value(-inner.value());
+                    return Optional<long>.Value((0 as long).wrapping_sub(inner.value()));
                 }
             } else if (prefix and op == "+") {
                 return _constant_integer(operand);
@@ -1780,6 +1784,9 @@ struct _Builder {
                     }
                     Integer(v) => {
                         return Built<Expression>.Ok(Expression.IntLiteral(v));
+                    }
+                    Unsigned(v) => {
+                        return Built<Expression>.Ok(make_unsigned_literal(v, loc(span)));
                     }
                     Float(v) => {
                         return Built<Expression>.Ok(Expression.FloatLiteral(v));

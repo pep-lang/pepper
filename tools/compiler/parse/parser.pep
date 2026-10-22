@@ -1415,9 +1415,26 @@ struct Parser {
             if (_failed) {
                 return operand;
             }
+            if (_position == op + 2 and _text(op) == "-") {
+                if (operand is Literal(value, _)) {
+                    return _negative(op, value);
+                }
+            }
             return Expression.Unary(_text(op), true, operand, Span(_start(op), _last_end()));
         }
         return _cast();
+    }
+
+    # The `-` at `minus` and `value`, the number literal after it: their
+    # `Unary`, or for a value past `long`'s range one literal with the
+    # sign, which only `long`'s minimum fits.
+    _negative(minus: ulong, value: Literal): Expression {
+        var number = _token_span(minus + 1);
+        var whole = Span(_start(minus), number.end);
+        if (value is Unsigned(_)) {
+            return Expression.Literal(_number("-" + _text(minus + 1), whole, true), whole);
+        }
+        return Expression.Unary("-", true, Expression.Literal(value, number), whole);
     }
 
     _cast(): Expression {
@@ -1907,9 +1924,7 @@ struct Parser {
             _advance();
             _negative_problems = _problems.count;
             _negative_end = _position;
-            var number = _token_span(minus + 1);
-            var literal = Expression.Literal(_number(_text(minus + 1), number, false), number);
-            return Expression.Unary("-", true, literal, Span(_start(minus), number.end));
+            return _negative(minus, _number(_text(minus + 1), _token_span(minus + 1), false));
         }
         if (token.is_word(_source, "sizeof")) {
             _advance();
@@ -4395,11 +4410,15 @@ struct Parser {
             return Literal.Float(value.value());
         }
         var value = long.parse(text);
-        if (!value.is_value()) {
+        if (value.is_value()) {
+            return Literal.Integer(value.value());
+        }
+        var unsigned = negative ? Optional<ulong>.Empty : ulong.parse(text);
+        if (!unsigned.is_value()) {
             _problem("integer literal is too large to be represented in a 64-bit integer", span);
             return Literal.Integer(0);
         }
-        return Literal.Integer(value.value());
+        return Literal.Unsigned(unsigned.value());
     }
 
     _character(index: ulong): Literal {

@@ -130,7 +130,7 @@ export struct Cache {
     ## names listed beside them (`NEEDS_FILE`), and a body edit below can drop
     ## one of those without changing `key` (#24). So objects under `key` whose
     ## needs `below` lacks are passed over for those under `key` with `below`
-    ## added (`unit_store_key`).
+    ## added (`store_unit`).
     ##
     ## @param unit the compilation unit's name in the cache (`+<name>`)
     ## @param key its key
@@ -150,16 +150,50 @@ export struct Cache {
         return Optional<String>.Empty;
     }
 
-    ## Returns the key to store new objects of compilation unit `unit`, keyed
-    ## `key`, under: `key`, unless the cache holds objects under it already,
-    ## which then do not link with the objects below (`unit_objects`).
+    ## Moves `built`, the objects of compilation unit `unit` just compiled on
+    ## objects below that define `below`, into the build cache with what they
+    ## use of those (`needs`, a name a line, kept as `NEEDS_FILE`), under
+    ## `key`, or, when the cache holds objects under `key` already that do
+    ## not link with the objects below, under `key` with `below` added. A
+    ## key's folder appears whole, by a rename that fails when it is there
+    ## already, so two builds storing one key at the same moment (#152) never
+    ## see half of each other's: the one that renames second links the
+    ## first's objects when they link with its objects below
+    ## (`unit_objects`), and else keeps its own under the other key.
     ##
+    ## @param built the folder of objects
     ## @param unit the compilation unit's name in the cache (`+<name>`)
     ## @param key its key
+    ## @param needs what its objects use of what the objects below define
     ## @param below what the objects of each compilation unit it reads define
-    ## @returns the key
-    unit_store_key(unit: String, key: String, below: Defines[]): String {
-        return objects(unit, key).is_directory() ? _with_below(key, below) : key;
+    ## @param file a file its objects' folder holds
+    ## @returns the key of the objects to link, or why they could not be stored
+    store_unit(
+        built: Path, unit: String, key: String, needs: String, below: Defines[], file: String
+    ): Result<String, String> {
+        if (File.write_text(built.join(Path(NEEDS_FILE)), $"{stamp_of(below)}\n{needs}").is_err()) {
+            return Result<String, String>.err($"cannot write to {built}");
+        }
+        var target = objects(unit, key);
+        var placed = _place(built, target);
+        if (placed.is_err()) {
+            return Result<String, String>.err(placed.error());
+        }
+        if (placed.value()) {
+            _prune(target.parent().value());
+            return Result<String, String>.ok(key);
+        }
+        var found = unit_objects(unit, key, below, file);
+        if (found.is_value()) {
+            Directory.remove_all(built);
+            return Result<String, String>.ok(found.value());
+        }
+        var other = _with_below(key, below);
+        var stored = store(built, unit, other);
+        if (stored.is_err()) {
+            return Result<String, String>.err(stored.error());
+        }
+        return Result<String, String>.ok(other);
     }
 
     ## Moves `built`, a folder of objects just written, to where the objects
@@ -175,10 +209,25 @@ export struct Cache {
     ## @returns the objects' folder in the cache, or why it could not be moved
     store(built: Path, unit: String, key: String): Result<Path, String> {
         var target = objects(unit, key);
+        var placed = _place(built, target);
+        if (placed.is_err()) {
+            return Result<Path, String>.err(placed.error());
+        }
+        if (!placed.value()) {
+            Directory.remove_all(built);
+        }
+        _prune(target.parent().value());
+        return Result<Path, String>.ok(target);
+    }
+
+    # Renames `built` to `target`, a key's folder. Returns whether it did:
+    # not when another build's folder is there already, which stays, as
+    # `built` does.
+    _place(built: Path, target: Path): Result<bool, String> {
         var folder = target.parent().value();
         var created = Directory.create_all(folder);
         if (created.is_err()) {
-            return Result<Path, String>.err($"cannot create {folder}: {created.error().message}");
+            return Result<bool, String>.err($"cannot create {folder}: {created.error().message}");
         }
         var moved = File.rename(built, target);
         if (moved.is_err() and !target.metadata().is_ok()) {
@@ -189,12 +238,11 @@ export struct Cache {
         }
         if (moved.is_err()) {
             if (!target.metadata().is_ok()) {
-                return Result<Path, String>.err($"cannot move {built} to {target}: {moved.error().message}");
+                return Result<bool, String>.err($"cannot move {built} to {target}: {moved.error().message}");
             }
-            Directory.remove_all(built);
+            return Result<bool, String>.ok(false);
         }
-        _prune(folder);
-        return Result<Path, String>.ok(target);
+        return Result<bool, String>.ok(true);
     }
 
     ## Returns where the record of the program that writes `output` is.

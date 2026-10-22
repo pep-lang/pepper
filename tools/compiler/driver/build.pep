@@ -28,8 +28,6 @@ import [
     worker_file,
     mark,
     Defines,
-    NEEDS_FILE,
-    stamp_of,
     union_of,
     numbered_objects,
     serve_compilation_units,
@@ -298,25 +296,11 @@ export struct Built {
     construct() {}
 }
 
-# `program.link_bodies(bodies)`; a syntax error it reads is printed as pepc
-# prints one loading the program, which it would have been then, and the
-# error returned is empty: printed already.
-_link_bodies(program: link.Program, bodies: bool[]): String? {
-    var error = program.link_bodies(bodies);
-    if (error.is_value()) {
-        print($"pepc: {error.value()}");
-        return Optional<String>.Value("");
-    }
-    return Optional<String>.Empty;
-}
-
-# `error` as the build reports it, rendered; a file whose bodies did not
-# read prints as `_link_bodies` prints it, and the error is empty.
+# `error` as the build reports it, rendered.
 _check_error(error: CheckError, sources: SourceText[]): String {
     match (error) {
         Unread(message) => {
-            print($"pepc: {message}");
-            return "";
+            return message;
         }
         Linking(diagnostics) => {
             return render_all(diagnostics, sources);
@@ -416,30 +400,13 @@ _needs(ir: llvm.Module, declared: HashSet<String>): String {
 
 # Keeps `folder`, compilation unit `unit`'s objects just compiled on objects
 # below it that define `below`, in the build cache, with what they declare of
-# those (`needs`, from `_needs`), under the key `Cache.unit_store_key` gives.
+# those (`needs`, from `_needs`), under its key (`Cache.store_unit`).
 # Returns the key of the objects to link, which hold `file`: those, or
-# another build's under that key that also link with the objects below.
+# another build's that also link with the objects below.
 _store_unit(
     cache: Cache, unit: CompilationUnit, folder: Path, needs: String, below: Defines[], file: String
 ): Result<String, String> {
-    if (File.write_text(folder.join(Path(NEEDS_FILE)), $"{stamp_of(below)}\n{needs}").is_err()) {
-        return Result<String, String>.err($"cannot write to {folder}");
-    }
-    var name = $"+{unit.name}";
-    var stored = cache.store(folder, name, cache.unit_store_key(name, unit.key, below));
-    if (stored.is_err()) {
-        return Result<String, String>.err(stored.error());
-    }
-    # shortcut: two builds at once with one key but other objects below
-    # both find the key free and one fails here; store under the other key
-    # instead if a shared cache across checkouts ever meets it.
-    var key = cache.unit_objects(name, unit.key, below, file);
-    if (!key.is_value()) {
-        return Result<String, String>.err(
-            $"the build cache's objects of compilation unit '{unit.name}' do not link with those below it; build again"
-        );
-    }
-    return Result<String, String>.ok(key.value());
+    return cache.store_unit(folder, $"+{unit.name}", unit.key, needs, below, file);
 }
 
 # How the units are compiled, as text for their keys: the target, the CPU
@@ -888,7 +855,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # Checking compilation units links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
     if (units.count <= 1) {
-        var unread = _link_bodies(program, every_file(program));
+        var unread = program.link_bodies(every_file(program));
         if (unread.is_value()) {
             return Result<Built, String>.err(unread.value());
         }

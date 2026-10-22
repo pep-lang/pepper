@@ -475,7 +475,7 @@ enum _CtValue {
                         "reflect.Member",
                         [
                             ("name", StaticConstant.String(m.name)),
-                            ("type_name", StaticConstant.String(display_name(m.ty.display()))),
+                            ("type_name", StaticConstant.String(display_name(m.ty.display_stored()))),
                             ("index", StaticConstant.Int(m.index as long)),
                             ("is_last", StaticConstant.Bool(m.index + 1 == m.count)),
                             ("is_const", StaticConstant.Bool(m.is_const)),
@@ -1074,7 +1074,7 @@ struct _Expander {
             }
             var type_arguments = Array<(String, String)>();
             for (var (param, ty) in block.type_map) {
-                type_arguments.append((param, display_name(ty.display())));
+                type_arguments.append((param, display_name(ty.display_stored())));
             }
             state.static_recording.value().expansions.append(
                 StaticExpansion(block.loc, block.span, type_arguments, written, positions)
@@ -1121,10 +1121,10 @@ struct _Expander {
         }
         var names = Array<(String, String)>();
         for (var (spelled, ty) in member_types()) {
-            names.append((spelled, display_name(ty.display())));
+            names.append((spelled, display_name(ty.display_stored())));
         }
         for (var (param, ty) in type_map) {
-            names.append((param, display_name(ty.display())));
+            names.append((param, display_name(ty.display_stored())));
         }
         if (statement) {
             return Optional<String[]>.Value(statement_source(source, span, taken, names));
@@ -1692,6 +1692,9 @@ struct _Expander {
                     Integer(v) => {
                         return ok(_CtValue.Int(v));
                     }
+                    Unsigned(v) => {
+                        return ok(_CtValue.Int(unsafe_cast<long>(v)));
+                    }
                     Float(v) => {
                         return ok(_CtValue.Float(v));
                     }
@@ -2027,7 +2030,7 @@ struct _Expander {
                         found = Optional<_CtValue>.Value(_CtValue.Bool(m.index + 1 == m.count));
                     }
                     "type_name" => {
-                        found = Optional<_CtValue>.Value(_CtValue.Text(display_name(m.ty.display())));
+                        found = Optional<_CtValue>.Value(_CtValue.Text(display_name(m.ty.display_stored())));
                     }
                     "is_const" => {
                         found = Optional<_CtValue>.Value(_CtValue.Bool(m.is_const));
@@ -2286,7 +2289,7 @@ struct _Expander {
                 if (failed.is_value()) {
                     return failed.value();
                 }
-                return ok(_CtValue.Text(display_name(type_args[0].display())));
+                return ok(_CtValue.Text(display_name(type_args[0].display_stored())));
             }
             "properties", "fields" => {
                 var failed = _checks(
@@ -3112,6 +3115,9 @@ _attribute_argument(module: Module, e: ast.Expression, file: uint): Result<_CtVa
             match (literal) {
                 Integer(v) => {
                     return Result<_CtValue, Diagnostic>.Ok(_CtValue.Int(v));
+                }
+                Unsigned(v) => {
+                    return Result<_CtValue, Diagnostic>.Ok(_CtValue.Int(unsafe_cast<long>(v)));
                 }
                 Float(v) => {
                     return Result<_CtValue, Diagnostic>.Ok(_CtValue.Float(v));

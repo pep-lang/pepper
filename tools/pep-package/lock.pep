@@ -11,7 +11,11 @@
 #     commit = "0123456789abcdef0123456789abcdef01234567"
 #     sha256 = "<the checksum of its files: see archive.pep>"
 #
-# A package only `[dev-dependencies]` lead to has `dev = true`.
+# A package only `[dev-dependencies]` lead to has `dev = true`, and one only
+# `[target.'<condition>'.dependencies]` lead to has `target`, the
+# condition under which a build needs it (`target = "OS(Windows)"`): the
+# lock lists every platform's packages, and a build fetches only its
+# target's.
 
 import [File, Path] from io;
 import toml;
@@ -31,6 +35,9 @@ export struct Locked {
     var sha256: String = "";
     # Whether only the project's dev-dependencies lead to it.
     var dev: bool = false;
+    # The `[Target(...)]` condition under which a build needs it, or empty
+    # when every build does.
+    var target: String = "";
 
     construct() {}
 
@@ -83,6 +90,7 @@ export read_lock(path: Path): Result<Array<Locked>> {
         locked.sha256 = _text(item, "sha256");
         var dev = item.try_get("dev");
         locked.dev = dev.is_value() and dev.value().as_bool().value_or(false);
+        locked.target = _text(item, "target");
         if (locked.source.is_empty or locked.commit.is_empty) {
             return Result<Array<Locked>>.Err($"{path.to_string()}: every package needs a 'source' and a 'commit'");
         }
@@ -120,6 +128,9 @@ export lock_text(packages: Array<Locked>): String {
         }
         if (locked.dev) {
             text += "dev = true\n";
+        }
+        if (!locked.target.is_empty) {
+            text += "target = " + toml.TomlValue.String(locked.target).to_string() + "\n";
         }
     }
     return text;
