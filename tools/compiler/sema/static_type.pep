@@ -90,6 +90,8 @@ export struct StructTable {
     ## Generic declaration's name to its entry, whose types are written in
     ## its own parameters (`Box` to `Box<T>`'s).
     var generics: HashMap<String, StructInfo> = HashMap<String, StructInfo>();
+    ## Generic function's name to its declaration.
+    var generic_functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
     # With a memo, the checked declarations' table, shared by the passes:
     # this one holds the rest and looks there for what it lacks.
     var _base: StructTable? = Optional<StructTable>.Empty;
@@ -134,10 +136,15 @@ export struct StructTable {
             }
         }
         for (var f in module.functions) {
-            if ((shared and module.checked.functions.contains(f.name)) or _returns_own_parameter(f)) {
+            if (shared and module.checked.functions.contains(f.name)) {
                 continue;
             }
-            functions[f.name] = f.ty;
+            if (f.generic_params.count > 0) {
+                generic_functions[f.name] = f;
+            }
+            if (!_returns_own_parameter(f)) {
+                functions[f.name] = f.ty;
+            }
         }
         for (var e in module.externs) {
             functions[e.name] = e.ty;
@@ -153,7 +160,13 @@ export struct StructTable {
             }
         }
         for (var f in module.functions) {
-            if (module.checked.functions.contains(f.name) and !_returns_own_parameter(f)) {
+            if (!module.checked.functions.contains(f.name)) {
+                continue;
+            }
+            if (f.generic_params.count > 0) {
+                out.generic_functions[f.name] = f;
+            }
+            if (!_returns_own_parameter(f)) {
                 out.functions[f.name] = f.ty;
             }
         }
@@ -213,6 +226,28 @@ export struct StructTable {
         var generic = _generic(receiver);
         var declared = generic.is_value() ? generic.value().returns.try_get(name) : Optional<TypeName>.Empty;
         return declared.is_value() ? ret.labeled_through(receiver, declared.value(), generic.value().params) : ret;
+    }
+
+    ## Returns `ty`, the type of a call written with labeled type
+    ## arguments `labeled` (`FunctionCallExpression.labeled`), with their
+    ## labels: a generic function's declared result with them put in
+    ## (`TypeName.labeled_through`), else the type as written
+    ## (`TypeName.as_written`).
+    ##
+    ## @param ty the call's type, unlabeled
+    ## @param labeled the type the call is written with, if it has labels
+    ## @returns the type, labeled
+    labeled_call(ty: TypeName, labeled: TypeName?): TypeName {
+        if (!labeled.is_value()) {
+            return ty;
+        }
+        var name = labeled.value().name;
+        var own = generic_functions.try_get(name);
+        var generic = own.is_value() or !_base.is_value() ? own : _base.value().generic_functions.try_get(name);
+        if (generic.is_value()) {
+            return ty.labeled_through(labeled.value(), generic.value().ty, param_names(generic.value().generic_params));
+        }
+        return ty.as_written(labeled);
     }
 
     # The entry of `receiver`'s generic declaration when its type arguments
@@ -514,7 +549,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
         }
         FunctionCall(node) => {
             var ty = _call_type(node, table, current, state);
-            return ty.is_value() ? _known(ty.value().as_written(node.labeled)) : ty;
+            return ty.is_value() ? _known(table.labeled_call(ty.value(), node.labeled)) : ty;
         }
         Binary(node) => {
             if (_is_assignment(node.op)) {

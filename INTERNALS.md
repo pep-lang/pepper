@@ -587,7 +587,11 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     (`TypeName.as_written`): `var a = Array<(name: String, count: int)>()`
     and the receiver of `Optional<(left: int, right: int)>.Value(...)` or
     `Box<(p: int, q: int)>.make(...)`, whose result then takes the labels
-    back like any member.
+    back like any member. A generic function call's result is its declared
+    return type with the call's type arguments put in the same way
+    (`StructTable.labeled_call`, `_TypeScopes._labeled_call`); type
+    arguments that `resolve_implicit_types` infers or completes go in
+    `FunctionCallExpression.labeled` too when they have labels.
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
     literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,
