@@ -269,6 +269,15 @@ reads its main checkout's). Re-run it on a new machine rather than copying
 that file. With a valid install present it only rewrites the file, and
 <code>./scripts/setup-llvm.sh --check</code> reports what it would use, changing
 nothing.</p>
+<p>CI provisions LLVM with <code>scripts/ci-provision-llvm.sh</code>, through
+<code>.github/actions/provision-llvm</code>. On Linux, apt's 89 MB of packages come
+from the runner's Ubuntu mirror, which on a slow day took longer than the
+step's 15 minutes, so the action caches the <code>.deb</code> files apt downloaded
+(keyed on <code>scripts/setup-llvm.sh</code> and the Ubuntu release) and the script
+puts them in apt's archive, so apt downloads none it already has. A miss,
+or a set the image has moved past, downloads from the mirror, retrying a
+download that stalls for 30 seconds, and refills the cache; only main's
+runs save it, under a new key, so the newest set is the one restored.</p>
 <p>Only the Windows archive path is large: budget roughly <strong>5 GB</strong> of disk for
 the tree plus its cached archive, and a few minutes for the first run.
 Everything lands outside the repository, under <code>%LOCALAPPDATA%\pepper</code> or
