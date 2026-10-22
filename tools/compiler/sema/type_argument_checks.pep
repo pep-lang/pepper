@@ -1,6 +1,7 @@
 ## Generic calls and values whose type arguments nothing gave.
 
 import [Diagnostic, Location] from compiler.diagnostic;
+import [unit_decls] from "checked";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module, StructDef, TypeName] from "model";
@@ -21,7 +22,9 @@ export check_type_arguments(module: Module, state: PassState) {
     if (checker.generics.count == 0 and !checker.has_methods) {
         return;
     }
-    for (var st in module.structs) {
+    # A checked declaration's code was checked with its unit.
+    var own = unit_decls(module);
+    for (var st in own.structs) {
         if (st.generic_params.count != 0) {
             continue;
         }
@@ -34,7 +37,7 @@ export check_type_arguments(module: Module, state: PassState) {
         }
     }
     checker.current = Optional<TypeName>.Empty;
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         if (!f.is_generic_func) {
             checker.visit(f);
         }
@@ -49,6 +52,23 @@ struct _TypeArgumentChecks {
     var method_names: HashSet<String> = HashSet<String>();
     var statics: StructTable? = Optional<StructTable>.Empty;
     var current: TypeName? = Optional<TypeName>.Empty;
+    # The structs by type, the first of each, found on first use.
+    var _spelled: HashMap<String, StructDef>? = Optional<HashMap<String, StructDef>>.Empty;
+
+    ## The struct `owner` (or a pointer to it) spells.
+    struct_spelled(owner: TypeName): StructDef? {
+        if (!_spelled.is_value()) {
+            var by_type = HashMap<String, StructDef>();
+            for (var st in module.structs) {
+                var key = st.ty.to_string();
+                if (!by_type.contains(key)) {
+                    by_type[key] = st;
+                }
+            }
+            _spelled = Optional<HashMap<String, StructDef>>.Value(by_type);
+        }
+        return _spelled.value().try_get(owner.without_pointers().to_string());
+    }
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -113,7 +133,7 @@ struct _TypeArgumentChecks {
                 if (has_methods and !node.name.contains("<") and method_names.contains(node.name)) {
                     var owner = owner_type(node.lhs);
                     if (owner.is_value()) {
-                        var st = _struct_spelled(module, owner.value());
+                        var st = struct_spelled(owner.value());
                         if (st.is_value()
                             and !_has_method(st.value(), node.name)
                             and !_has_field(st.value(), node.name)) {
@@ -149,7 +169,7 @@ struct _TypeArgumentChecks {
         if (!owner.is_value()) {
             return Optional<StructDef>.Empty;
         }
-        return _struct_spelled(module, owner.value());
+        return struct_spelled(owner.value());
     }
 
     check_call(callee: String, args: Expression[], loc: Loc, base: FunctionDef) {
@@ -212,17 +232,6 @@ _all_params(base: FunctionDef): String {
         names.append(p.name);
     }
     return ", ".join(names);
-}
-
-## The struct `owner` (or a pointer to it) spells.
-_struct_spelled(module: Module, owner: TypeName): StructDef? {
-    var key = owner.without_pointers().to_string();
-    for (var st in module.structs) {
-        if (st.ty.to_string() == key) {
-            return Optional<StructDef>.Value(st);
-        }
-    }
-    return Optional<StructDef>.Empty;
 }
 
 _has_method(st: StructDef, name: String): bool {

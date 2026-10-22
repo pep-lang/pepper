@@ -2741,7 +2741,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
     var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(result.trait_types));
     var values = function_value_search(module, state, tables);
     var functions = generic_function_search(module, state);
-    var methods = generic_method_search(module);
+    var methods = generic_method_search(module, state);
     var filters = Array<SiteFilter>();
     var applied = Array<bool>();
     if (values.is_value()) {
@@ -2787,7 +2787,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
         tables.reset(Optional<TypeName[]>.Value(result.trait_types));
     }
     if (result.bound or result.specialized) {
-        methods = generic_method_search(module);
+        methods = generic_method_search(module, state);
         method_sites = _method_sites(module, methods);
     }
     if (methods.is_value()) {

@@ -186,6 +186,9 @@ export struct PassState {
     ## generic base, by its name with its parameters, as
     ## `type_arguments.record_conformances` sets them.
     var conformances: HashMap<String, (String[], TypeName[])> = HashMap<String, (String[], TypeName[])>();
+    ## The same for the checked structs, found once per compilation unit:
+    ## `conformances` then holds only the unit's own structs.
+    var checked_conformances: HashMap<String, (String[], TypeName[])>? = Optional<HashMap<String, (String[], TypeName[])>>.Empty;
     ## Every trait's name, for a `match` on a trait value, as
     ## `enums.install_traits` records them.
     var trait_names: HashSet<String> = HashSet<String>();
