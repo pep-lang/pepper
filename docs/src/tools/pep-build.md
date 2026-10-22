@@ -442,6 +442,9 @@ A Windows build without `-g` also writes `<output>.pdb`, holding only the
 program's function names, which is where [backtraces](../language/debug.md)
 read them.
 
+Every link leaves out the functions and data nothing uses, except a Windows
+build with `-g`: its linker keeps them all, so the program is larger.
+
 ### `--debug-static=source`, `--debug-static=expanded`
 
 With `-g`, chooses which source the debugger shows for the code a `static`

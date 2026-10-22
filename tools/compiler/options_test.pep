@@ -537,3 +537,32 @@ no_runtime_checks_at_o0_warns_as_the_rust_compiler_does() {
     );
     expect_true(ran.stderr.contains("warning: '--no-runtime-checks' has no effect at -O0\n"));
 }
+
+# Builds `source` at `-O` into `name` in `folder`, runs it, checks it
+# printed `expected`, and returns the program's size in bytes.
+_built_size(folder: Path, name: String, source: String, expected: String): ulong {
+    File.write_text(folder.join(Path($"{name}.pep")), source);
+    var program = folder.join(Path(name + toolchain.executable_suffix()));
+    _succeeds(folder, ["-O", $"{name}.pep", "-o", program.to_string(), "--build", "build", "--no-cache"]);
+    var command = process.Command(program.to_string());
+    command.stdout(process.Stream.Pipe);
+    var ran = command.run();
+    expect_true(ran.is_ok());
+    expect_equal(ran.value().stdout.replace("\r\n", "\n"), expected);
+    return program.metadata().value().size;
+}
+
+[Test]
+an_unused_string_constant_is_left_out_of_the_program() {
+    # pepper#155: a 100 KB constant nothing reads adds nothing; one the
+    # program reads is kept.
+    var folder = TempFolder("options_unused_constant");
+    var table = "a".repeat(100000);
+    var hello = "main(): int {\n    print(\"hi\");\n    return 0;\n}\n";
+    var without = _built_size(folder.path, "without", hello, "hi\n");
+    var unused = _built_size(folder.path, "unused", $"const TABLE = \"{table}\";\n\n{hello}", "hi\n");
+    expect_true(unused < without + 20000);
+    var reads = "main(): int {\n    print(TABLE.size);\n    print(TABLE[99999]);\n    return 0;\n}\n";
+    var used = _built_size(folder.path, "used", $"const TABLE = \"{table}\";\n\n{reads}", "100000\na\n");
+    expect_true(used > without + 100000);
+}

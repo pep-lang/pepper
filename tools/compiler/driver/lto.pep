@@ -72,6 +72,7 @@ export optimize_whole(
     var objects = Array<Path>();
     if (count < 2) {
         var object = dir.join(Path($"lto.{extension}"));
+        codegen.section_each_definition(ir);
         place_constructors(ir, machine.triple());
         var emitted = machine.emit_to_file(ir, object.to_string());
         if (emitted.is_err()) {

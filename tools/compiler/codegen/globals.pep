@@ -205,6 +205,16 @@ extend Generator {
                             constant = true;
                         }
                     }
+                    # `const X = "text";`: a `StringConstant` of literal
+                    # bytes. Storing it at startup would keep the bytes in
+                    # every program, read or not (pepper#155).
+                    FunctionCall(node) => {
+                        var value = string_constant_value(node, ty_string);
+                        if (value.is_value()) {
+                            global.set_initializer(value.value());
+                            constant = true;
+                        }
+                    }
                     else => {}
                 }
                 if (!constant) {
@@ -331,6 +341,48 @@ extend Generator {
             flush_deferred_temps()?;
         }
         return Result<void>.ok();
+    }
+
+    ## The constant `StringConstant` that `call`, `StringConstant(raw, size,
+    ## length)` of literals, makes for a global of type `ty`, as its
+    ## constructor would; none for any other call.
+    string_constant_value(call: sema.FunctionCallExpression, ty: String): llvm.Value? {
+        var none = Optional<llvm.Value>.Empty;
+        var desc = structs.try_get(ty);
+        if (call.function != sema.STRING_CONSTANT
+            or ty != sema.STRING_CONSTANT
+            or call.args.count != 3
+            or !(call.args[0] is StringLiteral(_))
+            or !desc.is_value()) {
+            return none;
+        }
+        var string_type = desc.value().llvm_type;
+        var values = Array<llvm.Value>();
+        for (var i in 0..string_type.field_count()) {
+            # The constructor sets `_data`, `_size` and `_length` from its
+            # parameters in that order.
+            var (field_name, _) = desc.value().fields[i];
+            if (field_name == "_data") {
+                var data = codegen_expr(call.args[0]);
+                if (data.is_err()) {
+                    return none;
+                }
+                values.append(data.value());
+                continue;
+            }
+            if (field_name != "_size" and field_name != "_length") {
+                return none;
+            }
+            match (call.args[field_name == "_size" ? 1 : 2]) {
+                IntLiteral(v) => {
+                    values.append(string_type.field(i).const_int(v));
+                }
+                else => {
+                    return none;
+                }
+            }
+        }
+        return Optional<llvm.Value>.Value(string_type.const_struct(values));
     }
 
     # Thread-locals

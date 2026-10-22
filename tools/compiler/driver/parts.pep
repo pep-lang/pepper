@@ -264,6 +264,8 @@ _compile(
         }
         return Result<void, String>.ok();
     }
+    _stage(tracing, ir, job, "sections");
+    codegen.section_each_definition(ir);
     _stage(tracing, ir, job, "constructors");
     place_constructors(ir, machine.triple());
     _stage(tracing, ir, job, "emit");
