@@ -1,6 +1,6 @@
 # A file in the module's folder that imports the module, not `shapes.pep`:
 # its `Circle` arm names `Shape`'s case, not the type `Circle` declared
-# there.
+# there, and `side` binds a value, not the function `side` declared there.
 import [Shape] from demo;
 
 main(): int {

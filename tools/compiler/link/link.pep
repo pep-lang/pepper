@@ -667,6 +667,8 @@ struct _Linker {
     var unions: _Unions = _Unions();
     # Every type name declared at top level, in any file.
     var types: HashSet<String> = HashSet<String>();
+    # The case names of every enum declared at top level, in any file.
+    var case_names: HashSet<String> = HashSet<String>();
     # Per file, its exports -> the declarations they denote.
     var exports: HashMap<String, String>[] = Array<HashMap<String, String>>();
     # The prelude's exports.
@@ -1997,8 +1999,13 @@ struct _Linker {
         for (var f in files) {
             for (var d in named_decls(f.module)) {
                 match (d) {
-                    Struct(_) => {
+                    Struct(s) => {
                         types.insert(d.declared_name());
+                        if (s.enumeration.is_value()) {
+                            for (var c in s.enumeration.value().cases) {
+                                case_names.insert(c.name);
+                            }
+                        }
                     }
                     TypeAlias(_) => {
                         types.insert(d.declared_name());
@@ -2789,13 +2796,23 @@ extend _Rewriter with ScopeWalk {
                 return;
             }
         } else if (!own_names.contains(names.base_type_name(ty.name))) {
-            # A name nothing binds here is an enum's case, which may share
-            # its name with a type in a file this one does not import.
-            match (_resolve_imported(names.base_type_name(ty.name), bindings, linker.prelude)) {
-                Unknown => {
-                    return;
+            # Unless an import binds it, the name may be a binding or an
+            # enum's case that shares its name with declarations this file
+            # does not import, or with several it imports (#157). Only a
+            # type no case is named after is reported, as a type.
+            var name = names.base_type_name(ty.name);
+            match (_resolve_imported(name, bindings, linker.prelude)) {
+                Declared(_, _) => {}
+                Ambiguous => {
+                    if (linker.case_names.contains(name)) {
+                        return;
+                    }
                 }
-                else => {}
+                Unknown => {
+                    if (linker.case_names.contains(name) or !linker.types.contains(name)) {
+                        return;
+                    }
+                }
             }
         }
         visit_type_name(ty);

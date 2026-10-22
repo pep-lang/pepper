@@ -9,3 +9,8 @@ export enum Shape {
 export enum Circle {
     Big,
 }
+
+# Named like the binding of a `Square(side)` arm.
+side(): int {
+    return 0;
+}
