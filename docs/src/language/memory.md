@@ -317,6 +317,16 @@ the compiler checks every call:
   {{#include ../../examples/memory-move-closure.pep}}
   ```
 
+  In a loop, the check counts every reference the loop's body makes,
+  wherever in the body it is made: a statement after the `move` runs again
+  before the next pass's `move`. So a loop can move a variable it gives a
+  new value each pass, but not one it also stores in a variable from
+  outside the loop, even after the `move`:
+
+  ```pepper
+  {{#include ../../examples/memory-move-loop.pep}}
+  ```
+
 - A moved variable cannot be read again until it is assigned a new value,
   including on the next pass through a loop:
 
