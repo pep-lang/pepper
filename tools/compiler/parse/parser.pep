@@ -156,7 +156,8 @@ const _MOST_ERRORS: ulong = 100;
 ## it should close as `related`. A line the lexer refuses is read as spaces.
 ## The errors come in `parse`'s order (lexical, syntax, errors in nodes that
 ## parse, then the checks after parsing), and the first is always the one
-## `parse` reports, with the same message and offset.
+## `parse` reports, with the same message and offset. Source nested past
+## `MAX_NESTING` gives that error alone, and an empty module.
 ##
 ## @param source the text of one source file
 ## @returns the module as far as it parses, and its errors
@@ -164,6 +165,13 @@ export parse_recovering(source: String): Recovered {
     var parsed = parse(source);
     if (parsed.is_ok()) {
         return Recovered(parsed.value());
+    }
+    # Past `MAX_NESTING` the reading stops at the limit, and what follows
+    # only reads as unmatched braces and parentheses: that error alone.
+    if (parsed.error().message.starts_with("code is nested too deeply")) {
+        var out = Recovered(ast.Module());
+        out.errors.append(parsed.error());
+        return out;
     }
     var errors = Array<ParseError>();
     var text = source;
@@ -273,6 +281,16 @@ _parse(
     return Result<ast.Module, ParseError>.ok(module);
 }
 
+## The deepest the tree of a source file may nest, as clang's
+## `-fbracket-depth` bounds it: each parenthesis, block, `else if`, type
+## argument, pattern, prefix operator and argument list nests one level
+## deeper, and so does each operator of a chain (`a + b + c` is two levels)
+## and each `.member`, call or index of a postfix chain. A call's
+## arguments, and an interpolated string's holes, are one level more. Every stage after
+## the parser recurses over the tree, so this bounds the stack they need
+## (`STACK_SIZE`).
+export const MAX_NESTING: int = 256;
+
 # No token: the index `_suspect_open` holds when no block is suspect.
 const _NO_TOKEN: ulong = 0xFFFFFFFFFFFFFFFF;
 
@@ -287,6 +305,7 @@ struct Mark {
     var tests: ulong;
     var warnings: ulong;
     var names: ulong;
+    var deepest: int;
 
     construct() {}
 }
@@ -393,9 +412,15 @@ struct Parser {
     var _failed: bool;
     # The syntax error furthest into the source so far.
     var _error: SyntaxError?;
-    # Set by a missing `;`, which is reported over any error found further
-    # on, like the compiler's hard errors.
-    var _missing_semicolon: bool;
+    # Set by a missing `;` or by code nested too deeply, which is reported
+    # over any error found further on, like the compiler's hard errors.
+    var _final_error: bool;
+    # The tree level of what is being read (`_enter`), the deepest level
+    # the tree has reached (`_wrap`), and whether `_error` is that reading
+    # went past `MAX_NESTING`.
+    var _level: int;
+    var _deepest: int;
+    var _too_deep: bool;
     # Whether a type is being read where an expression could also start, in
     # which case `a.b` is a qualified type only when `a` names an import.
     var _probing: bool;
@@ -517,7 +542,7 @@ struct Parser {
 
     _fail(message: String) {
         var offset = _peek().offset;
-        if (!_missing_semicolon and (!_error or offset > _error.value().offset)) {
+        if (!_final_error and (!_error or offset > _error.value().offset)) {
             _error = Optional<SyntaxError>.Value(SyntaxError(message, offset));
         }
         _failed = true;
@@ -531,6 +556,7 @@ struct Parser {
         mark.tests = _build_option_tests.count;
         mark.warnings = _warnings.count;
         mark.names = _lowered_names.count;
+        mark.deepest = _deepest;
         return mark;
     }
 
@@ -553,7 +579,8 @@ struct Parser {
     # Forgets the syntax error found so far.
     _clear_error() {
         _error = Optional<SyntaxError>.Empty;
-        _missing_semicolon = false;
+        _final_error = false;
+        _too_deep = false;
     }
 
     # Notes `error`, which ended the item whose first token is `item`,
@@ -713,6 +740,7 @@ struct Parser {
     # Goes back to `mark`, dropping what the abandoned reading added.
     _restore(mark: Mark) {
         _position = mark.position;
+        _deepest = mark.deepest;
         _failed = false;
         if (_recovering) {
             _drop_recovered(mark.position);
@@ -767,7 +795,74 @@ struct Parser {
         }
         var last = _tokens[_position - 1];
         _error = Optional<SyntaxError>.Value(SyntaxError("expected ';'", last.offset + last.size));
-        _missing_semicolon = true;
+        _final_error = true;
+        _too_deep = false;
+        _failed = true;
+    }
+
+    # ── Nesting (`MAX_NESTING`) ──────────────────────────────────────────
+    #
+    # A rule that recurses into a child reads it one level deeper
+    # (`_enter`, `_leave`). A loop that wraps the tree read so far in a new
+    # node (`a + b + c`, `f().g()`, `T??`) measures that tree's height
+    # instead: `_deepest` is the deepest level it reached, and each turn
+    # makes it one level taller (`_wrap`), with the new operand read below
+    # the new node (`_level` one deeper while it is read).
+
+    # Goes one level deeper; past `MAX_NESTING`, fails at the input instead
+    # and returns false (with the level unchanged).
+    _enter(): bool {
+        if (_level >= MAX_NESTING) {
+            _fail_too_deep();
+            return false;
+        }
+        _level += 1;
+        if (_level > _deepest) {
+            _deepest = _level;
+        }
+        return true;
+    }
+
+    _leave() {
+        _level -= 1;
+    }
+
+    # Starts measuring the tree a wrapping loop reads at the current level;
+    # returns the deepest level so far, for `_end_wrapping`.
+    _start_wrapping(): int {
+        var outer = _deepest;
+        _deepest = _level;
+        return outer;
+    }
+
+    # Wraps the tree read since `_start_wrapping` in one more node; past
+    # `MAX_NESTING`, fails at the input instead and returns false.
+    _wrap(): bool {
+        if (_deepest >= MAX_NESTING) {
+            _fail_too_deep();
+            return false;
+        }
+        _deepest += 1;
+        return true;
+    }
+
+    _end_wrapping(outer: int) {
+        if (outer > _deepest) {
+            _deepest = outer;
+        }
+    }
+
+    # Fails at the input, over any other error but an earlier one of its
+    # own: the first reading to go too deep names the token, as a
+    # declaration read before an expression names the `int` of
+    # `__ptr<__ptr<...int>> p`, not a `>` of `a < b > c`.
+    _fail_too_deep() {
+        if (!_too_deep) {
+            var message = $"code is nested too deeply: the limit is {MAX_NESTING} levels; split it into smaller expressions or functions";
+            _error = Optional<SyntaxError>.Value(SyntaxError(message, _peek().offset));
+            _final_error = true;
+            _too_deep = true;
+        }
         _failed = true;
     }
 
@@ -922,10 +1017,17 @@ struct Parser {
 
     # A type: a function type, or a named type with array and pointer
     # suffixes.
+    # A level deeper, and each `?` or `*` suffix one more.
     _type_name(): TypeName {
+        if (!_enter()) {
+            return TypeName();
+        }
+        var outer = _start_wrapping();
         _type_depth += 1;
         var out = _type_name_at_depth();
         _type_depth -= 1;
+        _end_wrapping(outer);
+        _leave();
         return out;
     }
 
@@ -962,6 +1064,9 @@ struct Parser {
             ulong star_end = _last_end();
             ulong i = 0;
             while (i < stars) {
+                if (!_wrap()) {
+                    return out;
+                }
                 out = _c_pointer_to(out, star_end);
                 i += 1;
             }
@@ -1089,6 +1194,9 @@ struct Parser {
     # `?` optional suffixes after the type `out`, each wrapping it.
     _optional_suffixes(out: TypeName): TypeName {
         while (_at("?") and (!_probing or _optional_suffix_in_probe())) {
+            if (!_wrap()) {
+                return out;
+            }
             _advance();
             var wrapped = TypeName(ast.OPTIONAL_TYPE, Span(out.span.start, _last_end()));
             wrapped.generic_types.append(out);
@@ -1204,7 +1312,12 @@ struct Parser {
     # ── Expressions ──────────────────────────────────────────────────────
 
     _expression(): Expression {
-        return _assignment();
+        if (!_enter()) {
+            return _nothing();
+        }
+        var out = _assignment();
+        _leave();
+        return out;
     }
 
     _assignment(): Expression {
@@ -1228,7 +1341,8 @@ struct Parser {
             ulong op_start = _start(_position);
             var text = _operator_text(op);
             _take_operator(op);
-            var rhs = _assignment();
+            # Through `_expression`, a level deeper: `a = b = c` nests.
+            var rhs = _expression();
             if (_failed) {
                 return rhs;
             }
@@ -1364,8 +1478,16 @@ struct Parser {
         );
     }
 
-    # A left-associative binary level.
+    # A left-associative binary level, whose chain nests a level per
+    # operator.
     _binary_level(level: int): Expression {
+        var outer = _start_wrapping();
+        var out = _binary_chain(level);
+        _end_wrapping(outer);
+        return out;
+    }
+
+    _binary_chain(level: int): Expression {
         var lhs = _binary_operand(level);
         if (_failed) {
             return lhs;
@@ -1375,10 +1497,15 @@ struct Parser {
             if (op == 0) {
                 break;
             }
+            if (!_wrap()) {
+                return lhs;
+            }
             ulong op_start = _start(_position);
             var text = _operator_text(op);
             _take_operator(op);
+            _level += 1;
             var rhs = _binary_operand(level);
+            _level -= 1;
             if (_failed) {
                 return rhs;
             }
@@ -1411,7 +1538,11 @@ struct Parser {
             ulong op = _position;
             _advance();
             # The operand may itself be prefixed: `!!x` is `!(!x)`.
+            if (!_enter()) {
+                return _nothing();
+            }
             var operand = _unary();
+            _leave();
             if (_failed) {
                 return operand;
             }
@@ -1474,7 +1605,11 @@ struct Parser {
         if (_at("**")) {
             ulong op = _position;
             _advance();
+            if (!_enter()) {
+                return base;
+            }
             var exponent = _power();
+            _leave();
             if (_failed) {
                 return exponent;
             }
@@ -1504,7 +1639,16 @@ struct Parser {
         return e;
     }
 
+    # An atom and its postfix chain, which nests a level per member,
+    # call, index or postfix operator.
     _postfix(): Expression {
+        var outer = _start_wrapping();
+        var out = _postfix_chain();
+        _end_wrapping(outer);
+        return out;
+    }
+
+    _postfix_chain(): Expression {
         ulong start = _position;
         var operand = _atom();
         var callee = Callee.Other;
@@ -1517,6 +1661,9 @@ struct Parser {
         }
         while (!_failed) {
             if (_at(".")) {
+                if (!_wrap()) {
+                    return operand;
+                }
                 _advance();
                 # A tuple element, `t.0`.
                 if (_peek().kind == TokenKind.Number) {
@@ -1543,7 +1690,11 @@ struct Parser {
                 # value, the expression ending after the `>`.
                 if (_at("<") and _adjacent(0)) {
                     var mark = _mark();
+                    # Below the new node, as the operands of a call and an
+                    # index are.
+                    _level += 1;
                     var arguments = _type_arguments();
+                    _level -= 1;
                     var ends = _at(";")
                         or _at(",")
                         or _at(")")
@@ -1570,8 +1721,13 @@ struct Parser {
                 continue;
             }
             if (_at("[")) {
+                if (!_wrap()) {
+                    return operand;
+                }
                 _advance();
+                _level += 1;
                 var index = _expression();
+                _level -= 1;
                 if (_failed) {
                     return index;
                 }
@@ -1581,12 +1737,20 @@ struct Parser {
                 continue;
             }
             if (_at("(")) {
+                if (!_wrap()) {
+                    return operand;
+                }
+                _level += 1;
                 var arguments = _arguments();
+                _level -= 1;
                 operand = _call(operand, callee, arguments);
                 callee = Callee.Other;
                 continue;
             }
             if (_at("++") or _at("--") or (_at("?") and _propagates())) {
+                if (!_wrap()) {
+                    return operand;
+                }
                 var op = _text(_position);
                 _advance();
                 operand = Expression.Unary(
@@ -1635,13 +1799,15 @@ struct Parser {
         # Probe for `? expression :`, leaving no error behind.
         var mark = _mark();
         var error = _error;
-        var missing_semicolon = _missing_semicolon;
+        var final_error = _final_error;
+        var too_deep = _too_deep;
         _advance();
         _expression();
         bool ternary = !_failed and _at(":");
         _restore(mark);
         _error = error;
-        _missing_semicolon = missing_semicolon;
+        _final_error = final_error;
+        _too_deep = too_deep;
         return !ternary;
     }
 
@@ -2109,8 +2275,17 @@ struct Parser {
     }
 
     # `{ statement... }`, after the attributes `attributes` when the block
-    # has any.
+    # has any, a level deeper.
     _block(attributes: Attribute[]): Block {
+        if (!_enter()) {
+            return Block();
+        }
+        var out = _block_at_depth(attributes);
+        _leave();
+        return out;
+    }
+
+    _block_at_depth(attributes: Attribute[]): Block {
         var out = Block();
         out.attributes = attributes;
         ulong open = _position;
@@ -2328,7 +2503,12 @@ struct Parser {
                 return _no_statement();
             }
             if (_at_word("if") or list.count > 0) {
+                # A level deeper, as the block it stands for.
+                if (!_enter()) {
+                    return _no_statement();
+                }
                 var inner = _if_statement(list);
+                _leave();
                 if (_failed) {
                     return _no_statement();
                 }
@@ -2645,8 +2825,17 @@ struct Parser {
     # `Case(x, _)`, whose values are patterns too (`Value(Text(t))`); a
     # literal: a number (`-1` too), string, character, `true` or `false`,
     # or a range of them (`1..9`); or a tuple pattern of two or more,
-    # `(Case, x, 0)`.
+    # `(Case, x, 0)`. A level deeper.
     _pattern(): Pattern {
+        if (!_enter()) {
+            return Pattern();
+        }
+        var out = _pattern_at_depth();
+        _leave();
+        return out;
+    }
+
+    _pattern_at_depth(): Pattern {
         var out = Pattern();
         ulong start = _position;
         if (_at("(")) {
@@ -2714,11 +2903,17 @@ struct Parser {
             # A range from a named constant: `MIN..MAX`.
             Expression low = Expression.SymbolRef(_text(start), _token_span(start));
             ulong segment = start + 2;
+            # Each segment nests a level, as in an expression.
+            var outer = _start_wrapping();
             while (segment <= last) {
+                if (!_wrap()) {
+                    return out;
+                }
                 var segment_span = _token_span(segment);
                 low = Expression.MemberAccess(low, _text(segment), segment_span, Span(pattern_start, segment_span.end));
                 segment += 2;
             }
+            _end_wrapping(outer);
             out.literal = Optional<Expression>.Value(low);
             out.range_inclusive = _at("..>");
             _advance();
@@ -4605,9 +4800,23 @@ struct Parser {
             parser._lowered_names.append(name);
         }
         parser._lowered_static_depth = _lowered_static_depth;
+        # Two levels, as a call: desugaring makes the hole an argument.
+        parser._level = _level + 1;
+        parser._deepest = parser._level;
         var value = parser._expression();
+        if (parser._too_deep and parser._failed) {
+            # Reported once, at the token, with nothing else read.
+            _problem(
+                parser._error.value().message,
+                Span(base + parser._error.value().offset, base + parser._error.value().offset)
+            );
+            return Optional<Expression>.Value(_nothing());
+        }
         if (parser._failed or !parser._at_end()) {
             return Optional<Expression>.Empty;
+        }
+        if (parser._deepest > _deepest) {
+            _deepest = parser._deepest;
         }
         for (var problem in parser._problems) {
             _problems.append(problem);

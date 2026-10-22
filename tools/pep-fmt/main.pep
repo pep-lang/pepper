@@ -18,6 +18,8 @@
 
 import cli;
 import [File, Path] from io;
+import compiler.parse;
+import process;
 import syntax;
 import "files";
 import "format";
@@ -28,7 +30,12 @@ version(): String {
     return "0.11.0-dev";
 }
 
-main(args: String[]): int {
+# On a stack of `parse.STACK_SIZE`, which the deepest source fits in.
+main(): int {
+    return parse.on_compiler_stack(() => _main(process.arguments()));
+}
+
+_main(args: String[]): int {
     var parser = cli.Parser(
         "pep-fmt", "Formats Pepper source; with no files, standard input to standard output.", version = version()
     );

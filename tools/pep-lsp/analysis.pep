@@ -31,15 +31,6 @@ import "platforms";
 ## so typing does not start an analysis per keystroke.
 export const SETTLE_MILLISECONDS: ulong = 250;
 
-## The analysis thread's stack, 8 MiB, the same on every system (a thread
-## gets 1 MiB by default on Windows and 512 KiB on macOS). The parser and
-## sema recurse once or more per level of nesting, and an unoptimized
-## (`-O0`) build of pep-lsp uses up to about 10 KiB of stack per level,
-## five to ten times an optimized build's: source nested 252 levels deep
-## overflowed 1 MiB at `-O0` (#185). pep-lsp's tests check that the deepest
-## source fits in half of this.
-export const ANALYSIS_STACK_SIZE: ulong = 8388608;
-
 ## Work for the analysis thread.
 export enum Job {
     ## Analyze `text`, the text of document `uri`, after it settles.

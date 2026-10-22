@@ -421,6 +421,38 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   server's quick fix). A C-style declaration (`Box b = f()`) followed by a
   line break is still reported as a declaration missing its `;`, rather
   than reparsed as an expression.
+- **Nesting and the stack.** The parser and every stage after it
+  (builder, desugaring, the sema passes, codegen) recurse over the tree,
+  so the parser bounds its depth: past `parse.MAX_NESTING` (256) levels
+  it fails with `code is nested too deeply`, at the token that crosses
+  the limit, as clang's `-fbracket-depth` does. A rule that recurses
+  into a child is one level (`_enter`/`_leave`: `_expression`, `_block`,
+  an `else if`, a prefix operator, `**`'s exponent, `_type_name`,
+  `_pattern`); a loop that wraps the tree read so far in a new node (a
+  binary chain, a postfix chain, `?` and `*` type suffixes) measures
+  that tree's height instead (`_start_wrapping`, `_wrap`,
+  `_end_wrapping`), so `(deep) + 1 + 1` counts both. An interpolated
+  string's hole is read two levels below its string, as a call's argument
+  is (desugaring makes it one). The first reading
+  to go too deep names the token (a declaration probe's `int` in
+  `__ptr<__ptr<...int>> p`), and its error stands over any found
+  further on, as a missing `;` does.
+  The rule for the stack: every thread that parses, checks or compiles
+  source runs on `parse.STACK_SIZE` (8 MiB, `parse/stack.pep`), and that
+  must hold the deepest source twice over in an unoptimized (`-O0`)
+  build, whose frames are 2 to 20 times `-O1`'s (#185). A tool's `main`
+  runs its work through `parse.on_compiler_stack`: pep-build (which is
+  also its `--compile-part` and `--compilation-unit-worker` children),
+  pep-lsp (the server, its `--compilation-unit-worker` children; its
+  analysis thread asks for the same size), pep-fmt and pep-doc. At `-O0`
+  a whole build of the deepest source needs up to 2.8 MiB, about 11 KiB a
+  level (an assignment chain `x = y = ... = 1`; parentheses 2.7 MiB, a
+  `+` chain 2.2 MiB, nested `if`s 1.3 MiB), so 8 MiB leaves more than
+  twice that. `checks_the_deepest_source_in_half_the_compiler_stack`
+  (passes_test) and pep-lsp's `deepest_source_fits_the_server_stack`
+  check the front end in half of it at whatever level the tests are built,
+  and `builds_and_runs_the_deepest_source` (programs_test) builds the
+  deepest source with the `pep-build` under test.
 - **Generic method calls.** In postfix position, `.name<types>(` is a call
   with type arguments only when `<` follows the name and `(` follows `>`
   with no whitespace; the method name becomes the string `"map<long>"`.
@@ -2539,11 +2571,10 @@ inlay hints, quick fixes and dimmed code for other platforms. A request
 slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
-  document's newest text once edits settle (250 ms). It runs on an 8 MiB
-  stack (`ANALYSIS_STACK_SIZE`), since the parser and sema recurse per
-  level of nesting and an unoptimized build needs about 10 KiB a level;
-  `deepest_source_fits_the_server_stack` checks the deepest source in
-  half of it. It loads the
+  document's newest text once edits settle (250 ms). It runs on a stack
+  of `parse.STACK_SIZE` (§2.3, "Nesting and the stack");
+  `deepest_source_fits_the_server_stack` checks the deepest source, and
+  one level deeper, in half of it. It loads the
   program rooted at the document, with the editor's text in
   `Setup.sources`, and publishes the diagnostics through the `[Shared]`
   `lsp.Client`. A document edited again while it was analyzed is analyzed
@@ -3560,7 +3591,10 @@ program by hand.
    fail with `_expect`/`_fail("expected …")`, try an alternative reading
    through a `Mark` (`_mark`/`_restore`), and update `is_reserved_word` for
    a new keyword. If the source form needs lowering that the written tree
-   keeps (as interpolated strings do), add it to `compiler.desugar`.
+   keeps (as interpolated strings do), add it to `compiler.desugar`. A
+   rule that can contain itself without passing through `_expression`,
+   `_block`, `_type_name` or `_pattern` counts its level (`_enter`, or
+   `_wrap` in a loop; §2.3 "Nesting and the stack").
 3. Extend the walks that must see the new node: `parse/checks.pep`,
    `link/walk.pep` (the walk linking, visibility and deprecation share, so
    imported names inside it are rewritten and checked, and names it binds
@@ -3840,9 +3874,11 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
 - **Targets.** `--target` names one of the triples `link.Target` accepts
   (x86_64 and AArch64 for Linux, macOS, Windows, iOS and Android, and
   `wasm32-wasip1`); 32-bit x86 is not one.
-- **No nesting limit.** The parser and every pass recurse over the tree,
-  and nothing bounds its depth: a deeply enough nested program can
-  overflow the compiler's stack.
+- **Nesting is counted, not measured.** `MAX_NESTING` counts the levels
+  of the parsed tree (§2.3); the stack each level costs is measured on
+  the source shapes `nesting_programs` and pep-lsp's `deepest_programs`
+  hold. A shape that makes a later stage recurse much more per level
+  than those could still need more than `STACK_SIZE`.
 - Some passes leave unresolved nodes for codegen to report as
   `unknown …`.
 - **Sync types.** `Lazy<T>` relies on `check_shared_types` to reject a
