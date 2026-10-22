@@ -348,12 +348,14 @@ extend Generator {
     ## constructor would; none for any other call.
     string_constant_value(call: sema.FunctionCallExpression, ty: String): llvm.Value? {
         var none = Optional<llvm.Value>.Empty;
-        var desc = structs.try_get(ty);
         if (call.function != sema.STRING_CONSTANT
             or ty != sema.STRING_CONSTANT
             or call.args.count != 3
-            or !(call.args[0] is StringLiteral(_))
-            or !desc.is_value()) {
+            or !(call.args[0] is StringLiteral(_))) {
+            return none;
+        }
+        var desc = structs.try_get(ty);
+        if (!desc.is_value()) {
             return none;
         }
         var string_type = desc.value().llvm_type;
