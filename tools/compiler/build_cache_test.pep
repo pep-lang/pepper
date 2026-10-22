@@ -643,33 +643,79 @@ keeps_string_literals_apart_across_units() {
     File.write_text(
         root.join(Path("main.pep")), "import \"a\";\nmain(): int {\n    return a_text() == \"alphabeta\" ? 0 : 1;\n}\n"
     );
-    var setup = link.Setup();
-    setup.import_dirs.append(root);
-    var build = () => {
-        var output = root.join(Path("main"));
-        var options = driver.BuildOptions(output, root.join(Path("build")));
-        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
-        options.in_process = true;
-        var program = link.load_program(root.join(Path("main.pep")), setup);
-        expect_true(program.is_ok());
-        var built = driver.build(program.value(), options);
-        if (built.is_err()) {
-            print(built.error());
-        }
-        expect_true(built.is_ok());
-        var ran = process.Command(output.to_string()).spawn();
-        expect_true(ran.is_ok() and ran.value().wait().value().success());
-        return built.value();
-    };
-    var first = build();
+    var first = _build_with_runtime(root, "main.pep");
     expect_true(first.hits.is_empty);
     File.write_text(
         root.join(Path("main.pep")),
         "import \"a\";\nmain(): int {\n    var first = \"one\" + \"two\" + \"three\";\n    return a_text() == \"alphabeta\" and first == \"onetwothree\" ? 0 : 1;\n}\n"
     );
     # `a.pep`'s object comes from the cache, with its own literals.
-    var second = build();
+    var second = _build_with_runtime(root, "main.pep");
     expect_false(second.hits.is_empty);
+}
+
+# Builds the program whose entry is `entry` in `root`, with the runtime and
+# the cache in `root`, and runs it.
+_build_with_runtime(root: Path, entry: String): driver.Built {
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    var program = link.load_program(root.join(Path(entry)), setup);
+    expect_true(program.is_ok());
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).spawn();
+    expect_true(ran.is_ok() and ran.value().wait().value().success());
+    return built.value();
+}
+
+# A file's object, which the cache keeps for every program the file is in,
+# steers the last release of a trait value or a closure only into the
+# structs that file sees: built first in a program that adds a conformer and
+# closures it does not see, it still links in a program without them (#170).
+[Test]
+links_an_object_built_in_a_program_with_more_conformers() {
+    var folder = TempFolder("chain_views");
+    var root = folder.path;
+    File.write_text(
+        root.join(Path("source.pep")),
+        "export trait Source {\n    next(): int;\n}\n"
+            + "export struct Wrap {\n    var inner: Source;\n"
+            + "    construct(inner: Source) {\n        this.inner = inner;\n    }\n}\n"
+            + "extend Wrap with Source {\n    next(): int {\n        return inner.next() + 1;\n    }\n}\n"
+            + "export struct Zero {\n    construct() {}\n}\n"
+            + "extend Zero with Source {\n    next(): int {\n        return 0;\n    }\n}\n"
+            + "export wrap_twice(): int {\n    Source s = Wrap(Wrap(Zero()));\n    return s.next();\n}\n"
+            + "export call(f: () => int): int {\n    return f();\n}\n"
+    );
+    # A conformer of `Source` that holds one, in a file `source.pep` does
+    # not see, as `archive.TarReader` is to `compress.DecompressReader`.
+    File.write_text(
+        root.join(Path("archive.pep")),
+        "import \"source\";\nexport struct Archive {\n    var source: Source;\n    var buffer: int[] = Array<int>();\n"
+            + "    construct(source: Source) {\n        this.source = source;\n    }\n}\n"
+            + "extend Archive with Source {\n    next(): int {\n        buffer.append(1);\n"
+            + "        return source.next();\n    }\n}\n"
+    );
+    File.write_text(
+        root.join(Path("with.pep")),
+        "import \"archive\";\nimport \"source\";\nmain(): int {\n    Source s = Archive(Wrap(Archive(Zero())));\n"
+            + "    var f: () => int = () => 1;\n    for (var i in 0..3) {\n        var g = f;\n        f = () => g() + 1;\n    }\n"
+            + "    return s.next() + call(f) + wrap_twice() - 7;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("without.pep")),
+        "import \"source\";\nmain(): int {\n    return wrap_twice() + call(() => 1) - 3;\n}\n"
+    );
+    _build_with_runtime(root, "with.pep");
+    var without = _build_with_runtime(root, "without.pep");
+    expect_true(without.hits.contains("source"));
 }
 
 # Writes a program whose `a.pep` returns `a_body`, and whose `main.pep`

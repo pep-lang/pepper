@@ -265,6 +265,9 @@ export struct Generator {
     ## `_pep_copy_value`) has no owner, so it is `linkonce_odr`, as C++ emits an
     ## implicit special member in each object that uses it.
     var declared: HashSet<String>? = Optional<HashSet<String>>.Empty;
+    ## The program generated, when known: a struct's last release then
+    ## steers only into the structs its file sees (`find_chains`).
+    var program: link.Program? = Optional<link.Program>.Empty;
     ## The unowned bodies held back (`hold`), with the names they are
     ## generated as and their declarations, and the places in those of the
     ## ones no generated code calls yet.
@@ -613,7 +616,7 @@ export struct Generator {
         for (var st in structs) {
             instantiate_struct(st)?;
         }
-        find_chains(structs);
+        find_chains(structs, module.traits);
         # ABI sizes are only right once every body is set.
         for (var entry in this.structs) {
             var (_, desc) = entry;
@@ -1020,6 +1023,8 @@ export struct Build {
 ## @param declared compiling one compilation unit's object: the functions only
 ##   declared, by name, whoever owns them, which the objects of
 ##   the compilation units below define (`Generator.declared`)
+## @param program the program the module was checked from, so the code of
+##   each file names only what the files it sees declare (`Generator.program`)
 ## @returns the module, or the first error
 export generate(
     module: Module,
@@ -1029,13 +1034,15 @@ export generate(
     build: Build,
     owners: HashMap<String, uint> = HashMap<String, uint>(),
     cached_files: HashSet<uint> = HashSet<uint>(),
-    declared: HashSet<String>? = Optional<HashSet<String>>.Empty
+    declared: HashSet<String>? = Optional<HashSet<String>>.Empty,
+    program: link.Program? = Optional<link.Program>.Empty
 ): Result<llvm.Module, Diagnostic> {
     var context = llvm.Context();
     var generator = Generator(context, name, build.machine, state);
     generator.owners = owners;
     generator.cached_files = cached_files;
     generator.declared = declared;
+    generator.program = program;
     generator.file_namespaces = namespaces;
     generator.opt_level = build.opt_level;
     generator.runtime_checks = build.runtime_checks;

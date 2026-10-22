@@ -19,6 +19,7 @@
 ## cannot be steered from the destructor; its last release goes through
 ## the runtime's `_pep_release_last`, which bounds the nesting on the stack.
 
+import compiler.link;
 import llvm;
 import compiler.sema;
 import [CountField, Statement, StructDef, TypeName, VariableDef] from compiler.sema;
@@ -64,12 +65,63 @@ struct _Edge {
     }
 }
 
+## Which structs each struct of the graph sees: those declared in the files
+## its own file and the files of the types it names can see
+## (`link.unit_inputs`). A field steers only into a struct its struct sees:
+## the code of a struct's last release is in the objects of the files that
+## use it, which the build cache keeps for any program those files are in,
+## so it must not name what only some of those programs have (#170).
+struct _Views {
+    var program: link.Program?;
+    ## The files each node is declared in or names a type of.
+    var named: Array<HashSet<ulong>> = Array<HashSet<ulong>>();
+    var _inputs: HashMap<ulong, HashSet<ulong>> = HashMap<ulong, HashSet<ulong>>();
+    var _seen: HashMap<ulong, HashSet<ulong>> = HashMap<ulong, HashSet<ulong>>();
+
+    construct(program: link.Program?) {
+        this.program = program;
+    }
+
+    ## Whether node `from` sees node `target`; every node sees every other
+    ## when there is no program to tell.
+    sees(from: ulong, target: ulong): bool {
+        if (!program.is_value()) {
+            return true;
+        }
+        if (!_seen.contains(from)) {
+            var files = HashSet<ulong>();
+            for (var file in named[from]) {
+                for (var input in _inputs_of(file)) {
+                    files.insert(input);
+                }
+            }
+            _seen[from] = files;
+        }
+        var files = _seen[from];
+        for (var file in named[target]) {
+            if (!files.contains(file)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    _inputs_of(file: ulong): HashSet<ulong> {
+        if (!_inputs.contains(file)) {
+            _inputs[file] = HashSet<ulong>(link.unit_inputs(program.value(), link.TranslationUnit("", [file])));
+        }
+        return _inputs[file];
+    }
+}
+
 extend Generator {
     ## Fills `recursive`, `deep_recursive` and `chain_fields` from the
     ## program's structs: the strongly connected components of the graph
     ## whose nodes are the structs and whose edges are what their fields can
-    ## hold (Tarjan's algorithm, with an explicit stack).
-    find_chains(all: StructDef[]) {
+    ## hold (Tarjan's algorithm, with an explicit stack). An edge to a
+    ## struct its struct does not see (`_Views`) is not steered, so a cycle
+    ## through it goes through `_pep_release_last`.
+    find_chains(all: StructDef[], declared_traits: sema.TraitDef[]) {
         var index = HashMap<String, ulong>();
         var nodes = Array<StructDef>();
         for (var st in all) {
@@ -78,6 +130,21 @@ extend Generator {
             }
             index[st.name] = nodes.count;
             nodes.append(st);
+        }
+        var trait_files = HashMap<String, ulong>();
+        for (var t in declared_traits) {
+            if (!t.loc.is_none()) {
+                trait_files[t.name] = t.loc.file as ulong;
+            }
+        }
+        var views = _Views(program);
+        for (var st in nodes) {
+            var files = HashSet<ulong>();
+            if (!st.loc.is_none()) {
+                files.insert(st.loc.file as ulong);
+            }
+            _named_files(st.ty, trait_files, files);
+            views.named.append(files);
         }
         var conformers = HashMap<String, Array<ulong>>();
         var closures = HashMap<String, Array<ulong>>();
@@ -103,7 +170,8 @@ extend Generator {
             }
         }
         var edges = Array<Array<_Edge>>();
-        for (var st in nodes) {
+        for (var from in 0..nodes.count) {
+            var st = nodes[from];
             var out = Array<_Edge>();
             bool owner = _chain_owner(st.name);
             # `Array`'s destructor releases `_size` elements of `_data`, so
@@ -113,7 +181,7 @@ extend Generator {
             for (var field in st.field_members) {
                 bool buffer = array and field.name == "_data" and field.ty.is_pointer();
                 var kind = buffer ? ChainKind.Buffer : ChainKind.Struct;
-                _type_edges(field.ty, owner, kind, position, nodes, index, conformers, out);
+                _type_edges(field.ty, owner, kind, position, nodes, index, conformers, views, from, out);
                 position += 1;
             }
             if (st.ty.is_function_type()) {
@@ -123,7 +191,10 @@ extend Generator {
                 var destroy = _field_position(structs[st.name], "__destroy");
                 if (found.is_value()) {
                     for (var c in found.value()) {
-                        bool direct = owner and destroy.is_value() and _chain_owner(nodes[c].name);
+                        bool direct = owner
+                            and destroy.is_value()
+                            and _chain_owner(nodes[c].name)
+                            and views.sees(from, c);
                         out.append(_Edge(c, direct, ChainKind.Closures, destroy.value_or(0), st.name));
                     }
                 }
@@ -187,8 +258,9 @@ extend Generator {
     ## of its struct, can hold: the struct it names, a trait's conformers,
     ## a pointer's or tuple's elements. Each is steered (`_Edge.direct`)
     ## when `owner` and the target has counts codegen generates, as `kind`;
-    ## a pointer's elements only as a `Buffer`, never a tuple's. A weak
-    ## reference owns nothing.
+    ## a pointer's elements only as a `Buffer`, never a tuple's, and a
+    ## trait's conformer only when node `from`, the struct, sees it
+    ## (`views`). A weak reference owns nothing.
     _type_edges(
         ty: TypeName,
         owner: bool,
@@ -197,6 +269,8 @@ extend Generator {
         nodes: Array<StructDef>,
         index: HashMap<String, ulong>,
         conformers: HashMap<String, Array<ulong>>,
+        views: _Views,
+        from: ulong,
         out: Array<_Edge>
     ) {
         if (ty.is_weak() or ty.is_extern_function_type()) {
@@ -206,7 +280,7 @@ extend Generator {
             bool steered = owner and kind == ChainKind.Buffer and ty.is_pointer();
             for (var element in ty.sub_types) {
                 bool slot = steered and !element.is_pointer() and !element.is_tuple();
-                _type_edges(element, slot, ChainKind.Buffer, position, nodes, index, conformers, out);
+                _type_edges(element, slot, ChainKind.Buffer, position, nodes, index, conformers, views, from, out);
             }
             return;
         }
@@ -215,13 +289,29 @@ extend Generator {
         if (found.is_value()) {
             var through = kind == ChainKind.Buffer ? ChainKind.Buffer : ChainKind.Trait;
             for (var c in found.value()) {
-                out.append(_Edge(c, owner and _chain_owner(nodes[c].name), through, position, name));
+                bool direct = owner and _chain_owner(nodes[c].name) and views.sees(from, c);                out.append(_Edge(c, direct, through, position, name));
             }
             return;
         }
         var target = index.try_get(name);
         if (target.is_value()) {
             out.append(_Edge(target.value(), owner and _chain_owner(name), kind, position, name));
+        }
+    }
+
+    ## Adds to `out` the file of each struct and trait `ty` names, its
+    ## type arguments' included: the files `trait_files` gives for traits.
+    _named_files(ty: TypeName, trait_files: HashMap<String, ulong>, out: HashSet<ulong>) {
+        var desc = structs.try_get(ty.to_string());
+        if (desc.is_value() and !desc.value().loc.is_none()) {
+            out.insert(desc.value().loc.file as ulong);
+        }
+        var file = trait_files.try_get(ty.name);
+        if (file.is_value()) {
+            out.insert(file.value());
+        }
+        for (var sub in ty.sub_types) {
+            _named_files(sub, trait_files, out);
         }
     }
 

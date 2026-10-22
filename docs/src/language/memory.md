@@ -75,8 +75,11 @@ included, and the chain is destroyed in a loop: an object's destructor
 still runs before those of the objects it held, the last-declared of those
 fields still goes first, and an array's elements go in index order, but an
 object's other fields are released before the chain below it. A cycle that
-runs through anything else, such as a tuple or the elements of another
-container (a `HashMap`, an `Optional`), nests as usual until it is about
+runs through anything else, such as a tuple, the elements of another
+container (a `HashMap`, an `Optional`), a trait value holding a struct
+declared in a file the holding struct's file does not import, or a closure
+whose function type names no type of the closure's own file (`() => int`
+names none), nests as usual until it is about
 16 KiB of stack deep; past that, further objects wait on a list for the
 current thread and are destroyed, in the order they were released, when
 the outermost release has finished its own object.
