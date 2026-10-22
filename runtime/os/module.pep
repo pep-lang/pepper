@@ -55,6 +55,7 @@ export hostname;
 export logical_cpus;
 export physical_cpus;
 export total_memory;
+export peak_memory;
 export page_size;
 export user_name;
 export home_directory;

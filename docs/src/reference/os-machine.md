@@ -219,6 +219,24 @@ returned instead, as the JVM does. WASI does not report it.
 **Returns**
 - the total physical memory, or the container's memory limit when that is lower, in bytes; 0 when the system does not report it
 
+## peak_memory
+
+```pepper
+peak_memory(): ulong
+```
+
+Returns the most physical memory this process has held at once since it
+started: its peak resident set size (`ru_maxrss` on Linux and macOS, the
+peak working set on Windows). WASI does not report it.
+
+**Returns**
+- the peak resident set size in bytes; 0 when the system does not report it
+
+**Example**
+```pepper
+var megabytes = os.peak_memory() / 1048576;
+```
+
 ## page_size
 
 ```pepper

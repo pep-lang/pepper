@@ -647,8 +647,11 @@ scratch. A failure names the cached objects that differ.
 `-T` turns on a trace channel, which prints to standard error. Repeat it for
 more channels; `--Tall` turns on every one.
 
-- `-T time` prints how long each stage of the compile took
-  (`time: check and build    470.763 ms`).
+- `-T time` prints how long each stage of the compile took, and the
+  compiler's peak memory once it ended (`time: link bodies 1395 ms, peak
+  400 MB`). A build in compilation units keeps its workers' timings in
+  `compilation-units.<pid>/<k>.stages` in the build folder, each ending
+  with that worker's peak memory.
 - `-T passes` prints how long each pass of the checker took, summed over its
   runs, slowest first (`pass:  3116.171 ms   16x resolve_implicit_types`),
   the passes run checking the runtime and each module included.
