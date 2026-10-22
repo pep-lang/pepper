@@ -1114,8 +1114,8 @@ a_workspace_shares_one_lock_and_builds_its_members() {
     expect_equal(run(process.Command(geo.join("geo" + exe).to_string())).stdout, "1.1.0 1.3.1\n");
     expect_true(app.join("app" + exe).is_file());
     # `-o` is relative to where the build runs, not to the member.
-    expect_exit(run(hosts.command(tool("pep-build").to_string(), root, ["-p", "geo", "-o", "out/geo"])), 0);
-    expect_true(root.join("out").join("geo" + exe).is_file());
+    expect_exit(run(hosts.command(tool("pep-build").to_string(), root, ["-p", "geo", "-o", "geo_out" + exe])), 0);
+    expect_true(root.join("geo_out" + exe).is_file());
     var unknown = run(hosts.command(tool("pep-build").to_string(), root, ["-p", "nope"]));
     expect_exit(unknown, 1);
     expect_contains(unknown.stderr, "no workspace member named 'nope' in '-p'; the members are 'app', 'geo', 'shapes'");
