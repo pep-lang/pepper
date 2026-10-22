@@ -863,8 +863,8 @@ struct _BoundsChecker {
         if (declared) {
             return;
         }
-        var shown_left = lhs_type.is_value() ? constraint_spelled(lhs_type.value()) : "?";
-        var shown_right = rhs_type.is_value() ? constraint_spelled(rhs_type.value()) : "?";
+        var shown_left = lhs_type.is_value() ? lhs_type.value().display() : "?";
+        var shown_right = rhs_type.is_value() ? rhs_type.value().display() : "?";
         # The node's location runs on over the right operand.
         var operator = Loc.at(loc.file, ast.Span(loc.span.start, loc.span.start + name.size));
         _report(
@@ -965,7 +965,7 @@ struct _BoundsChecker {
             }
             _report(
                 error_at(
-                    $"cannot pass a value of type '{constraint_spelled(actual.value())}' as argument {i} of '{base}', which has type '{constraint_spelled(expected.value())}'",
+                    $"cannot pass a value of type '{actual.value().display()}' as argument {i} of '{base}', which has type '{expected.value().display()}'",
                     at
                 ),
                 ($"'{base}' declared here", Optional<Loc>.Value(member.loc))

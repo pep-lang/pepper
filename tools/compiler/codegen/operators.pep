@@ -349,8 +349,8 @@ extend Generator {
             } else {
                 var applied = apply_op(op, lhs_c, rhs_c, result_ty, ptr_elem, ptr_elem_name);
                 if (applied.is_err() and applied.error().message.starts_with("unsupported op")) {
-                    var lhs_display = sema.constraint_spelled(sema.parse_type_string(lhs_name));
-                    var rhs_display = sema.constraint_spelled(sema.parse_type_string(rhs_name));
+                    var lhs_display = sema.parse_type_string(lhs_name).display();
+                    var rhs_display = sema.parse_type_string(rhs_name).display();
                     applied = fail<llvm.Value>(
                         $"invalid operands to binary expression ('{lhs_display}' and '{rhs_display}')"
                     );

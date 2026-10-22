@@ -570,7 +570,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `is_tuple`), displayed as `(A, B)`; `t.0` is a `MemberRef` named `"0"`.
     `Tuple<A, B>` builds the same type. Labels (`(line: int, column: int)`)
     ride on `TypeName.labels`, which equality, hashing and `Display` ignore
-    (`display()` shows them); `check_labels` rejects a partly labeled or
+    (`display()` shows them, and names each number type as programs
+    commonly do, `int` for the `i32` a literal is typed, through
+    `common_number_name`; `display_stored()` keeps the stored spelling for
+    `reflect.name`, which gives a type as written); `check_labels` rejects a partly labeled or
     duplicate set, and `lower_destructures` renames `p.line` to `p.0`
     (`tuple_index`). A labeled literal `(line: 3, column: 7)` is built as
     a call to `__tuple(line,column)` (`tuple_literals.tuple_constructor_labels`

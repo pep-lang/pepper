@@ -374,7 +374,7 @@ struct _TraitConversions {
                 }
             }
         }
-        var shown = constraint_spelled(actual);
+        var shown = actual.display();
         var error = error_at(
             $"'{shown}' cannot be converted to trait '{expected.display()}': only structs and enums whose cases carry values can be trait values",
             loc

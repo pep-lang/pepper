@@ -13,7 +13,6 @@ export [
 ] from "arithmetic";
 export [check_cast] from "casts";
 export [canonical_type] from "common";
-export [constraint_spelled] from "common";
 export [error_at] from "common";
 export [verify_injected] from "injected";
 export [returns_fresh, takes_over] from "confinement";

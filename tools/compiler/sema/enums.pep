@@ -315,7 +315,7 @@ _shown_type(ty: TypeName): String {
         }
         return $"({", ".join(elements)})";
     }
-    return demangle_name(ty.to_string());
+    return demangle_name(ty.display());
 }
 
 ## Records every value type's methods (the functions named `X::m`).
