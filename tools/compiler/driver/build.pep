@@ -296,25 +296,11 @@ export struct Built {
     construct() {}
 }
 
-# `program.link_bodies(bodies)`; a syntax error it reads is printed as pepc
-# prints one loading the program, which it would have been then, and the
-# error returned is empty: printed already.
-_link_bodies(program: link.Program, bodies: bool[]): String? {
-    var error = program.link_bodies(bodies);
-    if (error.is_value()) {
-        print($"pepc: {error.value()}");
-        return Optional<String>.Value("");
-    }
-    return Optional<String>.Empty;
-}
-
-# `error` as the build reports it, rendered; a file whose bodies did not
-# read prints as `_link_bodies` prints it, and the error is empty.
+# `error` as the build reports it, rendered.
 _check_error(error: CheckError, sources: SourceText[]): String {
     match (error) {
         Unread(message) => {
-            print($"pepc: {message}");
-            return "";
+            return message;
         }
         Linking(diagnostics) => {
             return render_all(diagnostics, sources);
@@ -869,7 +855,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # Checking compilation units links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
     if (units.count <= 1) {
-        var unread = _link_bodies(program, every_file(program));
+        var unread = program.link_bodies(every_file(program));
         if (unread.is_value()) {
             return Result<Built, String>.err(unread.value());
         }

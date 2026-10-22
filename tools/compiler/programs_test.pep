@@ -104,6 +104,23 @@ an_unknown_member_in_an_interpolation_is_named() {
     expect_contains(error.value(), "interpolation_unknown_member.pep:5:20: error: no member named 'count' in 'String'");
 }
 
+# A syntax error in a function body, read after the declarations, is a
+# diagnostic like any other: the line with a caret, and no `pepc:` (#158).
+[Test]
+a_syntax_error_in_a_body_shows_its_line() {
+    var folder = TempFolder("programs_body_literal_too_large");
+    var source = folder.path.join("body_literal_too_large.pep");
+    # Written here: in testdata/, the repository's parse test would read it.
+    write_file(source, "main(): int {\n    ulong a = 18446744073709551616;\n    return 0;\n}\n");
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(
+        error.value(),
+        "body_literal_too_large.pep:2:15: error: integer literal is too large to be represented in a 64-bit integer\n    2 |     ulong a = 18446744073709551616;\n      |               ^~~~~~~~~~~~~~~~~~~~"
+    );
+    expect_true(!error.value().contains("pepc:"), "no 'pepc:' prefix");
+}
+
 # ── visibility ──────────────────────────────────────────────────────────────
 
 # A module's private extern is not visible from another module, whose

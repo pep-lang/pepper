@@ -1692,6 +1692,9 @@ struct _Expander {
                     Integer(v) => {
                         return ok(_CtValue.Int(v));
                     }
+                    Unsigned(v) => {
+                        return ok(_CtValue.Int(unsafe_cast<long>(v)));
+                    }
                     Float(v) => {
                         return ok(_CtValue.Float(v));
                     }
@@ -3112,6 +3115,9 @@ _attribute_argument(module: Module, e: ast.Expression, file: uint): Result<_CtVa
             match (literal) {
                 Integer(v) => {
                     return Result<_CtValue, Diagnostic>.Ok(_CtValue.Int(v));
+                }
+                Unsigned(v) => {
+                    return Result<_CtValue, Diagnostic>.Ok(_CtValue.Int(unsafe_cast<long>(v)));
                 }
                 Float(v) => {
                     return Result<_CtValue, Diagnostic>.Ok(_CtValue.Float(v));

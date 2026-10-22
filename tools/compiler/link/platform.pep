@@ -624,6 +624,12 @@ struct _Evaluator {
                 Null => {
                     usable = false;
                 }
+                Unsigned(n) => {
+                    return _fail_at(
+                        $"build option '{name.value()}' cannot be compared with {n}: a build option is a 'long'",
+                        literal.span()
+                    );
+                }
                 else => {}
             }
         }
@@ -1124,6 +1130,9 @@ export literal_text(value: Literal): String {
             return out.to_string();
         }
         Integer(n) => {
+            return $"{n}";
+        }
+        Unsigned(n) => {
             return $"{n}";
         }
         Float(f) => {

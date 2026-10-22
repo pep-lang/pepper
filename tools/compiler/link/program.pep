@@ -698,19 +698,8 @@ _describe_paths(paths: Path[]): String {
     return ", ".join(parts);
 }
 
-# A parse error as the compiler reports it: `file:line:column: error: ...`.
+# A parse error as the compiler reports it: `file:line:column: error: ...`
+# and the line, with a caret under the span.
 _render(name: String, source: String, span: Span, message: String): String {
-    ulong line = 1;
-    ulong column = 1;
-    ulong i = 0;
-    while (i < span.start and i < source.size) {
-        if (source.byte_at(i) == '\n') {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-        i += 1;
-    }
-    return $"{name}:{line}:{column}: error: {message}";
+    return Diagnostic.error(message).at(Location(0, span)).render([SourceText(name, source)]);
 }

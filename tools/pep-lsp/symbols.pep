@@ -166,6 +166,9 @@ export literal_type(literal: ast.Literal): String {
         Integer(_) => {
             return "int";
         }
+        Unsigned(_) => {
+            return "ulong";
+        }
         Float(_) => {
             return "float";
         }
