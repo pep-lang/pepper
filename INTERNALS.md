@@ -3097,7 +3097,9 @@ lines are always taken: the compiler's own code calls its functions by name
 checks every compilation unit but the last in `pepc --compilation-unit-worker <dir>` children,
 started with the build's own command line. A compilation unit is handed to an idle
 worker once every compilation unit it reads is done, as its number and key on the
-worker's standard input; before each one a worker reads and links the
+worker's standard input; of the ready ones, the one the longest chain of
+compilation units reading it waits on goes first (`_chain_lengths`), as a build
+system schedules its critical path; before each one a worker reads and links the
 bodies of its files only (`Program.link_bodies`, which links more files'
 bodies each time it is called), since the compilation units it reads come as
 records. The
