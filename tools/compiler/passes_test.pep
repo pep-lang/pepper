@@ -390,6 +390,11 @@ reports_confinement_errors_part_11() {
     reports_confinement_error(10);
 }
 
+[Test]
+reports_confinement_errors_part_12() {
+    reports_confinement_error(11);
+}
+
 reports_confinement_error(index: ulong) {
     var folder = TempFolder($"passes_confinement_{index}");
     var programs = [confinement_error_programs()[index]];
@@ -419,7 +424,10 @@ confinement_error_programs(): String[] {
         # one a call returned (#173).
         "# expect: main.pep:18:17: error: 'b' cannot be moved: 'bump' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    var bump = () => {\n        b.n += 1;\n    };\n    c.send(move(b));\n    bump();\n    return 0;\n}\n",
         "# expect: main.pep:25:17: error: 'b' cannot be moved: 'h' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nstruct Holder {\n    var f: () => void;\n\n    construct(f: () => void) {\n        this.f = f;\n    }\n}\n\nstore(h: Holder, c: async.Channel<Box>) {\n    var b = Box(1);\n    h.f = () => {\n        b.n += 1;\n    };\n    c.send(move(b));\n}\n\nmain(): int {\n    store(Holder(() => {}), async.Channel<Box>());\n    return 0;\n}\n",
-        "# expect: main.pep:20:17: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nwrap(b: Box): () => int {\n    return () => b.n;\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    var get = wrap(b);\n    c.send(move(b));\n    return get();\n}\n"
+        "# expect: main.pep:20:17: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nwrap(b: Box): () => int {\n    return () => b.n;\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    var get = wrap(b);\n    c.send(move(b));\n    return get();\n}\n",
+        # A `for` loop's hidden iterator holds the closure until the loop
+        # ends.
+        "# expect: main.pep:20:21: error: 'b' cannot be moved: a hidden value of the code around it (such as a loop's iterator) also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nnumbers(): Array<int> {\n    return [1, 2, 3];\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    for (var x in numbers().iterate().map<int>((v: int): int => v + b.n)) {\n        c.send(move(b));\n        break;\n    }\n    return 0;\n}\n"
     ];
 }
 

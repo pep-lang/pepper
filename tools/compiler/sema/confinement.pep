@@ -2921,9 +2921,18 @@ struct _RegionWalk {
                     }
                 }
                 if (checking and (shares or others.count > 0)) {
-                    var why = others.count > 0 ?
-                        $"'{others[0]}' also references its value" :
-                        "its value shares objects with the rest of the program";
+                    var why = "its value shares objects with the rest of the program";
+                    if (others.count > 0) {
+                        # A hidden local (a `for` loop's iterator) is named
+                        # only when no local of the user's is.
+                        why = "a hidden value of the code around it (such as a loop's iterator) also references its value";
+                        for (var other in others) {
+                            if (!other.starts_with("__")) {
+                                why = $"'{other}' also references its value";
+                                break;
+                            }
+                        }
+                    }
                     report(
                         _error_at_known(
                             $"'{node.id}' cannot be moved: {why}",
@@ -2983,7 +2992,7 @@ struct _RegionWalk {
                 var l = scope[i];
                 if (l.name == moving and !skipped) {
                     skipped = true;
-                } else if (l.region >= 0 and !l.name.starts_with("__")) {
+                } else if (l.region >= 0) {
                     for (var leaf in leaves(l.region)) {
                         if (find(leaf) == root) {
                             out.append(l.name);
