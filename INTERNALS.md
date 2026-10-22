@@ -1934,11 +1934,19 @@ changed.
   hit marks its parts reused too, so a build storing newer keys of a part
   does not remove one another build is about to link. Pruning reads a
   key's time again just before it moves the folder aside, and moves it
-  back when it was reused meanwhile; a build links the objects of a
-  compilation unit it found in the cache through `Cache.reused_objects`,
-  which looks again for about a second while the folder is away and fails
-  the build rather than link without them (a link short of a unit's
-  objects fails on undefined symbols, #24). A unit's folder
+  back when it was reused meanwhile, so a key a build decided to reuse can
+  be missing for a moment. Every read of such a key's folder after the
+  decision goes through `Cache.look_again`, which looks again for about a
+  second while the folder is away: the objects of the compilation units the
+  last reads (`_check_in_workers`, #172, and `Cache.reused_objects`), what
+  they define (`_copy_defines`), and the last's own objects, warnings and
+  `[Link]` arguments (`_last_kept`). A build fails rather than link without
+  them (a link short of a unit's objects fails on undefined symbols, #24).
+  `numbered_objects` reads a folder's objects from one listing, so a folder
+  moved aside and back between two looks cannot end the list early. Once a
+  build marked a key, a prune that reads its time later keeps it, so only a
+  prune already past that check when the build marked it can move it, and
+  it moves it straight back. A unit's folder
   spells the `/` of its name as `.` (`u/process.command#0/`), so each
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them

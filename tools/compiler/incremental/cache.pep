@@ -96,12 +96,34 @@ export struct Cache {
         return folder.set_modified(os.SystemTime.now().unix_nanoseconds()).is_ok();
     }
 
+    ## Returns what `find` finds of a key this build already decided to
+    ## reuse, looking again for about a second while it finds nothing. A
+    ## build pruning the key's unit moves its folder aside, and back when it
+    ## was reused meanwhile (`_prune`), so a key this build marked (`used`)
+    ## can be missing for a moment: once a build decided to reuse a key, a
+    ## look that misses it is not a plain miss. Every read of a key's
+    ## folder after the decision goes through here.
+    ##
+    ## @typeParam T what is found
+    ## @param find one look: marks the key as reused and reads what it needs
+    ## @returns what `find` found, or none when it found nothing for about a
+    ##   second
+    look_again<T>(find: () => T?): T? {
+        for (var _ in 0.._REUSE_TRIES) {
+            var found = find();
+            if (found.is_value()) {
+                return found;
+            }
+            async.Thread.sleep(_REUSE_WAIT);
+        }
+        return Optional<T>.Empty;
+    }
+
     ## Returns the objects of `unit` under `key` (`numbered_objects`),
     ## marked as just reused, for linking a unit this build found in the
-    ## cache when it checked it. A build pruning the unit moves a key's
-    ## folder aside, and back when it was reused meanwhile (`_prune`), so a
-    ## folder found missing or empty is looked for again for about a
-    ## second: a link without its objects fails on undefined symbols.
+    ## cache when it checked it, looked for again while missing
+    ## (`look_again`): a link without its objects fails on undefined
+    ## symbols.
     ##
     ## @param unit the unit's name
     ## @param key its key
@@ -109,18 +131,16 @@ export struct Cache {
     ## @returns the objects, or why the cache no longer holds them
     reused_objects(unit: String, key: String, extension: String): Result<Path[], String> {
         var folder = objects(unit, key);
-        for (var _ in 0.._REUSE_TRIES) {
-            if (used(folder)) {
-                var found = numbered_objects(folder, extension);
-                if (!found.is_empty) {
-                    return Result<Path[], String>.ok(found);
-                }
-            }
-            async.Thread.sleep(_REUSE_WAIT);
+        var found = look_again(() => {
+            var listed = used(folder) ? numbered_objects(folder, extension) : Array<Path>();
+            return listed.is_empty ? Optional<Path[]>.Empty : Optional<Path[]>.Value(listed);
+        });
+        if (!found.is_value()) {
+            return Result<Path[], String>.err(
+                $"the build cache no longer holds the objects of '{unit}' ({folder}); build again"
+            );
         }
-        return Result<Path[], String>.err(
-            $"the build cache no longer holds the objects of '{unit}' ({folder}); build again"
-        );
+        return Result<Path[], String>.ok(found.value());
     }
 
     ## Returns the key the cache holds objects of compilation unit `unit`,
@@ -438,7 +458,9 @@ export default_cache(work: Path): Cache {
 ## came, so a removal that stops partway (a file open on Windows) leaves no
 ## key without its objects. A key a build reused (`used`) after the listing
 ## here is put back: that build checks its objects after marking it, so
-## either it finds the key gone and compiles, or the key stays.
+## either it finds the key gone and compiles, or the key stays. It is
+## missing meanwhile, so every later read of a key a build decided to
+## reuse looks again (`Cache.look_again`).
 _prune(folder: Path) {
     var entries = Directory.open(folder);
     if (entries.is_err()) {
@@ -1042,17 +1064,30 @@ _copy_folder(from: Path, to: Path): IoResult<void> {
 }
 
 ## The objects of a unit's parts in `folder`: `0.<extension>` and on, until
-## one is missing.
+## one is missing, read from one listing of `folder`. A look per file could
+## end the list early, without a part, when a build pruning the unit moves
+## the folder aside and back between two looks (`_prune`); a listing reads
+## one open folder, all of it or nothing.
 ##
 ## @param folder the folder of the objects
 ## @param extension the objects' file extension
 ## @returns the objects, none when `folder` holds no `0.<extension>`
 export numbered_objects(folder: Path, extension: String): Path[] {
     var objects = Array<Path>();
-    var at = folder.join(Path($"0.{extension}"));
-    while (at.is_file()) {
-        objects.append(at);
-        at = folder.join(Path($"{objects.count}.{extension}"));
+    var opened = Directory.open(folder);
+    if (opened.is_err()) {
+        return objects;
+    }
+    var entries = opened.value().entries();
+    if (entries.is_err()) {
+        return objects;
+    }
+    var names = HashSet<String>();
+    for (var entry in entries.value()) {
+        names.insert(entry.name);
+    }
+    while (names.contains($"{objects.count}.{extension}")) {
+        objects.append(folder.join(Path($"{objects.count}.{extension}")));
     }
     return objects;
 }
