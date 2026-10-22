@@ -157,6 +157,12 @@ pepper="$bin/pepper$exe"
 # installed toolchain's.
 export PATH="$bin:$PATH"
 
+# Every tool's dependencies, fetched up front: the compiler's imports tests
+# check every tool's sources, whichever part of the tests runs.
+for project in "$root"/tools/*/pep.toml; do
+  "$bin/pep-package$exe" -C "$(dirname "$project")" fetch
+done
+
 failed=0
 run() {
   echo "=== pepper test $* (in $(basename "$PWD"))"

@@ -116,8 +116,9 @@ runs:
       shell: bash
       run: |
         set -euxo pipefail
+        # Git's bash finds `pep-build` for `pep-build.exe`; git does not.
         compiler="$PEPPER_COMPILER_DIR/pep-build"
-        [ -f "$compiler" ] || compiler="$compiler.exe"
+        [ ! -f "$compiler.exe" ] || compiler="$compiler.exe"
         echo "hash=$(git hash-object "$compiler")" >> "$GITHUB_OUTPUT"
     - name: Restore the compiler's build cache
       if: inputs.compiler == 'true'
