@@ -6,6 +6,7 @@
 ## or an integer and back, and a number to another number of the same width
 ## with its bits unchanged. Neither ever applies to a refcounted reference.
 
+import [unit_decls] from "checked";
 import [bit_width, is_float_type] from "arithmetic";
 import "common";
 import "function_types_check";
@@ -26,16 +27,18 @@ import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 ## @param module the model
 ## @param state the passes' state, which takes the error
 export check_casts(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
     var checker = _Casts(module, state);
     var bases = _Bases(module);
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         if (f.generic_params.count == 0) {
             checker.unbound = bases.params(f.name, false);
             checker.current = Optional<TypeName>.Empty;
             checker.visit(f);
         }
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         # Generic bases are checked through their specializations.
         if (_is_generic_base(st) or st.ty.is_function_type() or st.ty.is_weak()) {
             continue;
@@ -52,6 +55,9 @@ export check_casts(module: Module, state: PassState) {
     checker.unbound = Array<String>();
     checker.current = Optional<TypeName>.Empty;
     for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            continue;
+        }
         if (g.default.is_value()) {
             rewrite_expression(g.default.value(), checker);
         }

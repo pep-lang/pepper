@@ -576,7 +576,12 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
 _step(index: ulong, module: Module, state: PassState): Diagnostic? {
     match (index) {
         0 => {
-            return apply_platform_filters(module, state.target);
+            # A struct whose method is checked again has a new body.
+            var rechecked = HashSet<String>();
+            for (var key in state.rechecked_methods) {
+                rechecked.insert(key.split(" ")[1]);
+            }
+            return apply_platform_filters(module, state.target, rechecked);
         }
         1 => {
             # `[Equatable]` structs get their `==` and `__hash` first, so

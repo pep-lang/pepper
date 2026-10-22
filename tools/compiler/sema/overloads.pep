@@ -150,16 +150,21 @@ export name_overloads(module: Module, state: PassState) {
         i += 1;
     }
     var groups = grouping.sorted();
+    # The externs by file and name, in order.
+    var externs_named = HashMap<String, Array<ExternDef>>();
+    for (var e in module.externs) {
+        var key = $"{e.loc.file} {e.name}";
+        if (!externs_named.contains(key)) {
+            externs_named[key] = Array<ExternDef>();
+        }
+        externs_named[key].append(e);
+    }
     for (var group in groups) {
         # An extern names one C symbol, so it cannot share its name with
         # another function of the file; redeclaring the same prototype is
         # allowed.
-        var externs = Array<ExternDef>();
-        for (var e in module.externs) {
-            if (e.loc.file == group.file and e.name == group.name) {
-                externs.append(e);
-            }
-        }
+        var named = externs_named.try_get($"{group.file} {group.name}");
+        var externs = named.is_value() ? named.value() : Array<ExternDef>();
         if (group.members.count > 0 and externs.count > 0) {
             var function = module.functions[group.members[0]];
             var later = function.loc;

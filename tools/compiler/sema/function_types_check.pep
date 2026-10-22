@@ -6,6 +6,7 @@
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
+import [unit_decls] from "checked";
 import [is_numeric_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE] from "builder";
 import "closure_sites";
@@ -33,14 +34,16 @@ import [Rewriter, rewrite_expression] from "walk";
 ## @param module the model
 ## @param state the passes' state, which takes the error
 export check_function_types(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
     var checker = _FunctionTypes(module, state);
     var bases = _Bases(module);
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         checker.unbound = bases.params(f.name, false);
         checker.current = Optional<TypeName>.Empty;
         checker.function(f);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         # Generic bases are checked through their specializations; the
         # synthesized function-type structs hold no user code.
         if (_is_generic_base(st) or st.ty.is_function_type() or st.ty.is_weak()) {
@@ -58,6 +61,9 @@ export check_function_types(module: Module, state: PassState) {
     checker.unbound = Array<String>();
     checker.current = Optional<TypeName>.Empty;
     for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            continue;
+        }
         if (g.default.is_value()) {
             checker.variable(g, g.default.value());
         }
