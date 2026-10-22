@@ -34,10 +34,20 @@
 # comes, each line starting `tools| `, so a slow or stuck test shows in
 # a live log.
 #
+# PEPPER_TESTS_PART runs part of them, so CI can split the suite between
+# runners: `compiler` runs the compiler's tests (tools/compiler), `others`
+# everything else (the runtime's and the other tools'); unset or `all`
+# runs both.
+#
 # Every build the tests make checks that sema left no injected construct
 # half resolved (PEPC_VERIFY_INJECTED, INTERNALS.md "Debugging").
 set -euo pipefail
 export PEPC_VERIFY_INJECTED="${PEPC_VERIFY_INJECTED:-1}"
+part="${PEPPER_TESTS_PART:-all}"
+case "$part" in
+  all|compiler|others) ;;
+  *) echo "error: PEPPER_TESTS_PART is 'all', 'compiler' or 'others', not '$part'" >&2; exit 2 ;;
+esac
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 target="${PEPPER_TARGET_DIR:-$root/target}"
@@ -160,6 +170,18 @@ rm -f "$tools_status"
 (
   cd "$root/tools"
   [ -z "$llvm_path" ] || PATH="$llvm_path:$PATH"
+  # The folders of this part; none named is every one.
+  folders=()
+  if [ "$part" = compiler ]; then
+    folders=(compiler)
+  elif [ "$part" = others ]; then
+    for folder in */; do
+      folder="${folder%/}"
+      if [ "$folder" != compiler ] && grep -rlq --include='*.pep' '^\[Test\]' "$folder"; then
+        folders+=("$folder")
+      fi
+    done
+  fi
   if grep -rlq --include='*.pep' '^\[Test\]' .; then
     # At -O1: the compiler's passes tests run the Pepper passes in-process
     # over the test programs, which is slow unoptimized (near the 60 s
@@ -168,7 +190,7 @@ rm -f "$tools_status"
     # examples' parts, which build every example, take up to 270 s on the
     # Windows runner while it shares its host, so they get 600 s (`-t` in
     # the arguments still wins).
-    PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run "${llvm[@]+"${llvm[@]}"}" -t 600 "$@"
+    PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run "${llvm[@]+"${llvm[@]}"}" -t 600 "$@" "${folders[@]+"${folders[@]}"}"
   fi
   echo "$failed" > "$tools_status"
 ) 2>&1 | while IFS= read -r line; do printf 'tools| %s\n' "$line"; done &
@@ -176,24 +198,26 @@ rm -f "$tools_status"
 tools=$!
 
 cd "$root/runtime"
-run "$@"
-if [ -d compress/test ]; then
-  if [ -z "$exe" ]; then
-    run -D USE_ZLIB "$@" compress/test
-  elif [ -n "${PEPPER_TEST_ZLIB_DIR:-}" ]; then
-    run -D USE_ZLIB -L "$PEPPER_TEST_ZLIB_DIR" "$@" compress/test
-  else
-    echo "=== skipped: -D USE_ZLIB compress/test (set PEPPER_TEST_ZLIB_DIR to a folder holding zlib.lib)"
-  fi
-fi
-if [ -d digest/test ]; then
-  libcrypto=()
-  for dir in /opt/homebrew/opt/openssl@3/lib /usr/local/opt/openssl@3/lib; do
-    if [ "$(uname -s)" = Darwin ] && [ -d "$dir" ]; then
-      libcrypto+=(-L "$dir")
+if [ "$part" != compiler ]; then
+  run "$@"
+  if [ -d compress/test ]; then
+    if [ -z "$exe" ]; then
+      run -D USE_ZLIB "$@" compress/test
+    elif [ -n "${PEPPER_TEST_ZLIB_DIR:-}" ]; then
+      run -D USE_ZLIB -L "$PEPPER_TEST_ZLIB_DIR" "$@" compress/test
+    else
+      echo "=== skipped: -D USE_ZLIB compress/test (set PEPPER_TEST_ZLIB_DIR to a folder holding zlib.lib)"
     fi
-  done
-  run -D USE_LIBCRYPTO "${libcrypto[@]+"${libcrypto[@]}"}" "$@" digest/test
+  fi
+  if [ -d digest/test ]; then
+    libcrypto=()
+    for dir in /opt/homebrew/opt/openssl@3/lib /usr/local/opt/openssl@3/lib; do
+      if [ "$(uname -s)" = Darwin ] && [ -d "$dir" ]; then
+        libcrypto+=(-L "$dir")
+      fi
+    done
+    run -D USE_LIBCRYPTO "${libcrypto[@]+"${libcrypto[@]}"}" "$@" digest/test
+  fi
 fi
 
 wait "$tools"

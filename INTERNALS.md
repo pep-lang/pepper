@@ -3643,13 +3643,11 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     it through pepper-llvm) and the libraries the tests link, install the
     newest published toolchain (the `x.y.z-dev` prerelease `release.yml`
     publishes on each merge, or a release with a higher version, through
-    `install.sh` / `install.ps1`), restore the newest build cache an
-    earlier run saved for the OS (`PEPPER_CACHE_DIR`, one cache every
-    build in the job shares, the tools' tests' own builds included, and
-    the changed compiler; actions/cache, saved again after the job), build `tools/compiler` when it changed
-    (`ci-build-compiler.sh`), and give the compiler a time taken from its
-    contents, since the cache keys on the compiler's path, size and time.
-    Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
+    `install.sh` / `install.ps1`), name `PEPPER_CACHE_DIR` (one build
+    cache every build in the job shares, the tools' tests' own builds
+    included; it starts empty, since its keys name the compiler, new in
+    nearly every run), and build `tools/compiler` when it changed
+    (`ci-build-compiler.sh`). Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
     which prints the runner's memory, disk and biggest processes each
     minute; a job that fails, is cancelled or times out ends with its
     `--report` (Diagnostics). The Windows job also runs `pep-doc

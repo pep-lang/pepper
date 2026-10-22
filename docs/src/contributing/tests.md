@@ -97,8 +97,8 @@ files uses a fresh folder under the system's temporary folder
 (`TempFolder` in the `testing` module makes and removes one).
 
 CI runs `scripts/pepper-tests.sh` with the installed build of main on
-Linux, macOS and Windows, one job on each, starting from the build cache
-the previous run saved. A PR that changes the compiler (`tools/compiler/`) is tested with
+Linux, macOS and Windows, one job on each, every build in a job sharing
+one build cache. A PR that changes the compiler (`tools/compiler/`) is tested with
 that compiler instead: CI builds it with the build of main first
 (`scripts/ci-build-compiler.sh`) and runs the suite with it. Each job has
 a time limit a little above its slowest passing runs, and prints the

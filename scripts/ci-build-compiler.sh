@@ -42,13 +42,24 @@ export PEPPER_RUNTIME="$root/runtime"
 echo "=== building tools/compiler with $("$stage0/pep-build$exe" --version)"
 # Fetched up front, so a failed fetch shows pep-package's own error.
 "$stage0/pep-package$exe" -C tools/compiler fetch
-# shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
-# runtime's number extensions that declare `Comparable` when it checks
-# a compilation unit again, so it builds without compilation
-# units. Drop the variable once the published stage 0 is 0.10.0-dev or
-# later.
-PEPC_NO_COMPILATION_UNITS=1 "$stage0/pep-build$exe" -O tools/compiler/main.pep \
-  -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}"
+# In compilation units, from a build cache of its own beside the compiler
+# (ci.yml saves it from main and restores it), so a change to a few files
+# rebuilds only their units. Its keys name stage 0 by its contents, not
+# by its path, size and time: each job installs stage 0 afresh, with a new
+# time, which would miss every key.
+identity="stage0 $(git hash-object "$stage0/pep-build$exe")"
+echo "=== stage 0 identity: $identity"
+# Two compilation units at once by default: one worker checking pepc
+# grows to several GB, and the hosted runners have 7 to 16.
+log="$out/build.log"
+PEPC_COMPILER_IDENTITY="$identity" PEPPER_CACHE_DIR="$out/cache" \
+  PEPC_COMPILATION_UNIT_JOBS="${PEPC_COMPILATION_UNIT_JOBS:-2}" \
+  "$stage0/pep-build$exe" -O tools/compiler/main.pep -T time -T cache \
+  -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}" 2> "$log" || { cat "$log" >&2; exit 1; }
+# The stages' times, and how many objects the cache supplied.
+grep '^time:' "$log" || true
+grep 'compilation units checked already' "$log" || true
+grep -oE '^cache: (hit|miss)' "$log" | sort | uniq -c || true
 # pepc loads LLVM-C.dll from its own folder.
 if [ -n "$exe" ]; then
   cp -f "$stage0/LLVM-C.dll" "$out/"

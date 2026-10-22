@@ -467,3 +467,5 @@ _is_name_byte(b: byte): bool {
 _is_namespace_byte(b: byte): bool {
     return _is_name_byte(b) or b == '/' or b == '#';
 }
+
+# CI cache probe 1 (to be removed before merging).
