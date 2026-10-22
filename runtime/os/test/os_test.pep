@@ -79,6 +79,7 @@ machine_and_user() {
     expect_true(os.physical_cpus() >= 1);
     expect_true(os.physical_cpus() <= os.logical_cpus());
     expect_true(os.total_memory() >= 16777216);
+    expect_true(os.peak_memory() >= 1048576);
     var page = os.page_size();
     expect_true(page >= 4096);
     expect_equal(page & (page - 1), 0);

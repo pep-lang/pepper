@@ -118,6 +118,29 @@ keeps_once_a_method_two_units_specialized() {
     );
 }
 
+# A call to an overloaded generic method of a struct below: the passes keep
+# the struct's overloads (`TraitTypeMemo.members`), whose generic signatures
+# hold the passes' state, so the state held itself, and every declaration it
+# reached, after the compilation unit was checked (#167). The test's leak
+# check catches the cycle.
+[Test]
+lets_go_of_the_state_after_a_generic_overload_below() {
+    _builds_and_runs(
+        "units_generic_overload_below",
+        [
+            (
+                "describer.pep",
+                "export struct Describer {\n    describe(value: bool): int {\n        return 1;\n    }\n    describe<T>(value: Array<T>): int {\n        return 2;\n    }\n}\n"
+            ),
+            (
+                "uses.pep",
+                "import \"describer\";\nexport described(): int {\n    var d = Describer();\n    return d.describe(true) + d.describe([1]);\n}\n"
+            ),
+            ("main.pep", "import \"uses\";\nmain(): int {\n    return described() - 3;\n}\n")
+        ]
+    );
+}
+
 # The same with a method the passes synthesize for a use: two compilation units
 # that copy a struct of a third each gave it a `__copy`.
 [Test]

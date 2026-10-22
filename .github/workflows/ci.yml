@@ -215,9 +215,12 @@ jobs:
           # per CPU, a Linux runner's 16 GB ran out (swap full) while the
           # tools' test programs built, and three runners died.
           PEPC_COMPILATION_UNIT_JOBS: 2
+        # The test programs build as one program each, which is about 3x
+        # faster cold than in units (#171). Only pep-test's builds see it, so
+        # the tests of units and the build cache still build in units.
         run: |
           bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
-            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`pep-doc reference`) in the same
@@ -279,9 +282,12 @@ jobs:
           # checking 8 compilation units at once ran a 16 GB Mac out of
           # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
+        # The test programs build as one program each, which is about 3x
+        # faster cold than in units (#171). Only pep-test's builds see it, so
+        # the tests of units and the build cache still build in units.
         run: |
           bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
-            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
+            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1 -j 3
 
       # A failed, cancelled or timed-out job: the samples with the least
       # memory free, and every process, its age and size, the disks, and
@@ -334,9 +340,12 @@ jobs:
           # per CPU, a Linux runner's 16 GB ran out (swap full) while the
           # tools' test programs built, and three runners died.
           PEPC_COMPILATION_UNIT_JOBS: 2
+        # The test programs build as one program each, which is about 3x
+        # faster cold than in units (#171). Only pep-test's builds see it, so
+        # the tests of units and the build cache still build in units.
         run: |
           bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
-            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+            bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and
@@ -439,10 +448,9 @@ jobs:
 
       - name: Provision LLVM
         timeout-minutes: 15
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-provision-llvm.sh
+        uses: ./.github/actions/provision-llvm
+        with:
+          token: ${{ github.token }}
 
       # See test-windows: build beside the checkout, where its clean step
       # cannot reach. The test jobs' directory, so a runner builds once.
@@ -505,6 +513,7 @@ jobs:
           done
           ls "$RUNNER_WORKSPACE/cross-cache" "$RUNNER_WORKSPACE/cross-cache/sysroots"
           ls "$RUNNER_TEMP/sysroots"
+          ls -l "$RUNNER_TEMP/llvm-debs"
           [ -n "${PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC:-}" ] && find "$PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC" -maxdepth 6 -type d
 
   cross-run:

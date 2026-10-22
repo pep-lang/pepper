@@ -90,8 +90,8 @@ export struct Resolver {
     var update_all: bool = false;
     # The sources to update.
     var update: Array<String> = __null;
-    # `--offline`: use only what `.pep/deps` holds, and fail on what needs
-    # the network.
+    # `--offline`: use only what `.pep/deps` and the download cache hold,
+    # and fail on what needs the network.
     var offline: bool = false;
     # The toolchain release resolving, which each package's
     # `minimum_toolchain` is checked against; empty checks none.
@@ -135,9 +135,7 @@ export struct Resolver {
             return Result<String>.Ok(known.value());
         }
         var (host, repository) = split_source(source);
-        var text = file_at(
-            repository_url(host, repository), package_dir(project, host, repository), commit, "pep.toml", offline
-        );
+        var text = file_at(host, repository, package_dir(project, host, repository), commit, "pep.toml", offline);
         if (text.is_err()) {
             return Result<String>.Err(
                 $"cannot read the pep.toml of {source} {commit.substr(0, 12)}: {text.error().message}"
@@ -338,21 +336,18 @@ export struct Resolver {
             return Result<(String, String)>.Ok((commit, expected));
         }
         if (!has_git()) {
-            if (offline) {
-                return Result<(String, String)>.Err(not_held_offline(dir, commit));
-            }
             if (commit.length != 40) {
                 return Result<(String, String)>.Err(
                     $"git is not on the PATH, and fetching the commit '{commit}' without it needs all 40 digits"
                 );
             }
-            var fetched = fetch_archive(host, repository, dir, commit, expected);
+            var fetched = fetch_archive(host, repository, dir, commit, expected, offline);
             if (fetched.is_err()) {
                 return Result<(String, String)>.Err(fetched.error().message);
             }
             return Result<(String, String)>.Ok((commit, fetched.value()));
         }
-        var checked = check_out(repository_url(host, repository), dir, commit, offline);
+        var checked = check_out(host, repository, dir, commit, offline);
         if (checked.is_err()) {
             return Result<(String, String)>.Err(checked.error().message);
         }
