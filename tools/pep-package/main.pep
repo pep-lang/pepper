@@ -7,11 +7,13 @@
 #     pepper package add someone/geometry       # the newest version, as 'geometry'
 #     pepper package add other/json@2.x --name fast_json
 #     pepper package add --dev someone/fixtures  # only for tests and examples
+#     pepper package add --target 'OS(Windows)' someone/winapi  # only on Windows
 #     pepper package remove geometry
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
 #     pepper package fetch --locked             # fail rather than change pep.lock
 #     pepper package fetch --offline            # only what .pep/deps holds; --frozen is both
+#     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
 #
 # Build it from the repository root; its pep.toml names the toml package it
@@ -61,6 +63,10 @@ main(args: String[]): int {
     );
     var frozen = parser.flag("frozen", help = "both --locked and --offline", global = true);
     var fetch = parser.command("fetch", "Fetches what pep.lock lists, resolving what pep.toml changed since");
+    var fetch_packages = fetch.positionals(
+        "packages",
+        "only these locked packages (their sources, github:owner/name), at the commits pep.lock records, without resolving: what a build fetches for its target"
+    );
     var add = parser.command("add", "Adds a dependency at its newest version, or at a range given after @");
     var add_package = add.positional(
         "package", "[host:]owner/name[@range]; without a host, the first of pep.toml's [fetch] hosts that has it"
@@ -70,6 +76,12 @@ main(args: String[]): int {
     );
     var add_dev = add.flag(
         "dev", help = "add it to [dev-dependencies], which only the project's tests and examples import"
+    );
+    var add_target = add.option(
+        "target",
+        "t",
+        "add it to [target.'CONDITION'.dependencies], which only builds for the targets CONDITION selects use; CONDITION is what [Target(...)] takes, such as OS(Windows)",
+        value_name = "CONDITION"
     );
     var remove = parser.command("remove", "Removes a dependency");
     var remove_package = remove.positional("package", "the dependency's name, or its owner/name");
@@ -94,10 +106,13 @@ main(args: String[]): int {
     project.locked = locked.is_set or frozen.is_set or os.environment_flag("PEPPER_LOCKED");
     project.offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE");
     if (fetch.is_selected) {
-        return project.fetch();
+        return fetch_packages.values().is_empty ? project.fetch() : project.fetch_locked(fetch_packages.values());
     }
     if (add.is_selected) {
-        return project.add(add_package.value(), add_name.value_or(""), add_dev.is_set);
+        if (add_dev.is_set and add_target.is_set) {
+            return fail("--dev and --target name different tables; give one");
+        }
+        return project.add(add_package.value(), add_name.value_or(""), add_dev.is_set, add_target.value_or(""));
     }
     if (remove.is_selected) {
         return project.remove(remove_package.value());
@@ -279,7 +294,41 @@ struct Project {
         return 0;
     }
 
-    add(spec: String, given_name: String, dev: bool): int {
+    # Fetches the locked packages `sources` names at their locked commits,
+    # resolving nothing: a build that needs only them (its target's) and
+    # whose pep.lock lists every dependency.
+    fetch_locked(sources: Array<String>): int {
+        var locked = read_lock(lock_path(dir));
+        if (locked.is_err()) {
+            return fail(locked.error().message);
+        }
+        var resolver = Resolver(dir, Manifest(), locked.value());
+        resolver.offline = offline;
+        for (var source in sources) {
+            var found = Optional<Locked>.Empty;
+            for (var package in locked.value()) {
+                if (package.source == source) {
+                    found = Optional<Locked>.Value(package);
+                }
+            }
+            if (found.is_empty()) {
+                return fail($"pep.lock does not list '{source}'");
+            }
+            var (host, repository) = split_source(source);
+            var package = package_dir(dir, host, repository);
+            var was_there = package.is_directory();
+            var fetched = resolver.fetch(host, repository, package, found.value().commit);
+            if (fetched.is_err()) {
+                return fail($"cannot fetch {source}: {fetched.error().message}");
+            }
+            if (!was_there) {
+                say($"fetched {found.value().describe()} ({source})");
+            }
+        }
+        return 0;
+    }
+
+    add(spec: String, given_name: String, dev: bool, target: String): int {
         if (offline) {
             return fail(
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
@@ -367,8 +416,11 @@ struct Project {
             return fail(document.error().to_string());
         }
         var edited = document.value();
-        var table = dev ? "dev-dependencies" : "dependencies";
-        var set = edited.set([table, name], entry, inline = true);
+        var added = Requirement();
+        added.name = name;
+        added.dev = dev;
+        added.target = target;
+        var set = edited.set(added.key(), entry, inline = true);
         if (set.is_err()) {
             return fail(set.error().to_string());
         }
@@ -389,7 +441,7 @@ struct Project {
                     entry["version"] = toml.TomlValue.String(package.version);
                 }
             }
-            var reset = edited.set([table, name], entry, inline = true);
+            var reset = edited.set(added.key(), entry, inline = true);
             if (reset.is_err()) {
                 File.write_text(manifest_path, original);
                 return fail(reset.error().to_string());
@@ -454,7 +506,7 @@ struct Project {
         var keys = Array<Array<String>>();
         for (var requirement in manifest.value().requirements) {
             if (requirement.name == spec or requirement.repository == spec or requirement.source() == spec) {
-                keys.append([requirement.table(), requirement.name]);
+                keys.append(requirement.key());
             }
         }
         if (keys.is_empty) {

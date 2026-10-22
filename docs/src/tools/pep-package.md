@@ -7,6 +7,7 @@
 pepper package add someone/geometry          # the newest version, imported as 'geometry'
 pepper package add other/json@2.x --name fast_json
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
+pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -40,9 +41,11 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `--offline` | Uses only what `.pep/deps` holds, and fails on anything that needs the network |
 | `--frozen` | Both `--locked` and `--offline` |
 | `fetch` | Fetches what `pep.lock` lists, and resolves what `pep.toml` changed since `pep.lock` was written |
+| `fetch <source>...` | Fetches only those locked packages (`github:owner/name`), at their locked commits, resolving nothing |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
+| `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use |
 | `remove <name>` | Removes a dependency or dev-dependency, by its name or its `owner/name` |
 | `update [<name>...]` | Moves dependencies to the newest versions their ranges allow; every one when none is named |
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
@@ -61,6 +64,15 @@ Fetches every package in `pep.lock` into the project's `.pep/deps` at its
 locked commit. When `pep.toml` names a dependency `pep.lock` does not list,
 or asks for a revision the locked one does not satisfy, `fetch` resolves it
 and updates `pep.lock`; everything else keeps its locked revision.
+Resolving reads the `pep.toml` of every package in the graph, so it
+fetches every platform's packages, those of
+[`[target]` tables](projects.md#targetconditiondependencies) included.
+
+`fetch <source>...` fetches only the locked packages named, at the commits
+`pep.lock` records, and resolves nothing. It is what a build runs when its
+lock lists every dependency and holds packages for other platforms:
+`pepper build` names the packages its target needs and `.pep/deps` lacks,
+so a build fetches no other platform's.
 
 ### `add <owner/name>[@<range>]`
 
@@ -95,10 +107,17 @@ another. A name already in `pep.toml`, or the name of a runtime module
 and examples import it, and projects that depend on this one ignore it
 (see [Projects: pep.toml](projects.md#dev-dependencies)).
 
+`--target <condition>` adds it to `[target.'<condition>'.dependencies]`:
+only a build for a target the condition selects sees it. The condition is
+what `[Target(...)]` takes (`OS(Windows)`, `OS(Linux) && Arch(x64)`; see
+[Platform selection](../language/platform-selection.md)); quote it for the
+shell. It cannot be given with `--dev`.
+
 ### `remove <name>`
 
-Removes the dependency or dev-dependency with that name (or that
-`owner/name`) from `pep.toml`, and drops from `pep.lock` every package nothing needs any more.
+Removes the dependency with that name (or that `owner/name`) from
+`pep.toml`, whichever table it is in, and drops from `pep.lock` every
+package nothing needs any more.
 
 ### `update [<name>...]`
 
@@ -146,7 +165,8 @@ First it checks, and lists every check that fails at once:
   resolve it with its other packages. A dev-dependency may be anything,
   since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]` needs 0.11.0.
+  `pep.toml` feature the package uses: `[dev-dependencies]` and
+  `[target]` tables need 0.11.0.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
@@ -188,6 +208,26 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 
 A package that only the project's `[dev-dependencies]` lead to has
 `dev = true`; one that a dependency leads to as well does not.
+
+`pep.lock` lists every platform's packages, so it is the same whichever
+system writes it, as `Cargo.lock` is: a project locked on Linux builds on
+Windows with no change to the lock, and `--locked` passes on both. A
+package that only `[target.'<condition>'.dependencies]` lead to has
+`target`, the condition under which a build needs it; on the way to it,
+conditions join with `&&` and other ways with `||`, so
+`target = "(OS(Linux)) || (OS(Windows))"` is needed on either. A build
+fetches a package only when its `target` holds for what it builds for,
+the platform `--target` names in a cross build.
+
+```toml
+[[package]]
+name = "winapi"
+source = "github:someone/winapi"
+version = "1.0.0"
+commit = "4a1f0c7e9b2d3c5a6e8f0a1b2c3d4e5f60718293"
+sha256 = "..."
+target = "OS(Windows)"
+```
 
 The checksum covers the files of the commit as the host's archive of it
 holds them, not the archive's bytes, which a host may compress
@@ -275,6 +315,9 @@ name each imports it by.
 - The project's own `[dev-dependencies]` are resolved with its
   dependencies, as requirements of the project; a dependency's
   `[dev-dependencies]` are not part of the graph at all.
+- Every `[target.'<condition>'.dependencies]`, the project's and its
+  dependencies', is resolved with the rest, whatever the platform
+  resolving, so one version of a package serves every platform.
 
 ### The toolchain a package needs
 

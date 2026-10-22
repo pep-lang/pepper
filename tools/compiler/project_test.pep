@@ -96,7 +96,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]' and '[fetch]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]' and '[fetch]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -296,6 +296,128 @@ only_tests_and_examples_see_dev_dependencies() {
     var hidden = link.load_manifest(app.join(Path("pep.toml")), [runtime]);
     expect_true(hidden.is_err());
     expect_true(hidden.error().contains("dependency 'io' has the name of the runtime module 'io'"));
+}
+
+[Test]
+reads_target_dependencies() {
+    var parsed = link.parse_manifest(
+        Path("/p/pep.toml"),
+        "[package]\nname = \"p\"\n[dependencies]\ngeo = { path = \"geo\" }\n"
+            + "[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
+            + "[target.'OS(Linux) && Arch(x64)'.dependencies]\nepoll = { github = \"someone/epoll\" }\n"
+    );
+    expect_true(parsed.is_ok());
+    var m = parsed.value();
+    expect_equal(m.dependencies.count, 3);
+    expect_equal(m.dependency("geo").value().target, "");
+    expect_equal(m.dependency("winapi").value().target, "OS(Windows)");
+    var windows = link.Target.parse("x86_64-pc-windows-msvc").value();
+    var linux = link.Target.parse("x86_64-unknown-linux-gnu").value();
+    expect_true(m.dependency("geo").value().matches(linux));
+    expect_true(m.dependency("winapi").value().matches(windows));
+    expect_false(m.dependency("winapi").value().matches(linux));
+    expect_true(m.dependency("epoll").value().matches(linux));
+    expect_equal(m.git_dependencies().count, 2);
+    expect_equal(m.git_dependencies(Optional<link.Target>.Value(linux))[0].name, "epoll");
+
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[target.'OS(Darwin)'.dependencies]\nx = { github = \"a/x\" }\n"),
+        "OS(Darwin): unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[target.'Windows)]'.dependencies]\nx = { github = \"a/x\" }\n"),
+        "Windows)]: invalid target condition 'Windows)]'; expected what '[Target(...)]' takes, such as 'OS(Windows)'"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[target.'OS(Windows)'.dev-dependencies]\nx = { github = \"a/x\" }\n"),
+        "dev-dependencies: unknown key 'dev-dependencies' in '[target.'OS(Windows)']'; expected one of 'dependencies'"
+    );
+    expect_equal(
+        errors(
+            "[package]\nname = \"a\"\n[dependencies]\nx = { github = \"a/x\" }\n[target.'OS(Windows)'.dependencies]\nx = { github = \"a/x\" }\n"
+        ),
+        "x: 'x' is in both '[dependencies]' and '[target.'OS(Windows)'.dependencies]'; keep it in one"
+    );
+    expect_equal(
+        errors(
+            "[package]\nname = \"a\"\n[target.'OS(Windows)'.dependencies]\nx = { github = \"a/x\", tags = \"v1\" }\n"
+        ),
+        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit'"
+    );
+}
+
+# What checking `file` for the target `triple` reports; empty when it
+# builds.
+check_for(file: Path, triple: String): String {
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.target = link.Target.parse(triple).value();
+    var program = link.load_program(file, setup);
+    expect_true(program.is_ok());
+    var report = program.value().check();
+    return report.is_value() ? report.value() : "";
+}
+
+[Test]
+a_build_sees_only_its_targets_dependencies() {
+    var folder = TempFolder("target_dependencies");
+    var app = folder.path.join(Path("app"));
+    var win = folder.path.join(Path("win"));
+    Directory.create_all(app);
+    Directory.create_all(win);
+    File.write_text(win.join(Path("module.pep")), "export answer(): int {\n    return 42;\n}\n");
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[target.'OS(Windows)'.dependencies]\nwin = { path = \"../win\" }\n"
+    );
+    File.write_text(
+        app.join(Path("main.pep")),
+        "[Target(OS(Windows))]\nimport win;\nmain(): int {\n    return 0;\n}\n"
+            + "[Target(OS(Windows))]\nanswer(): int {\n    return win.answer();\n}\n"
+    );
+    var main = app.join(Path("main.pep"));
+    expect_equal(check_for(main, "x86_64-pc-windows-msvc"), "");
+    expect_equal(check_for(main, "x86_64-unknown-linux-gnu"), "");
+
+    # Imported where the condition does not hold, the error says so.
+    File.write_text(main, "import win;\nmain(): int {\n    return win.answer() - 42;\n}\n");
+    expect_equal(check_for(main, "x86_64-pc-windows-msvc"), "");
+    expect_true(
+        check_for(
+            main,
+            "aarch64-apple-darwin"
+        ).contains(
+            "main.pep:1:8: error: 'win' is a dependency only for targets where 'OS(Windows)' holds, which this build's does not; put '[Target(OS(Windows))]' on the import"
+        )
+    );
+}
+
+[Test]
+a_build_fetches_only_its_targets_packages() {
+    var folder = TempFolder("target_fetch");
+    var root = folder.path;
+    File.write_text(
+        root.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[target.'OS(Windows)'.dependencies]\nnet = { github = \"nobody/net\" }\n"
+    );
+    File.write_text(root.join(Path("main.pep")), "main(): int {\n    return 0;\n}\n");
+    File.write_text(
+        root.join(Path("pep.lock")),
+        "version = 1\n\n[[package]]\nname = \"net\"\nsource = \"github:nobody/net\"\n"
+            + "commit = \"0123456789abcdef0123456789abcdef01234567\"\ntarget = \"OS(Windows)\"\n"
+    );
+    var entry = root.join(Path("main.pep"));
+    var linux = link.Target.parse("x86_64-unknown-linux-gnu").value();
+    var windows = link.Target.parse("x86_64-pc-windows-msvc").value();
+    # Offline, a build fails only on what its target needs and lacks.
+    expect_true(driver.fetch_dependencies(entry, offline = true, target = linux).is_ok());
+    var missing = driver.fetch_dependencies(entry, offline = true, target = windows);
+    expect_true(missing.is_err());
+    expect_true(missing.error().contains("lacks github:nobody/net 0123456789ab"));
+    # Unlocked, it is stale for every target.
+    File.remove(root.join(Path("pep.lock")));
+    expect_true(driver.fetch_dependencies(entry, locked = true, target = linux).is_err());
+    expect_true(driver.fetch_dependencies(entry, offline = true, target = linux).is_ok());
 }
 
 [Test]

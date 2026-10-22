@@ -435,7 +435,8 @@ main(args: String[]): int {
         var fetched = driver.fetch_dependencies(
             entry,
             locked = locked.is_set or frozen.is_set or os.environment_flag("PEPPER_LOCKED"),
-            offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE")
+            offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE"),
+            target = setup.target
         );
         if (fetched.is_err()) {
             File.stderr().write_all(fetched.error() + "\n");

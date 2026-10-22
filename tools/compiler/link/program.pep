@@ -18,7 +18,7 @@ import "files" as files;
 import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
-import [Target, TEST_BUILD_OPTION, undefined_build_option_comparisons] from "platform";
+import [Target, undefined_build_option_comparisons] from "platform";
 import [load_manifest, Packages] from "project";
 import "project";
 import [check_visibility] from "visibility";
@@ -458,7 +458,7 @@ export load(
     # Resolved import keys per file, mapped to indices once all are loaded.
     var resolved = Array<Array<String?>>();
     # The `pep.toml` each file falls under, for the dependencies it imports.
-    var packages = Packages(root, test = target.build_options.contains(TEST_BUILD_OPTION));
+    var packages = Packages(root, target);
     var project = packages.project;
     if (!project.is_value()) {
         var cwd = process.working_directory();
