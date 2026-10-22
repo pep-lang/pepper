@@ -2521,8 +2521,10 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   `pep-lsp-whole` keyed by `_whole_inputs` (the runtime unit's key, the
   document, its OS and build options); while the child runs, an analysis
   checks the edit again on that record (`recheck_whole`,
-  `incremental.recheck_compilation_unit`) and waits for the child only when
-  the record does not fit the edit. Otherwise the compilation units below the
+  `incremental.recheck_compilation_unit` with `report`, so the edit's error
+  or warnings show rather than give up: the record warned of nothing, so
+  they are all the edit's) and waits for the child only when the record
+  does not fit the edit. Otherwise the compilation units below the
   document's that the cache lacks are
   checked first in `pep-lsp --compilation-unit-worker <dir>` children
   (`incremental.check_in_workers`, `serve_compilation_units`, `check_for_worker`),
@@ -3234,7 +3236,9 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    specializations they newly ask for.
 
 It gives up, and `check_compilation_unit` checks the compilation unit from
-its files, on an error or a warning, or when a changed function's return
+its files, on an error or a warning (unless given `report`, as pep-lsp's
+`recheck_whole` does: then a warning goes there, and an error goes there
+before it gives up), or when a changed function's return
 type or link summary (`summary_without_place`) came out other than the
 record's: code the record keeps was checked against them. Specializations
 only the old bodies asked for stay in the record as dead code. A body edit

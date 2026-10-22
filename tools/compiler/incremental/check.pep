@@ -511,6 +511,9 @@ export check_unit(
 ##   build generates code
 ## @param sources the program's sources
 ## @param times where the time each pass took goes (`-T passes`), if anywhere
+## @param report where the error or the warnings the passes find go, when
+##   given: a warning then no longer gives up, and an error gives nothing
+##   back after going there; when not given, either gives up
 ## @returns as `check_compilation_unit`, or nothing
 export recheck_compilation_unit(
     program: link.Program,
@@ -519,7 +522,8 @@ export recheck_compilation_unit(
     base: RecheckBase,
     reused: Reused?,
     sources: SourceText[],
-    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
+    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty,
+    report: Diagnostic[]? = Optional<Diagnostic[]>.Empty
 ): (sema.Module, sema.PassState, sema.TypeAliasDef[])? {
     var merged = merged_onto(program, module, base.bytes, base.shift);
     if (merged.is_err()) {
@@ -660,9 +664,12 @@ export recheck_compilation_unit(
     state.copies_again = copies;
     var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
     if (ran.is_err()) {
+        if (report is Value(out)) {
+            out.append(ran.error());
+        }
         return _not_rechecked($"an error: {ran.error().message}");
     }
-    if (!state.notes.is_empty) {
+    if (!state.notes.is_empty and report.is_empty()) {
         return _not_rechecked($"a warning: {state.notes[0].message}");
     }
     for (var (function, key, facts) in rechecked) {
@@ -681,6 +688,9 @@ export recheck_compilation_unit(
         if (now != facts) {
             return _not_rechecked($"the facts of {owner}.{name}: {facts} became {now}");
         }
+    }
+    if (report is Value(out)) {
+        out.append_all(state.notes);
     }
     return Optional<(sema.Module, sema.PassState, sema.TypeAliasDef[])>.Value((after, state, aliases));
 }
