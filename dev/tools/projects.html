@@ -214,6 +214,9 @@ shapes    = { path = "../shapes" }
 
 [dev-dependencies]
 fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
+
+[target.'OS(Windows)'.dependencies]
+winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
 </code></pre>
 <p>A package is a project other projects depend on: a repository (or folder)
 with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
@@ -347,6 +350,59 @@ name may be in only one of the two tables.</p>
     1 | import fixtures;
       |        ^~~~~~~~
 </code></pre>
+<h2 id="targetconditiondependencies"><a class="header" href="#targetconditiondependencies"><code>[target.'&lt;condition&gt;'.dependencies]</code></a></h2>
+<p>A package only some platforms need, such as a binding to a Windows API,
+goes in a <code>[target]</code> table whose key is the condition, written as in
+<code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[target.'OS(Windows)'.dependencies]
+winapi = { github = "someone/winapi", version = "1" }
+
+[target.'OS(Linux) &amp;&amp; Arch(x64)'.dependencies]
+epoll = { github = "someone/epoll", version = "0.3" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The condition</strong> is what <code>[Target(...)]</code> takes, <code>OS(...)</code>, <code>Arch(...)</code>
+and <code>BuildOption(...)</code> with <code>&amp;&amp;</code>, <code>||</code> and <code>!</code> (see
+<a href="../language/platform-selection.html">Platform selection</a>), and it is
+checked the same way: <code>OS(Darwin)</code> is an error at the key.</p>
+</li>
+<li>
+<p><strong>Who sees them:</strong> a build whose target the condition selects: the
+machine building, or the platform <code>--target</code> names in a cross build.
+Guard the import the same way, so other targets skip it:</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]
+import winapi;
+</code></pre>
+<p>An import a build for another target reaches is an error:</p>
+<pre><code class="language-text">main.pep:1:8: error: 'winapi' is a dependency only for targets where 'OS(Windows)' holds, which this build's does not; put '[Target(OS(Windows))]' on the import
+    1 | import winapi;
+      |        ^~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Locked for every platform:</strong> <code>pep.lock</code> lists every platform's
+packages, so it is the same on each, and marks those only some need
+with their <code>target</code> (see <a href="pep-package.html#peplock">pep.lock</a>). A build
+fetches only what its target needs; resolving a change to <code>pep.toml</code>,
+or checking the lock with <code>--locked</code>, reads every package's <code>pep.toml</code>,
+so it fetches every platform's.</p>
+</li>
+<li>
+<p><strong>In a package:</strong> a dependency's <code>[target]</code> tables apply to the
+projects that use it, for their build's target.</p>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+a <code>[target]</code> table as an unknown table, so a package that has one sets
+<code>minimum_toolchain = "0.11.0"</code> (or later) in <code>[package]</code>, as for
+<a href="#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pepper package publish</code>
+checks it.</p>
+</li>
+</ul>
+<p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="pep-package.html#add-ownernamerange">pep-package</a>).
+A name may be in only one of the dependency tables, and a <code>[target]</code> table
+holds only <code>dependencies</code>.</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -362,9 +418,11 @@ hosts = ["codeberg", "github"]
       | ^~
 </code></pre>
 <ul>
-<li>Two dependencies with the same name (in one table, or in both
-<code>[dependencies]</code> and <code>[dev-dependencies]</code>), or a dependency named like a
-runtime module (<code>io</code>, <code>async</code>), which it would otherwise hide.</li>
+<li>Two dependencies with the same name (in one table, or in two of
+<code>[dependencies]</code>, <code>[dev-dependencies]</code> and the <code>[target]</code> tables), or a
+dependency named like a runtime module (<code>io</code>, <code>async</code>), which it would
+otherwise hide.</li>
+<li>A <code>[target]</code> condition <code>[Target(...)]</code> would reject.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,

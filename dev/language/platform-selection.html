@@ -280,6 +280,10 @@ main(): int {
 <p>The attribute goes before <code>export</code>, not after it:
 <code>[Target(OS(Windows))] export f()</code>. Writing <code>export [Target(OS(Windows))] f()</code>
 is a parse error.</p>
+<p>A project's <code>pep.toml</code> takes the same conditions for the packages only some
+platforms need (<code>[target.'OS(Windows)'.dependencies]</code>): a build sees them
+only for a target the condition selects, so guard their imports with it
+too. See <a href="../tools/projects.html#targetconditiondependencies">Projects: pep.toml</a>.</p>
 <h2 id="blocks-inside-a-function"><a class="header" href="#blocks-inside-a-function">Blocks inside a function</a></h2>
 <p>Inside a function body, attach <code>[Target(...)]</code> to a block <code>{ ... }</code>. The block
 is kept or removed like a declaration. Blocks may nest, and may appear inside
