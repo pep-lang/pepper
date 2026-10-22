@@ -327,6 +327,7 @@ package still checks its files against `pep.lock`'s `sha256`.
 Processes take turns at a package: each holds a lock on
 `<host>/<owner>/<name>.lock` while it fetches it, so projects fetching
 the same package at once each wait for the other and fetch it once.
+`cache clean` removes those locks too, so run it when no fetch is running.
 
 ```text
 $ pepper package cache info
