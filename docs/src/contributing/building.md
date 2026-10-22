@@ -99,10 +99,10 @@ CI provisions LLVM with `scripts/ci-provision-llvm.sh`, through
 from the runner's Ubuntu mirror, which on a slow day took longer than the
 step's 15 minutes, so the action caches the `.deb` files apt downloaded
 (keyed on `scripts/setup-llvm.sh` and the Ubuntu release) and the script
-installs them with no download. A miss, or a set apt can no longer
-install, installs from the mirror, retrying a download that stalls for 30
-seconds, and refills the cache; only main's runs save it, under a new key,
-so the newest set is the one restored.
+puts them in apt's archive, so apt downloads none it already has. A miss,
+or a set the image has moved past, downloads from the mirror, retrying a
+download that stalls for 30 seconds, and refills the cache; only main's
+runs save it, under a new key, so the newest set is the one restored.
 
 Only the Windows archive path is large: budget roughly **5 GB** of disk for
 the tree plus its cached archive, and a few minutes for the first run.

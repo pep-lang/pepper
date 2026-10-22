@@ -3,11 +3,11 @@
 # the runner's Ubuntu mirror, normally in seconds, but a slow mirror once
 # took longer than the step's 15 minutes (#194). The cache holds the .deb
 # files the last miss downloaded, keyed on the setup script (which pins the
-# LLVM) and the image's Ubuntu release, and the script installs them with
-# no download. The key ends in the run's id and is restored by prefix, so
-# the newest entry wins and a set that stops installing (a newer image) is
-# replaced: the script refills the folder from the mirror and says so, and
-# only then is it saved. Only main saves it, so pull requests cannot fill
+# LLVM) and the image's Ubuntu release, and the script hands them to apt so
+# it downloads none it has. The key ends in the run's id and is restored by
+# prefix, so the newest entry wins and a set the image has moved past is
+# replaced: the script refills the folder when apt had to download and says
+# so, and only then is it saved. Only main saves it, so pull requests cannot fill
 # the repository's 10 GB of caches with copies.
 #
 # The caller bounds it with timeout-minutes; a composite step cannot.
@@ -40,8 +40,8 @@ runs:
         key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}
         restore-keys: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-
 
-    # Writes filled=true when it (re)filled the folder from the mirror: on a
-    # miss, or when the restored set no longer installs.
+    # Writes filled=true when it (re)filled the folder: on a miss, or when
+    # apt had to download what the restored set lacked.
     - name: Provision LLVM
       id: provision
       shell: bash
