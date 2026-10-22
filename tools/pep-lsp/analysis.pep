@@ -134,7 +134,9 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         );
         client.publish_diagnostics(analysis.uri, analysis.diagnostics);
         _publish_others(client, analysis, open, shown);
-        results.send(copy(analysis));
+        # `_publish_others` keeps copies of the URIs it shows, so nothing else
+        # references the analysis: it moves, uncopied (#173).
+        results.send(move(analysis));
         client.wake();
     }
 }
@@ -192,7 +194,7 @@ _publish_others(
             continue;
         }
         client.publish_diagnostics(uri, diagnostics);
-        now.insert(uri);
+        now.insert(copy(uri));
     }
     var before = shown.try_get(analysis.uri);
     if (before.is_value()) {
@@ -202,7 +204,7 @@ _publish_others(
             }
         }
     }
-    shown[analysis.uri] = now;
+    shown[copy(analysis.uri)] = now;
 }
 
 # The last segment of a URI, for the log.
