@@ -7,17 +7,21 @@
 ## struct must conform to by `extend S with Tr`; string literals and
 ## `StringConstant`s become C strings, `StringConstant`s and `String`s as
 ## their slots need; tuple and collection literals take their slot's type.
+## A decimal literal above `long`'s range fits only a `ulong` slot (or a
+## float's): any other integer slot is an error.
 ## Calls through a trait value are checked against the trait's
 ## dispatchable members, and every trait type the program uses is recorded
 ## for code generation.
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
+import [bit_width, is_float_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
 import "closure_sites";
 import "closures";
 import "common";
 import [Conformance] from "constraints";
+import [unsigned_literal] from "literals";
 import [Loc] from "loc";
 import [
     BinaryOp,
@@ -66,9 +70,6 @@ export convert_to_traits(module: Module, state: PassState) {
                 break;
             }
         }
-    }
-    if (module.traits.count == 0 and implicit.count == 0) {
-        return;
     }
     var converter = _TraitConversions(module, state, implicit);
     converter.check_covariant_returns(module);
@@ -240,6 +241,13 @@ struct _TraitConversions {
     ## `value` flows into a slot of type `expected`: returns what replaces
     ## it.
     convert(value: Expression, expected: TypeName, fallback: Loc): Expression {
+        var unsigned = unsigned_literal(value);
+        if (unsigned.is_value() and _narrower_than_ulong(expected)) {
+            state.report(
+                error_at($"integer literal is too large for type '{expected.display()}'", unsigned.value().loc)
+            );
+            return value;
+        }
         if (_is_c_string_type(expected)) {
             return convert_constant(_unwrap_string_literal(value), "c_str");
         }
@@ -816,6 +824,12 @@ _converts_children(e: Expression): bool {
             return true;
         }
     }
+}
+
+# An integer type that cannot hold every `ulong`.
+_narrower_than_ulong(ty: TypeName): bool {
+    var name = ty.to_string();
+    return bit_width(name).is_value() and !is_float_type(name) and name != "u64" and name != "ulong";
 }
 
 ## A pointer to characters, bytes, or `void`: a slot a string literal fills

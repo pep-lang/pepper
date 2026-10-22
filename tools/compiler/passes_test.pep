@@ -595,6 +595,15 @@ const ALL_STEPS: ulong = 1000000;
 # Programs a pass rejects.
 error_programs(): String[] {
     return [
+        # Decimal literals past `long`'s range: a `ulong` only, and none
+        # past `ulong`'s.
+        "# expect: main.pep:3:14: error: integer literal is too large for type 'long'\nmain(): int {\n    long a = 9223372036854775808;\n    return 0;\n}\n",
+        "# expect: main.pep:6:17: error: integer literal is too large for type 'int'\ntake(x: int): int {\n    return x;\n}\nmain(): int {\n    return take(18446744073709551615);\n}\n",
+        "# expect: main.pep:4:9: error: integer literal is too large for type 'long'\nmain(): int {\n    long c = 0;\n    c = 9223372036854775808;\n    return 0;\n}\n",
+        "# expect: main.pep:2:19: error: integer literal is too large for type 'long'\nconst BIG: long = 9223372036854775808;\nmain(): int { return 0; }\n",
+        "# expect: main.pep:3:12: error: integer literal is too large for type 'long'\nbig(): long {\n    return 9223372036854775808;\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:3:15: error: integer literal is too large to be represented in a 64-bit integer\nmain(): int {\n    ulong a = 18446744073709551616;\n    return 0;\n}\n",
+        "# expect: main.pep:3:14: error: integer literal is too large to be represented in a 64-bit integer\nmain(): int {\n    long a = -9223372036854775809;\n    return 0;\n}\n",
         # Shared struct fields, module-scope variables and thread-locals
         # that are not const, not thread-safe or not constant.
         "# expect: main.pep:4:9: error: field 'count' of shared struct 'Counter' must be 'const'\n[Shared]\nstruct Counter {\n    int count;\n}\nmain(): int { return 0; }\n",

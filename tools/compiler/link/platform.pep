@@ -624,6 +624,10 @@ struct _Evaluator {
                 Null => {
                     usable = false;
                 }
+                # Build options read as `long`s.
+                Unsigned(_) => {
+                    usable = false;
+                }
                 else => {}
             }
         }
@@ -1124,6 +1128,9 @@ export literal_text(value: Literal): String {
             return out.to_string();
         }
         Integer(n) => {
+            return $"{n}";
+        }
+        Unsigned(n) => {
             return $"{n}";
         }
         Float(f) => {

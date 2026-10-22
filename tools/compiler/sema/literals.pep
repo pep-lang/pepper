@@ -2,7 +2,10 @@
 ## of each string literal. `-1` and `-2.5` become literals of their own, and
 ## each string literal a `String` built from a raw one.
 
-import [Expression, FunctionCallExpression, Module, StringLiteralExpression, UnaryOp] from "model";
+import [Loc] from "loc";
+import [
+    CastExpression, CastKind, Expression, FunctionCallExpression, Module, StringLiteralExpression, TypeName, UnaryOp
+] from "model";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Folds each `-<literal>` in function bodies and global initializers into
@@ -46,7 +49,7 @@ struct _NegationFolder {
             if (node.op == UnaryOp.Neg) {
                 match (node.operand) {
                     IntLiteral(value) => {
-                        return Expression.IntLiteral(-value);
+                        return Expression.IntLiteral((0 as long).wrapping_sub(value));
                     }
                     FloatLiteral(value) => {
                         return Expression.FloatLiteral(-value);
@@ -60,6 +63,35 @@ struct _NegationFolder {
 }
 
 extend _NegationFolder with Rewriter;
+
+## Returns the expression a decimal literal above `long`'s range stands
+## for: its bits, cast to `ulong`.
+##
+## @param value the literal's value
+## @param loc where the literal is
+## @returns the cast
+export make_unsigned_literal(value: ulong, loc: Loc): Expression {
+    var bits = Expression.IntLiteral(unsafe_cast<long>(value));
+    return Expression.Cast(CastExpression(bits, TypeName.named("ulong"), loc, CastKind.Synthesized));
+}
+
+## Returns `e` as `make_unsigned_literal` made it, or none when it is
+## something else.
+##
+## @param e the expression
+## @returns the cast, or none
+export unsigned_literal(e: Expression): CastExpression? {
+    if (e is Cast(cast)) {
+        # Only these synthesized casts of a literal to `ulong` are located.
+        if (cast.kind == CastKind.Synthesized
+            and !cast.loc.is_none()
+            and cast.expr is IntLiteral(_)
+            and cast.ty.to_string() == "ulong") {
+            return Optional<CastExpression>.Value(cast);
+        }
+    }
+    return Optional<CastExpression>.Empty;
+}
 
 ## Returns `e` as `resolve_injected` leaves it: a string literal
 ## that is not raw becomes `String(<raw literal>, size, length)`, located

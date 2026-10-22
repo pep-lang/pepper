@@ -28,6 +28,12 @@ on its own is an `int` when its value fits in an `int`, and a `long` otherwise, 
 variable of that type (`u64 huge = 9000000000000000000;`). A hexadecimal literal
 is a 64-bit bit pattern: `u64 all = 0xFFFFFFFFFFFFFFFF;` sets every bit.
 
+A decimal literal larger than the largest `long` (9223372036854775807), up to
+the largest `ulong` (18446744073709551615), is a `ulong`: it is the same value as
+its hexadecimal spelling, and it fits only where a `ulong` (or a floating-point
+type) takes it. `long`'s minimum is written with its sign,
+`-9223372036854775808`.
+
 ```pepper
 {{#include ../../examples/types-integers.pep}}
 ```
@@ -37,13 +43,17 @@ C: a `u16` holding 65535 becomes 0 when you add 1 and store the result, and
 `70000 as u16` is 4464. Arithmetic that overflows `int` or a wider type
 panics instead (see [Integer overflow](#integer-overflow)).
 
-A decimal literal larger than the largest `long` (9223372036854775807), or a
-hexadecimal literal with more than 64 bits, is an error:
+A decimal literal larger than the largest `ulong`, or a hexadecimal literal with
+more than 64 bits, is an error, and so is a decimal literal stored where its
+value does not fit, past `long`'s range:
 
 ```text
 main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
     2 |     var f = 99999999999999999999;
       |             ^~~~~~~~~~~~~~~~~~~~
+main.pep:3:14: error: integer literal is too large for type 'long'
+    3 |     long g = 9223372036854775808;
+      |              ^~~~~~~~~~~~~~~~~~~
 ```
 
 ### Floating point

@@ -3125,20 +3125,24 @@ _a_Literal_write(out: RecordOut, value: ast.Literal) {
             out.unsigned(1);
             out.signed(p0 as long);
         }
-        Float(p0) => {
+        Unsigned(p0) => {
             out.unsigned(2);
+            out.unsigned(p0);
+        }
+        Float(p0) => {
+            out.unsigned(3);
             out.number(p0);
         }
         Bool(p0) => {
-            out.unsigned(3);
+            out.unsigned(4);
             out.flag(p0);
         }
         Char(p0) => {
-            out.unsigned(4);
+            out.unsigned(5);
             out.unsigned(p0 as ulong);
         }
         Null => {
-            out.unsigned(5);
+            out.unsigned(6);
         }
     }
 }
@@ -3154,18 +3158,22 @@ _a_Literal_read(input: RecordIn): ast.Literal {
         return ast.Literal.Integer(_f839);
     }
     if (tag == 2) {
-        var _f840 = input.number();
-        return ast.Literal.Float(_f840);
+        var _f840 = input.unsigned();
+        return ast.Literal.Unsigned(_f840);
     }
     if (tag == 3) {
-        var _f841 = input.flag();
-        return ast.Literal.Bool(_f841);
+        var _f841 = input.number();
+        return ast.Literal.Float(_f841);
     }
     if (tag == 4) {
-        var _f842 = input.unsigned() as u8;
-        return ast.Literal.Char(_f842);
+        var _f842 = input.flag();
+        return ast.Literal.Bool(_f842);
     }
     if (tag == 5) {
+        var _f843 = input.unsigned() as u8;
+        return ast.Literal.Char(_f843);
+    }
+    if (tag == 6) {
         return ast.Literal.Null;
     }
     input.fail("Literal", tag);
@@ -3175,30 +3183,30 @@ _a_Literal_read(input: RecordIn): ast.Literal {
 _m_Block_write(out: RecordOut, value: Block) {
     out.text(value.name);
     out.unsigned(value.items.count);
-    for (var _item843 in value.items) {
-        _m_Statement_write(out, _item843);
+    for (var _item844 in value.items) {
+        _m_Statement_write(out, _item844);
     }
     out.unsigned(value.attributes.count);
-    for (var _item844 in value.attributes) {
-        _a_Attribute_write(out, _item844);
+    for (var _item845 in value.attributes) {
+        _a_Attribute_write(out, _item845);
     }
 }
 
 _m_Block_read(input: RecordIn): Block {
-    var _f845 = input.text();
-    var _v846 = Array<Statement>();
-    var _n847 = input.count();
-    for (var _ in 0.._n847) {
-        _v846.append(_m_Statement_read(input));
+    var _f846 = input.text();
+    var _v847 = Array<Statement>();
+    var _n848 = input.count();
+    for (var _ in 0.._n848) {
+        _v847.append(_m_Statement_read(input));
     }
-    var _f848 = _v846;
-    var _v849 = Array<ast.Attribute>();
-    var _n850 = input.count();
-    for (var _ in 0.._n850) {
-        _v849.append(_a_Attribute_read(input));
+    var _f849 = _v847;
+    var _v850 = Array<ast.Attribute>();
+    var _n851 = input.count();
+    for (var _ in 0.._n851) {
+        _v850.append(_a_Attribute_read(input));
     }
-    var _f851 = _v849;
-    return Block(_f845, _f848, _f851);
+    var _f852 = _v850;
+    return Block(_f846, _f849, _f852);
 }
 
 _m_Statement_write(out: RecordOut, value: Statement) {
@@ -3245,40 +3253,40 @@ _m_Statement_write(out: RecordOut, value: Statement) {
 _m_Statement_read(input: RecordIn): Statement {
     var tag = input.unsigned();
     if (tag == 0) {
-        var _f1264 = _m_Expression_read(input);
-        return Statement.Expression(_f1264);
+        var _f1265 = _m_Expression_read(input);
+        return Statement.Expression(_f1265);
     }
     if (tag == 1) {
-        var _f1265 = _m_Block_read(input);
-        return Statement.Block(_f1265);
+        var _f1266 = _m_Block_read(input);
+        return Statement.Block(_f1266);
     }
     if (tag == 2) {
-        var _f1266 = _m_Declaration_read(input);
-        return Statement.Declaration(_f1266);
+        var _f1267 = _m_Declaration_read(input);
+        return Statement.Declaration(_f1267);
     }
     if (tag == 3) {
-        var _f1267 = _m_Branch_read(input);
-        return Statement.Branch(_f1267);
+        var _f1268 = _m_Branch_read(input);
+        return Statement.Branch(_f1268);
     }
     if (tag == 4) {
-        var _f1268 = _m_While_read(input);
-        return Statement.While(_f1268);
+        var _f1269 = _m_While_read(input);
+        return Statement.While(_f1269);
     }
     if (tag == 5) {
-        var _f1269 = _m_ReturnStatement_read(input);
-        return Statement.Return(_f1269);
+        var _f1270 = _m_ReturnStatement_read(input);
+        return Statement.Return(_f1270);
     }
     if (tag == 6) {
-        var _f1270 = _m_LoopBreak_read(input);
-        return Statement.LoopBreak(_f1270);
+        var _f1271 = _m_LoopBreak_read(input);
+        return Statement.LoopBreak(_f1271);
     }
     if (tag == 7) {
-        var _f1271 = _m_StaticBlock_read(input);
-        return Statement.Static(_f1271);
+        var _f1272 = _m_StaticBlock_read(input);
+        return Statement.Static(_f1272);
     }
     if (tag == 8) {
-        var _f1272 = _m_StaticPass_read(input);
-        return Statement.StaticPass(_f1272);
+        var _f1273 = _m_StaticPass_read(input);
+        return Statement.StaticPass(_f1273);
     }
     input.fail("Statement", tag);
     return _m_Statement_read(input);
@@ -3288,10 +3296,10 @@ _m_StaticPass_write(out: RecordOut, value: StaticPass) {
     out.loc(value.loc);
     out.flag(value.stop);
     out.unsigned(value.values.count);
-    for (var _item852 in value.values) {
-        var (_t853, _t854) = _item852;
-        out.text(_t853);
-        _m_StaticConstant_write(out, _t854);
+    for (var _item853 in value.values) {
+        var (_t854, _t855) = _item853;
+        out.text(_t854);
+        _m_StaticConstant_write(out, _t855);
     }
     if (value.header.is_value()) {
         out.unsigned(1);
@@ -3300,61 +3308,61 @@ _m_StaticPass_write(out: RecordOut, value: StaticPass) {
         out.unsigned(0);
     }
     out.unsigned(value.lines.count);
-    for (var _item855 in value.lines) {
-        var (_t856, _t857) = _item855;
-        out.loc(_t856);
-        out.unsigned(_t857 as ulong);
+    for (var _item856 in value.lines) {
+        var (_t857, _t858) = _item856;
+        out.loc(_t857);
+        out.unsigned(_t858 as ulong);
     }
 }
 
 _m_StaticPass_read(input: RecordIn): StaticPass {
-    var _f858 = input.loc();
-    var _f859 = input.flag();
-    var _v860 = Array<(String, StaticConstant)>();
-    var _n861 = input.count();
-    for (var _ in 0.._n861) {
-        var _t862 = input.text();
-        var _t863 = _m_StaticConstant_read(input);
-        _v860.append((_t862, _t863));
+    var _f859 = input.loc();
+    var _f860 = input.flag();
+    var _v861 = Array<(String, StaticConstant)>();
+    var _n862 = input.count();
+    for (var _ in 0.._n862) {
+        var _t863 = input.text();
+        var _t864 = _m_StaticConstant_read(input);
+        _v861.append((_t863, _t864));
     }
-    var _f864 = _v860;
-    var _o865 = Optional<uint>.Empty;
+    var _f865 = _v861;
+    var _o866 = Optional<uint>.Empty;
     if (input.unsigned() == 1) {
-        _o865 = Optional<uint>.Value(input.unsigned() as uint);
+        _o866 = Optional<uint>.Value(input.unsigned() as uint);
     }
-    var _f866 = _o865;
-    var _v867 = Array<(Loc, uint)>();
-    var _n868 = input.count();
-    for (var _ in 0.._n868) {
-        var _t869 = input.loc();
-        var _t870 = input.unsigned() as uint;
-        _v867.append((_t869, _t870));
+    var _f867 = _o866;
+    var _v868 = Array<(Loc, uint)>();
+    var _n869 = input.count();
+    for (var _ in 0.._n869) {
+        var _t870 = input.loc();
+        var _t871 = input.unsigned() as uint;
+        _v868.append((_t870, _t871));
     }
-    var _f871 = _v867;
-    return StaticPass(_f858, _f859, _f864, _f866, _f871);
+    var _f872 = _v868;
+    return StaticPass(_f859, _f860, _f865, _f867, _f872);
 }
 
 _m_RecordStaticConstant_write(out: RecordOut, value: RecordStaticConstant) {
     out.text(value.name);
     out.unsigned(value.fields.count);
-    for (var _item1277 in value.fields) {
-        var (_t1278, _t1279) = _item1277;
-        out.text(_t1278);
-        _m_StaticConstant_write(out, _t1279);
+    for (var _item1278 in value.fields) {
+        var (_t1279, _t1280) = _item1278;
+        out.text(_t1279);
+        _m_StaticConstant_write(out, _t1280);
     }
 }
 
 _m_RecordStaticConstant_read(input: RecordIn): RecordStaticConstant {
-    var _f1280 = input.text();
-    var _v1281 = Array<(String, StaticConstant)>();
-    var _n1282 = input.count();
-    for (var _ in 0.._n1282) {
-        var _t1283 = input.text();
-        var _t1284 = _m_StaticConstant_read(input);
-        _v1281.append((_t1283, _t1284));
+    var _f1281 = input.text();
+    var _v1282 = Array<(String, StaticConstant)>();
+    var _n1283 = input.count();
+    for (var _ in 0.._n1283) {
+        var _t1284 = input.text();
+        var _t1285 = _m_StaticConstant_read(input);
+        _v1282.append((_t1284, _t1285));
     }
-    var _f1285 = _v1281;
-    return RecordStaticConstant(_f1280, _f1285);
+    var _f1286 = _v1282;
+    return RecordStaticConstant(_f1281, _f1286);
 }
 
 _m_StaticConstant_write(out: RecordOut, value: StaticConstant) {
@@ -3385,20 +3393,20 @@ _m_StaticConstant_write(out: RecordOut, value: StaticConstant) {
 _m_StaticConstant_read(input: RecordIn): StaticConstant {
     var tag = input.unsigned();
     if (tag == 0) {
-        var _f1273 = input.signed();
-        return StaticConstant.Int(_f1273);
+        var _f1274 = input.signed();
+        return StaticConstant.Int(_f1274);
     }
     if (tag == 1) {
-        var _f1274 = input.number();
-        return StaticConstant.Float(_f1274);
+        var _f1275 = input.number();
+        return StaticConstant.Float(_f1275);
     }
     if (tag == 2) {
-        var _f1275 = input.flag();
-        return StaticConstant.Bool(_f1275);
+        var _f1276 = input.flag();
+        return StaticConstant.Bool(_f1276);
     }
     if (tag == 3) {
-        var _f1276 = input.text();
-        return StaticConstant.String(_f1276);
+        var _f1277 = input.text();
+        return StaticConstant.String(_f1277);
     }
     if (tag == 4) {
         return StaticConstant.Record(_m_RecordStaticConstant_read(input));
@@ -3409,18 +3417,18 @@ _m_StaticConstant_read(input: RecordIn): StaticConstant {
 
 _m_StaticBlock_write(out: RecordOut, value: StaticBlock) {
     out.unsigned(value.captures.count);
-    for (var _item872 in value.captures) {
-        out.text(_item872);
+    for (var _item873 in value.captures) {
+        out.text(_item873);
     }
     out.unsigned(value.items.count);
-    for (var _item873 in value.items) {
-        _m_StaticItem_write(out, _item873);
+    for (var _item874 in value.items) {
+        _m_StaticItem_write(out, _item874);
     }
     out.unsigned(value.type_map.count);
-    for (var _item874 in value.type_map) {
-        var (_t875, _t876) = _item874;
-        out.text(_t875);
-        _m_TypeName_write(out, _t876);
+    for (var _item875 in value.type_map) {
+        var (_t876, _t877) = _item875;
+        out.text(_t876);
+        _m_TypeName_write(out, _t877);
     }
     out.loc(value.loc);
     out.unsigned(out.blank_locs ? 0 : value.span.start);
@@ -3428,61 +3436,61 @@ _m_StaticBlock_write(out: RecordOut, value: StaticBlock) {
 }
 
 _m_StaticBlock_read(input: RecordIn): StaticBlock {
-    var _v877 = Array<String>();
-    var _n878 = input.count();
-    for (var _ in 0.._n878) {
-        _v877.append(input.text());
+    var _v878 = Array<String>();
+    var _n879 = input.count();
+    for (var _ in 0.._n879) {
+        _v878.append(input.text());
     }
-    var _f879 = _v877;
-    var _v880 = Array<StaticItem>();
-    var _n881 = input.count();
-    for (var _ in 0.._n881) {
-        _v880.append(_m_StaticItem_read(input));
+    var _f880 = _v878;
+    var _v881 = Array<StaticItem>();
+    var _n882 = input.count();
+    for (var _ in 0.._n882) {
+        _v881.append(_m_StaticItem_read(input));
     }
-    var _f882 = _v880;
-    var _v883 = Array<(String, TypeName)>();
-    var _n884 = input.count();
-    for (var _ in 0.._n884) {
-        var _t885 = input.text();
-        var _t886 = _m_TypeName_read(input);
-        _v883.append((_t885, _t886));
+    var _f883 = _v881;
+    var _v884 = Array<(String, TypeName)>();
+    var _n885 = input.count();
+    for (var _ in 0.._n885) {
+        var _t886 = input.text();
+        var _t887 = _m_TypeName_read(input);
+        _v884.append((_t886, _t887));
     }
-    var _f887 = _v883;
-    var _f888 = input.loc();
-    var _s889 = input.unsigned();
-    var _f890 = ast.Span(_s889, input.unsigned());
-    return StaticBlock(_f879, _f882, _f887, _f888, _f890);
+    var _f888 = _v884;
+    var _f889 = input.loc();
+    var _s890 = input.unsigned();
+    var _f891 = ast.Span(_s890, input.unsigned());
+    return StaticBlock(_f880, _f883, _f888, _f889, _f891);
 }
 
 _m_TypeName_write(out: RecordOut, value: TypeName) {
     out.text(value.name);
     out.unsigned(value.sub_types.count);
-    for (var _item891 in value.sub_types) {
-        _m_TypeName_write(out, _item891);
+    for (var _item892 in value.sub_types) {
+        _m_TypeName_write(out, _item892);
     }
     _m_TypeFlags_write(out, value.flags);
     out.unsigned(value.labels.count);
-    for (var _item892 in value.labels) {
-        out.text(_item892);
+    for (var _item893 in value.labels) {
+        out.text(_item893);
     }
 }
 
 _m_TypeName_read(input: RecordIn): TypeName {
-    var _f893 = input.text();
-    var _v894 = Array<TypeName>();
-    var _n895 = input.count();
-    for (var _ in 0.._n895) {
-        _v894.append(_m_TypeName_read(input));
+    var _f894 = input.text();
+    var _v895 = Array<TypeName>();
+    var _n896 = input.count();
+    for (var _ in 0.._n896) {
+        _v895.append(_m_TypeName_read(input));
     }
-    var _f896 = _v894;
-    var _f897 = _m_TypeFlags_read(input);
-    var _v898 = Array<String>();
-    var _n899 = input.count();
-    for (var _ in 0.._n899) {
-        _v898.append(input.text());
+    var _f897 = _v895;
+    var _f898 = _m_TypeFlags_read(input);
+    var _v899 = Array<String>();
+    var _n900 = input.count();
+    for (var _ in 0.._n900) {
+        _v899.append(input.text());
     }
-    var _f900 = _v898;
-    return TypeName(_f893, _f896, _f897, _f900);
+    var _f901 = _v899;
+    return TypeName(_f894, _f897, _f898, _f901);
 }
 
 _m_TypeFlags_write(out: RecordOut, value: TypeFlags) {
@@ -3512,44 +3520,44 @@ _m_ForStaticItem_write(out: RecordOut, value: ForStaticItem) {
     out.text(value.name);
     _a_Expression_write(out, value.iterable);
     out.unsigned(value.body.count);
-    for (var _item1286 in value.body) {
-        _m_StaticItem_write(out, _item1286);
+    for (var _item1287 in value.body) {
+        _m_StaticItem_write(out, _item1287);
     }
     out.loc(value.loc);
 }
 
 _m_ForStaticItem_read(input: RecordIn): ForStaticItem {
-    var _f1287 = input.text();
-    var _f1288 = _a_Expression_read(input);
-    var _v1289 = Array<StaticItem>();
-    var _n1290 = input.count();
-    for (var _ in 0.._n1290) {
-        _v1289.append(_m_StaticItem_read(input));
+    var _f1288 = input.text();
+    var _f1289 = _a_Expression_read(input);
+    var _v1290 = Array<StaticItem>();
+    var _n1291 = input.count();
+    for (var _ in 0.._n1291) {
+        _v1290.append(_m_StaticItem_read(input));
     }
-    var _f1291 = _v1289;
-    var _f1292 = input.loc();
-    return ForStaticItem(_f1288, _f1287, _f1291, _f1292);
+    var _f1292 = _v1290;
+    var _f1293 = input.loc();
+    return ForStaticItem(_f1289, _f1288, _f1292, _f1293);
 }
 
 _m_WhileStaticItem_write(out: RecordOut, value: WhileStaticItem) {
     _a_Expression_write(out, value.condition);
     out.unsigned(value.body.count);
-    for (var _item1293 in value.body) {
-        _m_StaticItem_write(out, _item1293);
+    for (var _item1294 in value.body) {
+        _m_StaticItem_write(out, _item1294);
     }
     out.loc(value.loc);
 }
 
 _m_WhileStaticItem_read(input: RecordIn): WhileStaticItem {
-    var _f1294 = _a_Expression_read(input);
-    var _v1295 = Array<StaticItem>();
-    var _n1296 = input.count();
-    for (var _ in 0.._n1296) {
-        _v1295.append(_m_StaticItem_read(input));
+    var _f1295 = _a_Expression_read(input);
+    var _v1296 = Array<StaticItem>();
+    var _n1297 = input.count();
+    for (var _ in 0.._n1297) {
+        _v1296.append(_m_StaticItem_read(input));
     }
-    var _f1297 = _v1295;
-    var _f1298 = input.loc();
-    return WhileStaticItem(_f1294, _f1297, _f1298);
+    var _f1298 = _v1296;
+    var _f1299 = input.loc();
+    return WhileStaticItem(_f1295, _f1298, _f1299);
 }
 
 _m_JumpStaticItem_write(out: RecordOut, value: JumpStaticItem) {
@@ -3558,73 +3566,73 @@ _m_JumpStaticItem_write(out: RecordOut, value: JumpStaticItem) {
 }
 
 _m_JumpStaticItem_read(input: RecordIn): JumpStaticItem {
-    var _f1299 = _m_LoopBreakKind_read(input);
-    var _f1300 = input.loc();
-    return JumpStaticItem(_f1299, _f1300);
+    var _f1300 = _m_LoopBreakKind_read(input);
+    var _f1301 = input.loc();
+    return JumpStaticItem(_f1300, _f1301);
 }
 
 _m_IfStaticItem_write(out: RecordOut, value: IfStaticItem) {
     _a_Expression_write(out, value.condition);
     out.unsigned(value.then_items.count);
-    for (var _item1301 in value.then_items) {
-        _m_StaticItem_write(out, _item1301);
+    for (var _item1302 in value.then_items) {
+        _m_StaticItem_write(out, _item1302);
     }
     out.unsigned(value.else_items.count);
-    for (var _item1302 in value.else_items) {
-        _m_StaticItem_write(out, _item1302);
+    for (var _item1303 in value.else_items) {
+        _m_StaticItem_write(out, _item1303);
     }
     out.loc(value.loc);
 }
 
 _m_IfStaticItem_read(input: RecordIn): IfStaticItem {
-    var _f1303 = _a_Expression_read(input);
-    var _v1304 = Array<StaticItem>();
-    var _n1305 = input.count();
-    for (var _ in 0.._n1305) {
-        _v1304.append(_m_StaticItem_read(input));
+    var _f1304 = _a_Expression_read(input);
+    var _v1305 = Array<StaticItem>();
+    var _n1306 = input.count();
+    for (var _ in 0.._n1306) {
+        _v1305.append(_m_StaticItem_read(input));
     }
-    var _f1306 = _v1304;
-    var _v1307 = Array<StaticItem>();
-    var _n1308 = input.count();
-    for (var _ in 0.._n1308) {
-        _v1307.append(_m_StaticItem_read(input));
+    var _f1307 = _v1305;
+    var _v1308 = Array<StaticItem>();
+    var _n1309 = input.count();
+    for (var _ in 0.._n1309) {
+        _v1308.append(_m_StaticItem_read(input));
     }
-    var _f1309 = _v1307;
-    var _f1310 = input.loc();
-    return IfStaticItem(_f1303, _f1306, _f1309, _f1310);
+    var _f1310 = _v1308;
+    var _f1311 = input.loc();
+    return IfStaticItem(_f1304, _f1307, _f1310, _f1311);
 }
 
 _m_EmitIfStaticItem_write(out: RecordOut, value: EmitIfStaticItem) {
     _m_Expression_write(out, value.condition);
     out.unsigned(value.then_items.count);
-    for (var _item1311 in value.then_items) {
-        _m_StaticItem_write(out, _item1311);
+    for (var _item1312 in value.then_items) {
+        _m_StaticItem_write(out, _item1312);
     }
     out.unsigned(value.else_items.count);
-    for (var _item1312 in value.else_items) {
-        _m_StaticItem_write(out, _item1312);
+    for (var _item1313 in value.else_items) {
+        _m_StaticItem_write(out, _item1313);
     }
     out.unsigned(out.blank_locs ? 0 : value.span.start);
     out.unsigned(out.blank_locs ? 0 : value.span.end);
 }
 
 _m_EmitIfStaticItem_read(input: RecordIn): EmitIfStaticItem {
-    var _f1313 = _m_Expression_read(input);
-    var _v1314 = Array<StaticItem>();
-    var _n1315 = input.count();
-    for (var _ in 0.._n1315) {
-        _v1314.append(_m_StaticItem_read(input));
+    var _f1314 = _m_Expression_read(input);
+    var _v1315 = Array<StaticItem>();
+    var _n1316 = input.count();
+    for (var _ in 0.._n1316) {
+        _v1315.append(_m_StaticItem_read(input));
     }
-    var _f1316 = _v1314;
-    var _v1317 = Array<StaticItem>();
-    var _n1318 = input.count();
-    for (var _ in 0.._n1318) {
-        _v1317.append(_m_StaticItem_read(input));
+    var _f1317 = _v1315;
+    var _v1318 = Array<StaticItem>();
+    var _n1319 = input.count();
+    for (var _ in 0.._n1319) {
+        _v1318.append(_m_StaticItem_read(input));
     }
-    var _f1319 = _v1317;
-    var _s1320 = input.unsigned();
-    var _f1321 = ast.Span(_s1320, input.unsigned());
-    return EmitIfStaticItem(_f1313, _f1316, _f1319, _f1321);
+    var _f1320 = _v1318;
+    var _s1321 = input.unsigned();
+    var _f1322 = ast.Span(_s1321, input.unsigned());
+    return EmitIfStaticItem(_f1314, _f1317, _f1320, _f1322);
 }
 
 _m_VarStaticItem_write(out: RecordOut, value: VarStaticItem) {
@@ -3634,10 +3642,10 @@ _m_VarStaticItem_write(out: RecordOut, value: VarStaticItem) {
 }
 
 _m_VarStaticItem_read(input: RecordIn): VarStaticItem {
-    var _f1326 = input.text();
-    var _f1327 = _a_Expression_read(input);
-    var _f1328 = input.loc();
-    return VarStaticItem(_f1327, _f1326, _f1328);
+    var _f1327 = input.text();
+    var _f1328 = _a_Expression_read(input);
+    var _f1329 = input.loc();
+    return VarStaticItem(_f1328, _f1327, _f1329);
 }
 
 _m_StaticItem_write(out: RecordOut, value: StaticItem) {
@@ -3665,8 +3673,8 @@ _m_StaticItem_write(out: RecordOut, value: StaticItem) {
         Block(v) => {
             out.unsigned(5);
             out.unsigned(v.count);
-            for (var _item1322 in v) {
-                _m_StaticItem_write(out, _item1322);
+            for (var _item1323 in v) {
+                _m_StaticItem_write(out, _item1323);
             }
         }
         Var(node) => {
@@ -3704,26 +3712,26 @@ _m_StaticItem_read(input: RecordIn): StaticItem {
         return StaticItem.EmitIf(_m_EmitIfStaticItem_read(input));
     }
     if (tag == 5) {
-        var _v1323 = Array<StaticItem>();
-        var _n1324 = input.count();
-        for (var _ in 0.._n1324) {
-            _v1323.append(_m_StaticItem_read(input));
+        var _v1324 = Array<StaticItem>();
+        var _n1325 = input.count();
+        for (var _ in 0.._n1325) {
+            _v1324.append(_m_StaticItem_read(input));
         }
-        var _f1325 = _v1323;
-        return StaticItem.Block(_f1325);
+        var _f1326 = _v1324;
+        return StaticItem.Block(_f1326);
     }
     if (tag == 6) {
         return StaticItem.Var(_m_VarStaticItem_read(input));
     }
     if (tag == 7) {
-        var _f1329 = _a_Expression_read(input);
-        return StaticItem.Evaluate(_f1329);
+        var _f1330 = _a_Expression_read(input);
+        return StaticItem.Evaluate(_f1330);
     }
     if (tag == 8) {
-        var _f1330 = _m_Statement_read(input);
-        var _s1331 = input.unsigned();
-        var _f1332 = ast.Span(_s1331, input.unsigned());
-        return StaticItem.Emit(_f1330, _f1332);
+        var _f1331 = _m_Statement_read(input);
+        var _s1332 = input.unsigned();
+        var _f1333 = ast.Span(_s1332, input.unsigned());
+        return StaticItem.Emit(_f1331, _f1333);
     }
     input.fail("StaticItem", tag);
     return _m_StaticItem_read(input);
@@ -3736,10 +3744,10 @@ _m_SymbolRefExpression_write(out: RecordOut, value: SymbolRefExpression) {
 }
 
 _m_SymbolRefExpression_read(input: RecordIn): SymbolRefExpression {
-    var _f1333 = input.text();
-    var _f1334 = _m_TypeName_read(input);
-    var _f1335 = input.loc();
-    return SymbolRefExpression(_f1333, _f1334, _f1335);
+    var _f1334 = input.text();
+    var _f1335 = _m_TypeName_read(input);
+    var _f1336 = input.loc();
+    return SymbolRefExpression(_f1334, _f1335, _f1336);
 }
 
 _m_MemberRefExpression_write(out: RecordOut, value: MemberRefExpression) {
@@ -3749,10 +3757,10 @@ _m_MemberRefExpression_write(out: RecordOut, value: MemberRefExpression) {
 }
 
 _m_MemberRefExpression_read(input: RecordIn): MemberRefExpression {
-    var _f1336 = _m_Expression_read(input);
-    var _f1337 = input.text();
-    var _f1338 = input.loc();
-    return MemberRefExpression(_f1336, _f1337, _f1338);
+    var _f1337 = _m_Expression_read(input);
+    var _f1338 = input.text();
+    var _f1339 = input.loc();
+    return MemberRefExpression(_f1337, _f1338, _f1339);
 }
 
 _m_StringLiteralExpression_write(out: RecordOut, value: StringLiteralExpression) {
@@ -3762,10 +3770,10 @@ _m_StringLiteralExpression_write(out: RecordOut, value: StringLiteralExpression)
 }
 
 _m_StringLiteralExpression_read(input: RecordIn): StringLiteralExpression {
-    var _f1342 = input.text();
-    var _f1343 = input.flag();
-    var _f1344 = input.loc();
-    return StringLiteralExpression(_f1342, _f1343, _f1344);
+    var _f1343 = input.text();
+    var _f1344 = input.flag();
+    var _f1345 = input.loc();
+    return StringLiteralExpression(_f1343, _f1344, _f1345);
 }
 
 _m_BinaryExpression_write(out: RecordOut, value: BinaryExpression) {
@@ -3776,11 +3784,11 @@ _m_BinaryExpression_write(out: RecordOut, value: BinaryExpression) {
 }
 
 _m_BinaryExpression_read(input: RecordIn): BinaryExpression {
-    var _f1345 = _m_BinaryOp_read(input);
-    var _f1346 = _m_Expression_read(input);
+    var _f1346 = _m_BinaryOp_read(input);
     var _f1347 = _m_Expression_read(input);
-    var _f1348 = input.loc();
-    return BinaryExpression(_f1346, _f1347, _f1345, _f1348);
+    var _f1348 = _m_Expression_read(input);
+    var _f1349 = input.loc();
+    return BinaryExpression(_f1347, _f1348, _f1346, _f1349);
 }
 
 _m_UnaryExpression_write(out: RecordOut, value: UnaryExpression) {
@@ -3790,10 +3798,10 @@ _m_UnaryExpression_write(out: RecordOut, value: UnaryExpression) {
 }
 
 _m_UnaryExpression_read(input: RecordIn): UnaryExpression {
-    var _f1349 = _m_UnaryOp_read(input);
-    var _f1350 = _m_Expression_read(input);
-    var _f1351 = input.loc();
-    return UnaryExpression(_f1350, _f1349, _f1351);
+    var _f1350 = _m_UnaryOp_read(input);
+    var _f1351 = _m_Expression_read(input);
+    var _f1352 = input.loc();
+    return UnaryExpression(_f1351, _f1350, _f1352);
 }
 
 _m_CastExpression_write(out: RecordOut, value: CastExpression) {
@@ -3804,11 +3812,11 @@ _m_CastExpression_write(out: RecordOut, value: CastExpression) {
 }
 
 _m_CastExpression_read(input: RecordIn): CastExpression {
-    var _f1352 = _m_Expression_read(input);
-    var _f1353 = _m_TypeName_read(input);
-    var _f1354 = input.loc();
-    var _f1355 = _m_CastKind_read(input);
-    return CastExpression(_f1352, _f1353, _f1354, _f1355);
+    var _f1353 = _m_Expression_read(input);
+    var _f1354 = _m_TypeName_read(input);
+    var _f1355 = input.loc();
+    var _f1356 = _m_CastKind_read(input);
+    return CastExpression(_f1353, _f1354, _f1355, _f1356);
 }
 
 _m_TernaryExpression_write(out: RecordOut, value: TernaryExpression) {
@@ -3818,10 +3826,10 @@ _m_TernaryExpression_write(out: RecordOut, value: TernaryExpression) {
 }
 
 _m_TernaryExpression_read(input: RecordIn): TernaryExpression {
-    var _f1356 = _m_Expression_read(input);
     var _f1357 = _m_Expression_read(input);
     var _f1358 = _m_Expression_read(input);
-    return TernaryExpression(_f1356, _f1357, _f1358);
+    var _f1359 = _m_Expression_read(input);
+    return TernaryExpression(_f1357, _f1358, _f1359);
 }
 
 _m_IndexExpression_write(out: RecordOut, value: IndexExpression) {
@@ -3831,10 +3839,10 @@ _m_IndexExpression_write(out: RecordOut, value: IndexExpression) {
 }
 
 _m_IndexExpression_read(input: RecordIn): IndexExpression {
-    var _f1359 = _m_Expression_read(input);
     var _f1360 = _m_Expression_read(input);
-    var _f1361 = input.loc();
-    return IndexExpression(_f1359, _f1360, _f1361);
+    var _f1361 = _m_Expression_read(input);
+    var _f1362 = input.loc();
+    return IndexExpression(_f1360, _f1361, _f1362);
 }
 
 _m_ArrayIndexExpression_write(out: RecordOut, value: ArrayIndexExpression) {
@@ -3845,34 +3853,34 @@ _m_ArrayIndexExpression_write(out: RecordOut, value: ArrayIndexExpression) {
 }
 
 _m_ArrayIndexExpression_read(input: RecordIn): ArrayIndexExpression {
-    var _f1362 = _m_TypeName_read(input);
-    var _f1363 = _m_Expression_read(input);
+    var _f1363 = _m_TypeName_read(input);
     var _f1364 = _m_Expression_read(input);
-    var _f1365 = input.loc();
-    return ArrayIndexExpression(_f1363, _f1364, _f1362, _f1365);
+    var _f1365 = _m_Expression_read(input);
+    var _f1366 = input.loc();
+    return ArrayIndexExpression(_f1364, _f1365, _f1363, _f1366);
 }
 
 _m_SimdExpression_write(out: RecordOut, value: SimdExpression) {
     _m_SimdOp_write(out, value.op);
     _m_TypeName_write(out, value.ty);
     out.unsigned(value.args.count);
-    for (var _item1389 in value.args) {
-        _m_Expression_write(out, _item1389);
+    for (var _item1390 in value.args) {
+        _m_Expression_write(out, _item1390);
     }
     out.loc(value.loc);
 }
 
 _m_SimdExpression_read(input: RecordIn): SimdExpression {
-    var _f1390 = _m_SimdOp_read(input);
-    var _f1391 = _m_TypeName_read(input);
-    var _v1392 = Array<Expression>();
-    var _n1393 = input.count();
-    for (var _ in 0.._n1393) {
-        _v1392.append(_m_Expression_read(input));
+    var _f1391 = _m_SimdOp_read(input);
+    var _f1392 = _m_TypeName_read(input);
+    var _v1393 = Array<Expression>();
+    var _n1394 = input.count();
+    for (var _ in 0.._n1394) {
+        _v1393.append(_m_Expression_read(input));
     }
-    var _f1394 = _v1392;
-    var _f1395 = input.loc();
-    return SimdExpression(_f1390, _f1391, _f1394, _f1395);
+    var _f1395 = _v1393;
+    var _f1396 = input.loc();
+    return SimdExpression(_f1391, _f1392, _f1395, _f1396);
 }
 
 _m_CountStepExpression_write(out: RecordOut, value: CountStepExpression) {
@@ -3882,10 +3890,10 @@ _m_CountStepExpression_write(out: RecordOut, value: CountStepExpression) {
 }
 
 _m_CountStepExpression_read(input: RecordIn): CountStepExpression {
-    var _f1399 = _m_CountField_read(input);
-    var _f1400 = input.flag();
+    var _f1400 = _m_CountField_read(input);
     var _f1401 = input.flag();
-    return CountStepExpression(_f1399, _f1400, _f1401);
+    var _f1402 = input.flag();
+    return CountStepExpression(_f1400, _f1401, _f1402);
 }
 
 _m_FunctionPointerExpression_write(out: RecordOut, value: FunctionPointerExpression) {
@@ -3900,21 +3908,21 @@ _m_FunctionPointerExpression_write(out: RecordOut, value: FunctionPointerExpress
 }
 
 _m_FunctionPointerExpression_read(input: RecordIn): FunctionPointerExpression {
-    var _o1402 = Optional<TypeName>.Empty;
+    var _o1403 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o1402 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o1403 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f1403 = _o1402;
-    var _f1404 = input.text();
-    var _f1405 = input.loc();
-    return FunctionPointerExpression(_f1403, _f1404, _f1405);
+    var _f1404 = _o1403;
+    var _f1405 = input.text();
+    var _f1406 = input.loc();
+    return FunctionPointerExpression(_f1404, _f1405, _f1406);
 }
 
 _m_FunctionCallExpression_write(out: RecordOut, value: FunctionCallExpression) {
     out.text(value.function);
     out.unsigned(value.args.count);
-    for (var _item1406 in value.args) {
-        _m_Expression_write(out, _item1406);
+    for (var _item1407 in value.args) {
+        _m_Expression_write(out, _item1407);
     }
     out.loc(value.loc);
     if (value.labeled.is_value()) {
@@ -3926,20 +3934,20 @@ _m_FunctionCallExpression_write(out: RecordOut, value: FunctionCallExpression) {
 }
 
 _m_FunctionCallExpression_read(input: RecordIn): FunctionCallExpression {
-    var _f1407 = input.text();
-    var _v1408 = Array<Expression>();
-    var _n1409 = input.count();
-    for (var _ in 0.._n1409) {
-        _v1408.append(_m_Expression_read(input));
+    var _f1408 = input.text();
+    var _v1409 = Array<Expression>();
+    var _n1410 = input.count();
+    for (var _ in 0.._n1410) {
+        _v1409.append(_m_Expression_read(input));
     }
-    var _f1410 = _v1408;
-    var _f1411 = input.loc();
-    var _o1412 = Optional<TypeName>.Empty;
+    var _f1411 = _v1409;
+    var _f1412 = input.loc();
+    var _o1413 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o1412 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o1413 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f1413 = _o1412;
-    return FunctionCallExpression(_f1407, _f1410, _f1411, _f1413);
+    var _f1414 = _o1413;
+    return FunctionCallExpression(_f1408, _f1411, _f1412, _f1414);
 }
 
 _m_NamedArgumentExpression_write(out: RecordOut, value: NamedArgumentExpression) {
@@ -3949,10 +3957,10 @@ _m_NamedArgumentExpression_write(out: RecordOut, value: NamedArgumentExpression)
 }
 
 _m_NamedArgumentExpression_read(input: RecordIn): NamedArgumentExpression {
-    var _f1414 = input.text();
-    var _f1415 = _m_Expression_read(input);
-    var _f1416 = input.loc();
-    return NamedArgumentExpression(_f1415, _f1414, _f1416);
+    var _f1415 = input.text();
+    var _f1416 = _m_Expression_read(input);
+    var _f1417 = input.loc();
+    return NamedArgumentExpression(_f1416, _f1415, _f1417);
 }
 
 _m_DefaultArgumentExpression_write(out: RecordOut, value: DefaultArgumentExpression) {
@@ -3960,31 +3968,31 @@ _m_DefaultArgumentExpression_write(out: RecordOut, value: DefaultArgumentExpress
 }
 
 _m_DefaultArgumentExpression_read(input: RecordIn): DefaultArgumentExpression {
-    var _f1417 = _m_TypeName_read(input);
-    return DefaultArgumentExpression(_f1417);
+    var _f1418 = _m_TypeName_read(input);
+    return DefaultArgumentExpression(_f1418);
 }
 
 _m_MethodCallExpression_write(out: RecordOut, value: MethodCallExpression) {
     _m_Expression_write(out, value.this_value);
     out.text(value.method);
     out.unsigned(value.args.count);
-    for (var _item1418 in value.args) {
-        _m_Expression_write(out, _item1418);
+    for (var _item1419 in value.args) {
+        _m_Expression_write(out, _item1419);
     }
     out.loc(value.loc);
 }
 
 _m_MethodCallExpression_read(input: RecordIn): MethodCallExpression {
-    var _f1419 = _m_Expression_read(input);
-    var _f1420 = input.text();
-    var _v1421 = Array<Expression>();
-    var _n1422 = input.count();
-    for (var _ in 0.._n1422) {
-        _v1421.append(_m_Expression_read(input));
+    var _f1420 = _m_Expression_read(input);
+    var _f1421 = input.text();
+    var _v1422 = Array<Expression>();
+    var _n1423 = input.count();
+    for (var _ in 0.._n1423) {
+        _v1422.append(_m_Expression_read(input));
     }
-    var _f1423 = _v1421;
-    var _f1424 = input.loc();
-    return MethodCallExpression(_f1419, _f1420, _f1423, _f1424);
+    var _f1424 = _v1422;
+    var _f1425 = input.loc();
+    return MethodCallExpression(_f1420, _f1421, _f1424, _f1425);
 }
 
 _m_FunctionRefExpression_write(out: RecordOut, value: FunctionRefExpression) {
@@ -3994,29 +4002,29 @@ _m_FunctionRefExpression_write(out: RecordOut, value: FunctionRefExpression) {
 }
 
 _m_FunctionRefExpression_read(input: RecordIn): FunctionRefExpression {
-    var _f1425 = input.text();
-    var _f1426 = _m_TypeName_read(input);
-    var _f1427 = input.loc();
-    return FunctionRefExpression(_f1425, _f1426, _f1427);
+    var _f1426 = input.text();
+    var _f1427 = _m_TypeName_read(input);
+    var _f1428 = input.loc();
+    return FunctionRefExpression(_f1426, _f1427, _f1428);
 }
 
 _m_InvokeExpression_write(out: RecordOut, value: InvokeExpression) {
     _m_Expression_write(out, value.callee);
     out.unsigned(value.args.count);
-    for (var _item1428 in value.args) {
-        _m_Expression_write(out, _item1428);
+    for (var _item1429 in value.args) {
+        _m_Expression_write(out, _item1429);
     }
 }
 
 _m_InvokeExpression_read(input: RecordIn): InvokeExpression {
-    var _f1429 = _m_Expression_read(input);
-    var _v1430 = Array<Expression>();
-    var _n1431 = input.count();
-    for (var _ in 0.._n1431) {
-        _v1430.append(_m_Expression_read(input));
+    var _f1430 = _m_Expression_read(input);
+    var _v1431 = Array<Expression>();
+    var _n1432 = input.count();
+    for (var _ in 0.._n1432) {
+        _v1431.append(_m_Expression_read(input));
     }
-    var _f1432 = _v1430;
-    return InvokeExpression(_f1429, _f1432);
+    var _f1433 = _v1431;
+    return InvokeExpression(_f1430, _f1433);
 }
 
 _m_MakeClosureExpression_write(out: RecordOut, value: MakeClosureExpression) {
@@ -4027,30 +4035,30 @@ _m_MakeClosureExpression_write(out: RecordOut, value: MakeClosureExpression) {
 }
 
 _m_MakeClosureExpression_read(input: RecordIn): MakeClosureExpression {
-    var _f1434 = _m_Expression_read(input);
-    var _f1435 = input.text();
-    var _f1436 = _m_TypeName_read(input);
-    var _f1437 = input.loc();
-    return MakeClosureExpression(_f1434, _f1435, _f1436, _f1437);
+    var _f1435 = _m_Expression_read(input);
+    var _f1436 = input.text();
+    var _f1437 = _m_TypeName_read(input);
+    var _f1438 = input.loc();
+    return MakeClosureExpression(_f1435, _f1436, _f1437, _f1438);
 }
 
 _m_CallPointerExpression_write(out: RecordOut, value: CallPointerExpression) {
     _m_Expression_write(out, value.pointer);
     out.unsigned(value.args.count);
-    for (var _item1439 in value.args) {
-        _m_Expression_write(out, _item1439);
+    for (var _item1440 in value.args) {
+        _m_Expression_write(out, _item1440);
     }
 }
 
 _m_CallPointerExpression_read(input: RecordIn): CallPointerExpression {
-    var _f1440 = _m_Expression_read(input);
-    var _v1441 = Array<Expression>();
-    var _n1442 = input.count();
-    for (var _ in 0.._n1442) {
-        _v1441.append(_m_Expression_read(input));
+    var _f1441 = _m_Expression_read(input);
+    var _v1442 = Array<Expression>();
+    var _n1443 = input.count();
+    for (var _ in 0.._n1443) {
+        _v1442.append(_m_Expression_read(input));
     }
-    var _f1443 = _v1441;
-    return CallPointerExpression(_f1440, _f1443);
+    var _f1444 = _v1442;
+    return CallPointerExpression(_f1441, _f1444);
 }
 
 _m_MoveExpression_write(out: RecordOut, value: MoveExpression) {
@@ -4059,9 +4067,9 @@ _m_MoveExpression_write(out: RecordOut, value: MoveExpression) {
 }
 
 _m_MoveExpression_read(input: RecordIn): MoveExpression {
-    var _f1446 = _m_Expression_read(input);
-    var _f1447 = input.loc();
-    return MoveExpression(_f1446, _f1447);
+    var _f1447 = _m_Expression_read(input);
+    var _f1448 = input.loc();
+    return MoveExpression(_f1447, _f1448);
 }
 
 _m_DestructureExpression_write(out: RecordOut, value: DestructureExpression) {
@@ -4071,10 +4079,10 @@ _m_DestructureExpression_write(out: RecordOut, value: DestructureExpression) {
 }
 
 _m_DestructureExpression_read(input: RecordIn): DestructureExpression {
-    var _f1448 = _m_Expression_read(input);
-    var _f1449 = input.unsigned();
-    var _f1450 = input.loc();
-    return DestructureExpression(_f1448, _f1449, _f1450);
+    var _f1449 = _m_Expression_read(input);
+    var _f1450 = input.unsigned();
+    var _f1451 = input.loc();
+    return DestructureExpression(_f1449, _f1450, _f1451);
 }
 
 _m_StaticCaseExpression_write(out: RecordOut, value: StaticCaseExpression) {
@@ -4083,9 +4091,9 @@ _m_StaticCaseExpression_write(out: RecordOut, value: StaticCaseExpression) {
 }
 
 _m_StaticCaseExpression_read(input: RecordIn): StaticCaseExpression {
-    var _f1453 = _m_TypeName_read(input);
-    var _f1454 = input.signed();
-    return StaticCaseExpression(_f1453, _f1454);
+    var _f1454 = _m_TypeName_read(input);
+    var _f1455 = input.signed();
+    return StaticCaseExpression(_f1454, _f1455);
 }
 
 _m_StaticStringExpression_write(out: RecordOut, value: StaticStringExpression) {
@@ -4094,9 +4102,9 @@ _m_StaticStringExpression_write(out: RecordOut, value: StaticStringExpression) {
 }
 
 _m_StaticStringExpression_read(input: RecordIn): StaticStringExpression {
-    var _f1455 = input.text();
-    var _f1456 = input.loc();
-    return StaticStringExpression(_f1455, _f1456);
+    var _f1456 = input.text();
+    var _f1457 = input.loc();
+    return StaticStringExpression(_f1456, _f1457);
 }
 
 _m_SubjectExpression_write(out: RecordOut, value: SubjectExpression) {
@@ -4106,10 +4114,10 @@ _m_SubjectExpression_write(out: RecordOut, value: SubjectExpression) {
 }
 
 _m_SubjectExpression_read(input: RecordIn): SubjectExpression {
-    var _f1458 = input.unsigned();
-    var _f1459 = _m_TypeName_read(input);
-    var _f1460 = input.loc();
-    return SubjectExpression(_f1458, _f1459, _f1460);
+    var _f1459 = input.unsigned();
+    var _f1460 = _m_TypeName_read(input);
+    var _f1461 = input.loc();
+    return SubjectExpression(_f1459, _f1460, _f1461);
 }
 
 _m_ToTraitExpression_write(out: RecordOut, value: ToTraitExpression) {
@@ -4120,11 +4128,11 @@ _m_ToTraitExpression_write(out: RecordOut, value: ToTraitExpression) {
 }
 
 _m_ToTraitExpression_read(input: RecordIn): ToTraitExpression {
-    var _f1461 = _m_Expression_read(input);
-    var _f1462 = _m_TypeName_read(input);
+    var _f1462 = _m_Expression_read(input);
     var _f1463 = _m_TypeName_read(input);
-    var _f1464 = input.loc();
-    return ToTraitExpression(_f1461, _f1462, _f1463, _f1464);
+    var _f1464 = _m_TypeName_read(input);
+    var _f1465 = input.loc();
+    return ToTraitExpression(_f1462, _f1463, _f1464, _f1465);
 }
 
 _m_FromTraitExpression_write(out: RecordOut, value: FromTraitExpression) {
@@ -4132,26 +4140,26 @@ _m_FromTraitExpression_write(out: RecordOut, value: FromTraitExpression) {
     _m_TypeName_write(out, value.from);
     _m_TypeName_write(out, value.to);
     out.unsigned(value.candidates.count);
-    for (var _item1465 in value.candidates) {
-        _m_TypeName_write(out, _item1465);
+    for (var _item1466 in value.candidates) {
+        _m_TypeName_write(out, _item1466);
     }
     out.flag(value.test);
     out.loc(value.loc);
 }
 
 _m_FromTraitExpression_read(input: RecordIn): FromTraitExpression {
-    var _f1466 = _m_Expression_read(input);
-    var _f1467 = _m_TypeName_read(input);
+    var _f1467 = _m_Expression_read(input);
     var _f1468 = _m_TypeName_read(input);
-    var _v1469 = Array<TypeName>();
-    var _n1470 = input.count();
-    for (var _ in 0.._n1470) {
-        _v1469.append(_m_TypeName_read(input));
+    var _f1469 = _m_TypeName_read(input);
+    var _v1470 = Array<TypeName>();
+    var _n1471 = input.count();
+    for (var _ in 0.._n1471) {
+        _v1470.append(_m_TypeName_read(input));
     }
-    var _f1471 = _v1469;
-    var _f1472 = input.flag();
-    var _f1473 = input.loc();
-    return FromTraitExpression(_f1466, _f1467, _f1468, _f1471, _f1472, _f1473);
+    var _f1472 = _v1470;
+    var _f1473 = input.flag();
+    var _f1474 = input.loc();
+    return FromTraitExpression(_f1467, _f1468, _f1469, _f1472, _f1473, _f1474);
 }
 
 _m_Expression_write(out: RecordOut, value: Expression) {
@@ -4398,16 +4406,16 @@ _m_Expression_read(input: RecordIn): Expression {
         return Expression.MemberRef(_m_MemberRefExpression_read(input));
     }
     if (tag == 3) {
-        var _f1339 = input.flag();
-        return Expression.BoolLiteral(_f1339);
+        var _f1340 = input.flag();
+        return Expression.BoolLiteral(_f1340);
     }
     if (tag == 4) {
-        var _f1340 = input.signed();
-        return Expression.IntLiteral(_f1340);
+        var _f1341 = input.signed();
+        return Expression.IntLiteral(_f1341);
     }
     if (tag == 5) {
-        var _f1341 = input.number();
-        return Expression.FloatLiteral(_f1341);
+        var _f1342 = input.number();
+        return Expression.FloatLiteral(_f1342);
     }
     if (tag == 6) {
         return Expression.StringLiteral(_m_StringLiteralExpression_read(input));
@@ -4434,69 +4442,69 @@ _m_Expression_read(input: RecordIn): Expression {
         return Expression.ArrayIndex(_m_ArrayIndexExpression_read(input));
     }
     if (tag == 14) {
-        var _f1366 = _m_TypeName_read(input);
-        return Expression.SizeOf(_f1366);
+        var _f1367 = _m_TypeName_read(input);
+        return Expression.SizeOf(_f1367);
     }
     if (tag == 15) {
-        var _f1367 = _m_TypeName_read(input);
-        return Expression.IsPod(_f1367);
+        var _f1368 = _m_TypeName_read(input);
+        return Expression.IsPod(_f1368);
     }
     if (tag == 16) {
-        var _f1368 = _m_TypeName_read(input);
-        return Expression.Default(_f1368);
+        var _f1369 = _m_TypeName_read(input);
+        return Expression.Default(_f1369);
     }
     if (tag == 17) {
-        var _f1369 = _m_TypeName_read(input);
-        return Expression.Allocate(_f1369);
+        var _f1370 = _m_TypeName_read(input);
+        return Expression.Allocate(_f1370);
     }
     if (tag == 18) {
-        var _f1370 = _m_TypeName_read(input);
-        var _f1371 = _m_Expression_read(input);
-        return Expression.RefCount(_f1370, _f1371);
+        var _f1371 = _m_TypeName_read(input);
+        var _f1372 = _m_Expression_read(input);
+        return Expression.RefCount(_f1371, _f1372);
     }
     if (tag == 19) {
-        var _f1372 = _m_TypeName_read(input);
-        var _f1373 = _m_Expression_read(input);
-        return Expression.Address(_f1372, _f1373);
+        var _f1373 = _m_TypeName_read(input);
+        var _f1374 = _m_Expression_read(input);
+        return Expression.Address(_f1373, _f1374);
     }
     if (tag == 20) {
-        var _f1374 = _m_TypeName_read(input);
-        var _f1375 = _m_Expression_read(input);
-        return Expression.AtomicLoad(_f1374, _f1375);
+        var _f1375 = _m_TypeName_read(input);
+        var _f1376 = _m_Expression_read(input);
+        return Expression.AtomicLoad(_f1375, _f1376);
     }
     if (tag == 21) {
-        var _f1376 = _m_TypeName_read(input);
-        var _f1377 = _m_Expression_read(input);
+        var _f1377 = _m_TypeName_read(input);
         var _f1378 = _m_Expression_read(input);
-        return Expression.AtomicStore(_f1376, _f1377, _f1378);
+        var _f1379 = _m_Expression_read(input);
+        return Expression.AtomicStore(_f1377, _f1378, _f1379);
     }
     if (tag == 22) {
-        var _f1379 = _m_Expression_read(input);
         var _f1380 = _m_Expression_read(input);
-        return Expression.ConstructAt(_f1379, _f1380);
+        var _f1381 = _m_Expression_read(input);
+        return Expression.ConstructAt(_f1380, _f1381);
     }
     if (tag == 23) {
-        var _f1381 = _m_TypeName_read(input);
-        var _f1382 = _m_Expression_read(input);
+        var _f1382 = _m_TypeName_read(input);
         var _f1383 = _m_Expression_read(input);
         var _f1384 = _m_Expression_read(input);
-        return Expression.AtomicCmpXchg(_f1381, _f1382, _f1383, _f1384);
+        var _f1385 = _m_Expression_read(input);
+        return Expression.AtomicCmpXchg(_f1382, _f1383, _f1384, _f1385);
     }
     if (tag == 24) {
-        var _f1385 = _m_AtomicFetchOp_read(input);
-        var _f1386 = _m_TypeName_read(input);
-        var _f1387 = _m_Expression_read(input);
+        var _f1386 = _m_AtomicFetchOp_read(input);
+        var _f1387 = _m_TypeName_read(input);
         var _f1388 = _m_Expression_read(input);
-        return Expression.AtomicFetch(_f1385, _f1386, _f1387, _f1388);
+        var _f1389 = _m_Expression_read(input);
+        return Expression.AtomicFetch(_f1386, _f1387, _f1388, _f1389);
     }
     if (tag == 25) {
         return Expression.Simd(_m_SimdExpression_read(input));
     }
     if (tag == 26) {
-        var _f1396 = _m_WeakOp_read(input);
-        var _f1397 = _m_TypeName_read(input);
-        var _f1398 = _m_Expression_read(input);
-        return Expression.Weak(_f1396, _f1397, _f1398);
+        var _f1397 = _m_WeakOp_read(input);
+        var _f1398 = _m_TypeName_read(input);
+        var _f1399 = _m_Expression_read(input);
+        return Expression.Weak(_f1397, _f1398, _f1399);
     }
     if (tag == 27) {
         return Expression.CountStep(_m_CountStepExpression_read(input));
@@ -4523,26 +4531,26 @@ _m_Expression_read(input: RecordIn): Expression {
         return Expression.Invoke(_m_InvokeExpression_read(input));
     }
     if (tag == 35) {
-        var _f1433 = _m_ClosureLiteral_read(input);
-        return Expression.ClosureLiteral(_f1433);
+        var _f1434 = _m_ClosureLiteral_read(input);
+        return Expression.ClosureLiteral(_f1434);
     }
     if (tag == 36) {
         return Expression.MakeClosure(_m_MakeClosureExpression_read(input));
     }
     if (tag == 37) {
-        var _f1438 = input.text();
-        return Expression.MethodAddress(_f1438);
+        var _f1439 = input.text();
+        return Expression.MethodAddress(_f1439);
     }
     if (tag == 38) {
         return Expression.CallPointer(_m_CallPointerExpression_read(input));
     }
     if (tag == 39) {
-        var _f1444 = _m_Expression_read(input);
-        return Expression.ForIterator(_f1444);
+        var _f1445 = _m_Expression_read(input);
+        return Expression.ForIterator(_f1445);
     }
     if (tag == 40) {
-        var _f1445 = _m_Expression_read(input);
-        return Expression.WithEntered(_f1445);
+        var _f1446 = _m_Expression_read(input);
+        return Expression.WithEntered(_f1446);
     }
     if (tag == 41) {
         return Expression.Move(_m_MoveExpression_read(input));
@@ -4551,12 +4559,12 @@ _m_Expression_read(input: RecordIn): Expression {
         return Expression.Destructure(_m_DestructureExpression_read(input));
     }
     if (tag == 43) {
-        var _f1451 = _m_MatchArmTest_read(input);
-        return Expression.MatchArm(_f1451);
+        var _f1452 = _m_MatchArmTest_read(input);
+        return Expression.MatchArm(_f1452);
     }
     if (tag == 44) {
-        var _f1452 = _m_CaseValue_read(input);
-        return Expression.CaseValue(_f1452);
+        var _f1453 = _m_CaseValue_read(input);
+        return Expression.CaseValue(_f1453);
     }
     if (tag == 45) {
         return Expression.StaticCase(_m_StaticCaseExpression_read(input));
@@ -4565,8 +4573,8 @@ _m_Expression_read(input: RecordIn): Expression {
         return Expression.StaticString(_m_StaticStringExpression_read(input));
     }
     if (tag == 47) {
-        var _f1457 = _m_WithSubject_read(input);
-        return Expression.WithSubject(_f1457);
+        var _f1458 = _m_WithSubject_read(input);
+        return Expression.WithSubject(_f1458);
     }
     if (tag == 48) {
         return Expression.Subject(_m_SubjectExpression_read(input));
@@ -4581,12 +4589,12 @@ _m_Expression_read(input: RecordIn): Expression {
         return Expression.FromTrait(_m_FromTraitExpression_read(input));
     }
     if (tag == 52) {
-        var _f1474 = _m_StaticValue_read(input);
-        return Expression.StaticValue(_f1474);
+        var _f1475 = _m_StaticValue_read(input);
+        return Expression.StaticValue(_f1475);
     }
     if (tag == 53) {
-        var _f1475 = _m_StaticMember_read(input);
-        return Expression.StaticMember(_f1475);
+        var _f1476 = _m_StaticMember_read(input);
+        return Expression.StaticMember(_f1476);
     }
     input.fail("Expression", tag);
     return _m_Expression_read(input);
@@ -4596,39 +4604,39 @@ _m_StaticMember_write(out: RecordOut, value: StaticMember) {
     _a_Expression_write(out, value.member);
     out.text(value.method);
     out.unsigned(value.args.count);
-    for (var _item901 in value.args) {
-        _m_Expression_write(out, _item901);
+    for (var _item902 in value.args) {
+        _m_Expression_write(out, _item902);
     }
     out.loc(value.loc);
     out.unsigned(out.blank_locs ? 0 : value.span.start);
     out.unsigned(out.blank_locs ? 0 : value.span.end);
     out.unsigned(value.argument_spans.count);
-    for (var _item902 in value.argument_spans) {
-        out.unsigned(out.blank_locs ? 0 : _item902.start);
-        out.unsigned(out.blank_locs ? 0 : _item902.end);
+    for (var _item903 in value.argument_spans) {
+        out.unsigned(out.blank_locs ? 0 : _item903.start);
+        out.unsigned(out.blank_locs ? 0 : _item903.end);
     }
 }
 
 _m_StaticMember_read(input: RecordIn): StaticMember {
-    var _f903 = _a_Expression_read(input);
-    var _f904 = input.text();
-    var _v905 = Array<Expression>();
-    var _n906 = input.count();
-    for (var _ in 0.._n906) {
-        _v905.append(_m_Expression_read(input));
+    var _f904 = _a_Expression_read(input);
+    var _f905 = input.text();
+    var _v906 = Array<Expression>();
+    var _n907 = input.count();
+    for (var _ in 0.._n907) {
+        _v906.append(_m_Expression_read(input));
     }
-    var _f907 = _v905;
-    var _f908 = input.loc();
-    var _s909 = input.unsigned();
-    var _f910 = ast.Span(_s909, input.unsigned());
-    var _v911 = Array<ast.Span>();
-    var _n912 = input.count();
-    for (var _ in 0.._n912) {
-        var _s913 = input.unsigned();
-        _v911.append(ast.Span(_s913, input.unsigned()));
+    var _f908 = _v906;
+    var _f909 = input.loc();
+    var _s910 = input.unsigned();
+    var _f911 = ast.Span(_s910, input.unsigned());
+    var _v912 = Array<ast.Span>();
+    var _n913 = input.count();
+    for (var _ in 0.._n913) {
+        var _s914 = input.unsigned();
+        _v912.append(ast.Span(_s914, input.unsigned()));
     }
-    var _f914 = _v911;
-    return StaticMember(_f903, _f904, _f907, _f908, _f910, _f914);
+    var _f915 = _v912;
+    return StaticMember(_f904, _f905, _f908, _f909, _f911, _f915);
 }
 
 _m_StaticValue_write(out: RecordOut, value: StaticValue) {
@@ -4637,9 +4645,9 @@ _m_StaticValue_write(out: RecordOut, value: StaticValue) {
 }
 
 _m_StaticValue_read(input: RecordIn): StaticValue {
-    var _f915 = _a_Expression_read(input);
-    var _f916 = input.loc();
-    return StaticValue(_f915, _f916);
+    var _f916 = _a_Expression_read(input);
+    var _f917 = input.loc();
+    return StaticValue(_f916, _f917);
 }
 
 _m_WithSubject_write(out: RecordOut, value: WithSubject) {
@@ -4656,39 +4664,39 @@ _m_WithSubject_write(out: RecordOut, value: WithSubject) {
 }
 
 _m_WithSubject_read(input: RecordIn): WithSubject {
-    var _f917 = input.unsigned();
-    var _f918 = _m_Expression_read(input);
+    var _f918 = input.unsigned();
     var _f919 = _m_Expression_read(input);
-    var _o920 = Optional<String>.Empty;
+    var _f920 = _m_Expression_read(input);
+    var _o921 = Optional<String>.Empty;
     if (input.unsigned() == 1) {
-        _o920 = Optional<String>.Value(input.text());
+        _o921 = Optional<String>.Value(input.text());
     }
-    var _f921 = _o920;
-    var _f922 = input.loc();
-    return WithSubject(_f918, _f919, _f917, _f921, _f922);
+    var _f922 = _o921;
+    var _f923 = input.loc();
+    return WithSubject(_f919, _f920, _f918, _f922, _f923);
 }
 
 _m_CaseValue_write(out: RecordOut, value: CaseValue) {
     _m_Expression_write(out, value.subject);
     out.text(value.name);
     out.unsigned(value.choices.count);
-    for (var _item923 in value.choices) {
-        _m_CaseChoice_write(out, _item923);
+    for (var _item924 in value.choices) {
+        _m_CaseChoice_write(out, _item924);
     }
     out.loc(value.loc);
 }
 
 _m_CaseValue_read(input: RecordIn): CaseValue {
-    var _f924 = _m_Expression_read(input);
-    var _f925 = input.text();
-    var _v926 = Array<CaseChoice>();
-    var _n927 = input.count();
-    for (var _ in 0.._n927) {
-        _v926.append(_m_CaseChoice_read(input));
+    var _f925 = _m_Expression_read(input);
+    var _f926 = input.text();
+    var _v927 = Array<CaseChoice>();
+    var _n928 = input.count();
+    for (var _ in 0.._n928) {
+        _v927.append(_m_CaseChoice_read(input));
     }
-    var _f928 = _v926;
-    var _f929 = input.loc();
-    return CaseValue(_f924, _f925, _f928, _f929);
+    var _f929 = _v927;
+    var _f930 = input.loc();
+    return CaseValue(_f925, _f926, _f929, _f930);
 }
 
 _m_CaseChoice_write(out: RecordOut, value: CaseChoice) {
@@ -4702,62 +4710,62 @@ _m_CaseChoice_write(out: RecordOut, value: CaseChoice) {
     }
     out.unsigned(value.index);
     out.unsigned(value.bindings.count);
-    for (var _item930 in value.bindings) {
-        out.loc(_item930);
+    for (var _item931 in value.bindings) {
+        out.loc(_item931);
     }
     out.loc(value.loc);
 }
 
 _m_CaseChoice_read(input: RecordIn): CaseChoice {
-    var _f931 = input.text();
-    var _f932 = input.loc();
-    var _o933 = Optional<TypeName>.Empty;
+    var _f932 = input.text();
+    var _f933 = input.loc();
+    var _o934 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o933 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o934 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f934 = _o933;
-    var _f935 = input.unsigned();
-    var _v936 = Array<Loc>();
-    var _n937 = input.count();
-    for (var _ in 0.._n937) {
-        _v936.append(input.loc());
+    var _f935 = _o934;
+    var _f936 = input.unsigned();
+    var _v937 = Array<Loc>();
+    var _n938 = input.count();
+    for (var _ in 0.._n938) {
+        _v937.append(input.loc());
     }
-    var _f938 = _v936;
-    var _f939 = input.loc();
-    return CaseChoice(_f931, _f932, _f934, _f935, _f938, _f939);
+    var _f939 = _v937;
+    var _f940 = input.loc();
+    return CaseChoice(_f932, _f933, _f935, _f936, _f939, _f940);
 }
 
 _m_MatchArmTest_write(out: RecordOut, value: MatchArmTest) {
     _m_Expression_write(out, value.subject);
     out.unsigned(value.patterns.count);
-    for (var _item940 in value.patterns) {
-        _m_CasePattern_write(out, _item940);
+    for (var _item941 in value.patterns) {
+        _m_CasePattern_write(out, _item941);
     }
     _m_MatchSite_write(out, value.site);
     out.unsigned(value.element_names.count);
-    for (var _item941 in value.element_names) {
-        _m_ElementName_write(out, _item941);
+    for (var _item942 in value.element_names) {
+        _m_ElementName_write(out, _item942);
     }
     out.flag(value.guarded);
 }
 
 _m_MatchArmTest_read(input: RecordIn): MatchArmTest {
-    var _f942 = _m_Expression_read(input);
-    var _v943 = Array<CasePattern>();
-    var _n944 = input.count();
-    for (var _ in 0.._n944) {
-        _v943.append(_m_CasePattern_read(input));
+    var _f943 = _m_Expression_read(input);
+    var _v944 = Array<CasePattern>();
+    var _n945 = input.count();
+    for (var _ in 0.._n945) {
+        _v944.append(_m_CasePattern_read(input));
     }
-    var _f945 = _v943;
-    var _f946 = _m_MatchSite_read(input);
-    var _v947 = Array<ElementName>();
-    var _n948 = input.count();
-    for (var _ in 0.._n948) {
-        _v947.append(_m_ElementName_read(input));
+    var _f946 = _v944;
+    var _f947 = _m_MatchSite_read(input);
+    var _v948 = Array<ElementName>();
+    var _n949 = input.count();
+    for (var _ in 0.._n949) {
+        _v948.append(_m_ElementName_read(input));
     }
-    var _f949 = _v947;
-    var _f950 = input.flag();
-    return MatchArmTest(_f942, _f945, _f946, _f949, _f950);
+    var _f950 = _v948;
+    var _f951 = input.flag();
+    return MatchArmTest(_f943, _f946, _f947, _f950, _f951);
 }
 
 _m_ElementName_write(out: RecordOut, value: ElementName) {
@@ -4766,26 +4774,26 @@ _m_ElementName_write(out: RecordOut, value: ElementName) {
     out.flag(value.declared);
     if (value.missing.is_value()) {
         out.unsigned(1);
-        var (_t951, _t952) = value.missing.value();
-        out.text(_t951);
-        out.loc(_t952);
+        var (_t952, _t953) = value.missing.value();
+        out.text(_t952);
+        out.loc(_t953);
     } else {
         out.unsigned(0);
     }
 }
 
 _m_ElementName_read(input: RecordIn): ElementName {
-    var _f953 = input.text();
-    var _f954 = input.loc();
-    var _f955 = input.flag();
-    var _o956 = Optional<(String, Loc)>.Empty;
+    var _f954 = input.text();
+    var _f955 = input.loc();
+    var _f956 = input.flag();
+    var _o957 = Optional<(String, Loc)>.Empty;
     if (input.unsigned() == 1) {
-        var _t957 = input.text();
-        var _t958 = input.loc();
-        _o956 = Optional<(String, Loc)>.Value((_t957, _t958));
+        var _t958 = input.text();
+        var _t959 = input.loc();
+        _o957 = Optional<(String, Loc)>.Value((_t958, _t959));
     }
-    var _f959 = _o956;
-    return ElementName(_f953, _f954, _f955, _f959);
+    var _f960 = _o957;
+    return ElementName(_f954, _f955, _f956, _f960);
 }
 
 _m_MatchSite_write(out: RecordOut, value: MatchSite) {
@@ -4802,16 +4810,16 @@ _m_MatchSite_write(out: RecordOut, value: MatchSite) {
 }
 
 _m_MatchSite_read(input: RecordIn): MatchSite {
-    var _f960 = input.unsigned();
-    var _f961 = input.loc();
-    var _o962 = Optional<Loc>.Empty;
+    var _f961 = input.unsigned();
+    var _f962 = input.loc();
+    var _o963 = Optional<Loc>.Empty;
     if (input.unsigned() == 1) {
-        _o962 = Optional<Loc>.Value(input.loc());
+        _o963 = Optional<Loc>.Value(input.loc());
     }
-    var _f963 = _o962;
-    var _f964 = input.flag();
+    var _f964 = _o963;
     var _f965 = input.flag();
-    return MatchSite(_f960, _f961, _f963, _f964, _f965);
+    var _f966 = input.flag();
+    return MatchSite(_f961, _f962, _f964, _f965, _f966);
 }
 
 _m_CasePattern_write(out: RecordOut, value: CasePattern) {
@@ -4826,8 +4834,8 @@ _m_CasePattern_write(out: RecordOut, value: CasePattern) {
     if (value.bindings.is_value()) {
         out.unsigned(1);
         out.unsigned(value.bindings.value().count);
-        for (var _item966 in value.bindings.value()) {
-            _m_CasePattern_write(out, _item966);
+        for (var _item967 in value.bindings.value()) {
+            _m_CasePattern_write(out, _item967);
         }
     } else {
         out.unsigned(0);
@@ -4841,8 +4849,8 @@ _m_CasePattern_write(out: RecordOut, value: CasePattern) {
     if (value.elements.is_value()) {
         out.unsigned(1);
         out.unsigned(value.elements.value().count);
-        for (var _item967 in value.elements.value()) {
-            _m_CasePattern_write(out, _item967);
+        for (var _item968 in value.elements.value()) {
+            _m_CasePattern_write(out, _item968);
         }
     } else {
         out.unsigned(0);
@@ -4851,9 +4859,9 @@ _m_CasePattern_write(out: RecordOut, value: CasePattern) {
     out.flag(value.constant);
     if (value.values.is_value()) {
         out.unsigned(1);
-        var (_t968, _t969) = value.values.value();
-        out.signed(_t968 as long);
+        var (_t969, _t970) = value.values.value();
         out.signed(_t969 as long);
+        out.signed(_t970 as long);
     } else {
         out.unsigned(0);
     }
@@ -4866,59 +4874,59 @@ _m_CasePattern_write(out: RecordOut, value: CasePattern) {
 }
 
 _m_CasePattern_read(input: RecordIn): CasePattern {
-    var _o970 = Optional<TypeName>.Empty;
+    var _o971 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o970 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o971 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f971 = _o970;
-    var _f972 = input.text();
-    var _f973 = input.loc();
-    var _o974 = Optional<Array<CasePattern>>.Empty;
+    var _f972 = _o971;
+    var _f973 = input.text();
+    var _f974 = input.loc();
+    var _o975 = Optional<Array<CasePattern>>.Empty;
     if (input.unsigned() == 1) {
-        var _v975 = Array<CasePattern>();
-        var _n976 = input.count();
-        for (var _ in 0.._n976) {
-            _v975.append(_m_CasePattern_read(input));
+        var _v976 = Array<CasePattern>();
+        var _n977 = input.count();
+        for (var _ in 0.._n977) {
+            _v976.append(_m_CasePattern_read(input));
         }
-        _o974 = Optional<Array<CasePattern>>.Value(_v975);
+        _o975 = Optional<Array<CasePattern>>.Value(_v976);
     }
-    var _f977 = _o974;
-    var _o978 = Optional<Expression>.Empty;
+    var _f978 = _o975;
+    var _o979 = Optional<Expression>.Empty;
     if (input.unsigned() == 1) {
-        _o978 = Optional<Expression>.Value(_m_Expression_read(input));
+        _o979 = Optional<Expression>.Value(_m_Expression_read(input));
     }
-    var _f979 = _o978;
-    var _o980 = Optional<Array<CasePattern>>.Empty;
+    var _f980 = _o979;
+    var _o981 = Optional<Array<CasePattern>>.Empty;
     if (input.unsigned() == 1) {
-        var _v981 = Array<CasePattern>();
-        var _n982 = input.count();
-        for (var _ in 0.._n982) {
-            _v981.append(_m_CasePattern_read(input));
+        var _v982 = Array<CasePattern>();
+        var _n983 = input.count();
+        for (var _ in 0.._n983) {
+            _v982.append(_m_CasePattern_read(input));
         }
-        _o980 = Optional<Array<CasePattern>>.Value(_v981);
+        _o981 = Optional<Array<CasePattern>>.Value(_v982);
     }
-    var _f983 = _o980;
-    var _f984 = input.flag();
+    var _f984 = _o981;
     var _f985 = input.flag();
-    var _o986 = Optional<(long, long)>.Empty;
+    var _f986 = input.flag();
+    var _o987 = Optional<(long, long)>.Empty;
     if (input.unsigned() == 1) {
-        var _t987 = input.signed();
         var _t988 = input.signed();
-        _o986 = Optional<(long, long)>.Value((_t987, _t988));
+        var _t989 = input.signed();
+        _o987 = Optional<(long, long)>.Value((_t988, _t989));
     }
-    var _f989 = _o986;
-    var _o990 = Optional<TypeName>.Empty;
+    var _f990 = _o987;
+    var _o991 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o990 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o991 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f991 = _o990;
-    return CasePattern(_f971, _f972, _f973, _f977, _f979, _f983, _f984, _f985, _f989, _f991);
+    var _f992 = _o991;
+    return CasePattern(_f972, _f973, _f974, _f978, _f980, _f984, _f985, _f986, _f990, _f992);
 }
 
 _m_ClosureLiteral_write(out: RecordOut, value: ClosureLiteral) {
     out.unsigned(value.parameters.count);
-    for (var _item992 in value.parameters) {
-        _m_VariableDef_write(out, _item992);
+    for (var _item993 in value.parameters) {
+        _m_VariableDef_write(out, _item993);
     }
     _m_TypeName_write(out, value.ty);
     _m_Block_write(out, value.body);
@@ -4927,17 +4935,17 @@ _m_ClosureLiteral_write(out: RecordOut, value: ClosureLiteral) {
 }
 
 _m_ClosureLiteral_read(input: RecordIn): ClosureLiteral {
-    var _v993 = Array<VariableDef>();
-    var _n994 = input.count();
-    for (var _ in 0.._n994) {
-        _v993.append(_m_VariableDef_read(input));
+    var _v994 = Array<VariableDef>();
+    var _n995 = input.count();
+    for (var _ in 0.._n995) {
+        _v994.append(_m_VariableDef_read(input));
     }
-    var _f995 = _v993;
-    var _f996 = _m_TypeName_read(input);
-    var _f997 = _m_Block_read(input);
-    var _f998 = input.flag();
-    var _f999 = input.loc();
-    return ClosureLiteral(_f995, _f996, _f997, _f998, _f999);
+    var _f996 = _v994;
+    var _f997 = _m_TypeName_read(input);
+    var _f998 = _m_Block_read(input);
+    var _f999 = input.flag();
+    var _f1000 = input.loc();
+    return ClosureLiteral(_f996, _f997, _f998, _f999, _f1000);
 }
 
 _m_VariableDef_write(out: RecordOut, value: VariableDef) {
@@ -4952,8 +4960,8 @@ _m_VariableDef_write(out: RecordOut, value: VariableDef) {
     out.flag(value.hidden);
     _m_Kind_write(out, value.kind);
     out.unsigned(value.attributes.count);
-    for (var _item1000 in value.attributes) {
-        _a_Attribute_write(out, _item1000);
+    for (var _item1001 in value.attributes) {
+        _a_Attribute_write(out, _item1001);
     }
     out.loc(value.loc);
     out.loc(value.type_loc);
@@ -4961,25 +4969,25 @@ _m_VariableDef_write(out: RecordOut, value: VariableDef) {
 }
 
 _m_VariableDef_read(input: RecordIn): VariableDef {
-    var _f1001 = input.text();
-    var _f1002 = _m_TypeName_read(input);
-    var _o1003 = Optional<Expression>.Empty;
+    var _f1002 = input.text();
+    var _f1003 = _m_TypeName_read(input);
+    var _o1004 = Optional<Expression>.Empty;
     if (input.unsigned() == 1) {
-        _o1003 = Optional<Expression>.Value(_m_Expression_read(input));
+        _o1004 = Optional<Expression>.Value(_m_Expression_read(input));
     }
-    var _f1004 = _o1003;
-    var _f1005 = input.flag();
-    var _f1006 = _m_Kind_read(input);
-    var _v1007 = Array<ast.Attribute>();
-    var _n1008 = input.count();
-    for (var _ in 0.._n1008) {
-        _v1007.append(_a_Attribute_read(input));
+    var _f1005 = _o1004;
+    var _f1006 = input.flag();
+    var _f1007 = _m_Kind_read(input);
+    var _v1008 = Array<ast.Attribute>();
+    var _n1009 = input.count();
+    for (var _ in 0.._n1009) {
+        _v1008.append(_a_Attribute_read(input));
     }
-    var _f1009 = _v1007;
-    var _f1010 = input.loc();
+    var _f1010 = _v1008;
     var _f1011 = input.loc();
-    var _f1012 = input.flag();
-    return VariableDef(_f1001, _f1002, _f1004, _f1005, _f1006, _f1009, _f1010, _f1011, _f1012);
+    var _f1012 = input.loc();
+    var _f1013 = input.flag();
+    return VariableDef(_f1002, _f1003, _f1005, _f1006, _f1007, _f1010, _f1011, _f1012, _f1013);
 }
 
 _m_Kind_write(out: RecordOut, value: Kind) {
@@ -5764,8 +5772,8 @@ _m_LoopBreak_write(out: RecordOut, value: LoopBreak) {
 }
 
 _m_LoopBreak_read(input: RecordIn): LoopBreak {
-    var _f1013 = _m_LoopBreakKind_read(input);
-    return LoopBreak(_f1013);
+    var _f1014 = _m_LoopBreakKind_read(input);
+    return LoopBreak(_f1014);
 }
 
 _m_ReturnStatement_write(out: RecordOut, value: ReturnStatement) {
@@ -5779,13 +5787,13 @@ _m_ReturnStatement_write(out: RecordOut, value: ReturnStatement) {
 }
 
 _m_ReturnStatement_read(input: RecordIn): ReturnStatement {
-    var _o1014 = Optional<Expression>.Empty;
+    var _o1015 = Optional<Expression>.Empty;
     if (input.unsigned() == 1) {
-        _o1014 = Optional<Expression>.Value(_m_Expression_read(input));
+        _o1015 = Optional<Expression>.Value(_m_Expression_read(input));
     }
-    var _f1015 = _o1014;
-    var _f1016 = input.loc();
-    return ReturnStatement(_f1015, _f1016);
+    var _f1016 = _o1015;
+    var _f1017 = input.loc();
+    return ReturnStatement(_f1016, _f1017);
 }
 
 _m_While_write(out: RecordOut, value: While) {
@@ -5794,9 +5802,9 @@ _m_While_write(out: RecordOut, value: While) {
 }
 
 _m_While_read(input: RecordIn): While {
-    var _f1017 = _m_Expression_read(input);
-    var _f1018 = _m_Block_read(input);
-    return While(_f1017, _f1018);
+    var _f1018 = _m_Expression_read(input);
+    var _f1019 = _m_Block_read(input);
+    return While(_f1018, _f1019);
 }
 
 _m_Branch_write(out: RecordOut, value: Branch) {
@@ -5811,14 +5819,14 @@ _m_Branch_write(out: RecordOut, value: Branch) {
 }
 
 _m_Branch_read(input: RecordIn): Branch {
-    var _f1019 = _m_Expression_read(input);
-    var _f1020 = _m_Block_read(input);
-    var _o1021 = Optional<Block>.Empty;
+    var _f1020 = _m_Expression_read(input);
+    var _f1021 = _m_Block_read(input);
+    var _o1022 = Optional<Block>.Empty;
     if (input.unsigned() == 1) {
-        _o1021 = Optional<Block>.Value(_m_Block_read(input));
+        _o1022 = Optional<Block>.Value(_m_Block_read(input));
     }
-    var _f1022 = _o1021;
-    return Branch(_f1019, _f1020, _f1022);
+    var _f1023 = _o1022;
+    return Branch(_f1020, _f1021, _f1023);
 }
 
 _m_Declaration_write(out: RecordOut, value: Declaration) {
@@ -5857,32 +5865,32 @@ _m_Declaration_write(out: RecordOut, value: Declaration) {
 _m_Declaration_read(input: RecordIn): Declaration {
     var tag = input.unsigned();
     if (tag == 0) {
-        var _f1476 = _m_VariableDef_read(input);
-        return Declaration.Variable(_f1476);
+        var _f1477 = _m_VariableDef_read(input);
+        return Declaration.Variable(_f1477);
     }
     if (tag == 1) {
-        var _f1477 = _m_FunctionDef_read(input);
-        return Declaration.Function(_f1477);
+        var _f1478 = _m_FunctionDef_read(input);
+        return Declaration.Function(_f1478);
     }
     if (tag == 2) {
-        var _f1478 = _m_StructDef_read(input);
-        return Declaration.Struct(_f1478);
+        var _f1479 = _m_StructDef_read(input);
+        return Declaration.Struct(_f1479);
     }
     if (tag == 3) {
-        var _f1479 = _m_TraitDef_read(input);
-        return Declaration.Trait(_f1479);
+        var _f1480 = _m_TraitDef_read(input);
+        return Declaration.Trait(_f1480);
     }
     if (tag == 4) {
-        var _f1480 = _m_ExtensionDef_read(input);
-        return Declaration.Extension(_f1480);
+        var _f1481 = _m_ExtensionDef_read(input);
+        return Declaration.Extension(_f1481);
     }
     if (tag == 5) {
-        var _f1481 = _m_ExternDef_read(input);
-        return Declaration.Extern(_f1481);
+        var _f1482 = _m_ExternDef_read(input);
+        return Declaration.Extern(_f1482);
     }
     if (tag == 6) {
-        var _f1482 = _m_TypeAliasDef_read(input);
-        return Declaration.TypeAlias(_f1482);
+        var _f1483 = _m_TypeAliasDef_read(input);
+        return Declaration.TypeAlias(_f1483);
     }
     input.fail("Declaration", tag);
     return _m_Declaration_read(input);
@@ -5891,42 +5899,42 @@ _m_Declaration_read(input: RecordIn): Declaration {
 _m_TypeAliasDef_write(out: RecordOut, value: TypeAliasDef) {
     out.text(value.name);
     out.unsigned(value.generic_params.count);
-    for (var _item1023 in value.generic_params) {
-        _m_GenericParam_write(out, _item1023);
+    for (var _item1024 in value.generic_params) {
+        _m_GenericParam_write(out, _item1024);
     }
     _m_TypeName_write(out, value.target);
     out.unsigned(value.attributes.count);
-    for (var _item1024 in value.attributes) {
-        _a_Attribute_write(out, _item1024);
+    for (var _item1025 in value.attributes) {
+        _a_Attribute_write(out, _item1025);
     }
     out.loc(value.loc);
 }
 
 _m_TypeAliasDef_read(input: RecordIn): TypeAliasDef {
-    var _f1025 = input.text();
-    var _v1026 = Array<GenericParam>();
-    var _n1027 = input.count();
-    for (var _ in 0.._n1027) {
-        _v1026.append(_m_GenericParam_read(input));
+    var _f1026 = input.text();
+    var _v1027 = Array<GenericParam>();
+    var _n1028 = input.count();
+    for (var _ in 0.._n1028) {
+        _v1027.append(_m_GenericParam_read(input));
     }
-    var _f1028 = _v1026;
-    var _f1029 = _m_TypeName_read(input);
-    var _v1030 = Array<ast.Attribute>();
-    var _n1031 = input.count();
-    for (var _ in 0.._n1031) {
-        _v1030.append(_a_Attribute_read(input));
+    var _f1029 = _v1027;
+    var _f1030 = _m_TypeName_read(input);
+    var _v1031 = Array<ast.Attribute>();
+    var _n1032 = input.count();
+    for (var _ in 0.._n1032) {
+        _v1031.append(_a_Attribute_read(input));
     }
-    var _f1032 = _v1030;
-    var _f1033 = input.loc();
-    return TypeAliasDef(_f1025, _f1028, _f1029, _f1032, _f1033);
+    var _f1033 = _v1031;
+    var _f1034 = input.loc();
+    return TypeAliasDef(_f1026, _f1029, _f1030, _f1033, _f1034);
 }
 
 _m_GenericParam_write(out: RecordOut, value: GenericParam) {
     out.text(value.name);
     out.loc(value.loc);
     out.unsigned(value.bounds.count);
-    for (var _item1034 in value.bounds) {
-        _m_Bound_write(out, _item1034);
+    for (var _item1035 in value.bounds) {
+        _m_Bound_write(out, _item1035);
     }
     if (value.default.is_value()) {
         out.unsigned(1);
@@ -5939,22 +5947,22 @@ _m_GenericParam_write(out: RecordOut, value: GenericParam) {
 }
 
 _m_GenericParam_read(input: RecordIn): GenericParam {
-    var _f1035 = input.text();
-    var _f1036 = input.loc();
-    var _v1037 = Array<Bound>();
-    var _n1038 = input.count();
-    for (var _ in 0.._n1038) {
-        _v1037.append(_m_Bound_read(input));
+    var _f1036 = input.text();
+    var _f1037 = input.loc();
+    var _v1038 = Array<Bound>();
+    var _n1039 = input.count();
+    for (var _ in 0.._n1039) {
+        _v1038.append(_m_Bound_read(input));
     }
-    var _f1039 = _v1037;
-    var _o1040 = Optional<TypeName>.Empty;
+    var _f1040 = _v1038;
+    var _o1041 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o1040 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o1041 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f1041 = _o1040;
-    var _f1042 = input.loc();
-    var _f1043 = input.flag();
-    return GenericParam(_f1035, _f1036, _f1039, _f1041, _f1042, _f1043);
+    var _f1042 = _o1041;
+    var _f1043 = input.loc();
+    var _f1044 = input.flag();
+    return GenericParam(_f1036, _f1037, _f1040, _f1042, _f1043, _f1044);
 }
 
 _m_Bound_write(out: RecordOut, value: Bound) {
@@ -5963,44 +5971,44 @@ _m_Bound_write(out: RecordOut, value: Bound) {
 }
 
 _m_Bound_read(input: RecordIn): Bound {
-    var _f1044 = _m_TypeName_read(input);
-    var _f1045 = input.loc();
-    return Bound(_f1044, _f1045);
+    var _f1045 = _m_TypeName_read(input);
+    var _f1046 = input.loc();
+    return Bound(_f1045, _f1046);
 }
 
 _m_ExternDef_write(out: RecordOut, value: ExternDef) {
     out.text(value.name);
     _m_TypeName_write(out, value.ty);
     out.unsigned(value.parameters.count);
-    for (var _item1046 in value.parameters) {
-        _m_VariableDef_write(out, _item1046);
+    for (var _item1047 in value.parameters) {
+        _m_VariableDef_write(out, _item1047);
     }
     out.flag(value.is_variadic);
     out.unsigned(value.attributes.count);
-    for (var _item1047 in value.attributes) {
-        _a_Attribute_write(out, _item1047);
+    for (var _item1048 in value.attributes) {
+        _a_Attribute_write(out, _item1048);
     }
     out.loc(value.loc);
 }
 
 _m_ExternDef_read(input: RecordIn): ExternDef {
-    var _f1048 = input.text();
-    var _f1049 = _m_TypeName_read(input);
-    var _v1050 = Array<VariableDef>();
-    var _n1051 = input.count();
-    for (var _ in 0.._n1051) {
-        _v1050.append(_m_VariableDef_read(input));
+    var _f1049 = input.text();
+    var _f1050 = _m_TypeName_read(input);
+    var _v1051 = Array<VariableDef>();
+    var _n1052 = input.count();
+    for (var _ in 0.._n1052) {
+        _v1051.append(_m_VariableDef_read(input));
     }
-    var _f1052 = _v1050;
-    var _f1053 = input.flag();
-    var _v1054 = Array<ast.Attribute>();
-    var _n1055 = input.count();
-    for (var _ in 0.._n1055) {
-        _v1054.append(_a_Attribute_read(input));
+    var _f1053 = _v1051;
+    var _f1054 = input.flag();
+    var _v1055 = Array<ast.Attribute>();
+    var _n1056 = input.count();
+    for (var _ in 0.._n1056) {
+        _v1055.append(_a_Attribute_read(input));
     }
-    var _f1056 = _v1054;
-    var _f1057 = input.loc();
-    return ExternDef(_f1048, _f1049, _f1052, _f1053, _f1056, _f1057);
+    var _f1057 = _v1055;
+    var _f1058 = input.loc();
+    return ExternDef(_f1049, _f1050, _f1053, _f1054, _f1057, _f1058);
 }
 
 _m_ExtensionDef_write(out: RecordOut, value: ExtensionDef) {
@@ -6012,22 +6020,22 @@ _m_ExtensionDef_write(out: RecordOut, value: ExtensionDef) {
         out.unsigned(0);
     }
     out.unsigned(value.traits.count);
-    for (var _item1058 in value.traits) {
-        _m_TypeName_write(out, _item1058);
+    for (var _item1059 in value.traits) {
+        _m_TypeName_write(out, _item1059);
     }
     out.unsigned(value.restated.count);
-    for (var _item1059 in value.restated) {
-        var (_t1060, _t1061) = _item1059;
-        out.unsigned(_t1060);
-        _m_Bound_write(out, _t1061);
+    for (var _item1060 in value.restated) {
+        var (_t1061, _t1062) = _item1060;
+        out.unsigned(_t1061);
+        _m_Bound_write(out, _t1062);
     }
     out.unsigned(value.methods.count);
-    for (var _item1062 in value.methods) {
-        _m_FunctionDef_write(out, _item1062);
+    for (var _item1063 in value.methods) {
+        _m_FunctionDef_write(out, _item1063);
     }
     out.unsigned(value.attributes.count);
-    for (var _item1063 in value.attributes) {
-        _a_Attribute_write(out, _item1063);
+    for (var _item1064 in value.attributes) {
+        _a_Attribute_write(out, _item1064);
     }
     out.loc(value.loc);
     out.flag(value.is_exported);
@@ -6035,125 +6043,125 @@ _m_ExtensionDef_write(out: RecordOut, value: ExtensionDef) {
 }
 
 _m_ExtensionDef_read(input: RecordIn): ExtensionDef {
-    var _f1064 = _m_TypeName_read(input);
-    var _o1065 = Optional<String>.Empty;
+    var _f1065 = _m_TypeName_read(input);
+    var _o1066 = Optional<String>.Empty;
     if (input.unsigned() == 1) {
-        _o1065 = Optional<String>.Value(input.text());
+        _o1066 = Optional<String>.Value(input.text());
     }
-    var _f1066 = _o1065;
-    var _v1067 = Array<TypeName>();
-    var _n1068 = input.count();
-    for (var _ in 0.._n1068) {
-        _v1067.append(_m_TypeName_read(input));
+    var _f1067 = _o1066;
+    var _v1068 = Array<TypeName>();
+    var _n1069 = input.count();
+    for (var _ in 0.._n1069) {
+        _v1068.append(_m_TypeName_read(input));
     }
-    var _f1069 = _v1067;
-    var _v1070 = Array<(ulong, Bound)>();
-    var _n1071 = input.count();
-    for (var _ in 0.._n1071) {
-        var _t1072 = input.unsigned();
-        var _t1073 = _m_Bound_read(input);
-        _v1070.append((_t1072, _t1073));
+    var _f1070 = _v1068;
+    var _v1071 = Array<(ulong, Bound)>();
+    var _n1072 = input.count();
+    for (var _ in 0.._n1072) {
+        var _t1073 = input.unsigned();
+        var _t1074 = _m_Bound_read(input);
+        _v1071.append((_t1073, _t1074));
     }
-    var _f1074 = _v1070;
-    var _v1075 = Array<FunctionDef>();
-    var _n1076 = input.count();
-    for (var _ in 0.._n1076) {
-        _v1075.append(_m_FunctionDef_read(input));
+    var _f1075 = _v1071;
+    var _v1076 = Array<FunctionDef>();
+    var _n1077 = input.count();
+    for (var _ in 0.._n1077) {
+        _v1076.append(_m_FunctionDef_read(input));
     }
-    var _f1077 = _v1075;
-    var _v1078 = Array<ast.Attribute>();
-    var _n1079 = input.count();
-    for (var _ in 0.._n1079) {
-        _v1078.append(_a_Attribute_read(input));
+    var _f1078 = _v1076;
+    var _v1079 = Array<ast.Attribute>();
+    var _n1080 = input.count();
+    for (var _ in 0.._n1080) {
+        _v1079.append(_a_Attribute_read(input));
     }
-    var _f1080 = _v1078;
-    var _f1081 = input.loc();
-    var _f1082 = input.flag();
+    var _f1081 = _v1079;
+    var _f1082 = input.loc();
     var _f1083 = input.flag();
-    return ExtensionDef(_f1064, _f1066, _f1069, _f1074, _f1077, _f1080, _f1081, _f1082, _f1083);
+    var _f1084 = input.flag();
+    return ExtensionDef(_f1065, _f1067, _f1070, _f1075, _f1078, _f1081, _f1082, _f1083, _f1084);
 }
 
 _m_TraitDef_write(out: RecordOut, value: TraitDef) {
     out.text(value.name);
     out.unsigned(value.generic_params.count);
-    for (var _item1084 in value.generic_params) {
-        _m_GenericParam_write(out, _item1084);
+    for (var _item1085 in value.generic_params) {
+        _m_GenericParam_write(out, _item1085);
     }
     out.unsigned(value.methods.count);
-    for (var _item1085 in value.methods) {
-        _m_FunctionDef_write(out, _item1085);
+    for (var _item1086 in value.methods) {
+        _m_FunctionDef_write(out, _item1086);
     }
     out.unsigned(value.attributes.count);
-    for (var _item1086 in value.attributes) {
-        _a_Attribute_write(out, _item1086);
+    for (var _item1087 in value.attributes) {
+        _a_Attribute_write(out, _item1087);
     }
     out.loc(value.loc);
 }
 
 _m_TraitDef_read(input: RecordIn): TraitDef {
-    var _f1087 = input.text();
-    var _v1088 = Array<GenericParam>();
-    var _n1089 = input.count();
-    for (var _ in 0.._n1089) {
-        _v1088.append(_m_GenericParam_read(input));
+    var _f1088 = input.text();
+    var _v1089 = Array<GenericParam>();
+    var _n1090 = input.count();
+    for (var _ in 0.._n1090) {
+        _v1089.append(_m_GenericParam_read(input));
     }
-    var _f1090 = _v1088;
-    var _v1091 = Array<FunctionDef>();
-    var _n1092 = input.count();
-    for (var _ in 0.._n1092) {
-        _v1091.append(_m_FunctionDef_read(input));
+    var _f1091 = _v1089;
+    var _v1092 = Array<FunctionDef>();
+    var _n1093 = input.count();
+    for (var _ in 0.._n1093) {
+        _v1092.append(_m_FunctionDef_read(input));
     }
-    var _f1093 = _v1091;
-    var _v1094 = Array<ast.Attribute>();
-    var _n1095 = input.count();
-    for (var _ in 0.._n1095) {
-        _v1094.append(_a_Attribute_read(input));
+    var _f1094 = _v1092;
+    var _v1095 = Array<ast.Attribute>();
+    var _n1096 = input.count();
+    for (var _ in 0.._n1096) {
+        _v1095.append(_a_Attribute_read(input));
     }
-    var _f1096 = _v1094;
-    var _f1097 = input.loc();
-    return TraitDef(_f1087, _f1090, _f1093, _f1096, _f1097);
+    var _f1097 = _v1095;
+    var _f1098 = input.loc();
+    return TraitDef(_f1088, _f1091, _f1094, _f1097, _f1098);
 }
 
 _m_StructDef_write(out: RecordOut, value: StructDef) {
     out.text(value.name);
     _m_TypeName_write(out, value.ty);
     out.unsigned(value.generic_params.count);
-    for (var _item1098 in value.generic_params) {
-        _m_GenericParam_write(out, _item1098);
+    for (var _item1099 in value.generic_params) {
+        _m_GenericParam_write(out, _item1099);
     }
     out.unsigned(value.field_members.count);
-    for (var _item1099 in value.field_members) {
-        _m_VariableDef_write(out, _item1099);
+    for (var _item1100 in value.field_members) {
+        _m_VariableDef_write(out, _item1100);
     }
     out.unsigned(value.method_members.count);
-    for (var _item1100 in value.method_members) {
-        _m_FunctionDef_write(out, _item1100);
-    }
-    out.unsigned(value.generic_methods.count);
-    for (var _item1101 in value.generic_methods) {
+    for (var _item1101 in value.method_members) {
         _m_FunctionDef_write(out, _item1101);
     }
-    out.unsigned(value.constructors.count);
-    for (var _item1102 in value.constructors) {
+    out.unsigned(value.generic_methods.count);
+    for (var _item1102 in value.generic_methods) {
         _m_FunctionDef_write(out, _item1102);
+    }
+    out.unsigned(value.constructors.count);
+    for (var _item1103 in value.constructors) {
+        _m_FunctionDef_write(out, _item1103);
     }
     _m_FunctionDef_write(out, value.destructor);
     _m_FunctionDef_write(out, value.acquire);
     _m_FunctionDef_write(out, value.release);
     out.unsigned(value.traits.count);
-    for (var _item1103 in value.traits) {
-        _m_TypeName_write(out, _item1103);
+    for (var _item1104 in value.traits) {
+        _m_TypeName_write(out, _item1104);
     }
     out.unsigned(value.attributes.count);
-    for (var _item1104 in value.attributes) {
-        _a_Attribute_write(out, _item1104);
+    for (var _item1105 in value.attributes) {
+        _a_Attribute_write(out, _item1105);
     }
     out.loc(value.loc);
     if (value.enum_cases.is_value()) {
         out.unsigned(1);
         out.unsigned(value.enum_cases.value().count);
-        for (var _item1105 in value.enum_cases.value()) {
-            _m_EnumCaseDef_write(out, _item1105);
+        for (var _item1106 in value.enum_cases.value()) {
+            _m_EnumCaseDef_write(out, _item1106);
         }
     } else {
         out.unsigned(0);
@@ -6169,66 +6177,66 @@ _m_StructDef_read_lazy(input: RecordIn): StructDef {
 }
 
 _m_StructDef_read_with(input: RecordIn, lazy: bool): StructDef {
-    var _f1106 = input.text();
-    var _f1107 = _m_TypeName_read(input);
-    var _v1108 = Array<GenericParam>();
-    var _n1109 = input.count();
-    for (var _ in 0.._n1109) {
-        _v1108.append(_m_GenericParam_read(input));
+    var _f1107 = input.text();
+    var _f1108 = _m_TypeName_read(input);
+    var _v1109 = Array<GenericParam>();
+    var _n1110 = input.count();
+    for (var _ in 0.._n1110) {
+        _v1109.append(_m_GenericParam_read(input));
     }
-    var _f1110 = _v1108;
-    var _v1111 = Array<VariableDef>();
-    var _n1112 = input.count();
-    for (var _ in 0.._n1112) {
-        _v1111.append(_m_VariableDef_read(input));
+    var _f1111 = _v1109;
+    var _v1112 = Array<VariableDef>();
+    var _n1113 = input.count();
+    for (var _ in 0.._n1113) {
+        _v1112.append(_m_VariableDef_read(input));
     }
-    var _f1113 = _v1111;
-    var _v1114 = Array<FunctionDef>();
-    var _n1115 = input.count();
-    for (var _ in 0.._n1115) {
-        _v1114.append(_m_FunctionDef_read_with(input, lazy));
+    var _f1114 = _v1112;
+    var _v1115 = Array<FunctionDef>();
+    var _n1116 = input.count();
+    for (var _ in 0.._n1116) {
+        _v1115.append(_m_FunctionDef_read_with(input, lazy));
     }
-    var _f1116 = _v1114;
-    var _v1117 = Array<FunctionDef>();
-    var _n1118 = input.count();
-    for (var _ in 0.._n1118) {
-        _v1117.append(_m_FunctionDef_read(input));
+    var _f1117 = _v1115;
+    var _v1118 = Array<FunctionDef>();
+    var _n1119 = input.count();
+    for (var _ in 0.._n1119) {
+        _v1118.append(_m_FunctionDef_read(input));
     }
-    var _f1119 = _v1117;
-    var _v1120 = Array<FunctionDef>();
-    var _n1121 = input.count();
-    for (var _ in 0.._n1121) {
-        _v1120.append(_m_FunctionDef_read_with(input, lazy));
+    var _f1120 = _v1118;
+    var _v1121 = Array<FunctionDef>();
+    var _n1122 = input.count();
+    for (var _ in 0.._n1122) {
+        _v1121.append(_m_FunctionDef_read_with(input, lazy));
     }
-    var _f1122 = _v1120;
-    var _f1123 = _m_FunctionDef_read_with(input, lazy);
+    var _f1123 = _v1121;
     var _f1124 = _m_FunctionDef_read_with(input, lazy);
     var _f1125 = _m_FunctionDef_read_with(input, lazy);
-    var _v1126 = Array<TypeName>();
-    var _n1127 = input.count();
-    for (var _ in 0.._n1127) {
-        _v1126.append(_m_TypeName_read(input));
+    var _f1126 = _m_FunctionDef_read_with(input, lazy);
+    var _v1127 = Array<TypeName>();
+    var _n1128 = input.count();
+    for (var _ in 0.._n1128) {
+        _v1127.append(_m_TypeName_read(input));
     }
-    var _f1128 = _v1126;
-    var _v1129 = Array<ast.Attribute>();
-    var _n1130 = input.count();
-    for (var _ in 0.._n1130) {
-        _v1129.append(_a_Attribute_read(input));
+    var _f1129 = _v1127;
+    var _v1130 = Array<ast.Attribute>();
+    var _n1131 = input.count();
+    for (var _ in 0.._n1131) {
+        _v1130.append(_a_Attribute_read(input));
     }
-    var _f1131 = _v1129;
-    var _f1132 = input.loc();
-    var _o1133 = Optional<Array<EnumCaseDef>>.Empty;
+    var _f1132 = _v1130;
+    var _f1133 = input.loc();
+    var _o1134 = Optional<Array<EnumCaseDef>>.Empty;
     if (input.unsigned() == 1) {
-        var _v1134 = Array<EnumCaseDef>();
-        var _n1135 = input.count();
-        for (var _ in 0.._n1135) {
-            _v1134.append(_m_EnumCaseDef_read(input));
+        var _v1135 = Array<EnumCaseDef>();
+        var _n1136 = input.count();
+        for (var _ in 0.._n1136) {
+            _v1135.append(_m_EnumCaseDef_read(input));
         }
-        _o1133 = Optional<Array<EnumCaseDef>>.Value(_v1134);
+        _o1134 = Optional<Array<EnumCaseDef>>.Value(_v1135);
     }
-    var _f1136 = _o1133;
+    var _f1137 = _o1134;
     return StructDef(
-        _f1106, _f1107, _f1110, _f1113, _f1116, _f1119, _f1122, _f1123, _f1124, _f1125, _f1128, _f1131, _f1132, _f1136
+        _f1107, _f1108, _f1111, _f1114, _f1117, _f1120, _f1123, _f1124, _f1125, _f1126, _f1129, _f1132, _f1133, _f1137
     );
 }
 
@@ -6236,82 +6244,82 @@ _m_EnumCaseDef_write(out: RecordOut, value: EnumCaseDef) {
     out.text(value.name);
     out.signed(value.value as long);
     out.unsigned(value.payload.count);
-    for (var _item1137 in value.payload) {
-        var (_t1138, _t1139) = _item1137;
-        out.text(_t1138);
-        out.loc(_t1139);
+    for (var _item1138 in value.payload) {
+        var (_t1139, _t1140) = _item1138;
+        out.text(_t1139);
+        out.loc(_t1140);
     }
     out.unsigned(value.attributes.count);
-    for (var _item1140 in value.attributes) {
-        _a_Attribute_write(out, _item1140);
+    for (var _item1141 in value.attributes) {
+        _a_Attribute_write(out, _item1141);
     }
     out.loc(value.loc);
 }
 
 _m_EnumCaseDef_read(input: RecordIn): EnumCaseDef {
-    var _f1141 = input.text();
-    var _f1142 = input.signed();
-    var _v1143 = Array<(String, Loc)>();
-    var _n1144 = input.count();
-    for (var _ in 0.._n1144) {
-        var _t1145 = input.text();
-        var _t1146 = input.loc();
-        _v1143.append((_t1145, _t1146));
+    var _f1142 = input.text();
+    var _f1143 = input.signed();
+    var _v1144 = Array<(String, Loc)>();
+    var _n1145 = input.count();
+    for (var _ in 0.._n1145) {
+        var _t1146 = input.text();
+        var _t1147 = input.loc();
+        _v1144.append((_t1146, _t1147));
     }
-    var _f1147 = _v1143;
-    var _v1148 = Array<ast.Attribute>();
-    var _n1149 = input.count();
-    for (var _ in 0.._n1149) {
-        _v1148.append(_a_Attribute_read(input));
+    var _f1148 = _v1144;
+    var _v1149 = Array<ast.Attribute>();
+    var _n1150 = input.count();
+    for (var _ in 0.._n1150) {
+        _v1149.append(_a_Attribute_read(input));
     }
-    var _f1150 = _v1148;
-    var _f1151 = input.loc();
-    return EnumCaseDef(_f1141, _f1142, _f1147, _f1150, _f1151);
+    var _f1151 = _v1149;
+    var _f1152 = input.loc();
+    return EnumCaseDef(_f1142, _f1143, _f1148, _f1151, _f1152);
 }
 
 _m_ExtensionScopes_write(out: RecordOut, value: ExtensionScopes) {
-    var _keys1153 = Array<(u8[], u8[], uint)>();
-    for (var _key1152 in value.prelude) {
-        var _scratch1154 = out.scratch();
-        _scratch1154.unsigned(_key1152 as ulong);
-        var _vscratch1156 = out.scratch();
-        _keys1153.append((_scratch1154.finish(), _vscratch1156.finish(), _key1152));
+    var _keys1154 = Array<(u8[], u8[], uint)>();
+    for (var _key1153 in value.prelude) {
+        var _scratch1155 = out.scratch();
+        _scratch1155.unsigned(_key1153 as ulong);
+        var _vscratch1157 = out.scratch();
+        _keys1154.append((_scratch1155.finish(), _vscratch1157.finish(), _key1153));
     }
-    _keys1153.sort((a, b) => {
+    _keys1154.sort((a, b) => {
         var (x, xv, _) = a;
         var (y, yv, _) = b;
         var by_key = compare_bytes(x, y);
         return by_key != 0 ? by_key : compare_bytes(xv, yv);
     });
-    out.unsigned(_keys1153.count);
-    for (var (_bytes1155, _, _key1152) in _keys1153) {
-        out.unsigned(_key1152 as ulong);
+    out.unsigned(_keys1154.count);
+    for (var (_bytes1156, _, _key1153) in _keys1154) {
+        out.unsigned(_key1153 as ulong);
     }
     out.unsigned(value.visible.count);
-    for (var _item1157 in value.visible) {
-        var _keys1159 = Array<(u8[], u8[], uint)>();
-        for (var _key1158 in _item1157) {
-            var _scratch1160 = out.scratch();
-            _scratch1160.unsigned(_key1158 as ulong);
-            var _vscratch1162 = out.scratch();
-            _keys1159.append((_scratch1160.finish(), _vscratch1162.finish(), _key1158));
+    for (var _item1158 in value.visible) {
+        var _keys1160 = Array<(u8[], u8[], uint)>();
+        for (var _key1159 in _item1158) {
+            var _scratch1161 = out.scratch();
+            _scratch1161.unsigned(_key1159 as ulong);
+            var _vscratch1163 = out.scratch();
+            _keys1160.append((_scratch1161.finish(), _vscratch1163.finish(), _key1159));
         }
-        _keys1159.sort((a, b) => {
+        _keys1160.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys1159.count);
-        for (var (_bytes1161, _, _key1158) in _keys1159) {
-            out.unsigned(_key1158 as ulong);
+        out.unsigned(_keys1160.count);
+        for (var (_bytes1162, _, _key1159) in _keys1160) {
+            out.unsigned(_key1159 as ulong);
         }
     }
     out.unsigned(value.module.count);
-    for (var _item1163 in value.module) {
-        if (_item1163.is_value()) {
+    for (var _item1164 in value.module) {
+        if (_item1164.is_value()) {
             out.unsigned(1);
-            out.unsigned(_item1163.value() as ulong);
+            out.unsigned(_item1164.value() as ulong);
         } else {
             out.unsigned(0);
         }
@@ -6319,34 +6327,34 @@ _m_ExtensionScopes_write(out: RecordOut, value: ExtensionScopes) {
 }
 
 _m_ExtensionScopes_read(input: RecordIn): ExtensionScopes {
-    var _v1164 = HashSet<uint>();
-    var _n1165 = input.count();
-    for (var _ in 0.._n1165) {
-        _v1164.insert(input.unsigned() as uint);
+    var _v1165 = HashSet<uint>();
+    var _n1166 = input.count();
+    for (var _ in 0.._n1166) {
+        _v1165.insert(input.unsigned() as uint);
     }
-    var _f1166 = _v1164;
-    var _v1167 = Array<HashSet<uint>>();
-    var _n1168 = input.count();
-    for (var _ in 0.._n1168) {
-        var _v1169 = HashSet<uint>();
-        var _n1170 = input.count();
-        for (var _ in 0.._n1170) {
-            _v1169.insert(input.unsigned() as uint);
+    var _f1167 = _v1165;
+    var _v1168 = Array<HashSet<uint>>();
+    var _n1169 = input.count();
+    for (var _ in 0.._n1169) {
+        var _v1170 = HashSet<uint>();
+        var _n1171 = input.count();
+        for (var _ in 0.._n1171) {
+            _v1170.insert(input.unsigned() as uint);
         }
-        _v1167.append(_v1169);
+        _v1168.append(_v1170);
     }
-    var _f1171 = _v1167;
-    var _v1172 = Array<Optional<uint>>();
-    var _n1173 = input.count();
-    for (var _ in 0.._n1173) {
-        var _o1174 = Optional<uint>.Empty;
+    var _f1172 = _v1168;
+    var _v1173 = Array<Optional<uint>>();
+    var _n1174 = input.count();
+    for (var _ in 0.._n1174) {
+        var _o1175 = Optional<uint>.Empty;
         if (input.unsigned() == 1) {
-            _o1174 = Optional<uint>.Value(input.unsigned() as uint);
+            _o1175 = Optional<uint>.Value(input.unsigned() as uint);
         }
-        _v1172.append(_o1174);
+        _v1173.append(_o1175);
     }
-    var _f1175 = _v1172;
-    return ExtensionScopes(_f1166, _f1171, _f1175);
+    var _f1176 = _v1173;
+    return ExtensionScopes(_f1167, _f1172, _f1176);
 }
 
 _m_Conversion_write(out: RecordOut, value: Conversion) {
@@ -6357,36 +6365,36 @@ _m_Conversion_write(out: RecordOut, value: Conversion) {
 }
 
 _m_Conversion_read(input: RecordIn): Conversion {
-    var _f1176 = input.loc();
-    var _f1177 = _m_TypeName_read(input);
+    var _f1177 = input.loc();
     var _f1178 = _m_TypeName_read(input);
-    var _f1179 = input.loc();
-    return Conversion(_f1176, _f1177, _f1178, _f1179);
+    var _f1179 = _m_TypeName_read(input);
+    var _f1180 = input.loc();
+    return Conversion(_f1177, _f1178, _f1179, _f1180);
 }
 
 _m_TraitType_write(out: RecordOut, value: TraitType) {
     _m_TypeName_write(out, value.ty);
     out.unsigned(value.methods.count);
-    for (var _item1180 in value.methods) {
-        _m_FunctionDef_write(out, _item1180);
+    for (var _item1181 in value.methods) {
+        _m_FunctionDef_write(out, _item1181);
     }
 }
 
 _m_TraitType_read(input: RecordIn): TraitType {
-    var _f1181 = _m_TypeName_read(input);
-    var _v1182 = Array<FunctionDef>();
-    var _n1183 = input.count();
-    for (var _ in 0.._n1183) {
-        _v1182.append(_m_FunctionDef_read(input));
+    var _f1182 = _m_TypeName_read(input);
+    var _v1183 = Array<FunctionDef>();
+    var _n1184 = input.count();
+    for (var _ in 0.._n1184) {
+        _v1183.append(_m_FunctionDef_read(input));
     }
-    var _f1184 = _v1182;
-    return TraitType(_f1181, _f1184);
+    var _f1185 = _v1183;
+    return TraitType(_f1182, _f1185);
 }
 
 _m_UseContext_write(out: RecordOut, value: UseContext) {
     out.unsigned(value.scope.count);
-    for (var _item1185 in value.scope) {
-        _m_GenericParam_write(out, _item1185);
+    for (var _item1186 in value.scope) {
+        _m_GenericParam_write(out, _item1186);
     }
     if (value.extension.is_value()) {
         out.unsigned(1);
@@ -6395,51 +6403,51 @@ _m_UseContext_write(out: RecordOut, value: UseContext) {
         out.unsigned(0);
     }
     out.unsigned(value.conditions.count);
-    for (var _item1186 in value.conditions) {
-        _a_Attribute_write(out, _item1186);
+    for (var _item1187 in value.conditions) {
+        _a_Attribute_write(out, _item1187);
     }
 }
 
 _m_UseContext_read(input: RecordIn): UseContext {
-    var _v1187 = Array<GenericParam>();
-    var _n1188 = input.count();
-    for (var _ in 0.._n1188) {
-        _v1187.append(_m_GenericParam_read(input));
+    var _v1188 = Array<GenericParam>();
+    var _n1189 = input.count();
+    for (var _ in 0.._n1189) {
+        _v1188.append(_m_GenericParam_read(input));
     }
-    var _f1189 = _v1187;
-    var _o1190 = Optional<TypeName>.Empty;
+    var _f1190 = _v1188;
+    var _o1191 = Optional<TypeName>.Empty;
     if (input.unsigned() == 1) {
-        _o1190 = Optional<TypeName>.Value(_m_TypeName_read(input));
+        _o1191 = Optional<TypeName>.Value(_m_TypeName_read(input));
     }
-    var _f1191 = _o1190;
-    var _v1192 = Array<ast.Attribute>();
-    var _n1193 = input.count();
-    for (var _ in 0.._n1193) {
-        _v1192.append(_a_Attribute_read(input));
+    var _f1192 = _o1191;
+    var _v1193 = Array<ast.Attribute>();
+    var _n1194 = input.count();
+    for (var _ in 0.._n1194) {
+        _v1193.append(_a_Attribute_read(input));
     }
-    var _f1194 = _v1192;
-    return UseContext(_f1189, _f1191, _f1194);
+    var _f1195 = _v1193;
+    return UseContext(_f1190, _f1192, _f1195);
 }
 
 _m_TypeUse_write(out: RecordOut, value: TypeUse) {
     _m_TypeName_write(out, value.ty);
     out.unsigned(value.args.count);
-    for (var _item1195 in value.args) {
-        out.loc(_item1195);
+    for (var _item1196 in value.args) {
+        out.loc(_item1196);
     }
     out.unsigned(value.context);
 }
 
 _m_TypeUse_read(input: RecordIn): TypeUse {
-    var _f1196 = _m_TypeName_read(input);
-    var _v1197 = Array<Loc>();
-    var _n1198 = input.count();
-    for (var _ in 0.._n1198) {
-        _v1197.append(input.loc());
+    var _f1197 = _m_TypeName_read(input);
+    var _v1198 = Array<Loc>();
+    var _n1199 = input.count();
+    for (var _ in 0.._n1199) {
+        _v1198.append(input.loc());
     }
-    var _f1199 = _v1197;
-    var _f1200 = input.unsigned();
-    return TypeUse(_f1196, _f1199, _f1200);
+    var _f1200 = _v1198;
+    var _f1201 = input.unsigned();
+    return TypeUse(_f1197, _f1200, _f1201);
 }
 
 _m_PropertyDef_write(out: RecordOut, value: PropertyDef) {
@@ -6465,24 +6473,24 @@ _m_PropertyDef_write(out: RecordOut, value: PropertyDef) {
 }
 
 _m_PropertyDef_read(input: RecordIn): PropertyDef {
-    var _f1201 = input.text();
     var _f1202 = input.text();
-    var _f1203 = input.flag();
-    var _f1204 = input.loc();
-    var _f1205 = _m_AccessorKind_read(input);
-    var _o1206 = Optional<AccessorKind>.Empty;
+    var _f1203 = input.text();
+    var _f1204 = input.flag();
+    var _f1205 = input.loc();
+    var _f1206 = _m_AccessorKind_read(input);
+    var _o1207 = Optional<AccessorKind>.Empty;
     if (input.unsigned() == 1) {
-        _o1206 = Optional<AccessorKind>.Value(_m_AccessorKind_read(input));
+        _o1207 = Optional<AccessorKind>.Value(_m_AccessorKind_read(input));
     }
-    var _f1207 = _o1206;
-    var _f1208 = input.loc();
-    var _o1209 = Optional<String>.Empty;
+    var _f1208 = _o1207;
+    var _f1209 = input.loc();
+    var _o1210 = Optional<String>.Empty;
     if (input.unsigned() == 1) {
-        _o1209 = Optional<String>.Value(input.text());
+        _o1210 = Optional<String>.Value(input.text());
     }
-    var _f1210 = _o1209;
-    var _f1211 = input.flag();
-    return PropertyDef(_f1201, _f1202, _f1203, _f1204, _f1205, _f1207, _f1208, _f1210, _f1211);
+    var _f1211 = _o1210;
+    var _f1212 = input.flag();
+    return PropertyDef(_f1202, _f1203, _f1204, _f1205, _f1206, _f1208, _f1209, _f1211, _f1212);
 }
 
 _m_AccessorKind_write(out: RecordOut, value: AccessorKind) {
@@ -6519,70 +6527,70 @@ _m_Withheld_write(out: RecordOut, value: Withheld) {
 }
 
 _m_Withheld_read(input: RecordIn): Withheld {
-    var _f1212 = input.text();
     var _f1213 = input.text();
     var _f1214 = input.text();
-    var _f1215 = input.unsigned();
-    var _f1216 = _m_TypeName_read(input);
+    var _f1215 = input.text();
+    var _f1216 = input.unsigned();
     var _f1217 = _m_TypeName_read(input);
-    var _f1218 = input.loc();
-    return Withheld(_f1212, _f1213, _f1214, _f1215, _f1216, _f1217, _f1218);
+    var _f1218 = _m_TypeName_read(input);
+    var _f1219 = input.loc();
+    return Withheld(_f1213, _f1214, _f1215, _f1216, _f1217, _f1218, _f1219);
 }
 
 _m_EnumDef_write(out: RecordOut, value: EnumDef) {
     out.text(value.name);
     _m_TypeName_write(out, value.representation);
     out.unsigned(value.cases.count);
-    for (var _item1219 in value.cases) {
-        _m_EnumCaseDef_write(out, _item1219);
+    for (var _item1220 in value.cases) {
+        _m_EnumCaseDef_write(out, _item1220);
     }
     out.unsigned(value.attributes.count);
-    for (var _item1220 in value.attributes) {
-        _a_Attribute_write(out, _item1220);
+    for (var _item1221 in value.attributes) {
+        _a_Attribute_write(out, _item1221);
     }
     out.loc(value.loc);
 }
 
 _m_EnumDef_read(input: RecordIn): EnumDef {
-    var _f1221 = input.text();
-    var _f1222 = _m_TypeName_read(input);
-    var _v1223 = Array<EnumCaseDef>();
-    var _n1224 = input.count();
-    for (var _ in 0.._n1224) {
-        _v1223.append(_m_EnumCaseDef_read(input));
+    var _f1222 = input.text();
+    var _f1223 = _m_TypeName_read(input);
+    var _v1224 = Array<EnumCaseDef>();
+    var _n1225 = input.count();
+    for (var _ in 0.._n1225) {
+        _v1224.append(_m_EnumCaseDef_read(input));
     }
-    var _f1225 = _v1223;
-    var _v1226 = Array<ast.Attribute>();
-    var _n1227 = input.count();
-    for (var _ in 0.._n1227) {
-        _v1226.append(_a_Attribute_read(input));
+    var _f1226 = _v1224;
+    var _v1227 = Array<ast.Attribute>();
+    var _n1228 = input.count();
+    for (var _ in 0.._n1228) {
+        _v1227.append(_a_Attribute_read(input));
     }
-    var _f1228 = _v1226;
-    var _f1229 = input.loc();
-    return EnumDef(_f1221, _f1222, _f1225, _f1228, _f1229);
+    var _f1229 = _v1227;
+    var _f1230 = input.loc();
+    return EnumDef(_f1222, _f1223, _f1226, _f1229, _f1230);
 }
 
 _m_ModuleStaticBlock_write(out: RecordOut, value: ModuleStaticBlock) {
     _m_StaticBlock_write(out, value.block);
     out.unsigned(value.constants.count);
-    for (var _item1230 in value.constants) {
-        var (_t1231, _t1232) = _item1230;
-        out.text(_t1231);
-        out.loc(_t1232);
+    for (var _item1231 in value.constants) {
+        var (_t1232, _t1233) = _item1231;
+        out.text(_t1232);
+        out.loc(_t1233);
     }
 }
 
 _m_ModuleStaticBlock_read(input: RecordIn): ModuleStaticBlock {
-    var _f1233 = _m_StaticBlock_read(input);
-    var _v1234 = Array<(String, Loc)>();
-    var _n1235 = input.count();
-    for (var _ in 0.._n1235) {
-        var _t1236 = input.text();
-        var _t1237 = input.loc();
-        _v1234.append((_t1236, _t1237));
+    var _f1234 = _m_StaticBlock_read(input);
+    var _v1235 = Array<(String, Loc)>();
+    var _n1236 = input.count();
+    for (var _ in 0.._n1236) {
+        var _t1237 = input.text();
+        var _t1238 = input.loc();
+        _v1235.append((_t1237, _t1238));
     }
-    var _f1238 = _v1234;
-    return ModuleStaticBlock(_f1233, _f1238);
+    var _f1239 = _v1235;
+    return ModuleStaticBlock(_f1234, _f1239);
 }
 
 _a_Import_write(out: RecordOut, value: ast.Import) {
@@ -6599,59 +6607,59 @@ _a_Import_write(out: RecordOut, value: ast.Import) {
     if (value.symbols.is_value()) {
         out.unsigned(1);
         out.unsigned(value.symbols.value().count);
-        for (var _item1239 in value.symbols.value()) {
-            _a_ImportedSymbol_write(out, _item1239);
+        for (var _item1240 in value.symbols.value()) {
+            _a_ImportedSymbol_write(out, _item1240);
         }
     } else {
         out.unsigned(0);
     }
     out.flag(value.reexport);
     out.unsigned(value.attributes.count);
-    for (var _item1240 in value.attributes) {
-        _a_Attribute_write(out, _item1240);
+    for (var _item1241 in value.attributes) {
+        _a_Attribute_write(out, _item1241);
     }
     out.unsigned(out.blank_locs ? 0 : value.span.start);
     out.unsigned(out.blank_locs ? 0 : value.span.end);
 }
 
 _a_Import_read(input: RecordIn): ast.Import {
-    var _f1241 = input.text();
-    var _s1242 = input.unsigned();
-    var _f1243 = ast.Span(_s1242, input.unsigned());
-    var _o1244 = Optional<String>.Empty;
+    var _f1242 = input.text();
+    var _s1243 = input.unsigned();
+    var _f1244 = ast.Span(_s1243, input.unsigned());
+    var _o1245 = Optional<String>.Empty;
     if (input.unsigned() == 1) {
-        _o1244 = Optional<String>.Value(input.text());
+        _o1245 = Optional<String>.Value(input.text());
     }
-    var _f1245 = _o1244;
-    var _f1246 = input.flag();
-    var _o1247 = Optional<Array<ast.ImportedSymbol>>.Empty;
+    var _f1246 = _o1245;
+    var _f1247 = input.flag();
+    var _o1248 = Optional<Array<ast.ImportedSymbol>>.Empty;
     if (input.unsigned() == 1) {
-        var _v1248 = Array<ast.ImportedSymbol>();
-        var _n1249 = input.count();
-        for (var _ in 0.._n1249) {
-            _v1248.append(_a_ImportedSymbol_read(input));
+        var _v1249 = Array<ast.ImportedSymbol>();
+        var _n1250 = input.count();
+        for (var _ in 0.._n1250) {
+            _v1249.append(_a_ImportedSymbol_read(input));
         }
-        _o1247 = Optional<Array<ast.ImportedSymbol>>.Value(_v1248);
+        _o1248 = Optional<Array<ast.ImportedSymbol>>.Value(_v1249);
     }
-    var _f1250 = _o1247;
-    var _f1251 = input.flag();
-    var _v1252 = Array<ast.Attribute>();
-    var _n1253 = input.count();
-    for (var _ in 0.._n1253) {
-        _v1252.append(_a_Attribute_read(input));
+    var _f1251 = _o1248;
+    var _f1252 = input.flag();
+    var _v1253 = Array<ast.Attribute>();
+    var _n1254 = input.count();
+    for (var _ in 0.._n1254) {
+        _v1253.append(_a_Attribute_read(input));
     }
-    var _f1254 = _v1252;
-    var _s1255 = input.unsigned();
-    var _f1256 = ast.Span(_s1255, input.unsigned());
+    var _f1255 = _v1253;
+    var _s1256 = input.unsigned();
+    var _f1257 = ast.Span(_s1256, input.unsigned());
     var value = ast.Import();
-    value.name = _f1241;
-    value.name_span = _f1243;
-    value.alias = _f1245;
-    value.is_local = _f1246;
-    value.symbols = _f1250;
-    value.reexport = _f1251;
-    value.attributes = _f1254;
-    value.span = _f1256;
+    value.name = _f1242;
+    value.name_span = _f1244;
+    value.alias = _f1246;
+    value.is_local = _f1247;
+    value.symbols = _f1251;
+    value.reexport = _f1252;
+    value.attributes = _f1255;
+    value.span = _f1257;
     return value;
 }
 
@@ -6670,55 +6678,55 @@ _a_ImportedSymbol_write(out: RecordOut, value: ast.ImportedSymbol) {
 }
 
 _a_ImportedSymbol_read(input: RecordIn): ast.ImportedSymbol {
-    var _f1257 = input.text();
-    var _s1258 = input.unsigned();
-    var _f1259 = ast.Span(_s1258, input.unsigned());
-    var _o1260 = Optional<String>.Empty;
+    var _f1258 = input.text();
+    var _s1259 = input.unsigned();
+    var _f1260 = ast.Span(_s1259, input.unsigned());
+    var _o1261 = Optional<String>.Empty;
     if (input.unsigned() == 1) {
-        _o1260 = Optional<String>.Value(input.text());
+        _o1261 = Optional<String>.Value(input.text());
     }
-    var _f1261 = _o1260;
-    var _s1262 = input.unsigned();
-    var _f1263 = ast.Span(_s1262, input.unsigned());
+    var _f1262 = _o1261;
+    var _s1263 = input.unsigned();
+    var _f1264 = ast.Span(_s1263, input.unsigned());
     var value = ast.ImportedSymbol();
-    value.name = _f1257;
-    value.name_span = _f1259;
-    value.alias = _f1261;
-    value.span = _f1263;
+    value.name = _f1258;
+    value.name_span = _f1260;
+    value.alias = _f1262;
+    value.span = _f1264;
     return value;
 }
 
 _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     ulong _mark = out.values.count;
-    var _hs1488 = Array<String>();
-    for (var _item1483 in value.imports) {
+    var _hs1489 = Array<String>();
+    for (var _item1484 in value.imports) {
         var scratch = base.scratch();
-        _a_Import_write(scratch, _item1483);
-        _hs1488.append(base.hash_of(scratch));
+        _a_Import_write(scratch, _item1484);
+        _hs1489.append(base.hash_of(scratch));
     }
-    var _seq1489 = base.sequence("imports");
-    ulong _bj1490 = 0;
-    var _news1491 = Array<ulong>();
-    for (var _i1492 in 0.._hs1488.count) {
-        if (_bj1490 < _seq1489.count and _hs1488[_i1492] == _seq1489[_bj1490]) {
-            _bj1490 += 1;
+    var _seq1490 = base.sequence("imports");
+    ulong _bj1491 = 0;
+    var _news1492 = Array<ulong>();
+    for (var _i1493 in 0.._hs1489.count) {
+        if (_bj1491 < _seq1490.count and _hs1489[_i1493] == _seq1490[_bj1491]) {
+            _bj1491 += 1;
         } else {
-            _news1491.append(_i1492);
+            _news1492.append(_i1493);
         }
     }
-    if (_bj1490 == _seq1489.count) {
+    if (_bj1491 == _seq1490.count) {
         out.unsigned(2);
-        out.unsigned(_news1491.count);
-        for (var _i1492 in _news1491) {
-            out.unsigned(_i1492);
-            _a_Import_write(out, value.imports[_i1492]);
+        out.unsigned(_news1492.count);
+        for (var _i1493 in _news1492) {
+            out.unsigned(_i1493);
+            _a_Import_write(out, value.imports[_i1493]);
             {
-                var _own1493 = RecordOut();
-                _own1493.blank_bodies = true;
-                _own1493.blank_locs = true;
-                _own1493.pending_as_bytes = true;
-                _a_Import_write(_own1493, value.imports[_i1492]);
-                base.own("imports", interface_text(_own1493));
+                var _own1494 = RecordOut();
+                _own1494.blank_bodies = true;
+                _own1494.blank_locs = true;
+                _own1494.pending_as_bytes = true;
+                _a_Import_write(_own1494, value.imports[_i1493]);
+                base.own("imports", interface_text(_own1494));
             }
         }
         base.count("imports" + " merged", 0);
@@ -6728,140 +6736,140 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("imports" + " whole", 0);
         out.unsigned(value.imports.count);
-        for (var _i1492 in 0..value.imports.count) {
-            _a_Import_write(out, value.imports[_i1492]);
+        for (var _i1493 in 0..value.imports.count) {
+            _a_Import_write(out, value.imports[_i1493]);
             {
-                var _own1494 = RecordOut();
-                _own1494.blank_bodies = true;
-                _own1494.blank_locs = true;
-                _own1494.pending_as_bytes = true;
-                _a_Import_write(_own1494, value.imports[_i1492]);
-                base.own("imports", interface_text(_own1494));
+                var _own1495 = RecordOut();
+                _own1495.blank_bodies = true;
+                _own1495.blank_locs = true;
+                _own1495.pending_as_bytes = true;
+                _a_Import_write(_own1495, value.imports[_i1493]);
+                base.own("imports", interface_text(_own1495));
             }
         }
     }
     base.stat("imports", out.values.count - _mark);
     _mark = out.values.count;
-    var _seq1504 = base.ref_structs;
-    ulong _bj1505 = 0;
-    var _news1507 = Array<ulong>();
-    var _patches1508 = Array<(ulong, ulong)>();
-    for (var _i1509 in 0..value.structs.count) {
-        if (_bj1505 < _seq1504.count
-            and value.structs[_i1509] === _seq1504[_bj1505]
-            and !value.extended_checked.contains(value.structs[_i1509].name)) {
+    var _seq1505 = base.ref_structs;
+    ulong _bj1506 = 0;
+    var _news1508 = Array<ulong>();
+    var _patches1509 = Array<(ulong, ulong)>();
+    for (var _i1510 in 0..value.structs.count) {
+        if (_bj1506 < _seq1505.count
+            and value.structs[_i1510] === _seq1505[_bj1506]
+            and !value.extended_checked.contains(value.structs[_i1510].name)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_StructDef_write(scratch, value.structs[_i1509]);
-                base.verify_same("s", _bj1505, scratch, value.structs[_i1509].name);
+                _m_StructDef_write(scratch, value.structs[_i1510]);
+                base.verify_same("s", _bj1506, scratch, value.structs[_i1510].name);
             }
-            _bj1505 += 1;
-        } else if (_bj1505 < _seq1504.count
-            and !(value.structs[_i1509] === _seq1504[_bj1505])
-            and _same_m_StructDef(value.structs[_i1509], _seq1504[_bj1505], base)) {
+            _bj1506 += 1;
+        } else if (_bj1506 < _seq1505.count
+            and !(value.structs[_i1510] === _seq1505[_bj1506])
+            and _same_m_StructDef(value.structs[_i1510], _seq1505[_bj1506], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_StructDef_write(scratch, value.structs[_i1509]);
-                base.verify_same("s", _bj1505, scratch, value.structs[_i1509].name);
+                _m_StructDef_write(scratch, value.structs[_i1510]);
+                base.verify_same("s", _bj1506, scratch, value.structs[_i1510].name);
             }
-            _bj1505 += 1;
-        } else if (_bj1505 < _seq1504.count and value.structs[_i1509].name == _seq1504[_bj1505].name) {
-            _patches1508.append((_i1509, _bj1505));
-            _bj1505 += 1;
+            _bj1506 += 1;
+        } else if (_bj1506 < _seq1505.count and value.structs[_i1510].name == _seq1505[_bj1506].name) {
+            _patches1509.append((_i1510, _bj1506));
+            _bj1506 += 1;
         } else {
-            _news1507.append(_i1509);
+            _news1508.append(_i1510);
         }
     }
-    if (_bj1505 == _seq1504.count) {
+    if (_bj1506 == _seq1505.count) {
         out.unsigned(2);
-        out.unsigned(_patches1508.count);
-        for (var (_i1509, _b) in _patches1508) {
+        out.unsigned(_patches1509.count);
+        for (var (_i1510, _b) in _patches1509) {
             ulong _before = out.values.count;
-            out.text(value.structs[_i1509].name);
+            out.text(value.structs[_i1510].name);
             out.unsigned(_b);
-            _patch_s_write(out, value.structs[_i1509], base, _b);
+            _patch_s_write(out, value.structs[_i1510], base, _b);
             base.count("s patched", out.values.count - _before);
             {
-                var _own1510 = RecordOut();
-                _own1510.blank_bodies = true;
-                _own1510.blank_locs = true;
-                _own1510.pending_as_bytes = true;
-                var _s1511 = value.structs[_i1509];
-                var _methods1512 = _s1511.method_members;
-                _s1511.method_members = Array<FunctionDef>();
-                var _fields1513 = _s1511.field_members;
-                var split__fields1513 = splits_fields(_s1511);
-                if (split__fields1513) {
-                    _s1511.field_members = Array<VariableDef>();
+                var _own1511 = RecordOut();
+                _own1511.blank_bodies = true;
+                _own1511.blank_locs = true;
+                _own1511.pending_as_bytes = true;
+                var _s1512 = value.structs[_i1510];
+                var _methods1513 = _s1512.method_members;
+                _s1512.method_members = Array<FunctionDef>();
+                var _fields1514 = _s1512.field_members;
+                var split__fields1514 = splits_fields(_s1512);
+                if (split__fields1514) {
+                    _s1512.field_members = Array<VariableDef>();
                 }
-                _m_StructDef_write(_own1510, _s1511);
-                _s1511.method_members = _methods1512;
-                _s1511.field_members = _fields1513;
-                base.own_named("structs", _s1511.name, interface_text(_own1510));
-                for (var _m1514 in _methods1512) {
-                    var _own1515 = RecordOut();
-                    _own1515.blank_bodies = true;
-                    _own1515.blank_locs = true;
-                    _own1515.pending_as_bytes = true;
-                    _m_FunctionDef_write(_own1515, _m1514);
-                    base.own_method("structs", _s1511.name, _m1514.name, interface_text(_own1515));
+                _m_StructDef_write(_own1511, _s1512);
+                _s1512.method_members = _methods1513;
+                _s1512.field_members = _fields1514;
+                base.own_named("structs", _s1512.name, interface_text(_own1511));
+                for (var _m1515 in _methods1513) {
+                    var _own1516 = RecordOut();
+                    _own1516.blank_bodies = true;
+                    _own1516.blank_locs = true;
+                    _own1516.pending_as_bytes = true;
+                    _m_FunctionDef_write(_own1516, _m1515);
+                    base.own_method("structs", _s1512.name, _m1515.name, interface_text(_own1516));
                 }
-                if (split__fields1513) {
-                    var _order1517 = StringBuilder();
-                    for (var _f1516 in _fields1513) {
-                        var _own1518 = RecordOut();
-                        _own1518.blank_locs = true;
-                        _m_VariableDef_write(_own1518, _f1516);
-                        base.own_method("structs", _s1511.name, "." + _f1516.name, interface_text(_own1518));
-                        _order1517.append(_f1516.name);
-                        _order1517.append(",");
+                if (split__fields1514) {
+                    var _order1518 = StringBuilder();
+                    for (var _f1517 in _fields1514) {
+                        var _own1519 = RecordOut();
+                        _own1519.blank_locs = true;
+                        _m_VariableDef_write(_own1519, _f1517);
+                        base.own_method("structs", _s1512.name, "." + _f1517.name, interface_text(_own1519));
+                        _order1518.append(_f1517.name);
+                        _order1518.append(",");
                     }
-                    base.own_method("structs", _s1511.name, ".#order", _order1517.to_string());
+                    base.own_method("structs", _s1512.name, ".#order", _order1518.to_string());
                 }
             }
         }
-        out.unsigned(_news1507.count);
-        for (var _i1509 in _news1507) {
+        out.unsigned(_news1508.count);
+        for (var _i1510 in _news1508) {
             ulong _before = out.values.count;
-            out.unsigned(_i1509);
-            _m_StructDef_write(out, value.structs[_i1509]);
+            out.unsigned(_i1510);
+            _m_StructDef_write(out, value.structs[_i1510]);
             base.count("s new", out.values.count - _before);
             {
-                var _own1519 = RecordOut();
-                _own1519.blank_bodies = true;
-                _own1519.blank_locs = true;
-                _own1519.pending_as_bytes = true;
-                var _s1520 = value.structs[_i1509];
-                var _methods1521 = _s1520.method_members;
-                _s1520.method_members = Array<FunctionDef>();
-                var _fields1522 = _s1520.field_members;
-                var split__fields1522 = splits_fields(_s1520);
-                if (split__fields1522) {
-                    _s1520.field_members = Array<VariableDef>();
+                var _own1520 = RecordOut();
+                _own1520.blank_bodies = true;
+                _own1520.blank_locs = true;
+                _own1520.pending_as_bytes = true;
+                var _s1521 = value.structs[_i1510];
+                var _methods1522 = _s1521.method_members;
+                _s1521.method_members = Array<FunctionDef>();
+                var _fields1523 = _s1521.field_members;
+                var split__fields1523 = splits_fields(_s1521);
+                if (split__fields1523) {
+                    _s1521.field_members = Array<VariableDef>();
                 }
-                _m_StructDef_write(_own1519, _s1520);
-                _s1520.method_members = _methods1521;
-                _s1520.field_members = _fields1522;
-                base.own_named("structs", _s1520.name, interface_text(_own1519));
-                for (var _m1523 in _methods1521) {
-                    var _own1524 = RecordOut();
-                    _own1524.blank_bodies = true;
-                    _own1524.blank_locs = true;
-                    _own1524.pending_as_bytes = true;
-                    _m_FunctionDef_write(_own1524, _m1523);
-                    base.own_method("structs", _s1520.name, _m1523.name, interface_text(_own1524));
+                _m_StructDef_write(_own1520, _s1521);
+                _s1521.method_members = _methods1522;
+                _s1521.field_members = _fields1523;
+                base.own_named("structs", _s1521.name, interface_text(_own1520));
+                for (var _m1524 in _methods1522) {
+                    var _own1525 = RecordOut();
+                    _own1525.blank_bodies = true;
+                    _own1525.blank_locs = true;
+                    _own1525.pending_as_bytes = true;
+                    _m_FunctionDef_write(_own1525, _m1524);
+                    base.own_method("structs", _s1521.name, _m1524.name, interface_text(_own1525));
                 }
-                if (split__fields1522) {
-                    var _order1526 = StringBuilder();
-                    for (var _f1525 in _fields1522) {
-                        var _own1527 = RecordOut();
-                        _own1527.blank_locs = true;
-                        _m_VariableDef_write(_own1527, _f1525);
-                        base.own_method("structs", _s1520.name, "." + _f1525.name, interface_text(_own1527));
-                        _order1526.append(_f1525.name);
-                        _order1526.append(",");
+                if (split__fields1523) {
+                    var _order1527 = StringBuilder();
+                    for (var _f1526 in _fields1523) {
+                        var _own1528 = RecordOut();
+                        _own1528.blank_locs = true;
+                        _m_VariableDef_write(_own1528, _f1526);
+                        base.own_method("structs", _s1521.name, "." + _f1526.name, interface_text(_own1528));
+                        _order1527.append(_f1526.name);
+                        _order1527.append(",");
                     }
-                    base.own_method("structs", _s1520.name, ".#order", _order1526.to_string());
+                    base.own_method("structs", _s1521.name, ".#order", _order1527.to_string());
                 }
             }
         }
@@ -6869,73 +6877,73 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     } else {
         out.unsigned(1);
         base.count("s by place", 0);
-        var _struct_hits1503 = HashSet<long>();
-        var _slots1506 = HashMap<String, long>();
-        for (var _i1509 in 0.._seq1504.count) {
-            if (!_slots1506.contains(_seq1504[_i1509].name)) {
-                _slots1506[_seq1504[_i1509].name] = _i1509 as long;
+        var _struct_hits1504 = HashSet<long>();
+        var _slots1507 = HashMap<String, long>();
+        for (var _i1510 in 0.._seq1505.count) {
+            if (!_slots1507.contains(_seq1505[_i1510].name)) {
+                _slots1507[_seq1505[_i1510].name] = _i1510 as long;
             }
         }
         out.unsigned(value.structs.count);
-        for (var _i1509 in 0..value.structs.count) {
-            var _item1502 = value.structs[_i1509];
-            var _slot = _slots1506.try_get(_item1502.name);
+        for (var _i1510 in 0..value.structs.count) {
+            var _item1503 = value.structs[_i1510];
+            var _slot = _slots1507.try_get(_item1503.name);
             long named = _slot.is_value() ? _slot.value() : -1;
             long at = -1;
             if (named >= 0
-                and _seq1504[named as ulong] === _item1502
-                and !value.extended_checked.contains(_item1502.name)) {
+                and _seq1505[named as ulong] === _item1503
+                and !value.extended_checked.contains(_item1503.name)) {
                 at = named;
             }
             ulong _before = out.values.count;
             if (at >= 0) {
-                _struct_hits1503.insert(at);
+                _struct_hits1504.insert(at);
                 out.unsigned((at as ulong) * 2 + 1);
             } else if (named >= 0) {
-                _struct_hits1503.insert(named);
+                _struct_hits1504.insert(named);
                 out.unsigned(2);
                 out.unsigned(named as ulong);
-                _patch_s_write(out, _item1502, base, named as ulong);
+                _patch_s_write(out, _item1503, base, named as ulong);
                 base.count("s patched", out.values.count - _before);
             } else {
                 out.unsigned(0);
-                _m_StructDef_write(out, _item1502);
+                _m_StructDef_write(out, _item1503);
                 base.count("s new", out.values.count - _before);
             }
         }
-        base.missed("s", "s", _struct_hits1503.count);
+        base.missed("s", "s", _struct_hits1504.count);
     }
     base.stat("structs", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1541 = Array<String>();
-    for (var _item1536 in value.traits) {
+    var _hs1542 = Array<String>();
+    for (var _item1537 in value.traits) {
         var scratch = base.scratch();
-        _m_TraitDef_write(scratch, _item1536);
-        _hs1541.append(base.hash_of(scratch));
+        _m_TraitDef_write(scratch, _item1537);
+        _hs1542.append(base.hash_of(scratch));
     }
-    var _seq1542 = base.sequence("traits");
-    ulong _bj1543 = 0;
-    var _news1544 = Array<ulong>();
-    for (var _i1545 in 0.._hs1541.count) {
-        if (_bj1543 < _seq1542.count and _hs1541[_i1545] == _seq1542[_bj1543]) {
-            _bj1543 += 1;
+    var _seq1543 = base.sequence("traits");
+    ulong _bj1544 = 0;
+    var _news1545 = Array<ulong>();
+    for (var _i1546 in 0.._hs1542.count) {
+        if (_bj1544 < _seq1543.count and _hs1542[_i1546] == _seq1543[_bj1544]) {
+            _bj1544 += 1;
         } else {
-            _news1544.append(_i1545);
+            _news1545.append(_i1546);
         }
     }
-    if (_bj1543 == _seq1542.count) {
+    if (_bj1544 == _seq1543.count) {
         out.unsigned(2);
-        out.unsigned(_news1544.count);
-        for (var _i1545 in _news1544) {
-            out.unsigned(_i1545);
-            _m_TraitDef_write(out, value.traits[_i1545]);
+        out.unsigned(_news1545.count);
+        for (var _i1546 in _news1545) {
+            out.unsigned(_i1546);
+            _m_TraitDef_write(out, value.traits[_i1546]);
             {
-                var _own1546 = RecordOut();
-                _own1546.blank_bodies = false;
-                _own1546.blank_locs = true;
-                _own1546.pending_as_bytes = true;
-                _m_TraitDef_write(_own1546, value.traits[_i1545]);
-                base.own("traits", interface_text(_own1546));
+                var _own1547 = RecordOut();
+                _own1547.blank_bodies = false;
+                _own1547.blank_locs = true;
+                _own1547.pending_as_bytes = true;
+                _m_TraitDef_write(_own1547, value.traits[_i1546]);
+                base.own("traits", interface_text(_own1547));
             }
         }
         base.count("traits" + " merged", 0);
@@ -6945,49 +6953,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("traits" + " whole", 0);
         out.unsigned(value.traits.count);
-        for (var _i1545 in 0..value.traits.count) {
-            _m_TraitDef_write(out, value.traits[_i1545]);
+        for (var _i1546 in 0..value.traits.count) {
+            _m_TraitDef_write(out, value.traits[_i1546]);
             {
-                var _own1547 = RecordOut();
-                _own1547.blank_bodies = false;
-                _own1547.blank_locs = true;
-                _own1547.pending_as_bytes = true;
-                _m_TraitDef_write(_own1547, value.traits[_i1545]);
-                base.own("traits", interface_text(_own1547));
+                var _own1548 = RecordOut();
+                _own1548.blank_bodies = false;
+                _own1548.blank_locs = true;
+                _own1548.pending_as_bytes = true;
+                _m_TraitDef_write(_own1548, value.traits[_i1546]);
+                base.own("traits", interface_text(_own1548));
             }
         }
     }
     base.stat("traits", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1560 = Array<String>();
-    for (var _item1555 in value.extensions) {
+    var _hs1561 = Array<String>();
+    for (var _item1556 in value.extensions) {
         var scratch = base.scratch();
-        _m_ExtensionDef_write(scratch, _item1555);
-        _hs1560.append(base.hash_of(scratch));
+        _m_ExtensionDef_write(scratch, _item1556);
+        _hs1561.append(base.hash_of(scratch));
     }
-    var _seq1561 = base.sequence("extensions");
-    ulong _bj1562 = 0;
-    var _news1563 = Array<ulong>();
-    for (var _i1564 in 0.._hs1560.count) {
-        if (_bj1562 < _seq1561.count and _hs1560[_i1564] == _seq1561[_bj1562]) {
-            _bj1562 += 1;
+    var _seq1562 = base.sequence("extensions");
+    ulong _bj1563 = 0;
+    var _news1564 = Array<ulong>();
+    for (var _i1565 in 0.._hs1561.count) {
+        if (_bj1563 < _seq1562.count and _hs1561[_i1565] == _seq1562[_bj1563]) {
+            _bj1563 += 1;
         } else {
-            _news1563.append(_i1564);
+            _news1564.append(_i1565);
         }
     }
-    if (_bj1562 == _seq1561.count) {
+    if (_bj1563 == _seq1562.count) {
         out.unsigned(2);
-        out.unsigned(_news1563.count);
-        for (var _i1564 in _news1563) {
-            out.unsigned(_i1564);
-            _m_ExtensionDef_write(out, value.extensions[_i1564]);
+        out.unsigned(_news1564.count);
+        for (var _i1565 in _news1564) {
+            out.unsigned(_i1565);
+            _m_ExtensionDef_write(out, value.extensions[_i1565]);
             {
-                var _own1565 = RecordOut();
-                _own1565.blank_bodies = true;
-                _own1565.blank_locs = true;
-                _own1565.pending_as_bytes = true;
-                _m_ExtensionDef_write(_own1565, value.extensions[_i1564]);
-                base.own("extensions", interface_text(_own1565));
+                var _own1566 = RecordOut();
+                _own1566.blank_bodies = true;
+                _own1566.blank_locs = true;
+                _own1566.pending_as_bytes = true;
+                _m_ExtensionDef_write(_own1566, value.extensions[_i1565]);
+                base.own("extensions", interface_text(_own1566));
             }
         }
         base.count("extensions" + " merged", 0);
@@ -6997,74 +7005,74 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("extensions" + " whole", 0);
         out.unsigned(value.extensions.count);
-        for (var _i1564 in 0..value.extensions.count) {
-            _m_ExtensionDef_write(out, value.extensions[_i1564]);
+        for (var _i1565 in 0..value.extensions.count) {
+            _m_ExtensionDef_write(out, value.extensions[_i1565]);
             {
-                var _own1566 = RecordOut();
-                _own1566.blank_bodies = true;
-                _own1566.blank_locs = true;
-                _own1566.pending_as_bytes = true;
-                _m_ExtensionDef_write(_own1566, value.extensions[_i1564]);
-                base.own("extensions", interface_text(_own1566));
+                var _own1567 = RecordOut();
+                _own1567.blank_bodies = true;
+                _own1567.blank_locs = true;
+                _own1567.pending_as_bytes = true;
+                _m_ExtensionDef_write(_own1567, value.extensions[_i1565]);
+                base.own("extensions", interface_text(_own1567));
             }
         }
     }
     base.stat("extensions", out.values.count - _mark);
     _mark = out.values.count;
-    var _seq1579 = base.ref_functions;
-    ulong _bj1580 = 0;
-    var _news1581 = Array<ulong>();
-    var _changed1575 = Array<(ulong, ulong)>();
-    for (var _i1582 in 0..value.functions.count) {
-        if (_bj1580 < _seq1579.count and value.functions[_i1582] === _seq1579[_bj1580]) {
+    var _seq1580 = base.ref_functions;
+    ulong _bj1581 = 0;
+    var _news1582 = Array<ulong>();
+    var _changed1576 = Array<(ulong, ulong)>();
+    for (var _i1583 in 0..value.functions.count) {
+        if (_bj1581 < _seq1580.count and value.functions[_i1583] === _seq1580[_bj1581]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.functions[_i1582]);
-                base.verify_same("functions", _bj1580, scratch);
+                _m_FunctionDef_write(scratch, value.functions[_i1583]);
+                base.verify_same("functions", _bj1581, scratch);
             }
-            _bj1580 += 1;
-        } else if (_bj1580 < _seq1579.count and _same_m_FunctionDef(value.functions[_i1582], _seq1579[_bj1580], base)) {
+            _bj1581 += 1;
+        } else if (_bj1581 < _seq1580.count and _same_m_FunctionDef(value.functions[_i1583], _seq1580[_bj1581], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.functions[_i1582]);
-                base.verify_same("functions", _bj1580, scratch);
+                _m_FunctionDef_write(scratch, value.functions[_i1583]);
+                base.verify_same("functions", _bj1581, scratch);
             }
-            _bj1580 += 1;
-        } else if (_bj1580 < _seq1579.count and value.functions[_i1582].name == _seq1579[_bj1580].name) {
-            _changed1575.append((_i1582, _bj1580));
-            _bj1580 += 1;
+            _bj1581 += 1;
+        } else if (_bj1581 < _seq1580.count and value.functions[_i1583].name == _seq1580[_bj1581].name) {
+            _changed1576.append((_i1583, _bj1581));
+            _bj1581 += 1;
         } else {
-            _news1581.append(_i1582);
+            _news1582.append(_i1583);
         }
     }
-    if (_bj1580 == _seq1579.count) {
+    if (_bj1581 == _seq1580.count) {
         out.unsigned(2);
-        out.unsigned(_changed1575.count);
-        for (var (_i1582, _b) in _changed1575) {
-            out.text(value.functions[_i1582].name);
+        out.unsigned(_changed1576.count);
+        for (var (_i1583, _b) in _changed1576) {
+            out.text(value.functions[_i1583].name);
             out.unsigned(_b);
-            _m_FunctionDef_write(out, value.functions[_i1582]);
-            {
-                var _own1583 = RecordOut();
-                _own1583.blank_bodies = true;
-                _own1583.blank_locs = true;
-                _own1583.pending_as_bytes = true;
-                _m_FunctionDef_write(_own1583, value.functions[_i1582]);
-                base.own_function("functions", value.functions[_i1582], interface_text(_own1583));
-            }
-        }
-        base.count("functions" + " changed", _changed1575.count);
-        out.unsigned(_news1581.count);
-        for (var _i1582 in _news1581) {
-            out.unsigned(_i1582);
-            _m_FunctionDef_write(out, value.functions[_i1582]);
+            _m_FunctionDef_write(out, value.functions[_i1583]);
             {
                 var _own1584 = RecordOut();
                 _own1584.blank_bodies = true;
                 _own1584.blank_locs = true;
                 _own1584.pending_as_bytes = true;
-                _m_FunctionDef_write(_own1584, value.functions[_i1582]);
-                base.own_function("functions", value.functions[_i1582], interface_text(_own1584));
+                _m_FunctionDef_write(_own1584, value.functions[_i1583]);
+                base.own_function("functions", value.functions[_i1583], interface_text(_own1584));
+            }
+        }
+        base.count("functions" + " changed", _changed1576.count);
+        out.unsigned(_news1582.count);
+        for (var _i1583 in _news1582) {
+            out.unsigned(_i1583);
+            _m_FunctionDef_write(out, value.functions[_i1583]);
+            {
+                var _own1585 = RecordOut();
+                _own1585.blank_bodies = true;
+                _own1585.blank_locs = true;
+                _own1585.pending_as_bytes = true;
+                _m_FunctionDef_write(_own1585, value.functions[_i1583]);
+                base.own_function("functions", value.functions[_i1583], interface_text(_own1585));
             }
         }
         base.count("functions" + " merged", 0);
@@ -7074,49 +7082,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("functions" + " whole", 0);
         out.unsigned(value.functions.count);
-        for (var _i1582 in 0..value.functions.count) {
-            _m_FunctionDef_write(out, value.functions[_i1582]);
+        for (var _i1583 in 0..value.functions.count) {
+            _m_FunctionDef_write(out, value.functions[_i1583]);
             {
-                var _own1585 = RecordOut();
-                _own1585.blank_bodies = true;
-                _own1585.blank_locs = true;
-                _own1585.pending_as_bytes = true;
-                _m_FunctionDef_write(_own1585, value.functions[_i1582]);
-                base.own_function("functions", value.functions[_i1582], interface_text(_own1585));
+                var _own1586 = RecordOut();
+                _own1586.blank_bodies = true;
+                _own1586.blank_locs = true;
+                _own1586.pending_as_bytes = true;
+                _m_FunctionDef_write(_own1586, value.functions[_i1583]);
+                base.own_function("functions", value.functions[_i1583], interface_text(_own1586));
             }
         }
     }
     base.stat("functions", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1598 = Array<String>();
-    for (var _item1593 in value.externs) {
+    var _hs1599 = Array<String>();
+    for (var _item1594 in value.externs) {
         var scratch = base.scratch();
-        _m_ExternDef_write(scratch, _item1593);
-        _hs1598.append(base.hash_of(scratch));
+        _m_ExternDef_write(scratch, _item1594);
+        _hs1599.append(base.hash_of(scratch));
     }
-    var _seq1599 = base.sequence("externs");
-    ulong _bj1600 = 0;
-    var _news1601 = Array<ulong>();
-    for (var _i1602 in 0.._hs1598.count) {
-        if (_bj1600 < _seq1599.count and _hs1598[_i1602] == _seq1599[_bj1600]) {
-            _bj1600 += 1;
+    var _seq1600 = base.sequence("externs");
+    ulong _bj1601 = 0;
+    var _news1602 = Array<ulong>();
+    for (var _i1603 in 0.._hs1599.count) {
+        if (_bj1601 < _seq1600.count and _hs1599[_i1603] == _seq1600[_bj1601]) {
+            _bj1601 += 1;
         } else {
-            _news1601.append(_i1602);
+            _news1602.append(_i1603);
         }
     }
-    if (_bj1600 == _seq1599.count) {
+    if (_bj1601 == _seq1600.count) {
         out.unsigned(2);
-        out.unsigned(_news1601.count);
-        for (var _i1602 in _news1601) {
-            out.unsigned(_i1602);
-            _m_ExternDef_write(out, value.externs[_i1602]);
+        out.unsigned(_news1602.count);
+        for (var _i1603 in _news1602) {
+            out.unsigned(_i1603);
+            _m_ExternDef_write(out, value.externs[_i1603]);
             {
-                var _own1603 = RecordOut();
-                _own1603.blank_bodies = true;
-                _own1603.blank_locs = true;
-                _own1603.pending_as_bytes = true;
-                _m_ExternDef_write(_own1603, value.externs[_i1602]);
-                base.own("externs", interface_text(_own1603));
+                var _own1604 = RecordOut();
+                _own1604.blank_bodies = true;
+                _own1604.blank_locs = true;
+                _own1604.pending_as_bytes = true;
+                _m_ExternDef_write(_own1604, value.externs[_i1603]);
+                base.own("externs", interface_text(_own1604));
             }
         }
         base.count("externs" + " merged", 0);
@@ -7126,49 +7134,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("externs" + " whole", 0);
         out.unsigned(value.externs.count);
-        for (var _i1602 in 0..value.externs.count) {
-            _m_ExternDef_write(out, value.externs[_i1602]);
+        for (var _i1603 in 0..value.externs.count) {
+            _m_ExternDef_write(out, value.externs[_i1603]);
             {
-                var _own1604 = RecordOut();
-                _own1604.blank_bodies = true;
-                _own1604.blank_locs = true;
-                _own1604.pending_as_bytes = true;
-                _m_ExternDef_write(_own1604, value.externs[_i1602]);
-                base.own("externs", interface_text(_own1604));
+                var _own1605 = RecordOut();
+                _own1605.blank_bodies = true;
+                _own1605.blank_locs = true;
+                _own1605.pending_as_bytes = true;
+                _m_ExternDef_write(_own1605, value.externs[_i1603]);
+                base.own("externs", interface_text(_own1605));
             }
         }
     }
     base.stat("externs", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1617 = Array<String>();
-    for (var _item1612 in value.globals) {
+    var _hs1618 = Array<String>();
+    for (var _item1613 in value.globals) {
         var scratch = base.scratch();
-        _m_VariableDef_write(scratch, _item1612);
-        _hs1617.append(base.hash_of(scratch));
+        _m_VariableDef_write(scratch, _item1613);
+        _hs1618.append(base.hash_of(scratch));
     }
-    var _seq1618 = base.sequence("globals");
-    ulong _bj1619 = 0;
-    var _news1620 = Array<ulong>();
-    for (var _i1621 in 0.._hs1617.count) {
-        if (_bj1619 < _seq1618.count and _hs1617[_i1621] == _seq1618[_bj1619]) {
-            _bj1619 += 1;
+    var _seq1619 = base.sequence("globals");
+    ulong _bj1620 = 0;
+    var _news1621 = Array<ulong>();
+    for (var _i1622 in 0.._hs1618.count) {
+        if (_bj1620 < _seq1619.count and _hs1618[_i1622] == _seq1619[_bj1620]) {
+            _bj1620 += 1;
         } else {
-            _news1620.append(_i1621);
+            _news1621.append(_i1622);
         }
     }
-    if (_bj1619 == _seq1618.count) {
+    if (_bj1620 == _seq1619.count) {
         out.unsigned(2);
-        out.unsigned(_news1620.count);
-        for (var _i1621 in _news1620) {
-            out.unsigned(_i1621);
-            _m_VariableDef_write(out, value.globals[_i1621]);
+        out.unsigned(_news1621.count);
+        for (var _i1622 in _news1621) {
+            out.unsigned(_i1622);
+            _m_VariableDef_write(out, value.globals[_i1622]);
             {
-                var _own1622 = RecordOut();
-                _own1622.blank_bodies = true;
-                _own1622.blank_locs = true;
-                _own1622.pending_as_bytes = true;
-                _m_VariableDef_write(_own1622, value.globals[_i1621]);
-                base.own("globals", interface_text(_own1622));
+                var _own1623 = RecordOut();
+                _own1623.blank_bodies = true;
+                _own1623.blank_locs = true;
+                _own1623.pending_as_bytes = true;
+                _m_VariableDef_write(_own1623, value.globals[_i1622]);
+                base.own("globals", interface_text(_own1623));
             }
         }
         base.count("globals" + " merged", 0);
@@ -7178,49 +7186,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("globals" + " whole", 0);
         out.unsigned(value.globals.count);
-        for (var _i1621 in 0..value.globals.count) {
-            _m_VariableDef_write(out, value.globals[_i1621]);
+        for (var _i1622 in 0..value.globals.count) {
+            _m_VariableDef_write(out, value.globals[_i1622]);
             {
-                var _own1623 = RecordOut();
-                _own1623.blank_bodies = true;
-                _own1623.blank_locs = true;
-                _own1623.pending_as_bytes = true;
-                _m_VariableDef_write(_own1623, value.globals[_i1621]);
-                base.own("globals", interface_text(_own1623));
+                var _own1624 = RecordOut();
+                _own1624.blank_bodies = true;
+                _own1624.blank_locs = true;
+                _own1624.pending_as_bytes = true;
+                _m_VariableDef_write(_own1624, value.globals[_i1622]);
+                base.own("globals", interface_text(_own1624));
             }
         }
     }
     base.stat("globals", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1636 = Array<String>();
-    for (var _item1631 in value.static_blocks) {
+    var _hs1637 = Array<String>();
+    for (var _item1632 in value.static_blocks) {
         var scratch = base.scratch();
-        _m_ModuleStaticBlock_write(scratch, _item1631);
-        _hs1636.append(base.hash_of(scratch));
+        _m_ModuleStaticBlock_write(scratch, _item1632);
+        _hs1637.append(base.hash_of(scratch));
     }
-    var _seq1637 = base.sequence("static_blocks");
-    ulong _bj1638 = 0;
-    var _news1639 = Array<ulong>();
-    for (var _i1640 in 0.._hs1636.count) {
-        if (_bj1638 < _seq1637.count and _hs1636[_i1640] == _seq1637[_bj1638]) {
-            _bj1638 += 1;
+    var _seq1638 = base.sequence("static_blocks");
+    ulong _bj1639 = 0;
+    var _news1640 = Array<ulong>();
+    for (var _i1641 in 0.._hs1637.count) {
+        if (_bj1639 < _seq1638.count and _hs1637[_i1641] == _seq1638[_bj1639]) {
+            _bj1639 += 1;
         } else {
-            _news1639.append(_i1640);
+            _news1640.append(_i1641);
         }
     }
-    if (_bj1638 == _seq1637.count) {
+    if (_bj1639 == _seq1638.count) {
         out.unsigned(2);
-        out.unsigned(_news1639.count);
-        for (var _i1640 in _news1639) {
-            out.unsigned(_i1640);
-            _m_ModuleStaticBlock_write(out, value.static_blocks[_i1640]);
+        out.unsigned(_news1640.count);
+        for (var _i1641 in _news1640) {
+            out.unsigned(_i1641);
+            _m_ModuleStaticBlock_write(out, value.static_blocks[_i1641]);
             {
-                var _own1641 = RecordOut();
-                _own1641.blank_bodies = true;
-                _own1641.blank_locs = true;
-                _own1641.pending_as_bytes = true;
-                _m_ModuleStaticBlock_write(_own1641, value.static_blocks[_i1640]);
-                base.own("static_blocks", interface_text(_own1641));
+                var _own1642 = RecordOut();
+                _own1642.blank_bodies = true;
+                _own1642.blank_locs = true;
+                _own1642.pending_as_bytes = true;
+                _m_ModuleStaticBlock_write(_own1642, value.static_blocks[_i1641]);
+                base.own("static_blocks", interface_text(_own1642));
             }
         }
         base.count("static_blocks" + " merged", 0);
@@ -7230,49 +7238,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("static_blocks" + " whole", 0);
         out.unsigned(value.static_blocks.count);
-        for (var _i1640 in 0..value.static_blocks.count) {
-            _m_ModuleStaticBlock_write(out, value.static_blocks[_i1640]);
+        for (var _i1641 in 0..value.static_blocks.count) {
+            _m_ModuleStaticBlock_write(out, value.static_blocks[_i1641]);
             {
-                var _own1642 = RecordOut();
-                _own1642.blank_bodies = true;
-                _own1642.blank_locs = true;
-                _own1642.pending_as_bytes = true;
-                _m_ModuleStaticBlock_write(_own1642, value.static_blocks[_i1640]);
-                base.own("static_blocks", interface_text(_own1642));
+                var _own1643 = RecordOut();
+                _own1643.blank_bodies = true;
+                _own1643.blank_locs = true;
+                _own1643.pending_as_bytes = true;
+                _m_ModuleStaticBlock_write(_own1643, value.static_blocks[_i1641]);
+                base.own("static_blocks", interface_text(_own1643));
             }
         }
     }
     base.stat("static_blocks", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1655 = Array<String>();
-    for (var _item1650 in value.enums) {
+    var _hs1656 = Array<String>();
+    for (var _item1651 in value.enums) {
         var scratch = base.scratch();
-        _m_EnumDef_write(scratch, _item1650);
-        _hs1655.append(base.hash_of(scratch));
+        _m_EnumDef_write(scratch, _item1651);
+        _hs1656.append(base.hash_of(scratch));
     }
-    var _seq1656 = base.sequence("enums");
-    ulong _bj1657 = 0;
-    var _news1658 = Array<ulong>();
-    for (var _i1659 in 0.._hs1655.count) {
-        if (_bj1657 < _seq1656.count and _hs1655[_i1659] == _seq1656[_bj1657]) {
-            _bj1657 += 1;
+    var _seq1657 = base.sequence("enums");
+    ulong _bj1658 = 0;
+    var _news1659 = Array<ulong>();
+    for (var _i1660 in 0.._hs1656.count) {
+        if (_bj1658 < _seq1657.count and _hs1656[_i1660] == _seq1657[_bj1658]) {
+            _bj1658 += 1;
         } else {
-            _news1658.append(_i1659);
+            _news1659.append(_i1660);
         }
     }
-    if (_bj1657 == _seq1656.count) {
+    if (_bj1658 == _seq1657.count) {
         out.unsigned(2);
-        out.unsigned(_news1658.count);
-        for (var _i1659 in _news1658) {
-            out.unsigned(_i1659);
-            _m_EnumDef_write(out, value.enums[_i1659]);
+        out.unsigned(_news1659.count);
+        for (var _i1660 in _news1659) {
+            out.unsigned(_i1660);
+            _m_EnumDef_write(out, value.enums[_i1660]);
             {
-                var _own1660 = RecordOut();
-                _own1660.blank_bodies = true;
-                _own1660.blank_locs = true;
-                _own1660.pending_as_bytes = true;
-                _m_EnumDef_write(_own1660, value.enums[_i1659]);
-                base.own_named("enums", value.enums[_i1659].name, interface_text(_own1660));
+                var _own1661 = RecordOut();
+                _own1661.blank_bodies = true;
+                _own1661.blank_locs = true;
+                _own1661.pending_as_bytes = true;
+                _m_EnumDef_write(_own1661, value.enums[_i1660]);
+                base.own_named("enums", value.enums[_i1660].name, interface_text(_own1661));
             }
         }
         base.count("enums" + " merged", 0);
@@ -7282,49 +7290,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("enums" + " whole", 0);
         out.unsigned(value.enums.count);
-        for (var _i1659 in 0..value.enums.count) {
-            _m_EnumDef_write(out, value.enums[_i1659]);
+        for (var _i1660 in 0..value.enums.count) {
+            _m_EnumDef_write(out, value.enums[_i1660]);
             {
-                var _own1661 = RecordOut();
-                _own1661.blank_bodies = true;
-                _own1661.blank_locs = true;
-                _own1661.pending_as_bytes = true;
-                _m_EnumDef_write(_own1661, value.enums[_i1659]);
-                base.own_named("enums", value.enums[_i1659].name, interface_text(_own1661));
+                var _own1662 = RecordOut();
+                _own1662.blank_bodies = true;
+                _own1662.blank_locs = true;
+                _own1662.pending_as_bytes = true;
+                _m_EnumDef_write(_own1662, value.enums[_i1660]);
+                base.own_named("enums", value.enums[_i1660].name, interface_text(_own1662));
             }
         }
     }
     base.stat("enums", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1674 = Array<String>();
-    for (var _item1669 in value.struct_specs) {
+    var _hs1675 = Array<String>();
+    for (var _item1670 in value.struct_specs) {
         var scratch = base.scratch();
-        _m_TypeName_write(scratch, _item1669);
-        _hs1674.append(base.hash_of(scratch));
+        _m_TypeName_write(scratch, _item1670);
+        _hs1675.append(base.hash_of(scratch));
     }
-    var _seq1675 = base.sequence("struct_specs");
-    ulong _bj1676 = 0;
-    var _news1677 = Array<ulong>();
-    for (var _i1678 in 0.._hs1674.count) {
-        if (_bj1676 < _seq1675.count and _hs1674[_i1678] == _seq1675[_bj1676]) {
-            _bj1676 += 1;
+    var _seq1676 = base.sequence("struct_specs");
+    ulong _bj1677 = 0;
+    var _news1678 = Array<ulong>();
+    for (var _i1679 in 0.._hs1675.count) {
+        if (_bj1677 < _seq1676.count and _hs1675[_i1679] == _seq1676[_bj1677]) {
+            _bj1677 += 1;
         } else {
-            _news1677.append(_i1678);
+            _news1678.append(_i1679);
         }
     }
-    if (_bj1676 == _seq1675.count) {
+    if (_bj1677 == _seq1676.count) {
         out.unsigned(2);
-        out.unsigned(_news1677.count);
-        for (var _i1678 in _news1677) {
-            out.unsigned(_i1678);
-            _m_TypeName_write(out, value.struct_specs[_i1678]);
+        out.unsigned(_news1678.count);
+        for (var _i1679 in _news1678) {
+            out.unsigned(_i1679);
+            _m_TypeName_write(out, value.struct_specs[_i1679]);
             {
-                var _own1679 = RecordOut();
-                _own1679.blank_bodies = true;
-                _own1679.blank_locs = true;
-                _own1679.pending_as_bytes = true;
-                _m_TypeName_write(_own1679, value.struct_specs[_i1678]);
-                base.own("struct_specs", interface_text(_own1679));
+                var _own1680 = RecordOut();
+                _own1680.blank_bodies = true;
+                _own1680.blank_locs = true;
+                _own1680.pending_as_bytes = true;
+                _m_TypeName_write(_own1680, value.struct_specs[_i1679]);
+                base.own("struct_specs", interface_text(_own1680));
             }
         }
         base.count("struct_specs" + " merged", 0);
@@ -7334,49 +7342,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("struct_specs" + " whole", 0);
         out.unsigned(value.struct_specs.count);
-        for (var _i1678 in 0..value.struct_specs.count) {
-            _m_TypeName_write(out, value.struct_specs[_i1678]);
+        for (var _i1679 in 0..value.struct_specs.count) {
+            _m_TypeName_write(out, value.struct_specs[_i1679]);
             {
-                var _own1680 = RecordOut();
-                _own1680.blank_bodies = true;
-                _own1680.blank_locs = true;
-                _own1680.pending_as_bytes = true;
-                _m_TypeName_write(_own1680, value.struct_specs[_i1678]);
-                base.own("struct_specs", interface_text(_own1680));
+                var _own1681 = RecordOut();
+                _own1681.blank_bodies = true;
+                _own1681.blank_locs = true;
+                _own1681.pending_as_bytes = true;
+                _m_TypeName_write(_own1681, value.struct_specs[_i1679]);
+                base.own("struct_specs", interface_text(_own1681));
             }
         }
     }
     base.stat("struct_specs", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1693 = Array<String>();
-    for (var _item1688 in value.func_specs) {
+    var _hs1694 = Array<String>();
+    for (var _item1689 in value.func_specs) {
         var scratch = base.scratch();
-        _m_TypeName_write(scratch, _item1688);
-        _hs1693.append(base.hash_of(scratch));
+        _m_TypeName_write(scratch, _item1689);
+        _hs1694.append(base.hash_of(scratch));
     }
-    var _seq1694 = base.sequence("func_specs");
-    ulong _bj1695 = 0;
-    var _news1696 = Array<ulong>();
-    for (var _i1697 in 0.._hs1693.count) {
-        if (_bj1695 < _seq1694.count and _hs1693[_i1697] == _seq1694[_bj1695]) {
-            _bj1695 += 1;
+    var _seq1695 = base.sequence("func_specs");
+    ulong _bj1696 = 0;
+    var _news1697 = Array<ulong>();
+    for (var _i1698 in 0.._hs1694.count) {
+        if (_bj1696 < _seq1695.count and _hs1694[_i1698] == _seq1695[_bj1696]) {
+            _bj1696 += 1;
         } else {
-            _news1696.append(_i1697);
+            _news1697.append(_i1698);
         }
     }
-    if (_bj1695 == _seq1694.count) {
+    if (_bj1696 == _seq1695.count) {
         out.unsigned(2);
-        out.unsigned(_news1696.count);
-        for (var _i1697 in _news1696) {
-            out.unsigned(_i1697);
-            _m_TypeName_write(out, value.func_specs[_i1697]);
+        out.unsigned(_news1697.count);
+        for (var _i1698 in _news1697) {
+            out.unsigned(_i1698);
+            _m_TypeName_write(out, value.func_specs[_i1698]);
             {
-                var _own1698 = RecordOut();
-                _own1698.blank_bodies = true;
-                _own1698.blank_locs = true;
-                _own1698.pending_as_bytes = true;
-                _m_TypeName_write(_own1698, value.func_specs[_i1697]);
-                base.own("func_specs", interface_text(_own1698));
+                var _own1699 = RecordOut();
+                _own1699.blank_bodies = true;
+                _own1699.blank_locs = true;
+                _own1699.pending_as_bytes = true;
+                _m_TypeName_write(_own1699, value.func_specs[_i1698]);
+                base.own("func_specs", interface_text(_own1699));
             }
         }
         base.count("func_specs" + " merged", 0);
@@ -7386,67 +7394,67 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("func_specs" + " whole", 0);
         out.unsigned(value.func_specs.count);
-        for (var _i1697 in 0..value.func_specs.count) {
-            _m_TypeName_write(out, value.func_specs[_i1697]);
+        for (var _i1698 in 0..value.func_specs.count) {
+            _m_TypeName_write(out, value.func_specs[_i1698]);
             {
-                var _own1699 = RecordOut();
-                _own1699.blank_bodies = true;
-                _own1699.blank_locs = true;
-                _own1699.pending_as_bytes = true;
-                _m_TypeName_write(_own1699, value.func_specs[_i1697]);
-                base.own("func_specs", interface_text(_own1699));
+                var _own1700 = RecordOut();
+                _own1700.blank_bodies = true;
+                _own1700.blank_locs = true;
+                _own1700.pending_as_bytes = true;
+                _m_TypeName_write(_own1700, value.func_specs[_i1698]);
+                base.own("func_specs", interface_text(_own1700));
             }
         }
     }
     base.stat("func_specs", out.values.count - _mark);
     _mark = out.values.count;
-    var _hits1711 = HashSet<long>();
+    var _hits1712 = HashSet<long>();
     out.unsigned(value.type_aliases.count);
-    for (var _item1707 in value.type_aliases) {
+    for (var _item1708 in value.type_aliases) {
         var scratch = base.scratch();
-        _m_TypeAliasDef_write(scratch, _item1707);
+        _m_TypeAliasDef_write(scratch, _item1708);
         var hash = base.hash_of(scratch);
         var at = base.find_hashed("type_aliases", hash);
         if (at >= 0) {
-            _hits1711.insert(at);
+            _hits1712.insert(at);
             out.unsigned((at as ulong) * 2 + 1);
         } else {
             out.unsigned(0);
-            _m_TypeAliasDef_write(out, _item1707);
+            _m_TypeAliasDef_write(out, _item1708);
         }
     }
-    base.missed("type_aliases", "type_aliases", _hits1711.count);
+    base.missed("type_aliases", "type_aliases", _hits1712.count);
     base.stat("type_aliases", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1721 = Array<String>();
-    for (var _item1716 in value.withheld) {
+    var _hs1722 = Array<String>();
+    for (var _item1717 in value.withheld) {
         var scratch = base.scratch();
-        _m_Withheld_write(scratch, _item1716);
-        _hs1721.append(base.hash_of(scratch));
+        _m_Withheld_write(scratch, _item1717);
+        _hs1722.append(base.hash_of(scratch));
     }
-    var _seq1722 = base.sequence("withheld");
-    ulong _bj1723 = 0;
-    var _news1724 = Array<ulong>();
-    for (var _i1725 in 0.._hs1721.count) {
-        if (_bj1723 < _seq1722.count and _hs1721[_i1725] == _seq1722[_bj1723]) {
-            _bj1723 += 1;
+    var _seq1723 = base.sequence("withheld");
+    ulong _bj1724 = 0;
+    var _news1725 = Array<ulong>();
+    for (var _i1726 in 0.._hs1722.count) {
+        if (_bj1724 < _seq1723.count and _hs1722[_i1726] == _seq1723[_bj1724]) {
+            _bj1724 += 1;
         } else {
-            _news1724.append(_i1725);
+            _news1725.append(_i1726);
         }
     }
-    if (_bj1723 == _seq1722.count) {
+    if (_bj1724 == _seq1723.count) {
         out.unsigned(2);
-        out.unsigned(_news1724.count);
-        for (var _i1725 in _news1724) {
-            out.unsigned(_i1725);
-            _m_Withheld_write(out, value.withheld[_i1725]);
+        out.unsigned(_news1725.count);
+        for (var _i1726 in _news1725) {
+            out.unsigned(_i1726);
+            _m_Withheld_write(out, value.withheld[_i1726]);
             {
-                var _own1726 = RecordOut();
-                _own1726.blank_bodies = true;
-                _own1726.blank_locs = true;
-                _own1726.pending_as_bytes = true;
-                _m_Withheld_write(_own1726, value.withheld[_i1725]);
-                base.own("withheld", interface_text(_own1726));
+                var _own1727 = RecordOut();
+                _own1727.blank_bodies = true;
+                _own1727.blank_locs = true;
+                _own1727.pending_as_bytes = true;
+                _m_Withheld_write(_own1727, value.withheld[_i1726]);
+                base.own("withheld", interface_text(_own1727));
             }
         }
         base.count("withheld" + " merged", 0);
@@ -7456,49 +7464,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("withheld" + " whole", 0);
         out.unsigned(value.withheld.count);
-        for (var _i1725 in 0..value.withheld.count) {
-            _m_Withheld_write(out, value.withheld[_i1725]);
+        for (var _i1726 in 0..value.withheld.count) {
+            _m_Withheld_write(out, value.withheld[_i1726]);
             {
-                var _own1727 = RecordOut();
-                _own1727.blank_bodies = true;
-                _own1727.blank_locs = true;
-                _own1727.pending_as_bytes = true;
-                _m_Withheld_write(_own1727, value.withheld[_i1725]);
-                base.own("withheld", interface_text(_own1727));
+                var _own1728 = RecordOut();
+                _own1728.blank_bodies = true;
+                _own1728.blank_locs = true;
+                _own1728.pending_as_bytes = true;
+                _m_Withheld_write(_own1728, value.withheld[_i1726]);
+                base.own("withheld", interface_text(_own1728));
             }
         }
     }
     base.stat("withheld", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1740 = Array<String>();
-    for (var _item1735 in value.properties) {
+    var _hs1741 = Array<String>();
+    for (var _item1736 in value.properties) {
         var scratch = base.scratch();
-        _m_PropertyDef_write(scratch, _item1735);
-        _hs1740.append(base.hash_of(scratch));
+        _m_PropertyDef_write(scratch, _item1736);
+        _hs1741.append(base.hash_of(scratch));
     }
-    var _seq1741 = base.sequence("properties");
-    ulong _bj1742 = 0;
-    var _news1743 = Array<ulong>();
-    for (var _i1744 in 0.._hs1740.count) {
-        if (_bj1742 < _seq1741.count and _hs1740[_i1744] == _seq1741[_bj1742]) {
-            _bj1742 += 1;
+    var _seq1742 = base.sequence("properties");
+    ulong _bj1743 = 0;
+    var _news1744 = Array<ulong>();
+    for (var _i1745 in 0.._hs1741.count) {
+        if (_bj1743 < _seq1742.count and _hs1741[_i1745] == _seq1742[_bj1743]) {
+            _bj1743 += 1;
         } else {
-            _news1743.append(_i1744);
+            _news1744.append(_i1745);
         }
     }
-    if (_bj1742 == _seq1741.count) {
+    if (_bj1743 == _seq1742.count) {
         out.unsigned(2);
-        out.unsigned(_news1743.count);
-        for (var _i1744 in _news1743) {
-            out.unsigned(_i1744);
-            _m_PropertyDef_write(out, value.properties[_i1744]);
+        out.unsigned(_news1744.count);
+        for (var _i1745 in _news1744) {
+            out.unsigned(_i1745);
+            _m_PropertyDef_write(out, value.properties[_i1745]);
             {
-                var _own1745 = RecordOut();
-                _own1745.blank_bodies = true;
-                _own1745.blank_locs = true;
-                _own1745.pending_as_bytes = true;
-                _m_PropertyDef_write(_own1745, value.properties[_i1744]);
-                base.own("properties", interface_text(_own1745));
+                var _own1746 = RecordOut();
+                _own1746.blank_bodies = true;
+                _own1746.blank_locs = true;
+                _own1746.pending_as_bytes = true;
+                _m_PropertyDef_write(_own1746, value.properties[_i1745]);
+                base.own("properties", interface_text(_own1746));
             }
         }
         base.count("properties" + " merged", 0);
@@ -7508,49 +7516,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("properties" + " whole", 0);
         out.unsigned(value.properties.count);
-        for (var _i1744 in 0..value.properties.count) {
-            _m_PropertyDef_write(out, value.properties[_i1744]);
+        for (var _i1745 in 0..value.properties.count) {
+            _m_PropertyDef_write(out, value.properties[_i1745]);
             {
-                var _own1746 = RecordOut();
-                _own1746.blank_bodies = true;
-                _own1746.blank_locs = true;
-                _own1746.pending_as_bytes = true;
-                _m_PropertyDef_write(_own1746, value.properties[_i1744]);
-                base.own("properties", interface_text(_own1746));
+                var _own1747 = RecordOut();
+                _own1747.blank_bodies = true;
+                _own1747.blank_locs = true;
+                _own1747.pending_as_bytes = true;
+                _m_PropertyDef_write(_own1747, value.properties[_i1745]);
+                base.own("properties", interface_text(_own1747));
             }
         }
     }
     base.stat("properties", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1759 = Array<String>();
-    for (var _item1754 in value.type_uses) {
+    var _hs1760 = Array<String>();
+    for (var _item1755 in value.type_uses) {
         var scratch = base.scratch();
-        _m_TypeUse_write(scratch, _item1754);
-        _hs1759.append(base.hash_of(scratch));
+        _m_TypeUse_write(scratch, _item1755);
+        _hs1760.append(base.hash_of(scratch));
     }
-    var _seq1760 = base.sequence("type_uses");
-    ulong _bj1761 = 0;
-    var _news1762 = Array<ulong>();
-    for (var _i1763 in 0.._hs1759.count) {
-        if (_bj1761 < _seq1760.count and _hs1759[_i1763] == _seq1760[_bj1761]) {
-            _bj1761 += 1;
+    var _seq1761 = base.sequence("type_uses");
+    ulong _bj1762 = 0;
+    var _news1763 = Array<ulong>();
+    for (var _i1764 in 0.._hs1760.count) {
+        if (_bj1762 < _seq1761.count and _hs1760[_i1764] == _seq1761[_bj1762]) {
+            _bj1762 += 1;
         } else {
-            _news1762.append(_i1763);
+            _news1763.append(_i1764);
         }
     }
-    if (_bj1761 == _seq1760.count) {
+    if (_bj1762 == _seq1761.count) {
         out.unsigned(2);
-        out.unsigned(_news1762.count);
-        for (var _i1763 in _news1762) {
-            out.unsigned(_i1763);
-            _m_TypeUse_write(out, value.type_uses[_i1763]);
+        out.unsigned(_news1763.count);
+        for (var _i1764 in _news1763) {
+            out.unsigned(_i1764);
+            _m_TypeUse_write(out, value.type_uses[_i1764]);
             {
-                var _own1764 = RecordOut();
-                _own1764.blank_bodies = true;
-                _own1764.blank_locs = true;
-                _own1764.pending_as_bytes = true;
-                _m_TypeUse_write(_own1764, value.type_uses[_i1763]);
-                base.own("type_uses", interface_text(_own1764));
+                var _own1765 = RecordOut();
+                _own1765.blank_bodies = true;
+                _own1765.blank_locs = true;
+                _own1765.pending_as_bytes = true;
+                _m_TypeUse_write(_own1765, value.type_uses[_i1764]);
+                base.own("type_uses", interface_text(_own1765));
             }
         }
         base.count("type_uses" + " merged", 0);
@@ -7560,49 +7568,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("type_uses" + " whole", 0);
         out.unsigned(value.type_uses.count);
-        for (var _i1763 in 0..value.type_uses.count) {
-            _m_TypeUse_write(out, value.type_uses[_i1763]);
+        for (var _i1764 in 0..value.type_uses.count) {
+            _m_TypeUse_write(out, value.type_uses[_i1764]);
             {
-                var _own1765 = RecordOut();
-                _own1765.blank_bodies = true;
-                _own1765.blank_locs = true;
-                _own1765.pending_as_bytes = true;
-                _m_TypeUse_write(_own1765, value.type_uses[_i1763]);
-                base.own("type_uses", interface_text(_own1765));
+                var _own1766 = RecordOut();
+                _own1766.blank_bodies = true;
+                _own1766.blank_locs = true;
+                _own1766.pending_as_bytes = true;
+                _m_TypeUse_write(_own1766, value.type_uses[_i1764]);
+                base.own("type_uses", interface_text(_own1766));
             }
         }
     }
     base.stat("type_uses", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1778 = Array<String>();
-    for (var _item1773 in value.use_contexts) {
+    var _hs1779 = Array<String>();
+    for (var _item1774 in value.use_contexts) {
         var scratch = base.scratch();
-        _m_UseContext_write(scratch, _item1773);
-        _hs1778.append(base.hash_of(scratch));
+        _m_UseContext_write(scratch, _item1774);
+        _hs1779.append(base.hash_of(scratch));
     }
-    var _seq1779 = base.sequence("use_contexts");
-    ulong _bj1780 = 0;
-    var _news1781 = Array<ulong>();
-    for (var _i1782 in 0.._hs1778.count) {
-        if (_bj1780 < _seq1779.count and _hs1778[_i1782] == _seq1779[_bj1780]) {
-            _bj1780 += 1;
+    var _seq1780 = base.sequence("use_contexts");
+    ulong _bj1781 = 0;
+    var _news1782 = Array<ulong>();
+    for (var _i1783 in 0.._hs1779.count) {
+        if (_bj1781 < _seq1780.count and _hs1779[_i1783] == _seq1780[_bj1781]) {
+            _bj1781 += 1;
         } else {
-            _news1781.append(_i1782);
+            _news1782.append(_i1783);
         }
     }
-    if (_bj1780 == _seq1779.count) {
+    if (_bj1781 == _seq1780.count) {
         out.unsigned(2);
-        out.unsigned(_news1781.count);
-        for (var _i1782 in _news1781) {
-            out.unsigned(_i1782);
-            _m_UseContext_write(out, value.use_contexts[_i1782]);
+        out.unsigned(_news1782.count);
+        for (var _i1783 in _news1782) {
+            out.unsigned(_i1783);
+            _m_UseContext_write(out, value.use_contexts[_i1783]);
             {
-                var _own1783 = RecordOut();
-                _own1783.blank_bodies = true;
-                _own1783.blank_locs = true;
-                _own1783.pending_as_bytes = true;
-                _m_UseContext_write(_own1783, value.use_contexts[_i1782]);
-                base.own("use_contexts", interface_text(_own1783));
+                var _own1784 = RecordOut();
+                _own1784.blank_bodies = true;
+                _own1784.blank_locs = true;
+                _own1784.pending_as_bytes = true;
+                _m_UseContext_write(_own1784, value.use_contexts[_i1783]);
+                base.own("use_contexts", interface_text(_own1784));
             }
         }
         base.count("use_contexts" + " merged", 0);
@@ -7612,82 +7620,82 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("use_contexts" + " whole", 0);
         out.unsigned(value.use_contexts.count);
-        for (var _i1782 in 0..value.use_contexts.count) {
-            _m_UseContext_write(out, value.use_contexts[_i1782]);
+        for (var _i1783 in 0..value.use_contexts.count) {
+            _m_UseContext_write(out, value.use_contexts[_i1783]);
             {
-                var _own1784 = RecordOut();
-                _own1784.blank_bodies = true;
-                _own1784.blank_locs = true;
-                _own1784.pending_as_bytes = true;
-                _m_UseContext_write(_own1784, value.use_contexts[_i1782]);
-                base.own("use_contexts", interface_text(_own1784));
+                var _own1785 = RecordOut();
+                _own1785.blank_bodies = true;
+                _own1785.blank_locs = true;
+                _own1785.pending_as_bytes = true;
+                _m_UseContext_write(_own1785, value.use_contexts[_i1783]);
+                base.own("use_contexts", interface_text(_own1785));
             }
         }
     }
     base.stat("use_contexts", out.values.count - _mark);
     _mark = out.values.count;
-    var _n1794 = base.size("literal_args");
-    var _scratch1793 = base.scratch();
-    if (value.literal_args.count >= _n1794) {
-        for (var _i1795 in 0.._n1794) {
-            var (_t1796, _t1797, _t1798) = value.literal_args[_i1795];
-            _scratch1793.loc(_t1796);
-            _scratch1793.unsigned(_t1797);
-            _scratch1793.loc(_t1798);
+    var _n1795 = base.size("literal_args");
+    var _scratch1794 = base.scratch();
+    if (value.literal_args.count >= _n1795) {
+        for (var _i1796 in 0.._n1795) {
+            var (_t1797, _t1798, _t1799) = value.literal_args[_i1796];
+            _scratch1794.loc(_t1797);
+            _scratch1794.unsigned(_t1798);
+            _scratch1794.loc(_t1799);
         }
     }
-    if (value.literal_args.count >= _n1794 and base.same_list("literal_args", _scratch1793)) {
+    if (value.literal_args.count >= _n1795 and base.same_list("literal_args", _scratch1794)) {
         out.unsigned(1);
-        out.unsigned(_n1794);
-        out.unsigned(value.literal_args.count - _n1794);
-        for (var _i1795 in _n1794..value.literal_args.count) {
-            var (_t1799, _t1800, _t1801) = value.literal_args[_i1795];
-            out.loc(_t1799);
-            out.unsigned(_t1800);
-            out.loc(_t1801);
+        out.unsigned(_n1795);
+        out.unsigned(value.literal_args.count - _n1795);
+        for (var _i1796 in _n1795..value.literal_args.count) {
+            var (_t1800, _t1801, _t1802) = value.literal_args[_i1796];
+            out.loc(_t1800);
+            out.unsigned(_t1801);
+            out.loc(_t1802);
         }
     } else {
         out.unsigned(0);
         out.unsigned(value.literal_args.count);
-        for (var _item1802 in value.literal_args) {
-            var (_t1803, _t1804, _t1805) = _item1802;
-            out.loc(_t1803);
-            out.unsigned(_t1804);
-            out.loc(_t1805);
+        for (var _item1803 in value.literal_args) {
+            var (_t1804, _t1805, _t1806) = _item1803;
+            out.loc(_t1804);
+            out.unsigned(_t1805);
+            out.loc(_t1806);
         }
         base.count("literal_args whole", 0);
     }
     base.stat("literal_args", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1828 = Array<String>();
-    for (var _item1823 in value.constrained_aliases) {
+    var _hs1829 = Array<String>();
+    for (var _item1824 in value.constrained_aliases) {
         var scratch = base.scratch();
-        _m_TypeAliasDef_write(scratch, _item1823);
-        _hs1828.append(base.hash_of(scratch));
+        _m_TypeAliasDef_write(scratch, _item1824);
+        _hs1829.append(base.hash_of(scratch));
     }
-    var _seq1829 = base.sequence("constrained_aliases");
-    ulong _bj1830 = 0;
-    var _news1831 = Array<ulong>();
-    for (var _i1832 in 0.._hs1828.count) {
-        if (_bj1830 < _seq1829.count and _hs1828[_i1832] == _seq1829[_bj1830]) {
-            _bj1830 += 1;
+    var _seq1830 = base.sequence("constrained_aliases");
+    ulong _bj1831 = 0;
+    var _news1832 = Array<ulong>();
+    for (var _i1833 in 0.._hs1829.count) {
+        if (_bj1831 < _seq1830.count and _hs1829[_i1833] == _seq1830[_bj1831]) {
+            _bj1831 += 1;
         } else {
-            _news1831.append(_i1832);
+            _news1832.append(_i1833);
         }
     }
-    if (_bj1830 == _seq1829.count) {
+    if (_bj1831 == _seq1830.count) {
         out.unsigned(2);
-        out.unsigned(_news1831.count);
-        for (var _i1832 in _news1831) {
-            out.unsigned(_i1832);
-            _m_TypeAliasDef_write(out, value.constrained_aliases[_i1832]);
+        out.unsigned(_news1832.count);
+        for (var _i1833 in _news1832) {
+            out.unsigned(_i1833);
+            _m_TypeAliasDef_write(out, value.constrained_aliases[_i1833]);
             {
-                var _own1833 = RecordOut();
-                _own1833.blank_bodies = true;
-                _own1833.blank_locs = true;
-                _own1833.pending_as_bytes = true;
-                _m_TypeAliasDef_write(_own1833, value.constrained_aliases[_i1832]);
-                base.own("constrained_aliases", interface_text(_own1833));
+                var _own1834 = RecordOut();
+                _own1834.blank_bodies = true;
+                _own1834.blank_locs = true;
+                _own1834.pending_as_bytes = true;
+                _m_TypeAliasDef_write(_own1834, value.constrained_aliases[_i1833]);
+                base.own("constrained_aliases", interface_text(_own1834));
             }
         }
         base.count("constrained_aliases" + " merged", 0);
@@ -7697,49 +7705,49 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("constrained_aliases" + " whole", 0);
         out.unsigned(value.constrained_aliases.count);
-        for (var _i1832 in 0..value.constrained_aliases.count) {
-            _m_TypeAliasDef_write(out, value.constrained_aliases[_i1832]);
+        for (var _i1833 in 0..value.constrained_aliases.count) {
+            _m_TypeAliasDef_write(out, value.constrained_aliases[_i1833]);
             {
-                var _own1834 = RecordOut();
-                _own1834.blank_bodies = true;
-                _own1834.blank_locs = true;
-                _own1834.pending_as_bytes = true;
-                _m_TypeAliasDef_write(_own1834, value.constrained_aliases[_i1832]);
-                base.own("constrained_aliases", interface_text(_own1834));
+                var _own1835 = RecordOut();
+                _own1835.blank_bodies = true;
+                _own1835.blank_locs = true;
+                _own1835.pending_as_bytes = true;
+                _m_TypeAliasDef_write(_own1835, value.constrained_aliases[_i1833]);
+                base.own("constrained_aliases", interface_text(_own1835));
             }
         }
     }
     base.stat("constrained_aliases", out.values.count - _mark);
     _mark = out.values.count;
-    var _hs1847 = Array<String>();
-    for (var _item1842 in value.trait_types) {
+    var _hs1848 = Array<String>();
+    for (var _item1843 in value.trait_types) {
         var scratch = base.scratch();
-        _m_TraitType_write(scratch, _item1842);
-        _hs1847.append(base.hash_of(scratch));
+        _m_TraitType_write(scratch, _item1843);
+        _hs1848.append(base.hash_of(scratch));
     }
-    var _seq1848 = base.sequence("trait_types");
-    ulong _bj1849 = 0;
-    var _news1850 = Array<ulong>();
-    for (var _i1851 in 0.._hs1847.count) {
-        if (_bj1849 < _seq1848.count and _hs1847[_i1851] == _seq1848[_bj1849]) {
-            _bj1849 += 1;
+    var _seq1849 = base.sequence("trait_types");
+    ulong _bj1850 = 0;
+    var _news1851 = Array<ulong>();
+    for (var _i1852 in 0.._hs1848.count) {
+        if (_bj1850 < _seq1849.count and _hs1848[_i1852] == _seq1849[_bj1850]) {
+            _bj1850 += 1;
         } else {
-            _news1850.append(_i1851);
+            _news1851.append(_i1852);
         }
     }
-    if (_bj1849 == _seq1848.count) {
+    if (_bj1850 == _seq1849.count) {
         out.unsigned(2);
-        out.unsigned(_news1850.count);
-        for (var _i1851 in _news1850) {
-            out.unsigned(_i1851);
-            _m_TraitType_write(out, value.trait_types[_i1851]);
+        out.unsigned(_news1851.count);
+        for (var _i1852 in _news1851) {
+            out.unsigned(_i1852);
+            _m_TraitType_write(out, value.trait_types[_i1852]);
             {
-                var _own1852 = RecordOut();
-                _own1852.blank_bodies = true;
-                _own1852.blank_locs = true;
-                _own1852.pending_as_bytes = true;
-                _m_TraitType_write(_own1852, value.trait_types[_i1851]);
-                base.own("trait_types", interface_text(_own1852));
+                var _own1853 = RecordOut();
+                _own1853.blank_bodies = true;
+                _own1853.blank_locs = true;
+                _own1853.pending_as_bytes = true;
+                _m_TraitType_write(_own1853, value.trait_types[_i1852]);
+                base.own("trait_types", interface_text(_own1853));
             }
         }
         base.count("trait_types" + " merged", 0);
@@ -7749,498 +7757,498 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("trait_types" + " whole", 0);
         out.unsigned(value.trait_types.count);
-        for (var _i1851 in 0..value.trait_types.count) {
-            _m_TraitType_write(out, value.trait_types[_i1851]);
+        for (var _i1852 in 0..value.trait_types.count) {
+            _m_TraitType_write(out, value.trait_types[_i1852]);
             {
-                var _own1853 = RecordOut();
-                _own1853.blank_bodies = true;
-                _own1853.blank_locs = true;
-                _own1853.pending_as_bytes = true;
-                _m_TraitType_write(_own1853, value.trait_types[_i1851]);
-                base.own("trait_types", interface_text(_own1853));
+                var _own1854 = RecordOut();
+                _own1854.blank_bodies = true;
+                _own1854.blank_locs = true;
+                _own1854.pending_as_bytes = true;
+                _m_TraitType_write(_own1854, value.trait_types[_i1852]);
+                base.own("trait_types", interface_text(_own1854));
             }
         }
     }
     base.stat("trait_types", out.values.count - _mark);
     _mark = out.values.count;
     out.unsigned(value.conversions.count);
-    for (var _item1861 in value.conversions) {
-        _m_Conversion_write(out, _item1861);
+    for (var _item1862 in value.conversions) {
+        _m_Conversion_write(out, _item1862);
     }
-    for (var _conv1862 in value.conversions) {
-        var _own1863 = RecordOut();
-        _own1863.blank_locs = true;
-        _m_Conversion_write(_own1863, _conv1862);
-        var _h = interface_text(_own1863);
+    for (var _conv1863 in value.conversions) {
+        var _own1864 = RecordOut();
+        _own1864.blank_locs = true;
+        _m_Conversion_write(_own1864, _conv1863);
+        var _h = interface_text(_own1864);
         if (base.find_hashed("conversions", _h) < 0) {
             base.own("conversions", _h);
         }
     }
     base.stat("conversions", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept1871 = 0;
-    var _news1872 = Map<String, Array<String>>();
-    for (var (_key1868, _) in value.overload_sets) {
-        var _kscratch1869 = base.scratch();
-        _kscratch1869.text(_key1868);
-        var _vscratch1870 = base.scratch();
-        _vscratch1870.unsigned(value.overload_sets[_key1868].count);
-        for (var _item1873 in value.overload_sets[_key1868]) {
-            _vscratch1870.text(_item1873);
+    ulong _kept1872 = 0;
+    var _news1873 = Map<String, Array<String>>();
+    for (var (_key1869, _) in value.overload_sets) {
+        var _kscratch1870 = base.scratch();
+        _kscratch1870.text(_key1869);
+        var _vscratch1871 = base.scratch();
+        _vscratch1871.unsigned(value.overload_sets[_key1869].count);
+        for (var _item1874 in value.overload_sets[_key1869]) {
+            _vscratch1871.text(_item1874);
         }
-        var _had = base.entry("overload_sets", _kscratch1869, _vscratch1870);
+        var _had = base.entry("overload_sets", _kscratch1870, _vscratch1871);
         if (_had >= 0) {
-            _kept1871 += 1;
+            _kept1872 += 1;
         }
         if (_had != 1) {
-            _news1872[_key1868] = value.overload_sets[_key1868];
+            _news1873[_key1869] = value.overload_sets[_key1869];
         }
     }
-    if (_kept1871 == base.size("overload_sets")) {
+    if (_kept1872 == base.size("overload_sets")) {
         out.unsigned(1);
-        var _keys1875 = Array<(u8[], u8[], String)>();
-        for (var (_key1874, _) in _news1872) {
-            var _scratch1876 = out.scratch();
-            _scratch1876.text(_key1874);
-            var _vscratch1878 = out.scratch();
-            _vscratch1878.unsigned(_news1872[_key1874].count);
-            for (var _item1879 in _news1872[_key1874]) {
-                _vscratch1878.text(_item1879);
+        var _keys1876 = Array<(u8[], u8[], String)>();
+        for (var (_key1875, _) in _news1873) {
+            var _scratch1877 = out.scratch();
+            _scratch1877.text(_key1875);
+            var _vscratch1879 = out.scratch();
+            _vscratch1879.unsigned(_news1873[_key1875].count);
+            for (var _item1880 in _news1873[_key1875]) {
+                _vscratch1879.text(_item1880);
             }
-            _keys1875.append((_scratch1876.finish(), _vscratch1878.finish(), _key1874));
+            _keys1876.append((_scratch1877.finish(), _vscratch1879.finish(), _key1875));
         }
-        _keys1875.sort((a, b) => {
+        _keys1876.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys1875.count);
-        for (var (_bytes1877, _, _key1874) in _keys1875) {
-            out.text(_key1874);
-            out.unsigned(_news1872[_key1874].count);
-            for (var _item1880 in _news1872[_key1874]) {
-                out.text(_item1880);
+        out.unsigned(_keys1876.count);
+        for (var (_bytes1878, _, _key1875) in _keys1876) {
+            out.text(_key1875);
+            out.unsigned(_news1873[_key1875].count);
+            for (var _item1881 in _news1873[_key1875]) {
+                out.text(_item1881);
             }
         }
-        for (var (_okey1881, _) in _news1872) {
-            var _own1882 = RecordOut();
-            _own1882.blank_bodies = true;
-            _own1882.blank_locs = true;
-            _own1882.pending_as_bytes = true;
-            _own1882.text(_okey1881);
-            _own1882.unsigned(_news1872[_okey1881].count);
-            for (var _item1883 in _news1872[_okey1881]) {
-                _own1882.text(_item1883);
+        for (var (_okey1882, _) in _news1873) {
+            var _own1883 = RecordOut();
+            _own1883.blank_bodies = true;
+            _own1883.blank_locs = true;
+            _own1883.pending_as_bytes = true;
+            _own1883.text(_okey1882);
+            _own1883.unsigned(_news1873[_okey1882].count);
+            for (var _item1884 in _news1873[_okey1882]) {
+                _own1883.text(_item1884);
             }
-            base.own("overload_sets", interface_text(_own1882));
+            base.own("overload_sets", interface_text(_own1883));
         }
     } else {
         out.unsigned(0);
-        var _keys1885 = Array<(u8[], u8[], String)>();
-        for (var (_key1884, _) in value.overload_sets) {
-            var _scratch1886 = out.scratch();
-            _scratch1886.text(_key1884);
-            var _vscratch1888 = out.scratch();
-            _vscratch1888.unsigned(value.overload_sets[_key1884].count);
-            for (var _item1889 in value.overload_sets[_key1884]) {
-                _vscratch1888.text(_item1889);
+        var _keys1886 = Array<(u8[], u8[], String)>();
+        for (var (_key1885, _) in value.overload_sets) {
+            var _scratch1887 = out.scratch();
+            _scratch1887.text(_key1885);
+            var _vscratch1889 = out.scratch();
+            _vscratch1889.unsigned(value.overload_sets[_key1885].count);
+            for (var _item1890 in value.overload_sets[_key1885]) {
+                _vscratch1889.text(_item1890);
             }
-            _keys1885.append((_scratch1886.finish(), _vscratch1888.finish(), _key1884));
+            _keys1886.append((_scratch1887.finish(), _vscratch1889.finish(), _key1885));
         }
-        _keys1885.sort((a, b) => {
+        _keys1886.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys1885.count);
-        for (var (_bytes1887, _, _key1884) in _keys1885) {
-            out.text(_key1884);
-            out.unsigned(value.overload_sets[_key1884].count);
-            for (var _item1890 in value.overload_sets[_key1884]) {
-                out.text(_item1890);
+        out.unsigned(_keys1886.count);
+        for (var (_bytes1888, _, _key1885) in _keys1886) {
+            out.text(_key1885);
+            out.unsigned(value.overload_sets[_key1885].count);
+            for (var _item1891 in value.overload_sets[_key1885]) {
+                out.text(_item1891);
             }
         }
-        for (var (_okey1891, _) in value.overload_sets) {
-            var _own1892 = RecordOut();
-            _own1892.blank_bodies = true;
-            _own1892.blank_locs = true;
-            _own1892.pending_as_bytes = true;
-            _own1892.text(_okey1891);
-            _own1892.unsigned(value.overload_sets[_okey1891].count);
-            for (var _item1893 in value.overload_sets[_okey1891]) {
-                _own1892.text(_item1893);
+        for (var (_okey1892, _) in value.overload_sets) {
+            var _own1893 = RecordOut();
+            _own1893.blank_bodies = true;
+            _own1893.blank_locs = true;
+            _own1893.pending_as_bytes = true;
+            _own1893.text(_okey1892);
+            _own1893.unsigned(value.overload_sets[_okey1892].count);
+            for (var _item1894 in value.overload_sets[_okey1892]) {
+                _own1893.text(_item1894);
             }
-            base.own("overload_sets", interface_text(_own1892));
+            base.own("overload_sets", interface_text(_own1893));
         }
         base.count("overload_sets whole", 0);
     }
     base.stat("overload_sets", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept1911 = 0;
-    var _news1912 = Map<String, Array<Array<String>>>();
-    for (var (_key1908, _) in value.overload_unions) {
-        var _kscratch1909 = base.scratch();
-        _kscratch1909.text(_key1908);
-        var _vscratch1910 = base.scratch();
-        _vscratch1910.unsigned(value.overload_unions[_key1908].count);
-        for (var _item1913 in value.overload_unions[_key1908]) {
-            _vscratch1910.unsigned(_item1913.count);
-            for (var _item1914 in _item1913) {
-                _vscratch1910.text(_item1914);
+    ulong _kept1912 = 0;
+    var _news1913 = Map<String, Array<Array<String>>>();
+    for (var (_key1909, _) in value.overload_unions) {
+        var _kscratch1910 = base.scratch();
+        _kscratch1910.text(_key1909);
+        var _vscratch1911 = base.scratch();
+        _vscratch1911.unsigned(value.overload_unions[_key1909].count);
+        for (var _item1914 in value.overload_unions[_key1909]) {
+            _vscratch1911.unsigned(_item1914.count);
+            for (var _item1915 in _item1914) {
+                _vscratch1911.text(_item1915);
             }
         }
-        var _had = base.entry("overload_unions", _kscratch1909, _vscratch1910);
+        var _had = base.entry("overload_unions", _kscratch1910, _vscratch1911);
         if (_had >= 0) {
-            _kept1911 += 1;
+            _kept1912 += 1;
         }
         if (_had != 1) {
-            _news1912[_key1908] = value.overload_unions[_key1908];
+            _news1913[_key1909] = value.overload_unions[_key1909];
         }
     }
-    if (_kept1911 == base.size("overload_unions")) {
+    if (_kept1912 == base.size("overload_unions")) {
         out.unsigned(1);
-        var _keys1916 = Array<(u8[], u8[], String)>();
-        for (var (_key1915, _) in _news1912) {
-            var _scratch1917 = out.scratch();
-            _scratch1917.text(_key1915);
-            var _vscratch1919 = out.scratch();
-            _vscratch1919.unsigned(_news1912[_key1915].count);
-            for (var _item1920 in _news1912[_key1915]) {
-                _vscratch1919.unsigned(_item1920.count);
-                for (var _item1921 in _item1920) {
-                    _vscratch1919.text(_item1921);
+        var _keys1917 = Array<(u8[], u8[], String)>();
+        for (var (_key1916, _) in _news1913) {
+            var _scratch1918 = out.scratch();
+            _scratch1918.text(_key1916);
+            var _vscratch1920 = out.scratch();
+            _vscratch1920.unsigned(_news1913[_key1916].count);
+            for (var _item1921 in _news1913[_key1916]) {
+                _vscratch1920.unsigned(_item1921.count);
+                for (var _item1922 in _item1921) {
+                    _vscratch1920.text(_item1922);
                 }
             }
-            _keys1916.append((_scratch1917.finish(), _vscratch1919.finish(), _key1915));
+            _keys1917.append((_scratch1918.finish(), _vscratch1920.finish(), _key1916));
         }
-        _keys1916.sort((a, b) => {
+        _keys1917.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys1916.count);
-        for (var (_bytes1918, _, _key1915) in _keys1916) {
-            out.text(_key1915);
-            out.unsigned(_news1912[_key1915].count);
-            for (var _item1922 in _news1912[_key1915]) {
-                out.unsigned(_item1922.count);
-                for (var _item1923 in _item1922) {
-                    out.text(_item1923);
+        out.unsigned(_keys1917.count);
+        for (var (_bytes1919, _, _key1916) in _keys1917) {
+            out.text(_key1916);
+            out.unsigned(_news1913[_key1916].count);
+            for (var _item1923 in _news1913[_key1916]) {
+                out.unsigned(_item1923.count);
+                for (var _item1924 in _item1923) {
+                    out.text(_item1924);
                 }
             }
         }
-        for (var (_okey1924, _) in _news1912) {
-            var _own1925 = RecordOut();
-            _own1925.blank_bodies = true;
-            _own1925.blank_locs = true;
-            _own1925.pending_as_bytes = true;
-            _own1925.text(_okey1924);
-            _own1925.unsigned(_news1912[_okey1924].count);
-            for (var _item1926 in _news1912[_okey1924]) {
-                _own1925.unsigned(_item1926.count);
-                for (var _item1927 in _item1926) {
-                    _own1925.text(_item1927);
+        for (var (_okey1925, _) in _news1913) {
+            var _own1926 = RecordOut();
+            _own1926.blank_bodies = true;
+            _own1926.blank_locs = true;
+            _own1926.pending_as_bytes = true;
+            _own1926.text(_okey1925);
+            _own1926.unsigned(_news1913[_okey1925].count);
+            for (var _item1927 in _news1913[_okey1925]) {
+                _own1926.unsigned(_item1927.count);
+                for (var _item1928 in _item1927) {
+                    _own1926.text(_item1928);
                 }
             }
-            base.own("overload_unions", interface_text(_own1925));
+            base.own("overload_unions", interface_text(_own1926));
         }
     } else {
         out.unsigned(0);
-        var _keys1929 = Array<(u8[], u8[], String)>();
-        for (var (_key1928, _) in value.overload_unions) {
-            var _scratch1930 = out.scratch();
-            _scratch1930.text(_key1928);
-            var _vscratch1932 = out.scratch();
-            _vscratch1932.unsigned(value.overload_unions[_key1928].count);
-            for (var _item1933 in value.overload_unions[_key1928]) {
-                _vscratch1932.unsigned(_item1933.count);
-                for (var _item1934 in _item1933) {
-                    _vscratch1932.text(_item1934);
+        var _keys1930 = Array<(u8[], u8[], String)>();
+        for (var (_key1929, _) in value.overload_unions) {
+            var _scratch1931 = out.scratch();
+            _scratch1931.text(_key1929);
+            var _vscratch1933 = out.scratch();
+            _vscratch1933.unsigned(value.overload_unions[_key1929].count);
+            for (var _item1934 in value.overload_unions[_key1929]) {
+                _vscratch1933.unsigned(_item1934.count);
+                for (var _item1935 in _item1934) {
+                    _vscratch1933.text(_item1935);
                 }
             }
-            _keys1929.append((_scratch1930.finish(), _vscratch1932.finish(), _key1928));
+            _keys1930.append((_scratch1931.finish(), _vscratch1933.finish(), _key1929));
         }
-        _keys1929.sort((a, b) => {
+        _keys1930.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys1929.count);
-        for (var (_bytes1931, _, _key1928) in _keys1929) {
-            out.text(_key1928);
-            out.unsigned(value.overload_unions[_key1928].count);
-            for (var _item1935 in value.overload_unions[_key1928]) {
-                out.unsigned(_item1935.count);
-                for (var _item1936 in _item1935) {
-                    out.text(_item1936);
+        out.unsigned(_keys1930.count);
+        for (var (_bytes1932, _, _key1929) in _keys1930) {
+            out.text(_key1929);
+            out.unsigned(value.overload_unions[_key1929].count);
+            for (var _item1936 in value.overload_unions[_key1929]) {
+                out.unsigned(_item1936.count);
+                for (var _item1937 in _item1936) {
+                    out.text(_item1937);
                 }
             }
         }
-        for (var (_okey1937, _) in value.overload_unions) {
-            var _own1938 = RecordOut();
-            _own1938.blank_bodies = true;
-            _own1938.blank_locs = true;
-            _own1938.pending_as_bytes = true;
-            _own1938.text(_okey1937);
-            _own1938.unsigned(value.overload_unions[_okey1937].count);
-            for (var _item1939 in value.overload_unions[_okey1937]) {
-                _own1938.unsigned(_item1939.count);
-                for (var _item1940 in _item1939) {
-                    _own1938.text(_item1940);
+        for (var (_okey1938, _) in value.overload_unions) {
+            var _own1939 = RecordOut();
+            _own1939.blank_bodies = true;
+            _own1939.blank_locs = true;
+            _own1939.pending_as_bytes = true;
+            _own1939.text(_okey1938);
+            _own1939.unsigned(value.overload_unions[_okey1938].count);
+            for (var _item1940 in value.overload_unions[_okey1938]) {
+                _own1939.unsigned(_item1940.count);
+                for (var _item1941 in _item1940) {
+                    _own1939.text(_item1941);
                 }
             }
-            base.own("overload_unions", interface_text(_own1938));
+            base.own("overload_unions", interface_text(_own1939));
         }
         base.count("overload_unions whole", 0);
     }
     base.stat("overload_unions", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept1963 = 0;
-    var _news1964 = Map<String, Map<String, Array<String>>>();
-    for (var (_key1960, _) in value.method_overload_sets) {
-        var _kscratch1961 = base.scratch();
-        _kscratch1961.text(_key1960);
-        var _vscratch1962 = base.scratch();
-        var _keys1966 = Array<(u8[], u8[], String)>();
-        for (var (_key1965, _) in value.method_overload_sets[_key1960]) {
-            var _scratch1967 = _vscratch1962.scratch();
-            _scratch1967.text(_key1965);
-            var _vscratch1969 = _vscratch1962.scratch();
-            _vscratch1969.unsigned(value.method_overload_sets[_key1960][_key1965].count);
-            for (var _item1970 in value.method_overload_sets[_key1960][_key1965]) {
-                _vscratch1969.text(_item1970);
+    ulong _kept1964 = 0;
+    var _news1965 = Map<String, Map<String, Array<String>>>();
+    for (var (_key1961, _) in value.method_overload_sets) {
+        var _kscratch1962 = base.scratch();
+        _kscratch1962.text(_key1961);
+        var _vscratch1963 = base.scratch();
+        var _keys1967 = Array<(u8[], u8[], String)>();
+        for (var (_key1966, _) in value.method_overload_sets[_key1961]) {
+            var _scratch1968 = _vscratch1963.scratch();
+            _scratch1968.text(_key1966);
+            var _vscratch1970 = _vscratch1963.scratch();
+            _vscratch1970.unsigned(value.method_overload_sets[_key1961][_key1966].count);
+            for (var _item1971 in value.method_overload_sets[_key1961][_key1966]) {
+                _vscratch1970.text(_item1971);
             }
-            _keys1966.append((_scratch1967.finish(), _vscratch1969.finish(), _key1965));
+            _keys1967.append((_scratch1968.finish(), _vscratch1970.finish(), _key1966));
         }
-        _keys1966.sort((a, b) => {
+        _keys1967.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        _vscratch1962.unsigned(_keys1966.count);
-        for (var (_bytes1968, _, _key1965) in _keys1966) {
-            _vscratch1962.text(_key1965);
-            _vscratch1962.unsigned(value.method_overload_sets[_key1960][_key1965].count);
-            for (var _item1971 in value.method_overload_sets[_key1960][_key1965]) {
-                _vscratch1962.text(_item1971);
+        _vscratch1963.unsigned(_keys1967.count);
+        for (var (_bytes1969, _, _key1966) in _keys1967) {
+            _vscratch1963.text(_key1966);
+            _vscratch1963.unsigned(value.method_overload_sets[_key1961][_key1966].count);
+            for (var _item1972 in value.method_overload_sets[_key1961][_key1966]) {
+                _vscratch1963.text(_item1972);
             }
         }
-        var _had = base.entry("method_overload_sets", _kscratch1961, _vscratch1962);
+        var _had = base.entry("method_overload_sets", _kscratch1962, _vscratch1963);
         if (_had >= 0) {
-            _kept1963 += 1;
+            _kept1964 += 1;
         }
         if (_had != 1) {
-            _news1964[_key1960] = value.method_overload_sets[_key1960];
+            _news1965[_key1961] = value.method_overload_sets[_key1961];
         }
     }
-    if (_kept1963 == base.size("method_overload_sets")) {
+    if (_kept1964 == base.size("method_overload_sets")) {
         out.unsigned(1);
-        var _keys1973 = Array<(u8[], u8[], String)>();
-        for (var (_key1972, _) in _news1964) {
-            var _scratch1974 = out.scratch();
-            _scratch1974.text(_key1972);
-            var _vscratch1976 = out.scratch();
-            var _keys1978 = Array<(u8[], u8[], String)>();
-            for (var (_key1977, _) in _news1964[_key1972]) {
-                var _scratch1979 = _vscratch1976.scratch();
-                _scratch1979.text(_key1977);
-                var _vscratch1981 = _vscratch1976.scratch();
-                _vscratch1981.unsigned(_news1964[_key1972][_key1977].count);
-                for (var _item1982 in _news1964[_key1972][_key1977]) {
-                    _vscratch1981.text(_item1982);
+        var _keys1974 = Array<(u8[], u8[], String)>();
+        for (var (_key1973, _) in _news1965) {
+            var _scratch1975 = out.scratch();
+            _scratch1975.text(_key1973);
+            var _vscratch1977 = out.scratch();
+            var _keys1979 = Array<(u8[], u8[], String)>();
+            for (var (_key1978, _) in _news1965[_key1973]) {
+                var _scratch1980 = _vscratch1977.scratch();
+                _scratch1980.text(_key1978);
+                var _vscratch1982 = _vscratch1977.scratch();
+                _vscratch1982.unsigned(_news1965[_key1973][_key1978].count);
+                for (var _item1983 in _news1965[_key1973][_key1978]) {
+                    _vscratch1982.text(_item1983);
                 }
-                _keys1978.append((_scratch1979.finish(), _vscratch1981.finish(), _key1977));
+                _keys1979.append((_scratch1980.finish(), _vscratch1982.finish(), _key1978));
             }
-            _keys1978.sort((a, b) => {
+            _keys1979.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            _vscratch1976.unsigned(_keys1978.count);
-            for (var (_bytes1980, _, _key1977) in _keys1978) {
-                _vscratch1976.text(_key1977);
-                _vscratch1976.unsigned(_news1964[_key1972][_key1977].count);
-                for (var _item1983 in _news1964[_key1972][_key1977]) {
-                    _vscratch1976.text(_item1983);
+            _vscratch1977.unsigned(_keys1979.count);
+            for (var (_bytes1981, _, _key1978) in _keys1979) {
+                _vscratch1977.text(_key1978);
+                _vscratch1977.unsigned(_news1965[_key1973][_key1978].count);
+                for (var _item1984 in _news1965[_key1973][_key1978]) {
+                    _vscratch1977.text(_item1984);
                 }
             }
-            _keys1973.append((_scratch1974.finish(), _vscratch1976.finish(), _key1972));
+            _keys1974.append((_scratch1975.finish(), _vscratch1977.finish(), _key1973));
         }
-        _keys1973.sort((a, b) => {
+        _keys1974.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys1973.count);
-        for (var (_bytes1975, _, _key1972) in _keys1973) {
-            out.text(_key1972);
-            var _keys1985 = Array<(u8[], u8[], String)>();
-            for (var (_key1984, _) in _news1964[_key1972]) {
-                var _scratch1986 = out.scratch();
-                _scratch1986.text(_key1984);
-                var _vscratch1988 = out.scratch();
-                _vscratch1988.unsigned(_news1964[_key1972][_key1984].count);
-                for (var _item1989 in _news1964[_key1972][_key1984]) {
-                    _vscratch1988.text(_item1989);
+        out.unsigned(_keys1974.count);
+        for (var (_bytes1976, _, _key1973) in _keys1974) {
+            out.text(_key1973);
+            var _keys1986 = Array<(u8[], u8[], String)>();
+            for (var (_key1985, _) in _news1965[_key1973]) {
+                var _scratch1987 = out.scratch();
+                _scratch1987.text(_key1985);
+                var _vscratch1989 = out.scratch();
+                _vscratch1989.unsigned(_news1965[_key1973][_key1985].count);
+                for (var _item1990 in _news1965[_key1973][_key1985]) {
+                    _vscratch1989.text(_item1990);
                 }
-                _keys1985.append((_scratch1986.finish(), _vscratch1988.finish(), _key1984));
+                _keys1986.append((_scratch1987.finish(), _vscratch1989.finish(), _key1985));
             }
-            _keys1985.sort((a, b) => {
+            _keys1986.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            out.unsigned(_keys1985.count);
-            for (var (_bytes1987, _, _key1984) in _keys1985) {
-                out.text(_key1984);
-                out.unsigned(_news1964[_key1972][_key1984].count);
-                for (var _item1990 in _news1964[_key1972][_key1984]) {
-                    out.text(_item1990);
+            out.unsigned(_keys1986.count);
+            for (var (_bytes1988, _, _key1985) in _keys1986) {
+                out.text(_key1985);
+                out.unsigned(_news1965[_key1973][_key1985].count);
+                for (var _item1991 in _news1965[_key1973][_key1985]) {
+                    out.text(_item1991);
                 }
             }
         }
-        for (var (_okey1991, _) in _news1964) {
-            var _own1992 = RecordOut();
-            _own1992.blank_bodies = true;
-            _own1992.blank_locs = true;
-            _own1992.pending_as_bytes = true;
-            _own1992.text(_okey1991);
-            var _keys1994 = Array<(u8[], u8[], String)>();
-            for (var (_key1993, _) in _news1964[_okey1991]) {
-                var _scratch1995 = _own1992.scratch();
-                _scratch1995.text(_key1993);
-                var _vscratch1997 = _own1992.scratch();
-                _vscratch1997.unsigned(_news1964[_okey1991][_key1993].count);
-                for (var _item1998 in _news1964[_okey1991][_key1993]) {
-                    _vscratch1997.text(_item1998);
+        for (var (_okey1992, _) in _news1965) {
+            var _own1993 = RecordOut();
+            _own1993.blank_bodies = true;
+            _own1993.blank_locs = true;
+            _own1993.pending_as_bytes = true;
+            _own1993.text(_okey1992);
+            var _keys1995 = Array<(u8[], u8[], String)>();
+            for (var (_key1994, _) in _news1965[_okey1992]) {
+                var _scratch1996 = _own1993.scratch();
+                _scratch1996.text(_key1994);
+                var _vscratch1998 = _own1993.scratch();
+                _vscratch1998.unsigned(_news1965[_okey1992][_key1994].count);
+                for (var _item1999 in _news1965[_okey1992][_key1994]) {
+                    _vscratch1998.text(_item1999);
                 }
-                _keys1994.append((_scratch1995.finish(), _vscratch1997.finish(), _key1993));
+                _keys1995.append((_scratch1996.finish(), _vscratch1998.finish(), _key1994));
             }
-            _keys1994.sort((a, b) => {
+            _keys1995.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            _own1992.unsigned(_keys1994.count);
-            for (var (_bytes1996, _, _key1993) in _keys1994) {
-                _own1992.text(_key1993);
-                _own1992.unsigned(_news1964[_okey1991][_key1993].count);
-                for (var _item1999 in _news1964[_okey1991][_key1993]) {
-                    _own1992.text(_item1999);
+            _own1993.unsigned(_keys1995.count);
+            for (var (_bytes1997, _, _key1994) in _keys1995) {
+                _own1993.text(_key1994);
+                _own1993.unsigned(_news1965[_okey1992][_key1994].count);
+                for (var _item2000 in _news1965[_okey1992][_key1994]) {
+                    _own1993.text(_item2000);
                 }
             }
-            base.own("method_overload_sets", interface_text(_own1992));
+            base.own("method_overload_sets", interface_text(_own1993));
         }
     } else {
         out.unsigned(0);
-        var _keys2001 = Array<(u8[], u8[], String)>();
-        for (var (_key2000, _) in value.method_overload_sets) {
-            var _scratch2002 = out.scratch();
-            _scratch2002.text(_key2000);
-            var _vscratch2004 = out.scratch();
-            var _keys2006 = Array<(u8[], u8[], String)>();
-            for (var (_key2005, _) in value.method_overload_sets[_key2000]) {
-                var _scratch2007 = _vscratch2004.scratch();
-                _scratch2007.text(_key2005);
-                var _vscratch2009 = _vscratch2004.scratch();
-                _vscratch2009.unsigned(value.method_overload_sets[_key2000][_key2005].count);
-                for (var _item2010 in value.method_overload_sets[_key2000][_key2005]) {
-                    _vscratch2009.text(_item2010);
+        var _keys2002 = Array<(u8[], u8[], String)>();
+        for (var (_key2001, _) in value.method_overload_sets) {
+            var _scratch2003 = out.scratch();
+            _scratch2003.text(_key2001);
+            var _vscratch2005 = out.scratch();
+            var _keys2007 = Array<(u8[], u8[], String)>();
+            for (var (_key2006, _) in value.method_overload_sets[_key2001]) {
+                var _scratch2008 = _vscratch2005.scratch();
+                _scratch2008.text(_key2006);
+                var _vscratch2010 = _vscratch2005.scratch();
+                _vscratch2010.unsigned(value.method_overload_sets[_key2001][_key2006].count);
+                for (var _item2011 in value.method_overload_sets[_key2001][_key2006]) {
+                    _vscratch2010.text(_item2011);
                 }
-                _keys2006.append((_scratch2007.finish(), _vscratch2009.finish(), _key2005));
+                _keys2007.append((_scratch2008.finish(), _vscratch2010.finish(), _key2006));
             }
-            _keys2006.sort((a, b) => {
+            _keys2007.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            _vscratch2004.unsigned(_keys2006.count);
-            for (var (_bytes2008, _, _key2005) in _keys2006) {
-                _vscratch2004.text(_key2005);
-                _vscratch2004.unsigned(value.method_overload_sets[_key2000][_key2005].count);
-                for (var _item2011 in value.method_overload_sets[_key2000][_key2005]) {
-                    _vscratch2004.text(_item2011);
+            _vscratch2005.unsigned(_keys2007.count);
+            for (var (_bytes2009, _, _key2006) in _keys2007) {
+                _vscratch2005.text(_key2006);
+                _vscratch2005.unsigned(value.method_overload_sets[_key2001][_key2006].count);
+                for (var _item2012 in value.method_overload_sets[_key2001][_key2006]) {
+                    _vscratch2005.text(_item2012);
                 }
             }
-            _keys2001.append((_scratch2002.finish(), _vscratch2004.finish(), _key2000));
+            _keys2002.append((_scratch2003.finish(), _vscratch2005.finish(), _key2001));
         }
-        _keys2001.sort((a, b) => {
+        _keys2002.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2001.count);
-        for (var (_bytes2003, _, _key2000) in _keys2001) {
-            out.text(_key2000);
-            var _keys2013 = Array<(u8[], u8[], String)>();
-            for (var (_key2012, _) in value.method_overload_sets[_key2000]) {
-                var _scratch2014 = out.scratch();
-                _scratch2014.text(_key2012);
-                var _vscratch2016 = out.scratch();
-                _vscratch2016.unsigned(value.method_overload_sets[_key2000][_key2012].count);
-                for (var _item2017 in value.method_overload_sets[_key2000][_key2012]) {
-                    _vscratch2016.text(_item2017);
+        out.unsigned(_keys2002.count);
+        for (var (_bytes2004, _, _key2001) in _keys2002) {
+            out.text(_key2001);
+            var _keys2014 = Array<(u8[], u8[], String)>();
+            for (var (_key2013, _) in value.method_overload_sets[_key2001]) {
+                var _scratch2015 = out.scratch();
+                _scratch2015.text(_key2013);
+                var _vscratch2017 = out.scratch();
+                _vscratch2017.unsigned(value.method_overload_sets[_key2001][_key2013].count);
+                for (var _item2018 in value.method_overload_sets[_key2001][_key2013]) {
+                    _vscratch2017.text(_item2018);
                 }
-                _keys2013.append((_scratch2014.finish(), _vscratch2016.finish(), _key2012));
+                _keys2014.append((_scratch2015.finish(), _vscratch2017.finish(), _key2013));
             }
-            _keys2013.sort((a, b) => {
+            _keys2014.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            out.unsigned(_keys2013.count);
-            for (var (_bytes2015, _, _key2012) in _keys2013) {
-                out.text(_key2012);
-                out.unsigned(value.method_overload_sets[_key2000][_key2012].count);
-                for (var _item2018 in value.method_overload_sets[_key2000][_key2012]) {
-                    out.text(_item2018);
+            out.unsigned(_keys2014.count);
+            for (var (_bytes2016, _, _key2013) in _keys2014) {
+                out.text(_key2013);
+                out.unsigned(value.method_overload_sets[_key2001][_key2013].count);
+                for (var _item2019 in value.method_overload_sets[_key2001][_key2013]) {
+                    out.text(_item2019);
                 }
             }
         }
-        for (var (_okey2019, _) in value.method_overload_sets) {
-            var _own2020 = RecordOut();
-            _own2020.blank_bodies = true;
-            _own2020.blank_locs = true;
-            _own2020.pending_as_bytes = true;
-            _own2020.text(_okey2019);
-            var _keys2022 = Array<(u8[], u8[], String)>();
-            for (var (_key2021, _) in value.method_overload_sets[_okey2019]) {
-                var _scratch2023 = _own2020.scratch();
-                _scratch2023.text(_key2021);
-                var _vscratch2025 = _own2020.scratch();
-                _vscratch2025.unsigned(value.method_overload_sets[_okey2019][_key2021].count);
-                for (var _item2026 in value.method_overload_sets[_okey2019][_key2021]) {
-                    _vscratch2025.text(_item2026);
+        for (var (_okey2020, _) in value.method_overload_sets) {
+            var _own2021 = RecordOut();
+            _own2021.blank_bodies = true;
+            _own2021.blank_locs = true;
+            _own2021.pending_as_bytes = true;
+            _own2021.text(_okey2020);
+            var _keys2023 = Array<(u8[], u8[], String)>();
+            for (var (_key2022, _) in value.method_overload_sets[_okey2020]) {
+                var _scratch2024 = _own2021.scratch();
+                _scratch2024.text(_key2022);
+                var _vscratch2026 = _own2021.scratch();
+                _vscratch2026.unsigned(value.method_overload_sets[_okey2020][_key2022].count);
+                for (var _item2027 in value.method_overload_sets[_okey2020][_key2022]) {
+                    _vscratch2026.text(_item2027);
                 }
-                _keys2022.append((_scratch2023.finish(), _vscratch2025.finish(), _key2021));
+                _keys2023.append((_scratch2024.finish(), _vscratch2026.finish(), _key2022));
             }
-            _keys2022.sort((a, b) => {
+            _keys2023.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            _own2020.unsigned(_keys2022.count);
-            for (var (_bytes2024, _, _key2021) in _keys2022) {
-                _own2020.text(_key2021);
-                _own2020.unsigned(value.method_overload_sets[_okey2019][_key2021].count);
-                for (var _item2027 in value.method_overload_sets[_okey2019][_key2021]) {
-                    _own2020.text(_item2027);
+            _own2021.unsigned(_keys2023.count);
+            for (var (_bytes2025, _, _key2022) in _keys2023) {
+                _own2021.text(_key2022);
+                _own2021.unsigned(value.method_overload_sets[_okey2020][_key2022].count);
+                for (var _item2028 in value.method_overload_sets[_okey2020][_key2022]) {
+                    _own2021.text(_item2028);
                 }
             }
-            base.own("method_overload_sets", interface_text(_own2020));
+            base.own("method_overload_sets", interface_text(_own2021));
         }
         base.count("method_overload_sets whole", 0);
     }
@@ -8249,555 +8257,555 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     _m_ExtensionScopes_write(out, value.extension_scopes);
     base.stat("extension_scopes", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2058 = 0;
-    var _news2059 = HashSet<Loc>();
-    for (var _key2055 in value.private_functions) {
-        var _kscratch2056 = base.scratch();
-        _kscratch2056.loc(_key2055);
-        var _vscratch2057 = base.scratch();
-        var _had = base.entry("private_functions", _kscratch2056, _vscratch2057);
+    ulong _kept2059 = 0;
+    var _news2060 = HashSet<Loc>();
+    for (var _key2056 in value.private_functions) {
+        var _kscratch2057 = base.scratch();
+        _kscratch2057.loc(_key2056);
+        var _vscratch2058 = base.scratch();
+        var _had = base.entry("private_functions", _kscratch2057, _vscratch2058);
         if (_had >= 0) {
-            _kept2058 += 1;
+            _kept2059 += 1;
         }
         if (_had != 1) {
-            _news2059.insert(_key2055);
+            _news2060.insert(_key2056);
         }
     }
-    if (_kept2058 == base.size("private_functions")) {
+    if (_kept2059 == base.size("private_functions")) {
         out.unsigned(1);
-        var _keys2061 = Array<(u8[], u8[], Loc)>();
-        for (var _key2060 in _news2059) {
-            var _scratch2062 = out.scratch();
-            _scratch2062.loc(_key2060);
-            var _vscratch2064 = out.scratch();
-            _keys2061.append((_scratch2062.finish(), _vscratch2064.finish(), _key2060));
+        var _keys2062 = Array<(u8[], u8[], Loc)>();
+        for (var _key2061 in _news2060) {
+            var _scratch2063 = out.scratch();
+            _scratch2063.loc(_key2061);
+            var _vscratch2065 = out.scratch();
+            _keys2062.append((_scratch2063.finish(), _vscratch2065.finish(), _key2061));
         }
-        _keys2061.sort((a, b) => {
+        _keys2062.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2061.count);
-        for (var (_bytes2063, _, _key2060) in _keys2061) {
-            out.loc(_key2060);
+        out.unsigned(_keys2062.count);
+        for (var (_bytes2064, _, _key2061) in _keys2062) {
+            out.loc(_key2061);
         }
-        for (var _okey2065 in _news2059) {
-            var _own2066 = RecordOut();
-            _own2066.blank_bodies = true;
-            _own2066.blank_locs = true;
-            _own2066.pending_as_bytes = true;
-            _own2066.loc(_okey2065);
-            base.own_at("private_functions", _okey2065, interface_text(_own2066));
+        for (var _okey2066 in _news2060) {
+            var _own2067 = RecordOut();
+            _own2067.blank_bodies = true;
+            _own2067.blank_locs = true;
+            _own2067.pending_as_bytes = true;
+            _own2067.loc(_okey2066);
+            base.own_at("private_functions", _okey2066, interface_text(_own2067));
         }
     } else {
         out.unsigned(0);
-        var _keys2068 = Array<(u8[], u8[], Loc)>();
-        for (var _key2067 in value.private_functions) {
-            var _scratch2069 = out.scratch();
-            _scratch2069.loc(_key2067);
-            var _vscratch2071 = out.scratch();
-            _keys2068.append((_scratch2069.finish(), _vscratch2071.finish(), _key2067));
+        var _keys2069 = Array<(u8[], u8[], Loc)>();
+        for (var _key2068 in value.private_functions) {
+            var _scratch2070 = out.scratch();
+            _scratch2070.loc(_key2068);
+            var _vscratch2072 = out.scratch();
+            _keys2069.append((_scratch2070.finish(), _vscratch2072.finish(), _key2068));
         }
-        _keys2068.sort((a, b) => {
+        _keys2069.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2068.count);
-        for (var (_bytes2070, _, _key2067) in _keys2068) {
-            out.loc(_key2067);
+        out.unsigned(_keys2069.count);
+        for (var (_bytes2071, _, _key2068) in _keys2069) {
+            out.loc(_key2068);
         }
-        for (var _okey2072 in value.private_functions) {
-            var _own2073 = RecordOut();
-            _own2073.blank_bodies = true;
-            _own2073.blank_locs = true;
-            _own2073.pending_as_bytes = true;
-            _own2073.loc(_okey2072);
-            base.own_at("private_functions", _okey2072, interface_text(_own2073));
+        for (var _okey2073 in value.private_functions) {
+            var _own2074 = RecordOut();
+            _own2074.blank_bodies = true;
+            _own2074.blank_locs = true;
+            _own2074.pending_as_bytes = true;
+            _own2074.loc(_okey2073);
+            base.own_at("private_functions", _okey2073, interface_text(_own2074));
         }
         base.count("private_functions whole", 0);
     }
     base.stat("private_functions", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2084 = 0;
-    var _news2085 = HashSet<Loc>();
-    for (var _key2081 in value.file_private_functions) {
-        var _kscratch2082 = base.scratch();
-        _kscratch2082.loc(_key2081);
-        var _vscratch2083 = base.scratch();
-        var _had = base.entry("file_private_functions", _kscratch2082, _vscratch2083);
+    ulong _kept2085 = 0;
+    var _news2086 = HashSet<Loc>();
+    for (var _key2082 in value.file_private_functions) {
+        var _kscratch2083 = base.scratch();
+        _kscratch2083.loc(_key2082);
+        var _vscratch2084 = base.scratch();
+        var _had = base.entry("file_private_functions", _kscratch2083, _vscratch2084);
         if (_had >= 0) {
-            _kept2084 += 1;
+            _kept2085 += 1;
         }
         if (_had != 1) {
-            _news2085.insert(_key2081);
+            _news2086.insert(_key2082);
         }
     }
-    if (_kept2084 == base.size("file_private_functions")) {
+    if (_kept2085 == base.size("file_private_functions")) {
         out.unsigned(1);
-        var _keys2087 = Array<(u8[], u8[], Loc)>();
-        for (var _key2086 in _news2085) {
-            var _scratch2088 = out.scratch();
-            _scratch2088.loc(_key2086);
-            var _vscratch2090 = out.scratch();
-            _keys2087.append((_scratch2088.finish(), _vscratch2090.finish(), _key2086));
+        var _keys2088 = Array<(u8[], u8[], Loc)>();
+        for (var _key2087 in _news2086) {
+            var _scratch2089 = out.scratch();
+            _scratch2089.loc(_key2087);
+            var _vscratch2091 = out.scratch();
+            _keys2088.append((_scratch2089.finish(), _vscratch2091.finish(), _key2087));
         }
-        _keys2087.sort((a, b) => {
+        _keys2088.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2087.count);
-        for (var (_bytes2089, _, _key2086) in _keys2087) {
-            out.loc(_key2086);
+        out.unsigned(_keys2088.count);
+        for (var (_bytes2090, _, _key2087) in _keys2088) {
+            out.loc(_key2087);
         }
-        for (var _okey2091 in _news2085) {
-            var _own2092 = RecordOut();
-            _own2092.blank_bodies = true;
-            _own2092.blank_locs = true;
-            _own2092.pending_as_bytes = true;
-            _own2092.loc(_okey2091);
-            base.own_at("file_private_functions", _okey2091, interface_text(_own2092));
+        for (var _okey2092 in _news2086) {
+            var _own2093 = RecordOut();
+            _own2093.blank_bodies = true;
+            _own2093.blank_locs = true;
+            _own2093.pending_as_bytes = true;
+            _own2093.loc(_okey2092);
+            base.own_at("file_private_functions", _okey2092, interface_text(_own2093));
         }
     } else {
         out.unsigned(0);
-        var _keys2094 = Array<(u8[], u8[], Loc)>();
-        for (var _key2093 in value.file_private_functions) {
-            var _scratch2095 = out.scratch();
-            _scratch2095.loc(_key2093);
-            var _vscratch2097 = out.scratch();
-            _keys2094.append((_scratch2095.finish(), _vscratch2097.finish(), _key2093));
+        var _keys2095 = Array<(u8[], u8[], Loc)>();
+        for (var _key2094 in value.file_private_functions) {
+            var _scratch2096 = out.scratch();
+            _scratch2096.loc(_key2094);
+            var _vscratch2098 = out.scratch();
+            _keys2095.append((_scratch2096.finish(), _vscratch2098.finish(), _key2094));
         }
-        _keys2094.sort((a, b) => {
+        _keys2095.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2094.count);
-        for (var (_bytes2096, _, _key2093) in _keys2094) {
-            out.loc(_key2093);
+        out.unsigned(_keys2095.count);
+        for (var (_bytes2097, _, _key2094) in _keys2095) {
+            out.loc(_key2094);
         }
-        for (var _okey2098 in value.file_private_functions) {
-            var _own2099 = RecordOut();
-            _own2099.blank_bodies = true;
-            _own2099.blank_locs = true;
-            _own2099.pending_as_bytes = true;
-            _own2099.loc(_okey2098);
-            base.own_at("file_private_functions", _okey2098, interface_text(_own2099));
+        for (var _okey2099 in value.file_private_functions) {
+            var _own2100 = RecordOut();
+            _own2100.blank_bodies = true;
+            _own2100.blank_locs = true;
+            _own2100.pending_as_bytes = true;
+            _own2100.loc(_okey2099);
+            base.own_at("file_private_functions", _okey2099, interface_text(_own2100));
         }
         base.count("file_private_functions whole", 0);
     }
     base.stat("file_private_functions", out.values.count - _mark);
     _mark = out.values.count;
-    var _n2109 = base.size("call_targets");
-    var _scratch2108 = base.scratch();
-    if (value.call_targets.count >= _n2109) {
-        for (var _i2110 in 0.._n2109) {
-            var (_t2111, _t2112) = value.call_targets[_i2110];
-            _scratch2108.loc(_t2111);
-            _scratch2108.text(_t2112);
+    var _n2110 = base.size("call_targets");
+    var _scratch2109 = base.scratch();
+    if (value.call_targets.count >= _n2110) {
+        for (var _i2111 in 0.._n2110) {
+            var (_t2112, _t2113) = value.call_targets[_i2111];
+            _scratch2109.loc(_t2112);
+            _scratch2109.text(_t2113);
         }
     }
-    if (value.call_targets.count >= _n2109 and base.same_list("call_targets", _scratch2108)) {
+    if (value.call_targets.count >= _n2110 and base.same_list("call_targets", _scratch2109)) {
         out.unsigned(1);
-        out.unsigned(_n2109);
-        out.unsigned(value.call_targets.count - _n2109);
-        for (var _i2110 in _n2109..value.call_targets.count) {
-            var (_t2113, _t2114) = value.call_targets[_i2110];
-            out.loc(_t2113);
-            out.text(_t2114);
+        out.unsigned(_n2110);
+        out.unsigned(value.call_targets.count - _n2110);
+        for (var _i2111 in _n2110..value.call_targets.count) {
+            var (_t2114, _t2115) = value.call_targets[_i2111];
+            out.loc(_t2114);
+            out.text(_t2115);
         }
     } else {
         out.unsigned(0);
         out.unsigned(value.call_targets.count);
-        for (var _item2115 in value.call_targets) {
-            var (_t2116, _t2117) = _item2115;
-            out.loc(_t2116);
-            out.text(_t2117);
+        for (var _item2116 in value.call_targets) {
+            var (_t2117, _t2118) = _item2116;
+            out.loc(_t2117);
+            out.text(_t2118);
         }
         base.count("call_targets whole", 0);
     }
     base.stat("call_targets", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2134 = 0;
-    var _news2135 = Array<(Loc, String)>();
-    for (var _item2132 in value.argument_names) {
-        var _escratch2133 = base.scratch();
-        var (_t2136, _t2137) = _item2132;
-        _escratch2133.loc(_t2136);
-        _escratch2133.text(_t2137);
-        if (base.entry("argument_names", _escratch2133, base.scratch()) >= 0) {
-            _kept2134 += 1;
+    ulong _kept2135 = 0;
+    var _news2136 = Array<(Loc, String)>();
+    for (var _item2133 in value.argument_names) {
+        var _escratch2134 = base.scratch();
+        var (_t2137, _t2138) = _item2133;
+        _escratch2134.loc(_t2137);
+        _escratch2134.text(_t2138);
+        if (base.entry("argument_names", _escratch2134, base.scratch()) >= 0) {
+            _kept2135 += 1;
         } else {
-            _news2135.append(_item2132);
+            _news2136.append(_item2133);
         }
     }
-    if (_kept2134 == base.size("argument_names")) {
+    if (_kept2135 == base.size("argument_names")) {
         out.unsigned(1);
-        out.unsigned(_news2135.count);
-        for (var _item2138 in _news2135) {
-            var (_t2139, _t2140) = _item2138;
-            out.loc(_t2139);
-            out.text(_t2140);
+        out.unsigned(_news2136.count);
+        for (var _item2139 in _news2136) {
+            var (_t2140, _t2141) = _item2139;
+            out.loc(_t2140);
+            out.text(_t2141);
         }
     } else {
         out.unsigned(0);
         out.unsigned(value.argument_names.count);
-        for (var _item2141 in value.argument_names) {
-            var (_t2142, _t2143) = _item2141;
-            out.loc(_t2142);
-            out.text(_t2143);
+        for (var _item2142 in value.argument_names) {
+            var (_t2143, _t2144) = _item2142;
+            out.loc(_t2143);
+            out.text(_t2144);
         }
         base.count("argument_names whole", 0);
     }
     base.stat("argument_names", out.values.count - _mark);
     _mark = out.values.count;
-    var _n2158 = base.size("namespaces");
-    var _scratch2157 = base.scratch();
-    if (value.namespaces.count >= _n2158) {
-        for (var _i2159 in 0.._n2158) {
-            _scratch2157.text(value.namespaces[_i2159]);
+    var _n2159 = base.size("namespaces");
+    var _scratch2158 = base.scratch();
+    if (value.namespaces.count >= _n2159) {
+        for (var _i2160 in 0.._n2159) {
+            _scratch2158.text(value.namespaces[_i2160]);
         }
     }
-    if (value.namespaces.count >= _n2158 and base.same_list("namespaces", _scratch2157)) {
+    if (value.namespaces.count >= _n2159 and base.same_list("namespaces", _scratch2158)) {
         out.unsigned(1);
-        out.unsigned(_n2158);
-        out.unsigned(value.namespaces.count - _n2158);
-        for (var _i2159 in _n2158..value.namespaces.count) {
-            out.text(value.namespaces[_i2159]);
+        out.unsigned(_n2159);
+        out.unsigned(value.namespaces.count - _n2159);
+        for (var _i2160 in _n2159..value.namespaces.count) {
+            out.text(value.namespaces[_i2160]);
             {
-                var _own2160 = RecordOut();
-                _own2160.blank_bodies = true;
-                _own2160.blank_locs = true;
-                _own2160.pending_as_bytes = true;
-                _own2160.text(value.namespaces[_i2159]);
-                base.own("namespaces", interface_text(_own2160));
+                var _own2161 = RecordOut();
+                _own2161.blank_bodies = true;
+                _own2161.blank_locs = true;
+                _own2161.pending_as_bytes = true;
+                _own2161.text(value.namespaces[_i2160]);
+                base.own("namespaces", interface_text(_own2161));
             }
         }
     } else {
         out.unsigned(0);
         out.unsigned(value.namespaces.count);
-        for (var _item2161 in value.namespaces) {
-            out.text(_item2161);
+        for (var _item2162 in value.namespaces) {
+            out.text(_item2162);
         }
-        for (var _i2159 in 0..value.namespaces.count) {
+        for (var _i2160 in 0..value.namespaces.count) {
             {
-                var _own2162 = RecordOut();
-                _own2162.blank_bodies = true;
-                _own2162.blank_locs = true;
-                _own2162.pending_as_bytes = true;
-                _own2162.text(value.namespaces[_i2159]);
-                base.own("namespaces", interface_text(_own2162));
+                var _own2163 = RecordOut();
+                _own2163.blank_bodies = true;
+                _own2163.blank_locs = true;
+                _own2163.pending_as_bytes = true;
+                _own2163.text(value.namespaces[_i2160]);
+                base.own("namespaces", interface_text(_own2163));
             }
         }
         base.count("namespaces whole", 0);
     }
     base.stat("namespaces", out.values.count - _mark);
     _mark = out.values.count;
-    var _n2173 = base.size("cached_files");
-    var _scratch2172 = base.scratch();
-    if (value.cached_files.count >= _n2173) {
-        for (var _i2174 in 0.._n2173) {
-            _scratch2172.flag(value.cached_files[_i2174]);
+    var _n2174 = base.size("cached_files");
+    var _scratch2173 = base.scratch();
+    if (value.cached_files.count >= _n2174) {
+        for (var _i2175 in 0.._n2174) {
+            _scratch2173.flag(value.cached_files[_i2175]);
         }
     }
-    if (value.cached_files.count >= _n2173 and base.same_list("cached_files", _scratch2172)) {
+    if (value.cached_files.count >= _n2174 and base.same_list("cached_files", _scratch2173)) {
         out.unsigned(1);
-        out.unsigned(_n2173);
-        out.unsigned(value.cached_files.count - _n2173);
-        for (var _i2174 in _n2173..value.cached_files.count) {
-            out.flag(value.cached_files[_i2174]);
+        out.unsigned(_n2174);
+        out.unsigned(value.cached_files.count - _n2174);
+        for (var _i2175 in _n2174..value.cached_files.count) {
+            out.flag(value.cached_files[_i2175]);
         }
     } else {
         out.unsigned(0);
         out.unsigned(value.cached_files.count);
-        for (var _item2175 in value.cached_files) {
-            out.flag(_item2175);
+        for (var _item2176 in value.cached_files) {
+            out.flag(_item2176);
         }
         base.count("cached_files whole", 0);
     }
     base.stat("cached_files", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2187 = 0;
-    var _news2188 = HashMap<Loc, String>();
-    for (var (_key2184, _) in value.recorded_summaries) {
-        var _kscratch2185 = base.scratch();
-        _kscratch2185.loc(_key2184);
-        var _vscratch2186 = base.scratch();
-        _vscratch2186.text(value.recorded_summaries[_key2184]);
-        var _had = base.entry("recorded_summaries", _kscratch2185, _vscratch2186);
+    ulong _kept2188 = 0;
+    var _news2189 = HashMap<Loc, String>();
+    for (var (_key2185, _) in value.recorded_summaries) {
+        var _kscratch2186 = base.scratch();
+        _kscratch2186.loc(_key2185);
+        var _vscratch2187 = base.scratch();
+        _vscratch2187.text(value.recorded_summaries[_key2185]);
+        var _had = base.entry("recorded_summaries", _kscratch2186, _vscratch2187);
         if (_had >= 0) {
-            _kept2187 += 1;
+            _kept2188 += 1;
         }
         if (_had != 1) {
-            _news2188[_key2184] = value.recorded_summaries[_key2184];
+            _news2189[_key2185] = value.recorded_summaries[_key2185];
         }
     }
-    if (_kept2187 == base.size("recorded_summaries")) {
+    if (_kept2188 == base.size("recorded_summaries")) {
         out.unsigned(1);
-        var _keys2190 = Array<(u8[], u8[], Loc)>();
-        for (var (_key2189, _) in _news2188) {
-            var _scratch2191 = out.scratch();
-            _scratch2191.loc(_key2189);
-            var _vscratch2193 = out.scratch();
-            _vscratch2193.text(_news2188[_key2189]);
-            _keys2190.append((_scratch2191.finish(), _vscratch2193.finish(), _key2189));
+        var _keys2191 = Array<(u8[], u8[], Loc)>();
+        for (var (_key2190, _) in _news2189) {
+            var _scratch2192 = out.scratch();
+            _scratch2192.loc(_key2190);
+            var _vscratch2194 = out.scratch();
+            _vscratch2194.text(_news2189[_key2190]);
+            _keys2191.append((_scratch2192.finish(), _vscratch2194.finish(), _key2190));
         }
-        _keys2190.sort((a, b) => {
+        _keys2191.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2190.count);
-        for (var (_bytes2192, _, _key2189) in _keys2190) {
-            out.loc(_key2189);
-            out.text(_news2188[_key2189]);
+        out.unsigned(_keys2191.count);
+        for (var (_bytes2193, _, _key2190) in _keys2191) {
+            out.loc(_key2190);
+            out.text(_news2189[_key2190]);
         }
     } else {
         out.unsigned(0);
-        var _keys2195 = Array<(u8[], u8[], Loc)>();
-        for (var (_key2194, _) in value.recorded_summaries) {
-            var _scratch2196 = out.scratch();
-            _scratch2196.loc(_key2194);
-            var _vscratch2198 = out.scratch();
-            _vscratch2198.text(value.recorded_summaries[_key2194]);
-            _keys2195.append((_scratch2196.finish(), _vscratch2198.finish(), _key2194));
+        var _keys2196 = Array<(u8[], u8[], Loc)>();
+        for (var (_key2195, _) in value.recorded_summaries) {
+            var _scratch2197 = out.scratch();
+            _scratch2197.loc(_key2195);
+            var _vscratch2199 = out.scratch();
+            _vscratch2199.text(value.recorded_summaries[_key2195]);
+            _keys2196.append((_scratch2197.finish(), _vscratch2199.finish(), _key2195));
         }
-        _keys2195.sort((a, b) => {
+        _keys2196.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2195.count);
-        for (var (_bytes2197, _, _key2194) in _keys2195) {
-            out.loc(_key2194);
-            out.text(value.recorded_summaries[_key2194]);
+        out.unsigned(_keys2196.count);
+        for (var (_bytes2198, _, _key2195) in _keys2196) {
+            out.loc(_key2195);
+            out.text(value.recorded_summaries[_key2195]);
         }
         base.count("recorded_summaries whole", 0);
     }
     base.stat("recorded_summaries", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2211 = 0;
-    var _news2212 = HashSet<Loc>();
-    for (var _key2208 in value.stripped) {
-        var _kscratch2209 = base.scratch();
-        _kscratch2209.loc(_key2208);
-        var _vscratch2210 = base.scratch();
-        var _had = base.entry("stripped", _kscratch2209, _vscratch2210);
+    ulong _kept2212 = 0;
+    var _news2213 = HashSet<Loc>();
+    for (var _key2209 in value.stripped) {
+        var _kscratch2210 = base.scratch();
+        _kscratch2210.loc(_key2209);
+        var _vscratch2211 = base.scratch();
+        var _had = base.entry("stripped", _kscratch2210, _vscratch2211);
         if (_had >= 0) {
-            _kept2211 += 1;
+            _kept2212 += 1;
         }
         if (_had != 1) {
-            _news2212.insert(_key2208);
+            _news2213.insert(_key2209);
         }
     }
-    if (_kept2211 == base.size("stripped")) {
+    if (_kept2212 == base.size("stripped")) {
         out.unsigned(1);
-        var _keys2214 = Array<(u8[], u8[], Loc)>();
-        for (var _key2213 in _news2212) {
-            var _scratch2215 = out.scratch();
-            _scratch2215.loc(_key2213);
-            var _vscratch2217 = out.scratch();
-            _keys2214.append((_scratch2215.finish(), _vscratch2217.finish(), _key2213));
+        var _keys2215 = Array<(u8[], u8[], Loc)>();
+        for (var _key2214 in _news2213) {
+            var _scratch2216 = out.scratch();
+            _scratch2216.loc(_key2214);
+            var _vscratch2218 = out.scratch();
+            _keys2215.append((_scratch2216.finish(), _vscratch2218.finish(), _key2214));
         }
-        _keys2214.sort((a, b) => {
+        _keys2215.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2214.count);
-        for (var (_bytes2216, _, _key2213) in _keys2214) {
-            out.loc(_key2213);
+        out.unsigned(_keys2215.count);
+        for (var (_bytes2217, _, _key2214) in _keys2215) {
+            out.loc(_key2214);
         }
     } else {
         out.unsigned(0);
-        var _keys2219 = Array<(u8[], u8[], Loc)>();
-        for (var _key2218 in value.stripped) {
-            var _scratch2220 = out.scratch();
-            _scratch2220.loc(_key2218);
-            var _vscratch2222 = out.scratch();
-            _keys2219.append((_scratch2220.finish(), _vscratch2222.finish(), _key2218));
+        var _keys2220 = Array<(u8[], u8[], Loc)>();
+        for (var _key2219 in value.stripped) {
+            var _scratch2221 = out.scratch();
+            _scratch2221.loc(_key2219);
+            var _vscratch2223 = out.scratch();
+            _keys2220.append((_scratch2221.finish(), _vscratch2223.finish(), _key2219));
         }
-        _keys2219.sort((a, b) => {
+        _keys2220.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2219.count);
-        for (var (_bytes2221, _, _key2218) in _keys2219) {
-            out.loc(_key2218);
+        out.unsigned(_keys2220.count);
+        for (var (_bytes2222, _, _key2219) in _keys2220) {
+            out.loc(_key2219);
         }
         base.count("stripped whole", 0);
     }
     base.stat("stripped", out.values.count - _mark);
     _mark = out.values.count;
     out.flag(value.templates.frozen);
-    var _seq2232 = base.ref_templates;
-    ulong _bj2233 = 0;
-    var _news2235 = Array<ulong>();
-    var _patches2236 = Array<(ulong, ulong)>();
-    for (var _i2237 in 0..value.templates.structs.count) {
-        if (_bj2233 < _seq2232.count
-            and value.templates.structs[_i2237] === _seq2232[_bj2233]
-            and !value.extended_checked.contains(value.templates.structs[_i2237].name)) {
+    var _seq2233 = base.ref_templates;
+    ulong _bj2234 = 0;
+    var _news2236 = Array<ulong>();
+    var _patches2237 = Array<(ulong, ulong)>();
+    for (var _i2238 in 0..value.templates.structs.count) {
+        if (_bj2234 < _seq2233.count
+            and value.templates.structs[_i2238] === _seq2233[_bj2234]
+            and !value.extended_checked.contains(value.templates.structs[_i2238].name)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_StructDef_write(scratch, value.templates.structs[_i2237]);
-                base.verify_same("t", _bj2233, scratch, value.templates.structs[_i2237].name);
+                _m_StructDef_write(scratch, value.templates.structs[_i2238]);
+                base.verify_same("t", _bj2234, scratch, value.templates.structs[_i2238].name);
             }
-            _bj2233 += 1;
-        } else if (_bj2233 < _seq2232.count
-            and !(value.templates.structs[_i2237] === _seq2232[_bj2233])
-            and _same_m_StructDef(value.templates.structs[_i2237], _seq2232[_bj2233], base)) {
+            _bj2234 += 1;
+        } else if (_bj2234 < _seq2233.count
+            and !(value.templates.structs[_i2238] === _seq2233[_bj2234])
+            and _same_m_StructDef(value.templates.structs[_i2238], _seq2233[_bj2234], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_StructDef_write(scratch, value.templates.structs[_i2237]);
-                base.verify_same("t", _bj2233, scratch, value.templates.structs[_i2237].name);
+                _m_StructDef_write(scratch, value.templates.structs[_i2238]);
+                base.verify_same("t", _bj2234, scratch, value.templates.structs[_i2238].name);
             }
-            _bj2233 += 1;
-        } else if (_bj2233 < _seq2232.count and value.templates.structs[_i2237].name == _seq2232[_bj2233].name) {
-            _patches2236.append((_i2237, _bj2233));
-            _bj2233 += 1;
+            _bj2234 += 1;
+        } else if (_bj2234 < _seq2233.count and value.templates.structs[_i2238].name == _seq2233[_bj2234].name) {
+            _patches2237.append((_i2238, _bj2234));
+            _bj2234 += 1;
         } else {
-            _news2235.append(_i2237);
+            _news2236.append(_i2238);
         }
     }
-    if (_bj2233 == _seq2232.count) {
+    if (_bj2234 == _seq2233.count) {
         out.unsigned(2);
-        out.unsigned(_patches2236.count);
-        for (var (_i2237, _b) in _patches2236) {
+        out.unsigned(_patches2237.count);
+        for (var (_i2238, _b) in _patches2237) {
             ulong _before = out.values.count;
-            out.text(value.templates.structs[_i2237].name);
+            out.text(value.templates.structs[_i2238].name);
             out.unsigned(_b);
-            _patch_t_write(out, value.templates.structs[_i2237], base, _b);
+            _patch_t_write(out, value.templates.structs[_i2238], base, _b);
             base.count("t patched", out.values.count - _before);
-            {
-                var _own2238 = RecordOut();
-                _own2238.blank_bodies = false;
-                _own2238.blank_locs = true;
-                _own2238.pending_as_bytes = true;
-                _m_StructDef_write(_own2238, value.templates.structs[_i2237]);
-                base.own("templates structs", interface_text(_own2238));
-            }
-        }
-        out.unsigned(_news2235.count);
-        for (var _i2237 in _news2235) {
-            ulong _before = out.values.count;
-            out.unsigned(_i2237);
-            _m_StructDef_write(out, value.templates.structs[_i2237]);
-            base.count("t new", out.values.count - _before);
             {
                 var _own2239 = RecordOut();
                 _own2239.blank_bodies = false;
                 _own2239.blank_locs = true;
                 _own2239.pending_as_bytes = true;
-                _m_StructDef_write(_own2239, value.templates.structs[_i2237]);
+                _m_StructDef_write(_own2239, value.templates.structs[_i2238]);
                 base.own("templates structs", interface_text(_own2239));
+            }
+        }
+        out.unsigned(_news2236.count);
+        for (var _i2238 in _news2236) {
+            ulong _before = out.values.count;
+            out.unsigned(_i2238);
+            _m_StructDef_write(out, value.templates.structs[_i2238]);
+            base.count("t new", out.values.count - _before);
+            {
+                var _own2240 = RecordOut();
+                _own2240.blank_bodies = false;
+                _own2240.blank_locs = true;
+                _own2240.pending_as_bytes = true;
+                _m_StructDef_write(_own2240, value.templates.structs[_i2238]);
+                base.own("templates structs", interface_text(_own2240));
             }
         }
         base.count("t merged", 0);
     } else {
         out.unsigned(1);
         base.count("t by place", 0);
-        var _struct_hits2231 = HashSet<long>();
-        var _slots2234 = HashMap<String, long>();
-        for (var _i2237 in 0.._seq2232.count) {
-            if (!_slots2234.contains(_seq2232[_i2237].name)) {
-                _slots2234[_seq2232[_i2237].name] = _i2237 as long;
+        var _struct_hits2232 = HashSet<long>();
+        var _slots2235 = HashMap<String, long>();
+        for (var _i2238 in 0.._seq2233.count) {
+            if (!_slots2235.contains(_seq2233[_i2238].name)) {
+                _slots2235[_seq2233[_i2238].name] = _i2238 as long;
             }
         }
         out.unsigned(value.templates.structs.count);
-        for (var _i2237 in 0..value.templates.structs.count) {
-            var _item2230 = value.templates.structs[_i2237];
-            var _slot = _slots2234.try_get(_item2230.name);
+        for (var _i2238 in 0..value.templates.structs.count) {
+            var _item2231 = value.templates.structs[_i2238];
+            var _slot = _slots2235.try_get(_item2231.name);
             long named = _slot.is_value() ? _slot.value() : -1;
             long at = -1;
             if (named >= 0
-                and _seq2232[named as ulong] === _item2230
-                and !value.extended_checked.contains(_item2230.name)) {
+                and _seq2233[named as ulong] === _item2231
+                and !value.extended_checked.contains(_item2231.name)) {
                 at = named;
             }
             ulong _before = out.values.count;
             if (at >= 0) {
-                _struct_hits2231.insert(at);
+                _struct_hits2232.insert(at);
                 out.unsigned((at as ulong) * 2 + 1);
             } else if (named >= 0) {
-                _struct_hits2231.insert(named);
+                _struct_hits2232.insert(named);
                 out.unsigned(2);
                 out.unsigned(named as ulong);
-                _patch_t_write(out, _item2230, base, named as ulong);
+                _patch_t_write(out, _item2231, base, named as ulong);
                 base.count("t patched", out.values.count - _before);
             } else {
                 out.unsigned(0);
-                _m_StructDef_write(out, _item2230);
+                _m_StructDef_write(out, _item2231);
                 base.count("t new", out.values.count - _before);
             }
         }
-        base.missed("t", "t", _struct_hits2231.count);
+        base.missed("t", "t", _struct_hits2232.count);
     }
-    var _seq2253 = base.ref_template_functions;
-    ulong _bj2254 = 0;
-    var _news2255 = Array<ulong>();
-    var _changed2249 = Array<(ulong, ulong)>();
-    for (var _i2256 in 0..value.templates.functions.count) {
-        if (_bj2254 < _seq2253.count and value.templates.functions[_i2256] === _seq2253[_bj2254]) {
+    var _seq2254 = base.ref_template_functions;
+    ulong _bj2255 = 0;
+    var _news2256 = Array<ulong>();
+    var _changed2250 = Array<(ulong, ulong)>();
+    for (var _i2257 in 0..value.templates.functions.count) {
+        if (_bj2255 < _seq2254.count and value.templates.functions[_i2257] === _seq2254[_bj2255]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.templates.functions[_i2256]);
-                base.verify_same("tf", _bj2254, scratch);
+                _m_FunctionDef_write(scratch, value.templates.functions[_i2257]);
+                base.verify_same("tf", _bj2255, scratch);
             }
-            _bj2254 += 1;
-        } else if (_bj2254 < _seq2253.count
-            and _same_m_FunctionDef(value.templates.functions[_i2256], _seq2253[_bj2254], base)) {
+            _bj2255 += 1;
+        } else if (_bj2255 < _seq2254.count
+            and _same_m_FunctionDef(value.templates.functions[_i2257], _seq2254[_bj2255], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.templates.functions[_i2256]);
-                base.verify_same("tf", _bj2254, scratch);
+                _m_FunctionDef_write(scratch, value.templates.functions[_i2257]);
+                base.verify_same("tf", _bj2255, scratch);
             }
-            _bj2254 += 1;
-        } else if (_bj2254 < _seq2253.count and value.templates.functions[_i2256].name == _seq2253[_bj2254].name) {
-            _changed2249.append((_i2256, _bj2254));
-            _bj2254 += 1;
+            _bj2255 += 1;
+        } else if (_bj2255 < _seq2254.count and value.templates.functions[_i2257].name == _seq2254[_bj2255].name) {
+            _changed2250.append((_i2257, _bj2255));
+            _bj2255 += 1;
         } else {
-            _news2255.append(_i2256);
+            _news2256.append(_i2257);
         }
     }
-    if (_bj2254 == _seq2253.count) {
+    if (_bj2255 == _seq2254.count) {
         out.unsigned(2);
-        out.unsigned(_changed2249.count);
-        for (var (_i2256, _b) in _changed2249) {
-            out.text(value.templates.functions[_i2256].name);
+        out.unsigned(_changed2250.count);
+        for (var (_i2257, _b) in _changed2250) {
+            out.text(value.templates.functions[_i2257].name);
             out.unsigned(_b);
-            _m_FunctionDef_write(out, value.templates.functions[_i2256]);
-            {
-                var _own2257 = RecordOut();
-                _own2257.blank_bodies = false;
-                _own2257.blank_locs = true;
-                _own2257.pending_as_bytes = true;
-                _m_FunctionDef_write(_own2257, value.templates.functions[_i2256]);
-                base.own("templates functions", interface_text(_own2257));
-            }
-        }
-        base.count("tf" + " changed", _changed2249.count);
-        out.unsigned(_news2255.count);
-        for (var _i2256 in _news2255) {
-            out.unsigned(_i2256);
-            _m_FunctionDef_write(out, value.templates.functions[_i2256]);
+            _m_FunctionDef_write(out, value.templates.functions[_i2257]);
             {
                 var _own2258 = RecordOut();
                 _own2258.blank_bodies = false;
                 _own2258.blank_locs = true;
                 _own2258.pending_as_bytes = true;
-                _m_FunctionDef_write(_own2258, value.templates.functions[_i2256]);
+                _m_FunctionDef_write(_own2258, value.templates.functions[_i2257]);
                 base.own("templates functions", interface_text(_own2258));
+            }
+        }
+        base.count("tf" + " changed", _changed2250.count);
+        out.unsigned(_news2256.count);
+        for (var _i2257 in _news2256) {
+            out.unsigned(_i2257);
+            _m_FunctionDef_write(out, value.templates.functions[_i2257]);
+            {
+                var _own2259 = RecordOut();
+                _own2259.blank_bodies = false;
+                _own2259.blank_locs = true;
+                _own2259.pending_as_bytes = true;
+                _m_FunctionDef_write(_own2259, value.templates.functions[_i2257]);
+                base.own("templates functions", interface_text(_own2259));
             }
         }
         base.count("tf" + " merged", 0);
@@ -8807,15 +8815,15 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
         out.unsigned(3);
         base.count("tf" + " whole", 0);
         out.unsigned(value.templates.functions.count);
-        for (var _i2256 in 0..value.templates.functions.count) {
-            _m_FunctionDef_write(out, value.templates.functions[_i2256]);
+        for (var _i2257 in 0..value.templates.functions.count) {
+            _m_FunctionDef_write(out, value.templates.functions[_i2257]);
             {
-                var _own2259 = RecordOut();
-                _own2259.blank_bodies = false;
-                _own2259.blank_locs = true;
-                _own2259.pending_as_bytes = true;
-                _m_FunctionDef_write(_own2259, value.templates.functions[_i2256]);
-                base.own("templates functions", interface_text(_own2259));
+                var _own2260 = RecordOut();
+                _own2260.blank_bodies = false;
+                _own2260.blank_locs = true;
+                _own2260.pending_as_bytes = true;
+                _m_FunctionDef_write(_own2260, value.templates.functions[_i2257]);
+                base.own("templates functions", interface_text(_own2260));
             }
         }
     }
@@ -8824,80 +8832,80 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     base.write_checked(out, value.checked);
     base.stat("checked", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2272 = 0;
-    var _news2273 = HashMap<String, SpecRequest>();
-    for (var (_key2269, _) in value.spec_requests) {
-        var _kscratch2270 = base.scratch();
-        _kscratch2270.text(_key2269);
-        var _vscratch2271 = base.scratch();
-        _m_SpecRequest_write(_vscratch2271, value.spec_requests[_key2269]);
-        var _had = base.entry("spec_requests", _kscratch2270, _vscratch2271);
+    ulong _kept2273 = 0;
+    var _news2274 = HashMap<String, SpecRequest>();
+    for (var (_key2270, _) in value.spec_requests) {
+        var _kscratch2271 = base.scratch();
+        _kscratch2271.text(_key2270);
+        var _vscratch2272 = base.scratch();
+        _m_SpecRequest_write(_vscratch2272, value.spec_requests[_key2270]);
+        var _had = base.entry("spec_requests", _kscratch2271, _vscratch2272);
         if (_had >= 0) {
-            _kept2272 += 1;
+            _kept2273 += 1;
         }
         if (_had != 1) {
-            _news2273[_key2269] = value.spec_requests[_key2269];
+            _news2274[_key2270] = value.spec_requests[_key2270];
         }
     }
-    if (_kept2272 == base.size("spec_requests")) {
+    if (_kept2273 == base.size("spec_requests")) {
         out.unsigned(1);
-        var _keys2275 = Array<(u8[], u8[], String)>();
-        for (var (_key2274, _) in _news2273) {
-            var _scratch2276 = out.scratch();
-            _scratch2276.text(_key2274);
-            var _vscratch2278 = out.scratch();
-            _m_SpecRequest_write(_vscratch2278, _news2273[_key2274]);
-            _keys2275.append((_scratch2276.finish(), _vscratch2278.finish(), _key2274));
+        var _keys2276 = Array<(u8[], u8[], String)>();
+        for (var (_key2275, _) in _news2274) {
+            var _scratch2277 = out.scratch();
+            _scratch2277.text(_key2275);
+            var _vscratch2279 = out.scratch();
+            _m_SpecRequest_write(_vscratch2279, _news2274[_key2275]);
+            _keys2276.append((_scratch2277.finish(), _vscratch2279.finish(), _key2275));
         }
-        _keys2275.sort((a, b) => {
+        _keys2276.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2275.count);
-        for (var (_bytes2277, _, _key2274) in _keys2275) {
-            out.text(_key2274);
-            _m_SpecRequest_write(out, _news2273[_key2274]);
+        out.unsigned(_keys2276.count);
+        for (var (_bytes2278, _, _key2275) in _keys2276) {
+            out.text(_key2275);
+            _m_SpecRequest_write(out, _news2274[_key2275]);
         }
-        for (var (_okey2279, _) in _news2273) {
-            var _own2280 = RecordOut();
-            _own2280.blank_bodies = true;
-            _own2280.blank_locs = true;
-            _own2280.pending_as_bytes = true;
-            _own2280.text(_okey2279);
-            _m_SpecRequest_write(_own2280, _news2273[_okey2279]);
-            base.own("spec_requests", interface_text(_own2280));
+        for (var (_okey2280, _) in _news2274) {
+            var _own2281 = RecordOut();
+            _own2281.blank_bodies = true;
+            _own2281.blank_locs = true;
+            _own2281.pending_as_bytes = true;
+            _own2281.text(_okey2280);
+            _m_SpecRequest_write(_own2281, _news2274[_okey2280]);
+            base.own("spec_requests", interface_text(_own2281));
         }
     } else {
         out.unsigned(0);
-        var _keys2282 = Array<(u8[], u8[], String)>();
-        for (var (_key2281, _) in value.spec_requests) {
-            var _scratch2283 = out.scratch();
-            _scratch2283.text(_key2281);
-            var _vscratch2285 = out.scratch();
-            _m_SpecRequest_write(_vscratch2285, value.spec_requests[_key2281]);
-            _keys2282.append((_scratch2283.finish(), _vscratch2285.finish(), _key2281));
+        var _keys2283 = Array<(u8[], u8[], String)>();
+        for (var (_key2282, _) in value.spec_requests) {
+            var _scratch2284 = out.scratch();
+            _scratch2284.text(_key2282);
+            var _vscratch2286 = out.scratch();
+            _m_SpecRequest_write(_vscratch2286, value.spec_requests[_key2282]);
+            _keys2283.append((_scratch2284.finish(), _vscratch2286.finish(), _key2282));
         }
-        _keys2282.sort((a, b) => {
+        _keys2283.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2282.count);
-        for (var (_bytes2284, _, _key2281) in _keys2282) {
-            out.text(_key2281);
-            _m_SpecRequest_write(out, value.spec_requests[_key2281]);
+        out.unsigned(_keys2283.count);
+        for (var (_bytes2285, _, _key2282) in _keys2283) {
+            out.text(_key2282);
+            _m_SpecRequest_write(out, value.spec_requests[_key2282]);
         }
-        for (var (_okey2286, _) in value.spec_requests) {
-            var _own2287 = RecordOut();
-            _own2287.blank_bodies = true;
-            _own2287.blank_locs = true;
-            _own2287.pending_as_bytes = true;
-            _own2287.text(_okey2286);
-            _m_SpecRequest_write(_own2287, value.spec_requests[_okey2286]);
-            base.own("spec_requests", interface_text(_own2287));
+        for (var (_okey2287, _) in value.spec_requests) {
+            var _own2288 = RecordOut();
+            _own2288.blank_bodies = true;
+            _own2288.blank_locs = true;
+            _own2288.pending_as_bytes = true;
+            _own2288.text(_okey2287);
+            _m_SpecRequest_write(_own2288, value.spec_requests[_okey2287]);
+            base.own("spec_requests", interface_text(_own2288));
         }
         base.count("spec_requests whole", 0);
     }
@@ -8906,131 +8914,131 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     out.flag(value.record_summaries);
     base.stat("record_summaries", out.values.count - _mark);
     _mark = out.values.count;
-    var _n2300 = base.size("summaries_to_record");
-    var _scratch2299 = base.scratch();
-    if (value.summaries_to_record.count >= _n2300) {
-        for (var _i2301 in 0.._n2300) {
-            var (_t2302, _t2303) = value.summaries_to_record[_i2301];
-            _scratch2299.loc(_t2302);
-            _scratch2299.text(_t2303);
+    var _n2301 = base.size("summaries_to_record");
+    var _scratch2300 = base.scratch();
+    if (value.summaries_to_record.count >= _n2301) {
+        for (var _i2302 in 0.._n2301) {
+            var (_t2303, _t2304) = value.summaries_to_record[_i2302];
+            _scratch2300.loc(_t2303);
+            _scratch2300.text(_t2304);
         }
     }
-    if (value.summaries_to_record.count >= _n2300 and base.same_list("summaries_to_record", _scratch2299)) {
+    if (value.summaries_to_record.count >= _n2301 and base.same_list("summaries_to_record", _scratch2300)) {
         out.unsigned(1);
-        out.unsigned(_n2300);
-        out.unsigned(value.summaries_to_record.count - _n2300);
-        for (var _i2301 in _n2300..value.summaries_to_record.count) {
-            var (_t2304, _t2305) = value.summaries_to_record[_i2301];
-            out.loc(_t2304);
-            out.text(_t2305);
+        out.unsigned(_n2301);
+        out.unsigned(value.summaries_to_record.count - _n2301);
+        for (var _i2302 in _n2301..value.summaries_to_record.count) {
+            var (_t2305, _t2306) = value.summaries_to_record[_i2302];
+            out.loc(_t2305);
+            out.text(_t2306);
         }
     } else {
         out.unsigned(0);
         out.unsigned(value.summaries_to_record.count);
-        for (var _item2306 in value.summaries_to_record) {
-            var (_t2307, _t2308) = _item2306;
-            out.loc(_t2307);
-            out.text(_t2308);
+        for (var _item2307 in value.summaries_to_record) {
+            var (_t2308, _t2309) = _item2307;
+            out.loc(_t2308);
+            out.text(_t2309);
         }
         base.count("summaries_to_record whole", 0);
     }
     base.stat("summaries_to_record", out.values.count - _mark);
     _mark = out.values.count;
-    ulong _kept2326 = 0;
-    var _news2327 = HashMap<String, Array<bool>>();
-    for (var (_key2323, _) in value.caller_copies) {
-        var _kscratch2324 = base.scratch();
-        _kscratch2324.text(_key2323);
-        var _vscratch2325 = base.scratch();
-        _vscratch2325.unsigned(value.caller_copies[_key2323].count);
-        for (var _item2328 in value.caller_copies[_key2323]) {
-            _vscratch2325.flag(_item2328);
+    ulong _kept2327 = 0;
+    var _news2328 = HashMap<String, Array<bool>>();
+    for (var (_key2324, _) in value.caller_copies) {
+        var _kscratch2325 = base.scratch();
+        _kscratch2325.text(_key2324);
+        var _vscratch2326 = base.scratch();
+        _vscratch2326.unsigned(value.caller_copies[_key2324].count);
+        for (var _item2329 in value.caller_copies[_key2324]) {
+            _vscratch2326.flag(_item2329);
         }
-        var _had = base.entry("caller_copies", _kscratch2324, _vscratch2325);
+        var _had = base.entry("caller_copies", _kscratch2325, _vscratch2326);
         if (_had >= 0) {
-            _kept2326 += 1;
+            _kept2327 += 1;
         }
         if (_had != 1) {
-            _news2327[_key2323] = value.caller_copies[_key2323];
+            _news2328[_key2324] = value.caller_copies[_key2324];
         }
     }
-    if (_kept2326 == base.size("caller_copies")) {
+    if (_kept2327 == base.size("caller_copies")) {
         out.unsigned(1);
-        var _keys2330 = Array<(u8[], u8[], String)>();
-        for (var (_key2329, _) in _news2327) {
-            var _scratch2331 = out.scratch();
-            _scratch2331.text(_key2329);
-            var _vscratch2333 = out.scratch();
-            _vscratch2333.unsigned(_news2327[_key2329].count);
-            for (var _item2334 in _news2327[_key2329]) {
-                _vscratch2333.flag(_item2334);
+        var _keys2331 = Array<(u8[], u8[], String)>();
+        for (var (_key2330, _) in _news2328) {
+            var _scratch2332 = out.scratch();
+            _scratch2332.text(_key2330);
+            var _vscratch2334 = out.scratch();
+            _vscratch2334.unsigned(_news2328[_key2330].count);
+            for (var _item2335 in _news2328[_key2330]) {
+                _vscratch2334.flag(_item2335);
             }
-            _keys2330.append((_scratch2331.finish(), _vscratch2333.finish(), _key2329));
+            _keys2331.append((_scratch2332.finish(), _vscratch2334.finish(), _key2330));
         }
-        _keys2330.sort((a, b) => {
+        _keys2331.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2330.count);
-        for (var (_bytes2332, _, _key2329) in _keys2330) {
-            out.text(_key2329);
-            out.unsigned(_news2327[_key2329].count);
-            for (var _item2335 in _news2327[_key2329]) {
-                out.flag(_item2335);
+        out.unsigned(_keys2331.count);
+        for (var (_bytes2333, _, _key2330) in _keys2331) {
+            out.text(_key2330);
+            out.unsigned(_news2328[_key2330].count);
+            for (var _item2336 in _news2328[_key2330]) {
+                out.flag(_item2336);
             }
         }
-        for (var (_okey2336, _) in _news2327) {
-            var _own2337 = RecordOut();
-            _own2337.blank_bodies = true;
-            _own2337.blank_locs = true;
-            _own2337.pending_as_bytes = true;
-            _own2337.text(_okey2336);
-            _own2337.unsigned(_news2327[_okey2336].count);
-            for (var _item2338 in _news2327[_okey2336]) {
-                _own2337.flag(_item2338);
+        for (var (_okey2337, _) in _news2328) {
+            var _own2338 = RecordOut();
+            _own2338.blank_bodies = true;
+            _own2338.blank_locs = true;
+            _own2338.pending_as_bytes = true;
+            _own2338.text(_okey2337);
+            _own2338.unsigned(_news2328[_okey2337].count);
+            for (var _item2339 in _news2328[_okey2337]) {
+                _own2338.flag(_item2339);
             }
-            base.own("caller_copies", interface_text(_own2337));
+            base.own("caller_copies", interface_text(_own2338));
         }
     } else {
         out.unsigned(0);
-        var _keys2340 = Array<(u8[], u8[], String)>();
-        for (var (_key2339, _) in value.caller_copies) {
-            var _scratch2341 = out.scratch();
-            _scratch2341.text(_key2339);
-            var _vscratch2343 = out.scratch();
-            _vscratch2343.unsigned(value.caller_copies[_key2339].count);
-            for (var _item2344 in value.caller_copies[_key2339]) {
-                _vscratch2343.flag(_item2344);
+        var _keys2341 = Array<(u8[], u8[], String)>();
+        for (var (_key2340, _) in value.caller_copies) {
+            var _scratch2342 = out.scratch();
+            _scratch2342.text(_key2340);
+            var _vscratch2344 = out.scratch();
+            _vscratch2344.unsigned(value.caller_copies[_key2340].count);
+            for (var _item2345 in value.caller_copies[_key2340]) {
+                _vscratch2344.flag(_item2345);
             }
-            _keys2340.append((_scratch2341.finish(), _vscratch2343.finish(), _key2339));
+            _keys2341.append((_scratch2342.finish(), _vscratch2344.finish(), _key2340));
         }
-        _keys2340.sort((a, b) => {
+        _keys2341.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2340.count);
-        for (var (_bytes2342, _, _key2339) in _keys2340) {
-            out.text(_key2339);
-            out.unsigned(value.caller_copies[_key2339].count);
-            for (var _item2345 in value.caller_copies[_key2339]) {
-                out.flag(_item2345);
+        out.unsigned(_keys2341.count);
+        for (var (_bytes2343, _, _key2340) in _keys2341) {
+            out.text(_key2340);
+            out.unsigned(value.caller_copies[_key2340].count);
+            for (var _item2346 in value.caller_copies[_key2340]) {
+                out.flag(_item2346);
             }
         }
-        for (var (_okey2346, _) in value.caller_copies) {
-            var _own2347 = RecordOut();
-            _own2347.blank_bodies = true;
-            _own2347.blank_locs = true;
-            _own2347.pending_as_bytes = true;
-            _own2347.text(_okey2346);
-            _own2347.unsigned(value.caller_copies[_okey2346].count);
-            for (var _item2348 in value.caller_copies[_okey2346]) {
-                _own2347.flag(_item2348);
+        for (var (_okey2347, _) in value.caller_copies) {
+            var _own2348 = RecordOut();
+            _own2348.blank_bodies = true;
+            _own2348.blank_locs = true;
+            _own2348.pending_as_bytes = true;
+            _own2348.text(_okey2347);
+            _own2348.unsigned(value.caller_copies[_okey2347].count);
+            for (var _item2349 in value.caller_copies[_okey2347]) {
+                _own2348.flag(_item2349);
             }
-            base.own("caller_copies", interface_text(_own2347));
+            base.own("caller_copies", interface_text(_own2348));
         }
         base.count("caller_copies whole", 0);
     }
@@ -9042,56 +9050,56 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
 }
 
 _m_Module_read_delta(input: RecordIn, base: Module): Module {
-    var _f1495 = Array<ast.Import>();
-    var _mode1498 = input.unsigned();
-    if (_mode1498 == 2) {
-        var _changed1484 = HashMap<ulong, ast.Import>();
-        ulong _bi1499 = 0;
-        var _n1496 = input.count();
-        for (var _ in 0.._n1496) {
-            var _at1500 = input.unsigned();
-            while (_f1495.count < _at1500 or (input.merging and _bi1499 < base.imports.count)) {
-                var _c = _changed1484.try_get(_bi1499);
-                _f1495.append(_c.is_value() ? _c.value() : base.imports[_bi1499]);
-                _bi1499 += 1;
+    var _f1496 = Array<ast.Import>();
+    var _mode1499 = input.unsigned();
+    if (_mode1499 == 2) {
+        var _changed1485 = HashMap<ulong, ast.Import>();
+        ulong _bi1500 = 0;
+        var _n1497 = input.count();
+        for (var _ in 0.._n1497) {
+            var _at1501 = input.unsigned();
+            while (_f1496.count < _at1501 or (input.merging and _bi1500 < base.imports.count)) {
+                var _c = _changed1485.try_get(_bi1500);
+                _f1496.append(_c.is_value() ? _c.value() : base.imports[_bi1500]);
+                _bi1500 += 1;
             }
-            _f1495.append(_a_Import_read(input));
+            _f1496.append(_a_Import_read(input));
         }
-        while (_bi1499 < base.imports.count) {
-            var _c = _changed1484.try_get(_bi1499);
-            _f1495.append(_c.is_value() ? _c.value() : base.imports[_bi1499]);
-            _bi1499 += 1;
+        while (_bi1500 < base.imports.count) {
+            var _c = _changed1485.try_get(_bi1500);
+            _f1496.append(_c.is_value() ? _c.value() : base.imports[_bi1500]);
+            _bi1500 += 1;
         }
-    } else if (_mode1498 == 3) {
-        var _n1496 = input.count();
-        for (var _ in 0.._n1496) {
-            _f1495.append(_a_Import_read(input));
+    } else if (_mode1499 == 3) {
+        var _n1497 = input.count();
+        for (var _ in 0.._n1497) {
+            _f1496.append(_a_Import_read(input));
         }
     } else {
-        var _n1496 = input.count();
+        var _n1497 = input.count();
         if (input.merging) {
             input.error = "imports" + " written by place";
         }
-        for (var _ in 0.._n1496) {
-            var _tag1497 = input.unsigned();
-            if (_tag1497 & 1 == 1) {
+        for (var _ in 0.._n1497) {
+            var _tag1498 = input.unsigned();
+            if (_tag1498 & 1 == 1) {
                 if (!input.merging) {
-                    _f1495.append(base.imports[_tag1497 >> 1]);
+                    _f1496.append(base.imports[_tag1498 >> 1]);
                 }
             } else {
                 var _read = _a_Import_read(input);
                 if (!input.merging or true) {
-                    _f1495.append(_read);
+                    _f1496.append(_read);
                 }
             }
         }
     }
-    var _f1528 = Array<StructDef>();
-    var _mode1531 = input.unsigned();
-    if (_mode1531 == 2) {
-        var _patched1534 = HashMap<ulong, StructDef>();
-        var _n1529 = input.count();
-        for (var _ in 0.._n1529) {
+    var _f1529 = Array<StructDef>();
+    var _mode1532 = input.unsigned();
+    if (_mode1532 == 2) {
+        var _patched1535 = HashMap<ulong, StructDef>();
+        var _n1530 = input.count();
+        for (var _ in 0.._n1530) {
             var _name = input.text();
             var _slot = input.unsigned();
             if (input.merging) {
@@ -9101,135 +9109,135 @@ _m_Module_read_delta(input: RecordIn, base: Module): Module {
                 input.error = $"no struct {_name} to patch";
                 break;
             }
-            _patched1534[_slot] = _patch_s_read(input, base.structs[_slot]);
+            _patched1535[_slot] = _patch_s_read(input, base.structs[_slot]);
         }
-        ulong _bi1532 = 0;
+        ulong _bi1533 = 0;
         var _added = input.count();
         for (var _ in 0.._added) {
-            var _at1533 = input.unsigned();
-            while (_f1528.count < _at1533 or (input.merging and _bi1532 < base.structs.count)) {
-                var _p = _patched1534.try_get(_bi1532);
-                _f1528.append(_p.is_value() ? _p.value() : base.structs[_bi1532]);
-                _bi1532 += 1;
+            var _at1534 = input.unsigned();
+            while (_f1529.count < _at1534 or (input.merging and _bi1533 < base.structs.count)) {
+                var _p = _patched1535.try_get(_bi1533);
+                _f1529.append(_p.is_value() ? _p.value() : base.structs[_bi1533]);
+                _bi1533 += 1;
             }
-            _f1528.append(_m_StructDef_read_lazy(input));
+            _f1529.append(_m_StructDef_read_lazy(input));
         }
-        while (_bi1532 < base.structs.count) {
-            var _p = _patched1534.try_get(_bi1532);
-            _f1528.append(_p.is_value() ? _p.value() : base.structs[_bi1532]);
-            _bi1532 += 1;
+        while (_bi1533 < base.structs.count) {
+            var _p = _patched1535.try_get(_bi1533);
+            _f1529.append(_p.is_value() ? _p.value() : base.structs[_bi1533]);
+            _bi1533 += 1;
         }
     } else {
         if (input.merging) {
             input.error = "structs written by place";
         }
-        var _n1529 = input.count();
-        for (var _ in 0.._n1529) {
-            var _tag1530 = input.unsigned();
-            if (_tag1530 & 1 == 1) {
-                _f1528.append(base.structs[(_tag1530 >> 1) < base.structs.count ? _tag1530 >> 1 : 0]);
-            } else if (_tag1530 == 2) {
+        var _n1530 = input.count();
+        for (var _ in 0.._n1530) {
+            var _tag1531 = input.unsigned();
+            if (_tag1531 & 1 == 1) {
+                _f1529.append(base.structs[(_tag1531 >> 1) < base.structs.count ? _tag1531 >> 1 : 0]);
+            } else if (_tag1531 == 2) {
                 var _was = base.structs[input.unsigned()];
-                _f1528.append(_patch_s_read(input, _was));
+                _f1529.append(_patch_s_read(input, _was));
             } else {
-                _f1528.append(_m_StructDef_read_lazy(input));
+                _f1529.append(_m_StructDef_read_lazy(input));
             }
         }
     }
-    var _f1548 = Array<TraitDef>();
-    var _mode1551 = input.unsigned();
-    if (_mode1551 == 2) {
-        var _changed1537 = HashMap<ulong, TraitDef>();
-        ulong _bi1552 = 0;
-        var _n1549 = input.count();
-        for (var _ in 0.._n1549) {
-            var _at1553 = input.unsigned();
-            while (_f1548.count < _at1553 or (input.merging and _bi1552 < base.traits.count)) {
-                var _c = _changed1537.try_get(_bi1552);
-                _f1548.append(_c.is_value() ? _c.value() : base.traits[_bi1552]);
-                _bi1552 += 1;
+    var _f1549 = Array<TraitDef>();
+    var _mode1552 = input.unsigned();
+    if (_mode1552 == 2) {
+        var _changed1538 = HashMap<ulong, TraitDef>();
+        ulong _bi1553 = 0;
+        var _n1550 = input.count();
+        for (var _ in 0.._n1550) {
+            var _at1554 = input.unsigned();
+            while (_f1549.count < _at1554 or (input.merging and _bi1553 < base.traits.count)) {
+                var _c = _changed1538.try_get(_bi1553);
+                _f1549.append(_c.is_value() ? _c.value() : base.traits[_bi1553]);
+                _bi1553 += 1;
             }
-            _f1548.append(_m_TraitDef_read(input));
+            _f1549.append(_m_TraitDef_read(input));
         }
-        while (_bi1552 < base.traits.count) {
-            var _c = _changed1537.try_get(_bi1552);
-            _f1548.append(_c.is_value() ? _c.value() : base.traits[_bi1552]);
-            _bi1552 += 1;
+        while (_bi1553 < base.traits.count) {
+            var _c = _changed1538.try_get(_bi1553);
+            _f1549.append(_c.is_value() ? _c.value() : base.traits[_bi1553]);
+            _bi1553 += 1;
         }
-    } else if (_mode1551 == 3) {
-        var _n1549 = input.count();
-        for (var _ in 0.._n1549) {
-            _f1548.append(_m_TraitDef_read(input));
+    } else if (_mode1552 == 3) {
+        var _n1550 = input.count();
+        for (var _ in 0.._n1550) {
+            _f1549.append(_m_TraitDef_read(input));
         }
     } else {
-        var _n1549 = input.count();
+        var _n1550 = input.count();
         if (input.merging) {
             input.error = "traits" + " written by place";
         }
-        for (var _ in 0.._n1549) {
-            var _tag1550 = input.unsigned();
-            if (_tag1550 & 1 == 1) {
+        for (var _ in 0.._n1550) {
+            var _tag1551 = input.unsigned();
+            if (_tag1551 & 1 == 1) {
                 if (!input.merging) {
-                    _f1548.append(base.traits[_tag1550 >> 1]);
+                    _f1549.append(base.traits[_tag1551 >> 1]);
                 }
             } else {
                 var _read = _m_TraitDef_read(input);
                 if (!input.merging or true) {
-                    _f1548.append(_read);
+                    _f1549.append(_read);
                 }
             }
         }
     }
-    var _f1567 = Array<ExtensionDef>();
-    var _mode1570 = input.unsigned();
-    if (_mode1570 == 2) {
-        var _changed1556 = HashMap<ulong, ExtensionDef>();
-        ulong _bi1571 = 0;
-        var _n1568 = input.count();
-        for (var _ in 0.._n1568) {
-            var _at1572 = input.unsigned();
-            while (_f1567.count < _at1572 or (input.merging and _bi1571 < base.extensions.count)) {
-                var _c = _changed1556.try_get(_bi1571);
-                _f1567.append(_c.is_value() ? _c.value() : base.extensions[_bi1571]);
-                _bi1571 += 1;
+    var _f1568 = Array<ExtensionDef>();
+    var _mode1571 = input.unsigned();
+    if (_mode1571 == 2) {
+        var _changed1557 = HashMap<ulong, ExtensionDef>();
+        ulong _bi1572 = 0;
+        var _n1569 = input.count();
+        for (var _ in 0.._n1569) {
+            var _at1573 = input.unsigned();
+            while (_f1568.count < _at1573 or (input.merging and _bi1572 < base.extensions.count)) {
+                var _c = _changed1557.try_get(_bi1572);
+                _f1568.append(_c.is_value() ? _c.value() : base.extensions[_bi1572]);
+                _bi1572 += 1;
             }
-            _f1567.append(_m_ExtensionDef_read(input));
+            _f1568.append(_m_ExtensionDef_read(input));
         }
-        while (_bi1571 < base.extensions.count) {
-            var _c = _changed1556.try_get(_bi1571);
-            _f1567.append(_c.is_value() ? _c.value() : base.extensions[_bi1571]);
-            _bi1571 += 1;
+        while (_bi1572 < base.extensions.count) {
+            var _c = _changed1557.try_get(_bi1572);
+            _f1568.append(_c.is_value() ? _c.value() : base.extensions[_bi1572]);
+            _bi1572 += 1;
         }
-    } else if (_mode1570 == 3) {
-        var _n1568 = input.count();
-        for (var _ in 0.._n1568) {
-            _f1567.append(_m_ExtensionDef_read(input));
+    } else if (_mode1571 == 3) {
+        var _n1569 = input.count();
+        for (var _ in 0.._n1569) {
+            _f1568.append(_m_ExtensionDef_read(input));
         }
     } else {
-        var _n1568 = input.count();
+        var _n1569 = input.count();
         if (input.merging) {
             input.error = "extensions" + " written by place";
         }
-        for (var _ in 0.._n1568) {
-            var _tag1569 = input.unsigned();
-            if (_tag1569 & 1 == 1) {
+        for (var _ in 0.._n1569) {
+            var _tag1570 = input.unsigned();
+            if (_tag1570 & 1 == 1) {
                 if (!input.merging) {
-                    _f1567.append(base.extensions[_tag1569 >> 1]);
+                    _f1568.append(base.extensions[_tag1570 >> 1]);
                 }
             } else {
                 var _read = _m_ExtensionDef_read(input);
                 if (!input.merging or true) {
-                    _f1567.append(_read);
+                    _f1568.append(_read);
                 }
             }
         }
     }
-    var _f1586 = Array<FunctionDef>();
-    var _mode1589 = input.unsigned();
-    if (_mode1589 == 2) {
-        var _changed1575 = HashMap<ulong, FunctionDef>();
-        var _nc1577 = input.count();
-        for (var _ in 0.._nc1577) {
+    var _f1587 = Array<FunctionDef>();
+    var _mode1590 = input.unsigned();
+    if (_mode1590 == 2) {
+        var _changed1576 = HashMap<ulong, FunctionDef>();
+        var _nc1578 = input.count();
+        for (var _ in 0.._nc1578) {
             var _name = input.text();
             var _slot = input.unsigned();
             if (input.merging) {
@@ -9243,934 +9251,934 @@ _m_Module_read_delta(input: RecordIn, base: Module): Module {
             }
             var _el = _m_FunctionDef_read_lazy(input);
             if (_slot < base.functions.count) {
-                _changed1575[_slot] = _el;
+                _changed1576[_slot] = _el;
             } else {
                 input.error = $"no {_name} to change";
             }
         }
-        ulong _bi1590 = 0;
-        var _n1587 = input.count();
-        for (var _ in 0.._n1587) {
-            var _at1591 = input.unsigned();
-            while (_f1586.count < _at1591 or (input.merging and _bi1590 < base.functions.count)) {
-                var _c = _changed1575.try_get(_bi1590);
-                _f1586.append(_c.is_value() ? _c.value() : base.functions[_bi1590]);
-                _bi1590 += 1;
+        ulong _bi1591 = 0;
+        var _n1588 = input.count();
+        for (var _ in 0.._n1588) {
+            var _at1592 = input.unsigned();
+            while (_f1587.count < _at1592 or (input.merging and _bi1591 < base.functions.count)) {
+                var _c = _changed1576.try_get(_bi1591);
+                _f1587.append(_c.is_value() ? _c.value() : base.functions[_bi1591]);
+                _bi1591 += 1;
             }
-            _f1586.append(_m_FunctionDef_read_lazy(input));
+            _f1587.append(_m_FunctionDef_read_lazy(input));
         }
-        while (_bi1590 < base.functions.count) {
-            var _c = _changed1575.try_get(_bi1590);
-            _f1586.append(_c.is_value() ? _c.value() : base.functions[_bi1590]);
-            _bi1590 += 1;
+        while (_bi1591 < base.functions.count) {
+            var _c = _changed1576.try_get(_bi1591);
+            _f1587.append(_c.is_value() ? _c.value() : base.functions[_bi1591]);
+            _bi1591 += 1;
         }
-    } else if (_mode1589 == 3) {
-        var _n1587 = input.count();
-        for (var _ in 0.._n1587) {
-            _f1586.append(_m_FunctionDef_read_lazy(input));
+    } else if (_mode1590 == 3) {
+        var _n1588 = input.count();
+        for (var _ in 0.._n1588) {
+            _f1587.append(_m_FunctionDef_read_lazy(input));
         }
     } else {
-        var _n1587 = input.count();
+        var _n1588 = input.count();
         if (input.merging) {
             input.error = "functions" + " written by place";
         }
-        for (var _ in 0.._n1587) {
-            var _tag1588 = input.unsigned();
-            if (_tag1588 & 1 == 1) {
+        for (var _ in 0.._n1588) {
+            var _tag1589 = input.unsigned();
+            if (_tag1589 & 1 == 1) {
                 if (!input.merging) {
-                    _f1586.append(base.functions[_tag1588 >> 1]);
+                    _f1587.append(base.functions[_tag1589 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read_lazy(input);
                 if (!input.merging or true) {
-                    _f1586.append(_read);
+                    _f1587.append(_read);
                 }
             }
         }
     }
-    var _f1605 = Array<ExternDef>();
-    var _mode1608 = input.unsigned();
-    if (_mode1608 == 2) {
-        var _changed1594 = HashMap<ulong, ExternDef>();
-        ulong _bi1609 = 0;
-        var _n1606 = input.count();
-        for (var _ in 0.._n1606) {
-            var _at1610 = input.unsigned();
-            while (_f1605.count < _at1610 or (input.merging and _bi1609 < base.externs.count)) {
-                var _c = _changed1594.try_get(_bi1609);
-                _f1605.append(_c.is_value() ? _c.value() : base.externs[_bi1609]);
-                _bi1609 += 1;
+    var _f1606 = Array<ExternDef>();
+    var _mode1609 = input.unsigned();
+    if (_mode1609 == 2) {
+        var _changed1595 = HashMap<ulong, ExternDef>();
+        ulong _bi1610 = 0;
+        var _n1607 = input.count();
+        for (var _ in 0.._n1607) {
+            var _at1611 = input.unsigned();
+            while (_f1606.count < _at1611 or (input.merging and _bi1610 < base.externs.count)) {
+                var _c = _changed1595.try_get(_bi1610);
+                _f1606.append(_c.is_value() ? _c.value() : base.externs[_bi1610]);
+                _bi1610 += 1;
             }
-            _f1605.append(_m_ExternDef_read(input));
+            _f1606.append(_m_ExternDef_read(input));
         }
-        while (_bi1609 < base.externs.count) {
-            var _c = _changed1594.try_get(_bi1609);
-            _f1605.append(_c.is_value() ? _c.value() : base.externs[_bi1609]);
-            _bi1609 += 1;
+        while (_bi1610 < base.externs.count) {
+            var _c = _changed1595.try_get(_bi1610);
+            _f1606.append(_c.is_value() ? _c.value() : base.externs[_bi1610]);
+            _bi1610 += 1;
         }
-    } else if (_mode1608 == 3) {
-        var _n1606 = input.count();
-        for (var _ in 0.._n1606) {
-            _f1605.append(_m_ExternDef_read(input));
+    } else if (_mode1609 == 3) {
+        var _n1607 = input.count();
+        for (var _ in 0.._n1607) {
+            _f1606.append(_m_ExternDef_read(input));
         }
     } else {
-        var _n1606 = input.count();
+        var _n1607 = input.count();
         if (input.merging) {
             input.error = "externs" + " written by place";
         }
-        for (var _ in 0.._n1606) {
-            var _tag1607 = input.unsigned();
-            if (_tag1607 & 1 == 1) {
+        for (var _ in 0.._n1607) {
+            var _tag1608 = input.unsigned();
+            if (_tag1608 & 1 == 1) {
                 if (!input.merging) {
-                    _f1605.append(base.externs[_tag1607 >> 1]);
+                    _f1606.append(base.externs[_tag1608 >> 1]);
                 }
             } else {
                 var _read = _m_ExternDef_read(input);
                 if (!input.merging or true) {
-                    _f1605.append(_read);
+                    _f1606.append(_read);
                 }
             }
         }
     }
-    var _f1624 = Array<VariableDef>();
-    var _mode1627 = input.unsigned();
-    if (_mode1627 == 2) {
-        var _changed1613 = HashMap<ulong, VariableDef>();
-        ulong _bi1628 = 0;
-        var _n1625 = input.count();
-        for (var _ in 0.._n1625) {
-            var _at1629 = input.unsigned();
-            while (_f1624.count < _at1629 or (input.merging and _bi1628 < base.globals.count)) {
-                var _c = _changed1613.try_get(_bi1628);
-                _f1624.append(_c.is_value() ? _c.value() : base.globals[_bi1628]);
-                _bi1628 += 1;
+    var _f1625 = Array<VariableDef>();
+    var _mode1628 = input.unsigned();
+    if (_mode1628 == 2) {
+        var _changed1614 = HashMap<ulong, VariableDef>();
+        ulong _bi1629 = 0;
+        var _n1626 = input.count();
+        for (var _ in 0.._n1626) {
+            var _at1630 = input.unsigned();
+            while (_f1625.count < _at1630 or (input.merging and _bi1629 < base.globals.count)) {
+                var _c = _changed1614.try_get(_bi1629);
+                _f1625.append(_c.is_value() ? _c.value() : base.globals[_bi1629]);
+                _bi1629 += 1;
             }
-            _f1624.append(_m_VariableDef_read(input));
+            _f1625.append(_m_VariableDef_read(input));
         }
-        while (_bi1628 < base.globals.count) {
-            var _c = _changed1613.try_get(_bi1628);
-            _f1624.append(_c.is_value() ? _c.value() : base.globals[_bi1628]);
-            _bi1628 += 1;
+        while (_bi1629 < base.globals.count) {
+            var _c = _changed1614.try_get(_bi1629);
+            _f1625.append(_c.is_value() ? _c.value() : base.globals[_bi1629]);
+            _bi1629 += 1;
         }
-    } else if (_mode1627 == 3) {
-        var _n1625 = input.count();
-        for (var _ in 0.._n1625) {
-            _f1624.append(_m_VariableDef_read(input));
+    } else if (_mode1628 == 3) {
+        var _n1626 = input.count();
+        for (var _ in 0.._n1626) {
+            _f1625.append(_m_VariableDef_read(input));
         }
     } else {
-        var _n1625 = input.count();
+        var _n1626 = input.count();
         if (input.merging) {
             input.error = "globals" + " written by place";
         }
-        for (var _ in 0.._n1625) {
-            var _tag1626 = input.unsigned();
-            if (_tag1626 & 1 == 1) {
+        for (var _ in 0.._n1626) {
+            var _tag1627 = input.unsigned();
+            if (_tag1627 & 1 == 1) {
                 if (!input.merging) {
-                    _f1624.append(base.globals[_tag1626 >> 1]);
+                    _f1625.append(base.globals[_tag1627 >> 1]);
                 }
             } else {
                 var _read = _m_VariableDef_read(input);
                 if (!input.merging or true) {
-                    _f1624.append(_read);
+                    _f1625.append(_read);
                 }
             }
         }
     }
-    var _f1643 = Array<ModuleStaticBlock>();
-    var _mode1646 = input.unsigned();
-    if (_mode1646 == 2) {
-        var _changed1632 = HashMap<ulong, ModuleStaticBlock>();
-        ulong _bi1647 = 0;
-        var _n1644 = input.count();
-        for (var _ in 0.._n1644) {
-            var _at1648 = input.unsigned();
-            while (_f1643.count < _at1648 or (input.merging and _bi1647 < base.static_blocks.count)) {
-                var _c = _changed1632.try_get(_bi1647);
-                _f1643.append(_c.is_value() ? _c.value() : base.static_blocks[_bi1647]);
-                _bi1647 += 1;
+    var _f1644 = Array<ModuleStaticBlock>();
+    var _mode1647 = input.unsigned();
+    if (_mode1647 == 2) {
+        var _changed1633 = HashMap<ulong, ModuleStaticBlock>();
+        ulong _bi1648 = 0;
+        var _n1645 = input.count();
+        for (var _ in 0.._n1645) {
+            var _at1649 = input.unsigned();
+            while (_f1644.count < _at1649 or (input.merging and _bi1648 < base.static_blocks.count)) {
+                var _c = _changed1633.try_get(_bi1648);
+                _f1644.append(_c.is_value() ? _c.value() : base.static_blocks[_bi1648]);
+                _bi1648 += 1;
             }
-            _f1643.append(_m_ModuleStaticBlock_read(input));
+            _f1644.append(_m_ModuleStaticBlock_read(input));
         }
-        while (_bi1647 < base.static_blocks.count) {
-            var _c = _changed1632.try_get(_bi1647);
-            _f1643.append(_c.is_value() ? _c.value() : base.static_blocks[_bi1647]);
-            _bi1647 += 1;
+        while (_bi1648 < base.static_blocks.count) {
+            var _c = _changed1633.try_get(_bi1648);
+            _f1644.append(_c.is_value() ? _c.value() : base.static_blocks[_bi1648]);
+            _bi1648 += 1;
         }
-    } else if (_mode1646 == 3) {
-        var _n1644 = input.count();
-        for (var _ in 0.._n1644) {
-            _f1643.append(_m_ModuleStaticBlock_read(input));
+    } else if (_mode1647 == 3) {
+        var _n1645 = input.count();
+        for (var _ in 0.._n1645) {
+            _f1644.append(_m_ModuleStaticBlock_read(input));
         }
     } else {
-        var _n1644 = input.count();
+        var _n1645 = input.count();
         if (input.merging) {
             input.error = "static_blocks" + " written by place";
         }
-        for (var _ in 0.._n1644) {
-            var _tag1645 = input.unsigned();
-            if (_tag1645 & 1 == 1) {
+        for (var _ in 0.._n1645) {
+            var _tag1646 = input.unsigned();
+            if (_tag1646 & 1 == 1) {
                 if (!input.merging) {
-                    _f1643.append(base.static_blocks[_tag1645 >> 1]);
+                    _f1644.append(base.static_blocks[_tag1646 >> 1]);
                 }
             } else {
                 var _read = _m_ModuleStaticBlock_read(input);
                 if (!input.merging or true) {
-                    _f1643.append(_read);
+                    _f1644.append(_read);
                 }
             }
         }
     }
-    var _f1662 = Array<EnumDef>();
-    var _mode1665 = input.unsigned();
-    if (_mode1665 == 2) {
-        var _changed1651 = HashMap<ulong, EnumDef>();
-        ulong _bi1666 = 0;
-        var _n1663 = input.count();
-        for (var _ in 0.._n1663) {
-            var _at1667 = input.unsigned();
-            while (_f1662.count < _at1667 or (input.merging and _bi1666 < base.enums.count)) {
-                var _c = _changed1651.try_get(_bi1666);
-                _f1662.append(_c.is_value() ? _c.value() : base.enums[_bi1666]);
-                _bi1666 += 1;
+    var _f1663 = Array<EnumDef>();
+    var _mode1666 = input.unsigned();
+    if (_mode1666 == 2) {
+        var _changed1652 = HashMap<ulong, EnumDef>();
+        ulong _bi1667 = 0;
+        var _n1664 = input.count();
+        for (var _ in 0.._n1664) {
+            var _at1668 = input.unsigned();
+            while (_f1663.count < _at1668 or (input.merging and _bi1667 < base.enums.count)) {
+                var _c = _changed1652.try_get(_bi1667);
+                _f1663.append(_c.is_value() ? _c.value() : base.enums[_bi1667]);
+                _bi1667 += 1;
             }
-            _f1662.append(_m_EnumDef_read(input));
+            _f1663.append(_m_EnumDef_read(input));
         }
-        while (_bi1666 < base.enums.count) {
-            var _c = _changed1651.try_get(_bi1666);
-            _f1662.append(_c.is_value() ? _c.value() : base.enums[_bi1666]);
-            _bi1666 += 1;
+        while (_bi1667 < base.enums.count) {
+            var _c = _changed1652.try_get(_bi1667);
+            _f1663.append(_c.is_value() ? _c.value() : base.enums[_bi1667]);
+            _bi1667 += 1;
         }
-    } else if (_mode1665 == 3) {
-        var _n1663 = input.count();
-        for (var _ in 0.._n1663) {
-            _f1662.append(_m_EnumDef_read(input));
+    } else if (_mode1666 == 3) {
+        var _n1664 = input.count();
+        for (var _ in 0.._n1664) {
+            _f1663.append(_m_EnumDef_read(input));
         }
     } else {
-        var _n1663 = input.count();
+        var _n1664 = input.count();
         if (input.merging) {
             input.error = "enums" + " written by place";
         }
-        for (var _ in 0.._n1663) {
-            var _tag1664 = input.unsigned();
-            if (_tag1664 & 1 == 1) {
+        for (var _ in 0.._n1664) {
+            var _tag1665 = input.unsigned();
+            if (_tag1665 & 1 == 1) {
                 if (!input.merging) {
-                    _f1662.append(base.enums[_tag1664 >> 1]);
+                    _f1663.append(base.enums[_tag1665 >> 1]);
                 }
             } else {
                 var _read = _m_EnumDef_read(input);
                 if (!input.merging or true) {
-                    _f1662.append(_read);
+                    _f1663.append(_read);
                 }
             }
         }
     }
-    var _f1681 = Array<TypeName>();
-    var _mode1684 = input.unsigned();
-    if (_mode1684 == 2) {
-        var _changed1670 = HashMap<ulong, TypeName>();
-        ulong _bi1685 = 0;
-        var _n1682 = input.count();
-        for (var _ in 0.._n1682) {
-            var _at1686 = input.unsigned();
-            while (_f1681.count < _at1686 or (input.merging and _bi1685 < base.struct_specs.count)) {
-                var _c = _changed1670.try_get(_bi1685);
-                _f1681.append(_c.is_value() ? _c.value() : base.struct_specs[_bi1685]);
-                _bi1685 += 1;
+    var _f1682 = Array<TypeName>();
+    var _mode1685 = input.unsigned();
+    if (_mode1685 == 2) {
+        var _changed1671 = HashMap<ulong, TypeName>();
+        ulong _bi1686 = 0;
+        var _n1683 = input.count();
+        for (var _ in 0.._n1683) {
+            var _at1687 = input.unsigned();
+            while (_f1682.count < _at1687 or (input.merging and _bi1686 < base.struct_specs.count)) {
+                var _c = _changed1671.try_get(_bi1686);
+                _f1682.append(_c.is_value() ? _c.value() : base.struct_specs[_bi1686]);
+                _bi1686 += 1;
             }
-            _f1681.append(_m_TypeName_read(input));
+            _f1682.append(_m_TypeName_read(input));
         }
-        while (_bi1685 < base.struct_specs.count) {
-            var _c = _changed1670.try_get(_bi1685);
-            _f1681.append(_c.is_value() ? _c.value() : base.struct_specs[_bi1685]);
-            _bi1685 += 1;
+        while (_bi1686 < base.struct_specs.count) {
+            var _c = _changed1671.try_get(_bi1686);
+            _f1682.append(_c.is_value() ? _c.value() : base.struct_specs[_bi1686]);
+            _bi1686 += 1;
         }
-    } else if (_mode1684 == 3) {
-        var _n1682 = input.count();
-        for (var _ in 0.._n1682) {
-            _f1681.append(_m_TypeName_read(input));
+    } else if (_mode1685 == 3) {
+        var _n1683 = input.count();
+        for (var _ in 0.._n1683) {
+            _f1682.append(_m_TypeName_read(input));
         }
     } else {
-        var _n1682 = input.count();
+        var _n1683 = input.count();
         if (input.merging) {
             input.error = "struct_specs" + " written by place";
         }
-        for (var _ in 0.._n1682) {
-            var _tag1683 = input.unsigned();
-            if (_tag1683 & 1 == 1) {
+        for (var _ in 0.._n1683) {
+            var _tag1684 = input.unsigned();
+            if (_tag1684 & 1 == 1) {
                 if (!input.merging) {
-                    _f1681.append(base.struct_specs[_tag1683 >> 1]);
+                    _f1682.append(base.struct_specs[_tag1684 >> 1]);
                 }
             } else {
                 var _read = _m_TypeName_read(input);
                 if (!input.merging or true) {
-                    _f1681.append(_read);
+                    _f1682.append(_read);
                 }
             }
         }
     }
-    var _f1700 = Array<TypeName>();
-    var _mode1703 = input.unsigned();
-    if (_mode1703 == 2) {
-        var _changed1689 = HashMap<ulong, TypeName>();
-        ulong _bi1704 = 0;
-        var _n1701 = input.count();
-        for (var _ in 0.._n1701) {
-            var _at1705 = input.unsigned();
-            while (_f1700.count < _at1705 or (input.merging and _bi1704 < base.func_specs.count)) {
-                var _c = _changed1689.try_get(_bi1704);
-                _f1700.append(_c.is_value() ? _c.value() : base.func_specs[_bi1704]);
-                _bi1704 += 1;
+    var _f1701 = Array<TypeName>();
+    var _mode1704 = input.unsigned();
+    if (_mode1704 == 2) {
+        var _changed1690 = HashMap<ulong, TypeName>();
+        ulong _bi1705 = 0;
+        var _n1702 = input.count();
+        for (var _ in 0.._n1702) {
+            var _at1706 = input.unsigned();
+            while (_f1701.count < _at1706 or (input.merging and _bi1705 < base.func_specs.count)) {
+                var _c = _changed1690.try_get(_bi1705);
+                _f1701.append(_c.is_value() ? _c.value() : base.func_specs[_bi1705]);
+                _bi1705 += 1;
             }
-            _f1700.append(_m_TypeName_read(input));
+            _f1701.append(_m_TypeName_read(input));
         }
-        while (_bi1704 < base.func_specs.count) {
-            var _c = _changed1689.try_get(_bi1704);
-            _f1700.append(_c.is_value() ? _c.value() : base.func_specs[_bi1704]);
-            _bi1704 += 1;
+        while (_bi1705 < base.func_specs.count) {
+            var _c = _changed1690.try_get(_bi1705);
+            _f1701.append(_c.is_value() ? _c.value() : base.func_specs[_bi1705]);
+            _bi1705 += 1;
         }
-    } else if (_mode1703 == 3) {
-        var _n1701 = input.count();
-        for (var _ in 0.._n1701) {
-            _f1700.append(_m_TypeName_read(input));
+    } else if (_mode1704 == 3) {
+        var _n1702 = input.count();
+        for (var _ in 0.._n1702) {
+            _f1701.append(_m_TypeName_read(input));
         }
     } else {
-        var _n1701 = input.count();
+        var _n1702 = input.count();
         if (input.merging) {
             input.error = "func_specs" + " written by place";
         }
-        for (var _ in 0.._n1701) {
-            var _tag1702 = input.unsigned();
-            if (_tag1702 & 1 == 1) {
+        for (var _ in 0.._n1702) {
+            var _tag1703 = input.unsigned();
+            if (_tag1703 & 1 == 1) {
                 if (!input.merging) {
-                    _f1700.append(base.func_specs[_tag1702 >> 1]);
+                    _f1701.append(base.func_specs[_tag1703 >> 1]);
                 }
             } else {
                 var _read = _m_TypeName_read(input);
                 if (!input.merging or true) {
-                    _f1700.append(_read);
+                    _f1701.append(_read);
                 }
             }
         }
     }
-    var _f1712 = Array<TypeAliasDef>();
-    var _n1713 = input.count();
+    var _f1713 = Array<TypeAliasDef>();
+    var _n1714 = input.count();
     if (input.merging) {
         for (var _b in base.type_aliases) {
-            _f1712.append(_b);
+            _f1713.append(_b);
         }
     }
-    for (var _ in 0.._n1713) {
-        var _tag1714 = input.unsigned();
-        if (_tag1714 & 1 == 1) {
+    for (var _ in 0.._n1714) {
+        var _tag1715 = input.unsigned();
+        if (_tag1715 & 1 == 1) {
             if (!input.merging) {
-                _f1712.append(base.type_aliases[_tag1714 >> 1]);
+                _f1713.append(base.type_aliases[_tag1715 >> 1]);
             }
         } else {
             var _read = _m_TypeAliasDef_read(input);
             if (!input.merging or false) {
-                _f1712.append(_read);
+                _f1713.append(_read);
             }
         }
     }
-    var _f1728 = Array<Withheld>();
-    var _mode1731 = input.unsigned();
-    if (_mode1731 == 2) {
-        var _changed1717 = HashMap<ulong, Withheld>();
-        ulong _bi1732 = 0;
-        var _n1729 = input.count();
-        for (var _ in 0.._n1729) {
-            var _at1733 = input.unsigned();
-            while (_f1728.count < _at1733 or (input.merging and _bi1732 < base.withheld.count)) {
-                var _c = _changed1717.try_get(_bi1732);
-                _f1728.append(_c.is_value() ? _c.value() : base.withheld[_bi1732]);
-                _bi1732 += 1;
+    var _f1729 = Array<Withheld>();
+    var _mode1732 = input.unsigned();
+    if (_mode1732 == 2) {
+        var _changed1718 = HashMap<ulong, Withheld>();
+        ulong _bi1733 = 0;
+        var _n1730 = input.count();
+        for (var _ in 0.._n1730) {
+            var _at1734 = input.unsigned();
+            while (_f1729.count < _at1734 or (input.merging and _bi1733 < base.withheld.count)) {
+                var _c = _changed1718.try_get(_bi1733);
+                _f1729.append(_c.is_value() ? _c.value() : base.withheld[_bi1733]);
+                _bi1733 += 1;
             }
-            _f1728.append(_m_Withheld_read(input));
+            _f1729.append(_m_Withheld_read(input));
         }
-        while (_bi1732 < base.withheld.count) {
-            var _c = _changed1717.try_get(_bi1732);
-            _f1728.append(_c.is_value() ? _c.value() : base.withheld[_bi1732]);
-            _bi1732 += 1;
+        while (_bi1733 < base.withheld.count) {
+            var _c = _changed1718.try_get(_bi1733);
+            _f1729.append(_c.is_value() ? _c.value() : base.withheld[_bi1733]);
+            _bi1733 += 1;
         }
-    } else if (_mode1731 == 3) {
-        var _n1729 = input.count();
-        for (var _ in 0.._n1729) {
-            _f1728.append(_m_Withheld_read(input));
+    } else if (_mode1732 == 3) {
+        var _n1730 = input.count();
+        for (var _ in 0.._n1730) {
+            _f1729.append(_m_Withheld_read(input));
         }
     } else {
-        var _n1729 = input.count();
+        var _n1730 = input.count();
         if (input.merging) {
             input.error = "withheld" + " written by place";
         }
-        for (var _ in 0.._n1729) {
-            var _tag1730 = input.unsigned();
-            if (_tag1730 & 1 == 1) {
+        for (var _ in 0.._n1730) {
+            var _tag1731 = input.unsigned();
+            if (_tag1731 & 1 == 1) {
                 if (!input.merging) {
-                    _f1728.append(base.withheld[_tag1730 >> 1]);
+                    _f1729.append(base.withheld[_tag1731 >> 1]);
                 }
             } else {
                 var _read = _m_Withheld_read(input);
                 if (!input.merging or true) {
-                    _f1728.append(_read);
+                    _f1729.append(_read);
                 }
             }
         }
     }
-    var _f1747 = Array<PropertyDef>();
-    var _mode1750 = input.unsigned();
-    if (_mode1750 == 2) {
-        var _changed1736 = HashMap<ulong, PropertyDef>();
-        ulong _bi1751 = 0;
-        var _n1748 = input.count();
-        for (var _ in 0.._n1748) {
-            var _at1752 = input.unsigned();
-            while (_f1747.count < _at1752 or (input.merging and _bi1751 < base.properties.count)) {
-                var _c = _changed1736.try_get(_bi1751);
-                _f1747.append(_c.is_value() ? _c.value() : base.properties[_bi1751]);
-                _bi1751 += 1;
+    var _f1748 = Array<PropertyDef>();
+    var _mode1751 = input.unsigned();
+    if (_mode1751 == 2) {
+        var _changed1737 = HashMap<ulong, PropertyDef>();
+        ulong _bi1752 = 0;
+        var _n1749 = input.count();
+        for (var _ in 0.._n1749) {
+            var _at1753 = input.unsigned();
+            while (_f1748.count < _at1753 or (input.merging and _bi1752 < base.properties.count)) {
+                var _c = _changed1737.try_get(_bi1752);
+                _f1748.append(_c.is_value() ? _c.value() : base.properties[_bi1752]);
+                _bi1752 += 1;
             }
-            _f1747.append(_m_PropertyDef_read(input));
+            _f1748.append(_m_PropertyDef_read(input));
         }
-        while (_bi1751 < base.properties.count) {
-            var _c = _changed1736.try_get(_bi1751);
-            _f1747.append(_c.is_value() ? _c.value() : base.properties[_bi1751]);
-            _bi1751 += 1;
+        while (_bi1752 < base.properties.count) {
+            var _c = _changed1737.try_get(_bi1752);
+            _f1748.append(_c.is_value() ? _c.value() : base.properties[_bi1752]);
+            _bi1752 += 1;
         }
-    } else if (_mode1750 == 3) {
-        var _n1748 = input.count();
-        for (var _ in 0.._n1748) {
-            _f1747.append(_m_PropertyDef_read(input));
+    } else if (_mode1751 == 3) {
+        var _n1749 = input.count();
+        for (var _ in 0.._n1749) {
+            _f1748.append(_m_PropertyDef_read(input));
         }
     } else {
-        var _n1748 = input.count();
+        var _n1749 = input.count();
         if (input.merging) {
             input.error = "properties" + " written by place";
         }
-        for (var _ in 0.._n1748) {
-            var _tag1749 = input.unsigned();
-            if (_tag1749 & 1 == 1) {
+        for (var _ in 0.._n1749) {
+            var _tag1750 = input.unsigned();
+            if (_tag1750 & 1 == 1) {
                 if (!input.merging) {
-                    _f1747.append(base.properties[_tag1749 >> 1]);
+                    _f1748.append(base.properties[_tag1750 >> 1]);
                 }
             } else {
                 var _read = _m_PropertyDef_read(input);
                 if (!input.merging or true) {
-                    _f1747.append(_read);
+                    _f1748.append(_read);
                 }
             }
         }
     }
-    var _f1766 = Array<TypeUse>();
-    var _mode1769 = input.unsigned();
-    if (_mode1769 == 2) {
-        var _changed1755 = HashMap<ulong, TypeUse>();
-        ulong _bi1770 = 0;
-        var _n1767 = input.count();
-        for (var _ in 0.._n1767) {
-            var _at1771 = input.unsigned();
-            while (_f1766.count < _at1771 or (input.merging and _bi1770 < base.type_uses.count)) {
-                var _c = _changed1755.try_get(_bi1770);
-                _f1766.append(_c.is_value() ? _c.value() : base.type_uses[_bi1770]);
-                _bi1770 += 1;
+    var _f1767 = Array<TypeUse>();
+    var _mode1770 = input.unsigned();
+    if (_mode1770 == 2) {
+        var _changed1756 = HashMap<ulong, TypeUse>();
+        ulong _bi1771 = 0;
+        var _n1768 = input.count();
+        for (var _ in 0.._n1768) {
+            var _at1772 = input.unsigned();
+            while (_f1767.count < _at1772 or (input.merging and _bi1771 < base.type_uses.count)) {
+                var _c = _changed1756.try_get(_bi1771);
+                _f1767.append(_c.is_value() ? _c.value() : base.type_uses[_bi1771]);
+                _bi1771 += 1;
             }
-            _f1766.append(_m_TypeUse_read(input));
+            _f1767.append(_m_TypeUse_read(input));
         }
-        while (_bi1770 < base.type_uses.count) {
-            var _c = _changed1755.try_get(_bi1770);
-            _f1766.append(_c.is_value() ? _c.value() : base.type_uses[_bi1770]);
-            _bi1770 += 1;
+        while (_bi1771 < base.type_uses.count) {
+            var _c = _changed1756.try_get(_bi1771);
+            _f1767.append(_c.is_value() ? _c.value() : base.type_uses[_bi1771]);
+            _bi1771 += 1;
         }
-    } else if (_mode1769 == 3) {
-        var _n1767 = input.count();
-        for (var _ in 0.._n1767) {
-            _f1766.append(_m_TypeUse_read(input));
+    } else if (_mode1770 == 3) {
+        var _n1768 = input.count();
+        for (var _ in 0.._n1768) {
+            _f1767.append(_m_TypeUse_read(input));
         }
     } else {
-        var _n1767 = input.count();
+        var _n1768 = input.count();
         if (input.merging) {
             input.error = "type_uses" + " written by place";
         }
-        for (var _ in 0.._n1767) {
-            var _tag1768 = input.unsigned();
-            if (_tag1768 & 1 == 1) {
+        for (var _ in 0.._n1768) {
+            var _tag1769 = input.unsigned();
+            if (_tag1769 & 1 == 1) {
                 if (!input.merging) {
-                    _f1766.append(base.type_uses[_tag1768 >> 1]);
+                    _f1767.append(base.type_uses[_tag1769 >> 1]);
                 }
             } else {
                 var _read = _m_TypeUse_read(input);
                 if (!input.merging or true) {
-                    _f1766.append(_read);
+                    _f1767.append(_read);
                 }
             }
         }
     }
-    var _f1785 = Array<UseContext>();
-    var _mode1788 = input.unsigned();
-    if (_mode1788 == 2) {
-        var _changed1774 = HashMap<ulong, UseContext>();
-        ulong _bi1789 = 0;
-        var _n1786 = input.count();
-        for (var _ in 0.._n1786) {
-            var _at1790 = input.unsigned();
-            while (_f1785.count < _at1790 or (input.merging and _bi1789 < base.use_contexts.count)) {
-                var _c = _changed1774.try_get(_bi1789);
-                _f1785.append(_c.is_value() ? _c.value() : base.use_contexts[_bi1789]);
-                _bi1789 += 1;
+    var _f1786 = Array<UseContext>();
+    var _mode1789 = input.unsigned();
+    if (_mode1789 == 2) {
+        var _changed1775 = HashMap<ulong, UseContext>();
+        ulong _bi1790 = 0;
+        var _n1787 = input.count();
+        for (var _ in 0.._n1787) {
+            var _at1791 = input.unsigned();
+            while (_f1786.count < _at1791 or (input.merging and _bi1790 < base.use_contexts.count)) {
+                var _c = _changed1775.try_get(_bi1790);
+                _f1786.append(_c.is_value() ? _c.value() : base.use_contexts[_bi1790]);
+                _bi1790 += 1;
             }
-            _f1785.append(_m_UseContext_read(input));
+            _f1786.append(_m_UseContext_read(input));
         }
-        while (_bi1789 < base.use_contexts.count) {
-            var _c = _changed1774.try_get(_bi1789);
-            _f1785.append(_c.is_value() ? _c.value() : base.use_contexts[_bi1789]);
-            _bi1789 += 1;
+        while (_bi1790 < base.use_contexts.count) {
+            var _c = _changed1775.try_get(_bi1790);
+            _f1786.append(_c.is_value() ? _c.value() : base.use_contexts[_bi1790]);
+            _bi1790 += 1;
         }
-    } else if (_mode1788 == 3) {
-        var _n1786 = input.count();
-        for (var _ in 0.._n1786) {
-            _f1785.append(_m_UseContext_read(input));
+    } else if (_mode1789 == 3) {
+        var _n1787 = input.count();
+        for (var _ in 0.._n1787) {
+            _f1786.append(_m_UseContext_read(input));
         }
     } else {
-        var _n1786 = input.count();
+        var _n1787 = input.count();
         if (input.merging) {
             input.error = "use_contexts" + " written by place";
         }
-        for (var _ in 0.._n1786) {
-            var _tag1787 = input.unsigned();
-            if (_tag1787 & 1 == 1) {
+        for (var _ in 0.._n1787) {
+            var _tag1788 = input.unsigned();
+            if (_tag1788 & 1 == 1) {
                 if (!input.merging) {
-                    _f1785.append(base.use_contexts[_tag1787 >> 1]);
+                    _f1786.append(base.use_contexts[_tag1788 >> 1]);
                 }
             } else {
                 var _read = _m_UseContext_read(input);
                 if (!input.merging or true) {
-                    _f1785.append(_read);
+                    _f1786.append(_read);
                 }
             }
         }
     }
-    var _f1806 = Array<(Loc, ulong, Loc)>();
-    var _tag1807 = input.unsigned();
-    if (_tag1807 == 1) {
+    var _f1807 = Array<(Loc, ulong, Loc)>();
+    var _tag1808 = input.unsigned();
+    if (_tag1808 == 1) {
         input.unsigned();
-        for (var _i1795 in 0..base.literal_args.count) {
-            _f1806.append(base.literal_args[_i1795]);
+        for (var _i1796 in 0..base.literal_args.count) {
+            _f1807.append(base.literal_args[_i1796]);
         }
-        var _more1809 = input.count();
-        for (var _ in 0.._more1809) {
-            var _t1810 = input.loc();
-            var _t1811 = input.unsigned();
-            var _t1812 = input.loc();
-            _f1806.append((_t1810, _t1811, _t1812));
+        var _more1810 = input.count();
+        for (var _ in 0.._more1810) {
+            var _t1811 = input.loc();
+            var _t1812 = input.unsigned();
+            var _t1813 = input.loc();
+            _f1807.append((_t1811, _t1812, _t1813));
         }
     } else {
-        var _v1813 = Array<(Loc, ulong, Loc)>();
-        var _n1814 = input.count();
-        for (var _ in 0.._n1814) {
-            var _t1815 = input.loc();
-            var _t1816 = input.unsigned();
-            var _t1817 = input.loc();
-            _v1813.append((_t1815, _t1816, _t1817));
+        var _v1814 = Array<(Loc, ulong, Loc)>();
+        var _n1815 = input.count();
+        for (var _ in 0.._n1815) {
+            var _t1816 = input.loc();
+            var _t1817 = input.unsigned();
+            var _t1818 = input.loc();
+            _v1814.append((_t1816, _t1817, _t1818));
         }
-        _f1806 = _v1813;
+        _f1807 = _v1814;
     }
-    var _f1835 = Array<TypeAliasDef>();
-    var _mode1838 = input.unsigned();
-    if (_mode1838 == 2) {
-        var _changed1824 = HashMap<ulong, TypeAliasDef>();
-        ulong _bi1839 = 0;
-        var _n1836 = input.count();
-        for (var _ in 0.._n1836) {
-            var _at1840 = input.unsigned();
-            while (_f1835.count < _at1840 or (input.merging and _bi1839 < base.constrained_aliases.count)) {
-                var _c = _changed1824.try_get(_bi1839);
-                _f1835.append(_c.is_value() ? _c.value() : base.constrained_aliases[_bi1839]);
-                _bi1839 += 1;
+    var _f1836 = Array<TypeAliasDef>();
+    var _mode1839 = input.unsigned();
+    if (_mode1839 == 2) {
+        var _changed1825 = HashMap<ulong, TypeAliasDef>();
+        ulong _bi1840 = 0;
+        var _n1837 = input.count();
+        for (var _ in 0.._n1837) {
+            var _at1841 = input.unsigned();
+            while (_f1836.count < _at1841 or (input.merging and _bi1840 < base.constrained_aliases.count)) {
+                var _c = _changed1825.try_get(_bi1840);
+                _f1836.append(_c.is_value() ? _c.value() : base.constrained_aliases[_bi1840]);
+                _bi1840 += 1;
             }
-            _f1835.append(_m_TypeAliasDef_read(input));
+            _f1836.append(_m_TypeAliasDef_read(input));
         }
-        while (_bi1839 < base.constrained_aliases.count) {
-            var _c = _changed1824.try_get(_bi1839);
-            _f1835.append(_c.is_value() ? _c.value() : base.constrained_aliases[_bi1839]);
-            _bi1839 += 1;
+        while (_bi1840 < base.constrained_aliases.count) {
+            var _c = _changed1825.try_get(_bi1840);
+            _f1836.append(_c.is_value() ? _c.value() : base.constrained_aliases[_bi1840]);
+            _bi1840 += 1;
         }
-    } else if (_mode1838 == 3) {
-        var _n1836 = input.count();
-        for (var _ in 0.._n1836) {
-            _f1835.append(_m_TypeAliasDef_read(input));
+    } else if (_mode1839 == 3) {
+        var _n1837 = input.count();
+        for (var _ in 0.._n1837) {
+            _f1836.append(_m_TypeAliasDef_read(input));
         }
     } else {
-        var _n1836 = input.count();
+        var _n1837 = input.count();
         if (input.merging) {
             input.error = "constrained_aliases" + " written by place";
         }
-        for (var _ in 0.._n1836) {
-            var _tag1837 = input.unsigned();
-            if (_tag1837 & 1 == 1) {
+        for (var _ in 0.._n1837) {
+            var _tag1838 = input.unsigned();
+            if (_tag1838 & 1 == 1) {
                 if (!input.merging) {
-                    _f1835.append(base.constrained_aliases[_tag1837 >> 1]);
+                    _f1836.append(base.constrained_aliases[_tag1838 >> 1]);
                 }
             } else {
                 var _read = _m_TypeAliasDef_read(input);
                 if (!input.merging or true) {
-                    _f1835.append(_read);
+                    _f1836.append(_read);
                 }
             }
         }
     }
-    var _f1854 = Array<TraitType>();
-    var _mode1857 = input.unsigned();
-    if (_mode1857 == 2) {
-        var _changed1843 = HashMap<ulong, TraitType>();
-        ulong _bi1858 = 0;
-        var _n1855 = input.count();
-        for (var _ in 0.._n1855) {
-            var _at1859 = input.unsigned();
-            while (_f1854.count < _at1859 or (input.merging and _bi1858 < base.trait_types.count)) {
-                var _c = _changed1843.try_get(_bi1858);
-                _f1854.append(_c.is_value() ? _c.value() : base.trait_types[_bi1858]);
-                _bi1858 += 1;
+    var _f1855 = Array<TraitType>();
+    var _mode1858 = input.unsigned();
+    if (_mode1858 == 2) {
+        var _changed1844 = HashMap<ulong, TraitType>();
+        ulong _bi1859 = 0;
+        var _n1856 = input.count();
+        for (var _ in 0.._n1856) {
+            var _at1860 = input.unsigned();
+            while (_f1855.count < _at1860 or (input.merging and _bi1859 < base.trait_types.count)) {
+                var _c = _changed1844.try_get(_bi1859);
+                _f1855.append(_c.is_value() ? _c.value() : base.trait_types[_bi1859]);
+                _bi1859 += 1;
             }
-            _f1854.append(_m_TraitType_read(input));
+            _f1855.append(_m_TraitType_read(input));
         }
-        while (_bi1858 < base.trait_types.count) {
-            var _c = _changed1843.try_get(_bi1858);
-            _f1854.append(_c.is_value() ? _c.value() : base.trait_types[_bi1858]);
-            _bi1858 += 1;
+        while (_bi1859 < base.trait_types.count) {
+            var _c = _changed1844.try_get(_bi1859);
+            _f1855.append(_c.is_value() ? _c.value() : base.trait_types[_bi1859]);
+            _bi1859 += 1;
         }
-    } else if (_mode1857 == 3) {
-        var _n1855 = input.count();
-        for (var _ in 0.._n1855) {
-            _f1854.append(_m_TraitType_read(input));
+    } else if (_mode1858 == 3) {
+        var _n1856 = input.count();
+        for (var _ in 0.._n1856) {
+            _f1855.append(_m_TraitType_read(input));
         }
     } else {
-        var _n1855 = input.count();
+        var _n1856 = input.count();
         if (input.merging) {
             input.error = "trait_types" + " written by place";
         }
-        for (var _ in 0.._n1855) {
-            var _tag1856 = input.unsigned();
-            if (_tag1856 & 1 == 1) {
+        for (var _ in 0.._n1856) {
+            var _tag1857 = input.unsigned();
+            if (_tag1857 & 1 == 1) {
                 if (!input.merging) {
-                    _f1854.append(base.trait_types[_tag1856 >> 1]);
+                    _f1855.append(base.trait_types[_tag1857 >> 1]);
                 }
             } else {
                 var _read = _m_TraitType_read(input);
                 if (!input.merging or true) {
-                    _f1854.append(_read);
+                    _f1855.append(_read);
                 }
             }
         }
     }
-    var _v1865 = Array<Conversion>();
-    var _n1866 = input.count();
-    for (var _ in 0.._n1866) {
-        _v1865.append(_m_Conversion_read(input));
+    var _v1866 = Array<Conversion>();
+    var _n1867 = input.count();
+    for (var _ in 0.._n1867) {
+        _v1866.append(_m_Conversion_read(input));
     }
-    var _f1867 = _v1865;
-    var _f1894 = Map<String, Array<String>>();
-    var _tag1895 = input.unsigned();
-    if (_tag1895 == 1) {
-        for (var (_bk1896, _bv) in base.overload_sets) {
-            _f1894[_bk1896] = _bv;
+    var _f1868 = _v1866;
+    var _f1895 = Map<String, Array<String>>();
+    var _tag1896 = input.unsigned();
+    if (_tag1896 == 1) {
+        for (var (_bk1897, _bv) in base.overload_sets) {
+            _f1895[_bk1897] = _bv;
         }
-        var _v1897 = Map<String, Array<String>>();
-        var _n1898 = input.count();
-        for (var _ in 0.._n1898) {
-            var _k1899 = input.text();
-            var _v1900 = Array<String>();
-            var _n1901 = input.count();
-            for (var _ in 0.._n1901) {
-                _v1900.append(input.text());
+        var _v1898 = Map<String, Array<String>>();
+        var _n1899 = input.count();
+        for (var _ in 0.._n1899) {
+            var _k1900 = input.text();
+            var _v1901 = Array<String>();
+            var _n1902 = input.count();
+            for (var _ in 0.._n1902) {
+                _v1901.append(input.text());
             }
-            _v1897[_k1899] = _v1900;
+            _v1898[_k1900] = _v1901;
         }
-        for (var (_bk1896, _av) in _v1897) {
-            _f1894[_bk1896] = _av;
+        for (var (_bk1897, _av) in _v1898) {
+            _f1895[_bk1897] = _av;
         }
     } else {
-        var _v1902 = Map<String, Array<String>>();
-        var _n1903 = input.count();
-        for (var _ in 0.._n1903) {
-            var _k1904 = input.text();
-            var _v1905 = Array<String>();
-            var _n1906 = input.count();
-            for (var _ in 0.._n1906) {
-                _v1905.append(input.text());
+        var _v1903 = Map<String, Array<String>>();
+        var _n1904 = input.count();
+        for (var _ in 0.._n1904) {
+            var _k1905 = input.text();
+            var _v1906 = Array<String>();
+            var _n1907 = input.count();
+            for (var _ in 0.._n1907) {
+                _v1906.append(input.text());
             }
-            _v1902[_k1904] = _v1905;
+            _v1903[_k1905] = _v1906;
         }
-        _f1894 = _v1902;
+        _f1895 = _v1903;
     }
-    var _f1941 = Map<String, Array<Array<String>>>();
-    var _tag1942 = input.unsigned();
-    if (_tag1942 == 1) {
-        for (var (_bk1943, _bv) in base.overload_unions) {
-            _f1941[_bk1943] = _bv;
+    var _f1942 = Map<String, Array<Array<String>>>();
+    var _tag1943 = input.unsigned();
+    if (_tag1943 == 1) {
+        for (var (_bk1944, _bv) in base.overload_unions) {
+            _f1942[_bk1944] = _bv;
         }
-        var _v1944 = Map<String, Array<Array<String>>>();
-        var _n1945 = input.count();
-        for (var _ in 0.._n1945) {
-            var _k1946 = input.text();
-            var _v1947 = Array<Array<String>>();
-            var _n1948 = input.count();
-            for (var _ in 0.._n1948) {
-                var _v1949 = Array<String>();
-                var _n1950 = input.count();
-                for (var _ in 0.._n1950) {
-                    _v1949.append(input.text());
+        var _v1945 = Map<String, Array<Array<String>>>();
+        var _n1946 = input.count();
+        for (var _ in 0.._n1946) {
+            var _k1947 = input.text();
+            var _v1948 = Array<Array<String>>();
+            var _n1949 = input.count();
+            for (var _ in 0.._n1949) {
+                var _v1950 = Array<String>();
+                var _n1951 = input.count();
+                for (var _ in 0.._n1951) {
+                    _v1950.append(input.text());
                 }
-                _v1947.append(_v1949);
+                _v1948.append(_v1950);
             }
-            _v1944[_k1946] = _v1947;
+            _v1945[_k1947] = _v1948;
         }
-        for (var (_bk1943, _av) in _v1944) {
-            _f1941[_bk1943] = _av;
+        for (var (_bk1944, _av) in _v1945) {
+            _f1942[_bk1944] = _av;
         }
     } else {
-        var _v1951 = Map<String, Array<Array<String>>>();
-        var _n1952 = input.count();
-        for (var _ in 0.._n1952) {
-            var _k1953 = input.text();
-            var _v1954 = Array<Array<String>>();
-            var _n1955 = input.count();
-            for (var _ in 0.._n1955) {
-                var _v1956 = Array<String>();
-                var _n1957 = input.count();
-                for (var _ in 0.._n1957) {
-                    _v1956.append(input.text());
+        var _v1952 = Map<String, Array<Array<String>>>();
+        var _n1953 = input.count();
+        for (var _ in 0.._n1953) {
+            var _k1954 = input.text();
+            var _v1955 = Array<Array<String>>();
+            var _n1956 = input.count();
+            for (var _ in 0.._n1956) {
+                var _v1957 = Array<String>();
+                var _n1958 = input.count();
+                for (var _ in 0.._n1958) {
+                    _v1957.append(input.text());
                 }
-                _v1954.append(_v1956);
+                _v1955.append(_v1957);
             }
-            _v1951[_k1953] = _v1954;
+            _v1952[_k1954] = _v1955;
         }
-        _f1941 = _v1951;
+        _f1942 = _v1952;
     }
-    var _f2028 = Map<String, Map<String, Array<String>>>();
-    var _tag2029 = input.unsigned();
-    if (_tag2029 == 1) {
-        for (var (_bk2030, _bv) in base.method_overload_sets) {
-            _f2028[_bk2030] = _bv;
+    var _f2029 = Map<String, Map<String, Array<String>>>();
+    var _tag2030 = input.unsigned();
+    if (_tag2030 == 1) {
+        for (var (_bk2031, _bv) in base.method_overload_sets) {
+            _f2029[_bk2031] = _bv;
         }
-        var _v2031 = Map<String, Map<String, Array<String>>>();
-        var _n2032 = input.count();
-        for (var _ in 0.._n2032) {
-            var _k2033 = input.text();
-            var _v2034 = Map<String, Array<String>>();
-            var _n2035 = input.count();
-            for (var _ in 0.._n2035) {
-                var _k2036 = input.text();
-                var _v2037 = Array<String>();
-                var _n2038 = input.count();
-                for (var _ in 0.._n2038) {
-                    _v2037.append(input.text());
+        var _v2032 = Map<String, Map<String, Array<String>>>();
+        var _n2033 = input.count();
+        for (var _ in 0.._n2033) {
+            var _k2034 = input.text();
+            var _v2035 = Map<String, Array<String>>();
+            var _n2036 = input.count();
+            for (var _ in 0.._n2036) {
+                var _k2037 = input.text();
+                var _v2038 = Array<String>();
+                var _n2039 = input.count();
+                for (var _ in 0.._n2039) {
+                    _v2038.append(input.text());
                 }
-                _v2034[_k2036] = _v2037;
+                _v2035[_k2037] = _v2038;
             }
-            _v2031[_k2033] = _v2034;
+            _v2032[_k2034] = _v2035;
         }
-        for (var (_bk2030, _av) in _v2031) {
-            _f2028[_bk2030] = _av;
+        for (var (_bk2031, _av) in _v2032) {
+            _f2029[_bk2031] = _av;
         }
     } else {
-        var _v2039 = Map<String, Map<String, Array<String>>>();
-        var _n2040 = input.count();
-        for (var _ in 0.._n2040) {
-            var _k2041 = input.text();
-            var _v2042 = Map<String, Array<String>>();
-            var _n2043 = input.count();
-            for (var _ in 0.._n2043) {
-                var _k2044 = input.text();
-                var _v2045 = Array<String>();
-                var _n2046 = input.count();
-                for (var _ in 0.._n2046) {
-                    _v2045.append(input.text());
+        var _v2040 = Map<String, Map<String, Array<String>>>();
+        var _n2041 = input.count();
+        for (var _ in 0.._n2041) {
+            var _k2042 = input.text();
+            var _v2043 = Map<String, Array<String>>();
+            var _n2044 = input.count();
+            for (var _ in 0.._n2044) {
+                var _k2045 = input.text();
+                var _v2046 = Array<String>();
+                var _n2047 = input.count();
+                for (var _ in 0.._n2047) {
+                    _v2046.append(input.text());
                 }
-                _v2042[_k2044] = _v2045;
+                _v2043[_k2045] = _v2046;
             }
-            _v2039[_k2041] = _v2042;
+            _v2040[_k2042] = _v2043;
         }
-        _f2028 = _v2039;
+        _f2029 = _v2040;
     }
-    var _f2054 = _m_ExtensionScopes_read(input);
-    var _f2074 = HashSet<Loc>();
-    var _tag2075 = input.unsigned();
-    if (_tag2075 == 1) {
-        for (var _bk2076 in base.private_functions) {
-            _f2074.insert(_bk2076);
+    var _f2055 = _m_ExtensionScopes_read(input);
+    var _f2075 = HashSet<Loc>();
+    var _tag2076 = input.unsigned();
+    if (_tag2076 == 1) {
+        for (var _bk2077 in base.private_functions) {
+            _f2075.insert(_bk2077);
         }
-        var _v2077 = HashSet<Loc>();
-        var _n2078 = input.count();
-        for (var _ in 0.._n2078) {
-            _v2077.insert(input.loc());
+        var _v2078 = HashSet<Loc>();
+        var _n2079 = input.count();
+        for (var _ in 0.._n2079) {
+            _v2078.insert(input.loc());
         }
-        for (var _bk2076 in _v2077) {
-            _f2074.insert(_bk2076);
+        for (var _bk2077 in _v2078) {
+            _f2075.insert(_bk2077);
         }
     } else {
-        var _v2079 = HashSet<Loc>();
-        var _n2080 = input.count();
-        for (var _ in 0.._n2080) {
-            _v2079.insert(input.loc());
+        var _v2080 = HashSet<Loc>();
+        var _n2081 = input.count();
+        for (var _ in 0.._n2081) {
+            _v2080.insert(input.loc());
         }
-        _f2074 = _v2079;
+        _f2075 = _v2080;
     }
-    var _f2100 = HashSet<Loc>();
-    var _tag2101 = input.unsigned();
-    if (_tag2101 == 1) {
-        for (var _bk2102 in base.file_private_functions) {
-            _f2100.insert(_bk2102);
+    var _f2101 = HashSet<Loc>();
+    var _tag2102 = input.unsigned();
+    if (_tag2102 == 1) {
+        for (var _bk2103 in base.file_private_functions) {
+            _f2101.insert(_bk2103);
         }
-        var _v2103 = HashSet<Loc>();
-        var _n2104 = input.count();
-        for (var _ in 0.._n2104) {
-            _v2103.insert(input.loc());
+        var _v2104 = HashSet<Loc>();
+        var _n2105 = input.count();
+        for (var _ in 0.._n2105) {
+            _v2104.insert(input.loc());
         }
-        for (var _bk2102 in _v2103) {
-            _f2100.insert(_bk2102);
+        for (var _bk2103 in _v2104) {
+            _f2101.insert(_bk2103);
         }
     } else {
-        var _v2105 = HashSet<Loc>();
-        var _n2106 = input.count();
-        for (var _ in 0.._n2106) {
-            _v2105.insert(input.loc());
+        var _v2106 = HashSet<Loc>();
+        var _n2107 = input.count();
+        for (var _ in 0.._n2107) {
+            _v2106.insert(input.loc());
         }
-        _f2100 = _v2105;
+        _f2101 = _v2106;
     }
-    var _f2118 = Array<(Loc, String)>();
-    var _tag2119 = input.unsigned();
-    if (_tag2119 == 1) {
+    var _f2119 = Array<(Loc, String)>();
+    var _tag2120 = input.unsigned();
+    if (_tag2120 == 1) {
         input.unsigned();
-        for (var _i2110 in 0..base.call_targets.count) {
-            _f2118.append(base.call_targets[_i2110]);
+        for (var _i2111 in 0..base.call_targets.count) {
+            _f2119.append(base.call_targets[_i2111]);
         }
-        var _more2121 = input.count();
-        for (var _ in 0.._more2121) {
-            var _t2122 = input.loc();
-            var _t2123 = input.text();
-            _f2118.append((_t2122, _t2123));
+        var _more2122 = input.count();
+        for (var _ in 0.._more2122) {
+            var _t2123 = input.loc();
+            var _t2124 = input.text();
+            _f2119.append((_t2123, _t2124));
         }
     } else {
-        var _v2124 = Array<(Loc, String)>();
-        var _n2125 = input.count();
-        for (var _ in 0.._n2125) {
-            var _t2126 = input.loc();
-            var _t2127 = input.text();
-            _v2124.append((_t2126, _t2127));
+        var _v2125 = Array<(Loc, String)>();
+        var _n2126 = input.count();
+        for (var _ in 0.._n2126) {
+            var _t2127 = input.loc();
+            var _t2128 = input.text();
+            _v2125.append((_t2127, _t2128));
         }
-        _f2118 = _v2124;
+        _f2119 = _v2125;
     }
-    var _f2144 = Array<(Loc, String)>();
-    var _tag2145 = input.unsigned();
-    if (_tag2145 == 1) {
-        var _v2146 = Array<(Loc, String)>();
-        var _n2147 = input.count();
-        for (var _ in 0.._n2147) {
-            var _t2148 = input.loc();
-            var _t2149 = input.text();
-            _v2146.append((_t2148, _t2149));
+    var _f2145 = Array<(Loc, String)>();
+    var _tag2146 = input.unsigned();
+    if (_tag2146 == 1) {
+        var _v2147 = Array<(Loc, String)>();
+        var _n2148 = input.count();
+        for (var _ in 0.._n2148) {
+            var _t2149 = input.loc();
+            var _t2150 = input.text();
+            _v2147.append((_t2149, _t2150));
         }
-        _f2144 = merge_by_place(base.argument_names, _v2146);
+        _f2145 = merge_by_place(base.argument_names, _v2147);
     } else {
-        var _v2150 = Array<(Loc, String)>();
-        var _n2151 = input.count();
-        for (var _ in 0.._n2151) {
-            var _t2152 = input.loc();
-            var _t2153 = input.text();
-            _v2150.append((_t2152, _t2153));
+        var _v2151 = Array<(Loc, String)>();
+        var _n2152 = input.count();
+        for (var _ in 0.._n2152) {
+            var _t2153 = input.loc();
+            var _t2154 = input.text();
+            _v2151.append((_t2153, _t2154));
         }
-        _f2144 = _v2150;
+        _f2145 = _v2151;
     }
-    var _f2163 = Array<String>();
-    var _tag2164 = input.unsigned();
-    if (_tag2164 == 1) {
+    var _f2164 = Array<String>();
+    var _tag2165 = input.unsigned();
+    if (_tag2165 == 1) {
         input.unsigned();
-        for (var _i2159 in 0..base.namespaces.count) {
-            _f2163.append(base.namespaces[_i2159]);
+        for (var _i2160 in 0..base.namespaces.count) {
+            _f2164.append(base.namespaces[_i2160]);
         }
-        var _more2166 = input.count();
-        for (var _ in 0.._more2166) {
-            _f2163.append(input.text());
+        var _more2167 = input.count();
+        for (var _ in 0.._more2167) {
+            _f2164.append(input.text());
         }
     } else {
-        var _v2167 = Array<String>();
-        var _n2168 = input.count();
-        for (var _ in 0.._n2168) {
-            _v2167.append(input.text());
+        var _v2168 = Array<String>();
+        var _n2169 = input.count();
+        for (var _ in 0.._n2169) {
+            _v2168.append(input.text());
         }
-        _f2163 = _v2167;
+        _f2164 = _v2168;
     }
-    var _f2176 = Array<bool>();
-    var _tag2177 = input.unsigned();
-    if (_tag2177 == 1) {
+    var _f2177 = Array<bool>();
+    var _tag2178 = input.unsigned();
+    if (_tag2178 == 1) {
         input.unsigned();
-        for (var _i2174 in 0..base.cached_files.count) {
-            _f2176.append(base.cached_files[_i2174]);
+        for (var _i2175 in 0..base.cached_files.count) {
+            _f2177.append(base.cached_files[_i2175]);
         }
-        var _more2179 = input.count();
-        for (var _ in 0.._more2179) {
-            _f2176.append(input.flag());
+        var _more2180 = input.count();
+        for (var _ in 0.._more2180) {
+            _f2177.append(input.flag());
         }
     } else {
-        var _v2180 = Array<bool>();
-        var _n2181 = input.count();
-        for (var _ in 0.._n2181) {
-            _v2180.append(input.flag());
+        var _v2181 = Array<bool>();
+        var _n2182 = input.count();
+        for (var _ in 0.._n2182) {
+            _v2181.append(input.flag());
         }
-        _f2176 = _v2180;
+        _f2177 = _v2181;
     }
-    var _f2199 = HashMap<Loc, String>();
-    var _tag2200 = input.unsigned();
-    if (_tag2200 == 1) {
-        for (var (_bk2201, _bv) in base.recorded_summaries) {
-            _f2199[_bk2201] = _bv;
+    var _f2200 = HashMap<Loc, String>();
+    var _tag2201 = input.unsigned();
+    if (_tag2201 == 1) {
+        for (var (_bk2202, _bv) in base.recorded_summaries) {
+            _f2200[_bk2202] = _bv;
         }
-        var _v2202 = HashMap<Loc, String>();
-        var _n2203 = input.count();
-        for (var _ in 0.._n2203) {
-            var _k2204 = input.loc();
-            _v2202[_k2204] = input.text();
+        var _v2203 = HashMap<Loc, String>();
+        var _n2204 = input.count();
+        for (var _ in 0.._n2204) {
+            var _k2205 = input.loc();
+            _v2203[_k2205] = input.text();
         }
-        for (var (_bk2201, _av) in _v2202) {
-            _f2199[_bk2201] = _av;
+        for (var (_bk2202, _av) in _v2203) {
+            _f2200[_bk2202] = _av;
         }
     } else {
-        var _v2205 = HashMap<Loc, String>();
-        var _n2206 = input.count();
-        for (var _ in 0.._n2206) {
-            var _k2207 = input.loc();
-            _v2205[_k2207] = input.text();
+        var _v2206 = HashMap<Loc, String>();
+        var _n2207 = input.count();
+        for (var _ in 0.._n2207) {
+            var _k2208 = input.loc();
+            _v2206[_k2208] = input.text();
         }
-        _f2199 = _v2205;
+        _f2200 = _v2206;
     }
-    var _f2223 = HashSet<Loc>();
-    var _tag2224 = input.unsigned();
-    if (_tag2224 == 1) {
-        for (var _bk2225 in base.stripped) {
-            _f2223.insert(_bk2225);
+    var _f2224 = HashSet<Loc>();
+    var _tag2225 = input.unsigned();
+    if (_tag2225 == 1) {
+        for (var _bk2226 in base.stripped) {
+            _f2224.insert(_bk2226);
         }
-        var _v2226 = HashSet<Loc>();
-        var _n2227 = input.count();
-        for (var _ in 0.._n2227) {
-            _v2226.insert(input.loc());
+        var _v2227 = HashSet<Loc>();
+        var _n2228 = input.count();
+        for (var _ in 0.._n2228) {
+            _v2227.insert(input.loc());
         }
-        for (var _bk2225 in _v2226) {
-            _f2223.insert(_bk2225);
+        for (var _bk2226 in _v2227) {
+            _f2224.insert(_bk2226);
         }
     } else {
-        var _v2228 = HashSet<Loc>();
-        var _n2229 = input.count();
-        for (var _ in 0.._n2229) {
-            _v2228.insert(input.loc());
+        var _v2229 = HashSet<Loc>();
+        var _n2230 = input.count();
+        for (var _ in 0.._n2230) {
+            _v2229.insert(input.loc());
         }
-        _f2223 = _v2228;
+        _f2224 = _v2229;
     }
     var _frozen = input.flag();
-    var _f2240 = Array<StructDef>();
-    var _mode2243 = input.unsigned();
-    if (_mode2243 == 2) {
-        var _patched2246 = HashMap<ulong, StructDef>();
-        var _n2241 = input.count();
-        for (var _ in 0.._n2241) {
+    var _f2241 = Array<StructDef>();
+    var _mode2244 = input.unsigned();
+    if (_mode2244 == 2) {
+        var _patched2247 = HashMap<ulong, StructDef>();
+        var _n2242 = input.count();
+        for (var _ in 0.._n2242) {
             var _name = input.text();
             var _slot = input.unsigned();
             if (input.merging) {
@@ -10180,49 +10188,49 @@ _m_Module_read_delta(input: RecordIn, base: Module): Module {
                 input.error = $"no struct {_name} to patch";
                 break;
             }
-            _patched2246[_slot] = _patch_t_read(input, base.templates.structs[_slot]);
+            _patched2247[_slot] = _patch_t_read(input, base.templates.structs[_slot]);
         }
-        ulong _bi2244 = 0;
+        ulong _bi2245 = 0;
         var _added = input.count();
         for (var _ in 0.._added) {
-            var _at2245 = input.unsigned();
-            while (_f2240.count < _at2245 or (input.merging and _bi2244 < base.templates.structs.count)) {
-                var _p = _patched2246.try_get(_bi2244);
-                _f2240.append(_p.is_value() ? _p.value() : base.templates.structs[_bi2244]);
-                _bi2244 += 1;
+            var _at2246 = input.unsigned();
+            while (_f2241.count < _at2246 or (input.merging and _bi2245 < base.templates.structs.count)) {
+                var _p = _patched2247.try_get(_bi2245);
+                _f2241.append(_p.is_value() ? _p.value() : base.templates.structs[_bi2245]);
+                _bi2245 += 1;
             }
-            _f2240.append(_m_StructDef_read(input));
+            _f2241.append(_m_StructDef_read(input));
         }
-        while (_bi2244 < base.templates.structs.count) {
-            var _p = _patched2246.try_get(_bi2244);
-            _f2240.append(_p.is_value() ? _p.value() : base.templates.structs[_bi2244]);
-            _bi2244 += 1;
+        while (_bi2245 < base.templates.structs.count) {
+            var _p = _patched2247.try_get(_bi2245);
+            _f2241.append(_p.is_value() ? _p.value() : base.templates.structs[_bi2245]);
+            _bi2245 += 1;
         }
     } else {
         if (input.merging) {
             input.error = "structs written by place";
         }
-        var _n2241 = input.count();
-        for (var _ in 0.._n2241) {
-            var _tag2242 = input.unsigned();
-            if (_tag2242 & 1 == 1) {
-                _f2240.append(
-                    base.templates.structs[(_tag2242 >> 1) < base.templates.structs.count ? _tag2242 >> 1 : 0]
+        var _n2242 = input.count();
+        for (var _ in 0.._n2242) {
+            var _tag2243 = input.unsigned();
+            if (_tag2243 & 1 == 1) {
+                _f2241.append(
+                    base.templates.structs[(_tag2243 >> 1) < base.templates.structs.count ? _tag2243 >> 1 : 0]
                 );
-            } else if (_tag2242 == 2) {
+            } else if (_tag2243 == 2) {
                 var _was = base.templates.structs[input.unsigned()];
-                _f2240.append(_patch_t_read(input, _was));
+                _f2241.append(_patch_t_read(input, _was));
             } else {
-                _f2240.append(_m_StructDef_read(input));
+                _f2241.append(_m_StructDef_read(input));
             }
         }
     }
-    var _f2260 = Array<FunctionDef>();
-    var _mode2263 = input.unsigned();
-    if (_mode2263 == 2) {
-        var _changed2249 = HashMap<ulong, FunctionDef>();
-        var _nc2251 = input.count();
-        for (var _ in 0.._nc2251) {
+    var _f2261 = Array<FunctionDef>();
+    var _mode2264 = input.unsigned();
+    if (_mode2264 == 2) {
+        var _changed2250 = HashMap<ulong, FunctionDef>();
+        var _nc2252 = input.count();
+        for (var _ in 0.._nc2252) {
             var _name = input.text();
             var _slot = input.unsigned();
             if (input.merging) {
@@ -10236,548 +10244,548 @@ _m_Module_read_delta(input: RecordIn, base: Module): Module {
             }
             var _el = _m_FunctionDef_read(input);
             if (_slot < base.templates.functions.count) {
-                _changed2249[_slot] = _el;
+                _changed2250[_slot] = _el;
             } else {
                 input.error = $"no {_name} to change";
             }
         }
-        ulong _bi2264 = 0;
-        var _n2261 = input.count();
-        for (var _ in 0.._n2261) {
-            var _at2265 = input.unsigned();
-            while (_f2260.count < _at2265 or (input.merging and _bi2264 < base.templates.functions.count)) {
-                var _c = _changed2249.try_get(_bi2264);
-                _f2260.append(_c.is_value() ? _c.value() : base.templates.functions[_bi2264]);
-                _bi2264 += 1;
+        ulong _bi2265 = 0;
+        var _n2262 = input.count();
+        for (var _ in 0.._n2262) {
+            var _at2266 = input.unsigned();
+            while (_f2261.count < _at2266 or (input.merging and _bi2265 < base.templates.functions.count)) {
+                var _c = _changed2250.try_get(_bi2265);
+                _f2261.append(_c.is_value() ? _c.value() : base.templates.functions[_bi2265]);
+                _bi2265 += 1;
             }
-            _f2260.append(_m_FunctionDef_read(input));
+            _f2261.append(_m_FunctionDef_read(input));
         }
-        while (_bi2264 < base.templates.functions.count) {
-            var _c = _changed2249.try_get(_bi2264);
-            _f2260.append(_c.is_value() ? _c.value() : base.templates.functions[_bi2264]);
-            _bi2264 += 1;
+        while (_bi2265 < base.templates.functions.count) {
+            var _c = _changed2250.try_get(_bi2265);
+            _f2261.append(_c.is_value() ? _c.value() : base.templates.functions[_bi2265]);
+            _bi2265 += 1;
         }
-    } else if (_mode2263 == 3) {
-        var _n2261 = input.count();
-        for (var _ in 0.._n2261) {
-            _f2260.append(_m_FunctionDef_read(input));
+    } else if (_mode2264 == 3) {
+        var _n2262 = input.count();
+        for (var _ in 0.._n2262) {
+            _f2261.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2261 = input.count();
+        var _n2262 = input.count();
         if (input.merging) {
             input.error = "tf" + " written by place";
         }
-        for (var _ in 0.._n2261) {
-            var _tag2262 = input.unsigned();
-            if (_tag2262 & 1 == 1) {
+        for (var _ in 0.._n2262) {
+            var _tag2263 = input.unsigned();
+            if (_tag2263 & 1 == 1) {
                 if (!input.merging) {
-                    _f2260.append(base.templates.functions[_tag2262 >> 1]);
+                    _f2261.append(base.templates.functions[_tag2263 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2260.append(_read);
+                    _f2261.append(_read);
                 }
             }
         }
     }
-    var _f2267 = Templates(_frozen, _f2240, _f2260);
-    var _f2268 = DeltaBase.read_checked(input, base.checked);
-    var _f2288 = HashMap<String, SpecRequest>();
-    var _tag2289 = input.unsigned();
-    if (_tag2289 == 1) {
-        for (var (_bk2290, _bv) in base.spec_requests) {
-            _f2288[_bk2290] = _bv;
+    var _f2268 = Templates(_frozen, _f2241, _f2261);
+    var _f2269 = DeltaBase.read_checked(input, base.checked);
+    var _f2289 = HashMap<String, SpecRequest>();
+    var _tag2290 = input.unsigned();
+    if (_tag2290 == 1) {
+        for (var (_bk2291, _bv) in base.spec_requests) {
+            _f2289[_bk2291] = _bv;
         }
-        var _v2291 = HashMap<String, SpecRequest>();
-        var _n2292 = input.count();
-        for (var _ in 0.._n2292) {
-            var _k2293 = input.text();
-            _v2291[_k2293] = _m_SpecRequest_read(input);
+        var _v2292 = HashMap<String, SpecRequest>();
+        var _n2293 = input.count();
+        for (var _ in 0.._n2293) {
+            var _k2294 = input.text();
+            _v2292[_k2294] = _m_SpecRequest_read(input);
         }
-        for (var (_bk2290, _av) in _v2291) {
-            _f2288[_bk2290] = _av;
+        for (var (_bk2291, _av) in _v2292) {
+            _f2289[_bk2291] = _av;
         }
     } else {
-        var _v2294 = HashMap<String, SpecRequest>();
-        var _n2295 = input.count();
-        for (var _ in 0.._n2295) {
-            var _k2296 = input.text();
-            _v2294[_k2296] = _m_SpecRequest_read(input);
+        var _v2295 = HashMap<String, SpecRequest>();
+        var _n2296 = input.count();
+        for (var _ in 0.._n2296) {
+            var _k2297 = input.text();
+            _v2295[_k2297] = _m_SpecRequest_read(input);
         }
-        _f2288 = _v2294;
+        _f2289 = _v2295;
     }
-    var _f2297 = input.flag();
-    var _f2309 = Array<(Loc, String)>();
-    var _tag2310 = input.unsigned();
-    if (_tag2310 == 1) {
+    var _f2298 = input.flag();
+    var _f2310 = Array<(Loc, String)>();
+    var _tag2311 = input.unsigned();
+    if (_tag2311 == 1) {
         input.unsigned();
-        for (var _i2301 in 0..base.summaries_to_record.count) {
-            _f2309.append(base.summaries_to_record[_i2301]);
+        for (var _i2302 in 0..base.summaries_to_record.count) {
+            _f2310.append(base.summaries_to_record[_i2302]);
         }
-        var _more2312 = input.count();
-        for (var _ in 0.._more2312) {
-            var _t2313 = input.loc();
-            var _t2314 = input.text();
-            _f2309.append((_t2313, _t2314));
-        }
-    } else {
-        var _v2315 = Array<(Loc, String)>();
-        var _n2316 = input.count();
-        for (var _ in 0.._n2316) {
-            var _t2317 = input.loc();
-            var _t2318 = input.text();
-            _v2315.append((_t2317, _t2318));
-        }
-        _f2309 = _v2315;
-    }
-    var _f2349 = HashMap<String, Array<bool>>();
-    var _tag2350 = input.unsigned();
-    if (_tag2350 == 1) {
-        for (var (_bk2351, _bv) in base.caller_copies) {
-            _f2349[_bk2351] = _bv;
-        }
-        var _v2352 = HashMap<String, Array<bool>>();
-        var _n2353 = input.count();
-        for (var _ in 0.._n2353) {
-            var _k2354 = input.text();
-            var _v2355 = Array<bool>();
-            var _n2356 = input.count();
-            for (var _ in 0.._n2356) {
-                _v2355.append(input.flag());
-            }
-            _v2352[_k2354] = _v2355;
-        }
-        for (var (_bk2351, _av) in _v2352) {
-            _f2349[_bk2351] = _av;
+        var _more2313 = input.count();
+        for (var _ in 0.._more2313) {
+            var _t2314 = input.loc();
+            var _t2315 = input.text();
+            _f2310.append((_t2314, _t2315));
         }
     } else {
-        var _v2357 = HashMap<String, Array<bool>>();
-        var _n2358 = input.count();
-        for (var _ in 0.._n2358) {
-            var _k2359 = input.text();
-            var _v2360 = Array<bool>();
-            var _n2361 = input.count();
-            for (var _ in 0.._n2361) {
-                _v2360.append(input.flag());
-            }
-            _v2357[_k2359] = _v2360;
+        var _v2316 = Array<(Loc, String)>();
+        var _n2317 = input.count();
+        for (var _ in 0.._n2317) {
+            var _t2318 = input.loc();
+            var _t2319 = input.text();
+            _v2316.append((_t2318, _t2319));
         }
-        _f2349 = _v2357;
+        _f2310 = _v2316;
     }
-    var _f2363 = input.flag();
+    var _f2350 = HashMap<String, Array<bool>>();
+    var _tag2351 = input.unsigned();
+    if (_tag2351 == 1) {
+        for (var (_bk2352, _bv) in base.caller_copies) {
+            _f2350[_bk2352] = _bv;
+        }
+        var _v2353 = HashMap<String, Array<bool>>();
+        var _n2354 = input.count();
+        for (var _ in 0.._n2354) {
+            var _k2355 = input.text();
+            var _v2356 = Array<bool>();
+            var _n2357 = input.count();
+            for (var _ in 0.._n2357) {
+                _v2356.append(input.flag());
+            }
+            _v2353[_k2355] = _v2356;
+        }
+        for (var (_bk2352, _av) in _v2353) {
+            _f2350[_bk2352] = _av;
+        }
+    } else {
+        var _v2358 = HashMap<String, Array<bool>>();
+        var _n2359 = input.count();
+        for (var _ in 0.._n2359) {
+            var _k2360 = input.text();
+            var _v2361 = Array<bool>();
+            var _n2362 = input.count();
+            for (var _ in 0.._n2362) {
+                _v2361.append(input.flag());
+            }
+            _v2358[_k2360] = _v2361;
+        }
+        _f2350 = _v2358;
+    }
+    var _f2364 = input.flag();
     return Module(
-        _f1495,
-        _f1528,
-        _f1548,
-        _f1567,
-        _f1586,
-        _f1605,
-        _f1624,
-        _f1643,
-        _f1662,
-        _f1681,
-        _f1700,
-        _f1712,
-        _f1728,
-        _f1747,
-        _f1766,
-        _f1785,
-        _f1806,
-        _f1835,
-        _f1854,
-        _f1867,
-        _f1894,
-        _f1941,
-        _f2028,
-        _f2054,
-        _f2074,
-        _f2100,
-        _f2118,
-        _f2144,
-        _f2163,
-        _f2176,
-        _f2199,
-        _f2223,
-        _f2267,
+        _f1496,
+        _f1529,
+        _f1549,
+        _f1568,
+        _f1587,
+        _f1606,
+        _f1625,
+        _f1644,
+        _f1663,
+        _f1682,
+        _f1701,
+        _f1713,
+        _f1729,
+        _f1748,
+        _f1767,
+        _f1786,
+        _f1807,
+        _f1836,
+        _f1855,
+        _f1868,
+        _f1895,
+        _f1942,
+        _f2029,
+        _f2055,
+        _f2075,
+        _f2101,
+        _f2119,
+        _f2145,
+        _f2164,
+        _f2177,
+        _f2200,
+        _f2224,
         _f2268,
-        _f2288,
-        _f2297,
-        _f2309,
-        _f2349,
-        _f2363
+        _f2269,
+        _f2289,
+        _f2298,
+        _f2310,
+        _f2350,
+        _f2364
     );
 }
 
 _m_Module_index(value: Module, base: DeltaBase) {
-    ulong _j1501 = 0;
-    for (var _item1483 in value.imports) {
+    ulong _j1502 = 0;
+    for (var _item1484 in value.imports) {
         var scratch = base.scratch();
-        _a_Import_write(scratch, _item1483);
-        base.add("imports", scratch, _j1501);
-        _j1501 += 1;
+        _a_Import_write(scratch, _item1484);
+        base.add("imports", scratch, _j1502);
+        _j1502 += 1;
     }
     if (base.verifying) {
-        ulong _j1535 = 0;
-        for (var _item1502 in value.structs) {
+        ulong _j1536 = 0;
+        for (var _item1503 in value.structs) {
             var scratch = base.scratch();
-            _m_StructDef_write(scratch, _item1502);
-            base.add("s", scratch, _j1535);
-            base.name("s", _item1502.name, _j1535);
-            _patch_s_index(_item1502, base, _j1535);
-            _j1535 += 1;
+            _m_StructDef_write(scratch, _item1503);
+            base.add("s", scratch, _j1536);
+            base.name("s", _item1503.name, _j1536);
+            _patch_s_index(_item1503, base, _j1536);
+            _j1536 += 1;
         }
     }
     base.ref_structs = value.structs.clone();
     base.ref_struct_parts = Array<StructDef>();
-    for (var _item1502 in value.structs) {
-        base.ref_struct_parts.append(_m_StructDef_shallow(_item1502));
+    for (var _item1503 in value.structs) {
+        base.ref_struct_parts.append(_m_StructDef_shallow(_item1503));
     }
-    ulong _j1554 = 0;
-    for (var _item1536 in value.traits) {
+    ulong _j1555 = 0;
+    for (var _item1537 in value.traits) {
         var scratch = base.scratch();
-        _m_TraitDef_write(scratch, _item1536);
-        base.add("traits", scratch, _j1554);
-        _j1554 += 1;
+        _m_TraitDef_write(scratch, _item1537);
+        base.add("traits", scratch, _j1555);
+        _j1555 += 1;
     }
-    ulong _j1573 = 0;
-    for (var _item1555 in value.extensions) {
+    ulong _j1574 = 0;
+    for (var _item1556 in value.extensions) {
         var scratch = base.scratch();
-        _m_ExtensionDef_write(scratch, _item1555);
-        base.add("extensions", scratch, _j1573);
-        _j1573 += 1;
+        _m_ExtensionDef_write(scratch, _item1556);
+        base.add("extensions", scratch, _j1574);
+        _j1574 += 1;
     }
     if (base.verifying) {
-        ulong _j1592 = 0;
-        for (var _item1574 in value.functions) {
+        ulong _j1593 = 0;
+        for (var _item1575 in value.functions) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item1574);
-            base.add("functions", scratch, _j1592);
-            base.name("functions", _item1574.name, _j1592);
-            _j1592 += 1;
+            _m_FunctionDef_write(scratch, _item1575);
+            base.add("functions", scratch, _j1593);
+            base.name("functions", _item1575.name, _j1593);
+            _j1593 += 1;
         }
     }
     base.ref_functions = value.functions.clone();
-    ulong _j1611 = 0;
-    for (var _item1593 in value.externs) {
+    ulong _j1612 = 0;
+    for (var _item1594 in value.externs) {
         var scratch = base.scratch();
-        _m_ExternDef_write(scratch, _item1593);
-        base.add("externs", scratch, _j1611);
-        _j1611 += 1;
+        _m_ExternDef_write(scratch, _item1594);
+        base.add("externs", scratch, _j1612);
+        _j1612 += 1;
     }
-    ulong _j1630 = 0;
-    for (var _item1612 in value.globals) {
+    ulong _j1631 = 0;
+    for (var _item1613 in value.globals) {
         var scratch = base.scratch();
-        _m_VariableDef_write(scratch, _item1612);
-        base.add("globals", scratch, _j1630);
-        _j1630 += 1;
+        _m_VariableDef_write(scratch, _item1613);
+        base.add("globals", scratch, _j1631);
+        _j1631 += 1;
     }
-    ulong _j1649 = 0;
-    for (var _item1631 in value.static_blocks) {
+    ulong _j1650 = 0;
+    for (var _item1632 in value.static_blocks) {
         var scratch = base.scratch();
-        _m_ModuleStaticBlock_write(scratch, _item1631);
-        base.add("static_blocks", scratch, _j1649);
-        _j1649 += 1;
+        _m_ModuleStaticBlock_write(scratch, _item1632);
+        base.add("static_blocks", scratch, _j1650);
+        _j1650 += 1;
     }
-    ulong _j1668 = 0;
-    for (var _item1650 in value.enums) {
+    ulong _j1669 = 0;
+    for (var _item1651 in value.enums) {
         var scratch = base.scratch();
-        _m_EnumDef_write(scratch, _item1650);
-        base.add("enums", scratch, _j1668);
-        _j1668 += 1;
+        _m_EnumDef_write(scratch, _item1651);
+        base.add("enums", scratch, _j1669);
+        _j1669 += 1;
     }
-    ulong _j1687 = 0;
-    for (var _item1669 in value.struct_specs) {
+    ulong _j1688 = 0;
+    for (var _item1670 in value.struct_specs) {
         var scratch = base.scratch();
-        _m_TypeName_write(scratch, _item1669);
-        base.add("struct_specs", scratch, _j1687);
-        _j1687 += 1;
+        _m_TypeName_write(scratch, _item1670);
+        base.add("struct_specs", scratch, _j1688);
+        _j1688 += 1;
     }
-    ulong _j1706 = 0;
-    for (var _item1688 in value.func_specs) {
+    ulong _j1707 = 0;
+    for (var _item1689 in value.func_specs) {
         var scratch = base.scratch();
-        _m_TypeName_write(scratch, _item1688);
-        base.add("func_specs", scratch, _j1706);
-        _j1706 += 1;
+        _m_TypeName_write(scratch, _item1689);
+        base.add("func_specs", scratch, _j1707);
+        _j1707 += 1;
     }
-    ulong _j1715 = 0;
-    for (var _item1707 in value.type_aliases) {
+    ulong _j1716 = 0;
+    for (var _item1708 in value.type_aliases) {
         var scratch = base.scratch();
-        _m_TypeAliasDef_write(scratch, _item1707);
-        base.add("type_aliases", scratch, _j1715);
-        _j1715 += 1;
+        _m_TypeAliasDef_write(scratch, _item1708);
+        base.add("type_aliases", scratch, _j1716);
+        _j1716 += 1;
     }
-    ulong _j1734 = 0;
-    for (var _item1716 in value.withheld) {
+    ulong _j1735 = 0;
+    for (var _item1717 in value.withheld) {
         var scratch = base.scratch();
-        _m_Withheld_write(scratch, _item1716);
-        base.add("withheld", scratch, _j1734);
-        _j1734 += 1;
+        _m_Withheld_write(scratch, _item1717);
+        base.add("withheld", scratch, _j1735);
+        _j1735 += 1;
     }
-    ulong _j1753 = 0;
-    for (var _item1735 in value.properties) {
+    ulong _j1754 = 0;
+    for (var _item1736 in value.properties) {
         var scratch = base.scratch();
-        _m_PropertyDef_write(scratch, _item1735);
-        base.add("properties", scratch, _j1753);
-        _j1753 += 1;
+        _m_PropertyDef_write(scratch, _item1736);
+        base.add("properties", scratch, _j1754);
+        _j1754 += 1;
     }
-    ulong _j1772 = 0;
-    for (var _item1754 in value.type_uses) {
+    ulong _j1773 = 0;
+    for (var _item1755 in value.type_uses) {
         var scratch = base.scratch();
-        _m_TypeUse_write(scratch, _item1754);
-        base.add("type_uses", scratch, _j1772);
-        _j1772 += 1;
+        _m_TypeUse_write(scratch, _item1755);
+        base.add("type_uses", scratch, _j1773);
+        _j1773 += 1;
     }
-    ulong _j1791 = 0;
-    for (var _item1773 in value.use_contexts) {
+    ulong _j1792 = 0;
+    for (var _item1774 in value.use_contexts) {
         var scratch = base.scratch();
-        _m_UseContext_write(scratch, _item1773);
-        base.add("use_contexts", scratch, _j1791);
-        _j1791 += 1;
+        _m_UseContext_write(scratch, _item1774);
+        base.add("use_contexts", scratch, _j1792);
+        _j1792 += 1;
     }
-    var _xscratch1818 = base.scratch();
-    for (var _xitem1819 in value.literal_args) {
-        var (_t1820, _t1821, _t1822) = _xitem1819;
-        _xscratch1818.loc(_t1820);
-        _xscratch1818.unsigned(_t1821);
-        _xscratch1818.loc(_t1822);
+    var _xscratch1819 = base.scratch();
+    for (var _xitem1820 in value.literal_args) {
+        var (_t1821, _t1822, _t1823) = _xitem1820;
+        _xscratch1819.loc(_t1821);
+        _xscratch1819.unsigned(_t1822);
+        _xscratch1819.loc(_t1823);
     }
-    base.keep_list("literal_args", value.literal_args.count, _xscratch1818);
-    ulong _j1841 = 0;
-    for (var _item1823 in value.constrained_aliases) {
+    base.keep_list("literal_args", value.literal_args.count, _xscratch1819);
+    ulong _j1842 = 0;
+    for (var _item1824 in value.constrained_aliases) {
         var scratch = base.scratch();
-        _m_TypeAliasDef_write(scratch, _item1823);
-        base.add("constrained_aliases", scratch, _j1841);
-        _j1841 += 1;
+        _m_TypeAliasDef_write(scratch, _item1824);
+        base.add("constrained_aliases", scratch, _j1842);
+        _j1842 += 1;
     }
-    ulong _j1860 = 0;
-    for (var _item1842 in value.trait_types) {
+    ulong _j1861 = 0;
+    for (var _item1843 in value.trait_types) {
         var scratch = base.scratch();
-        _m_TraitType_write(scratch, _item1842);
-        base.add("trait_types", scratch, _j1860);
-        _j1860 += 1;
+        _m_TraitType_write(scratch, _item1843);
+        base.add("trait_types", scratch, _j1861);
+        _j1861 += 1;
     }
-    ulong _cj1864 = 0;
-    for (var _conv1862 in value.conversions) {
-        var _own1863 = RecordOut();
-        _own1863.blank_locs = true;
-        _m_Conversion_write(_own1863, _conv1862);
-        base.add_hashed("conversions", interface_text(_own1863), _cj1864);
-        _cj1864 += 1;
+    ulong _cj1865 = 0;
+    for (var _conv1863 in value.conversions) {
+        var _own1864 = RecordOut();
+        _own1864.blank_locs = true;
+        _m_Conversion_write(_own1864, _conv1863);
+        base.add_hashed("conversions", interface_text(_own1864), _cj1865);
+        _cj1865 += 1;
     }
-    for (var (_key1868, _) in value.overload_sets) {
-        var _kscratch1869 = base.scratch();
-        _kscratch1869.text(_key1868);
-        var _vscratch1870 = base.scratch();
-        _vscratch1870.unsigned(value.overload_sets[_key1868].count);
-        for (var _item1907 in value.overload_sets[_key1868]) {
-            _vscratch1870.text(_item1907);
+    for (var (_key1869, _) in value.overload_sets) {
+        var _kscratch1870 = base.scratch();
+        _kscratch1870.text(_key1869);
+        var _vscratch1871 = base.scratch();
+        _vscratch1871.unsigned(value.overload_sets[_key1869].count);
+        for (var _item1908 in value.overload_sets[_key1869]) {
+            _vscratch1871.text(_item1908);
         }
-        base.keep_entry("overload_sets", _kscratch1869, _vscratch1870);
+        base.keep_entry("overload_sets", _kscratch1870, _vscratch1871);
     }
-    for (var (_key1908, _) in value.overload_unions) {
-        var _kscratch1909 = base.scratch();
-        _kscratch1909.text(_key1908);
-        var _vscratch1910 = base.scratch();
-        _vscratch1910.unsigned(value.overload_unions[_key1908].count);
-        for (var _item1958 in value.overload_unions[_key1908]) {
-            _vscratch1910.unsigned(_item1958.count);
-            for (var _item1959 in _item1958) {
-                _vscratch1910.text(_item1959);
+    for (var (_key1909, _) in value.overload_unions) {
+        var _kscratch1910 = base.scratch();
+        _kscratch1910.text(_key1909);
+        var _vscratch1911 = base.scratch();
+        _vscratch1911.unsigned(value.overload_unions[_key1909].count);
+        for (var _item1959 in value.overload_unions[_key1909]) {
+            _vscratch1911.unsigned(_item1959.count);
+            for (var _item1960 in _item1959) {
+                _vscratch1911.text(_item1960);
             }
         }
-        base.keep_entry("overload_unions", _kscratch1909, _vscratch1910);
+        base.keep_entry("overload_unions", _kscratch1910, _vscratch1911);
     }
-    for (var (_key1960, _) in value.method_overload_sets) {
-        var _kscratch1961 = base.scratch();
-        _kscratch1961.text(_key1960);
-        var _vscratch1962 = base.scratch();
-        var _keys2048 = Array<(u8[], u8[], String)>();
-        for (var (_key2047, _) in value.method_overload_sets[_key1960]) {
-            var _scratch2049 = _vscratch1962.scratch();
-            _scratch2049.text(_key2047);
-            var _vscratch2051 = _vscratch1962.scratch();
-            _vscratch2051.unsigned(value.method_overload_sets[_key1960][_key2047].count);
-            for (var _item2052 in value.method_overload_sets[_key1960][_key2047]) {
-                _vscratch2051.text(_item2052);
+    for (var (_key1961, _) in value.method_overload_sets) {
+        var _kscratch1962 = base.scratch();
+        _kscratch1962.text(_key1961);
+        var _vscratch1963 = base.scratch();
+        var _keys2049 = Array<(u8[], u8[], String)>();
+        for (var (_key2048, _) in value.method_overload_sets[_key1961]) {
+            var _scratch2050 = _vscratch1963.scratch();
+            _scratch2050.text(_key2048);
+            var _vscratch2052 = _vscratch1963.scratch();
+            _vscratch2052.unsigned(value.method_overload_sets[_key1961][_key2048].count);
+            for (var _item2053 in value.method_overload_sets[_key1961][_key2048]) {
+                _vscratch2052.text(_item2053);
             }
-            _keys2048.append((_scratch2049.finish(), _vscratch2051.finish(), _key2047));
+            _keys2049.append((_scratch2050.finish(), _vscratch2052.finish(), _key2048));
         }
-        _keys2048.sort((a, b) => {
+        _keys2049.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        _vscratch1962.unsigned(_keys2048.count);
-        for (var (_bytes2050, _, _key2047) in _keys2048) {
-            _vscratch1962.text(_key2047);
-            _vscratch1962.unsigned(value.method_overload_sets[_key1960][_key2047].count);
-            for (var _item2053 in value.method_overload_sets[_key1960][_key2047]) {
-                _vscratch1962.text(_item2053);
+        _vscratch1963.unsigned(_keys2049.count);
+        for (var (_bytes2051, _, _key2048) in _keys2049) {
+            _vscratch1963.text(_key2048);
+            _vscratch1963.unsigned(value.method_overload_sets[_key1961][_key2048].count);
+            for (var _item2054 in value.method_overload_sets[_key1961][_key2048]) {
+                _vscratch1963.text(_item2054);
             }
         }
-        base.keep_entry("method_overload_sets", _kscratch1961, _vscratch1962);
+        base.keep_entry("method_overload_sets", _kscratch1962, _vscratch1963);
     }
-    for (var _key2055 in value.private_functions) {
-        var _kscratch2056 = base.scratch();
-        _kscratch2056.loc(_key2055);
-        var _vscratch2057 = base.scratch();
-        base.keep_entry("private_functions", _kscratch2056, _vscratch2057);
+    for (var _key2056 in value.private_functions) {
+        var _kscratch2057 = base.scratch();
+        _kscratch2057.loc(_key2056);
+        var _vscratch2058 = base.scratch();
+        base.keep_entry("private_functions", _kscratch2057, _vscratch2058);
     }
-    for (var _key2081 in value.file_private_functions) {
-        var _kscratch2082 = base.scratch();
-        _kscratch2082.loc(_key2081);
-        var _vscratch2083 = base.scratch();
-        base.keep_entry("file_private_functions", _kscratch2082, _vscratch2083);
+    for (var _key2082 in value.file_private_functions) {
+        var _kscratch2083 = base.scratch();
+        _kscratch2083.loc(_key2082);
+        var _vscratch2084 = base.scratch();
+        base.keep_entry("file_private_functions", _kscratch2083, _vscratch2084);
     }
-    var _xscratch2128 = base.scratch();
-    for (var _xitem2129 in value.call_targets) {
-        var (_t2130, _t2131) = _xitem2129;
-        _xscratch2128.loc(_t2130);
-        _xscratch2128.text(_t2131);
+    var _xscratch2129 = base.scratch();
+    for (var _xitem2130 in value.call_targets) {
+        var (_t2131, _t2132) = _xitem2130;
+        _xscratch2129.loc(_t2131);
+        _xscratch2129.text(_t2132);
     }
-    base.keep_list("call_targets", value.call_targets.count, _xscratch2128);
-    for (var _item2132 in value.argument_names) {
-        var _escratch2133 = base.scratch();
-        var (_t2154, _t2155) = _item2132;
-        _escratch2133.loc(_t2154);
-        _escratch2133.text(_t2155);
-        base.keep_entry("argument_names", _escratch2133, base.scratch());
+    base.keep_list("call_targets", value.call_targets.count, _xscratch2129);
+    for (var _item2133 in value.argument_names) {
+        var _escratch2134 = base.scratch();
+        var (_t2155, _t2156) = _item2133;
+        _escratch2134.loc(_t2155);
+        _escratch2134.text(_t2156);
+        base.keep_entry("argument_names", _escratch2134, base.scratch());
     }
-    var _xscratch2169 = base.scratch();
-    for (var _xitem2170 in value.namespaces) {
-        _xscratch2169.text(_xitem2170);
+    var _xscratch2170 = base.scratch();
+    for (var _xitem2171 in value.namespaces) {
+        _xscratch2170.text(_xitem2171);
     }
-    base.keep_list("namespaces", value.namespaces.count, _xscratch2169);
-    var _xscratch2182 = base.scratch();
-    for (var _xitem2183 in value.cached_files) {
-        _xscratch2182.flag(_xitem2183);
+    base.keep_list("namespaces", value.namespaces.count, _xscratch2170);
+    var _xscratch2183 = base.scratch();
+    for (var _xitem2184 in value.cached_files) {
+        _xscratch2183.flag(_xitem2184);
     }
-    base.keep_list("cached_files", value.cached_files.count, _xscratch2182);
-    for (var (_key2184, _) in value.recorded_summaries) {
-        var _kscratch2185 = base.scratch();
-        _kscratch2185.loc(_key2184);
-        var _vscratch2186 = base.scratch();
-        _vscratch2186.text(value.recorded_summaries[_key2184]);
-        base.keep_entry("recorded_summaries", _kscratch2185, _vscratch2186);
+    base.keep_list("cached_files", value.cached_files.count, _xscratch2183);
+    for (var (_key2185, _) in value.recorded_summaries) {
+        var _kscratch2186 = base.scratch();
+        _kscratch2186.loc(_key2185);
+        var _vscratch2187 = base.scratch();
+        _vscratch2187.text(value.recorded_summaries[_key2185]);
+        base.keep_entry("recorded_summaries", _kscratch2186, _vscratch2187);
     }
-    for (var _key2208 in value.stripped) {
-        var _kscratch2209 = base.scratch();
-        _kscratch2209.loc(_key2208);
-        var _vscratch2210 = base.scratch();
-        base.keep_entry("stripped", _kscratch2209, _vscratch2210);
+    for (var _key2209 in value.stripped) {
+        var _kscratch2210 = base.scratch();
+        _kscratch2210.loc(_key2209);
+        var _vscratch2211 = base.scratch();
+        base.keep_entry("stripped", _kscratch2210, _vscratch2211);
     }
     if (base.verifying) {
-        ulong _j2247 = 0;
-        for (var _item2230 in value.templates.structs) {
+        ulong _j2248 = 0;
+        for (var _item2231 in value.templates.structs) {
             var scratch = base.scratch();
-            _m_StructDef_write(scratch, _item2230);
-            base.add("t", scratch, _j2247);
-            base.name("t", _item2230.name, _j2247);
-            _patch_t_index(_item2230, base, _j2247);
-            _j2247 += 1;
+            _m_StructDef_write(scratch, _item2231);
+            base.add("t", scratch, _j2248);
+            base.name("t", _item2231.name, _j2248);
+            _patch_t_index(_item2231, base, _j2248);
+            _j2248 += 1;
         }
     }
     base.ref_templates = value.templates.structs.clone();
     base.ref_template_parts = Array<StructDef>();
-    for (var _item2230 in value.templates.structs) {
-        base.ref_template_parts.append(_m_StructDef_shallow(_item2230));
+    for (var _item2231 in value.templates.structs) {
+        base.ref_template_parts.append(_m_StructDef_shallow(_item2231));
     }
     if (base.verifying) {
-        ulong _j2266 = 0;
-        for (var _item2248 in value.templates.functions) {
+        ulong _j2267 = 0;
+        for (var _item2249 in value.templates.functions) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2248);
-            base.add("tf", scratch, _j2266);
-            base.name("tf", _item2248.name, _j2266);
-            _j2266 += 1;
+            _m_FunctionDef_write(scratch, _item2249);
+            base.add("tf", scratch, _j2267);
+            base.name("tf", _item2249.name, _j2267);
+            _j2267 += 1;
         }
     }
     base.ref_template_functions = value.templates.functions.clone();
     base.keep_checked(value.checked);
-    for (var (_key2269, _) in value.spec_requests) {
-        var _kscratch2270 = base.scratch();
-        _kscratch2270.text(_key2269);
-        var _vscratch2271 = base.scratch();
-        _m_SpecRequest_write(_vscratch2271, value.spec_requests[_key2269]);
-        base.keep_entry("spec_requests", _kscratch2270, _vscratch2271);
+    for (var (_key2270, _) in value.spec_requests) {
+        var _kscratch2271 = base.scratch();
+        _kscratch2271.text(_key2270);
+        var _vscratch2272 = base.scratch();
+        _m_SpecRequest_write(_vscratch2272, value.spec_requests[_key2270]);
+        base.keep_entry("spec_requests", _kscratch2271, _vscratch2272);
     }
-    var _xscratch2319 = base.scratch();
-    for (var _xitem2320 in value.summaries_to_record) {
-        var (_t2321, _t2322) = _xitem2320;
-        _xscratch2319.loc(_t2321);
-        _xscratch2319.text(_t2322);
+    var _xscratch2320 = base.scratch();
+    for (var _xitem2321 in value.summaries_to_record) {
+        var (_t2322, _t2323) = _xitem2321;
+        _xscratch2320.loc(_t2322);
+        _xscratch2320.text(_t2323);
     }
-    base.keep_list("summaries_to_record", value.summaries_to_record.count, _xscratch2319);
-    for (var (_key2323, _) in value.caller_copies) {
-        var _kscratch2324 = base.scratch();
-        _kscratch2324.text(_key2323);
-        var _vscratch2325 = base.scratch();
-        _vscratch2325.unsigned(value.caller_copies[_key2323].count);
-        for (var _item2362 in value.caller_copies[_key2323]) {
-            _vscratch2325.flag(_item2362);
+    base.keep_list("summaries_to_record", value.summaries_to_record.count, _xscratch2320);
+    for (var (_key2324, _) in value.caller_copies) {
+        var _kscratch2325 = base.scratch();
+        _kscratch2325.text(_key2324);
+        var _vscratch2326 = base.scratch();
+        _vscratch2326.unsigned(value.caller_copies[_key2324].count);
+        for (var _item2363 in value.caller_copies[_key2324]) {
+            _vscratch2326.flag(_item2363);
         }
-        base.keep_entry("caller_copies", _kscratch2324, _vscratch2325);
+        base.keep_entry("caller_copies", _kscratch2325, _vscratch2326);
     }
 }
 
 _m_Module_index_resumed(value: Module, base: DeltaBase) {
-    ulong _j1715 = 0;
-    for (var _item1707 in value.type_aliases) {
+    ulong _j1716 = 0;
+    for (var _item1708 in value.type_aliases) {
         var scratch = base.scratch();
-        _m_TypeAliasDef_write(scratch, _item1707);
-        base.add("type_aliases", scratch, _j1715);
-        _j1715 += 1;
+        _m_TypeAliasDef_write(scratch, _item1708);
+        base.add("type_aliases", scratch, _j1716);
+        _j1716 += 1;
     }
-    for (var (_key2184, _) in value.recorded_summaries) {
-        var _kscratch2185 = base.scratch();
-        _kscratch2185.loc(_key2184);
-        var _vscratch2186 = base.scratch();
-        _vscratch2186.text(value.recorded_summaries[_key2184]);
-        base.keep_entry("recorded_summaries", _kscratch2185, _vscratch2186);
+    for (var (_key2185, _) in value.recorded_summaries) {
+        var _kscratch2186 = base.scratch();
+        _kscratch2186.loc(_key2185);
+        var _vscratch2187 = base.scratch();
+        _vscratch2187.text(value.recorded_summaries[_key2185]);
+        base.keep_entry("recorded_summaries", _kscratch2186, _vscratch2187);
     }
-    var _xscratch2319 = base.scratch();
-    for (var _xitem2320 in value.summaries_to_record) {
-        var (_t2321, _t2322) = _xitem2320;
-        _xscratch2319.loc(_t2321);
-        _xscratch2319.text(_t2322);
+    var _xscratch2320 = base.scratch();
+    for (var _xitem2321 in value.summaries_to_record) {
+        var (_t2322, _t2323) = _xitem2321;
+        _xscratch2320.loc(_t2322);
+        _xscratch2320.text(_t2323);
     }
-    base.keep_list("summaries_to_record", value.summaries_to_record.count, _xscratch2319);
+    base.keep_list("summaries_to_record", value.summaries_to_record.count, _xscratch2320);
 }
 
 _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
     out.text(value.name);
     _m_TypeName_write(out, value.ty);
-    var _seq2371 = base.ref_struct_parts[slot].generic_params;
-    ulong _bj2372 = 0;
-    var _news2373 = Array<ulong>();
-    for (var _i2374 in 0..value.generic_params.count) {
-        if (_bj2372 < _seq2371.count and value.generic_params[_i2374] === _seq2371[_bj2372]) {
+    var _seq2372 = base.ref_struct_parts[slot].generic_params;
+    ulong _bj2373 = 0;
+    var _news2374 = Array<ulong>();
+    for (var _i2375 in 0..value.generic_params.count) {
+        if (_bj2373 < _seq2372.count and value.generic_params[_i2375] === _seq2372[_bj2373]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_GenericParam_write(scratch, value.generic_params[_i2374]);
-                base.verify_same($"s.{slot}.generic_params", _bj2372, scratch);
+                _m_GenericParam_write(scratch, value.generic_params[_i2375]);
+                base.verify_same($"s.{slot}.generic_params", _bj2373, scratch);
             }
-            _bj2372 += 1;
-        } else if (_bj2372 < _seq2371.count
-            and _same_m_GenericParam(value.generic_params[_i2374], _seq2371[_bj2372], base)) {
+            _bj2373 += 1;
+        } else if (_bj2373 < _seq2372.count
+            and _same_m_GenericParam(value.generic_params[_i2375], _seq2372[_bj2373], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_GenericParam_write(scratch, value.generic_params[_i2374]);
-                base.verify_same($"s.{slot}.generic_params", _bj2372, scratch);
+                _m_GenericParam_write(scratch, value.generic_params[_i2375]);
+                base.verify_same($"s.{slot}.generic_params", _bj2373, scratch);
             }
-            _bj2372 += 1;
+            _bj2373 += 1;
         } else {
-            _news2373.append(_i2374);
+            _news2374.append(_i2375);
         }
     }
-    if (_bj2372 == _seq2371.count) {
+    if (_bj2373 == _seq2372.count) {
         out.unsigned(2);
-        out.unsigned(_news2373.count);
-        for (var _i2374 in _news2373) {
-            out.unsigned(_i2374);
-            _m_GenericParam_write(out, value.generic_params[_i2374]);
+        out.unsigned(_news2374.count);
+        for (var _i2375 in _news2374) {
+            out.unsigned(_i2375);
+            _m_GenericParam_write(out, value.generic_params[_i2375]);
         }
         base.count("s.*.generic_params" + " merged", 0);
     } else {
@@ -10786,39 +10794,39 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.generic_params" + " whole", 0);
         out.unsigned(value.generic_params.count);
-        for (var _i2374 in 0..value.generic_params.count) {
-            _m_GenericParam_write(out, value.generic_params[_i2374]);
+        for (var _i2375 in 0..value.generic_params.count) {
+            _m_GenericParam_write(out, value.generic_params[_i2375]);
         }
     }
-    var _seq2387 = base.ref_struct_parts[slot].field_members;
-    ulong _bj2388 = 0;
-    var _news2389 = Array<ulong>();
-    for (var _i2390 in 0..value.field_members.count) {
-        if (_bj2388 < _seq2387.count and value.field_members[_i2390] === _seq2387[_bj2388]) {
+    var _seq2388 = base.ref_struct_parts[slot].field_members;
+    ulong _bj2389 = 0;
+    var _news2390 = Array<ulong>();
+    for (var _i2391 in 0..value.field_members.count) {
+        if (_bj2389 < _seq2388.count and value.field_members[_i2391] === _seq2388[_bj2389]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_VariableDef_write(scratch, value.field_members[_i2390]);
-                base.verify_same($"s.{slot}.field_members", _bj2388, scratch);
+                _m_VariableDef_write(scratch, value.field_members[_i2391]);
+                base.verify_same($"s.{slot}.field_members", _bj2389, scratch);
             }
-            _bj2388 += 1;
-        } else if (_bj2388 < _seq2387.count
-            and _same_m_VariableDef(value.field_members[_i2390], _seq2387[_bj2388], base)) {
+            _bj2389 += 1;
+        } else if (_bj2389 < _seq2388.count
+            and _same_m_VariableDef(value.field_members[_i2391], _seq2388[_bj2389], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_VariableDef_write(scratch, value.field_members[_i2390]);
-                base.verify_same($"s.{slot}.field_members", _bj2388, scratch);
+                _m_VariableDef_write(scratch, value.field_members[_i2391]);
+                base.verify_same($"s.{slot}.field_members", _bj2389, scratch);
             }
-            _bj2388 += 1;
+            _bj2389 += 1;
         } else {
-            _news2389.append(_i2390);
+            _news2390.append(_i2391);
         }
     }
-    if (_bj2388 == _seq2387.count) {
+    if (_bj2389 == _seq2388.count) {
         out.unsigned(2);
-        out.unsigned(_news2389.count);
-        for (var _i2390 in _news2389) {
-            out.unsigned(_i2390);
-            _m_VariableDef_write(out, value.field_members[_i2390]);
+        out.unsigned(_news2390.count);
+        for (var _i2391 in _news2390) {
+            out.unsigned(_i2391);
+            _m_VariableDef_write(out, value.field_members[_i2391]);
         }
         base.count("s.*.field_members" + " merged", 0);
     } else {
@@ -10827,39 +10835,39 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.field_members" + " whole", 0);
         out.unsigned(value.field_members.count);
-        for (var _i2390 in 0..value.field_members.count) {
-            _m_VariableDef_write(out, value.field_members[_i2390]);
+        for (var _i2391 in 0..value.field_members.count) {
+            _m_VariableDef_write(out, value.field_members[_i2391]);
         }
     }
-    var _seq2403 = base.ref_struct_parts[slot].method_members;
-    ulong _bj2404 = 0;
-    var _news2405 = Array<ulong>();
-    for (var _i2406 in 0..value.method_members.count) {
-        if (_bj2404 < _seq2403.count and value.method_members[_i2406] === _seq2403[_bj2404]) {
+    var _seq2404 = base.ref_struct_parts[slot].method_members;
+    ulong _bj2405 = 0;
+    var _news2406 = Array<ulong>();
+    for (var _i2407 in 0..value.method_members.count) {
+        if (_bj2405 < _seq2404.count and value.method_members[_i2407] === _seq2404[_bj2405]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.method_members[_i2406]);
-                base.verify_same($"s.{slot}.method_members", _bj2404, scratch);
+                _m_FunctionDef_write(scratch, value.method_members[_i2407]);
+                base.verify_same($"s.{slot}.method_members", _bj2405, scratch);
             }
-            _bj2404 += 1;
-        } else if (_bj2404 < _seq2403.count
-            and _same_m_FunctionDef(value.method_members[_i2406], _seq2403[_bj2404], base)) {
+            _bj2405 += 1;
+        } else if (_bj2405 < _seq2404.count
+            and _same_m_FunctionDef(value.method_members[_i2407], _seq2404[_bj2405], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.method_members[_i2406]);
-                base.verify_same($"s.{slot}.method_members", _bj2404, scratch);
+                _m_FunctionDef_write(scratch, value.method_members[_i2407]);
+                base.verify_same($"s.{slot}.method_members", _bj2405, scratch);
             }
-            _bj2404 += 1;
+            _bj2405 += 1;
         } else {
-            _news2405.append(_i2406);
+            _news2406.append(_i2407);
         }
     }
-    if (_bj2404 == _seq2403.count) {
+    if (_bj2405 == _seq2404.count) {
         out.unsigned(2);
-        out.unsigned(_news2405.count);
-        for (var _i2406 in _news2405) {
-            out.unsigned(_i2406);
-            _m_FunctionDef_write(out, value.method_members[_i2406]);
+        out.unsigned(_news2406.count);
+        for (var _i2407 in _news2406) {
+            out.unsigned(_i2407);
+            _m_FunctionDef_write(out, value.method_members[_i2407]);
         }
         base.count("s.*.method_members" + " merged", 0);
     } else {
@@ -10868,39 +10876,39 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.method_members" + " whole", 0);
         out.unsigned(value.method_members.count);
-        for (var _i2406 in 0..value.method_members.count) {
-            _m_FunctionDef_write(out, value.method_members[_i2406]);
+        for (var _i2407 in 0..value.method_members.count) {
+            _m_FunctionDef_write(out, value.method_members[_i2407]);
         }
     }
-    var _seq2419 = base.ref_struct_parts[slot].generic_methods;
-    ulong _bj2420 = 0;
-    var _news2421 = Array<ulong>();
-    for (var _i2422 in 0..value.generic_methods.count) {
-        if (_bj2420 < _seq2419.count and value.generic_methods[_i2422] === _seq2419[_bj2420]) {
+    var _seq2420 = base.ref_struct_parts[slot].generic_methods;
+    ulong _bj2421 = 0;
+    var _news2422 = Array<ulong>();
+    for (var _i2423 in 0..value.generic_methods.count) {
+        if (_bj2421 < _seq2420.count and value.generic_methods[_i2423] === _seq2420[_bj2421]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.generic_methods[_i2422]);
-                base.verify_same($"s.{slot}.generic_methods", _bj2420, scratch);
+                _m_FunctionDef_write(scratch, value.generic_methods[_i2423]);
+                base.verify_same($"s.{slot}.generic_methods", _bj2421, scratch);
             }
-            _bj2420 += 1;
-        } else if (_bj2420 < _seq2419.count
-            and _same_m_FunctionDef(value.generic_methods[_i2422], _seq2419[_bj2420], base)) {
+            _bj2421 += 1;
+        } else if (_bj2421 < _seq2420.count
+            and _same_m_FunctionDef(value.generic_methods[_i2423], _seq2420[_bj2421], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.generic_methods[_i2422]);
-                base.verify_same($"s.{slot}.generic_methods", _bj2420, scratch);
+                _m_FunctionDef_write(scratch, value.generic_methods[_i2423]);
+                base.verify_same($"s.{slot}.generic_methods", _bj2421, scratch);
             }
-            _bj2420 += 1;
+            _bj2421 += 1;
         } else {
-            _news2421.append(_i2422);
+            _news2422.append(_i2423);
         }
     }
-    if (_bj2420 == _seq2419.count) {
+    if (_bj2421 == _seq2420.count) {
         out.unsigned(2);
-        out.unsigned(_news2421.count);
-        for (var _i2422 in _news2421) {
-            out.unsigned(_i2422);
-            _m_FunctionDef_write(out, value.generic_methods[_i2422]);
+        out.unsigned(_news2422.count);
+        for (var _i2423 in _news2422) {
+            out.unsigned(_i2423);
+            _m_FunctionDef_write(out, value.generic_methods[_i2423]);
         }
         base.count("s.*.generic_methods" + " merged", 0);
     } else {
@@ -10909,39 +10917,39 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.generic_methods" + " whole", 0);
         out.unsigned(value.generic_methods.count);
-        for (var _i2422 in 0..value.generic_methods.count) {
-            _m_FunctionDef_write(out, value.generic_methods[_i2422]);
+        for (var _i2423 in 0..value.generic_methods.count) {
+            _m_FunctionDef_write(out, value.generic_methods[_i2423]);
         }
     }
-    var _seq2435 = base.ref_struct_parts[slot].constructors;
-    ulong _bj2436 = 0;
-    var _news2437 = Array<ulong>();
-    for (var _i2438 in 0..value.constructors.count) {
-        if (_bj2436 < _seq2435.count and value.constructors[_i2438] === _seq2435[_bj2436]) {
+    var _seq2436 = base.ref_struct_parts[slot].constructors;
+    ulong _bj2437 = 0;
+    var _news2438 = Array<ulong>();
+    for (var _i2439 in 0..value.constructors.count) {
+        if (_bj2437 < _seq2436.count and value.constructors[_i2439] === _seq2436[_bj2437]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.constructors[_i2438]);
-                base.verify_same($"s.{slot}.constructors", _bj2436, scratch);
+                _m_FunctionDef_write(scratch, value.constructors[_i2439]);
+                base.verify_same($"s.{slot}.constructors", _bj2437, scratch);
             }
-            _bj2436 += 1;
-        } else if (_bj2436 < _seq2435.count
-            and _same_m_FunctionDef(value.constructors[_i2438], _seq2435[_bj2436], base)) {
+            _bj2437 += 1;
+        } else if (_bj2437 < _seq2436.count
+            and _same_m_FunctionDef(value.constructors[_i2439], _seq2436[_bj2437], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.constructors[_i2438]);
-                base.verify_same($"s.{slot}.constructors", _bj2436, scratch);
+                _m_FunctionDef_write(scratch, value.constructors[_i2439]);
+                base.verify_same($"s.{slot}.constructors", _bj2437, scratch);
             }
-            _bj2436 += 1;
+            _bj2437 += 1;
         } else {
-            _news2437.append(_i2438);
+            _news2438.append(_i2439);
         }
     }
-    if (_bj2436 == _seq2435.count) {
+    if (_bj2437 == _seq2436.count) {
         out.unsigned(2);
-        out.unsigned(_news2437.count);
-        for (var _i2438 in _news2437) {
-            out.unsigned(_i2438);
-            _m_FunctionDef_write(out, value.constructors[_i2438]);
+        out.unsigned(_news2438.count);
+        for (var _i2439 in _news2438) {
+            out.unsigned(_i2439);
+            _m_FunctionDef_write(out, value.constructors[_i2439]);
         }
         base.count("s.*.constructors" + " merged", 0);
     } else {
@@ -10950,41 +10958,41 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.constructors" + " whole", 0);
         out.unsigned(value.constructors.count);
-        for (var _i2438 in 0..value.constructors.count) {
-            _m_FunctionDef_write(out, value.constructors[_i2438]);
+        for (var _i2439 in 0..value.constructors.count) {
+            _m_FunctionDef_write(out, value.constructors[_i2439]);
         }
     }
     _m_FunctionDef_write(out, value.destructor);
     _m_FunctionDef_write(out, value.acquire);
     _m_FunctionDef_write(out, value.release);
-    var _seq2454 = base.ref_struct_parts[slot].traits;
-    ulong _bj2455 = 0;
-    var _news2456 = Array<ulong>();
-    for (var _i2457 in 0..value.traits.count) {
-        if (_bj2455 < _seq2454.count and value.traits[_i2457] === _seq2454[_bj2455]) {
+    var _seq2455 = base.ref_struct_parts[slot].traits;
+    ulong _bj2456 = 0;
+    var _news2457 = Array<ulong>();
+    for (var _i2458 in 0..value.traits.count) {
+        if (_bj2456 < _seq2455.count and value.traits[_i2458] === _seq2455[_bj2456]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_TypeName_write(scratch, value.traits[_i2457]);
-                base.verify_same($"s.{slot}.traits", _bj2455, scratch);
+                _m_TypeName_write(scratch, value.traits[_i2458]);
+                base.verify_same($"s.{slot}.traits", _bj2456, scratch);
             }
-            _bj2455 += 1;
-        } else if (_bj2455 < _seq2454.count and _same_m_TypeName(value.traits[_i2457], _seq2454[_bj2455], base)) {
+            _bj2456 += 1;
+        } else if (_bj2456 < _seq2455.count and _same_m_TypeName(value.traits[_i2458], _seq2455[_bj2456], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_TypeName_write(scratch, value.traits[_i2457]);
-                base.verify_same($"s.{slot}.traits", _bj2455, scratch);
+                _m_TypeName_write(scratch, value.traits[_i2458]);
+                base.verify_same($"s.{slot}.traits", _bj2456, scratch);
             }
-            _bj2455 += 1;
+            _bj2456 += 1;
         } else {
-            _news2456.append(_i2457);
+            _news2457.append(_i2458);
         }
     }
-    if (_bj2455 == _seq2454.count) {
+    if (_bj2456 == _seq2455.count) {
         out.unsigned(2);
-        out.unsigned(_news2456.count);
-        for (var _i2457 in _news2456) {
-            out.unsigned(_i2457);
-            _m_TypeName_write(out, value.traits[_i2457]);
+        out.unsigned(_news2457.count);
+        for (var _i2458 in _news2457) {
+            out.unsigned(_i2458);
+            _m_TypeName_write(out, value.traits[_i2458]);
         }
         base.count("s.*.traits" + " merged", 0);
     } else {
@@ -10993,38 +11001,38 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.traits" + " whole", 0);
         out.unsigned(value.traits.count);
-        for (var _i2457 in 0..value.traits.count) {
-            _m_TypeName_write(out, value.traits[_i2457]);
+        for (var _i2458 in 0..value.traits.count) {
+            _m_TypeName_write(out, value.traits[_i2458]);
         }
     }
-    var _seq2470 = base.ref_struct_parts[slot].attributes;
-    ulong _bj2471 = 0;
-    var _news2472 = Array<ulong>();
-    for (var _i2473 in 0..value.attributes.count) {
-        if (_bj2471 < _seq2470.count and value.attributes[_i2473] === _seq2470[_bj2471]) {
+    var _seq2471 = base.ref_struct_parts[slot].attributes;
+    ulong _bj2472 = 0;
+    var _news2473 = Array<ulong>();
+    for (var _i2474 in 0..value.attributes.count) {
+        if (_bj2472 < _seq2471.count and value.attributes[_i2474] === _seq2471[_bj2472]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _a_Attribute_write(scratch, value.attributes[_i2473]);
-                base.verify_same($"s.{slot}.attributes", _bj2471, scratch);
+                _a_Attribute_write(scratch, value.attributes[_i2474]);
+                base.verify_same($"s.{slot}.attributes", _bj2472, scratch);
             }
-            _bj2471 += 1;
-        } else if (_bj2471 < _seq2470.count and _same_a_Attribute(value.attributes[_i2473], _seq2470[_bj2471], base)) {
+            _bj2472 += 1;
+        } else if (_bj2472 < _seq2471.count and _same_a_Attribute(value.attributes[_i2474], _seq2471[_bj2472], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _a_Attribute_write(scratch, value.attributes[_i2473]);
-                base.verify_same($"s.{slot}.attributes", _bj2471, scratch);
+                _a_Attribute_write(scratch, value.attributes[_i2474]);
+                base.verify_same($"s.{slot}.attributes", _bj2472, scratch);
             }
-            _bj2471 += 1;
+            _bj2472 += 1;
         } else {
-            _news2472.append(_i2473);
+            _news2473.append(_i2474);
         }
     }
-    if (_bj2471 == _seq2470.count) {
+    if (_bj2472 == _seq2471.count) {
         out.unsigned(2);
-        out.unsigned(_news2472.count);
-        for (var _i2473 in _news2472) {
-            out.unsigned(_i2473);
-            _a_Attribute_write(out, value.attributes[_i2473]);
+        out.unsigned(_news2473.count);
+        for (var _i2474 in _news2473) {
+            out.unsigned(_i2474);
+            _a_Attribute_write(out, value.attributes[_i2474]);
         }
         base.count("s.*.attributes" + " merged", 0);
     } else {
@@ -11033,16 +11041,16 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("s.*.attributes" + " whole", 0);
         out.unsigned(value.attributes.count);
-        for (var _i2473 in 0..value.attributes.count) {
-            _a_Attribute_write(out, value.attributes[_i2473]);
+        for (var _i2474 in 0..value.attributes.count) {
+            _a_Attribute_write(out, value.attributes[_i2474]);
         }
     }
     out.loc(value.loc);
     if (value.enum_cases.is_value()) {
         out.unsigned(1);
         out.unsigned(value.enum_cases.value().count);
-        for (var _item2482 in value.enum_cases.value()) {
-            _m_EnumCaseDef_write(out, _item2482);
+        for (var _item2483 in value.enum_cases.value()) {
+            _m_EnumCaseDef_write(out, _item2483);
         }
     } else {
         out.unsigned(0);
@@ -11050,397 +11058,397 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
 }
 
 _patch_s_read(input: RecordIn, was: StructDef): StructDef {
-    var _f2364 = input.text();
-    var _f2365 = _m_TypeName_read(input);
-    var _f2375 = Array<GenericParam>();
-    var _mode2378 = input.unsigned();
-    if (_mode2378 == 2) {
-        var _changed2367 = HashMap<ulong, GenericParam>();
-        ulong _bi2379 = 0;
-        var _n2376 = input.count();
-        for (var _ in 0.._n2376) {
-            var _at2380 = input.unsigned();
-            while (_f2375.count < _at2380 or (input.merging and _bi2379 < was.generic_params.count)) {
-                var _c = _changed2367.try_get(_bi2379);
-                _f2375.append(_c.is_value() ? _c.value() : was.generic_params[_bi2379]);
-                _bi2379 += 1;
+    var _f2365 = input.text();
+    var _f2366 = _m_TypeName_read(input);
+    var _f2376 = Array<GenericParam>();
+    var _mode2379 = input.unsigned();
+    if (_mode2379 == 2) {
+        var _changed2368 = HashMap<ulong, GenericParam>();
+        ulong _bi2380 = 0;
+        var _n2377 = input.count();
+        for (var _ in 0.._n2377) {
+            var _at2381 = input.unsigned();
+            while (_f2376.count < _at2381 or (input.merging and _bi2380 < was.generic_params.count)) {
+                var _c = _changed2368.try_get(_bi2380);
+                _f2376.append(_c.is_value() ? _c.value() : was.generic_params[_bi2380]);
+                _bi2380 += 1;
             }
-            _f2375.append(_m_GenericParam_read(input));
+            _f2376.append(_m_GenericParam_read(input));
         }
-        while (_bi2379 < was.generic_params.count) {
-            var _c = _changed2367.try_get(_bi2379);
-            _f2375.append(_c.is_value() ? _c.value() : was.generic_params[_bi2379]);
-            _bi2379 += 1;
+        while (_bi2380 < was.generic_params.count) {
+            var _c = _changed2368.try_get(_bi2380);
+            _f2376.append(_c.is_value() ? _c.value() : was.generic_params[_bi2380]);
+            _bi2380 += 1;
         }
-    } else if (_mode2378 == 3) {
-        var _n2376 = input.count();
-        for (var _ in 0.._n2376) {
-            _f2375.append(_m_GenericParam_read(input));
+    } else if (_mode2379 == 3) {
+        var _n2377 = input.count();
+        for (var _ in 0.._n2377) {
+            _f2376.append(_m_GenericParam_read(input));
         }
     } else {
-        var _n2376 = input.count();
+        var _n2377 = input.count();
         if (input.merging) {
             input.error = "s.*.generic_params" + " written by place";
         }
-        for (var _ in 0.._n2376) {
-            var _tag2377 = input.unsigned();
-            if (_tag2377 & 1 == 1) {
+        for (var _ in 0.._n2377) {
+            var _tag2378 = input.unsigned();
+            if (_tag2378 & 1 == 1) {
                 if (!input.merging) {
-                    _f2375.append(was.generic_params[_tag2377 >> 1]);
+                    _f2376.append(was.generic_params[_tag2378 >> 1]);
                 }
             } else {
                 var _read = _m_GenericParam_read(input);
                 if (!input.merging or true) {
-                    _f2375.append(_read);
+                    _f2376.append(_read);
                 }
             }
         }
     }
-    var _f2391 = Array<VariableDef>();
-    var _mode2394 = input.unsigned();
-    if (_mode2394 == 2) {
-        var _changed2383 = HashMap<ulong, VariableDef>();
-        ulong _bi2395 = 0;
-        var _n2392 = input.count();
-        for (var _ in 0.._n2392) {
-            var _at2396 = input.unsigned();
-            while (_f2391.count < _at2396 or (input.merging and _bi2395 < was.field_members.count)) {
-                var _c = _changed2383.try_get(_bi2395);
-                _f2391.append(_c.is_value() ? _c.value() : was.field_members[_bi2395]);
-                _bi2395 += 1;
+    var _f2392 = Array<VariableDef>();
+    var _mode2395 = input.unsigned();
+    if (_mode2395 == 2) {
+        var _changed2384 = HashMap<ulong, VariableDef>();
+        ulong _bi2396 = 0;
+        var _n2393 = input.count();
+        for (var _ in 0.._n2393) {
+            var _at2397 = input.unsigned();
+            while (_f2392.count < _at2397 or (input.merging and _bi2396 < was.field_members.count)) {
+                var _c = _changed2384.try_get(_bi2396);
+                _f2392.append(_c.is_value() ? _c.value() : was.field_members[_bi2396]);
+                _bi2396 += 1;
             }
-            _f2391.append(_m_VariableDef_read(input));
+            _f2392.append(_m_VariableDef_read(input));
         }
-        while (_bi2395 < was.field_members.count) {
-            var _c = _changed2383.try_get(_bi2395);
-            _f2391.append(_c.is_value() ? _c.value() : was.field_members[_bi2395]);
-            _bi2395 += 1;
+        while (_bi2396 < was.field_members.count) {
+            var _c = _changed2384.try_get(_bi2396);
+            _f2392.append(_c.is_value() ? _c.value() : was.field_members[_bi2396]);
+            _bi2396 += 1;
         }
-    } else if (_mode2394 == 3) {
-        var _n2392 = input.count();
-        for (var _ in 0.._n2392) {
-            _f2391.append(_m_VariableDef_read(input));
+    } else if (_mode2395 == 3) {
+        var _n2393 = input.count();
+        for (var _ in 0.._n2393) {
+            _f2392.append(_m_VariableDef_read(input));
         }
     } else {
-        var _n2392 = input.count();
+        var _n2393 = input.count();
         if (input.merging) {
             input.error = "s.*.field_members" + " written by place";
         }
-        for (var _ in 0.._n2392) {
-            var _tag2393 = input.unsigned();
-            if (_tag2393 & 1 == 1) {
+        for (var _ in 0.._n2393) {
+            var _tag2394 = input.unsigned();
+            if (_tag2394 & 1 == 1) {
                 if (!input.merging) {
-                    _f2391.append(was.field_members[_tag2393 >> 1]);
+                    _f2392.append(was.field_members[_tag2394 >> 1]);
                 }
             } else {
                 var _read = _m_VariableDef_read(input);
                 if (!input.merging or true) {
-                    _f2391.append(_read);
+                    _f2392.append(_read);
                 }
             }
         }
     }
-    var _f2407 = Array<FunctionDef>();
-    var _mode2410 = input.unsigned();
-    if (_mode2410 == 2) {
-        var _changed2399 = HashMap<ulong, FunctionDef>();
-        ulong _bi2411 = 0;
-        var _n2408 = input.count();
-        for (var _ in 0.._n2408) {
-            var _at2412 = input.unsigned();
-            while (_f2407.count < _at2412 or (input.merging and _bi2411 < was.method_members.count)) {
-                var _c = _changed2399.try_get(_bi2411);
-                _f2407.append(_c.is_value() ? _c.value() : was.method_members[_bi2411]);
-                _bi2411 += 1;
+    var _f2408 = Array<FunctionDef>();
+    var _mode2411 = input.unsigned();
+    if (_mode2411 == 2) {
+        var _changed2400 = HashMap<ulong, FunctionDef>();
+        ulong _bi2412 = 0;
+        var _n2409 = input.count();
+        for (var _ in 0.._n2409) {
+            var _at2413 = input.unsigned();
+            while (_f2408.count < _at2413 or (input.merging and _bi2412 < was.method_members.count)) {
+                var _c = _changed2400.try_get(_bi2412);
+                _f2408.append(_c.is_value() ? _c.value() : was.method_members[_bi2412]);
+                _bi2412 += 1;
             }
-            _f2407.append(_m_FunctionDef_read(input));
+            _f2408.append(_m_FunctionDef_read(input));
         }
-        while (_bi2411 < was.method_members.count) {
-            var _c = _changed2399.try_get(_bi2411);
-            _f2407.append(_c.is_value() ? _c.value() : was.method_members[_bi2411]);
-            _bi2411 += 1;
+        while (_bi2412 < was.method_members.count) {
+            var _c = _changed2400.try_get(_bi2412);
+            _f2408.append(_c.is_value() ? _c.value() : was.method_members[_bi2412]);
+            _bi2412 += 1;
         }
-    } else if (_mode2410 == 3) {
-        var _n2408 = input.count();
-        for (var _ in 0.._n2408) {
-            _f2407.append(_m_FunctionDef_read(input));
+    } else if (_mode2411 == 3) {
+        var _n2409 = input.count();
+        for (var _ in 0.._n2409) {
+            _f2408.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2408 = input.count();
+        var _n2409 = input.count();
         if (input.merging) {
             input.error = "s.*.method_members" + " written by place";
         }
-        for (var _ in 0.._n2408) {
-            var _tag2409 = input.unsigned();
-            if (_tag2409 & 1 == 1) {
+        for (var _ in 0.._n2409) {
+            var _tag2410 = input.unsigned();
+            if (_tag2410 & 1 == 1) {
                 if (!input.merging) {
-                    _f2407.append(was.method_members[_tag2409 >> 1]);
+                    _f2408.append(was.method_members[_tag2410 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2407.append(_read);
+                    _f2408.append(_read);
                 }
             }
         }
     }
-    var _f2423 = Array<FunctionDef>();
-    var _mode2426 = input.unsigned();
-    if (_mode2426 == 2) {
-        var _changed2415 = HashMap<ulong, FunctionDef>();
-        ulong _bi2427 = 0;
-        var _n2424 = input.count();
-        for (var _ in 0.._n2424) {
-            var _at2428 = input.unsigned();
-            while (_f2423.count < _at2428 or (input.merging and _bi2427 < was.generic_methods.count)) {
-                var _c = _changed2415.try_get(_bi2427);
-                _f2423.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2427]);
-                _bi2427 += 1;
+    var _f2424 = Array<FunctionDef>();
+    var _mode2427 = input.unsigned();
+    if (_mode2427 == 2) {
+        var _changed2416 = HashMap<ulong, FunctionDef>();
+        ulong _bi2428 = 0;
+        var _n2425 = input.count();
+        for (var _ in 0.._n2425) {
+            var _at2429 = input.unsigned();
+            while (_f2424.count < _at2429 or (input.merging and _bi2428 < was.generic_methods.count)) {
+                var _c = _changed2416.try_get(_bi2428);
+                _f2424.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2428]);
+                _bi2428 += 1;
             }
-            _f2423.append(_m_FunctionDef_read(input));
+            _f2424.append(_m_FunctionDef_read(input));
         }
-        while (_bi2427 < was.generic_methods.count) {
-            var _c = _changed2415.try_get(_bi2427);
-            _f2423.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2427]);
-            _bi2427 += 1;
+        while (_bi2428 < was.generic_methods.count) {
+            var _c = _changed2416.try_get(_bi2428);
+            _f2424.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2428]);
+            _bi2428 += 1;
         }
-    } else if (_mode2426 == 3) {
-        var _n2424 = input.count();
-        for (var _ in 0.._n2424) {
-            _f2423.append(_m_FunctionDef_read(input));
+    } else if (_mode2427 == 3) {
+        var _n2425 = input.count();
+        for (var _ in 0.._n2425) {
+            _f2424.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2424 = input.count();
+        var _n2425 = input.count();
         if (input.merging) {
             input.error = "s.*.generic_methods" + " written by place";
         }
-        for (var _ in 0.._n2424) {
-            var _tag2425 = input.unsigned();
-            if (_tag2425 & 1 == 1) {
+        for (var _ in 0.._n2425) {
+            var _tag2426 = input.unsigned();
+            if (_tag2426 & 1 == 1) {
                 if (!input.merging) {
-                    _f2423.append(was.generic_methods[_tag2425 >> 1]);
+                    _f2424.append(was.generic_methods[_tag2426 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2423.append(_read);
+                    _f2424.append(_read);
                 }
             }
         }
     }
-    var _f2439 = Array<FunctionDef>();
-    var _mode2442 = input.unsigned();
-    if (_mode2442 == 2) {
-        var _changed2431 = HashMap<ulong, FunctionDef>();
-        ulong _bi2443 = 0;
-        var _n2440 = input.count();
-        for (var _ in 0.._n2440) {
-            var _at2444 = input.unsigned();
-            while (_f2439.count < _at2444 or (input.merging and _bi2443 < was.constructors.count)) {
-                var _c = _changed2431.try_get(_bi2443);
-                _f2439.append(_c.is_value() ? _c.value() : was.constructors[_bi2443]);
-                _bi2443 += 1;
+    var _f2440 = Array<FunctionDef>();
+    var _mode2443 = input.unsigned();
+    if (_mode2443 == 2) {
+        var _changed2432 = HashMap<ulong, FunctionDef>();
+        ulong _bi2444 = 0;
+        var _n2441 = input.count();
+        for (var _ in 0.._n2441) {
+            var _at2445 = input.unsigned();
+            while (_f2440.count < _at2445 or (input.merging and _bi2444 < was.constructors.count)) {
+                var _c = _changed2432.try_get(_bi2444);
+                _f2440.append(_c.is_value() ? _c.value() : was.constructors[_bi2444]);
+                _bi2444 += 1;
             }
-            _f2439.append(_m_FunctionDef_read(input));
+            _f2440.append(_m_FunctionDef_read(input));
         }
-        while (_bi2443 < was.constructors.count) {
-            var _c = _changed2431.try_get(_bi2443);
-            _f2439.append(_c.is_value() ? _c.value() : was.constructors[_bi2443]);
-            _bi2443 += 1;
+        while (_bi2444 < was.constructors.count) {
+            var _c = _changed2432.try_get(_bi2444);
+            _f2440.append(_c.is_value() ? _c.value() : was.constructors[_bi2444]);
+            _bi2444 += 1;
         }
-    } else if (_mode2442 == 3) {
-        var _n2440 = input.count();
-        for (var _ in 0.._n2440) {
-            _f2439.append(_m_FunctionDef_read(input));
+    } else if (_mode2443 == 3) {
+        var _n2441 = input.count();
+        for (var _ in 0.._n2441) {
+            _f2440.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2440 = input.count();
+        var _n2441 = input.count();
         if (input.merging) {
             input.error = "s.*.constructors" + " written by place";
         }
-        for (var _ in 0.._n2440) {
-            var _tag2441 = input.unsigned();
-            if (_tag2441 & 1 == 1) {
+        for (var _ in 0.._n2441) {
+            var _tag2442 = input.unsigned();
+            if (_tag2442 & 1 == 1) {
                 if (!input.merging) {
-                    _f2439.append(was.constructors[_tag2441 >> 1]);
+                    _f2440.append(was.constructors[_tag2442 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2439.append(_read);
+                    _f2440.append(_read);
                 }
             }
         }
     }
-    var _f2446 = _m_FunctionDef_read(input);
     var _f2447 = _m_FunctionDef_read(input);
     var _f2448 = _m_FunctionDef_read(input);
-    var _f2458 = Array<TypeName>();
-    var _mode2461 = input.unsigned();
-    if (_mode2461 == 2) {
-        var _changed2450 = HashMap<ulong, TypeName>();
-        ulong _bi2462 = 0;
-        var _n2459 = input.count();
-        for (var _ in 0.._n2459) {
-            var _at2463 = input.unsigned();
-            while (_f2458.count < _at2463 or (input.merging and _bi2462 < was.traits.count)) {
-                var _c = _changed2450.try_get(_bi2462);
-                _f2458.append(_c.is_value() ? _c.value() : was.traits[_bi2462]);
-                _bi2462 += 1;
+    var _f2449 = _m_FunctionDef_read(input);
+    var _f2459 = Array<TypeName>();
+    var _mode2462 = input.unsigned();
+    if (_mode2462 == 2) {
+        var _changed2451 = HashMap<ulong, TypeName>();
+        ulong _bi2463 = 0;
+        var _n2460 = input.count();
+        for (var _ in 0.._n2460) {
+            var _at2464 = input.unsigned();
+            while (_f2459.count < _at2464 or (input.merging and _bi2463 < was.traits.count)) {
+                var _c = _changed2451.try_get(_bi2463);
+                _f2459.append(_c.is_value() ? _c.value() : was.traits[_bi2463]);
+                _bi2463 += 1;
             }
-            _f2458.append(_m_TypeName_read(input));
+            _f2459.append(_m_TypeName_read(input));
         }
-        while (_bi2462 < was.traits.count) {
-            var _c = _changed2450.try_get(_bi2462);
-            _f2458.append(_c.is_value() ? _c.value() : was.traits[_bi2462]);
-            _bi2462 += 1;
+        while (_bi2463 < was.traits.count) {
+            var _c = _changed2451.try_get(_bi2463);
+            _f2459.append(_c.is_value() ? _c.value() : was.traits[_bi2463]);
+            _bi2463 += 1;
         }
-    } else if (_mode2461 == 3) {
-        var _n2459 = input.count();
-        for (var _ in 0.._n2459) {
-            _f2458.append(_m_TypeName_read(input));
+    } else if (_mode2462 == 3) {
+        var _n2460 = input.count();
+        for (var _ in 0.._n2460) {
+            _f2459.append(_m_TypeName_read(input));
         }
     } else {
-        var _n2459 = input.count();
+        var _n2460 = input.count();
         if (input.merging) {
             input.error = "s.*.traits" + " written by place";
         }
-        for (var _ in 0.._n2459) {
-            var _tag2460 = input.unsigned();
-            if (_tag2460 & 1 == 1) {
+        for (var _ in 0.._n2460) {
+            var _tag2461 = input.unsigned();
+            if (_tag2461 & 1 == 1) {
                 if (!input.merging) {
-                    _f2458.append(was.traits[_tag2460 >> 1]);
+                    _f2459.append(was.traits[_tag2461 >> 1]);
                 }
             } else {
                 var _read = _m_TypeName_read(input);
                 if (!input.merging or true) {
-                    _f2458.append(_read);
+                    _f2459.append(_read);
                 }
             }
         }
     }
-    var _f2474 = Array<ast.Attribute>();
-    var _mode2477 = input.unsigned();
-    if (_mode2477 == 2) {
-        var _changed2466 = HashMap<ulong, ast.Attribute>();
-        ulong _bi2478 = 0;
-        var _n2475 = input.count();
-        for (var _ in 0.._n2475) {
-            var _at2479 = input.unsigned();
-            while (_f2474.count < _at2479 or (input.merging and _bi2478 < was.attributes.count)) {
-                var _c = _changed2466.try_get(_bi2478);
-                _f2474.append(_c.is_value() ? _c.value() : was.attributes[_bi2478]);
-                _bi2478 += 1;
+    var _f2475 = Array<ast.Attribute>();
+    var _mode2478 = input.unsigned();
+    if (_mode2478 == 2) {
+        var _changed2467 = HashMap<ulong, ast.Attribute>();
+        ulong _bi2479 = 0;
+        var _n2476 = input.count();
+        for (var _ in 0.._n2476) {
+            var _at2480 = input.unsigned();
+            while (_f2475.count < _at2480 or (input.merging and _bi2479 < was.attributes.count)) {
+                var _c = _changed2467.try_get(_bi2479);
+                _f2475.append(_c.is_value() ? _c.value() : was.attributes[_bi2479]);
+                _bi2479 += 1;
             }
-            _f2474.append(_a_Attribute_read(input));
+            _f2475.append(_a_Attribute_read(input));
         }
-        while (_bi2478 < was.attributes.count) {
-            var _c = _changed2466.try_get(_bi2478);
-            _f2474.append(_c.is_value() ? _c.value() : was.attributes[_bi2478]);
-            _bi2478 += 1;
+        while (_bi2479 < was.attributes.count) {
+            var _c = _changed2467.try_get(_bi2479);
+            _f2475.append(_c.is_value() ? _c.value() : was.attributes[_bi2479]);
+            _bi2479 += 1;
         }
-    } else if (_mode2477 == 3) {
-        var _n2475 = input.count();
-        for (var _ in 0.._n2475) {
-            _f2474.append(_a_Attribute_read(input));
+    } else if (_mode2478 == 3) {
+        var _n2476 = input.count();
+        for (var _ in 0.._n2476) {
+            _f2475.append(_a_Attribute_read(input));
         }
     } else {
-        var _n2475 = input.count();
+        var _n2476 = input.count();
         if (input.merging) {
             input.error = "s.*.attributes" + " written by place";
         }
-        for (var _ in 0.._n2475) {
-            var _tag2476 = input.unsigned();
-            if (_tag2476 & 1 == 1) {
+        for (var _ in 0.._n2476) {
+            var _tag2477 = input.unsigned();
+            if (_tag2477 & 1 == 1) {
                 if (!input.merging) {
-                    _f2474.append(was.attributes[_tag2476 >> 1]);
+                    _f2475.append(was.attributes[_tag2477 >> 1]);
                 }
             } else {
                 var _read = _a_Attribute_read(input);
                 if (!input.merging or true) {
-                    _f2474.append(_read);
+                    _f2475.append(_read);
                 }
             }
         }
     }
-    var _f2481 = input.loc();
-    var _o2483 = Optional<Array<EnumCaseDef>>.Empty;
+    var _f2482 = input.loc();
+    var _o2484 = Optional<Array<EnumCaseDef>>.Empty;
     if (input.unsigned() == 1) {
-        var _v2484 = Array<EnumCaseDef>();
-        var _n2485 = input.count();
-        for (var _ in 0.._n2485) {
-            _v2484.append(_m_EnumCaseDef_read(input));
+        var _v2485 = Array<EnumCaseDef>();
+        var _n2486 = input.count();
+        for (var _ in 0.._n2486) {
+            _v2485.append(_m_EnumCaseDef_read(input));
         }
-        _o2483 = Optional<Array<EnumCaseDef>>.Value(_v2484);
+        _o2484 = Optional<Array<EnumCaseDef>>.Value(_v2485);
     }
-    var _f2486 = _o2483;
+    var _f2487 = _o2484;
     return StructDef(
-        _f2364, _f2365, _f2375, _f2391, _f2407, _f2423, _f2439, _f2446, _f2447, _f2448, _f2458, _f2474, _f2481, _f2486
+        _f2365, _f2366, _f2376, _f2392, _f2408, _f2424, _f2440, _f2447, _f2448, _f2449, _f2459, _f2475, _f2482, _f2487
     );
 }
 
 _patch_s_index(value: StructDef, base: DeltaBase, slot: ulong) {
     if (base.verifying) {
-        ulong _j2381 = 0;
-        for (var _item2366 in value.generic_params) {
+        ulong _j2382 = 0;
+        for (var _item2367 in value.generic_params) {
             var scratch = base.scratch();
-            _m_GenericParam_write(scratch, _item2366);
-            base.add($"s.{slot}.generic_params", scratch, _j2381);
-            _j2381 += 1;
+            _m_GenericParam_write(scratch, _item2367);
+            base.add($"s.{slot}.generic_params", scratch, _j2382);
+            _j2382 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2397 = 0;
-        for (var _item2382 in value.field_members) {
+        ulong _j2398 = 0;
+        for (var _item2383 in value.field_members) {
             var scratch = base.scratch();
-            _m_VariableDef_write(scratch, _item2382);
-            base.add($"s.{slot}.field_members", scratch, _j2397);
-            _j2397 += 1;
+            _m_VariableDef_write(scratch, _item2383);
+            base.add($"s.{slot}.field_members", scratch, _j2398);
+            _j2398 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2413 = 0;
-        for (var _item2398 in value.method_members) {
+        ulong _j2414 = 0;
+        for (var _item2399 in value.method_members) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2398);
-            base.add($"s.{slot}.method_members", scratch, _j2413);
-            _j2413 += 1;
+            _m_FunctionDef_write(scratch, _item2399);
+            base.add($"s.{slot}.method_members", scratch, _j2414);
+            _j2414 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2429 = 0;
-        for (var _item2414 in value.generic_methods) {
+        ulong _j2430 = 0;
+        for (var _item2415 in value.generic_methods) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2414);
-            base.add($"s.{slot}.generic_methods", scratch, _j2429);
-            _j2429 += 1;
+            _m_FunctionDef_write(scratch, _item2415);
+            base.add($"s.{slot}.generic_methods", scratch, _j2430);
+            _j2430 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2445 = 0;
-        for (var _item2430 in value.constructors) {
+        ulong _j2446 = 0;
+        for (var _item2431 in value.constructors) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2430);
-            base.add($"s.{slot}.constructors", scratch, _j2445);
-            _j2445 += 1;
+            _m_FunctionDef_write(scratch, _item2431);
+            base.add($"s.{slot}.constructors", scratch, _j2446);
+            _j2446 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2464 = 0;
-        for (var _item2449 in value.traits) {
+        ulong _j2465 = 0;
+        for (var _item2450 in value.traits) {
             var scratch = base.scratch();
-            _m_TypeName_write(scratch, _item2449);
-            base.add($"s.{slot}.traits", scratch, _j2464);
-            _j2464 += 1;
+            _m_TypeName_write(scratch, _item2450);
+            base.add($"s.{slot}.traits", scratch, _j2465);
+            _j2465 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2480 = 0;
-        for (var _item2465 in value.attributes) {
+        ulong _j2481 = 0;
+        for (var _item2466 in value.attributes) {
             var scratch = base.scratch();
-            _a_Attribute_write(scratch, _item2465);
-            base.add($"s.{slot}.attributes", scratch, _j2480);
-            _j2480 += 1;
+            _a_Attribute_write(scratch, _item2466);
+            base.add($"s.{slot}.attributes", scratch, _j2481);
+            _j2481 += 1;
         }
     }
 }
@@ -11448,35 +11456,35 @@ _patch_s_index(value: StructDef, base: DeltaBase, slot: ulong) {
 _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
     out.text(value.name);
     _m_TypeName_write(out, value.ty);
-    var _seq2494 = base.ref_template_parts[slot].generic_params;
-    ulong _bj2495 = 0;
-    var _news2496 = Array<ulong>();
-    for (var _i2497 in 0..value.generic_params.count) {
-        if (_bj2495 < _seq2494.count and value.generic_params[_i2497] === _seq2494[_bj2495]) {
+    var _seq2495 = base.ref_template_parts[slot].generic_params;
+    ulong _bj2496 = 0;
+    var _news2497 = Array<ulong>();
+    for (var _i2498 in 0..value.generic_params.count) {
+        if (_bj2496 < _seq2495.count and value.generic_params[_i2498] === _seq2495[_bj2496]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_GenericParam_write(scratch, value.generic_params[_i2497]);
-                base.verify_same($"t.{slot}.generic_params", _bj2495, scratch);
+                _m_GenericParam_write(scratch, value.generic_params[_i2498]);
+                base.verify_same($"t.{slot}.generic_params", _bj2496, scratch);
             }
-            _bj2495 += 1;
-        } else if (_bj2495 < _seq2494.count
-            and _same_m_GenericParam(value.generic_params[_i2497], _seq2494[_bj2495], base)) {
+            _bj2496 += 1;
+        } else if (_bj2496 < _seq2495.count
+            and _same_m_GenericParam(value.generic_params[_i2498], _seq2495[_bj2496], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_GenericParam_write(scratch, value.generic_params[_i2497]);
-                base.verify_same($"t.{slot}.generic_params", _bj2495, scratch);
+                _m_GenericParam_write(scratch, value.generic_params[_i2498]);
+                base.verify_same($"t.{slot}.generic_params", _bj2496, scratch);
             }
-            _bj2495 += 1;
+            _bj2496 += 1;
         } else {
-            _news2496.append(_i2497);
+            _news2497.append(_i2498);
         }
     }
-    if (_bj2495 == _seq2494.count) {
+    if (_bj2496 == _seq2495.count) {
         out.unsigned(2);
-        out.unsigned(_news2496.count);
-        for (var _i2497 in _news2496) {
-            out.unsigned(_i2497);
-            _m_GenericParam_write(out, value.generic_params[_i2497]);
+        out.unsigned(_news2497.count);
+        for (var _i2498 in _news2497) {
+            out.unsigned(_i2498);
+            _m_GenericParam_write(out, value.generic_params[_i2498]);
         }
         base.count("t.*.generic_params" + " merged", 0);
     } else {
@@ -11485,39 +11493,39 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.generic_params" + " whole", 0);
         out.unsigned(value.generic_params.count);
-        for (var _i2497 in 0..value.generic_params.count) {
-            _m_GenericParam_write(out, value.generic_params[_i2497]);
+        for (var _i2498 in 0..value.generic_params.count) {
+            _m_GenericParam_write(out, value.generic_params[_i2498]);
         }
     }
-    var _seq2510 = base.ref_template_parts[slot].field_members;
-    ulong _bj2511 = 0;
-    var _news2512 = Array<ulong>();
-    for (var _i2513 in 0..value.field_members.count) {
-        if (_bj2511 < _seq2510.count and value.field_members[_i2513] === _seq2510[_bj2511]) {
+    var _seq2511 = base.ref_template_parts[slot].field_members;
+    ulong _bj2512 = 0;
+    var _news2513 = Array<ulong>();
+    for (var _i2514 in 0..value.field_members.count) {
+        if (_bj2512 < _seq2511.count and value.field_members[_i2514] === _seq2511[_bj2512]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_VariableDef_write(scratch, value.field_members[_i2513]);
-                base.verify_same($"t.{slot}.field_members", _bj2511, scratch);
+                _m_VariableDef_write(scratch, value.field_members[_i2514]);
+                base.verify_same($"t.{slot}.field_members", _bj2512, scratch);
             }
-            _bj2511 += 1;
-        } else if (_bj2511 < _seq2510.count
-            and _same_m_VariableDef(value.field_members[_i2513], _seq2510[_bj2511], base)) {
+            _bj2512 += 1;
+        } else if (_bj2512 < _seq2511.count
+            and _same_m_VariableDef(value.field_members[_i2514], _seq2511[_bj2512], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_VariableDef_write(scratch, value.field_members[_i2513]);
-                base.verify_same($"t.{slot}.field_members", _bj2511, scratch);
+                _m_VariableDef_write(scratch, value.field_members[_i2514]);
+                base.verify_same($"t.{slot}.field_members", _bj2512, scratch);
             }
-            _bj2511 += 1;
+            _bj2512 += 1;
         } else {
-            _news2512.append(_i2513);
+            _news2513.append(_i2514);
         }
     }
-    if (_bj2511 == _seq2510.count) {
+    if (_bj2512 == _seq2511.count) {
         out.unsigned(2);
-        out.unsigned(_news2512.count);
-        for (var _i2513 in _news2512) {
-            out.unsigned(_i2513);
-            _m_VariableDef_write(out, value.field_members[_i2513]);
+        out.unsigned(_news2513.count);
+        for (var _i2514 in _news2513) {
+            out.unsigned(_i2514);
+            _m_VariableDef_write(out, value.field_members[_i2514]);
         }
         base.count("t.*.field_members" + " merged", 0);
     } else {
@@ -11526,39 +11534,39 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.field_members" + " whole", 0);
         out.unsigned(value.field_members.count);
-        for (var _i2513 in 0..value.field_members.count) {
-            _m_VariableDef_write(out, value.field_members[_i2513]);
+        for (var _i2514 in 0..value.field_members.count) {
+            _m_VariableDef_write(out, value.field_members[_i2514]);
         }
     }
-    var _seq2526 = base.ref_template_parts[slot].method_members;
-    ulong _bj2527 = 0;
-    var _news2528 = Array<ulong>();
-    for (var _i2529 in 0..value.method_members.count) {
-        if (_bj2527 < _seq2526.count and value.method_members[_i2529] === _seq2526[_bj2527]) {
+    var _seq2527 = base.ref_template_parts[slot].method_members;
+    ulong _bj2528 = 0;
+    var _news2529 = Array<ulong>();
+    for (var _i2530 in 0..value.method_members.count) {
+        if (_bj2528 < _seq2527.count and value.method_members[_i2530] === _seq2527[_bj2528]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.method_members[_i2529]);
-                base.verify_same($"t.{slot}.method_members", _bj2527, scratch);
+                _m_FunctionDef_write(scratch, value.method_members[_i2530]);
+                base.verify_same($"t.{slot}.method_members", _bj2528, scratch);
             }
-            _bj2527 += 1;
-        } else if (_bj2527 < _seq2526.count
-            and _same_m_FunctionDef(value.method_members[_i2529], _seq2526[_bj2527], base)) {
+            _bj2528 += 1;
+        } else if (_bj2528 < _seq2527.count
+            and _same_m_FunctionDef(value.method_members[_i2530], _seq2527[_bj2528], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.method_members[_i2529]);
-                base.verify_same($"t.{slot}.method_members", _bj2527, scratch);
+                _m_FunctionDef_write(scratch, value.method_members[_i2530]);
+                base.verify_same($"t.{slot}.method_members", _bj2528, scratch);
             }
-            _bj2527 += 1;
+            _bj2528 += 1;
         } else {
-            _news2528.append(_i2529);
+            _news2529.append(_i2530);
         }
     }
-    if (_bj2527 == _seq2526.count) {
+    if (_bj2528 == _seq2527.count) {
         out.unsigned(2);
-        out.unsigned(_news2528.count);
-        for (var _i2529 in _news2528) {
-            out.unsigned(_i2529);
-            _m_FunctionDef_write(out, value.method_members[_i2529]);
+        out.unsigned(_news2529.count);
+        for (var _i2530 in _news2529) {
+            out.unsigned(_i2530);
+            _m_FunctionDef_write(out, value.method_members[_i2530]);
         }
         base.count("t.*.method_members" + " merged", 0);
     } else {
@@ -11567,39 +11575,39 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.method_members" + " whole", 0);
         out.unsigned(value.method_members.count);
-        for (var _i2529 in 0..value.method_members.count) {
-            _m_FunctionDef_write(out, value.method_members[_i2529]);
+        for (var _i2530 in 0..value.method_members.count) {
+            _m_FunctionDef_write(out, value.method_members[_i2530]);
         }
     }
-    var _seq2542 = base.ref_template_parts[slot].generic_methods;
-    ulong _bj2543 = 0;
-    var _news2544 = Array<ulong>();
-    for (var _i2545 in 0..value.generic_methods.count) {
-        if (_bj2543 < _seq2542.count and value.generic_methods[_i2545] === _seq2542[_bj2543]) {
+    var _seq2543 = base.ref_template_parts[slot].generic_methods;
+    ulong _bj2544 = 0;
+    var _news2545 = Array<ulong>();
+    for (var _i2546 in 0..value.generic_methods.count) {
+        if (_bj2544 < _seq2543.count and value.generic_methods[_i2546] === _seq2543[_bj2544]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.generic_methods[_i2545]);
-                base.verify_same($"t.{slot}.generic_methods", _bj2543, scratch);
+                _m_FunctionDef_write(scratch, value.generic_methods[_i2546]);
+                base.verify_same($"t.{slot}.generic_methods", _bj2544, scratch);
             }
-            _bj2543 += 1;
-        } else if (_bj2543 < _seq2542.count
-            and _same_m_FunctionDef(value.generic_methods[_i2545], _seq2542[_bj2543], base)) {
+            _bj2544 += 1;
+        } else if (_bj2544 < _seq2543.count
+            and _same_m_FunctionDef(value.generic_methods[_i2546], _seq2543[_bj2544], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.generic_methods[_i2545]);
-                base.verify_same($"t.{slot}.generic_methods", _bj2543, scratch);
+                _m_FunctionDef_write(scratch, value.generic_methods[_i2546]);
+                base.verify_same($"t.{slot}.generic_methods", _bj2544, scratch);
             }
-            _bj2543 += 1;
+            _bj2544 += 1;
         } else {
-            _news2544.append(_i2545);
+            _news2545.append(_i2546);
         }
     }
-    if (_bj2543 == _seq2542.count) {
+    if (_bj2544 == _seq2543.count) {
         out.unsigned(2);
-        out.unsigned(_news2544.count);
-        for (var _i2545 in _news2544) {
-            out.unsigned(_i2545);
-            _m_FunctionDef_write(out, value.generic_methods[_i2545]);
+        out.unsigned(_news2545.count);
+        for (var _i2546 in _news2545) {
+            out.unsigned(_i2546);
+            _m_FunctionDef_write(out, value.generic_methods[_i2546]);
         }
         base.count("t.*.generic_methods" + " merged", 0);
     } else {
@@ -11608,39 +11616,39 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.generic_methods" + " whole", 0);
         out.unsigned(value.generic_methods.count);
-        for (var _i2545 in 0..value.generic_methods.count) {
-            _m_FunctionDef_write(out, value.generic_methods[_i2545]);
+        for (var _i2546 in 0..value.generic_methods.count) {
+            _m_FunctionDef_write(out, value.generic_methods[_i2546]);
         }
     }
-    var _seq2558 = base.ref_template_parts[slot].constructors;
-    ulong _bj2559 = 0;
-    var _news2560 = Array<ulong>();
-    for (var _i2561 in 0..value.constructors.count) {
-        if (_bj2559 < _seq2558.count and value.constructors[_i2561] === _seq2558[_bj2559]) {
+    var _seq2559 = base.ref_template_parts[slot].constructors;
+    ulong _bj2560 = 0;
+    var _news2561 = Array<ulong>();
+    for (var _i2562 in 0..value.constructors.count) {
+        if (_bj2560 < _seq2559.count and value.constructors[_i2562] === _seq2559[_bj2560]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.constructors[_i2561]);
-                base.verify_same($"t.{slot}.constructors", _bj2559, scratch);
+                _m_FunctionDef_write(scratch, value.constructors[_i2562]);
+                base.verify_same($"t.{slot}.constructors", _bj2560, scratch);
             }
-            _bj2559 += 1;
-        } else if (_bj2559 < _seq2558.count
-            and _same_m_FunctionDef(value.constructors[_i2561], _seq2558[_bj2559], base)) {
+            _bj2560 += 1;
+        } else if (_bj2560 < _seq2559.count
+            and _same_m_FunctionDef(value.constructors[_i2562], _seq2559[_bj2560], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_FunctionDef_write(scratch, value.constructors[_i2561]);
-                base.verify_same($"t.{slot}.constructors", _bj2559, scratch);
+                _m_FunctionDef_write(scratch, value.constructors[_i2562]);
+                base.verify_same($"t.{slot}.constructors", _bj2560, scratch);
             }
-            _bj2559 += 1;
+            _bj2560 += 1;
         } else {
-            _news2560.append(_i2561);
+            _news2561.append(_i2562);
         }
     }
-    if (_bj2559 == _seq2558.count) {
+    if (_bj2560 == _seq2559.count) {
         out.unsigned(2);
-        out.unsigned(_news2560.count);
-        for (var _i2561 in _news2560) {
-            out.unsigned(_i2561);
-            _m_FunctionDef_write(out, value.constructors[_i2561]);
+        out.unsigned(_news2561.count);
+        for (var _i2562 in _news2561) {
+            out.unsigned(_i2562);
+            _m_FunctionDef_write(out, value.constructors[_i2562]);
         }
         base.count("t.*.constructors" + " merged", 0);
     } else {
@@ -11649,41 +11657,41 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.constructors" + " whole", 0);
         out.unsigned(value.constructors.count);
-        for (var _i2561 in 0..value.constructors.count) {
-            _m_FunctionDef_write(out, value.constructors[_i2561]);
+        for (var _i2562 in 0..value.constructors.count) {
+            _m_FunctionDef_write(out, value.constructors[_i2562]);
         }
     }
     _m_FunctionDef_write(out, value.destructor);
     _m_FunctionDef_write(out, value.acquire);
     _m_FunctionDef_write(out, value.release);
-    var _seq2577 = base.ref_template_parts[slot].traits;
-    ulong _bj2578 = 0;
-    var _news2579 = Array<ulong>();
-    for (var _i2580 in 0..value.traits.count) {
-        if (_bj2578 < _seq2577.count and value.traits[_i2580] === _seq2577[_bj2578]) {
+    var _seq2578 = base.ref_template_parts[slot].traits;
+    ulong _bj2579 = 0;
+    var _news2580 = Array<ulong>();
+    for (var _i2581 in 0..value.traits.count) {
+        if (_bj2579 < _seq2578.count and value.traits[_i2581] === _seq2578[_bj2579]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_TypeName_write(scratch, value.traits[_i2580]);
-                base.verify_same($"t.{slot}.traits", _bj2578, scratch);
+                _m_TypeName_write(scratch, value.traits[_i2581]);
+                base.verify_same($"t.{slot}.traits", _bj2579, scratch);
             }
-            _bj2578 += 1;
-        } else if (_bj2578 < _seq2577.count and _same_m_TypeName(value.traits[_i2580], _seq2577[_bj2578], base)) {
+            _bj2579 += 1;
+        } else if (_bj2579 < _seq2578.count and _same_m_TypeName(value.traits[_i2581], _seq2578[_bj2579], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _m_TypeName_write(scratch, value.traits[_i2580]);
-                base.verify_same($"t.{slot}.traits", _bj2578, scratch);
+                _m_TypeName_write(scratch, value.traits[_i2581]);
+                base.verify_same($"t.{slot}.traits", _bj2579, scratch);
             }
-            _bj2578 += 1;
+            _bj2579 += 1;
         } else {
-            _news2579.append(_i2580);
+            _news2580.append(_i2581);
         }
     }
-    if (_bj2578 == _seq2577.count) {
+    if (_bj2579 == _seq2578.count) {
         out.unsigned(2);
-        out.unsigned(_news2579.count);
-        for (var _i2580 in _news2579) {
-            out.unsigned(_i2580);
-            _m_TypeName_write(out, value.traits[_i2580]);
+        out.unsigned(_news2580.count);
+        for (var _i2581 in _news2580) {
+            out.unsigned(_i2581);
+            _m_TypeName_write(out, value.traits[_i2581]);
         }
         base.count("t.*.traits" + " merged", 0);
     } else {
@@ -11692,38 +11700,38 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.traits" + " whole", 0);
         out.unsigned(value.traits.count);
-        for (var _i2580 in 0..value.traits.count) {
-            _m_TypeName_write(out, value.traits[_i2580]);
+        for (var _i2581 in 0..value.traits.count) {
+            _m_TypeName_write(out, value.traits[_i2581]);
         }
     }
-    var _seq2593 = base.ref_template_parts[slot].attributes;
-    ulong _bj2594 = 0;
-    var _news2595 = Array<ulong>();
-    for (var _i2596 in 0..value.attributes.count) {
-        if (_bj2594 < _seq2593.count and value.attributes[_i2596] === _seq2593[_bj2594]) {
+    var _seq2594 = base.ref_template_parts[slot].attributes;
+    ulong _bj2595 = 0;
+    var _news2596 = Array<ulong>();
+    for (var _i2597 in 0..value.attributes.count) {
+        if (_bj2595 < _seq2594.count and value.attributes[_i2597] === _seq2594[_bj2595]) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _a_Attribute_write(scratch, value.attributes[_i2596]);
-                base.verify_same($"t.{slot}.attributes", _bj2594, scratch);
+                _a_Attribute_write(scratch, value.attributes[_i2597]);
+                base.verify_same($"t.{slot}.attributes", _bj2595, scratch);
             }
-            _bj2594 += 1;
-        } else if (_bj2594 < _seq2593.count and _same_a_Attribute(value.attributes[_i2596], _seq2593[_bj2594], base)) {
+            _bj2595 += 1;
+        } else if (_bj2595 < _seq2594.count and _same_a_Attribute(value.attributes[_i2597], _seq2594[_bj2595], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
-                _a_Attribute_write(scratch, value.attributes[_i2596]);
-                base.verify_same($"t.{slot}.attributes", _bj2594, scratch);
+                _a_Attribute_write(scratch, value.attributes[_i2597]);
+                base.verify_same($"t.{slot}.attributes", _bj2595, scratch);
             }
-            _bj2594 += 1;
+            _bj2595 += 1;
         } else {
-            _news2595.append(_i2596);
+            _news2596.append(_i2597);
         }
     }
-    if (_bj2594 == _seq2593.count) {
+    if (_bj2595 == _seq2594.count) {
         out.unsigned(2);
-        out.unsigned(_news2595.count);
-        for (var _i2596 in _news2595) {
-            out.unsigned(_i2596);
-            _a_Attribute_write(out, value.attributes[_i2596]);
+        out.unsigned(_news2596.count);
+        for (var _i2597 in _news2596) {
+            out.unsigned(_i2597);
+            _a_Attribute_write(out, value.attributes[_i2597]);
         }
         base.count("t.*.attributes" + " merged", 0);
     } else {
@@ -11732,16 +11740,16 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
         out.unsigned(3);
         base.count("t.*.attributes" + " whole", 0);
         out.unsigned(value.attributes.count);
-        for (var _i2596 in 0..value.attributes.count) {
-            _a_Attribute_write(out, value.attributes[_i2596]);
+        for (var _i2597 in 0..value.attributes.count) {
+            _a_Attribute_write(out, value.attributes[_i2597]);
         }
     }
     out.loc(value.loc);
     if (value.enum_cases.is_value()) {
         out.unsigned(1);
         out.unsigned(value.enum_cases.value().count);
-        for (var _item2605 in value.enum_cases.value()) {
-            _m_EnumCaseDef_write(out, _item2605);
+        for (var _item2606 in value.enum_cases.value()) {
+            _m_EnumCaseDef_write(out, _item2606);
         }
     } else {
         out.unsigned(0);
@@ -11749,397 +11757,397 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
 }
 
 _patch_t_read(input: RecordIn, was: StructDef): StructDef {
-    var _f2487 = input.text();
-    var _f2488 = _m_TypeName_read(input);
-    var _f2498 = Array<GenericParam>();
-    var _mode2501 = input.unsigned();
-    if (_mode2501 == 2) {
-        var _changed2490 = HashMap<ulong, GenericParam>();
-        ulong _bi2502 = 0;
-        var _n2499 = input.count();
-        for (var _ in 0.._n2499) {
-            var _at2503 = input.unsigned();
-            while (_f2498.count < _at2503 or (input.merging and _bi2502 < was.generic_params.count)) {
-                var _c = _changed2490.try_get(_bi2502);
-                _f2498.append(_c.is_value() ? _c.value() : was.generic_params[_bi2502]);
-                _bi2502 += 1;
+    var _f2488 = input.text();
+    var _f2489 = _m_TypeName_read(input);
+    var _f2499 = Array<GenericParam>();
+    var _mode2502 = input.unsigned();
+    if (_mode2502 == 2) {
+        var _changed2491 = HashMap<ulong, GenericParam>();
+        ulong _bi2503 = 0;
+        var _n2500 = input.count();
+        for (var _ in 0.._n2500) {
+            var _at2504 = input.unsigned();
+            while (_f2499.count < _at2504 or (input.merging and _bi2503 < was.generic_params.count)) {
+                var _c = _changed2491.try_get(_bi2503);
+                _f2499.append(_c.is_value() ? _c.value() : was.generic_params[_bi2503]);
+                _bi2503 += 1;
             }
-            _f2498.append(_m_GenericParam_read(input));
+            _f2499.append(_m_GenericParam_read(input));
         }
-        while (_bi2502 < was.generic_params.count) {
-            var _c = _changed2490.try_get(_bi2502);
-            _f2498.append(_c.is_value() ? _c.value() : was.generic_params[_bi2502]);
-            _bi2502 += 1;
+        while (_bi2503 < was.generic_params.count) {
+            var _c = _changed2491.try_get(_bi2503);
+            _f2499.append(_c.is_value() ? _c.value() : was.generic_params[_bi2503]);
+            _bi2503 += 1;
         }
-    } else if (_mode2501 == 3) {
-        var _n2499 = input.count();
-        for (var _ in 0.._n2499) {
-            _f2498.append(_m_GenericParam_read(input));
+    } else if (_mode2502 == 3) {
+        var _n2500 = input.count();
+        for (var _ in 0.._n2500) {
+            _f2499.append(_m_GenericParam_read(input));
         }
     } else {
-        var _n2499 = input.count();
+        var _n2500 = input.count();
         if (input.merging) {
             input.error = "t.*.generic_params" + " written by place";
         }
-        for (var _ in 0.._n2499) {
-            var _tag2500 = input.unsigned();
-            if (_tag2500 & 1 == 1) {
+        for (var _ in 0.._n2500) {
+            var _tag2501 = input.unsigned();
+            if (_tag2501 & 1 == 1) {
                 if (!input.merging) {
-                    _f2498.append(was.generic_params[_tag2500 >> 1]);
+                    _f2499.append(was.generic_params[_tag2501 >> 1]);
                 }
             } else {
                 var _read = _m_GenericParam_read(input);
                 if (!input.merging or true) {
-                    _f2498.append(_read);
+                    _f2499.append(_read);
                 }
             }
         }
     }
-    var _f2514 = Array<VariableDef>();
-    var _mode2517 = input.unsigned();
-    if (_mode2517 == 2) {
-        var _changed2506 = HashMap<ulong, VariableDef>();
-        ulong _bi2518 = 0;
-        var _n2515 = input.count();
-        for (var _ in 0.._n2515) {
-            var _at2519 = input.unsigned();
-            while (_f2514.count < _at2519 or (input.merging and _bi2518 < was.field_members.count)) {
-                var _c = _changed2506.try_get(_bi2518);
-                _f2514.append(_c.is_value() ? _c.value() : was.field_members[_bi2518]);
-                _bi2518 += 1;
+    var _f2515 = Array<VariableDef>();
+    var _mode2518 = input.unsigned();
+    if (_mode2518 == 2) {
+        var _changed2507 = HashMap<ulong, VariableDef>();
+        ulong _bi2519 = 0;
+        var _n2516 = input.count();
+        for (var _ in 0.._n2516) {
+            var _at2520 = input.unsigned();
+            while (_f2515.count < _at2520 or (input.merging and _bi2519 < was.field_members.count)) {
+                var _c = _changed2507.try_get(_bi2519);
+                _f2515.append(_c.is_value() ? _c.value() : was.field_members[_bi2519]);
+                _bi2519 += 1;
             }
-            _f2514.append(_m_VariableDef_read(input));
+            _f2515.append(_m_VariableDef_read(input));
         }
-        while (_bi2518 < was.field_members.count) {
-            var _c = _changed2506.try_get(_bi2518);
-            _f2514.append(_c.is_value() ? _c.value() : was.field_members[_bi2518]);
-            _bi2518 += 1;
+        while (_bi2519 < was.field_members.count) {
+            var _c = _changed2507.try_get(_bi2519);
+            _f2515.append(_c.is_value() ? _c.value() : was.field_members[_bi2519]);
+            _bi2519 += 1;
         }
-    } else if (_mode2517 == 3) {
-        var _n2515 = input.count();
-        for (var _ in 0.._n2515) {
-            _f2514.append(_m_VariableDef_read(input));
+    } else if (_mode2518 == 3) {
+        var _n2516 = input.count();
+        for (var _ in 0.._n2516) {
+            _f2515.append(_m_VariableDef_read(input));
         }
     } else {
-        var _n2515 = input.count();
+        var _n2516 = input.count();
         if (input.merging) {
             input.error = "t.*.field_members" + " written by place";
         }
-        for (var _ in 0.._n2515) {
-            var _tag2516 = input.unsigned();
-            if (_tag2516 & 1 == 1) {
+        for (var _ in 0.._n2516) {
+            var _tag2517 = input.unsigned();
+            if (_tag2517 & 1 == 1) {
                 if (!input.merging) {
-                    _f2514.append(was.field_members[_tag2516 >> 1]);
+                    _f2515.append(was.field_members[_tag2517 >> 1]);
                 }
             } else {
                 var _read = _m_VariableDef_read(input);
                 if (!input.merging or true) {
-                    _f2514.append(_read);
+                    _f2515.append(_read);
                 }
             }
         }
     }
-    var _f2530 = Array<FunctionDef>();
-    var _mode2533 = input.unsigned();
-    if (_mode2533 == 2) {
-        var _changed2522 = HashMap<ulong, FunctionDef>();
-        ulong _bi2534 = 0;
-        var _n2531 = input.count();
-        for (var _ in 0.._n2531) {
-            var _at2535 = input.unsigned();
-            while (_f2530.count < _at2535 or (input.merging and _bi2534 < was.method_members.count)) {
-                var _c = _changed2522.try_get(_bi2534);
-                _f2530.append(_c.is_value() ? _c.value() : was.method_members[_bi2534]);
-                _bi2534 += 1;
+    var _f2531 = Array<FunctionDef>();
+    var _mode2534 = input.unsigned();
+    if (_mode2534 == 2) {
+        var _changed2523 = HashMap<ulong, FunctionDef>();
+        ulong _bi2535 = 0;
+        var _n2532 = input.count();
+        for (var _ in 0.._n2532) {
+            var _at2536 = input.unsigned();
+            while (_f2531.count < _at2536 or (input.merging and _bi2535 < was.method_members.count)) {
+                var _c = _changed2523.try_get(_bi2535);
+                _f2531.append(_c.is_value() ? _c.value() : was.method_members[_bi2535]);
+                _bi2535 += 1;
             }
-            _f2530.append(_m_FunctionDef_read(input));
+            _f2531.append(_m_FunctionDef_read(input));
         }
-        while (_bi2534 < was.method_members.count) {
-            var _c = _changed2522.try_get(_bi2534);
-            _f2530.append(_c.is_value() ? _c.value() : was.method_members[_bi2534]);
-            _bi2534 += 1;
+        while (_bi2535 < was.method_members.count) {
+            var _c = _changed2523.try_get(_bi2535);
+            _f2531.append(_c.is_value() ? _c.value() : was.method_members[_bi2535]);
+            _bi2535 += 1;
         }
-    } else if (_mode2533 == 3) {
-        var _n2531 = input.count();
-        for (var _ in 0.._n2531) {
-            _f2530.append(_m_FunctionDef_read(input));
+    } else if (_mode2534 == 3) {
+        var _n2532 = input.count();
+        for (var _ in 0.._n2532) {
+            _f2531.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2531 = input.count();
+        var _n2532 = input.count();
         if (input.merging) {
             input.error = "t.*.method_members" + " written by place";
         }
-        for (var _ in 0.._n2531) {
-            var _tag2532 = input.unsigned();
-            if (_tag2532 & 1 == 1) {
+        for (var _ in 0.._n2532) {
+            var _tag2533 = input.unsigned();
+            if (_tag2533 & 1 == 1) {
                 if (!input.merging) {
-                    _f2530.append(was.method_members[_tag2532 >> 1]);
+                    _f2531.append(was.method_members[_tag2533 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2530.append(_read);
+                    _f2531.append(_read);
                 }
             }
         }
     }
-    var _f2546 = Array<FunctionDef>();
-    var _mode2549 = input.unsigned();
-    if (_mode2549 == 2) {
-        var _changed2538 = HashMap<ulong, FunctionDef>();
-        ulong _bi2550 = 0;
-        var _n2547 = input.count();
-        for (var _ in 0.._n2547) {
-            var _at2551 = input.unsigned();
-            while (_f2546.count < _at2551 or (input.merging and _bi2550 < was.generic_methods.count)) {
-                var _c = _changed2538.try_get(_bi2550);
-                _f2546.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2550]);
-                _bi2550 += 1;
+    var _f2547 = Array<FunctionDef>();
+    var _mode2550 = input.unsigned();
+    if (_mode2550 == 2) {
+        var _changed2539 = HashMap<ulong, FunctionDef>();
+        ulong _bi2551 = 0;
+        var _n2548 = input.count();
+        for (var _ in 0.._n2548) {
+            var _at2552 = input.unsigned();
+            while (_f2547.count < _at2552 or (input.merging and _bi2551 < was.generic_methods.count)) {
+                var _c = _changed2539.try_get(_bi2551);
+                _f2547.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2551]);
+                _bi2551 += 1;
             }
-            _f2546.append(_m_FunctionDef_read(input));
+            _f2547.append(_m_FunctionDef_read(input));
         }
-        while (_bi2550 < was.generic_methods.count) {
-            var _c = _changed2538.try_get(_bi2550);
-            _f2546.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2550]);
-            _bi2550 += 1;
+        while (_bi2551 < was.generic_methods.count) {
+            var _c = _changed2539.try_get(_bi2551);
+            _f2547.append(_c.is_value() ? _c.value() : was.generic_methods[_bi2551]);
+            _bi2551 += 1;
         }
-    } else if (_mode2549 == 3) {
-        var _n2547 = input.count();
-        for (var _ in 0.._n2547) {
-            _f2546.append(_m_FunctionDef_read(input));
+    } else if (_mode2550 == 3) {
+        var _n2548 = input.count();
+        for (var _ in 0.._n2548) {
+            _f2547.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2547 = input.count();
+        var _n2548 = input.count();
         if (input.merging) {
             input.error = "t.*.generic_methods" + " written by place";
         }
-        for (var _ in 0.._n2547) {
-            var _tag2548 = input.unsigned();
-            if (_tag2548 & 1 == 1) {
+        for (var _ in 0.._n2548) {
+            var _tag2549 = input.unsigned();
+            if (_tag2549 & 1 == 1) {
                 if (!input.merging) {
-                    _f2546.append(was.generic_methods[_tag2548 >> 1]);
+                    _f2547.append(was.generic_methods[_tag2549 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2546.append(_read);
+                    _f2547.append(_read);
                 }
             }
         }
     }
-    var _f2562 = Array<FunctionDef>();
-    var _mode2565 = input.unsigned();
-    if (_mode2565 == 2) {
-        var _changed2554 = HashMap<ulong, FunctionDef>();
-        ulong _bi2566 = 0;
-        var _n2563 = input.count();
-        for (var _ in 0.._n2563) {
-            var _at2567 = input.unsigned();
-            while (_f2562.count < _at2567 or (input.merging and _bi2566 < was.constructors.count)) {
-                var _c = _changed2554.try_get(_bi2566);
-                _f2562.append(_c.is_value() ? _c.value() : was.constructors[_bi2566]);
-                _bi2566 += 1;
+    var _f2563 = Array<FunctionDef>();
+    var _mode2566 = input.unsigned();
+    if (_mode2566 == 2) {
+        var _changed2555 = HashMap<ulong, FunctionDef>();
+        ulong _bi2567 = 0;
+        var _n2564 = input.count();
+        for (var _ in 0.._n2564) {
+            var _at2568 = input.unsigned();
+            while (_f2563.count < _at2568 or (input.merging and _bi2567 < was.constructors.count)) {
+                var _c = _changed2555.try_get(_bi2567);
+                _f2563.append(_c.is_value() ? _c.value() : was.constructors[_bi2567]);
+                _bi2567 += 1;
             }
-            _f2562.append(_m_FunctionDef_read(input));
+            _f2563.append(_m_FunctionDef_read(input));
         }
-        while (_bi2566 < was.constructors.count) {
-            var _c = _changed2554.try_get(_bi2566);
-            _f2562.append(_c.is_value() ? _c.value() : was.constructors[_bi2566]);
-            _bi2566 += 1;
+        while (_bi2567 < was.constructors.count) {
+            var _c = _changed2555.try_get(_bi2567);
+            _f2563.append(_c.is_value() ? _c.value() : was.constructors[_bi2567]);
+            _bi2567 += 1;
         }
-    } else if (_mode2565 == 3) {
-        var _n2563 = input.count();
-        for (var _ in 0.._n2563) {
-            _f2562.append(_m_FunctionDef_read(input));
+    } else if (_mode2566 == 3) {
+        var _n2564 = input.count();
+        for (var _ in 0.._n2564) {
+            _f2563.append(_m_FunctionDef_read(input));
         }
     } else {
-        var _n2563 = input.count();
+        var _n2564 = input.count();
         if (input.merging) {
             input.error = "t.*.constructors" + " written by place";
         }
-        for (var _ in 0.._n2563) {
-            var _tag2564 = input.unsigned();
-            if (_tag2564 & 1 == 1) {
+        for (var _ in 0.._n2564) {
+            var _tag2565 = input.unsigned();
+            if (_tag2565 & 1 == 1) {
                 if (!input.merging) {
-                    _f2562.append(was.constructors[_tag2564 >> 1]);
+                    _f2563.append(was.constructors[_tag2565 >> 1]);
                 }
             } else {
                 var _read = _m_FunctionDef_read(input);
                 if (!input.merging or true) {
-                    _f2562.append(_read);
+                    _f2563.append(_read);
                 }
             }
         }
     }
-    var _f2569 = _m_FunctionDef_read(input);
     var _f2570 = _m_FunctionDef_read(input);
     var _f2571 = _m_FunctionDef_read(input);
-    var _f2581 = Array<TypeName>();
-    var _mode2584 = input.unsigned();
-    if (_mode2584 == 2) {
-        var _changed2573 = HashMap<ulong, TypeName>();
-        ulong _bi2585 = 0;
-        var _n2582 = input.count();
-        for (var _ in 0.._n2582) {
-            var _at2586 = input.unsigned();
-            while (_f2581.count < _at2586 or (input.merging and _bi2585 < was.traits.count)) {
-                var _c = _changed2573.try_get(_bi2585);
-                _f2581.append(_c.is_value() ? _c.value() : was.traits[_bi2585]);
-                _bi2585 += 1;
+    var _f2572 = _m_FunctionDef_read(input);
+    var _f2582 = Array<TypeName>();
+    var _mode2585 = input.unsigned();
+    if (_mode2585 == 2) {
+        var _changed2574 = HashMap<ulong, TypeName>();
+        ulong _bi2586 = 0;
+        var _n2583 = input.count();
+        for (var _ in 0.._n2583) {
+            var _at2587 = input.unsigned();
+            while (_f2582.count < _at2587 or (input.merging and _bi2586 < was.traits.count)) {
+                var _c = _changed2574.try_get(_bi2586);
+                _f2582.append(_c.is_value() ? _c.value() : was.traits[_bi2586]);
+                _bi2586 += 1;
             }
-            _f2581.append(_m_TypeName_read(input));
+            _f2582.append(_m_TypeName_read(input));
         }
-        while (_bi2585 < was.traits.count) {
-            var _c = _changed2573.try_get(_bi2585);
-            _f2581.append(_c.is_value() ? _c.value() : was.traits[_bi2585]);
-            _bi2585 += 1;
+        while (_bi2586 < was.traits.count) {
+            var _c = _changed2574.try_get(_bi2586);
+            _f2582.append(_c.is_value() ? _c.value() : was.traits[_bi2586]);
+            _bi2586 += 1;
         }
-    } else if (_mode2584 == 3) {
-        var _n2582 = input.count();
-        for (var _ in 0.._n2582) {
-            _f2581.append(_m_TypeName_read(input));
+    } else if (_mode2585 == 3) {
+        var _n2583 = input.count();
+        for (var _ in 0.._n2583) {
+            _f2582.append(_m_TypeName_read(input));
         }
     } else {
-        var _n2582 = input.count();
+        var _n2583 = input.count();
         if (input.merging) {
             input.error = "t.*.traits" + " written by place";
         }
-        for (var _ in 0.._n2582) {
-            var _tag2583 = input.unsigned();
-            if (_tag2583 & 1 == 1) {
+        for (var _ in 0.._n2583) {
+            var _tag2584 = input.unsigned();
+            if (_tag2584 & 1 == 1) {
                 if (!input.merging) {
-                    _f2581.append(was.traits[_tag2583 >> 1]);
+                    _f2582.append(was.traits[_tag2584 >> 1]);
                 }
             } else {
                 var _read = _m_TypeName_read(input);
                 if (!input.merging or true) {
-                    _f2581.append(_read);
+                    _f2582.append(_read);
                 }
             }
         }
     }
-    var _f2597 = Array<ast.Attribute>();
-    var _mode2600 = input.unsigned();
-    if (_mode2600 == 2) {
-        var _changed2589 = HashMap<ulong, ast.Attribute>();
-        ulong _bi2601 = 0;
-        var _n2598 = input.count();
-        for (var _ in 0.._n2598) {
-            var _at2602 = input.unsigned();
-            while (_f2597.count < _at2602 or (input.merging and _bi2601 < was.attributes.count)) {
-                var _c = _changed2589.try_get(_bi2601);
-                _f2597.append(_c.is_value() ? _c.value() : was.attributes[_bi2601]);
-                _bi2601 += 1;
+    var _f2598 = Array<ast.Attribute>();
+    var _mode2601 = input.unsigned();
+    if (_mode2601 == 2) {
+        var _changed2590 = HashMap<ulong, ast.Attribute>();
+        ulong _bi2602 = 0;
+        var _n2599 = input.count();
+        for (var _ in 0.._n2599) {
+            var _at2603 = input.unsigned();
+            while (_f2598.count < _at2603 or (input.merging and _bi2602 < was.attributes.count)) {
+                var _c = _changed2590.try_get(_bi2602);
+                _f2598.append(_c.is_value() ? _c.value() : was.attributes[_bi2602]);
+                _bi2602 += 1;
             }
-            _f2597.append(_a_Attribute_read(input));
+            _f2598.append(_a_Attribute_read(input));
         }
-        while (_bi2601 < was.attributes.count) {
-            var _c = _changed2589.try_get(_bi2601);
-            _f2597.append(_c.is_value() ? _c.value() : was.attributes[_bi2601]);
-            _bi2601 += 1;
+        while (_bi2602 < was.attributes.count) {
+            var _c = _changed2590.try_get(_bi2602);
+            _f2598.append(_c.is_value() ? _c.value() : was.attributes[_bi2602]);
+            _bi2602 += 1;
         }
-    } else if (_mode2600 == 3) {
-        var _n2598 = input.count();
-        for (var _ in 0.._n2598) {
-            _f2597.append(_a_Attribute_read(input));
+    } else if (_mode2601 == 3) {
+        var _n2599 = input.count();
+        for (var _ in 0.._n2599) {
+            _f2598.append(_a_Attribute_read(input));
         }
     } else {
-        var _n2598 = input.count();
+        var _n2599 = input.count();
         if (input.merging) {
             input.error = "t.*.attributes" + " written by place";
         }
-        for (var _ in 0.._n2598) {
-            var _tag2599 = input.unsigned();
-            if (_tag2599 & 1 == 1) {
+        for (var _ in 0.._n2599) {
+            var _tag2600 = input.unsigned();
+            if (_tag2600 & 1 == 1) {
                 if (!input.merging) {
-                    _f2597.append(was.attributes[_tag2599 >> 1]);
+                    _f2598.append(was.attributes[_tag2600 >> 1]);
                 }
             } else {
                 var _read = _a_Attribute_read(input);
                 if (!input.merging or true) {
-                    _f2597.append(_read);
+                    _f2598.append(_read);
                 }
             }
         }
     }
-    var _f2604 = input.loc();
-    var _o2606 = Optional<Array<EnumCaseDef>>.Empty;
+    var _f2605 = input.loc();
+    var _o2607 = Optional<Array<EnumCaseDef>>.Empty;
     if (input.unsigned() == 1) {
-        var _v2607 = Array<EnumCaseDef>();
-        var _n2608 = input.count();
-        for (var _ in 0.._n2608) {
-            _v2607.append(_m_EnumCaseDef_read(input));
+        var _v2608 = Array<EnumCaseDef>();
+        var _n2609 = input.count();
+        for (var _ in 0.._n2609) {
+            _v2608.append(_m_EnumCaseDef_read(input));
         }
-        _o2606 = Optional<Array<EnumCaseDef>>.Value(_v2607);
+        _o2607 = Optional<Array<EnumCaseDef>>.Value(_v2608);
     }
-    var _f2609 = _o2606;
+    var _f2610 = _o2607;
     return StructDef(
-        _f2487, _f2488, _f2498, _f2514, _f2530, _f2546, _f2562, _f2569, _f2570, _f2571, _f2581, _f2597, _f2604, _f2609
+        _f2488, _f2489, _f2499, _f2515, _f2531, _f2547, _f2563, _f2570, _f2571, _f2572, _f2582, _f2598, _f2605, _f2610
     );
 }
 
 _patch_t_index(value: StructDef, base: DeltaBase, slot: ulong) {
     if (base.verifying) {
-        ulong _j2504 = 0;
-        for (var _item2489 in value.generic_params) {
+        ulong _j2505 = 0;
+        for (var _item2490 in value.generic_params) {
             var scratch = base.scratch();
-            _m_GenericParam_write(scratch, _item2489);
-            base.add($"t.{slot}.generic_params", scratch, _j2504);
-            _j2504 += 1;
+            _m_GenericParam_write(scratch, _item2490);
+            base.add($"t.{slot}.generic_params", scratch, _j2505);
+            _j2505 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2520 = 0;
-        for (var _item2505 in value.field_members) {
+        ulong _j2521 = 0;
+        for (var _item2506 in value.field_members) {
             var scratch = base.scratch();
-            _m_VariableDef_write(scratch, _item2505);
-            base.add($"t.{slot}.field_members", scratch, _j2520);
-            _j2520 += 1;
+            _m_VariableDef_write(scratch, _item2506);
+            base.add($"t.{slot}.field_members", scratch, _j2521);
+            _j2521 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2536 = 0;
-        for (var _item2521 in value.method_members) {
+        ulong _j2537 = 0;
+        for (var _item2522 in value.method_members) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2521);
-            base.add($"t.{slot}.method_members", scratch, _j2536);
-            _j2536 += 1;
+            _m_FunctionDef_write(scratch, _item2522);
+            base.add($"t.{slot}.method_members", scratch, _j2537);
+            _j2537 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2552 = 0;
-        for (var _item2537 in value.generic_methods) {
+        ulong _j2553 = 0;
+        for (var _item2538 in value.generic_methods) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2537);
-            base.add($"t.{slot}.generic_methods", scratch, _j2552);
-            _j2552 += 1;
+            _m_FunctionDef_write(scratch, _item2538);
+            base.add($"t.{slot}.generic_methods", scratch, _j2553);
+            _j2553 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2568 = 0;
-        for (var _item2553 in value.constructors) {
+        ulong _j2569 = 0;
+        for (var _item2554 in value.constructors) {
             var scratch = base.scratch();
-            _m_FunctionDef_write(scratch, _item2553);
-            base.add($"t.{slot}.constructors", scratch, _j2568);
-            _j2568 += 1;
+            _m_FunctionDef_write(scratch, _item2554);
+            base.add($"t.{slot}.constructors", scratch, _j2569);
+            _j2569 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2587 = 0;
-        for (var _item2572 in value.traits) {
+        ulong _j2588 = 0;
+        for (var _item2573 in value.traits) {
             var scratch = base.scratch();
-            _m_TypeName_write(scratch, _item2572);
-            base.add($"t.{slot}.traits", scratch, _j2587);
-            _j2587 += 1;
+            _m_TypeName_write(scratch, _item2573);
+            base.add($"t.{slot}.traits", scratch, _j2588);
+            _j2588 += 1;
         }
     }
     if (base.verifying) {
-        ulong _j2603 = 0;
-        for (var _item2588 in value.attributes) {
+        ulong _j2604 = 0;
+        for (var _item2589 in value.attributes) {
             var scratch = base.scratch();
-            _a_Attribute_write(scratch, _item2588);
-            base.add($"t.{slot}.attributes", scratch, _j2603);
-            _j2603 += 1;
+            _a_Attribute_write(scratch, _item2589);
+            base.add($"t.{slot}.attributes", scratch, _j2604);
+            _j2604 += 1;
         }
     }
 }
@@ -12230,8 +12238,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.imports.count);
-        for (var _item2610 in value.imports) {
-            _a_Import_write(out, _item2610);
+        for (var _item2611 in value.imports) {
+            _a_Import_write(out, _item2611);
         }
         found.append(("imports", interface_text(out)));
     }
@@ -12240,8 +12248,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.structs.count);
-        for (var _item2611 in value.structs) {
-            _m_StructDef_write(out, _item2611);
+        for (var _item2612 in value.structs) {
+            _m_StructDef_write(out, _item2612);
         }
         found.append(("structs", interface_text(out)));
     }
@@ -12251,8 +12259,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_locs = interface;
         out.blank_bodies = false;
         out.unsigned(value.traits.count);
-        for (var _item2612 in value.traits) {
-            _m_TraitDef_write(out, _item2612);
+        for (var _item2613 in value.traits) {
+            _m_TraitDef_write(out, _item2613);
         }
         found.append(("traits", interface_text(out)));
     }
@@ -12261,8 +12269,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.extensions.count);
-        for (var _item2613 in value.extensions) {
-            _m_ExtensionDef_write(out, _item2613);
+        for (var _item2614 in value.extensions) {
+            _m_ExtensionDef_write(out, _item2614);
         }
         found.append(("extensions", interface_text(out)));
     }
@@ -12271,8 +12279,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.functions.count);
-        for (var _item2614 in value.functions) {
-            _m_FunctionDef_write(out, _item2614);
+        for (var _item2615 in value.functions) {
+            _m_FunctionDef_write(out, _item2615);
         }
         found.append(("functions", interface_text(out)));
     }
@@ -12281,8 +12289,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.externs.count);
-        for (var _item2615 in value.externs) {
-            _m_ExternDef_write(out, _item2615);
+        for (var _item2616 in value.externs) {
+            _m_ExternDef_write(out, _item2616);
         }
         found.append(("externs", interface_text(out)));
     }
@@ -12291,8 +12299,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.globals.count);
-        for (var _item2616 in value.globals) {
-            _m_VariableDef_write(out, _item2616);
+        for (var _item2617 in value.globals) {
+            _m_VariableDef_write(out, _item2617);
         }
         found.append(("globals", interface_text(out)));
     }
@@ -12301,8 +12309,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.static_blocks.count);
-        for (var _item2617 in value.static_blocks) {
-            _m_ModuleStaticBlock_write(out, _item2617);
+        for (var _item2618 in value.static_blocks) {
+            _m_ModuleStaticBlock_write(out, _item2618);
         }
         found.append(("static_blocks", interface_text(out)));
     }
@@ -12311,8 +12319,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.enums.count);
-        for (var _item2618 in value.enums) {
-            _m_EnumDef_write(out, _item2618);
+        for (var _item2619 in value.enums) {
+            _m_EnumDef_write(out, _item2619);
         }
         found.append(("enums", interface_text(out)));
     }
@@ -12321,8 +12329,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.struct_specs.count);
-        for (var _item2619 in value.struct_specs) {
-            _m_TypeName_write(out, _item2619);
+        for (var _item2620 in value.struct_specs) {
+            _m_TypeName_write(out, _item2620);
         }
         found.append(("struct_specs", interface_text(out)));
     }
@@ -12331,8 +12339,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.func_specs.count);
-        for (var _item2620 in value.func_specs) {
-            _m_TypeName_write(out, _item2620);
+        for (var _item2621 in value.func_specs) {
+            _m_TypeName_write(out, _item2621);
         }
         found.append(("func_specs", interface_text(out)));
     }
@@ -12341,8 +12349,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.type_aliases.count);
-        for (var _item2621 in value.type_aliases) {
-            _m_TypeAliasDef_write(out, _item2621);
+        for (var _item2622 in value.type_aliases) {
+            _m_TypeAliasDef_write(out, _item2622);
         }
         found.append(("type_aliases", interface_text(out)));
     }
@@ -12351,8 +12359,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.withheld.count);
-        for (var _item2622 in value.withheld) {
-            _m_Withheld_write(out, _item2622);
+        for (var _item2623 in value.withheld) {
+            _m_Withheld_write(out, _item2623);
         }
         found.append(("withheld", interface_text(out)));
     }
@@ -12361,8 +12369,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.properties.count);
-        for (var _item2623 in value.properties) {
-            _m_PropertyDef_write(out, _item2623);
+        for (var _item2624 in value.properties) {
+            _m_PropertyDef_write(out, _item2624);
         }
         found.append(("properties", interface_text(out)));
     }
@@ -12371,8 +12379,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.type_uses.count);
-        for (var _item2624 in value.type_uses) {
-            _m_TypeUse_write(out, _item2624);
+        for (var _item2625 in value.type_uses) {
+            _m_TypeUse_write(out, _item2625);
         }
         found.append(("type_uses", interface_text(out)));
     }
@@ -12381,8 +12389,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.use_contexts.count);
-        for (var _item2625 in value.use_contexts) {
-            _m_UseContext_write(out, _item2625);
+        for (var _item2626 in value.use_contexts) {
+            _m_UseContext_write(out, _item2626);
         }
         found.append(("use_contexts", interface_text(out)));
     }
@@ -12394,11 +12402,11 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
             out.unsigned(0);
         } else {
             out.unsigned(value.literal_args.count);
-            for (var _item2626 in value.literal_args) {
-                var (_t2627, _t2628, _t2629) = _item2626;
-                out.loc(_t2627);
-                out.unsigned(_t2628);
-                out.loc(_t2629);
+            for (var _item2627 in value.literal_args) {
+                var (_t2628, _t2629, _t2630) = _item2627;
+                out.loc(_t2628);
+                out.unsigned(_t2629);
+                out.loc(_t2630);
             }
         }
         found.append(("literal_args", interface_text(out)));
@@ -12408,8 +12416,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.constrained_aliases.count);
-        for (var _item2630 in value.constrained_aliases) {
-            _m_TypeAliasDef_write(out, _item2630);
+        for (var _item2631 in value.constrained_aliases) {
+            _m_TypeAliasDef_write(out, _item2631);
         }
         found.append(("constrained_aliases", interface_text(out)));
     }
@@ -12418,8 +12426,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.trait_types.count);
-        for (var _item2631 in value.trait_types) {
-            _m_TraitType_write(out, _item2631);
+        for (var _item2632 in value.trait_types) {
+            _m_TraitType_write(out, _item2632);
         }
         found.append(("trait_types", interface_text(out)));
     }
@@ -12428,8 +12436,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.conversions.count);
-        for (var _item2632 in value.conversions) {
-            _m_Conversion_write(out, _item2632);
+        for (var _item2633 in value.conversions) {
+            _m_Conversion_write(out, _item2633);
         }
         found.append(("conversions", interface_text(out)));
     }
@@ -12437,29 +12445,29 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2634 = Array<(u8[], u8[], String)>();
-        for (var (_key2633, _) in value.overload_sets) {
-            var _scratch2635 = out.scratch();
-            _scratch2635.text(_key2633);
-            var _vscratch2637 = out.scratch();
-            _vscratch2637.unsigned(value.overload_sets[_key2633].count);
-            for (var _item2638 in value.overload_sets[_key2633]) {
-                _vscratch2637.text(_item2638);
+        var _keys2635 = Array<(u8[], u8[], String)>();
+        for (var (_key2634, _) in value.overload_sets) {
+            var _scratch2636 = out.scratch();
+            _scratch2636.text(_key2634);
+            var _vscratch2638 = out.scratch();
+            _vscratch2638.unsigned(value.overload_sets[_key2634].count);
+            for (var _item2639 in value.overload_sets[_key2634]) {
+                _vscratch2638.text(_item2639);
             }
-            _keys2634.append((_scratch2635.finish(), _vscratch2637.finish(), _key2633));
+            _keys2635.append((_scratch2636.finish(), _vscratch2638.finish(), _key2634));
         }
-        _keys2634.sort((a, b) => {
+        _keys2635.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2634.count);
-        for (var (_bytes2636, _, _key2633) in _keys2634) {
-            out.text(_key2633);
-            out.unsigned(value.overload_sets[_key2633].count);
-            for (var _item2639 in value.overload_sets[_key2633]) {
-                out.text(_item2639);
+        out.unsigned(_keys2635.count);
+        for (var (_bytes2637, _, _key2634) in _keys2635) {
+            out.text(_key2634);
+            out.unsigned(value.overload_sets[_key2634].count);
+            for (var _item2640 in value.overload_sets[_key2634]) {
+                out.text(_item2640);
             }
         }
         found.append(("overload_sets", interface_text(out)));
@@ -12468,34 +12476,34 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2641 = Array<(u8[], u8[], String)>();
-        for (var (_key2640, _) in value.overload_unions) {
-            var _scratch2642 = out.scratch();
-            _scratch2642.text(_key2640);
-            var _vscratch2644 = out.scratch();
-            _vscratch2644.unsigned(value.overload_unions[_key2640].count);
-            for (var _item2645 in value.overload_unions[_key2640]) {
-                _vscratch2644.unsigned(_item2645.count);
-                for (var _item2646 in _item2645) {
-                    _vscratch2644.text(_item2646);
+        var _keys2642 = Array<(u8[], u8[], String)>();
+        for (var (_key2641, _) in value.overload_unions) {
+            var _scratch2643 = out.scratch();
+            _scratch2643.text(_key2641);
+            var _vscratch2645 = out.scratch();
+            _vscratch2645.unsigned(value.overload_unions[_key2641].count);
+            for (var _item2646 in value.overload_unions[_key2641]) {
+                _vscratch2645.unsigned(_item2646.count);
+                for (var _item2647 in _item2646) {
+                    _vscratch2645.text(_item2647);
                 }
             }
-            _keys2641.append((_scratch2642.finish(), _vscratch2644.finish(), _key2640));
+            _keys2642.append((_scratch2643.finish(), _vscratch2645.finish(), _key2641));
         }
-        _keys2641.sort((a, b) => {
+        _keys2642.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2641.count);
-        for (var (_bytes2643, _, _key2640) in _keys2641) {
-            out.text(_key2640);
-            out.unsigned(value.overload_unions[_key2640].count);
-            for (var _item2647 in value.overload_unions[_key2640]) {
-                out.unsigned(_item2647.count);
-                for (var _item2648 in _item2647) {
-                    out.text(_item2648);
+        out.unsigned(_keys2642.count);
+        for (var (_bytes2644, _, _key2641) in _keys2642) {
+            out.text(_key2641);
+            out.unsigned(value.overload_unions[_key2641].count);
+            for (var _item2648 in value.overload_unions[_key2641]) {
+                out.unsigned(_item2648.count);
+                for (var _item2649 in _item2648) {
+                    out.text(_item2649);
                 }
             }
         }
@@ -12505,70 +12513,70 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2650 = Array<(u8[], u8[], String)>();
-        for (var (_key2649, _) in value.method_overload_sets) {
-            var _scratch2651 = out.scratch();
-            _scratch2651.text(_key2649);
-            var _vscratch2653 = out.scratch();
-            var _keys2655 = Array<(u8[], u8[], String)>();
-            for (var (_key2654, _) in value.method_overload_sets[_key2649]) {
-                var _scratch2656 = _vscratch2653.scratch();
-                _scratch2656.text(_key2654);
-                var _vscratch2658 = _vscratch2653.scratch();
-                _vscratch2658.unsigned(value.method_overload_sets[_key2649][_key2654].count);
-                for (var _item2659 in value.method_overload_sets[_key2649][_key2654]) {
-                    _vscratch2658.text(_item2659);
+        var _keys2651 = Array<(u8[], u8[], String)>();
+        for (var (_key2650, _) in value.method_overload_sets) {
+            var _scratch2652 = out.scratch();
+            _scratch2652.text(_key2650);
+            var _vscratch2654 = out.scratch();
+            var _keys2656 = Array<(u8[], u8[], String)>();
+            for (var (_key2655, _) in value.method_overload_sets[_key2650]) {
+                var _scratch2657 = _vscratch2654.scratch();
+                _scratch2657.text(_key2655);
+                var _vscratch2659 = _vscratch2654.scratch();
+                _vscratch2659.unsigned(value.method_overload_sets[_key2650][_key2655].count);
+                for (var _item2660 in value.method_overload_sets[_key2650][_key2655]) {
+                    _vscratch2659.text(_item2660);
                 }
-                _keys2655.append((_scratch2656.finish(), _vscratch2658.finish(), _key2654));
+                _keys2656.append((_scratch2657.finish(), _vscratch2659.finish(), _key2655));
             }
-            _keys2655.sort((a, b) => {
+            _keys2656.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            _vscratch2653.unsigned(_keys2655.count);
-            for (var (_bytes2657, _, _key2654) in _keys2655) {
-                _vscratch2653.text(_key2654);
-                _vscratch2653.unsigned(value.method_overload_sets[_key2649][_key2654].count);
-                for (var _item2660 in value.method_overload_sets[_key2649][_key2654]) {
-                    _vscratch2653.text(_item2660);
+            _vscratch2654.unsigned(_keys2656.count);
+            for (var (_bytes2658, _, _key2655) in _keys2656) {
+                _vscratch2654.text(_key2655);
+                _vscratch2654.unsigned(value.method_overload_sets[_key2650][_key2655].count);
+                for (var _item2661 in value.method_overload_sets[_key2650][_key2655]) {
+                    _vscratch2654.text(_item2661);
                 }
             }
-            _keys2650.append((_scratch2651.finish(), _vscratch2653.finish(), _key2649));
+            _keys2651.append((_scratch2652.finish(), _vscratch2654.finish(), _key2650));
         }
-        _keys2650.sort((a, b) => {
+        _keys2651.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2650.count);
-        for (var (_bytes2652, _, _key2649) in _keys2650) {
-            out.text(_key2649);
-            var _keys2662 = Array<(u8[], u8[], String)>();
-            for (var (_key2661, _) in value.method_overload_sets[_key2649]) {
-                var _scratch2663 = out.scratch();
-                _scratch2663.text(_key2661);
-                var _vscratch2665 = out.scratch();
-                _vscratch2665.unsigned(value.method_overload_sets[_key2649][_key2661].count);
-                for (var _item2666 in value.method_overload_sets[_key2649][_key2661]) {
-                    _vscratch2665.text(_item2666);
+        out.unsigned(_keys2651.count);
+        for (var (_bytes2653, _, _key2650) in _keys2651) {
+            out.text(_key2650);
+            var _keys2663 = Array<(u8[], u8[], String)>();
+            for (var (_key2662, _) in value.method_overload_sets[_key2650]) {
+                var _scratch2664 = out.scratch();
+                _scratch2664.text(_key2662);
+                var _vscratch2666 = out.scratch();
+                _vscratch2666.unsigned(value.method_overload_sets[_key2650][_key2662].count);
+                for (var _item2667 in value.method_overload_sets[_key2650][_key2662]) {
+                    _vscratch2666.text(_item2667);
                 }
-                _keys2662.append((_scratch2663.finish(), _vscratch2665.finish(), _key2661));
+                _keys2663.append((_scratch2664.finish(), _vscratch2666.finish(), _key2662));
             }
-            _keys2662.sort((a, b) => {
+            _keys2663.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            out.unsigned(_keys2662.count);
-            for (var (_bytes2664, _, _key2661) in _keys2662) {
-                out.text(_key2661);
-                out.unsigned(value.method_overload_sets[_key2649][_key2661].count);
-                for (var _item2667 in value.method_overload_sets[_key2649][_key2661]) {
-                    out.text(_item2667);
+            out.unsigned(_keys2663.count);
+            for (var (_bytes2665, _, _key2662) in _keys2663) {
+                out.text(_key2662);
+                out.unsigned(value.method_overload_sets[_key2650][_key2662].count);
+                for (var _item2668 in value.method_overload_sets[_key2650][_key2662]) {
+                    out.text(_item2668);
                 }
             }
         }
@@ -12585,22 +12593,22 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2669 = Array<(u8[], u8[], Loc)>();
-        for (var _key2668 in value.private_functions) {
-            var _scratch2670 = out.scratch();
-            _scratch2670.loc(_key2668);
-            var _vscratch2672 = out.scratch();
-            _keys2669.append((_scratch2670.finish(), _vscratch2672.finish(), _key2668));
+        var _keys2670 = Array<(u8[], u8[], Loc)>();
+        for (var _key2669 in value.private_functions) {
+            var _scratch2671 = out.scratch();
+            _scratch2671.loc(_key2669);
+            var _vscratch2673 = out.scratch();
+            _keys2670.append((_scratch2671.finish(), _vscratch2673.finish(), _key2669));
         }
-        _keys2669.sort((a, b) => {
+        _keys2670.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2669.count);
-        for (var (_bytes2671, _, _key2668) in _keys2669) {
-            out.loc(_key2668);
+        out.unsigned(_keys2670.count);
+        for (var (_bytes2672, _, _key2669) in _keys2670) {
+            out.loc(_key2669);
         }
         found.append(("private_functions", interface_text(out)));
     }
@@ -12608,22 +12616,22 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2674 = Array<(u8[], u8[], Loc)>();
-        for (var _key2673 in value.file_private_functions) {
-            var _scratch2675 = out.scratch();
-            _scratch2675.loc(_key2673);
-            var _vscratch2677 = out.scratch();
-            _keys2674.append((_scratch2675.finish(), _vscratch2677.finish(), _key2673));
+        var _keys2675 = Array<(u8[], u8[], Loc)>();
+        for (var _key2674 in value.file_private_functions) {
+            var _scratch2676 = out.scratch();
+            _scratch2676.loc(_key2674);
+            var _vscratch2678 = out.scratch();
+            _keys2675.append((_scratch2676.finish(), _vscratch2678.finish(), _key2674));
         }
-        _keys2674.sort((a, b) => {
+        _keys2675.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2674.count);
-        for (var (_bytes2676, _, _key2673) in _keys2674) {
-            out.loc(_key2673);
+        out.unsigned(_keys2675.count);
+        for (var (_bytes2677, _, _key2674) in _keys2675) {
+            out.loc(_key2674);
         }
         found.append(("file_private_functions", interface_text(out)));
     }
@@ -12635,10 +12643,10 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
             out.unsigned(0);
         } else {
             out.unsigned(value.call_targets.count);
-            for (var _item2678 in value.call_targets) {
-                var (_t2679, _t2680) = _item2678;
-                out.loc(_t2679);
-                out.text(_t2680);
+            for (var _item2679 in value.call_targets) {
+                var (_t2680, _t2681) = _item2679;
+                out.loc(_t2680);
+                out.text(_t2681);
             }
         }
         found.append(("call_targets", interface_text(out)));
@@ -12651,10 +12659,10 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
             out.unsigned(0);
         } else {
             out.unsigned(value.argument_names.count);
-            for (var _item2681 in value.argument_names) {
-                var (_t2682, _t2683) = _item2681;
-                out.loc(_t2682);
-                out.text(_t2683);
+            for (var _item2682 in value.argument_names) {
+                var (_t2683, _t2684) = _item2682;
+                out.loc(_t2683);
+                out.text(_t2684);
             }
         }
         found.append(("argument_names", interface_text(out)));
@@ -12664,8 +12672,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_bodies = interface;
         out.blank_locs = interface;
         out.unsigned(value.namespaces.count);
-        for (var _item2684 in value.namespaces) {
-            out.text(_item2684);
+        for (var _item2685 in value.namespaces) {
+            out.text(_item2685);
         }
         found.append(("namespaces", interface_text(out)));
     }
@@ -12677,8 +12685,8 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
             out.unsigned(0);
         } else {
             out.unsigned(value.cached_files.count);
-            for (var _item2685 in value.cached_files) {
-                out.flag(_item2685);
+            for (var _item2686 in value.cached_files) {
+                out.flag(_item2686);
             }
         }
         found.append(("cached_files", interface_text(out)));
@@ -12690,24 +12698,24 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         if (interface) {
             write_interface_summaries(out, value.recorded_summaries);
         } else {
-            var _keys2687 = Array<(u8[], u8[], Loc)>();
-            for (var (_key2686, _) in value.recorded_summaries) {
-                var _scratch2688 = out.scratch();
-                _scratch2688.loc(_key2686);
-                var _vscratch2690 = out.scratch();
-                _vscratch2690.text(value.recorded_summaries[_key2686]);
-                _keys2687.append((_scratch2688.finish(), _vscratch2690.finish(), _key2686));
+            var _keys2688 = Array<(u8[], u8[], Loc)>();
+            for (var (_key2687, _) in value.recorded_summaries) {
+                var _scratch2689 = out.scratch();
+                _scratch2689.loc(_key2687);
+                var _vscratch2691 = out.scratch();
+                _vscratch2691.text(value.recorded_summaries[_key2687]);
+                _keys2688.append((_scratch2689.finish(), _vscratch2691.finish(), _key2687));
             }
-            _keys2687.sort((a, b) => {
+            _keys2688.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            out.unsigned(_keys2687.count);
-            for (var (_bytes2689, _, _key2686) in _keys2687) {
-                out.loc(_key2686);
-                out.text(value.recorded_summaries[_key2686]);
+            out.unsigned(_keys2688.count);
+            for (var (_bytes2690, _, _key2687) in _keys2688) {
+                out.loc(_key2687);
+                out.text(value.recorded_summaries[_key2687]);
             }
         }
         found.append(("recorded_summaries", interface_text(out)));
@@ -12719,22 +12727,22 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         if (interface) {
             out.unsigned(0);
         } else {
-            var _keys2692 = Array<(u8[], u8[], Loc)>();
-            for (var _key2691 in value.stripped) {
-                var _scratch2693 = out.scratch();
-                _scratch2693.loc(_key2691);
-                var _vscratch2695 = out.scratch();
-                _keys2692.append((_scratch2693.finish(), _vscratch2695.finish(), _key2691));
+            var _keys2693 = Array<(u8[], u8[], Loc)>();
+            for (var _key2692 in value.stripped) {
+                var _scratch2694 = out.scratch();
+                _scratch2694.loc(_key2692);
+                var _vscratch2696 = out.scratch();
+                _keys2693.append((_scratch2694.finish(), _vscratch2696.finish(), _key2692));
             }
-            _keys2692.sort((a, b) => {
+            _keys2693.sort((a, b) => {
                 var (x, xv, _) = a;
                 var (y, yv, _) = b;
                 var by_key = compare_bytes(x, y);
                 return by_key != 0 ? by_key : compare_bytes(xv, yv);
             });
-            out.unsigned(_keys2692.count);
-            for (var (_bytes2694, _, _key2691) in _keys2692) {
-                out.loc(_key2691);
+            out.unsigned(_keys2693.count);
+            for (var (_bytes2695, _, _key2692) in _keys2693) {
+                out.loc(_key2692);
             }
         }
         found.append(("stripped", interface_text(out)));
@@ -12758,24 +12766,24 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2697 = Array<(u8[], u8[], String)>();
-        for (var (_key2696, _) in value.spec_requests) {
-            var _scratch2698 = out.scratch();
-            _scratch2698.text(_key2696);
-            var _vscratch2700 = out.scratch();
-            _m_SpecRequest_write(_vscratch2700, value.spec_requests[_key2696]);
-            _keys2697.append((_scratch2698.finish(), _vscratch2700.finish(), _key2696));
+        var _keys2698 = Array<(u8[], u8[], String)>();
+        for (var (_key2697, _) in value.spec_requests) {
+            var _scratch2699 = out.scratch();
+            _scratch2699.text(_key2697);
+            var _vscratch2701 = out.scratch();
+            _m_SpecRequest_write(_vscratch2701, value.spec_requests[_key2697]);
+            _keys2698.append((_scratch2699.finish(), _vscratch2701.finish(), _key2697));
         }
-        _keys2697.sort((a, b) => {
+        _keys2698.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2697.count);
-        for (var (_bytes2699, _, _key2696) in _keys2697) {
-            out.text(_key2696);
-            _m_SpecRequest_write(out, value.spec_requests[_key2696]);
+        out.unsigned(_keys2698.count);
+        for (var (_bytes2700, _, _key2697) in _keys2698) {
+            out.text(_key2697);
+            _m_SpecRequest_write(out, value.spec_requests[_key2697]);
         }
         found.append(("spec_requests", interface_text(out)));
     }
@@ -12794,10 +12802,10 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
             out.unsigned(0);
         } else {
             out.unsigned(value.summaries_to_record.count);
-            for (var _item2701 in value.summaries_to_record) {
-                var (_t2702, _t2703) = _item2701;
-                out.loc(_t2702);
-                out.text(_t2703);
+            for (var _item2702 in value.summaries_to_record) {
+                var (_t2703, _t2704) = _item2702;
+                out.loc(_t2703);
+                out.text(_t2704);
             }
         }
         found.append(("summaries_to_record", interface_text(out)));
@@ -12806,29 +12814,29 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        var _keys2705 = Array<(u8[], u8[], String)>();
-        for (var (_key2704, _) in value.caller_copies) {
-            var _scratch2706 = out.scratch();
-            _scratch2706.text(_key2704);
-            var _vscratch2708 = out.scratch();
-            _vscratch2708.unsigned(value.caller_copies[_key2704].count);
-            for (var _item2709 in value.caller_copies[_key2704]) {
-                _vscratch2708.flag(_item2709);
+        var _keys2706 = Array<(u8[], u8[], String)>();
+        for (var (_key2705, _) in value.caller_copies) {
+            var _scratch2707 = out.scratch();
+            _scratch2707.text(_key2705);
+            var _vscratch2709 = out.scratch();
+            _vscratch2709.unsigned(value.caller_copies[_key2705].count);
+            for (var _item2710 in value.caller_copies[_key2705]) {
+                _vscratch2709.flag(_item2710);
             }
-            _keys2705.append((_scratch2706.finish(), _vscratch2708.finish(), _key2704));
+            _keys2706.append((_scratch2707.finish(), _vscratch2709.finish(), _key2705));
         }
-        _keys2705.sort((a, b) => {
+        _keys2706.sort((a, b) => {
             var (x, xv, _) = a;
             var (y, yv, _) = b;
             var by_key = compare_bytes(x, y);
             return by_key != 0 ? by_key : compare_bytes(xv, yv);
         });
-        out.unsigned(_keys2705.count);
-        for (var (_bytes2707, _, _key2704) in _keys2705) {
-            out.text(_key2704);
-            out.unsigned(value.caller_copies[_key2704].count);
-            for (var _item2710 in value.caller_copies[_key2704]) {
-                out.flag(_item2710);
+        out.unsigned(_keys2706.count);
+        for (var (_bytes2708, _, _key2705) in _keys2706) {
+            out.text(_key2705);
+            out.unsigned(value.caller_copies[_key2705].count);
+            for (var _item2711 in value.caller_copies[_key2705]) {
+                out.flag(_item2711);
             }
         }
         found.append(("caller_copies", interface_text(out)));
@@ -12840,19 +12848,19 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.flag(value.linked);
         found.append(("linked", interface_text(out)));
     }
-    for (var _item2711 in value.structs) {
+    for (var _item2712 in value.structs) {
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        _m_StructDef_write(out, _item2711);
-        found.append(("structs " + _item2711.name, interface_text(out)));
+        _m_StructDef_write(out, _item2712);
+        found.append(("structs " + _item2712.name, interface_text(out)));
     }
-    for (var _item2712 in value.functions) {
+    for (var _item2713 in value.functions) {
         var out = RecordOut();
         out.blank_bodies = interface;
         out.blank_locs = interface;
-        _m_FunctionDef_write(out, _item2712);
-        found.append(("functions " + _item2712.name, interface_text(out)));
+        _m_FunctionDef_write(out, _item2713);
+        found.append(("functions " + _item2713.name, interface_text(out)));
     }
     return found;
 }

@@ -72,6 +72,10 @@ export enum Literal {
     ##
     ## @param value the value
     Integer(value: long),
+    ## A decimal integer literal above `long`'s range: a `ulong`.
+    ##
+    ## @param value the value
+    Unsigned(value: ulong),
     ## A floating-point literal.
     ##
     ## @param value the value
@@ -126,6 +130,9 @@ export enum Literal {
             Integer(value) => {
                 return $"{value}";
             }
+            Unsigned(value) => {
+                return $"{value}";
+            }
             Float(value) => {
                 return $"{value}";
             }
@@ -178,6 +185,9 @@ export enum Literal {
             }
             Integer(value) => {
                 return tagged("Integer", JsonValue.Integer(value));
+            }
+            Unsigned(value) => {
+                return tagged("Unsigned", JsonValue.String($"{value}"));
             }
             Float(value) => {
                 return tagged("Float", JsonValue.Number(value));

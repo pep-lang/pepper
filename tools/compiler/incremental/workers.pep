@@ -333,7 +333,7 @@ export serve_compilation_units(
         # Only its own files' bodies are read: what it reads comes as records.
         var unread = program.link_bodies(_own_files(program, unit));
         if (unread.is_value()) {
-            File.stderr().write_all($"pepc: {unread.value()}\n");
+            File.stderr().write_all($"{unread.value()}\n");
             return 1;
         }
         clock.lap("worker link bodies");
