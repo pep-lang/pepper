@@ -931,6 +931,11 @@ on its own is an <code>int</code> when its value fits in an <code>int</code>, an
 <code>var big = 3000000000;</code> is a <code>long</code>. It takes another type when you store it in a
 variable of that type (<code>u64 huge = 9000000000000000000;</code>). A hexadecimal literal
 is a 64-bit bit pattern: <code>u64 all = 0xFFFFFFFFFFFFFFFF;</code> sets every bit.</p>
+<p>A decimal literal larger than the largest <code>long</code> (9223372036854775807), up to
+the largest <code>ulong</code> (18446744073709551615), is a <code>ulong</code>: it is the same value as
+its hexadecimal spelling, and it fits only where a <code>ulong</code> (or a floating-point
+type) takes it. <code>long</code>'s minimum is written with its sign,
+<code>-9223372036854775808</code>.</p>
 <pre><code class="language-pepper"># Integer types: widths, signedness, wraparound and conversions.
 main(): int {
     # Each width has a short name and a descriptive alias.
@@ -969,6 +974,12 @@ main(): int {
 
     # Hexadecimal literals.
     assert(0xFF == 255, "0xFF is 255");
+
+    # A decimal literal past long's range is a ulong.
+    u64 top = 18446744073709551615;
+    assert(top == 0xFFFFFFFFFFFFFFFF, "the largest ulong, in decimal");
+    long lowest = -9223372036854775808;
+    assert(lowest &lt; 0, "long's minimum is written with its sign");
     assert(count + big &gt; 0 &amp;&amp; mask &gt; 0 &amp;&amp; huge &gt; 0 &amp;&amp; port &gt; 0, "all in range");
     return 0;
 }
@@ -977,11 +988,17 @@ main(): int {
 C: a <code>u16</code> holding 65535 becomes 0 when you add 1 and store the result, and
 <code>70000 as u16</code> is 4464. Arithmetic that overflows <code>int</code> or a wider type
 panics instead (see <a href="language/types-and-variables.html#integer-overflow">Integer overflow</a>).</p>
-<p>A decimal literal larger than the largest <code>long</code> (9223372036854775807), or a
-hexadecimal literal with more than 64 bits, is an error:</p>
+<p>A decimal literal larger than the largest <code>ulong</code>, or a hexadecimal literal with
+more than 64 bits, is an error:</p>
 <pre><code class="language-text">main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
     2 |     var f = 99999999999999999999;
       |             ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
+<p>So is a decimal literal past <code>long</code>'s range stored in an integer type other than
+<code>ulong</code>:</p>
+<pre><code class="language-text">main.pep:2:14: error: integer literal is too large for type 'long'
+    2 |     long g = 9223372036854775808;
+      |              ^~~~~~~~~~~~~~~~~~~
 </code></pre>
 <h3 id="floating-point"><a class="header" href="#floating-point">Floating point</a></h3>
 <p><code>float</code> is a 32-bit and <code>double</code> a 64-bit IEEE 754 number (<code>f32</code> and <code>f64</code> are
@@ -1544,6 +1561,11 @@ const requests = async.Atomic&lt;long&gt;(0);   # changed with requests.fetch_ad
 [ThreadLocal]
 var depth: int = 0;                       # one per thread
 </code></pre>
+<p>A global whose initializer is a literal (a number, a <code>bool</code>, <code>__null</code>, or a
+string literal) is set when the program loads, with no code run. One that
+nothing reads, like a function nothing calls, is left out of the executable,
+so a module's data tables cost only the programs that use them. A Windows
+build with <code>-g</code> keeps them all.</p>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
 <p><code>value as Type</code> converts a value to another type explicitly, like <code>static_cast</code>
 in C++:</p>
@@ -2331,7 +2353,7 @@ is wrong:</p>
 main.pep:5:19: error: cannot format a value of type 'String' as an integer
     5 |     print($"{name:x}");
       |                   ^
-main.pep:6:16: error: cannot format a value of type 'i32' with a precision; only 'float' and 'double' take one
+main.pep:6:16: error: cannot format a value of type 'int' with a precision; only 'float' and 'double' take one
     6 |     print($"{n:.2}");
       |                ^
 </code></pre>
@@ -20791,7 +20813,7 @@ initializer, an assignment, an argument, a <code>return</code>, and each arm of
     2 |     int x = "hello";
       |             ^~~~~~~
 </code></pre>
-<pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
+<pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'int' as argument 1 of 'g', which has type 'String'
     3 |     return g(5);
       |            ^
 </code></pre>
@@ -22130,6 +22152,8 @@ program is built for the Mac it runs on. It works with <code>-O</code>. See
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program's function names, which is where <a href="tools/../language/debug.html">backtraces</a>
 read them.</p>
+<p>Every link leaves out the functions and data nothing uses, except a Windows
+build with <code>-g</code>: its linker keeps them all, so the program is larger.</p>
 <h3 id="--debug-staticsource---debug-staticexpanded"><a class="header" href="#--debug-staticsource---debug-staticexpanded"><code>--debug-static=source</code>, <code>--debug-static=expanded</code></a></h3>
 <p>With <code>-g</code>, chooses which source the debugger shows for the code a <code>static</code>
 block emits (see

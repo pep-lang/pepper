@@ -548,6 +548,8 @@ program is built for the Mac it runs on. It works with <code>-O</code>. See
 <p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
 program's function names, which is where <a href="../language/debug.html">backtraces</a>
 read them.</p>
+<p>Every link leaves out the functions and data nothing uses, except a Windows
+build with <code>-g</code>: its linker keeps them all, so the program is larger.</p>
 <h3 id="--debug-staticsource---debug-staticexpanded"><a class="header" href="#--debug-staticsource---debug-staticexpanded"><code>--debug-static=source</code>, <code>--debug-static=expanded</code></a></h3>
 <p>With <code>-g</code>, chooses which source the debugger shows for the code a <code>static</code>
 block emits (see
