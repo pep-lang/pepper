@@ -205,9 +205,14 @@ export check_out(
 # cache afterwards. `offline` fails rather than fetch.
 _fetch_commit(host: String, repository: String, directory: Path, commit: String, offline: bool): Result<void> {
     var dir = directory.to_string();
-    var cloned = directory.join(".git").exists();
+    # Not just a `.git` folder: a removal that stopped part way leaves one.
+    var cloned = checked_out(directory).is_value();
     if (cloned and git(["cat-file", "-e", commit + "^{commit}"], dir).is_ok()) {
         return Result<void>.ok();
+    }
+    # Offline with nothing cached, it fails before it writes to the home.
+    if (offline and !Path(cached_package(host, repository).to_string() + ".git").is_directory()) {
+        return Result<void>.Err(not_held_offline(directory, commit));
     }
     var lock = lock_cache(host, repository);
     if (lock.is_err()) {
@@ -245,15 +250,13 @@ _fetch_commit(host: String, repository: String, directory: Path, commit: String,
 # Makes the cache's bare repository of `repository` on `host` hold
 # `commit`, made and fetched from `url` when it lacks it; `offline` fails
 # instead, naming `directory`. Returns the repository and the full commit.
-# The caller holds `lock_cache`.
+# The caller holds `lock_cache`, and has checked that an offline one has a
+# repository.
 _cache_commit(
     host: String, repository: String, url: String, directory: Path, commit: String, offline: bool
 ): Result<(Path, String)> {
     var bare = Path(cached_package(host, repository).to_string() + ".git");
     if (!bare.is_directory()) {
-        if (offline) {
-            return Result<(Path, String)>.Err(not_held_offline(directory, commit));
-        }
         # Made beside it and renamed, so an interrupted one leaves none.
         var partial = Path(bare.to_string() + ".partial");
         if (partial.exists()) {

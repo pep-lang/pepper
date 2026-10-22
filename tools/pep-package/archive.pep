@@ -232,15 +232,16 @@ export fetch_archive(
     host: String, repository: String, directory: Path, commit: String, expected: String, offline: bool = false
 ): Result<String> {
     var url = archive_url(host, repository, commit);
+    var cached = cached_package(host, repository).join(commit + ".tar.gz");
+    if (offline and !cached.is_file()) {
+        return Result<String>.Err(not_held_offline(directory, commit));
+    }
     var lock = lock_cache(host, repository);
     if (lock.is_err()) {
         return Result<String>.Err(lock.error().message);
     }
-    var cached = cached_package(host, repository).join(commit + ".tar.gz");
+    # Another process may have stored it while this one waited.
     var from_cache = cached.is_file();
-    if (!from_cache and offline) {
-        return Result<String>.Err(not_held_offline(directory, commit));
-    }
     var packed = from_cache ? _read(cached) : _download(url);
     if (packed.is_err()) {
         return Result<String>.Err(packed.error().message);
