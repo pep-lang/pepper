@@ -6,9 +6,9 @@
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
-import [unit_decls] from "checked";
 import [is_numeric_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE] from "builder";
+import [unit_decls] from "checked";
 import "closure_sites";
 import "closures";
 import "common";

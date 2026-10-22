@@ -6,8 +6,8 @@
 ## or an integer and back, and a number to another number of the same width
 ## with its bits unchanged. Neither ever applies to a refcounted reference.
 
-import [unit_decls] from "checked";
 import [bit_width, is_float_type] from "arithmetic";
+import [unit_decls] from "checked";
 import "common";
 import "function_types_check";
 import [Loc] from "loc";

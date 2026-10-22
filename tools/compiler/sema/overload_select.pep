@@ -697,8 +697,7 @@ export struct Overloads {
 
     # Whether some struct has a method set named `name`.
     _has_method_set_name(name: String): bool {
-        return method_set_names.contains(name)
-            or (_base.is_value() and _base.value().method_set_names.contains(name));
+        return method_set_names.contains(name) or (_base.is_value() and _base.value().method_set_names.contains(name));
     }
 
     ## Returns the set a call to `function` names and the type arguments
@@ -1734,7 +1733,8 @@ struct _CandidateNames {
             }
             MemberRef(node) => {
                 var set = _method_set_name(node.name);
-                return method_set_names.contains(set) or (_base.is_value() and _base.value().method_set_names.contains(set));
+                return method_set_names.contains(set)
+                    or (_base.is_value() and _base.value().method_set_names.contains(set));
             }
             else => {}
         }

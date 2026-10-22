@@ -7,8 +7,8 @@
 ## Maranget's "Warnings for pattern matching".
 
 import [Diagnostic, Location] from compiler.diagnostic;
-import [unit_decls] from "checked";
 import [integer_range, payload_field, TAG_FIELD] from "builder";
+import [unit_decls] from "checked";
 import "common";
 import "confinement";
 import [install_traits, is_trait, reference_cases] from "enums";

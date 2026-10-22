@@ -112,45 +112,45 @@ struct _Referenceable {
 
     # Takes in `st`, unless it is generic.
     _add_struct(st: StructDef) {
-            if (st.generic_params.count != 0) {
-                return;
+        if (st.generic_params.count != 0) {
+            return;
+        }
+        var key = st.ty.to_string();
+        if (!methods.contains(key)) {
+            methods[key] = HashMap<String, _Signature>();
+        }
+        var own = methods[key];
+        for (var m in st.method_members) {
+            if (!m.name.starts_with("__") and !own.contains(m.name)) {
+                own[m.name] = _Signature(m);
             }
-            var key = st.ty.to_string();
-            if (!methods.contains(key)) {
-                methods[key] = HashMap<String, _Signature>();
-            }
-            var own = methods[key];
-            for (var m in st.method_members) {
-                if (!m.name.starts_with("__") and !own.contains(m.name)) {
-                    own[m.name] = _Signature(m);
-                }
-            }
-            var names = Array<String>();
-            for (var f in st.field_members) {
-                names.append(f.name);
-            }
-            fields[key] = names;
-            for (var c in st.constructors) {
-                var ctor = _Signature(c);
-                ctor.ret = st.ty;
-                ulong i = 0;
-                while (i < ctor.params.count) {
-                    var (name, ty) = ctor.params[i];
-                    if (ty.contains_auto() or ty.is_empty()) {
-                        for (var f in st.field_members) {
-                            if (f.name == name) {
-                                ctor.params[i] = (name, f.ty);
-                                break;
-                            }
+        }
+        var names = Array<String>();
+        for (var f in st.field_members) {
+            names.append(f.name);
+        }
+        fields[key] = names;
+        for (var c in st.constructors) {
+            var ctor = _Signature(c);
+            ctor.ret = st.ty;
+            ulong i = 0;
+            while (i < ctor.params.count) {
+                var (name, ty) = ctor.params[i];
+                if (ty.contains_auto() or ty.is_empty()) {
+                    for (var f in st.field_members) {
+                        if (f.name == name) {
+                            ctor.params[i] = (name, f.ty);
+                            break;
                         }
                     }
-                    i += 1;
                 }
-                constructors[c.name] = ctor;
+                i += 1;
             }
-            if (!st.name.starts_with("__") and !key.contains("<")) {
-                plain_structs[st.name] = st.ty;
-            }
+            constructors[c.name] = ctor;
+        }
+        if (!st.name.starts_with("__") and !key.contains("<")) {
+            plain_structs[st.name] = st.ty;
+        }
     }
 
     # Takes in the checked struct of type `key`, once, unless the unit's own
