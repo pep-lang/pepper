@@ -168,7 +168,7 @@ export parse_recovering(source: String): Recovered {
     }
     # Past `MAX_NESTING` the reading stops at the limit, and what follows
     # only reads as unmatched braces and parentheses: that error alone.
-    if (parsed.error().message.starts_with("code is nested too deeply")) {
+    if (parsed.error().message == _too_deep_message()) {
         var out = Recovered(ast.Module());
         out.errors.append(parsed.error());
         return out;
@@ -286,10 +286,15 @@ _parse(
 ## argument, pattern, prefix operator and argument list nests one level
 ## deeper, and so does each operator of a chain (`a + b + c` is two levels)
 ## and each `.member`, call or index of a postfix chain. A call's
-## arguments, and an interpolated string's holes, are one level more. Every stage after
-## the parser recurses over the tree, so this bounds the stack they need
-## (`STACK_SIZE`).
+## arguments, and an interpolated string's holes, are one level more.
+## Every stage after the parser recurses over the tree, so this bounds the
+## stack they need (`STACK_SIZE`).
 export const MAX_NESTING: int = 256;
+
+# The error for source nested past `MAX_NESTING`.
+_too_deep_message(): String {
+    return $"code is nested too deeply: the limit is {MAX_NESTING} levels; split it into smaller expressions or functions";
+}
 
 # No token: the index `_suspect_open` holds when no block is suspect.
 const _NO_TOKEN: ulong = 0xFFFFFFFFFFFFFFFF;
@@ -858,8 +863,7 @@ struct Parser {
     # `__ptr<__ptr<...int>> p`, not a `>` of `a < b > c`.
     _fail_too_deep() {
         if (!_too_deep) {
-            var message = $"code is nested too deeply: the limit is {MAX_NESTING} levels; split it into smaller expressions or functions";
-            _error = Optional<SyntaxError>.Value(SyntaxError(message, _peek().offset));
+            _error = Optional<SyntaxError>.Value(SyntaxError(_too_deep_message(), _peek().offset));
             _final_error = true;
             _too_deep = true;
         }
