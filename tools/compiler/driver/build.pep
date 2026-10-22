@@ -780,7 +780,9 @@ _work_on(
     }
     _copy_defines(compiled.value(), dir, k);
     var t7 = os.Instant.now();
-    stages.append($"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\n");
+    stages.append(
+        $"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\npeak {os.peak_memory() / 1048576} MB\n"
+    );
     if (options.trace_time) {
         File.write_text(worker_file(dir, k, "stages"), stages.to_string());
     }
