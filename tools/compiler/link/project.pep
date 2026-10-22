@@ -1188,7 +1188,7 @@ struct _Reader {
                 # found where it is listed again.
                 var from = value_span(path).start;
                 for (var member in strings(path, key, value)) {
-                    var at = item_span(path, member);
+                    var at = value_span(path);
                     var found = text.find($"\"{member}\"", from);
                     if (found >= 0) {
                         at = Span(found as ulong, found as ulong + member.size + 2);

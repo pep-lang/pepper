@@ -62,7 +62,7 @@ short, and `pepper help build` runs it.
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
 | `-v`, `--verbose` | Accepted; prints nothing more yet | off |
-| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--print-members` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
+| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
 | `-h`, `--help` | Print the options | |
 | `-V`, `--version` | Print the version | |
 
@@ -706,6 +706,10 @@ rerun by hand (the build prints it).
 - `--members <names>` names, comma-separated, the workspace members a
   build of several (`--all`, `-p`) builds together, so each child unifies
   its features with theirs. With a file, `--all` and `-p` do the same.
+- `--member <dir>`, with no file, builds the project in `<dir>` rather
+  than the one around the current folder; a build of several members
+  starts each child with it, in its own folder, so relative paths such
+  as `-o` keep their meaning.
 - `--print-members` prints the package name and folder of each member
   `--all` or `-p` selects, a tab between them, a line each, and builds
   nothing; `pep-test --all` and `-p` run it.

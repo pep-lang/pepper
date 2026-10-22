@@ -33,8 +33,12 @@ export struct ProjectSetup {
 ## @param file the file given, if any
 ## @param target the compile target: a Windows executable's name ends in
 ##   `.exe`
+## @param member with no file, the folder of the project to build instead
+##   (`--member`, a workspace member a build of several starts)
 ## @returns the setup, or why the project cannot be used
-export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, String> {
+export apply_project(
+    file: Path?, target: link.Target, member: Path? = Optional<Path>.Empty
+): Result<ProjectSetup, String> {
     var cwd = process.working_directory();
     var here = cwd.is_ok() ? cwd.value() : Path(".");
     Path? manifest_path;
@@ -44,7 +48,7 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
             manifest_path = Optional<Path>.Value(project.value().join(Path(link.MANIFEST_FILE)));
         }
     } else {
-        manifest_path = link.find_manifest(here);
+        manifest_path = link.find_manifest(member.is_value() ? member.value() : here);
         if (!manifest_path.is_value()) {
             return Result<ProjectSetup, String>.err(
                 $"no source files provided, and no {link.MANIFEST_FILE} in {here} or a folder above it"
@@ -153,9 +157,10 @@ export select_members(all: bool, names: String[]): Result<link.Manifest[], Strin
     return Result<link.Manifest[], String>.ok(selected);
 }
 
-## Builds each of `members` in a child `pep-build` run in its folder, with
-## this build's `arguments` but `--all` and `-p`, and `--members` naming
-## them all, so their features are unified. A member with no `[build]`
+## Builds each of `members` in a child `pep-build` given its folder with
+## `--member`, in this build's folder so relative paths keep their meaning,
+## with this build's `arguments` but `--all` and `-p`, and `--members`
+## naming them all, so their features are unified. A member with no `[build]`
 ## entry and no `main.pep`, a library, is skipped. Stops at the first that
 ## fails.
 ##
@@ -179,7 +184,7 @@ export build_members(arguments: String[], members: link.Manifest[]): int {
         i += 1;
         if (argument == "-p" or argument == "--package") {
             i += 1;
-        } else if (argument != "--all" and !argument.starts_with("--package=")) {
+        } else if (argument != "--all" and !argument.starts_with("--package=") and !argument.starts_with("-p")) {
             passed.append(argument);
         }
     }
@@ -194,7 +199,7 @@ export build_members(arguments: String[], members: link.Manifest[]): int {
         var ran = process
             .Command(executable.value().to_string())
             .arguments(passed)
-            .working_directory(member.dir())
+            .arguments(["--member", member.dir().to_string()])
             .stdout(process.Stream.Inherit)
             .stderr(process.Stream.Inherit)
             .run();

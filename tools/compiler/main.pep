@@ -246,6 +246,11 @@ main(args: String[]): int {
         help = "Internal: the workspace members, a comma-separated list of package names, built with this one, whose features are unified with its. A build of several members starts each with it",
         value_name = "NAMES"
     );
+    var member_dir = parser.option(
+        "member",
+        help = "Internal: with no file, build the project in DIR rather than the one around the current folder. A build of several members starts each with it",
+        value_name = "DIR"
+    );
     var print_members = parser.flag(
         "print-members",
         help = "Internal: print the name and folder of each workspace member `--all` or `-p` selects, a line each, instead of building. `pep-test` runs it"
@@ -264,7 +269,9 @@ main(args: String[]): int {
     # The workspace members `--all` and `-p` select: with no file, each is
     # built in a child of its own; with one, their features are unified.
     var members = Array<String>();
-    if (print_members.is_set or !path.is_value() or all_members.is_set or member_names.is_set) {
+    # A child of a build of several members selects none again.
+    if (!built_with.is_set
+        and (print_members.is_set or !path.is_value() or all_members.is_set or member_names.is_set)) {
         var selected = driver.select_members(all_members.is_set, member_names.values());
         if (selected.is_err()) {
             _report(selected.error());
@@ -401,7 +408,9 @@ main(args: String[]): int {
     # In a project, the build takes what its `pep.toml` gives: with no file,
     # the entry and output; and `[build]`'s libraries.
     var project = driver.apply_project(
-        path.is_value() ? Optional<Path>.Value(Path(path.value())) : Optional<Path>.Empty, setup.target
+        path.is_value() ? Optional<Path>.Value(Path(path.value())) : Optional<Path>.Empty,
+        setup.target,
+        member_dir.is_set ? Optional<Path>.Value(Path(member_dir.value())) : Optional<Path>.Empty
     );
     if (project.is_err()) {
         _report(project.error());
