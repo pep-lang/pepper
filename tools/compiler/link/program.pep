@@ -442,9 +442,12 @@ struct _Queued {
 ## @param root the root file
 ## @param prelude the prelude files, forced imports first
 ## @param search_paths where module imports look, in order
-## @param target the target platform selection evaluates against
+## @param target the target platform selection evaluates against, which
+##   gains the build options of the project's features turned on
+##   (`Packages.turn_on_features`)
 ## @param sources the text of files to take from here rather than the disk, by `files.path_key`
-## @returns the program, or why a file cannot be read or parsed
+## @returns the program, or why a file cannot be read or parsed or a feature
+##   turned on
 export load(
     root: Path,
     prelude: Path[],
@@ -459,6 +462,10 @@ export load(
     var resolved = Array<Array<String?>>();
     # The `pep.toml` each file falls under, for the dependencies it imports.
     var packages = Packages(root, target);
+    var features = packages.turn_on_features();
+    if (features.is_err()) {
+        return Result<Program, String>.err(features.error());
+    }
     var project = packages.project;
     if (!project.is_value()) {
         var cwd = process.working_directory();

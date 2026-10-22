@@ -26,6 +26,7 @@ export [
     read_lock,
     render_manifest_errors,
     Dependency,
+    Feature,
     Host,
     LockedPackage,
     Manifest,

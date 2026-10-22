@@ -391,6 +391,15 @@ process_arguments_follow_the_program_name() {
     expect_exit(output, 5);
 }
 
+# Every character arrives whole as UTF-8, on Windows too, where the C
+# runtime's `argv` is in the ANSI code page (pep-lang/pepper#165).
+[Test]
+process_arguments_arrive_as_utf8() {
+    var output = _run("process_arguments", ["é", "日本語", "😀 ✓", "naïve\\\"q\""]);
+    expect_equal(output.stdout, "[é]\n[日本語]\n[😀 ✓]\n[naïve\\\"q\"]\n");
+    expect_exit(output, 5);
+}
+
 [Test]
 process_argument_zero_names_the_program() {
     expect_exit(_run("process_program_name"), 0);

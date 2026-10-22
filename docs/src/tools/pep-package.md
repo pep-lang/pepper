@@ -8,6 +8,7 @@ pepper package add someone/geometry          # the newest version, imported as '
 pepper package add other/json@2.x --name fast_json
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
+pepper package add --optional --features simd someone/zlib  # only a feature turns it on
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -46,6 +47,9 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
 | `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use |
+| `add ... --optional` | Marks it `optional = true`: a build uses it only when a feature turns it on |
+| `add ... --features <names>`, `-F <names>` | The dependency's features to turn on, written to its `features`: a comma-separated list, or repeat the option |
+| `add ... --no-default-features` | Leaves the dependency's `default` feature off: `default-features = false` |
 | `remove <name>` | Removes a dependency or dev-dependency, by its name or its `owner/name` |
 | `update [<name>...]` | Moves dependencies to the newest versions their ranges allow; every one when none is named |
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
@@ -113,6 +117,12 @@ what `[Target(...)]` takes (`OS(Windows)`, `OS(Linux) && Arch(x64)`; see
 [Platform selection](../language/platform-selection.md)); quote it for the
 shell. It cannot be given with `--dev`.
 
+`--optional`, `--features <names>` and `--no-default-features` write the
+entry's `optional = true`, `features = [...]` and `default-features =
+false` (see [Features](projects.md#features)). A dev-dependency cannot be
+optional. The package's features are not checked until a build turns
+them on.
+
 ### `remove <name>`
 
 Removes the dependency with that name (or that `owner/name`) from
@@ -165,8 +175,9 @@ First it checks, and lists every check that fails at once:
   resolve it with its other packages. A dev-dependency may be anything,
   since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]` and
-  `[target]` tables need 0.11.0.
+  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`
+  and `[features]` tables, and a dependency's `optional`, `features` and
+  `default-features`, need 0.11.0.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
@@ -208,6 +219,11 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 
 A package that only the project's `[dev-dependencies]` lead to has
 `dev = true`; one that a dependency leads to as well does not.
+
+Features do not change the lock: an optional dependency is resolved,
+locked and fetched like any other, whether or not a build turns it on, so
+`pep.lock` is the same whichever `--features` a build gives (see
+[Features](projects.md#features)).
 
 `pep.lock` lists every platform's packages, so it is the same whichever
 system writes it, as `Cargo.lock` is: a project locked on Linux builds on

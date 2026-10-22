@@ -5,7 +5,10 @@
 ## `[dev-dependencies]`, which only the project's tests and examples see,
 ## and of `[target.'<condition>'.dependencies]`, which only a build for a
 ## target the `[Target(...)]` condition selects sees) is the name source
-## code imports; a fetched dependency lives in the
+## code imports. `[features]` names optional parts of a package: turning a
+## feature on defines the build option `<package>_<feature>` and turns on
+## the optional dependencies and dependency features it lists
+## (`Packages.turn_on_features`). A fetched dependency lives in the
 ## project's `.pep/deps/<host>/<repository>`, and `Packages` resolves the
 ## imports of every file of a program against the dependencies of the
 ## package that file belongs to.
@@ -221,6 +224,16 @@ export struct Dependency {
     var target: String = "";
     ## `target` read as the body of a `[Target(...)]`.
     var condition: Attribute? = Optional<Attribute>.Empty;
+    ## `optional = true`: a build sees it only when a feature turns it on
+    ## (`dep:name` or `name/feature` in `[features]`).
+    var optional: bool = false;
+    ## `features`: the dependency's features it turns on.
+    var features: String[] = Array<String>();
+    ## Where each of `features` is written.
+    var feature_spans: Span[] = Array<Span>();
+    ## `default-features`: whether it turns on the dependency's `default`
+    ## feature.
+    var default_features: bool = true;
 
     construct(name: String, name_span: Span, host: Host?, location: String) {
         this.name = name;
@@ -261,6 +274,24 @@ export struct Dependency {
     }
 }
 
+## One entry of `[features]`: a feature, and what turning it on turns on.
+export struct Feature {
+    ## The key.
+    var name: String;
+    ## The key's span in the manifest's text.
+    var name_span: Span;
+    ## What it turns on, as written: another feature (`gzip`), an optional
+    ## dependency (`dep:zlib`), or a dependency's feature (`zlib/simd`).
+    var enables: String[] = Array<String>();
+    ## Where each of `enables` is written.
+    var spans: Span[] = Array<Span>();
+
+    construct(name: String, name_span: Span) {
+        this.name = name;
+        this.name_span = name_span;
+    }
+}
+
 ## A problem with a `pep.toml`, at a byte range of its text.
 export struct ManifestError {
     var message: String;
@@ -293,6 +324,8 @@ export struct Manifest {
     ## `[dev-dependencies]`, in the order they are written: seen only by a
     ## build of this project's tests or examples (`Packages.dev`).
     var dev_dependencies: Dependency[] = Array<Dependency>();
+    ## `[features]`, in the order they are written.
+    var features: Feature[] = Array<Feature>();
 
     construct(path: Path, text: String) {
         this.path = path;
@@ -312,6 +345,22 @@ export struct Manifest {
     ## The dev-dependency named `name`, if any.
     dev_dependency(name: String): Dependency? {
         return _named(dev_dependencies, name);
+    }
+
+    ## The feature named `name`, if any.
+    feature(name: String): Feature? {
+        for (var f in features) {
+            if (f.name == name) {
+                return Optional<Feature>.Value(f);
+            }
+        }
+        return Optional<Feature>.Empty;
+    }
+
+    ## The build option the feature `feature` defines when it is on:
+    ## `<package>_<feature>`, such as `http_tls`.
+    build_option(feature: String): String {
+        return $"{name}_{feature}";
     }
 
     ## Returns its Git dependencies and dev-dependencies, and the Git
@@ -681,6 +730,14 @@ struct _Reader {
         return Optional<String>.Empty;
     }
 
+    boolean(path: String[], key: String, value: TomlValue): bool? {
+        if (value is Boolean(flag)) {
+            return Optional<bool>.Value(flag);
+        }
+        error($"'{key}' must be a boolean, not {_kind(value)}", value_span(path));
+        return Optional<bool>.Empty;
+    }
+
     strings(path: String[], key: String, value: TomlValue): String[] {
         var out = Array<String>();
         var items = value.as_array();
@@ -842,6 +899,10 @@ struct _Reader {
         Host? host = Optional<Host>.Empty;
         String? location;
         var revision = "";
+        var optional = false;
+        var features = Array<String>();
+        var feature_spans = Array<Span>();
+        var default_features = true;
         for (var (field, value) in fields) {
             var field_path = _at(path, field);
             var field_host = host_named(field);
@@ -888,12 +949,45 @@ struct _Reader {
                     continue;
                 }
                 revision = field;
+            } else if (field == "optional") {
+                var given = boolean(field_path, field, value);
+                if (given.is_value() and given.value() and path[0] == "dev-dependencies") {
+                    error(
+                        $"dev-dependency '{name}' cannot be optional; only '[dependencies]' are", key_span(field_path)
+                    );
+                    continue;
+                }
+                optional = given.value_or(false);
+            } else if (field == "default-features") {
+                default_features = boolean(field_path, field, value).value_or(true);
+            } else if (field == "features") {
+                for (var f in strings(field_path, field, value)) {
+                    var at = item_span(field_path, f);
+                    if (!is_identifier(f)) {
+                        error($"feature name '{f}' is not an identifier", at);
+                        continue;
+                    }
+                    features.append(f);
+                    feature_spans.append(at);
+                }
             } else {
                 unknown_key(
                     path,
                     field,
                     path.count > 2 ? $"target.'{path[1]}'.dependencies" : path[0],
-                    ["github", "gitlab", "codeberg", "path", "version", "branch", "tag", "commit"]
+                    [
+                        "github",
+                        "gitlab",
+                        "codeberg",
+                        "path",
+                        "version",
+                        "branch",
+                        "tag",
+                        "commit",
+                        "optional",
+                        "features",
+                        "default-features"
+                    ]
                 );
             }
         }
@@ -915,7 +1009,75 @@ struct _Reader {
         if (errors.count != before) {
             return;
         }
-        into.append(Dependency(name, key_span(path), host, location.value()));
+        var dependency = Dependency(name, key_span(path), host, location.value());
+        dependency.optional = optional;
+        dependency.features = features;
+        dependency.feature_spans = feature_spans;
+        dependency.default_features = default_features;
+        into.append(dependency);
+    }
+
+    ## The `[features]` table: each key a feature, holding the features,
+    ## optional dependencies (`dep:name`) and dependency features
+    ## (`name/feature`) it turns on, which `check_features` checks once
+    ## every table is read.
+    features(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        for (var (key, value) in members) {
+            var path = ["features", key];
+            if (!is_identifier(key)) {
+                error(
+                    $"feature name '{key}' is not an identifier; it names the build option '<package>_<feature>'",
+                    key_span(path)
+                );
+                continue;
+            }
+            var feature = Feature(key, key_span(path));
+            for (var item in strings(path, key, value)) {
+                feature.enables.append(item);
+                feature.spans.append(item_span(path, item));
+            }
+            manifest.features.append(feature);
+        }
+    }
+
+    ## Checks what each feature of `manifest` turns on: a feature of its
+    ## own, an optional dependency, or a feature of a dependency.
+    check_features(manifest: Manifest) {
+        for (var feature in manifest.features) {
+            for (var i in 0..feature.enables.count) {
+                var item = feature.enables[i];
+                var at = feature.spans[i];
+                if (item.starts_with("dep:")) {
+                    var name = item.substr_bytes(4, item.size - 4);
+                    var d = manifest.dependency(name);
+                    if (!d.is_value()) {
+                        error($"'{item}' names no dependency; 'dep:' turns on an optional dependency", at);
+                    } else if (!d.value().optional) {
+                        error(
+                            $"dependency '{name}' is not optional; give it 'optional = true' for 'dep:{name}' to turn it on",
+                            at
+                        );
+                    }
+                    continue;
+                }
+                var split = item.split_once("/");
+                if (split.is_value()) {
+                    var (name, inner) = split.value();
+                    if (!manifest.dependency(name).is_value()) {
+                        error($"'{item}' names no dependency '{name}'", at);
+                    } else if (!is_identifier(inner)) {
+                        error($"feature name '{inner}' is not an identifier", at);
+                    }
+                    continue;
+                }
+                if (!manifest.feature(item).is_value()) {
+                    error(
+                        $"no feature named '{item}' in '[features]'; a feature turns on features, 'dep:name' or 'name/feature'",
+                        at
+                    );
+                }
+            }
+        }
     }
 
     ## The `[target]` table: each key a condition, holding a
@@ -1019,9 +1181,14 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.fetch(table.value());
             }
+        } else if (key == "features") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.features(manifest, table.value());
+            }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]' and '[fetch]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]' and '[fetch]'",
                 reader.key_span(at)
             );
         }
@@ -1029,6 +1196,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
     if (!package_seen) {
         reader.error("missing '[package]' table with the project's 'name'", Span(0, 0));
     }
+    reader.check_features(manifest);
     for (var d in manifest.dependencies) {
         var first = manifest.dependency(d.name).value();
         if (first !== d) {
@@ -1142,6 +1310,14 @@ export struct Packages {
     ## Folder -> the manifest governing it, or why it could not be used, or
     ## Empty when none does.
     var _by_dir: HashMap<String, Result<Manifest, String>?> = HashMap<String, Result<Manifest, String>?>();
+    ## `<package folder>\n<feature>` for each feature turned on.
+    var _enabled: HashSet<String> = HashSet<String>();
+    ## `<package folder>\n<dependency>` for each dependency turned on.
+    var _on: HashSet<String> = HashSet<String>();
+    ## The package folders whose dependencies are turned on.
+    var _visited: HashSet<String> = HashSet<String>();
+    ## The first feature a dependency asks for that its package lacks.
+    var _feature_error: String? = Optional<String>.Empty;
 
     ## The packages of a program rooted at the file `root`.
     ##
@@ -1154,6 +1330,149 @@ export struct Packages {
         project = files.find_project(root);
         dev = target.build_options.contains(TEST_BUILD_OPTION)
             or (project.is_value() and _in_examples(project.value(), root));
+    }
+
+    ## Turns on the features the build asks for, and those they and every
+    ## dependency turned on ask for in turn, across the whole graph: the
+    ## project's package's `target.features`, with its `default` feature
+    ## unless `target.default_features` is false; each dependency's
+    ## `features`, with its `default` unless `default-features = false`;
+    ## and what each feature on lists. Each feature on defines its build
+    ## option (`Manifest.build_option`) in `target`, and an optional
+    ## dependency is seen (`resolve`) only once a feature turns it on. A
+    ## dependency not on disk yet is skipped.
+    ##
+    ## @returns nothing, or why a feature cannot be turned on
+    turn_on_features(): Result<void, String> {
+        if (!project.is_value()) {
+            if (!target.features.is_empty) {
+                return Result<void, String>.err(
+                    $"'--features' turns on features of a project's package, and there is no {files.MANIFEST_FILE} here"
+                );
+            }
+            return Result<void, String>.ok();
+        }
+        var root = _manifest_at(project.value());
+        if (!root.is_value()) {
+            return Result<void, String>.ok();
+        }
+        var manifest = root.value();
+        _visit(manifest);
+        var asked = Array<String>();
+        if (target.default_features and manifest.feature("default").is_value()) {
+            asked.append("default");
+        }
+        asked.append_all(target.features);
+        for (var name in asked) {
+            if (!manifest.feature(name).is_value()) {
+                var known = Array<String>();
+                for (var f in manifest.features) {
+                    known.append($"'{f.name}'");
+                }
+                return Result<void, String>.err(
+                    $"unknown feature '{name}' in '--features': package '{manifest.name}' has "
+                        + (known.is_empty ? "no features" : ", ".join(known))
+                );
+            }
+            _enable(manifest, name);
+        }
+        if (_feature_error.is_value()) {
+            return Result<void, String>.err(_feature_error.value());
+        }
+        return Result<void, String>.ok();
+    }
+
+    ## The manifest in `dir` itself, when it has one that parses.
+    _manifest_at(dir: Path): Manifest? {
+        if (!dir.join(Path(files.MANIFEST_FILE)).is_file()) {
+            return Optional<Manifest>.Empty;
+        }
+        var found = _manifest_for(dir);
+        if (!found.is_value() or found.value().is_err()) {
+            return Optional<Manifest>.Empty;
+        }
+        return Optional<Manifest>.Value(found.value().value());
+    }
+
+    ## Turns on the dependencies of `manifest` that are not optional (and
+    ## the project's dev-dependencies, in a dev build).
+    _visit(manifest: Manifest) {
+        var key = _key(manifest);
+        if (!_visited.insert(key)) {
+            return;
+        }
+        var named = manifest.dependencies.copy();
+        if (dev and key == project.value().normalize().to_string()) {
+            named.append_all(manifest.dev_dependencies);
+        }
+        for (var d in named) {
+            if (!d.optional) {
+                _turn_on(manifest, d);
+            }
+        }
+    }
+
+    ## Turns on `d`, a dependency of `manifest`, with the features it asks
+    ## for, when the build's target sees it; returns its manifest, when it
+    ## is on disk.
+    _turn_on(manifest: Manifest, d: Dependency): Manifest? {
+        if (!d.matches(target)) {
+            return Optional<Manifest>.Empty;
+        }
+        var first = _on.insert(_key(manifest) + "\n" + d.name);
+        var found = _manifest_at(d.directory(project.value(), manifest.dir()));
+        if (found.is_value() and first) {
+            _visit(found.value());
+            if (d.default_features and found.value().feature("default").is_value()) {
+                _enable(found.value(), "default");
+            }
+            for (var i in 0..d.features.count) {
+                _enable_in(found.value(), d.features[i], manifest, d.feature_spans[i]);
+            }
+        }
+        return found;
+    }
+
+    ## Turns on `feature` of `package`, which `manifest` asks for at `at`;
+    ## a feature `package` lacks is the error.
+    _enable_in(package: Manifest, feature: String, manifest: Manifest, at: Span) {
+        if (package.feature(feature).is_value()) {
+            _enable(package, feature);
+        } else if (!_feature_error.is_value()) {
+            var message = $"package '{package.name}' has no feature '{feature}'";
+            _feature_error = Optional<String>.Value(
+                render_manifest_errors(manifest.path, manifest.text, [ManifestError(message, at)])
+            );
+        }
+    }
+
+    ## Turns on `name`, a feature of `manifest`, and what it lists.
+    _enable(manifest: Manifest, name: String) {
+        if (!_enabled.insert(_key(manifest) + "\n" + name)) {
+            return;
+        }
+        target.build_options[manifest.build_option(name)] = "1";
+        var feature = manifest.feature(name).value();
+        for (var i in 0..feature.enables.count) {
+            var item = feature.enables[i];
+            var split = item.split_once("/");
+            if (item.starts_with("dep:")) {
+                _turn_on(manifest, manifest.dependency(item.substr_bytes(4, item.size - 4)).value());
+            } else if (split.is_value()) {
+                var (dependency, inner) = split.value();
+                var found = _turn_on(manifest, manifest.dependency(dependency).value());
+                if (found.is_value()) {
+                    _enable_in(found.value(), inner, manifest, feature.spans[i]);
+                }
+            } else {
+                _enable(manifest, item);
+            }
+        }
+    }
+
+    ## A package's key in the feature sets: its normalized folder.
+    _key(manifest: Manifest): String {
+        return manifest.dir().normalize().to_string();
     }
 
     _manifest_for(dir: Path): Result<Manifest, String>? {
@@ -1240,6 +1559,10 @@ export struct Packages {
             var condition = dependency.value().target;
             return Resolution.Missing(
                 $"'{first}' is a dependency only for targets where '{condition}' holds, which this build's does not; put '[Target({condition})]' on the import"
+            );
+        } else if (dependency.value().optional and !_on.contains(_key(manifest) + "\n" + first)) {
+            return Resolution.Missing(
+                $"'{first}' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:{first}' on the import"
             );
         }
         var package = dependency.value().directory(project.value(), manifest.dir());

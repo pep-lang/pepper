@@ -84,12 +84,17 @@ link.load_program(entry, setup)                                   (link/program.
                                    [build] include dirs follow -I, its deps resolve
     search paths                   -I dirs, then runtime dirs
     forced imports                 --import NAME → prelude, ahead of the runtime
+    features                       Packages.turn_on_features: --features (Target.features)
+                                   and each package's default, unified over the graph;
+                                   each feature on defines -D <package>_<feature> in the
+                                   target, and turns on the optional dependencies it lists
     the import walk                parse every reachable file; resolve imports
                                    (a dependency through Packages, else the search paths;
                                    the root project's dev-dependencies only in a TEST
                                    build or for a root file under its examples/; a
                                    [target.'<condition>'.dependencies] entry only when
-                                   the condition, read as [Target(...)]'s, holds)
+                                   the condition, read as [Target(...)]'s, holds; an
+                                   optional dependency only once a feature turns it on)
     link.link                      bind imports/exports; rewrite m.x, aliases; mangle
                                    private names (helper@io/file) → FileScope
   Program.check()                  linking errors, then visibility
@@ -3666,21 +3671,25 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     `test-windows`, `test-linux` and `test-macos` succeeded or the commit
     is prose only. It fails on a cancelled run.
   - `test-windows` (**`windows-2025`**), `test-macos` (**`macos-15`**)
-    and `test-linux` (**`ubuntu-24.04`**) run the whole suite, one job per
-    OS, so a run takes three runners. Their setup is the composite action
+    and `test-linux` (**`ubuntu-24.04`**) run the suite in two jobs per
+    OS (a matrix over `PEPPER_TESTS_PART`: `compiler`, the compiler's
+    tests, and `others`), so a run takes six runners. Their setup is the
+    composite action
     `.github/actions/prepare-tests`: provision LLVM 20
     (`ci-provision-llvm.sh`, cached on Windows; the compiler's tests link
     it through pepper-llvm) and the libraries the tests link, install the
     newest published toolchain (the `x.y.z-dev` prerelease `release.yml`
     publishes on each merge, or a release with a higher version, through
-    `install.sh` / `install.ps1`), restore the newest build cache an
-    earlier run saved for the OS (`PEPPER_CACHE_DIR`, one cache every
-    build in the job shares, the tools' tests' own builds included, and
-    the changed compiler; actions/cache, saved again after the job), build `tools/compiler` when it changed
-    (`ci-build-compiler.sh`), and give the compiler a time taken from its
-    contents, since the cache keys on the compiler's path, size and time.
-    Then `scripts/pepper-tests.sh` runs. The Windows job also runs `pep-doc
-    check`, and the Linux job cross-compiles a few examples for Linux arm64
+    `install.sh` / `install.ps1`), name `PEPPER_CACHE_DIR` (one build
+    cache every build in the job shares, the tools' tests' own builds
+    included; it starts empty, since its keys name the compiler, new in
+    nearly every run), and build `tools/compiler` when it changed
+    (`ci-build-compiler.sh`, from its own build cache, which actions/cache
+    carries between runs keyed on stage 0's contents). Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
+    which prints the runner's memory, disk and biggest processes each
+    minute; a job that fails, is cancelled or times out ends with its
+    `--report` (Diagnostics). The Windows `others` job also runs `pep-doc
+    check`, and the Linux `others` job cross-compiles a few examples for Linux arm64
     and runs them under qemu. All three are required, through `test`,
     which fails on a cancelled or timed-out job as on a failed one.
   - `cross-sysroots`, `cross-link` and `cross-run` (not required)
