@@ -2788,6 +2788,15 @@ extend _Rewriter with ScopeWalk {
             if (!bindings.qualified.contains(q)) {
                 return;
             }
+        } else if (!own_names.contains(names.base_type_name(ty.name))) {
+            # A name nothing binds here is an enum's case, which may share
+            # its name with a type in a file this one does not import.
+            match (_resolve_imported(names.base_type_name(ty.name), bindings, linker.prelude)) {
+                Unknown => {
+                    return;
+                }
+                else => {}
+            }
         }
         visit_type_name(ty);
     }
