@@ -4295,6 +4295,8 @@ main(): int {
     var counts = Array&lt;(word: String, count: int)&gt;();
     counts.append((word: "tuple", count: 2));
     assert(counts[0].count == 2, "a labeled element");
+    var found = Optional&lt;(line: int, column: int)&gt;.Value(p);
+    assert(found.value().column == 7, "through an enum case");
     return 0;
 }
 </code></pre>
@@ -4306,11 +4308,15 @@ converts to the other freely.</li>
 differ.</li>
 <li>Labels pass through a type argument: an element of an
 <code>Array&lt;(word: String, count: int)&gt;</code>, a <code>HashMap</code> value or the <code>value()</code> of a
-<code>(line: int, column: int)?</code> answers to its labels, though
+<code>(line: int, column: int)?</code> answers to its labels, and so does what a static
+method or an enum case called on the labeled type gives
+(<code>var p = Optional&lt;(line: int, column: int)&gt;.Value(at);</code>), though
 <code>Optional&lt;(line: int, column: int)&gt;</code> is the same type as
-<code>Optional&lt;(int, int)&gt;</code>. A variable typed by a static method's result, such
-as <code>var p = Optional&lt;(line: int, column: int)&gt;.Value(at);</code>, has no labels:
-declare its type to name the elements.</li>
+<code>Optional&lt;(int, int)&gt;</code>. A member takes back only the labels its declaration
+writes as a type parameter: a method of <code>Box&lt;(a: int, b: int)&gt;</code> declared to
+return <code>(int, int)</code> returns an unlabeled tuple. A generic function's result
+takes none: <code>identity&lt;(a: int, b: int)&gt;(p)</code> is unlabeled, so declare the
+variable's type to name its elements.</li>
 <li><code>var p = (line: 3, column: 7);</code> gives <code>p</code> the labeled type
 <code>(line: int, column: int)</code>. A labeled value takes at least two elements.</li>
 <li>A labeled value initializing or returned as a labeled type must use its
@@ -8779,17 +8785,19 @@ an object's destructor always runs before those of the objects it held.</p>
 a document nested a million levels deep, is destroyed without running out
 of stack. This changes the order above only for a <em>recursive</em> type: a
 struct whose fields can lead, through any number of steps, back to a value
-of its own type. A field that holds a struct of the same cycle directly (a
-list's <code>next</code>, a tree's <code>left</code> and <code>right</code>, a node's <code>children</code> array) is
-released only after the object holding it is completely destroyed, its
-other fields included, and the chain is destroyed in a loop: an object's
-destructor still runs before those of the objects it held, and the
-last-declared of those fields still goes first, but an object's other
-fields are released before the chain below it. A cycle that runs through a
-trait value, a container's elements or a closure's captures nests as
-usual until it is about 16 KiB of stack deep; past that, further objects
-wait on a list for the current thread and are destroyed, in the order they
-were released, when the outermost release has finished its own object.
+of its own type. A field that holds an object of the same cycle (a list's
+<code>next</code>, a tree's <code>left</code> and <code>right</code>, a node's <code>children</code> array and the
+nodes in it, a trait value, a closure and what it captures) is released
+only after the object holding it is completely destroyed, its other fields
+included, and the chain is destroyed in a loop: an object's destructor
+still runs before those of the objects it held, the last-declared of those
+fields still goes first, and an array's elements go in index order, but an
+object's other fields are released before the chain below it. A cycle that
+runs through anything else, such as a tuple or the elements of another
+container (a <code>HashMap</code>, an <code>Optional</code>), nests as usual until it is about
+16 KiB of stack deep; past that, further objects wait on a list for the
+current thread and are destroyed, in the order they were released, when
+the outermost release has finished its own object.
 Either way, every object is destroyed before the release that started it
 returns, and a type no cycle runs through is destroyed exactly as
 described above.</p>
@@ -8799,6 +8807,14 @@ const destroyed = async.Atomic&lt;int&gt;(0);
 
 struct Link {
     var next: Link;
+    destruct {
+        destroyed.fetch_add(1);
+    }
+}
+
+# A node of a tree, holding its children in an array.
+struct Tree {
+    var children: Array&lt;Tree&gt; = Array&lt;Tree&gt;();
     destruct {
         destroyed.fetch_add(1);
     }
@@ -8817,6 +8833,18 @@ main(): int {
     # per link.
     head = Link();
     assert(destroyed.load() == 1000000, "every link was destroyed");
+
+    # A tree a hundred thousand levels deep, through its children arrays.
+    var root = Tree();
+    var branch = root;
+    for (var i in 0..99999) {
+        var child = Tree();
+        branch.children.append(child);
+        branch = child;
+    }
+    branch = Tree();
+    root = Tree();
+    assert(destroyed.load() == 1100000, "every node was destroyed");
     return 0;
 }
 </code></pre>
@@ -22308,6 +22336,9 @@ json      = { gitlab = "group/pepper-json", version = "0.4.x" }
 fast_json = { github = "other/json", version = "2" }   # renamed: 'json' was taken
 http      = { codeberg = "someone/http", branch = "main" }
 shapes    = { path = "../shapes" }
+
+[dev-dependencies]
+fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
 </code></pre>
 <p>A package is a project other projects depend on: a repository (or folder)
 with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
@@ -22406,7 +22437,35 @@ pepper build
 <code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
 <code>--offline</code> builds with only what <code>.pep/deps</code> holds (<code>--frozen</code> is both;
 <code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
-<a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>.</p>
+<a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
+dev-dependencies as to the rest.</p>
+<h2 id="dev-dependencies"><a class="header" href="#dev-dependencies"><code>[dev-dependencies]</code></a></h2>
+<p>A package the project's tests and examples use but its code does not, such
+as a test helper, goes in <code>[dev-dependencies]</code>, written as in
+<code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[dev-dependencies]
+fixtures = { github = "someone/fixtures", version = "1" }
+</code></pre>
+<ul>
+<li><strong>Who sees them:</strong> a test build (<code>pepper test</code>, which builds with
+<code>pep-build --test</code>) and a build of a file in the project's <code>examples</code>
+folder, or a folder below it. Any other build of the project, such as
+<code>pepper build</code>, does not: an import of one there is an error that says to
+move it to <code>[dependencies]</code>.</li>
+<li><strong>Not part of the package:</strong> a project that depends on this package
+neither fetches nor resolves its dev-dependencies, so one that conflicts
+with the dependent's own dependencies does no harm.</li>
+<li><strong>Locked with the rest:</strong> <code>pep.lock</code> records them beside the other
+packages, each that only dev-dependencies lead to marked <code>dev = true</code>,
+and <code>pepper build</code> fetches them with the rest.</li>
+</ul>
+<p><code>pepper package add --dev</code> adds one, and <code>pepper package remove</code> removes one
+from either table (see <a href="tools/pep-package.html#add-ownernamerange">pep-package</a>). A
+name may be in only one of the two tables.</p>
+<pre><code class="language-text">main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
+    1 | import fixtures;
+      |        ^~~~~~~~
+</code></pre>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -22422,8 +22481,9 @@ hosts = ["codeberg", "github"]
       | ^~
 </code></pre>
 <ul>
-<li>Two dependencies with the same name, or a dependency named like a runtime
-module (<code>io</code>, <code>async</code>), which it would otherwise hide.</li>
+<li>Two dependencies with the same name (in one table, or in both
+<code>[dependencies]</code> and <code>[dev-dependencies]</code>), or a dependency named like a
+runtime module (<code>io</code>, <code>async</code>), which it would otherwise hide.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
@@ -22598,6 +22658,7 @@ to reclaim the space.</p>
 <code>pep.lock</code>. <code>pepper package</code> runs it with the same arguments:</p>
 <pre><code class="language-bash">pepper package add someone/geometry          # the newest version, imported as 'geometry'
 pepper package add other/json@2.x --name fast_json
+pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -22624,7 +22685,8 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
-<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency, by its name or its <code>owner/name</code></td></tr>
+<tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
+<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -22661,9 +22723,12 @@ branch. The name source code imports defaults to the repository's last part,
 with <code>-</code> and <code>.</code> turned into <code>_</code> (<code>other/json</code> adds <code>json</code>); <code>--name</code> gives
 another. A name already in <code>pep.toml</code>, or the name of a runtime module
 (<code>io</code>, <code>async</code>), is an error that suggests <code>--name</code>.</p>
+<p><code>--dev</code> adds it to <code>[dev-dependencies]</code> instead: only the project's tests
+and examples import it, and projects that depend on this one ignore it
+(see <a href="tools/projects.html#dev-dependencies">Projects: pep.toml</a>).</p>
 <h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
-<p>Removes the dependency with that name (or that <code>owner/name</code>) from
-<code>pep.toml</code>, and drops from <code>pep.lock</code> every package nothing needs any more.</p>
+<p>Removes the dependency or dev-dependency with that name (or that
+<code>owner/name</code>) from <code>pep.toml</code>, and drops from <code>pep.lock</code> every package nothing needs any more.</p>
 <h3 id="update-name"><a class="header" href="#update-name"><code>update [&lt;name&gt;...]</code></a></h3>
 <p>Moves the named dependencies (every one, when none is named) to the newest
 version their ranges allow, and says which other package holds one back
@@ -22690,6 +22755,8 @@ version = "1.1.0"
 commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
 sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
+<p>A package that only the project's <code>[dev-dependencies]</code> lead to has
+<code>dev = true</code>; one that a dependency leads to as well does not.</p>
 <p>The checksum covers the files of the commit as the host's archive of it
 holds them, not the archive's bytes, which a host may compress
 differently from one download to the next. It is the SHA-256 of every
@@ -22760,6 +22827,9 @@ names gets the revision it asks for, even outside the range a dependency
 declares, and <code>pep-package</code> says which requirement it overrode.</li>
 <li>A locked revision stays while it still satisfies every requirement;
 <code>update</code> is what moves it.</li>
+<li>The project's own <code>[dev-dependencies]</code> are resolved with its
+dependencies, as requirements of the project; a dependency's
+<code>[dev-dependencies]</code> are not part of the graph at all.</li>
 </ul>
 <h3 id="the-toolchain-a-package-needs"><a class="header" href="#the-toolchain-a-package-needs">The toolchain a package needs</a></h3>
 <p>A package states the oldest toolchain release that builds it with
@@ -23145,7 +23215,9 @@ with <code>pep-build --test</code> (found next to <code>pep-test</code>, else on
 in parallel. Each file keeps the scope it has in any program, so test
 files in a module's folder see each other's names, and a helper two of
 them declare must be <code>private</code> (see
-<a href="tools/../language/testing.html#where-tests-live">Unit tests</a>). A program that
+<a href="tools/../language/testing.html#where-tests-live">Unit tests</a>). A test build
+sees the project's <code>[dev-dependencies]</code> (see
+<a href="tools/projects.html#dev-dependencies">Projects: pep.toml</a>). A program that
 does not build is reported with the compiler's errors, and the other
 folders' tests still run.</li>
 <li><strong>Lists each program's tests</strong> with <code>--list</code> and keeps those that match

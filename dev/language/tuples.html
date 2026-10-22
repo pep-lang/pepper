@@ -267,6 +267,8 @@ main(): int {
     var counts = Array&lt;(word: String, count: int)&gt;();
     counts.append((word: "tuple", count: 2));
     assert(counts[0].count == 2, "a labeled element");
+    var found = Optional&lt;(line: int, column: int)&gt;.Value(p);
+    assert(found.value().column == 7, "through an enum case");
     return 0;
 }
 </code></pre>
@@ -278,11 +280,15 @@ converts to the other freely.</li>
 differ.</li>
 <li>Labels pass through a type argument: an element of an
 <code>Array&lt;(word: String, count: int)&gt;</code>, a <code>HashMap</code> value or the <code>value()</code> of a
-<code>(line: int, column: int)?</code> answers to its labels, though
+<code>(line: int, column: int)?</code> answers to its labels, and so does what a static
+method or an enum case called on the labeled type gives
+(<code>var p = Optional&lt;(line: int, column: int)&gt;.Value(at);</code>), though
 <code>Optional&lt;(line: int, column: int)&gt;</code> is the same type as
-<code>Optional&lt;(int, int)&gt;</code>. A variable typed by a static method's result, such
-as <code>var p = Optional&lt;(line: int, column: int)&gt;.Value(at);</code>, has no labels:
-declare its type to name the elements.</li>
+<code>Optional&lt;(int, int)&gt;</code>. A member takes back only the labels its declaration
+writes as a type parameter: a method of <code>Box&lt;(a: int, b: int)&gt;</code> declared to
+return <code>(int, int)</code> returns an unlabeled tuple. A generic function's result
+takes none: <code>identity&lt;(a: int, b: int)&gt;(p)</code> is unlabeled, so declare the
+variable's type to name its elements.</li>
 <li><code>var p = (line: 3, column: 7);</code> gives <code>p</code> the labeled type
 <code>(line: int, column: int)</code>. A labeled value takes at least two elements.</li>
 <li>A labeled value initializing or returned as a labeled type must use its

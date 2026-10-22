@@ -187,6 +187,7 @@
 <code>pep.lock</code>. <code>pepper package</code> runs it with the same arguments:</p>
 <pre><code class="language-bash">pepper package add someone/geometry          # the newest version, imported as 'geometry'
 pepper package add other/json@2.x --name fast_json
+pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
@@ -213,7 +214,8 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
-<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency, by its name or its <code>owner/name</code></td></tr>
+<tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
+<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -250,9 +252,12 @@ branch. The name source code imports defaults to the repository's last part,
 with <code>-</code> and <code>.</code> turned into <code>_</code> (<code>other/json</code> adds <code>json</code>); <code>--name</code> gives
 another. A name already in <code>pep.toml</code>, or the name of a runtime module
 (<code>io</code>, <code>async</code>), is an error that suggests <code>--name</code>.</p>
+<p><code>--dev</code> adds it to <code>[dev-dependencies]</code> instead: only the project's tests
+and examples import it, and projects that depend on this one ignore it
+(see <a href="projects.html#dev-dependencies">Projects: pep.toml</a>).</p>
 <h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
-<p>Removes the dependency with that name (or that <code>owner/name</code>) from
-<code>pep.toml</code>, and drops from <code>pep.lock</code> every package nothing needs any more.</p>
+<p>Removes the dependency or dev-dependency with that name (or that
+<code>owner/name</code>) from <code>pep.toml</code>, and drops from <code>pep.lock</code> every package nothing needs any more.</p>
 <h3 id="update-name"><a class="header" href="#update-name"><code>update [&lt;name&gt;...]</code></a></h3>
 <p>Moves the named dependencies (every one, when none is named) to the newest
 version their ranges allow, and says which other package holds one back
@@ -279,6 +284,8 @@ version = "1.1.0"
 commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
 sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
+<p>A package that only the project's <code>[dev-dependencies]</code> lead to has
+<code>dev = true</code>; one that a dependency leads to as well does not.</p>
 <p>The checksum covers the files of the commit as the host's archive of it
 holds them, not the archive's bytes, which a host may compress
 differently from one download to the next. It is the SHA-256 of every
@@ -349,6 +356,9 @@ names gets the revision it asks for, even outside the range a dependency
 declares, and <code>pep-package</code> says which requirement it overrode.</li>
 <li>A locked revision stays while it still satisfies every requirement;
 <code>update</code> is what moves it.</li>
+<li>The project's own <code>[dev-dependencies]</code> are resolved with its
+dependencies, as requirements of the project; a dependency's
+<code>[dev-dependencies]</code> are not part of the graph at all.</li>
 </ul>
 <h3 id="the-toolchain-a-package-needs"><a class="header" href="#the-toolchain-a-package-needs">The toolchain a package needs</a></h3>
 <p>A package states the oldest toolchain release that builds it with

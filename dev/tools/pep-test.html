@@ -241,7 +241,9 @@ with <code>pep-build --test</code> (found next to <code>pep-test</code>, else on
 in parallel. Each file keeps the scope it has in any program, so test
 files in a module's folder see each other's names, and a helper two of
 them declare must be <code>private</code> (see
-<a href="../language/testing.html#where-tests-live">Unit tests</a>). A program that
+<a href="../language/testing.html#where-tests-live">Unit tests</a>). A test build
+sees the project's <code>[dev-dependencies]</code> (see
+<a href="projects.html#dev-dependencies">Projects: pep.toml</a>). A program that
 does not build is reported with the compiler's errors, and the other
 folders' tests still run.</li>
 <li><strong>Lists each program's tests</strong> with <code>--list</code> and keeps those that match

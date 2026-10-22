@@ -211,6 +211,9 @@ json      = { gitlab = "group/pepper-json", version = "0.4.x" }
 fast_json = { github = "other/json", version = "2" }   # renamed: 'json' was taken
 http      = { codeberg = "someone/http", branch = "main" }
 shapes    = { path = "../shapes" }
+
+[dev-dependencies]
+fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
 </code></pre>
 <p>A package is a project other projects depend on: a repository (or folder)
 with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
@@ -309,7 +312,35 @@ pepper build
 <code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
 <code>--offline</code> builds with only what <code>.pep/deps</code> holds (<code>--frozen</code> is both;
 <code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
-<a href="pep-package.html#reproducible-builds">Reproducible builds</a>.</p>
+<a href="pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
+dev-dependencies as to the rest.</p>
+<h2 id="dev-dependencies"><a class="header" href="#dev-dependencies"><code>[dev-dependencies]</code></a></h2>
+<p>A package the project's tests and examples use but its code does not, such
+as a test helper, goes in <code>[dev-dependencies]</code>, written as in
+<code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[dev-dependencies]
+fixtures = { github = "someone/fixtures", version = "1" }
+</code></pre>
+<ul>
+<li><strong>Who sees them:</strong> a test build (<code>pepper test</code>, which builds with
+<code>pep-build --test</code>) and a build of a file in the project's <code>examples</code>
+folder, or a folder below it. Any other build of the project, such as
+<code>pepper build</code>, does not: an import of one there is an error that says to
+move it to <code>[dependencies]</code>.</li>
+<li><strong>Not part of the package:</strong> a project that depends on this package
+neither fetches nor resolves its dev-dependencies, so one that conflicts
+with the dependent's own dependencies does no harm.</li>
+<li><strong>Locked with the rest:</strong> <code>pep.lock</code> records them beside the other
+packages, each that only dev-dependencies lead to marked <code>dev = true</code>,
+and <code>pepper build</code> fetches them with the rest.</li>
+</ul>
+<p><code>pepper package add --dev</code> adds one, and <code>pepper package remove</code> removes one
+from either table (see <a href="pep-package.html#add-ownernamerange">pep-package</a>). A
+name may be in only one of the two tables.</p>
+<pre><code class="language-text">main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
+    1 | import fixtures;
+      |        ^~~~~~~~
+</code></pre>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -325,8 +356,9 @@ hosts = ["codeberg", "github"]
       | ^~
 </code></pre>
 <ul>
-<li>Two dependencies with the same name, or a dependency named like a runtime
-module (<code>io</code>, <code>async</code>), which it would otherwise hide.</li>
+<li>Two dependencies with the same name (in one table, or in both
+<code>[dependencies]</code> and <code>[dev-dependencies]</code>), or a dependency named like a
+runtime module (<code>io</code>, <code>async</code>), which it would otherwise hide.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
