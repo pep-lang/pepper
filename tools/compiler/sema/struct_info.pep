@@ -20,6 +20,8 @@ export struct StructInfo {
     ## A generic base's own type parameters, which its fields' and
     ## methods' types are written in.
     var params: Array<String> = Array<String>();
+    ## Its generic methods, as declared (`pass<T>`).
+    var generic_methods: FunctionDef[] = Array<FunctionDef>();
 
     construct() {}
 

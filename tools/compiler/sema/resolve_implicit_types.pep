@@ -1173,6 +1173,26 @@ struct _TypeScopes {
         return ty.as_written(labeled);
     }
 
+    # `ty`, the type of generic method call `node` written with labeled
+    # type arguments (`MethodCallExpression.labeled`), with their labels:
+    # the method's declared result with them put in.
+    _labeled_method_call(ty: TypeName, node: MethodCallExpression, current: TypeName?): TypeName {
+        if (!node.labeled.is_value()) {
+            return ty;
+        }
+        var labeled = node.labeled.value();
+        var key = type_of(node.this_value, current).without_pointers().to_string();
+        var methods = tables.generic_methods_of(key);
+        if (methods.is_value()) {
+            for (var (name, signature) in methods.value()) {
+                if (name == labeled.name) {
+                    return ty.labeled_through(labeled, signature.returns, param_names(signature.params));
+                }
+            }
+        }
+        return ty;
+    }
+
     # The table key and type parameters of `receiver`'s generic
     # declaration (`Box<T>` and `T` for `Box<(a: int, b: int)>`) when its
     # type arguments have labels to give back; most receivers have none.
@@ -1490,7 +1510,7 @@ struct _TypeScopes {
                 return current.is_value() ? current.value() : TypeName.auto();
             }
             MethodCall(node) => {
-                return _method_call_type(node, current);
+                return _labeled_method_call(_method_call_type(node, current), node, current);
             }
             ForIterator(source) => {
                 var source_type = type_of(source, current);
@@ -2245,13 +2265,14 @@ struct _ImplicitResolver {
                     continue;
                 }
                 var types = scopes.argument_types(node.args, current);
-                var type_args = node.method.contains("<") ?
-                    signature.complete(written.sub_types, types) :
-                    signature.infer(types);
+                # The written ones keep their labels for the result.
+                var leading = node.labeled.is_value() ? node.labeled.value().sub_types : written.sub_types;
+                var type_args = node.method.contains("<") ? signature.complete(leading, types) : signature.infer(types);
                 if (type_args.is_value()) {
                     var specialized = specialization(written.name, type_args.value());
                     if (node.method != specialized) {
                         node.method = specialized;
+                        node.labeled = _labeled_arguments(written.name, type_args.value());
                         scopes.edits += 1;
                     }
                 }
@@ -2303,7 +2324,9 @@ struct _ImplicitResolver {
             or scopes.value_callee(written.name, current).is_value()) {
             return;
         }
-        var type_args = signature.value().complete(written.sub_types, scopes.argument_types(call.args, current));
+        # The written ones keep their labels for the result.
+        var leading = call.labeled.is_value() ? call.labeled.value().sub_types : written.sub_types;
+        var type_args = signature.value().complete(leading, scopes.argument_types(call.args, current));
         if (type_args.is_value()) {
             var specialized = specialization(written.name, type_args.value());
             if (call.function != specialized) {

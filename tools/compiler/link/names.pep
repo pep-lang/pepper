@@ -2,9 +2,6 @@
 ## declarations apart, and the rule that decides when a generic function's
 ## parameters are types (a concrete override, `hash<int>`).
 
-import compiler.ast;
-import [Span, TypeName] from compiler.ast;
-
 ## Separates a name from the namespace of the file that declares it:
 ## `helper@io/file`.
 export const NAMESPACE_SEPARATOR = "@";
@@ -92,46 +89,6 @@ export is_concrete_override(params: String[]): bool {
 ## @returns true for a concrete override
 export is_override(params: String[]): bool {
     return params.count > 0 and is_concrete_override(params);
-}
-
-## Returns the type `text` spells (`Box<Pair<int, S>>`), every part at
-## `span`. An operator's name (`<=`) is a name.
-##
-## @param text the type's text
-## @param span where every part is
-## @returns the type
-export parse_type_string(text: String, span: Span): TypeName {
-    var found = text.find("<");
-    if (found <= 0 or !text.ends_with(">") or text.size <= found as ulong + 1) {
-        return TypeName(text, span);
-    }
-    ulong open = found as ulong;
-    var out = TypeName(text.substr_bytes(0, open), span);
-    var inner = text.substr_bytes(open + 1, text.size - open - 2);
-    if (inner.trim().is_empty) {
-        return out;
-    }
-    # Split on top-level commas only.
-    long depth = 0;
-    ulong start = 0;
-    ulong i = 0;
-    while (i < inner.size) {
-        var b = inner.byte_at(i);
-        if (b == '<') {
-            depth += 1;
-        } else if (b == '>') {
-            depth -= 1;
-        } else if (b == ',' and depth == 0) {
-            out.generic_types.append(parse_type_string(inner.substr_bytes(start, i - start).trim(), span));
-            start = i + 1;
-        }
-        i += 1;
-    }
-    var last = inner.substr_bytes(start, inner.size - start).trim();
-    if (!last.is_empty) {
-        out.generic_types.append(parse_type_string(last, span));
-    }
-    return out;
 }
 
 ## The linker spelling of a Pepper symbol. `main`, and a member name of

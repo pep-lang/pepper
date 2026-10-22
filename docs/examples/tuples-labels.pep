@@ -11,6 +11,11 @@ first_of<T>(items: Array<T>): T {
 struct Token {
     var text: String = "";
     var at: (line: int, column: int);
+
+    # So does a generic method.
+    pick<T>(items: Array<T>): T {
+        return items[0];
+    }
 }
 
 main(): int {
@@ -37,5 +42,6 @@ main(): int {
     var found = Optional<(line: int, column: int)>.Value(p);
     assert(found.value().column == 7, "through an enum case");
     assert(first_of(counts).count == 2, "through a generic function");
+    assert(t.pick<(word: String, count: int)>(counts).count == 2, "through a generic method");
     return 0;
 }
