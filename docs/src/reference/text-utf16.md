@@ -36,6 +36,11 @@ static encode(value: String, big_endian: bool = false): u8[]
 
 Returns the UTF-16 bytes of `value`.
 
+A `String` holds UTF-8, but one made from C memory may not be valid:
+each byte that does not start a valid UTF-8 sequence (see
+`Utf8.is_valid`) is encoded as U+FFFD, as `Utf8.decode_lossy` reads
+it, so the result is always valid UTF-16.
+
 **Parameters**
 - `value` — the text to encode
 - `big_endian` — whether each code unit's high byte comes first; false (little-endian) by default

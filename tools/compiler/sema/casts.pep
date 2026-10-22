@@ -114,7 +114,7 @@ struct _Casts {
         # A trait value may hold something else: its conversion can fail.
         var text = message.value();
         if (kind == CastKind.Static and trait_def(module.traits, from).is_value()) {
-            text = $"{text}; use 'as?' to convert a trait value, which gives '{constraint_spelled(ty)}?'";
+            text = $"{text}; use 'as?' to convert a trait value, which gives '{ty.display()}?'";
         }
         state.report(error_at(text, loc));
     }
@@ -302,8 +302,8 @@ export check_cast(from: TypeName, to: TypeName, kind: CastKind, state: PassState
     }
     var source = _category(from, state);
     var target = _category(to, state);
-    var from_text = constraint_spelled(from);
-    var to_text = constraint_spelled(to);
+    var from_text = from.display();
+    var to_text = to.display();
     if (kind == CastKind.Static) {
         if (_is_static(source, target)) {
             return ok;

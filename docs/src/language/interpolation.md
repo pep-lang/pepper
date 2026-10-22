@@ -184,7 +184,7 @@ main.pep:5:16: error: unexpected 'q' in format specification; expected '[[fill]a
 main.pep:5:19: error: cannot format a value of type 'String' as an integer
     5 |     print($"{name:x}");
       |                   ^
-main.pep:6:16: error: cannot format a value of type 'i32' with a precision; only 'float' and 'double' take one
+main.pep:6:16: error: cannot format a value of type 'int' with a precision; only 'float' and 'double' take one
     6 |     print($"{n:.2}");
       |                ^
 ```

@@ -265,7 +265,7 @@ _number_operator_error(state: PassState, m: FunctionDef, shown: String): Diagnos
         var at = operand.type_loc.is_none() ? m.loc : operand.type_loc;
         return Optional<Diagnostic>.Value(
             error_at(
-                $"operator '{name}' of '{shown}' cannot take an operand of type '{constraint_spelled(operand.ty)}': the built-in operator applies",
+                $"operator '{name}' of '{shown}' cannot take an operand of type '{operand.ty.display()}': the built-in operator applies",
                 at
             )
         );

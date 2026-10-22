@@ -28,7 +28,7 @@ short, and `pepper help build` runs it.
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
-| `--offline` | Fetch no dependency over the network; fail on one `.pep/deps` lacks | off, or `PEPPER_OFFLINE` |
+| `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
 | `--frozen` | Both `--locked` and `--offline` | off |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
@@ -51,6 +51,8 @@ short, and `pepper help build` runs it.
 | `-L <dir>` | Add a folder the linker searches | `PEPPER_LIBRARY_PATH` |
 | `--MSVC` | Use the MSVC linker (not ported) | off |
 | `-D <name>[=<value>]` | Define a build option | none |
+| `-F <names>`, `--features <names>` | Turn on features of the project's package | its `default` feature |
+| `--no-default-features` | Leave the project's package's `default` feature off | off |
 | `--no-runtime-checks=<list>` | Remove kinds of runtime check | every check on |
 | `--no-cache` | Do not use the build cache | the cache is used |
 | `--cache <dir>` | Folder for the build cache | `PEPPER_CACHE_DIR`, else `.pep/cache` (in a project's folder when building it) |
@@ -121,14 +123,17 @@ These make the fetch reproducible, for CI (see
   names that `pep.lock` does not list is an error before anything is
   fetched; otherwise the build runs `pep-package fetch --locked`, even when
   nothing is missing, so a changed range is caught too.
-- `--offline` (or `PEPPER_OFFLINE=1`) fetches nothing over the network: a
-  locked package `.pep/deps` lacks is an error that names it, and
-  `pep-package` runs with `--offline`.
+- `--offline` (or `PEPPER_OFFLINE=1`) fetches nothing over the network:
+  `pep-package` runs with `--offline`, taking a locked package `.pep/deps`
+  lacks from the [download cache](pep-package.md#the-download-cache), and
+  failing on one the cache lacks too. Without `pep-package`, a locked
+  package `.pep/deps` lacks is an error that names it.
 - `--frozen` is both.
 
 ```text
 $ pepper build --offline
---offline, and app/.pep/deps lacks github:someone/geometry 0582024b9cd7; run 'pepper package fetch' without --offline first
+fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 ```
 
 ### `-I <dir>`
@@ -551,6 +556,20 @@ See [Build options](../language/build-options.md).
 
 ```bash
 pepper build main.pep -D USE_ZLIB -D LOG_LEVEL=2
+```
+
+### `-F <names>`, `--features <names>`, `--no-default-features`
+
+`--features` turns on features of the project's package, from the
+`[features]` of its `pep.toml`: a comma-separated list (`--features
+tls,gzip`), or the option repeated. Its `default` feature is on unless
+`--no-default-features` is given. Each feature on defines the build option
+`<package>_<feature>` (`http_tls`), and turns on what it lists, across the
+whole dependency graph; see [Features](projects.md#features). A feature
+the package does not have is an error that lists those it has:
+
+```text
+unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
 ```
 
 ## Runtime checks

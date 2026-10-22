@@ -82,3 +82,30 @@ text_lossy_round_trips_release_everything() {
     var z = text.CodePage437.decode(text.CodePage437.encode_lossy(x));
     expect_equal(x, s);
 }
+
+# Checks that the String holding the bytes `values`, which are not valid
+# UTF-8, encodes (and so ends) to the text `replaced`, as
+# `Utf8.decode_lossy` reads the bytes: U+FFFD for each byte that starts no
+# sequence. A String made from C memory can hold such bytes
+# (pep-lang/pepper#165).
+_text_check_invalid(values: int[], replaced: String) {
+    var bytes = Array<u8>();
+    for (var value in values) {
+        bytes.append(value as u8);
+    }
+    var raw = String(unsafe_cast<__ptr<char>>(bytes._data), bytes.count);
+    expect_equal(text.Utf8.decode_lossy(bytes), replaced);
+    expect_equal(text.Utf16.decode(text.Utf16.encode(raw)).value(), replaced);
+    expect_equal(text.Utf16.decode(text.Utf16.encode(raw, true), true).value(), replaced);
+    expect_equal(text.Ascii.encode_lossy(raw).count, replaced.length);
+}
+
+[Test]
+text_encoding_invalid_utf8_ends_with_a_replacement_per_bad_byte() {
+    _text_check_invalid([97, 226, 130, 98], "a\u{FFFD}\u{FFFD}b");                       # truncated '€'
+    _text_check_invalid([226], "\u{FFFD}");                                              # truncated at the end
+    _text_check_invalid([97, 128, 98], "a\u{FFFD}b");                                    # lone continuation byte
+    _text_check_invalid([97, 192, 175, 98], "a\u{FFFD}\u{FFFD}b");                       # overlong '/'
+    _text_check_invalid([97, 237, 160, 128, 98], "a\u{FFFD}\u{FFFD}\u{FFFD}b");          # U+D800
+    _text_check_invalid([97, 244, 144, 128, 128], "a\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}");  # past U+10FFFF
+}

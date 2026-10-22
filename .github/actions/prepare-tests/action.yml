@@ -1,11 +1,18 @@
 # What scripts/pepper-tests.sh needs on a hosted runner, for CI's test-*
 # jobs (ci.yml): LLVM, the libraries the tests link, the toolchain to test
-# with, and PEPPER_TARGET_DIR. It restores the newest build cache an
-# earlier run saved for this OS and saves this run's after the job. With
-# `compiler` (ci.yml's `changes` job decides, and its summary says why),
-# the checkout's compiler is built, and PEPPER_COMPILER_DIR names it.
+# with, and PEPPER_TARGET_DIR and PEPPER_CACHE_DIR. With `compiler`
+# (ci.yml's `changes` job decides, and its summary says why), the
+# checkout's compiler is built, and PEPPER_COMPILER_DIR names it.
+#
+# Only the changed compiler's own build cache is carried between runs, a
+# few hundred MB, so a rerun, or a run whose compiler sources a run before
+# it built, takes seconds (scripts/ci-build-compiler.sh). The tests' builds start from
+# an empty cache: their keys name the compiler that builds them, new in
+# nearly every run (a PR's own, or the build of main a merge publishes),
+# so carrying them saved no time, while restoring and saving 0.5 to 2 GB
+# per OS cost minutes and evicted the other caches.
 name: Prepare the Pepper tests
-description: Provision a runner for scripts/pepper-tests.sh and restore its build cache
+description: Provision a runner for scripts/pepper-tests.sh
 
 inputs:
   compiler:
@@ -37,15 +44,14 @@ runs:
         path: ~/AppData/Local/pepper/cache
         key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
 
-    # apt and Homebrew serve the others in seconds.
-    - name: Provision LLVM
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.token }}
-      run: bash scripts/ci-provision-llvm.sh
+    # apt and Homebrew serve the others in seconds, Linux from a cache of
+    # apt's packages when it can (.github/actions/provision-llvm).
+    - uses: ./.github/actions/provision-llvm
+      with:
+        token: ${{ inputs.token }}
 
-    # Builds go beside the checkout, so the cache below can name one place
-    # on every OS. Every build shares one build cache (PEPPER_CACHE_DIR):
+    # Builds go beside the checkout. Every build shares one build cache
+    # (PEPPER_CACHE_DIR):
     # the test programs', the tools', and those the tools' tests make in
     # their own folders, which then take the runtime's units from it. The
     # tests of the cache itself name their own.
@@ -99,19 +105,29 @@ runs:
         PEPPER_EXPECT_COMMIT: ${{ inputs.expect-commit }}
       run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
-    # The build cache (PEPPER_CACHE_DIR, above), and the changed compiler
-    # with its build folder: restored from the newest
-    # earlier run for this OS, saved after the job. The cache keys on the
-    # compiler's path, size and time and on each source's path, all the
-    # same between runs on one OS.
-    - name: Restore and save the build cache
-      uses: actions/cache@v6
+    # The compiler's build cache is keyed on stage 0, the installed
+    # pep-build, by its contents (scripts/ci-build-compiler.sh names it so):
+    # the newest entry made with this stage 0. One made with another stage
+    # 0 has no key this build can use.
+    - name: Name stage 0
+      id: stage0
+      if: inputs.compiler == 'true'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        # Git's bash finds `pep-build` for `pep-build.exe`; git does not.
+        compiler="$PEPPER_COMPILER_DIR/pep-build"
+        [ ! -f "$compiler.exe" ] || compiler="$compiler.exe"
+        echo "hash=$(git hash-object "$compiler")" >> "$GITHUB_OUTPUT"
+    - name: Restore the compiler's build cache
+      id: restore
+      if: inputs.compiler == 'true'
+      uses: actions/cache/restore@v6
       with:
-        path: |
-          ${{ runner.workspace }}/pepper-cache
-          ${{ runner.workspace }}/target-test/compiler
-        key: pepper-tests-${{ runner.os }}-${{ github.sha }}-${{ github.run_id }}
-        restore-keys: pepper-tests-${{ runner.os }}-
+        path: ${{ runner.workspace }}/target-test/compiler
+        key: pepper-compiler-${{ runner.os }}-${{ steps.stage0.outputs.hash }}-${{ github.run_id }}
+        restore-keys: |
+          pepper-compiler-${{ runner.os }}-${{ steps.stage0.outputs.hash }}-
 
     # A change to the compiler is tested with that compiler, built with
     # the installed one (scripts/ci-build-compiler.sh, the release's stage
@@ -119,16 +135,14 @@ runs:
     - name: Build the changed compiler
       if: inputs.compiler == 'true'
       shell: bash
-      run: bash -euxo pipefail scripts/ci-build-compiler.sh
+      run: bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- bash -euxo pipefail scripts/ci-build-compiler.sh
 
-    # The cache keys on the compiler's time too, and each job installs the
-    # toolchain afresh. A time taken from the compiler's contents is the same
-    # in every job, and differs between compilers. Perl, since macOS's touch
-    # takes no `-d @seconds` and has no sha256sum.
-    - name: Give the compiler a time from its contents
-      shell: bash
-      run: |
-        set -euxo pipefail
-        compiler="$PEPPER_COMPILER_DIR/pep-build"
-        [ -f "$compiler" ] || compiler="$compiler.exe"
-        perl -MDigest::SHA -e '$f = shift; $t = hex(substr(Digest::SHA->new(256)->addfile($f, "b")->hexdigest, 0, 7)); utime($t, $t, $f) or die "$f: $!\n"' "$compiler"
+    # Saved by every run, pull requests' too, since it is small: the
+    # repository keeps 10 GB of caches, which the tests' caches used to fill.
+    # Not after a rerun, which restored this very key.
+    - name: Save the compiler's build cache
+      if: inputs.compiler == 'true' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.workspace }}/target-test/compiler
+        key: pepper-compiler-${{ runner.os }}-${{ steps.stage0.outputs.hash }}-${{ github.run_id }}

@@ -8,12 +8,15 @@ pepper package add someone/geometry          # the newest version, imported as '
 pepper package add other/json@2.x --name fast_json
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
+pepper package add --optional --features simd someone/zlib  # only a feature turns it on
 pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v<version> and push the tag
+pepper package cache info                    # the download cache every project shares
+pepper package cache clean
 ```
 
 ```text
@@ -31,6 +34,8 @@ so a project with a `pep.lock` builds on a machine with no git.
 
 `pepper build` fetches on its own what `pep.lock` lists and `.pep/deps`
 lacks, so a fresh clone of a project builds with `pepper build` alone.
+Every package is downloaded once per machine, into a
+[download cache](#the-download-cache) that all projects share.
 
 ## Options and commands
 
@@ -38,7 +43,7 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | --- | --- |
 | `-C <dir>`, `--directory <dir>` | Works on the project at or above `<dir>` instead of the current folder |
 | `--locked` | Fails, leaving `pep.lock` as it is, when the command would change it (see [Reproducible builds](#reproducible-builds)) |
-| `--offline` | Uses only what `.pep/deps` holds, and fails on anything that needs the network |
+| `--offline` | Uses only what `.pep/deps` and the [download cache](#the-download-cache) hold, and fails on anything that needs the network |
 | `--frozen` | Both `--locked` and `--offline` |
 | `fetch` | Fetches what `pep.lock` lists, and resolves what `pep.toml` changed since `pep.lock` was written |
 | `fetch <source>...` | Fetches only those locked packages (`github:owner/name`), at their locked commits, resolving nothing |
@@ -46,11 +51,16 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
 | `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use |
+| `add ... --optional` | Marks it `optional = true`: a build uses it only when a feature turns it on |
+| `add ... --features <names>`, `-F <names>` | The dependency's features to turn on, written to its `features`: a comma-separated list, or repeat the option |
+| `add ... --no-default-features` | Leaves the dependency's `default` feature off: `default-features = false` |
 | `remove <name>` | Removes a dependency or dev-dependency, by its name or its `owner/name` |
 | `update [<name>...]` | Moves dependencies to the newest versions their ranges allow; every one when none is named |
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
 | `publish` | Checks the package and runs its tests, then tags its version and pushes the tag (see [`publish`](#publish)) |
 | `publish --dry-run` | Checks and tests, but neither tags nor pushes |
+| `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
+| `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
 | `-V`, `--version` | Prints the version |
 
@@ -113,6 +123,12 @@ what `[Target(...)]` takes (`OS(Windows)`, `OS(Linux) && Arch(x64)`; see
 [Platform selection](../language/platform-selection.md)); quote it for the
 shell. It cannot be given with `--dev`.
 
+`--optional`, `--features <names>` and `--no-default-features` write the
+entry's `optional = true`, `features = [...]` and `default-features =
+false` (see [Features](projects.md#features)). A dev-dependency cannot be
+optional. The package's features are not checked until a build turns
+them on.
+
 ### `remove <name>`
 
 Removes the dependency with that name (or that `owner/name`) from
@@ -165,8 +181,9 @@ First it checks, and lists every check that fails at once:
   resolve it with its other packages. A dev-dependency may be anything,
   since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]` and
-  `[target]` tables need 0.11.0.
+  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`
+  and `[features]` tables, and a dependency's `optional`, `features` and
+  `default-features`, need 0.11.0.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
@@ -208,6 +225,11 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 
 A package that only the project's `[dev-dependencies]` lead to has
 `dev = true`; one that a dependency leads to as well does not.
+
+Features do not change the lock: an optional dependency is resolved,
+locked and fetched like any other, whether or not a build turns it on, so
+`pep.lock` is the same whichever `--features` a build gives (see
+[Features](projects.md#features)).
 
 `pep.lock` lists every platform's packages, so it is the same whichever
 system writes it, as `Cargo.lock` is: a project locked on Linux builds on
@@ -259,7 +281,9 @@ CI builds want to fail rather than quietly change what they build:
   `pep.toml`; it may still check packages out into `.pep/deps`.
 - **`--offline`** (or `PEPPER_OFFLINE=1`): nothing is cloned, fetched,
   downloaded or looked up. A package `.pep/deps` already holds at its
-  locked commit is used; one it lacks is an error, and so is anything that
+  locked commit is used, or else one the
+  [download cache](#the-download-cache) holds; one neither holds is an
+  error, and so is anything that
   must read which versions a repository offers (`add`, `update`, or a
   `pep.toml` change `pep.lock` does not cover).
 - **`--frozen`**: both.
@@ -271,16 +295,55 @@ pep-package: error: pep.lock would change, and --locked keeps it as it is:
 run the command without --locked (or PEPPER_LOCKED), then commit pep.lock
 
 $ pepper package fetch --offline
-pep-package: error: cannot fetch github:someone/geometry: --offline, and .pep/deps/github.com/someone/geometry does not hold the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither .pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 ```
 
 `pepper build` and `pepper test` take the same three options for the
 fetch they do on their own (see [The compiler: pep-build](pep-build.md)).
 
+## The download cache
+
+Each package is downloaded once per machine, into a cache in the Pepper
+home that every project shares, as Cargo's `~/.cargo/registry` and Go's
+module cache are: `cache/packages` in the home `PEPPER_HOME` names, else
+`%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere (see
+[Toolchains: pep-install](pep-install.md)). It holds, for each package,
+
+- `<host>/<owner>/<name>.git`: a bare git repository of every commit any
+  project has fetched, fetched from the host only when it lacks the commit
+  a project needs;
+- `<host>/<owner>/<name>/<commit>.tar.gz`: each archive fetched without
+  git (see [Fetching without git](#fetching-without-git)).
+
+A project's `.pep/deps/<host>/<owner>/<name>` is a clone of the cache's
+repository (its `origin` is still the host's address). Git hard-links
+the objects of a clone from a folder on the same drive, so it takes
+little space, and copies them from another drive. A clone is complete on
+its own, so deleting the cache never breaks a project: it builds from
+what `.pep/deps` holds, and the next fetch that needs a commit the
+project lacks downloads it into the cache again. Checking out a cached
+package still checks its files against `pep.lock`'s `sha256`.
+
+Processes take turns at a package: each holds a lock on
+`<host>/<owner>/<name>.lock` while it fetches it, so projects fetching
+the same package at once each wait for the other and fetch it once.
+`cache clean` takes each package's lock before it removes the package,
+and keeps one a fetch is using, saying so; the lock files themselves stay.
+
+```text
+$ pepper package cache info
+/home/me/.pepper/cache/packages
+github.com/other/numbers
+github.com/someone/geometry
+$ pepper package cache clean
+pep-package: removed 2 packages from /home/me/.pepper/cache/packages
+```
+
 ## Fetching without git
 
 When git is not on the `PATH`, `pep-package` fetches each commit
-`pep.lock` pins as the host's archive of it, over HTTPS, checks its files
+`pep.lock` pins as the host's archive of it, over HTTPS, into the
+[download cache](#the-download-cache) (once per machine), checks its files
 against the lock's `sha256` and unpacks it, without its top-level folder,
 into `.pep/deps`:
 
@@ -352,7 +415,7 @@ them out, each once per run.
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
 | `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
 | `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |
-| `PEPPER_HOME` | The Pepper home whose `pepper` [`publish`](#publish) runs the tests with, as for `pep-install` |
+| `PEPPER_HOME` | The Pepper home that holds the [download cache](#the-download-cache), and whose `pepper` [`publish`](#publish) runs the tests with, as for `pep-install` |
 | `PEPPER_RUNTIME` | The runtime folder whose modules a dependency may not be named like, as for the compiler |
 
 ## Building it

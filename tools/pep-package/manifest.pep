@@ -1,7 +1,9 @@
 # pep.toml as the package manager reads it: the package's name, the oldest
 # toolchain it builds with, and its dependencies, dev-dependencies and
 # `[target.'<condition>'.dependencies]`. The compiler checks the rest of the
-# file, the conditions included, when it builds.
+# file, the conditions and `[features]` included, when it builds. Features
+# do not change what is locked: an optional dependency is resolved and
+# locked like any other.
 
 import [File, Path] from io;
 import toml;
@@ -30,8 +32,13 @@ export struct Requirement {
     # The `[target.'<condition>']` it is under (`OS(Windows)`): the
     # platforms that use it. Empty for every platform.
     var target: String = "";
+    # Which of `optional`, `features` and `default-features` it sets, as
+    # pep.toml writes them, which only newer toolchains read.
+    var feature_keys: Array<String> = __null;
 
-    construct() {}
+    construct() {
+        feature_keys = Array<String>();
+    }
 
     # Where the package comes from, which identifies it in the whole
     # graph: `github:owner/name` (or `path:<folder>`).
@@ -198,8 +205,13 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
 # reads it. A package using one sets `minimum_toolchain` to that release
 # or later, which `publish` checks.
 export newer_manifest_features(): Array<(String, String)> {
-    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0")];
+    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0")];
 }
+
+# The first release that reads a dependency's `optional`, `features` and
+# `default-features`, which `newer_manifest_features` cannot name: they sit
+# under each dependency's own key.
+export const DEPENDENCY_FEATURES_RELEASE = "0.11.0";
 
 # One `[dependencies]` or `[dev-dependencies]` entry.
 _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement> {
@@ -210,6 +222,11 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
     var requirement = Requirement();
     requirement.name = key;
     for (var (field, field_value) in fields.value()) {
+        # The compiler checks these.
+        if (field == "optional" or field == "features" or field == "default-features") {
+            requirement.feature_keys.append(field);
+            continue;
+        }
         var text = field_value.as_string();
         if (text.is_empty()) {
             return Result<Requirement>.Err($"{path.to_string()}: '{field}' of dependency '{key}' must be a string");

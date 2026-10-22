@@ -278,7 +278,7 @@ main.pep:2:13: error: cannot initialize variable 'x' of type 'int' with a value 
 ```
 
 ```text
-main.pep:3:12: error: cannot pass a value of type 'i32' as argument 1 of 'g', which has type 'String'
+main.pep:3:12: error: cannot pass a value of type 'int' as argument 1 of 'g', which has type 'String'
     3 |     return g(5);
       |            ^
 ```

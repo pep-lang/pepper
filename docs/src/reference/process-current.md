@@ -11,8 +11,8 @@ names the deprecated prelude functions still hold:
 - `arguments(): Array<String>` returns the program's command-line
   arguments: element 0 is the program as it was started, and the
   arguments typed after it follow in order. `main` receives the same array
-  when it is declared `main(args: String[]): int`. On Windows they are in
-  the process's ANSI code page.
+  when it is declared `main(args: String[]): int`. On Windows they are
+  read as UTF-16 and converted to valid UTF-8.
 - `exit(code: int)` ends the program at once with status `code` (only its
   low 8 bits reach a POSIX parent), as C's `exit` does: the handlers
   registered with C's `atexit` run, then standard output and the other C

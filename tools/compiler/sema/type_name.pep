@@ -45,6 +45,93 @@ export is_integral_name(name: String): bool {
     }
 }
 
+## Returns the sized name of a number type (`i32` for `int`), and any
+## other name unchanged: `common_number_name` the other way, so the two
+## change together.
+##
+## @param name the type's name
+## @returns the sized name
+export sized_number_name(name: String): String {
+    match (name) {
+        "char" => {
+            return "i8";
+        }
+        "byte" => {
+            return "u8";
+        }
+        "short" => {
+            return "i16";
+        }
+        "ushort" => {
+            return "u16";
+        }
+        "int" => {
+            return "i32";
+        }
+        "uint" => {
+            return "u32";
+        }
+        "long" => {
+            return "i64";
+        }
+        "ulong" => {
+            return "u64";
+        }
+        "float" => {
+            return "f32";
+        }
+        "double" => {
+            return "f64";
+        }
+        else => {
+            return name;
+        }
+    }
+}
+
+## Returns the name programs commonly write for a number type sema spells
+## by width (`int` for `i32`), and any other name unchanged.
+##
+## @param name the type's name
+## @returns the common name
+export common_number_name(name: String): String {
+    match (name) {
+        "i8" => {
+            return "char";
+        }
+        "u8" => {
+            return "byte";
+        }
+        "i16" => {
+            return "short";
+        }
+        "u16" => {
+            return "ushort";
+        }
+        "i32" => {
+            return "int";
+        }
+        "u32" => {
+            return "uint";
+        }
+        "i64" => {
+            return "long";
+        }
+        "u64" => {
+            return "ulong";
+        }
+        "f32" => {
+            return "float";
+        }
+        "f64" => {
+            return "double";
+        }
+        else => {
+            return name;
+        }
+    }
+}
+
 export extend TypeName {
     ## Returns the type named `name`, with no arguments.
     ##
@@ -370,15 +457,29 @@ export extend TypeName {
 
     ## Returns the type as the programmer writes it, for error messages:
     ## `(int) => bool` for function types, `(a: int, b: int)` for tuples,
-    ## `Name<args>` otherwise.
+    ## `Name<args>` otherwise, and each number type by its common name
+    ## (`int` for the `i32` an integer literal is typed).
     ##
     ## @returns the text
     display(): String {
+        return _display(true);
+    }
+
+    ## Returns the type as `display` does, but with each number type spelled
+    ## as sema stores it (`u16` stays `u16`): for `reflect.name`, which
+    ## gives a type's name as written.
+    ##
+    ## @returns the text
+    display_stored(): String {
+        return _display(false);
+    }
+
+    _display(common: bool): String {
         if (is_function_type() or is_extern_function_type()) {
             var params = Array<String>();
             ulong i = 1;
             while (i < sub_types.count) {
-                params.append(sub_types[i].display());
+                params.append(sub_types[i]._display(common));
                 i += 1;
             }
             var shared = "";
@@ -387,16 +488,16 @@ export extend TypeName {
             } else if (is_extern_function_type()) {
                 shared = "extern ";
             }
-            return $"{shared}({", ".join(params)}) => {sub_types[0].display()}";
+            return $"{shared}({", ".join(params)}) => {sub_types[0]._display(common)}";
         }
         if (is_tuple()) {
             var elements = Array<String>();
             ulong i = 0;
             while (i < sub_types.count) {
                 if (i < labels.count and !labels[i].is_empty) {
-                    elements.append($"{labels[i]}: {sub_types[i].display()}");
+                    elements.append($"{labels[i]}: {sub_types[i]._display(common)}");
                 } else {
-                    elements.append(sub_types[i].display());
+                    elements.append(sub_types[i]._display(common));
                 }
                 i += 1;
             }
@@ -405,11 +506,11 @@ export extend TypeName {
         if (is_generic()) {
             var arguments = Array<String>();
             for (var t in sub_types) {
-                arguments.append(t.display());
+                arguments.append(t._display(common));
             }
             return $"{name}<{", ".join(arguments)}>";
         }
-        return name;
+        return common ? common_number_name(name) : name;
     }
 
     ## Returns the type's spelling in sema: `name<sub, sub>`, or `name`.

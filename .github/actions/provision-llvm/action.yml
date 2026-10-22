@@ -1,0 +1,58 @@
+# LLVM 20 for a CI job (scripts/ci-provision-llvm.sh), with Linux's apt
+# packages carried between runs: apt-get downloads about 89 MB of them from
+# the runner's Ubuntu mirror, normally in seconds, but a slow mirror once
+# took longer than the step's 15 minutes (#194). The cache holds the .deb
+# files the last miss downloaded, keyed on the setup script (which pins the
+# LLVM) and the image's Ubuntu release, and the script hands them to apt so
+# it downloads none it has. The key ends in the run's id and is restored by
+# prefix, so the newest entry wins and a set the image has moved past is
+# replaced: the script refills the folder when apt had to download and says
+# so, and only then is it saved. Only main saves it, so pull requests cannot fill
+# the repository's 10 GB of caches with copies.
+#
+# The caller bounds it with timeout-minutes; a composite step cannot.
+name: Provision LLVM
+description: Provision LLVM with scripts/ci-provision-llvm.sh, caching Linux's apt packages
+
+inputs:
+  token:
+    description: a GitHub token, for the release downloads on Windows
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Name the Ubuntu release
+      id: ubuntu
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        . /etc/os-release
+        echo "version=$VERSION_ID" >> "$GITHUB_OUTPUT"
+
+    - name: Restore LLVM's apt packages
+      id: restore
+      if: runner.os == 'Linux'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/llvm-debs
+        key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}
+        restore-keys: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-
+
+    # Writes filled=true when it (re)filled the folder: on a miss, or when
+    # apt had to download what the restored set lacked.
+    - name: Provision LLVM
+      id: provision
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PEPPER_CI_LLVM_DEBS: ${{ runner.os == 'Linux' && format('{0}/llvm-debs', runner.temp) || '' }}
+      run: bash scripts/ci-provision-llvm.sh
+
+    - name: Save LLVM's apt packages
+      if: runner.os == 'Linux' && github.ref == 'refs/heads/main' && steps.provision.outputs.filled == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/llvm-debs
+        key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}

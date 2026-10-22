@@ -8,7 +8,7 @@
 # git is missing.
 
 import async;
-import [Directory, File, Path] from io;
+import [Directory, File, OpenOptions, Path] from io;
 import [system_name] from os;
 import process;
 import [serve_folder] from tool_testing.server;
@@ -66,11 +66,13 @@ struct Hosts {
     # The command that runs `program` with `arguments` in `dir`, with this
     # stand-in for github.com, and GitLab and Codeberg in folders that do not
     # exist, so a lookup never leaves the machine (`add` asks every host).
+    # Its Pepper home, which holds the download cache, is in this folder.
     command(program: String, dir: Path, arguments: Array<String>): process.Command {
         return process
             .Command(program)
             .arguments(arguments)
             .working_directory(dir)
+            .environment("PEPPER_HOME", home().to_string())
             .environment("PEPPER_PACKAGE_GITHUB_URL", url)
             .environment("PEPPER_PACKAGE_GITLAB_URL", url + "/gitlab")
             .environment("PEPPER_PACKAGE_CODEBERG_URL", url + "/codeberg");
@@ -81,11 +83,11 @@ struct Hosts {
         return run(command(tool("pep-package").to_string(), dir, arguments));
     }
 
-    # Builds the project in `dir` as `pep-build` with no file does, which
-    # fetches what it lacks, and returns what the program prints, or the
-    # build's output when it fails.
-    build_and_run(dir: Path): String {
-        var built = run(command(tool("pep-build").to_string(), dir, Array<String>()));
+    # Builds the project in `dir` as `pep-build` with no file (and
+    # `arguments`) does, which fetches what it lacks, and returns what the
+    # program prints, or the build's output when it fails.
+    build_and_run(dir: Path, arguments: Array<String> = Array<String>()): String {
+        var built = run(command(tool("pep-build").to_string(), dir, arguments));
         if (!built.status.success()) {
             return $"the build failed:\n{built.stdout}{built.stderr}";
         }
@@ -98,6 +100,16 @@ struct Hosts {
             process.Command("git").arguments(["rev-parse", revision + "^{commit}"]).working_directory(bare(name))
         );
         return output.stdout.trim();
+    }
+
+    # The Pepper home the tools run with.
+    home(): Path {
+        return folder.path.join("home");
+    }
+
+    # The download cache in `home()`.
+    cache(): Path {
+        return home().join("cache").join("packages");
     }
 
     # The bare repository `name`.
@@ -390,6 +402,47 @@ target_dependencies_are_locked_for_every_platform_and_fetched_for_one() {
 }
 
 [Test]
+optional_dependencies_are_locked_and_built_only_with_their_feature() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("optional");
+    var project = Project("optional", "");
+    expect_exit(
+        hosts.package(
+            project.dir, ["add", "--optional", "--features", "fast", "--no-default-features", "other/numbers@1"]
+        ),
+        0
+    );
+    expect_contains(
+        project.manifest(),
+        "numbers = { github = \"other/numbers\", version = \"1\", optional = true, features = [\"fast\"], default-features = false }\n"
+    );
+    # Locked as any dependency is, whichever features a build turns on.
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    var both = hosts.package(project.dir, ["add", "--dev", "--optional", "someone/geometry"]);
+    expect_exit(both, 1);
+    expect_contains(both.stderr, "a dev-dependency cannot be optional; give --dev or --optional");
+
+    # A feature that turns it on: only a build asking for it imports it.
+    write_file(
+        project.dir.join("pep.toml"),
+        "[package]\nname = \"app\"\n\n[dependencies]\n"
+            + "numbers = { github = \"other/numbers\", version = \"1\", optional = true }\n"
+            + "\n[features]\ncount = [\"dep:numbers\"]\n"
+    );
+    write_file(
+        project.dir.join("main.pep"),
+        "[Target(BuildOption(app_count))]\nimport numbers;\n\n"
+            + "[Target(BuildOption(app_count))]\ndescribe(): String {\n    return numbers.numbers_version();\n}\n\n"
+            + "[Target(!BuildOption(app_count))]\ndescribe(): String {\n    return \"off\";\n}\n\n"
+            + "main(): int {\n    print(describe());\n    return 0;\n}\n"
+    );
+    expect_equal(hosts.build_and_run(project.dir), "off\n");
+    expect_equal(hosts.build_and_run(project.dir, ["--features", "count"]), "1.3.1\n");
+}
+
+[Test]
 builds_fetch_what_pep_lock_lists() {
     if (!has_git()) {
         return;
@@ -609,10 +662,15 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
             expect_exit(package_without_git(hosts, project.dir, ["fetch"], server), 0);
             # Offline with git, the unpacked archives serve too.
             expect_exit(hosts.package(project.dir, ["fetch", "--offline"]), 0);
+            # Offline without git, the archives in the download cache do.
+            remove_tree(project.dir.join(".pep"));
+            expect_exit(package_without_git(hosts, project.dir, ["fetch", "--offline"], server), 0);
+            expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
 
             # A tampered archive: 1.3.1's commit serves 2.0.0's files.
             write_archive(hosts, archives, "other/numbers", "v2.0.0", numbers);
             remove_tree(project.dir.join(".pep"));
+            remove_tree(hosts.cache());
             var tampered = package_without_git(hosts, project.dir, ["fetch"], server);
             expect_exit(tampered, 1);
             var expected = locked.split("source = \"github:other/numbers\"")[1].split("sha256 = \"")[1].split("\"")[0];
@@ -702,22 +760,94 @@ an_unfetched_dependency_fails_under_offline() {
     var head = run(process.Command("git").arguments(["rev-parse", "HEAD"]).working_directory(geometry));
     expect_equal(head.stdout.trim(), hosts.commit_of("someone/geometry", "v1.1.0"));
 
+    # Without .pep, the download cache serves, to pep-build too.
     remove_tree(project.dir.join(".pep"));
+    expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
+    remove_tree(project.dir.join(".pep"));
+    expect_exit(unreachable("pep-build", ["--offline"]), 0);
+
+    remove_tree(project.dir.join(".pep"));
+    remove_tree(hosts.cache());
     var refused = unreachable("pep-package", ["fetch", "--offline"]);
     expect_exit(refused, 1);
-    expect_contains(refused.stderr, "--offline, and ");
-    expect_contains(refused.stderr, " does not hold the commit ");
+    expect_contains(refused.stderr, "--offline, and neither ");
+    expect_contains(refused.stderr, " nor the package cache holds the commit ");
     expect_contains(refused.stderr, "; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first");
     expect_false(refused.stderr.contains("git clone"));
     var built = unreachable("pep-build", ["--offline"]);
     expect_exit(built, 1);
-    expect_contains(built.stderr, "lacks github:other/numbers ");
+    expect_contains(built.stderr, " nor the package cache holds the commit ");
     expect_false(project.dir.join(".pep").join("deps").exists());
     var added = unreachable("pep-package", ["add", "other/numbers", "--name", "more", "--offline"]);
     expect_exit(added, 1);
     expect_contains(
         added.stderr, "--offline, and adding 'other/numbers' reads which versions it offers over the network"
     );
+}
+
+[Test]
+projects_share_the_download_cache() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("cache");
+    var first = Project("cache_first", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(first.dir, ["fetch"]), 0);
+    var info = hosts.package(first.dir, ["cache", "info"]);
+    expect_exit(info, 0);
+    expect_contains(info.stdout, "\ngithub.com/other/numbers\ngithub.com/someone/geometry\n");
+
+    # A second project with the same lock fetches from the cache, without
+    # the host.
+    var second = Project("cache_second", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    write_file(second.dir.join("pep.lock"), first.lock());
+    var unreachable = (dir: Path, arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool("pep-package").to_string(), dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    expect_exit(unreachable(second.dir, ["fetch", "github:someone/geometry", "github:other/numbers"]), 0);
+    expect_equal(hosts.build_and_run(second.dir), "1.1.0 1.3.1\n");
+
+    # `clean` keeps a package whose lock a fetch holds, and says so.
+    var numbers = hosts.cache().join("github.com").join("other").join("numbers");
+    var geometry = hosts.cache().join("github.com").join("someone").join("geometry");
+    var lock = OpenOptions().write(true).open(Path(numbers.to_string() + ".lock")).value();
+    expect_true(lock.lock().is_ok());
+    var kept = hosts.package(first.dir, ["cache", "clean"]);
+    expect_exit(kept, 0);
+    expect_contains(kept.stderr, "kept github.com/other/numbers: a fetch holds its lock");
+    expect_true(Path(numbers.to_string() + ".git").is_directory());
+    expect_false(Path(geometry.to_string() + ".git").exists());
+    lock.close();
+
+    # A project's checkout does not need the cache once it is made.
+    expect_exit(hosts.package(first.dir, ["cache", "clean"]), 0);
+    expect_false(Path(numbers.to_string() + ".git").exists());
+    expect_equal(hosts.package(first.dir, ["cache", "info"]).stdout, hosts.cache().to_string() + "\n");
+    expect_equal(hosts.build_and_run(first.dir), "1.1.0 1.3.1\n");
+
+    # Two projects fetching at once take turns at the cache.
+    var projects = Array<Project>();
+    var children = Array<process.Child>();
+    for (var name in ["cache_one", "cache_two"]) {
+        var project = Project(name, "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+        projects.append(project);
+        write_file(project.dir.join("pep.lock"), first.lock());
+        children.append(
+            hosts
+                .command(tool("pep-package").to_string(), project.dir, ["fetch"])
+                .stdout(process.Stream.Null)
+                .stderr(process.Stream.Null)
+                .spawn()
+                .value()
+        );
+    }
+    for (var child in children) {
+        expect_true(child.wait().value().success());
+    }
 }
 
 [Test]
@@ -929,6 +1059,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
         manifest("1.0.0", "")
             + "\n[dependencies]\nnumbers = { github = \"other/numbers\", branch = \"main\" }\n"
             + "near = { path = \"../near\", version = \"1\" }\n"
+            + "zlib = { github = \"someone/zlib\", version = \"1\", optional = true }\n"
+            + "\n[features]\ngzip = [\"dep:zlib\"]\n"
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
             + "\n[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
     );
@@ -949,6 +1081,14 @@ publish_checks_tests_tags_and_pushes_the_version() {
     expect_contains(
         refused.stderr,
         "\n  'target' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  'features' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  'optional' of dependency 'zlib' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
     );
     expect_false(refused.stderr.contains("winapi"));
     expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");
