@@ -624,9 +624,11 @@ struct _Evaluator {
                 Null => {
                     usable = false;
                 }
-                # Build options read as `long`s.
-                Unsigned(_) => {
-                    usable = false;
+                Unsigned(n) => {
+                    return _fail_at(
+                        $"build option '{name.value()}' cannot be compared with {n}: a build option is a 'long'",
+                        literal.span()
+                    );
                 }
                 else => {}
             }

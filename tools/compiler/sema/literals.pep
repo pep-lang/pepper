@@ -82,12 +82,14 @@ export make_unsigned_literal(value: ulong, loc: Loc): Expression {
 ## @returns the cast, or none
 export unsigned_literal(e: Expression): CastExpression? {
     if (e is Cast(cast)) {
-        # Only these synthesized casts of a literal to `ulong` are located.
-        if (cast.kind == CastKind.Synthesized
-            and !cast.loc.is_none()
-            and cast.expr is IntLiteral(_)
-            and cast.ty.to_string() == "ulong") {
-            return Optional<CastExpression>.Value(cast);
+        # Only these synthesized casts to `ulong` are located, and their
+        # bits, 2^63 and up, read as a negative `long`.
+        if (cast.kind == CastKind.Synthesized and !cast.loc.is_none() and cast.ty.to_string() == "ulong") {
+            if (cast.expr is IntLiteral(bits)) {
+                if (bits < 0) {
+                    return Optional<CastExpression>.Value(cast);
+                }
+            }
         }
     }
     return Optional<CastExpression>.Empty;

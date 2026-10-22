@@ -71,6 +71,12 @@ export convert_to_traits(module: Module, state: PassState) {
             }
         }
     }
+    # shortcut: a program with no traits (only one built without the
+    # runtime) skips this pass, so its decimal literals past `long`'s range
+    # go unchecked; walk it for them if such programs ever matter.
+    if (module.traits.count == 0 and implicit.count == 0) {
+        return;
+    }
     var converter = _TraitConversions(module, state, implicit);
     converter.check_covariant_returns(module);
     converter.current = Optional<TypeName>.Empty;

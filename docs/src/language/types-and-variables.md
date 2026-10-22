@@ -44,15 +44,20 @@ C: a `u16` holding 65535 becomes 0 when you add 1 and store the result, and
 panics instead (see [Integer overflow](#integer-overflow)).
 
 A decimal literal larger than the largest `ulong`, or a hexadecimal literal with
-more than 64 bits, is an error, and so is a decimal literal stored where its
-value does not fit, past `long`'s range:
+more than 64 bits, is an error:
 
 ```text
 main.pep:2:13: error: integer literal is too large to be represented in a 64-bit integer
     2 |     var f = 99999999999999999999;
       |             ^~~~~~~~~~~~~~~~~~~~
-main.pep:3:14: error: integer literal is too large for type 'long'
-    3 |     long g = 9223372036854775808;
+```
+
+So is a decimal literal past `long`'s range stored in an integer type other than
+`ulong`:
+
+```text
+main.pep:2:14: error: integer literal is too large for type 'long'
+    2 |     long g = 9223372036854775808;
       |              ^~~~~~~~~~~~~~~~~~~
 ```
 

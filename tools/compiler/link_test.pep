@@ -199,6 +199,11 @@ reports_check_errors_and_warnings() {
             "main.pep",
             "# expect: main.pep:7:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]\n# expect: main.pep:9:9: warning: build option 'FAST' is not defined; the comparison is false\n# expect: main.pep:11:9: warning: build option 'FAST' is not defined; the comparison is false\n# expect: main.pep:11:35: warning: build option 'SLOW' is not defined; the comparison is false\nstruct S {\n    var x: int;\n    new(v: int) { x = v; }\n}\n[Target(BuildOption(FAST) == 1)]\nfast(): int { return 1; }\n[Target(BuildOption(FAST) == 1 or BuildOption(\"SLOW\") >= 2)]\nslow(): int { return 2; }\nmain(): int { var s = S(1); return s.x; }\n"
         ],
+        # A build option compared with a literal past `long`'s range.
+        [
+            "main.pep",
+            "# expect: main.pep:2:29: error: build option 'BIG' cannot be compared with 9223372036854775808: a build option is a 'long'\n[Target(BuildOption(BIG) == 9223372036854775808)]\nbig(): int { return 1; }\nmain(): int { return 0; }\n"
+        ],
         # `[__BuiltIn]` outside the runtime.
         [
             "main.pep",
