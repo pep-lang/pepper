@@ -83,45 +83,79 @@ function Get-Url([string]$Uri, [string]$OutFile, [string]$Accept = '*/*') {
     Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $OutFile -Headers $headers
 }
 
-# Gets the API URL $Uri into $OutFile, which must answer with a release.
-# GitHub sometimes answers the list of releases with 200 and `[]`, so a
-# failed or empty answer is tried twice more, after 2 and then 5 seconds; a
-# 404 is not. Fails after the last try with the HTTP status and the API's
-# message.
-function Get-Api([string]$Uri, [string]$OutFile) {
-    foreach ($delay in 2, 5, 0) {
+# Gets the API URL $Uri into $OutFile, whose answer must name the key $Key;
+# returns whether it did. GitHub sometimes answers with 200 and `[]` (its
+# list of releases does, often), so a failed or empty answer is asked again
+# after each of $Delays seconds; a 404 is not. Leaves what it got for
+# Stop-Api.
+function Get-Api([string]$Uri, [string]$OutFile, [string]$Key, [int[]]$Delays = @(2, 5)) {
+    $script:ApiUri = $Uri
+    foreach ($delay in $Delays + 0) {
         try {
             Get-Url $Uri $OutFile
-            $status = 200
+            $script:ApiStatus = 200
             $body = "$(Get-Content -Raw $OutFile)"
-            if ($body -match '"tag_name"') { return }
+            if ($body -match "`"$Key`"") { return $true }
             $flat = $body -replace '\s+', ' '
-            $message = "no release in its $($body.Length) characters, which start $($flat.Substring(0, [Math]::Min(60, $flat.Length)))"
+            $script:ApiMessage = "no `"$Key`" in its $($body.Length) characters, which start $($flat.Substring(0, [Math]::Min(60, $flat.Length)))"
         } catch {
             $failure = $_
-            $status = if ($failure.Exception.Response) { [int]$failure.Exception.Response.StatusCode } else { 0 }
+            $script:ApiStatus = if ($failure.Exception.Response) { [int]$failure.Exception.Response.StatusCode } else { 0 }
             $message = $(try { ($failure.ErrorDetails.Message | ConvertFrom-Json).message } catch { $null })
-            if (-not $message) { $message = $failure.Exception.Message }
-            if ($status -eq 404) { break }
+            $script:ApiMessage = if ($message) { $message } else { $failure.Exception.Message }
+            if ($script:ApiStatus -eq 404) { return $false }
         }
         if ($delay) {
-            Warn "GET $Uri answered HTTP $status ($message); trying again in ${delay}s"
+            Warn "GET $Uri answered HTTP $script:ApiStatus ($script:ApiMessage); trying again in ${delay}s"
             Start-Sleep -Seconds $delay
         }
     }
-    if (-not $Token -and $status -eq 404) { Warn 'while the repository is private, set GITHUB_TOKEN to a token that can read it' }
-    Fail "GET $Uri answered HTTP ${status}: $message"
+    return $false
 }
 
-# The release to install: the newest v<x.y.z> one, or -Version's, with this
-# target's toolchain and installer archives. The repository also has
-# vsix-* and llvm-* releases.
+# Fails with what the last Get-Api got.
+function Stop-Api {
+    if (-not $Token -and $script:ApiStatus -eq 404) { Warn 'while the repository is private, set GITHUB_TOKEN to a token that can read it' }
+    Fail "GET $script:ApiUri answered HTTP ${script:ApiStatus}: $script:ApiMessage"
+}
+
+# The release to install: -Version's; else the release of each v<x.y.z>
+# tag, newest version first, up to the first with this target's toolchain
+# and installer archives. The list of releases often answers with no
+# releases (#196), so it is asked, more patiently, only when the tags
+# cannot be.
 function Find-Release([string]$Work) {
+    $api = "https://api.github.com/repos/$Repo"
     $list = Join-Path $Work 'releases.json'
+    $refs = Join-Path $Work 'tags.json'
     $wanted = if ($Version) { "v$($Version.TrimStart('v'))" } else { '' }
-    if ($wanted) { Get-Api "https://api.github.com/repos/$Repo/releases/tags/$wanted" $list }
-    else { Get-Api "https://api.github.com/repos/$Repo/releases?per_page=100" $list }
-    $releases = Get-Content -Raw $list | ConvertFrom-Json
+    $found = $null
+    if ($wanted) {
+        if (-not (Get-Api "$api/releases/tags/$wanted" $list 'tag_name')) { Stop-Api }
+        $found = Select-Release $list $wanted
+    } elseif (Get-Api "$api/git/matching-refs/tags/v" $refs 'ref') {
+        $tags = foreach ($ref in (Get-Content -Raw $refs | ConvertFrom-Json)) { $ref.ref -replace '^refs/tags/', '' }
+        $tags = $tags | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } | Sort-Object { [version]$_.Substring(1) } -Descending
+        foreach ($tag in $tags) {
+            if (Get-Api "$api/releases/tags/$tag" $list 'tag_name') {
+                $found = Select-Release $list $wanted
+                if ($found) { break }
+            } elseif ($script:ApiStatus -ne 404) { Stop-Api }
+        }
+    } else {
+        if (-not (Get-Api "$api/releases?per_page=100" $list 'tag_name' @(2, 5, 10, 20, 30))) { Stop-Api }
+        $found = Select-Release $list $wanted
+    }
+    if ($found) { return $found }
+    if ($Version) { Fail "release $wanted has no pepper-$($wanted.Substring(1))-$Target.zip and pepper-install-$($wanted.Substring(1))-$Target.zip" }
+    Fail "no release of $Repo has a prebuilt Pepper and its installer for $Target yet"
+}
+
+# The first release in the file $List (one release or a list of them) that
+# may be installed, with this target's toolchain and installer archives,
+# or $null. The repository also has vsix-* and llvm-* releases.
+function Select-Release([string]$List, [string]$Wanted) {
+    $releases = Get-Content -Raw $List | ConvertFrom-Json
     foreach ($release in $releases) {
         if ($release.tag_name -notmatch '^v\d+\.\d+\.\d+') { continue }
         # A prerelease (v0.4.0-dev, the build of main) only when -Version names it.
@@ -137,8 +171,7 @@ function Find-Release([string]$Work) {
         if (-not ($assets[$names[0]] -and $assets[$names[1]])) { continue }
         return [pscustomobject]@{ Tag = $release.tag_name; Names = $names; Assets = $assets }
     }
-    if ($Version) { Fail "release $wanted has no pepper-$($wanted.Substring(1))-$Target.zip and pepper-install-$($wanted.Substring(1))-$Target.zip" }
-    Fail "no release of $Repo has a prebuilt Pepper and its installer for $Target yet"
+    return $null
 }
 
 # Downloads the asset $Name of $Release, and its .sha256, into $Work:

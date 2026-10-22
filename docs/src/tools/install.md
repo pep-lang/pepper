@@ -40,11 +40,15 @@ which:
    cannot.
 
 With `--version` (`-Version`) the script asks GitHub's API for that
-release by its tag; without, it lists the releases. GitHub sometimes
-answers the list with no releases, so an answer that fails or names no
-release is asked again twice, 2 and then 5 seconds apart. When the last
-one fails too, or the release does not exist (404), the script stops with
-the HTTP status and the API's message, such as
+release by its tag. Without, it lists the repository's `v<x.y.z>` tags
+and asks for the release of each, newest version first, until one has
+this machine's archives. GitHub's list of releases often answers with no
+releases, so the script asks for that list only when it cannot get the
+tags. An answer that fails or comes back empty is asked again twice, 2
+and then 5 seconds apart (five times, up to 30 seconds apart, for the
+list of releases). When the last one fails too, or the release does not
+exist (404), the script stops with the HTTP status and the API's
+message, such as
 `GET .../releases/tags/v9.9.9 answered HTTP 404: Not Found`.
 
 The script downloads the toolchain itself, rather than leaving it to

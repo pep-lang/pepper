@@ -46,33 +46,58 @@ case "$(uname -s)" in
 esac
 
 if [ -z "$version" ]; then
-  # The API lists releases newest first (by the commit each tag is on).
-  # GitHub sometimes answers it with 200 and `[]` (#196), so a failed or
-  # empty answer is tried twice more before failing with what it was.
-  url="https://api.github.com/repos/pep-lang/pepper/releases?per_page=100"
+  api="https://api.github.com/repos/pep-lang/pepper"
   token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-  for delay in 2 5 0; do
-    # The status goes on a line of its own after the body.
-    releases="$(curl -sSL -w '\n%{http_code}' ${token:+-H "Authorization: Bearer $token"} "$url")" || releases=$'\n0'
-    status="${releases##*$'\n'}"
-    releases="${releases%$'\n'*}"
-    if [ "$status" = 200 ] && grep -q '"tag_name"' <<< "$releases"; then
-      break
-    fi
-    if [ "$delay" = 0 ]; then
-      message="$(sed -n 's/.*"message": *"\([^"]*\)".*/\1/p' <<< "$releases" | head -1)"
-      echo "error: GET $url answered HTTP $status${message:+: $message}, with no release in its ${#releases} bytes, which start: ${releases:0:200}" >&2
-      exit 1
-    fi
-    echo "warning: GET $url answered HTTP $status (${#releases} bytes, no release); trying again in ${delay}s" >&2
-    sleep "$delay"
-  done
-  # The highest version, a release sorting after its own -dev: the -dev tag
-  # goes stale whenever main holds a release's version. One field per line,
+  # Gets the API url $1 into $body, whose answer must name the key $2.
+  # GitHub sometimes answers with 200 and `[]` (its list of releases does,
+  # often: #196), so a failed or empty answer is asked again after each
+  # delay in $3; a 404 is not. Fails with got and status set for api_die.
+  api_get() {
+    local delay
+    got="$1"
+    for delay in $3 0; do
+      # The status goes on a line of its own after the body.
+      body="$(curl -sSL -w '\n%{http_code}' ${token:+-H "Authorization: Bearer $token"} "$1")" || body=$'\n0'
+      status="${body##*$'\n'}"
+      body="${body%$'\n'*}"
+      if [ "$status" = 200 ] && grep -q "\"$2\"" <<< "$body"; then
+        return 0
+      fi
+      [ "$status" != 404 ] || return 1
+      [ "$delay" = 0 ] || { echo "warning: GET $1 answered HTTP $status (${#body} bytes, no \"$2\"); trying again in ${delay}s" >&2; sleep "$delay"; }
+    done
+    return 1
+  }
+  api_die() {
+    local message
+    message="$(sed -n 's/.*"message": *"\([^"]*\)".*/\1/p' <<< "$body" | sed -n 1p)"
+    echo "error: GET $got answered HTTP $status${message:+: $message}, in ${#body} bytes, which start: ${body:0:200}" >&2
+    exit 1
+  }
+  # The versions named by `"$1": "<prefix>vX.Y.Z"` or `-dev` on stdin,
+  # highest first, a release sorting before its own -dev: the -dev tag goes
+  # stale whenever main holds a release's version. One field per line,
   # whether the JSON comes pretty-printed or compact.
-  version="$(tr ',' '\n' <<< "$releases" | sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*\(-dev\)\{0,1\}\)".*/\1/p' \
-    | awk -F'[.-]' '{ print $1, $2, $3, ($4 == "dev" ? 0 : 1), $0 }' \
-    | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -d' ' -f5)"
+  versions() {
+    tr ',' '\n' | sed -n "s|^ *\"$1\": *\"[a-z/]*v\\([0-9]*\\.[0-9]*\\.[0-9]*\\(-dev\\)\\{0,1\\}\\)\".*|\\1|p" \
+      | awk -F'[.-]' '{ print $1, $2, $3, ($4 == "dev" ? 0 : 1), $0 }' \
+      | sort -k1,1nr -k2,2nr -k3,3nr -k4,4nr | cut -d' ' -f5
+  }
+  # The highest version whose tag has a release. The list of releases often
+  # answers with no releases, so it is asked, more patiently, only when the
+  # tags cannot be.
+  if api_get "$api/git/matching-refs/tags/v" ref "2 5"; then
+    for candidate in $(versions ref <<< "$body"); do
+      if api_get "$api/releases/tags/v$candidate" tag_name "2 5"; then
+        version="$candidate"
+        break
+      fi
+      [ "$status" = 404 ] || api_die
+    done
+  else
+    api_get "$api/releases?per_page=100" tag_name "2 5 10 20 30" || api_die
+    version="$(versions tag_name <<< "$body" | sed -n 1p)"
+  fi
   [ -n "$version" ] || { echo "error: no toolchain (vX.Y.Z release or vX.Y.Z-dev prerelease) is published" >&2; exit 1; }
 fi
 # A release of a -dev VERSION publishes it with its tag on the commit it
