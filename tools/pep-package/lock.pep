@@ -15,7 +15,10 @@
 # `[target.'<condition>'.dependencies]` lead to has `target`, the
 # condition under which a build needs it (`target = "OS(Windows)"`): the
 # lock lists every platform's packages, and a build fetches only its
-# target's.
+# target's. A package pep.toml's `[overrides]` replaces has `override`, the
+# replacement's source: a fork (`override = "github:you/geometry"`), whose
+# commit `commit` is, or a folder (`override = "path:../geometry"`), which
+# has no commit.
 
 import [File, Path] from io;
 import toml;
@@ -38,6 +41,9 @@ export struct Locked {
     # The `[Target(...)]` condition under which a build needs it, or empty
     # when every build does.
     var target: String = "";
+    # What `[overrides]` replaces it with: a fork's source, or `path:` and
+    # the folder as pep.toml writes it. Empty when it is not overridden.
+    var replaced_by: String = "";
 
     construct() {}
 
@@ -48,8 +54,12 @@ export struct Locked {
         this.commit = commit;
     }
 
-    # For messages: `geometry 1.2.3`, else its short commit.
+    # For messages: `geometry 1.2.3`, else its short commit, else the folder
+    # that overrides it.
     describe(): String {
+        if (version.is_empty and commit.is_empty) {
+            return name + " " + replaced_by;
+        }
         return name + " " + (version.is_empty ? commit.substr(0, 12) : version);
     }
 }
@@ -91,7 +101,8 @@ export read_lock(path: Path): Result<Array<Locked>> {
         var dev = item.try_get("dev");
         locked.dev = dev.is_value() and dev.value().as_bool().value_or(false);
         locked.target = _text(item, "target");
-        if (locked.source.is_empty or locked.commit.is_empty) {
+        locked.replaced_by = _text(item, "override");
+        if (locked.source.is_empty or (locked.commit.is_empty and !locked.replaced_by.starts_with("path:"))) {
             return Result<Array<Locked>>.Err($"{path.to_string()}: every package needs a 'source' and a 'commit'");
         }
         packages.append(locked);
@@ -122,7 +133,12 @@ export lock_text(packages: Array<Locked>): String {
         if (!locked.version.is_empty) {
             text += "version = " + toml.TomlValue.String(locked.version).to_string() + "\n";
         }
-        text += "commit = " + toml.TomlValue.String(locked.commit).to_string() + "\n";
+        if (!locked.replaced_by.is_empty) {
+            text += "override = " + toml.TomlValue.String(locked.replaced_by).to_string() + "\n";
+        }
+        if (!locked.commit.is_empty) {
+            text += "commit = " + toml.TomlValue.String(locked.commit).to_string() + "\n";
+        }
         if (!locked.sha256.is_empty) {
             text += "sha256 = " + toml.TomlValue.String(locked.sha256).to_string() + "\n";
         }

@@ -337,6 +337,56 @@ full    = ["tls", "gzip"]                  # other features of this package
 write a dependency's `optional`, `features` and `default-features` (see
 [pep-package](pep-package.md#add-ownernamerange)).
 
+## `[overrides]`
+
+To try a fix in a package deep in the graph, or to use a fork until the
+fix is released, the project replaces the package wherever the graph
+reaches it, without editing the `pep.toml` of each package on the way:
+
+```toml
+[overrides]
+"github:other/numbers" = { github = "me/numbers", branch = "fix-overflow" }
+"github:someone/geometry" = { path = "../geometry" }
+```
+
+- **The key** is the source of the package it replaces, as
+  [`pep.lock`](pep-package.md#peplock) writes it: the host's key, `:`,
+  and the repository (`github:owner/name`). One table keyed by the source
+  is enough, since a source is what makes two dependencies the same
+  package in the graph; the name each dependent imports it by does not.
+- **The value** is the package that replaces it, written as a dependency
+  is: a repository (`github`, `gitlab`, `codeberg`) with at most one of
+  `version`, `branch`, `tag` and `commit`, or a `path`, relative to this
+  `pep.toml`. It takes no `optional`, `features` or `default-features`;
+  those stay on each dependency.
+- **Everywhere, whatever is asked:** every package that depends on the
+  source gets the replacement, the project included, whatever version
+  range or branch each asks for. A fork is checked out in the original's
+  folder, `.pep/deps/<host>/<owner>/<name>`, and a `path` override's
+  folder is read in its place, its own dependencies included. Imports do
+  not change.
+- **Locked:** `pep.lock` records the replacement in the package's
+  `override`, with the fork's commit (see
+  [pep.lock](pep-package.md#peplock)), so `--locked` and `--offline`
+  builds stay reproducible, and adding, changing or removing an override
+  changes the lock.
+- **Only the project's own:** a dependency's `[overrides]` do not apply
+  to the projects that use it, and `pepper package publish` refuses a
+  package with any (see [publish](pep-package.md#publish)).
+- **Checked by `pepper package`:** an override that matches no package in
+  the graph is a warning at its key, and a replacement whose `[package]`
+  `name` differs from the name `pep.lock` records for the package it
+  replaces is an error there:
+
+  ```text
+  pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'
+      9 | "github:other/numbers" = { github = "someone/geometry", tag = "v1.0.0" }
+        | ^~~~~~~~~~~~~~~~~~~~~~
+  ```
+
+- **Needs toolchain 0.11.0:** an older toolchain rejects a `pep.toml`
+  with `[overrides]` as an unknown table.
+
 ## `[fetch]`
 
 ```toml
@@ -372,6 +422,8 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
   `import` uses.
 - A dependency with no source or two, a repository not written `owner/name`,
   or more than one of `version`, `branch`, `tag` and `commit`.
+- An `[overrides]` key that is not a source (`github:owner/name`), or an
+  override with `optional`, `features` or `default-features`.
 - A table or key `pep.toml` does not have, or a value of the wrong type.
 
 An import of a dependency that is not on disk says which folder is missing:

@@ -8,7 +8,11 @@
 ## code imports. `[features]` names optional parts of a package: turning a
 ## feature on defines the build option `<package>_<feature>` and turns on
 ## the optional dependencies and dependency features it lists
-## (`Packages.turn_on_features`). A fetched dependency lives in the
+## (`Packages.turn_on_features`). `[overrides]`, read only from the
+## project's own `pep.toml`, replaces a package wherever the graph reaches
+## it: a fork is checked out in the original's folder, and a `path`
+## override's folder stands in for it (`Manifest.directory_of`). A fetched
+## dependency lives in the
 ## project's `.pep/deps/<host>/<repository>`, and `Packages` resolves the
 ## imports of every file of a program against the dependencies of the
 ## package that file belongs to.
@@ -117,6 +121,9 @@ export struct LockedPackage {
     ## Its `target` condition: the platforms it is needed on, none when it
     ## is needed on every one.
     var condition: Attribute? = Optional<Attribute>.Empty;
+    ## The fork `[overrides]` replaces it with, `github:you/name`, which its
+    ## commit is cloned from; empty when it is not overridden.
+    var override_source: String = "";
 
     construct(host: Host, repository: String, commit: String) {
         this.host = host;
@@ -132,6 +139,18 @@ export struct LockedPackage {
     ## Whether a build for `build` needs it.
     matches(build: Target): bool {
         return _selects(condition, build);
+    }
+
+    ## The address git clones its commit from: its fork's, when overridden.
+    clone_url(): String {
+        var split = override_source.split_once(":");
+        if (split.is_value()) {
+            var fork = host_named(split.value().0);
+            if (fork.is_value()) {
+                return fork.value().clone_url(split.value().1);
+            }
+        }
+        return host.clone_url(repository);
     }
 }
 
@@ -163,6 +182,17 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
         if (!package.as_table().is_value()) {
             return Result<LockedPackage[], String>.err(invalid);
         }
+        var override_source = "";
+        var overridden = package.try_get("override");
+        if (overridden.is_value()) {
+            if (overridden.value() is String(o)) {
+                override_source = o;
+            }
+        }
+        # A `path` override has no commit and nothing to fetch.
+        if (override_source.starts_with("path:")) {
+            continue;
+        }
         var source = package.try_get("source");
         var commit = package.try_get("commit");
         if (!source.is_value() or !commit.is_value()) {
@@ -190,6 +220,7 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
             return Result<LockedPackage[], String>.err(invalid);
         }
         var entry = LockedPackage(host.value(), repository, commit_string);
+        entry.override_source = override_source;
         var target = package.try_get("target");
         if (target.is_value()) {
             if (target.value() is String(t)) {
@@ -326,6 +357,10 @@ export struct Manifest {
     var dev_dependencies: Dependency[] = Array<Dependency>();
     ## `[features]`, in the order they are written.
     var features: Feature[] = Array<Feature>();
+    ## `[overrides]`: each the package that replaces another, its `name`
+    ## the source it replaces (`github:owner/name`). Only the project's own
+    ## apply.
+    var overrides: Dependency[] = Array<Dependency>();
 
     construct(path: Path, text: String) {
         this.path = path;
@@ -357,6 +392,34 @@ export struct Manifest {
         return Optional<Feature>.Empty;
     }
 
+    ## Where `d`, a dependency of the package whose manifest is in
+    ## `manifest_dir`, is in the project this manifest is the root of: the
+    ## folder of a `path` override of its source, else `d.directory`. A
+    ## fork override is checked out where the original would be.
+    ##
+    ## @param d the dependency
+    ## @param manifest_dir the folder of the `pep.toml` naming it
+    ## @returns its folder
+    directory_of(d: Dependency, manifest_dir: Path): Path {
+        var replacement = _path_override(d);
+        if (replacement.is_value()) {
+            return dir().join(Path(replacement.value().location));
+        }
+        return d.directory(dir(), manifest_dir);
+    }
+
+    ## The `path` override of `d`'s source, if any.
+    _path_override(d: Dependency): Dependency? {
+        var source = d.locked_source();
+        if (source.is_value()) {
+            var replacement = _named(overrides, source.value());
+            if (replacement.is_value() and !replacement.value().host.is_value()) {
+                return replacement;
+            }
+        }
+        return Optional<Dependency>.Empty;
+    }
+
     ## The build option the feature `feature` defines when it is on:
     ## `<package>_<feature>`, such as `http_tls`.
     build_option(feature: String): String {
@@ -366,8 +429,10 @@ export struct Manifest {
     ## Returns its Git dependencies and dev-dependencies, and the Git
     ## dependencies of every `path` dependency they reach, which the
     ## project fetches into its own `.pep/deps`. Another package's
-    ## dev-dependencies are not part of this project. A `path` dependency
-    ## whose `pep.toml` cannot be read is skipped: importing it reports why.
+    ## dev-dependencies are not part of this project. A Git dependency this
+    ## manifest's `[overrides]` replaces with a `path` counts as that
+    ## folder. A `path` dependency whose `pep.toml` cannot be read is
+    ## skipped: importing it reports why.
     ##
     ## @param build when given, only what a build for this target sees
     ##   (`Dependency.matches`); else every platform's
@@ -392,11 +457,11 @@ export struct Manifest {
                 if (build.is_value() and !d.matches(build.value())) {
                     continue;
                 }
-                if (d.host.is_value()) {
+                if (d.host.is_value() and !_path_override(d).is_value()) {
                     out.append(d);
                     continue;
                 }
-                var folder = manifest.dir().join(Path(d.location));
+                var folder = directory_of(d, manifest.dir());
                 var nested = load_manifest(folder.join(Path(files.MANIFEST_FILE)), Array<Path>());
                 if (nested.is_ok()) {
                     pending.append(nested.value());
@@ -1080,6 +1145,45 @@ struct _Reader {
         }
     }
 
+    ## The `[overrides]` table: each key the source of a package
+    ## (`github:owner/name`), holding the package that replaces it, written
+    ## as a dependency is.
+    overrides(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        for (var (source, value) in members) {
+            var path = ["overrides", source];
+            var split = source.split_once(":");
+            if (!split.is_value() or !host_named(split.value().0).is_value() or !split.value().1.contains("/")) {
+                error(
+                    $"override '{source}' does not name a package's source, such as 'github:owner/name'",
+                    key_span(path)
+                );
+                continue;
+            }
+            var fields = value.as_table();
+            if (!fields.is_value()) {
+                error(
+                    $"override '{source}' must be a table, not {_kind(value)}: '\"{source}\" = "
+                        + "{ github = \"you/name\", branch = \"fix\" }'",
+                    value_span(path)
+                );
+                continue;
+            }
+            var featured = false;
+            for (var (field, _) in fields.value()) {
+                if (field == "optional" or field == "features" or field == "default-features") {
+                    error(
+                        $"an override takes a source and a revision, not '{field}'; set it on the dependency",
+                        key_span(_at(path, field))
+                    );
+                    featured = true;
+                }
+            }
+            if (!featured) {
+                dependency(manifest.overrides, path, source, fields.value());
+            }
+        }
+    }
+
     ## The `[target]` table: each key a condition, holding a
     ## `dependencies` table whose entries are appended to the manifest's
     ## dependencies, marked with it.
@@ -1186,9 +1290,14 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.features(manifest, table.value());
             }
+        } else if (key == "overrides") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.overrides(manifest, table.value());
+            }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]' and '[fetch]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]' and '[fetch]'",
                 reader.key_span(at)
             );
         }
@@ -1420,7 +1529,7 @@ export struct Packages {
             return Optional<Manifest>.Empty;
         }
         var first = _on.insert(_key(manifest) + "\n" + d.name);
-        var found = _manifest_at(d.directory(project.value(), manifest.dir()));
+        var found = _manifest_at(_directory(manifest, d));
         if (found.is_value() and first) {
             _visit(found.value());
             if (d.default_features and found.value().feature("default").is_value()) {
@@ -1468,6 +1577,16 @@ export struct Packages {
                 _enable(manifest, item);
             }
         }
+    }
+
+    ## Where `d`, a dependency of `manifest`, is: as the project's own
+    ## `[overrides]` place it (`Manifest.directory_of`).
+    _directory(manifest: Manifest, d: Dependency): Path {
+        var root = _manifest_at(project.value());
+        if (root.is_value()) {
+            return root.value().directory_of(d, manifest.dir());
+        }
+        return d.directory(project.value(), manifest.dir());
     }
 
     ## A package's key in the feature sets: its normalized folder.
@@ -1565,7 +1684,7 @@ export struct Packages {
                 $"'{first}' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:{first}' on the import"
             );
         }
-        var package = dependency.value().directory(project.value(), manifest.dir());
+        var package = _directory(manifest, dependency.value());
         if (!package.is_directory()) {
             if (dependency.value().host.is_value()) {
                 return Resolution.Missing(

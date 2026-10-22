@@ -175,9 +175,12 @@ First it checks, and lists every check that fails at once:
   resolve it with its other packages. A dev-dependency may be anything,
   since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`
-  and `[features]` tables, and a dependency's `optional`, `features` and
-  `default-features`, need 0.11.0.
+  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
+  `[features]` and `[overrides]` tables, and a dependency's `optional`,
+  `features` and `default-features`, need 0.11.0;
+- `pep.toml` has no `[overrides]`: a dependent builds with the packages
+  they replace, not the code the package was tested with, so a release
+  waits until the fix it needs is released too.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
@@ -262,6 +265,21 @@ checksums:
 pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
 ```
 
+A package the project's [`[overrides]`](projects.md#overrides) replace
+keeps its own `source` and has `override`, the replacement's source: a
+fork, whose commit `commit` is and whose files `sha256` covers, or
+`path:` and the folder as `pep.toml` writes it, with no commit, since a
+folder has none to pin:
+
+```toml
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
+```
+
 A command that leaves the graph as it was leaves `pep.lock` untouched, so
 a checkout with Windows line endings stays as git wrote it.
 
@@ -328,6 +346,11 @@ name each imports it by.
   declares, and `pep-package` says which requirement it overrode.
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
+- The project's [`[overrides]`](projects.md#overrides) replace a package
+  wherever the graph reaches it: the override's own revision is chosen,
+  from the fork, whatever the dependents ask, and a `path` override's
+  folder is read in its place. A locked revision of an override stays
+  until the override changes or `update` names the package.
 - The project's own `[dev-dependencies]` are resolved with its
   dependencies, as requirements of the project; a dependency's
   `[dev-dependencies]` are not part of the graph at all.
