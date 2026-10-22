@@ -348,7 +348,8 @@ an_override_replaces_a_package_everywhere_with_a_fork() {
     # range each asks, and the lock records it.
     write_file(
         project.dir.join("pep.toml"),
-        project.manifest() + "\n[overrides]\n\"github:other/numbers\" = { github = \"me/numbers\", branch = \"main\" }\n"
+        project.manifest()
+            + "\n[overrides]\n\"github:other/numbers\" = { github = \"me/numbers\", branch = \"main\" }\n"
     );
     expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 1);
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
@@ -377,7 +378,8 @@ an_override_replaces_a_package_everywhere_with_a_fork() {
     var unused = hosts.package(project.dir, ["fetch"]);
     expect_exit(unused, 0);
     expect_contains(
-        unused.stderr, "pep.toml:10:1: warning: override of 'github:nobody/nothing' matches no package in the dependency graph\n"
+        unused.stderr,
+        "pep.toml:10:1: warning: override of 'github:nobody/nothing' matches no package in the dependency graph\n"
     );
 }
 

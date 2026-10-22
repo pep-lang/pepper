@@ -1154,8 +1154,7 @@ struct _Reader {
             var split = source.split_once(":");
             if (!split.is_value() or !host_named(split.value().0).is_value() or !split.value().1.contains("/")) {
                 error(
-                    $"override '{source}' does not name a package's source, such as 'github:owner/name'",
-                    key_span(path)
+                    $"override '{source}' does not name a package's source, such as 'github:owner/name'", key_span(path)
                 );
                 continue;
             }

@@ -231,7 +231,9 @@ export struct Resolver {
                     if (!folder.join("pep.toml").is_file()) {
                         return Result<Graph>.Err(
                             root.at_override(
-                                "error", source, $"the folder {folder.to_string()} overriding '{source}' has no pep.toml"
+                                "error",
+                                source,
+                                $"the folder {folder.to_string()} overriding '{source}' has no pep.toml"
                             )
                         );
                     }
