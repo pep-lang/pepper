@@ -212,6 +212,22 @@ export struct LocAnchors {
         return Optional<(String, ulong)>.Value((_names[file][low], all[low]));
     }
 
+    ## Sets where each declaration of `name` starts: it is found when it is
+    ## declared once, as `add` leaves it.
+    ##
+    ## @param name the declaration's name
+    ## @param places each declaration's file and start
+    set_places(name: String, places: Array<(uint, ulong)>) {
+        _at.remove(name);
+        _twice.remove(name);
+        if (places.count == 1) {
+            _at[name] = places[0];
+        } else if (places.count > 1) {
+            _twice.insert(name);
+        }
+        _sorted = false;
+    }
+
     ## Returns where declaration `name` starts in file `file`.
     ##
     ## @param name the declaration's name

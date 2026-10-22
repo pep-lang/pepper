@@ -296,7 +296,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
     for (var round in 0..4096) {
         var structs = module.structs.count;
         var functions = module.functions.count;
-        gather_generics(module);
+        gather_generics(module, state);
         if (steps.stepped("gather_generics(module)")) {
             return;
         }
@@ -348,7 +348,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
         # Done only when gathering asks for nothing new.
         var struct_specs = module.struct_specs.count;
         var func_specs = module.func_specs.count;
-        gather_generics(module);
+        gather_generics(module, state);
         if (steps.stepped("gather_generics(module)")) {
             return;
         }
@@ -668,7 +668,7 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             return Optional<Diagnostic>.Empty;
         }
         19 => {
-            gather_generics(module);
+            gather_generics(module, state);
             return Optional<Diagnostic>.Empty;
         }
         20 => {

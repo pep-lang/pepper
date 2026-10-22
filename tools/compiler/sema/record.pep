@@ -13,7 +13,7 @@ import io;
 import os;
 import [Utf8] from text;
 import [Loc, LocAnchors, LocShift, NO_FILE] from "loc";
-import [Checked, FunctionDef, Module, StructDef] from "model";
+import [Checked, EnumDef, FunctionDef, Module, StructDef, TraitDef] from "model";
 import [set_name] from "names";
 import [PendingBody] from "pending";
 
@@ -1230,34 +1230,177 @@ export anchors_of(module: Module): LocAnchors {
     var out = LocAnchors();
     for (var structs in [module.structs, module.templates.structs]) {
         for (var s in structs) {
-            if (s.name.contains("<")) {
-                continue;
-            }
-            out.add($"s {s.name}", s.loc);
-            for (var methods in [s.method_members, s.constructors, s.generic_methods]) {
-                for (var m in methods) {
-                    if (!m.name.starts_with("__")) {
-                        out.add($"m {s.name}\n{m.name}", m.loc);
-                    }
-                }
+            for (var (name, loc) in _struct_anchors(s)) {
+                out.add(name, loc);
             }
         }
     }
     for (var functions in [module.functions, module.templates.functions]) {
         for (var f in functions) {
-            if (!f.name.contains("<")) {
-                out.add($"f {f.name}", f.loc);
+            for (var (name, loc) in _function_anchors(f)) {
+                out.add(name, loc);
             }
         }
     }
     for (var t in module.traits) {
-        out.add($"t {t.name}", t.loc);
-        for (var m in t.methods) {
-            out.add($"m {t.name}\n{m.name}", m.loc);
+        for (var (name, loc) in _trait_anchors(t)) {
+            out.add(name, loc);
         }
     }
     for (var e in module.enums) {
         out.add($"e {e.name}", e.loc);
     }
     return out;
+}
+
+# The anchors struct `s` gives: itself and its members, unless it is a
+# specialization.
+_struct_anchors(s: StructDef): Array<(String, Loc)> {
+    var out = Array<(String, Loc)>();
+    if (s.name.contains("<")) {
+        return out;
+    }
+    out.append(($"s {s.name}", s.loc));
+    for (var methods in [s.method_members, s.constructors, s.generic_methods]) {
+        for (var m in methods) {
+            if (!m.name.starts_with("__")) {
+                out.append(($"m {s.name}\n{m.name}", m.loc));
+            }
+        }
+    }
+    return out;
+}
+
+# The anchor function `f` gives, unless it is a specialization.
+_function_anchors(f: FunctionDef): Array<(String, Loc)> {
+    var out = Array<(String, Loc)>();
+    if (!f.name.contains("<")) {
+        out.append(($"f {f.name}", f.loc));
+    }
+    return out;
+}
+
+# The anchors trait `t` gives: itself and its methods.
+_trait_anchors(t: TraitDef): Array<(String, Loc)> {
+    var out = Array<(String, Loc)>();
+    out.append(($"t {t.name}", t.loc));
+    for (var m in t.methods) {
+        out.append(($"m {t.name}\n{m.name}", m.loc));
+    }
+    return out;
+}
+
+## `anchors_of` a module that merging a closure's records grows one record
+## at a time (`merged_module`): a read keeps the base's declarations, but
+## for those it patches, and adds its own after them, so only the
+## declarations that are not the ones taken in before are taken in again.
+## Reading the base's anchors anew before each record made merging a
+## closure quadratic in its size.
+export struct MergeAnchors {
+    ## The anchors of the module as last taken in.
+    var anchors: LocAnchors = LocAnchors();
+    # Each name's places, one for each declaration of it.
+    var _places: HashMap<String, Array<(uint, ulong)>> = HashMap<String, Array<(uint, ulong)>>();
+    # Each list's declarations as taken in, and the anchors each gave.
+    var _structs: Array<StructDef> = Array<StructDef>();
+    var _structs_gave: Array<Array<(String, Loc)>> = Array<Array<(String, Loc)>>();
+    var _template_structs: Array<StructDef> = Array<StructDef>();
+    var _template_structs_gave: Array<Array<(String, Loc)>> = Array<Array<(String, Loc)>>();
+    var _functions: Array<FunctionDef> = Array<FunctionDef>();
+    var _functions_gave: Array<Array<(String, Loc)>> = Array<Array<(String, Loc)>>();
+    var _template_functions: Array<FunctionDef> = Array<FunctionDef>();
+    var _template_functions_gave: Array<Array<(String, Loc)>> = Array<Array<(String, Loc)>>();
+    var _traits: Array<TraitDef> = Array<TraitDef>();
+    var _traits_gave: Array<Array<(String, Loc)>> = Array<Array<(String, Loc)>>();
+    var _enums: Array<EnumDef> = Array<EnumDef>();
+    var _enums_gave: Array<Array<(String, Loc)>> = Array<Array<(String, Loc)>>();
+
+    construct() {}
+
+    ## Takes in what `module` declares now: `anchors` is then
+    ## `anchors_of(module)`.
+    ##
+    ## @param module the module
+    update(module: Module) {
+        var changed = HashSet<String>();
+        _sync<StructDef>(module.structs, _structs, _structs_gave, _struct_anchors, changed);
+        _sync<StructDef>(module.templates.structs, _template_structs, _template_structs_gave, _struct_anchors, changed);
+        _sync<FunctionDef>(module.functions, _functions, _functions_gave, _function_anchors, changed);
+        _sync<FunctionDef>(
+            module.templates.functions, _template_functions, _template_functions_gave, _function_anchors, changed
+        );
+        _sync<TraitDef>(module.traits, _traits, _traits_gave, _trait_anchors, changed);
+        _sync<EnumDef>(module.enums, _enums, _enums_gave, (e: EnumDef) => [($"e {e.name}", e.loc)], changed);
+        for (var name in changed) {
+            var places = _places.try_get(name);
+            anchors.set_places(name, places.is_value() ? places.value() : Array<(uint, ulong)>());
+        }
+    }
+
+    # Brings `taken` up to `now`: a declaration that is not the one taken
+    # in at its place gives back what it gave, and the one there now gives
+    # its own. A struct that gained members is a patched one, a new object.
+    _sync<T>(
+        now: T[],
+        taken: T[],
+        gave: Array<Array<(String, Loc)>>,
+        anchors_of: (T) => Array<(String, Loc)>,
+        changed: HashSet<String>
+    ) {
+        ulong i = 0;
+        while (i < now.count or i < taken.count) {
+            bool same = i < now.count and i < taken.count and now[i] === taken[i];
+            if (!same) {
+                if (i < taken.count) {
+                    for (var (name, loc) in gave[i]) {
+                        _remove(name, loc, changed);
+                    }
+                }
+                if (i < now.count) {
+                    var given = anchors_of(now[i]);
+                    for (var (name, loc) in given) {
+                        _add(name, loc, changed);
+                    }
+                    if (i < taken.count) {
+                        taken[i] = now[i];
+                        gave[i] = given;
+                    } else {
+                        taken.append(now[i]);
+                        gave.append(given);
+                    }
+                }
+            }
+            i += 1;
+        }
+        while (taken.count > now.count) {
+            taken.pop();
+            gave.pop();
+        }
+    }
+
+    _add(name: String, loc: Loc, changed: HashSet<String>) {
+        if (loc.is_none()) {
+            return;
+        }
+        if (!_places.contains(name)) {
+            _places[name] = Array<(uint, ulong)>();
+        }
+        _places[name].append((loc.file, loc.span.start));
+        changed.insert(name);
+    }
+
+    _remove(name: String, loc: Loc, changed: HashSet<String>) {
+        if (loc.is_none()) {
+            return;
+        }
+        var places = _places[name];
+        for (var i in 0..places.count) {
+            var (file, start) = places[i];
+            if (file == loc.file and start == loc.span.start) {
+                places.remove_at(i);
+                break;
+            }
+        }
+        changed.insert(name);
+    }
 }
