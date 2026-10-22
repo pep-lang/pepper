@@ -15,6 +15,9 @@ pepper package update --verify               # one at a time, keeping the update
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v<version> and push the tag
+pepper package tree                          # the dependency graph pep.lock records
+pepper package why numbers                   # every path from the project to numbers
+pepper package outdated                      # packages behind their ranges or the newest version
 ```
 
 ```text
@@ -55,6 +58,11 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
 | `publish` | Checks the package and runs its tests, then tags its version and pushes the tag (see [`publish`](#publish)) |
 | `publish --dry-run` | Checks and tests, but neither tags nor pushes |
+| `tree` | Prints the dependency graph `pep.lock` records (see [`tree`](#tree)) |
+| `tree --depth <n>`, `-d <n>` | Prints only `<n>` levels of dependencies below the project |
+| `why <name>` | Prints every path from the project to a package (see [`why`](#why-name)) |
+| `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
+| `outdated --exit-code` | Exits with status 1 when a package is outdated |
 | `-h`, `--help` | Prints the options; after a command, that command's |
 | `-V`, `--version` | Prints the version |
 
@@ -198,6 +206,75 @@ tag to `origin`; when the push fails, it deletes the tag again.
 `--dry-run` checks and tests, then says what it would tag, without
 tagging or pushing anything. `publish` neither creates a release page on
 the host nor needs `pep.lock`, which a dependent does not read.
+
+### `tree`
+
+Prints the dependency graph `pep.lock` records, as the `pep.toml` of the
+project and of each locked package declare it. Each line is the name the
+dependent imports the package by, when that is not the package's own
+(`win: winapi`), its locked version (or short commit) and source, and
+marks:
+
+- `[dev]`: only the project's dev-dependencies lead to it;
+- `[target: <condition>]`: only builds for the targets the condition
+  selects need it (see [`[target]` tables](projects.md#targetconditiondependencies));
+- `[optional]` and `[features: ...]`: the dependent's entry says
+  `optional = true`, and the features its `features` turns on. A build
+  turns on more: each package's `default` feature, and what the features
+  it turns on list (see [Features](projects.md#features)).
+
+A package whose dependencies were listed above ends in `(*)` instead of
+listing them again:
+
+```text
+$ pepper package tree
+app
+|-- geometry 1.0.0 (github:someone/geometry)
+|   `-- numbers 1.3.1 (github:other/numbers)
+|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- geometry 1.0.0 (github:someone/geometry) (*)
+```
+
+`--depth <n>` stops `<n>` levels below the project (`--depth 1`: only its
+own dependencies). `tree`, `why` and `outdated` read the graph from
+`pep.lock`, checking each locked package out at its commit (with
+`--offline`, only from what it holds), and never change `pep.lock`. When
+`pep.toml` names a package `pep.lock` does not list, they fail and say to
+run `fetch` first.
+
+### `why <name>`
+
+Prints every path from the project to the package, one per line. The
+package is named by its own name, its `owner/name` or source, or the name
+a dependency imports it by:
+
+```text
+$ pepper package why numbers
+app -> geometry 1.0.0 -> numbers 1.3.1
+app -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1
+```
+
+### `outdated`
+
+Lists each locked package that is behind, with its locked version, the
+revision `update` would move it to (`wanted`: the newest version every
+range on it allows and this toolchain builds, or a branch's newest
+commit), and the newest version it offers (`latest`, not a prerelease):
+
+```text
+$ pepper package outdated
+package   locked  wanted  latest  source
+numbers   1.3.1   1.3.1   3.0.0   github:other/numbers
+geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry
+```
+
+Here `pepper package update` moves geometry to 1.1.0, and numbers stays
+below 3.0.0 until geometry's range on it allows that. With none behind,
+it prints `every package is at the newest version`. It reads what each
+package offers over the network, so with `--offline` it fails, saying it
+cannot check. The exit status is 0 whatever it finds, unless
+`--exit-code` asks for 1 when a package is outdated, for CI.
 
 ## pep.lock
 

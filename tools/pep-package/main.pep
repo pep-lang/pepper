@@ -16,6 +16,9 @@
 #     pepper package fetch --offline            # only what .pep/deps holds; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
+#     pepper package tree [--depth 1]           # the locked graph
+#     pepper package why numbers                # every path from the project to it
+#     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
 #
 # Build it from the repository root; its pep.toml names the toml package it
 # needs, which `pepper build` fetches:
@@ -32,6 +35,7 @@ import syntax;
 import toml;
 import toolchain;
 import "git";
+import "graph";
 import "lock";
 import "manifest";
 import "resolve";
@@ -107,6 +111,19 @@ main(args: String[]): int {
         "publish", "Checks the package and runs its tests, then tags its version and pushes the tag"
     );
     var dry_run = publish.flag("dry-run", help = "check and test, but neither tag nor push");
+    var tree = parser.command("tree", "Prints the dependency graph pep.lock records");
+    var depth = tree.option<ulong>(
+        "depth", "d", "print only N levels of dependencies below the project", value_name = "N"
+    );
+    var why = parser.command("why", "Prints every path from the project to a package");
+    var why_package = why.positional(
+        "package", "the package's name, owner/name or source, or the name a dependency is imported by"
+    );
+    var outdated = parser.command(
+        "outdated",
+        "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
+    );
+    var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
     if (!parser.parse(args)) {
         return 2;
     }
@@ -158,6 +175,15 @@ main(args: String[]): int {
     }
     if (publish.is_selected) {
         return project.publish(dry_run.is_set);
+    }
+    if (tree.is_selected) {
+        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF);
+    }
+    if (why.is_selected) {
+        return project.why(why_package.value());
+    }
+    if (outdated.is_selected) {
+        return project.outdated(exit_code.is_set);
     }
     print(parser.help());
     return 2;
@@ -710,6 +736,66 @@ struct Project {
             return false;
         }
         return true;
+    }
+
+    # The graph pep.lock records, for the reports.
+    _graph(): Result<LockedGraph> {
+        var manifest = read_manifest(manifest_path);
+        if (manifest.is_err()) {
+            return Result<LockedGraph>.Err(manifest.error().message);
+        }
+        var graph = read_graph(dir, manifest.value(), offline);
+        if (graph.is_ok()) {
+            graph.value().resolver.toolchain = version();
+        }
+        return graph;
+    }
+
+    tree(depth: ulong): int {
+        var graph = _graph();
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        File.stdout().write_all(graph.value().tree(depth));
+        return 0;
+    }
+
+    why(spec: String): int {
+        var graph = _graph();
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var targets = graph.value().find(spec);
+        if (targets.is_empty) {
+            return fail($"no package '{spec}' in pep.lock");
+        }
+        for (var path in graph.value().why(targets)) {
+            print(path);
+        }
+        return 0;
+    }
+
+    # Lists what is outdated; with `exit_code`, any is status 1.
+    outdated(exit_code: bool): int {
+        if (offline) {
+            return fail(
+                "--offline, and 'outdated' reads which versions each package offers over the network, so it cannot check; run it without --offline (or PEPPER_OFFLINE)"
+            );
+        }
+        var graph = _graph();
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var rows = graph.value().outdated();
+        if (rows.is_err()) {
+            return fail(rows.error().message);
+        }
+        if (rows.value().is_empty) {
+            print("every package is at the newest version");
+            return 0;
+        }
+        File.stdout().write_all(table(["package", "locked", "wanted", "latest", "source"], rows.value()));
+        return exit_code ? 1 : 0;
     }
 
     # Checks that the package is ready to release at pep.toml's `version`
