@@ -177,7 +177,11 @@ main(args: String[]): int {
 fail(message: String): int {
     # A clang-style diagnostic (`pep.toml:3:1: error: ...`) names itself.
     var first = message.split_once("\n");
-    if ((first.is_value() ? first.value().0 : message).contains(": error: ")) {
+    var located = (first.is_value() ? first.value().0 : message).split_once(": error: ");
+    var place = located.is_value() ? located.value().0.split(":") : Array<String>();
+    if (place.count >= 3
+        and ulong.parse(place[place.count - 1]).is_value()
+        and ulong.parse(place[place.count - 2]).is_value()) {
         File.stderr().write_all(message.ends_with("\n") ? message : message + "\n");
         return 1;
     }

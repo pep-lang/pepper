@@ -230,6 +230,18 @@ overrides_put_a_folder_in_place_of_a_package() {
     expect_true(program.is_ok());
     expect_false(program.value().check().is_value());
 
+    # The lock clones a fork's commit from the fork, and a folder has
+    # nothing to fetch.
+    File.write_text(
+        root.join(Path("pep.lock")),
+        "version = 1\n\n[[package]]\nname = \"geo\"\nsource = \"github:x/geo\"\noverride = \"path:geo\"\n"
+            + "\n[[package]]\nname = \"net\"\nsource = \"github:x/net\"\noverride = \"github:me/net\"\ncommit = \"abc\"\n"
+    );
+    var locked = link.read_lock(root.join(Path("pep.lock")));
+    expect_true(locked.is_ok());
+    expect_equal(locked.value().count, 1);
+    expect_equal(locked.value()[0].clone_url(), link.Host.GitHub.clone_url("me/net"));
+
     expect_equal(
         errors("[package]\nname = \"a\"\n[overrides]\n\"x/geo\" = { path = \"geo\" }\n"),
         "x/geo: override 'x/geo' does not name a package's source, such as 'github:owner/name'"
