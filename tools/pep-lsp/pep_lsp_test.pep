@@ -1774,8 +1774,10 @@ deepest_program(body: String): String {
 
 [Test]
 deepest_source_fits_the_server_stack() {
-    # The server analyzes on a thread of its own, with the default stack:
-    # a stack overflow cannot be caught, and ends the server.
+    # The server analyzes on a thread of its own, with a stack of
+    # ANALYSIS_STACK_SIZE: a stack overflow cannot be caught, and ends the
+    # server. Half of it here, so the deepest source fits with room to
+    # spare, whether this test is built optimized or not.
     var n = DEEPEST;
     var programs = [
         deepest_program("    x = 1" + " + x".repeat(n) + ";"),
@@ -1794,7 +1796,7 @@ deepest_source_fits_the_server_stack() {
         Thread.spawn(() => {
             var uri = documents.receive().value();
             outcomes.send(copy(outcome_of(analyze(uri, documents.receive().value()))));
-        }, "pep-lsp-analysis").join();
+        }, "pep-lsp-analysis", ANALYSIS_STACK_SIZE / 2).join();
         expect_equal($"{i}: " + outcomes.receive().value(), $"{i}: passed");
     }
 }

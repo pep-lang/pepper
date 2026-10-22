@@ -18,6 +18,12 @@ nothing waits for another thread (see [WebAssembly](platform-selection.md#webass
 - `Thread.spawn(body, name)` starts a new thread that runs `body`, a function
   of type `ThreadBody` (an alias for `shared () => void`), and returns its
   `Thread`. The name is optional.
+- `Thread.spawn(body, name, stack_size)` gives the thread `stack_size` bytes
+  of stack. Without it a thread gets the system's default: usually 8 MiB on
+  Linux (`ulimit -s`), 1 MiB on Windows and 512 KiB on macOS. A thread that
+  recurses deeply, such as one walking a deeply nested tree, passes a size so
+  it has the same room everywhere. The stack is reserved address space: memory is used only as
+  the thread reaches it.
 - `join()` waits for the body to return. After `join()`, the joining thread
   sees everything the other thread did. A thread can be joined once.
 - `Thread.current()` returns the calling thread's `Thread`. For a spawned
