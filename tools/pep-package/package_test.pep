@@ -66,11 +66,13 @@ struct Hosts {
     # The command that runs `program` with `arguments` in `dir`, with this
     # stand-in for github.com, and GitLab and Codeberg in folders that do not
     # exist, so a lookup never leaves the machine (`add` asks every host).
+    # Its Pepper home, which holds the download cache, is in this folder.
     command(program: String, dir: Path, arguments: Array<String>): process.Command {
         return process
             .Command(program)
             .arguments(arguments)
             .working_directory(dir)
+            .environment("PEPPER_HOME", home().to_string())
             .environment("PEPPER_PACKAGE_GITHUB_URL", url)
             .environment("PEPPER_PACKAGE_GITLAB_URL", url + "/gitlab")
             .environment("PEPPER_PACKAGE_CODEBERG_URL", url + "/codeberg");
@@ -98,6 +100,16 @@ struct Hosts {
             process.Command("git").arguments(["rev-parse", revision + "^{commit}"]).working_directory(bare(name))
         );
         return output.stdout.trim();
+    }
+
+    # The Pepper home the tools run with.
+    home(): Path {
+        return folder.path.join("home");
+    }
+
+    # The download cache in `home()`.
+    cache(): Path {
+        return home().join("cache").join("packages");
     }
 
     # The bare repository `name`.
@@ -650,10 +662,15 @@ a_locked_project_fetches_archives_without_git_and_checks_their_files() {
             expect_exit(package_without_git(hosts, project.dir, ["fetch"], server), 0);
             # Offline with git, the unpacked archives serve too.
             expect_exit(hosts.package(project.dir, ["fetch", "--offline"]), 0);
+            # Offline without git, the archives in the download cache do.
+            remove_tree(project.dir.join(".pep"));
+            expect_exit(package_without_git(hosts, project.dir, ["fetch", "--offline"], server), 0);
+            expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
 
             # A tampered archive: 1.3.1's commit serves 2.0.0's files.
             write_archive(hosts, archives, "other/numbers", "v2.0.0", numbers);
             remove_tree(project.dir.join(".pep"));
+            remove_tree(hosts.cache());
             var tampered = package_without_git(hosts, project.dir, ["fetch"], server);
             expect_exit(tampered, 1);
             var expected = locked.split("source = \"github:other/numbers\"")[1].split("sha256 = \"")[1].split("\"")[0];
@@ -743,22 +760,81 @@ an_unfetched_dependency_fails_under_offline() {
     var head = run(process.Command("git").arguments(["rev-parse", "HEAD"]).working_directory(geometry));
     expect_equal(head.stdout.trim(), hosts.commit_of("someone/geometry", "v1.1.0"));
 
+    # Without .pep, the download cache serves, to pep-build too.
     remove_tree(project.dir.join(".pep"));
+    expect_exit(unreachable("pep-package", ["fetch", "--offline"]), 0);
+    remove_tree(project.dir.join(".pep"));
+    expect_exit(unreachable("pep-build", ["--offline"]), 0);
+
+    remove_tree(project.dir.join(".pep"));
+    remove_tree(hosts.cache());
     var refused = unreachable("pep-package", ["fetch", "--offline"]);
     expect_exit(refused, 1);
-    expect_contains(refused.stderr, "--offline, and ");
-    expect_contains(refused.stderr, " does not hold the commit ");
+    expect_contains(refused.stderr, "--offline, and neither ");
+    expect_contains(refused.stderr, " nor the package cache holds the commit ");
     expect_contains(refused.stderr, "; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first");
     expect_false(refused.stderr.contains("git clone"));
     var built = unreachable("pep-build", ["--offline"]);
     expect_exit(built, 1);
-    expect_contains(built.stderr, "lacks github:other/numbers ");
+    expect_contains(built.stderr, " nor the package cache holds the commit ");
     expect_false(project.dir.join(".pep").join("deps").exists());
     var added = unreachable("pep-package", ["add", "other/numbers", "--name", "more", "--offline"]);
     expect_exit(added, 1);
     expect_contains(
         added.stderr, "--offline, and adding 'other/numbers' reads which versions it offers over the network"
     );
+}
+
+[Test]
+projects_share_the_download_cache() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("cache");
+    var first = Project("cache_first", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(first.dir, ["fetch"]), 0);
+    var info = hosts.package(first.dir, ["cache", "info"]);
+    expect_exit(info, 0);
+    expect_contains(info.stdout, "\ngithub.com/other/numbers\ngithub.com/someone/geometry\n");
+
+    # A second project with the same lock fetches from the cache, without
+    # the host.
+    var second = Project("cache_second", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    write_file(second.dir.join("pep.lock"), first.lock());
+    var unreachable = (dir: Path, arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool("pep-package").to_string(), dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    expect_exit(unreachable(second.dir, ["fetch", "github:someone/geometry", "github:other/numbers"]), 0);
+    expect_equal(hosts.build_and_run(second.dir), "1.1.0 1.3.1\n");
+
+    # A project's checkout does not need the cache once it is made.
+    expect_exit(hosts.package(first.dir, ["cache", "clean"]), 0);
+    expect_false(hosts.cache().exists());
+    expect_equal(hosts.build_and_run(first.dir), "1.1.0 1.3.1\n");
+
+    # Two projects fetching at once take turns at the cache.
+    var projects = Array<Project>();
+    var children = Array<process.Child>();
+    for (var name in ["cache_one", "cache_two"]) {
+        var project = Project(name, "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+        projects.append(project);
+        write_file(project.dir.join("pep.lock"), first.lock());
+        children.append(
+            hosts
+                .command(tool("pep-package").to_string(), project.dir, ["fetch"])
+                .stdout(process.Stream.Null)
+                .stderr(process.Stream.Null)
+                .spawn()
+                .value()
+        );
+    }
+    for (var child in children) {
+        expect_true(child.wait().value().success());
+    }
 }
 
 [Test]

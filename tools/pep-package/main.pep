@@ -13,9 +13,11 @@
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
 #     pepper package fetch --locked             # fail rather than change pep.lock
-#     pepper package fetch --offline            # only what .pep/deps holds; --frozen is both
+#     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
+#     pepper package cache info                 # the download cache every project shares
+#     pepper package cache clean
 #
 # Build it from the repository root; its pep.toml names the toml package it
 # needs, which `pepper build` fetches:
@@ -35,6 +37,7 @@ import "git";
 import "lock";
 import "manifest";
 import "resolve";
+import "tree";
 
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
@@ -59,7 +62,7 @@ main(args: String[]): int {
     );
     var offline = parser.flag(
         "offline",
-        help = "use only what .pep/deps holds, and fail on what needs the network (also PEPPER_OFFLINE=1)",
+        help = "use only what .pep/deps and the download cache hold, and fail on what needs the network (also PEPPER_OFFLINE=1)",
         global = true
     );
     var frozen = parser.flag("frozen", help = "both --locked and --offline", global = true);
@@ -107,8 +110,14 @@ main(args: String[]): int {
         "publish", "Checks the package and runs its tests, then tags its version and pushes the tag"
     );
     var dry_run = publish.flag("dry-run", help = "check and test, but neither tag nor push");
+    var cache = parser.command("cache", "Shows or empties the download cache every project shares");
+    var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
+    cache.command("clean", "Removes the cache; projects keep what .pep/deps holds");
     if (!parser.parse(args)) {
         return 2;
+    }
+    if (cache.is_selected) {
+        return cache_info.is_selected ? show_cache() : clean_cache();
     }
     var start = directory.is_set ? Path(directory.value()) : Path(".");
     var found = find_manifest(start);
@@ -167,6 +176,62 @@ main(args: String[]): int {
 fail(message: String): int {
     File.stderr().write_all($"pep-package: error: {message}\n");
     return 1;
+}
+
+# Prints the download cache's folder, then each package it holds
+# (`github.com/other/numbers`).
+show_cache(): int {
+    var root = cache_dir();
+    print(root.to_string());
+    var packages = Array<String>();
+    _list_cached(root, "", packages);
+    packages.sort((a, b) => a.compare(b));
+    for (var package in packages) {
+        print(package);
+    }
+    return 0;
+}
+
+# Adds to `packages` each package under `dir`, the cache's folder `prefix`
+# (`github.com/other`): a bare repository (`numbers.git`), or a folder
+# holding archives (`numbers/<commit>.tar.gz`).
+_list_cached(dir: Path, prefix: String, packages: Array<String>) {
+    var opened = Directory.open(dir);
+    if (opened.is_err()) {
+        return;
+    }
+    var listed = opened.value().entries();
+    if (listed.is_err()) {
+        return;
+    }
+    for (var entry in listed.value()) {
+        var name = entry.path.file_name().value_or("");
+        var path = prefix.is_empty ? name : prefix + "/" + name;
+        var package = "";
+        if (entry.is_directory and name.ends_with(".git")) {
+            package = path.substr(0, path.length - 4);
+        } else if (entry.is_file and name.ends_with(".tar.gz")) {
+            package = prefix;
+        } else if (entry.is_directory) {
+            _list_cached(entry.path, path, packages);
+        }
+        if (!package.is_empty and !packages.contains(package)) {
+            packages.append(package);
+        }
+    }
+}
+
+# Removes the download cache.
+clean_cache(): int {
+    var root = cache_dir();
+    if (root.exists()) {
+        var removed = remove_tree(root);
+        if (removed.is_err()) {
+            return fail($"cannot remove {root.to_string()}: {removed.error().message}");
+        }
+    }
+    say($"removed {root.to_string()}");
+    return 0;
 }
 
 # Prints `message` as progress.

@@ -1,10 +1,13 @@
 # Fetching packages with git: what a repository offers (`git ls-remote`),
-# and checking a commit out into `.pep/deps`. Authentication is git's
-# concern (credential helpers, SSH keys).
+# and checking a commit out into `.pep/deps` from the download cache every
+# project shares, a bare repository per package in the Pepper home.
+# Authentication is git's concern (credential helpers, SSH keys).
 
-import [Directory, Path] from io;
+import [Directory, File, Path] from io;
+import io;
 import os;
 import process;
+import toolchain;
 import "tree";
 
 # The web address of host `host` (`github`): `https://github.com`, or the
@@ -128,39 +131,59 @@ export checked_out(directory: Path): Optional<String> {
 
 # Why `--offline` cannot use `directory` for `commit`.
 export not_held_offline(directory: Path, commit: String): String {
-    return $"--offline, and {directory.to_string()} does not hold the commit {commit.substr(0, 12)}; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first";
+    return $"--offline, and neither {directory.to_string()} nor the package cache holds the commit {commit.substr(0, 12)}; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first";
 }
 
-# Makes `directory` a checkout of `commit` from `url`: clones it when it is
-# missing, fetches when the commit is not there yet, and checks the commit
-# out (detached). Returns the full commit. `offline` fails rather than
-# clone or fetch.
-export check_out(url: String, directory: Path, commit: String, offline: bool = false): Result<String> {
+# The download cache every project shares: `cache/packages` in the Pepper
+# home (`PEPPER_HOME`).
+export cache_dir(): Path {
+    return toolchain.find_home().root.join("cache").join("packages");
+}
+
+# Where the cache keeps `repository` (`owner/name`) on `host`: its bare
+# repository is this path with `.git` added, its archives (fetched without
+# git) `<this>/<commit>.tar.gz`, and its lock this path with `.lock` added.
+export cached_package(host: String, repository: String): Path {
+    var dir = cache_dir().join(host_domain(host));
+    for (var part in repository.split("/")) {
+        dir = dir.join(part);
+    }
+    return dir;
+}
+
+# Takes the cache's lock on `repository` on `host`, which the returned file
+# holds until it is closed or destroyed, so processes fetching the same
+# package take turns.
+export lock_cache(host: String, repository: String): Result<File> {
+    var path = Path(cached_package(host, repository).to_string() + ".lock");
+    var parent = path.parent();
+    if (parent.is_value()) {
+        Directory.create_all(parent.value());
+    }
+    var opened = io.OpenOptions().write(true).create(true).open(path);
+    if (opened.is_err()) {
+        return Result<File>.Err($"cannot open {path.to_string()}: {opened.error().message}");
+    }
+    var held = opened.value().lock();
+    if (held.is_err()) {
+        return Result<File>.Err($"cannot lock {path.to_string()}: {held.error().message}");
+    }
+    return Result<File>.Ok(opened.value());
+}
+
+# Makes `directory` a checkout of `commit` of `repository` on `host`:
+# clones it when it is missing, fetches when the commit is not there yet,
+# and checks the commit out (detached). Returns the full commit. `offline`
+# fails rather than reach the network.
+export check_out(
+    host: String, repository: String, directory: Path, commit: String, offline: bool = false
+): Result<String> {
     var at = checked_out(directory);
     if (at.is_value() and at.value().starts_with(commit)) {
         return Result<String>.Ok(at.value());
     }
-    if (at.is_empty() and offline) {
-        return Result<String>.Err(not_held_offline(directory, commit));
-    }
-    if (at.is_empty()) {
-        if (directory.exists()) {
-            var removed = remove_tree(directory);
-            if (removed.is_err()) {
-                return Result<String>.Err($"cannot remove {directory.to_string()}: {removed.error().message}");
-            }
-        }
-        var parent = directory.parent();
-        if (parent.is_value()) {
-            Directory.create_all(parent.value());
-        }
-        var cloned = git(["clone", "--quiet", "--no-checkout", url, directory.to_string()]);
-        if (cloned.is_err()) {
-            return Result<String>.Err(cloned.error().message);
-        }
-    }
     var dir = directory.to_string();
-    var fetched = _fetch_commit(url, directory, commit, offline);
+    var fetched = _fetch_commit(host, repository, directory, commit, offline);
     if (fetched.is_err()) {
         return Result<String>.Err(fetched.error().message);
     }
@@ -175,38 +198,120 @@ export check_out(url: String, directory: Path, commit: String, offline: bool = f
     return Result<String>.Ok(head.value());
 }
 
-# Fetches from `url` into the clone `directory` unless it has `commit`
-# already; `offline` fails rather than fetch.
-_fetch_commit(url: String, directory: Path, commit: String, offline: bool): Result<void> {
+# Makes the clone `directory` hold `commit`, unless it does already, from
+# the cache, which fetches it first when it lacks it. A missing clone is
+# cloned from the cache: git hard-links the objects where the file system
+# allows (copying them across drives), so the clone does not need the
+# cache afterwards. `offline` fails rather than fetch.
+_fetch_commit(host: String, repository: String, directory: Path, commit: String, offline: bool): Result<void> {
     var dir = directory.to_string();
-    if (git(["cat-file", "-e", commit + "^{commit}"], dir).is_ok()) {
+    var cloned = directory.join(".git").exists();
+    if (cloned and git(["cat-file", "-e", commit + "^{commit}"], dir).is_ok()) {
         return Result<void>.ok();
     }
-    if (offline) {
-        return Result<void>.Err(not_held_offline(directory, commit));
+    var lock = lock_cache(host, repository);
+    if (lock.is_err()) {
+        return Result<void>.Err(lock.error().message);
     }
-    var fetched = git(["fetch", "--quiet", "--tags", url, "+refs/heads/*:refs/remotes/origin/*"], dir);
-    if (fetched.is_err()) {
-        return Result<void>.Err(fetched.error().message);
+    var url = repository_url(host, repository);
+    var cached = _cache_commit(host, repository, url, directory, commit, offline);
+    if (cached.is_err()) {
+        return Result<void>.Err(cached.error().message);
     }
-    return Result<void>.ok();
+    var (bare, full) = cached.value();
+    if (cloned) {
+        var fetched = git(["fetch", "--quiet", bare.to_string(), full], dir);
+        return fetched.is_err() ? Result<void>.Err(fetched.error().message) : Result<void>.ok();
+    }
+    if (directory.exists()) {
+        var removed = remove_tree(directory);
+        if (removed.is_err()) {
+            return Result<void>.Err($"cannot remove {dir}: {removed.error().message}");
+        }
+    }
+    var parent = directory.parent();
+    if (parent.is_value()) {
+        Directory.create_all(parent.value());
+    }
+    var made = git(["clone", "--quiet", "--no-checkout", bare.to_string(), dir]);
+    if (made.is_err()) {
+        return Result<void>.Err(made.error().message);
+    }
+    # The clone names the package's own address, not the cache's.
+    var named = git(["remote", "set-url", "origin", url], dir);
+    return named.is_err() ? Result<void>.Err(named.error().message) : Result<void>.ok();
 }
 
-# The text of `file` at `commit` of `url`, read from the clone in
-# `directory` without checking the commit out (a missing clone is made by
-# checking `commit` out); none when the commit has no such file. `offline`
-# reads only what the clone holds.
+# Makes the cache's bare repository of `repository` on `host` hold
+# `commit`, made and fetched from `url` when it lacks it; `offline` fails
+# instead, naming `directory`. Returns the repository and the full commit.
+# The caller holds `lock_cache`.
+_cache_commit(
+    host: String, repository: String, url: String, directory: Path, commit: String, offline: bool
+): Result<(Path, String)> {
+    var bare = Path(cached_package(host, repository).to_string() + ".git");
+    if (!bare.is_directory()) {
+        if (offline) {
+            return Result<(Path, String)>.Err(not_held_offline(directory, commit));
+        }
+        # Made beside it and renamed, so an interrupted one leaves none.
+        var partial = Path(bare.to_string() + ".partial");
+        if (partial.exists()) {
+            var cleared = remove_tree(partial);
+            if (cleared.is_err()) {
+                return Result<(Path, String)>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
+            }
+        }
+        var made = git(["init", "--quiet", "--bare", partial.to_string()]);
+        if (made.is_err()) {
+            return Result<(Path, String)>.Err(made.error().message);
+        }
+        # Projects fetch a commit by its id, which no branch may name any more.
+        var allowed = git(["config", "uploadpack.allowAnySHA1InWant", "true"], partial.to_string());
+        if (allowed.is_err()) {
+            return Result<(Path, String)>.Err(allowed.error().message);
+        }
+        var moved = File.rename(partial, bare);
+        if (moved.is_err()) {
+            return Result<(Path, String)>.Err(
+                $"cannot move {partial.to_string()} to {bare.to_string()}: {moved.error().message}"
+            );
+        }
+    }
+    var at = bare.to_string();
+    var full = git(["rev-parse", "--verify", "--quiet", commit + "^{commit}"], at);
+    if (full.is_err()) {
+        if (offline) {
+            return Result<(Path, String)>.Err(not_held_offline(directory, commit));
+        }
+        # Forced, as a mirror may move a tag.
+        var fetched = git(["fetch", "--quiet", url, "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"], at);
+        if (fetched.is_err()) {
+            return Result<(Path, String)>.Err(fetched.error().message);
+        }
+        full = git(["rev-parse", "--verify", "--quiet", commit + "^{commit}"], at);
+        if (full.is_err()) {
+            return Result<(Path, String)>.Err($"{url} has no commit {commit}");
+        }
+    }
+    return Result<(Path, String)>.Ok((bare, full.value().trim()));
+}
+
+# The text of `file` at `commit` of `repository` on `host`, read from the
+# clone in `directory` without checking the commit out (a missing clone is
+# made by checking `commit` out); none when the commit has no such file.
+# `offline` reads only what the clone and the cache hold.
 export file_at(
-    url: String, directory: Path, commit: String, file: String, offline: bool = false
+    host: String, repository: String, directory: Path, commit: String, file: String, offline: bool = false
 ): Result<Optional<String>> {
     if (checked_out(directory).is_empty()) {
-        var checked = check_out(url, directory, commit, offline);
+        var checked = check_out(host, repository, directory, commit, offline);
         if (checked.is_err()) {
             return Result<Optional<String>>.Err(checked.error().message);
         }
     }
     var dir = directory.to_string();
-    var fetched = _fetch_commit(url, directory, commit, offline);
+    var fetched = _fetch_commit(host, repository, directory, commit, offline);
     if (fetched.is_err()) {
         return Result<Optional<String>>.Err(fetched.error().message);
     }
