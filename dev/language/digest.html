@@ -307,6 +307,12 @@ the application and purpose; different contexts give unrelated keys.</li>
 <li><strong>Extended output</strong>: every <code>Blake3</code> hasher's <code>finish(length)</code> returns
 <code>length</code> bytes, in any of the three modes. The first 32 are the digest
 <code>finish()</code> returns.</li>
+<li><strong>PBKDF2</strong> (RFC 8018): <code>digest.pbkdf2_sha256(password, salt, rounds, length)</code> derives <code>length</code> bytes from a password (<code>u8[]</code> or <code>String</code>) and
+a <code>u8[]</code> salt, with <code>rounds</code> iterations of HMAC-SHA-256 per 32-byte
+block. It is SCRAM's <code>Hi()</code>, as PostgreSQL, MongoDB and SASL logins use.
+To store new passwords, use Argon2id (pepper-crypto's <code>crypto.hash_password</code>) instead,
+which costs an attacker's GPUs memory as well as time. It panics when
+<code>rounds</code> is 0 or <code>length</code> is over RFC 8018's limit.</li>
 </ul>
 <h2 id="using-the-systems-crypto-library"><a class="header" href="#using-the-systems-crypto-library">Using the system's crypto library</a></h2>
 <p>By default the hashes are written in Pepper, so a program that uses them

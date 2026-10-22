@@ -333,6 +333,12 @@ with the dependent's own dependencies does no harm.</li>
 <li><strong>Locked with the rest:</strong> <code>pep.lock</code> records them beside the other
 packages, each that only dev-dependencies lead to marked <code>dev = true</code>,
 and <code>pepper build</code> fetches them with the rest.</li>
+<li><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+<code>[dev-dependencies]</code> as an unknown table, a dependency's included. So a
+package that has one sets <code>minimum_toolchain = "0.11.0"</code> (or later) in
+<code>[package]</code>, and <code>pepper package</code> on an older toolchain skips its
+versions instead of failing to build them. <code>pepper package publish</code>
+checks it (see <a href="pep-package.html#publish">pep-package</a>).</li>
 </ul>
 <p><code>pepper package add --dev</code> adds one, and <code>pepper package remove</code> removes one
 from either table (see <a href="pep-package.html#add-ownernamerange">pep-package</a>). A

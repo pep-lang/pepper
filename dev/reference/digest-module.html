@@ -196,7 +196,8 @@ such as git object ids</li>
 <li><a href="digest-blake3.html">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code>, with keyed hashing,
 key derivation and output of any length</li>
 <li><a href="digest-hmac.html">HMAC</a>: <code>Hmac</code>, <code>hmac_sha256</code>, <code>hmac_sha1</code>, and
-<code>equal_constant_time</code> to check a MAC</li>
+<code>equal_constant_time</code> to check a MAC, and <code>pbkdf2_sha256</code>, PBKDF2
+over HMAC-SHA-256</li>
 <li><a href="digest-hex.html">Hexadecimal</a>: <code>to_hex</code> and <code>from_hex</code></li>
 </ul>
 <p>The implementations are portable Pepper with no link dependency, unless

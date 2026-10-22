@@ -186,7 +186,8 @@
 <h1 id="hmac"><a class="header" href="#hmac">HMAC</a></h1>
 <p>HMAC (RFC 2104): a message authentication code from a hash and a secret
 key, as webhook signatures, JWTs (HS256) and S3-style request signing
-use, and a constant-time comparison to check one.</p>
+use, and a constant-time comparison to check one. Also PBKDF2, the
+password-based key derivation built on HMAC-SHA-256.</p>
 <p>Source: <code>runtime/digest/hmac.pep</code></p>
 <h2 id="hmac-1"><a class="header" href="#hmac-1">Hmac</a></h2>
 <pre><code class="language-pepper">struct Hmac&lt;T&gt;
@@ -336,6 +337,70 @@ bytes of <code>key</code>.</p>
 <ul>
 <li>the 20-byte MAC</li>
 </ul>
+<h2 id="pbkdf2_sha256"><a class="header" href="#pbkdf2_sha256">pbkdf2_sha256</a></h2>
+<pre><code class="language-pepper">pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[]
+</code></pre>
+<p>Derives <code>length</code> bytes from <code>password</code> and <code>salt</code> with PBKDF2-HMAC-SHA256
+(RFC 8018), running <code>rounds</code> iterations of HMAC-SHA-256 for each 32-byte
+block of the output.</p>
+<p>This is SCRAM's <code>Hi()</code> (PostgreSQL, MongoDB and SASL logins), and it
+derives keys from passphrases for formats that specify it. To store new
+passwords, use Argon2id (<code>crypto.hash_password</code> in pepper-crypto)
+instead: PBKDF2 needs almost no memory, so GPUs and ASICs test guesses
+against it cheaply.
+Where PBKDF2 is required, give each password its own random salt of 16
+bytes or more, and as many rounds as the login can afford (OWASP suggests
+600,000).</p>
+<p>The time grows with <code>rounds</code> times the number of 32-byte blocks, so a
+<code>length</code> above 32 costs the caller more but an attacker, who needs only
+the first block, no more.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>password</code> — the password or passphrase</li>
+<li><code>salt</code> — the salt</li>
+<li><code>rounds</code> — the iteration count, at least 1</li>
+<li><code>length</code> — the number of bytes to derive; 0 returns none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the <code>length</code>-byte derived key</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.pbkdf2_sha256("passwd".bytes(), "salt".bytes(), 1, 16);
+assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+</code></pre>
+<h2 id="pbkdf2_sha256-1"><a class="header" href="#pbkdf2_sha256-1">pbkdf2_sha256</a></h2>
+<pre><code class="language-pepper">pbkdf2_sha256(password: String, salt: u8[], rounds: ulong, length: ulong): u8[]
+</code></pre>
+<p>Derives <code>length</code> bytes from the UTF-8 bytes of <code>password</code> and <code>salt</code>
+with PBKDF2-HMAC-SHA256, as the <code>u8[]</code> overload does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>password</code> — the password or passphrase</li>
+<li><code>salt</code> — the salt</li>
+<li><code>rounds</code> — the iteration count, at least 1</li>
+<li><code>length</code> — the number of bytes to derive; 0 returns none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the <code>length</code>-byte derived key</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 16);
+assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+</code></pre>
 <h2 id="equal_constant_time"><a class="header" href="#equal_constant_time">equal_constant_time</a></h2>
 <pre><code class="language-pepper">equal_constant_time(a: u8[], b: u8[]): bool
 </code></pre>

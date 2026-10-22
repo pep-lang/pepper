@@ -4269,6 +4269,11 @@ position(): (line: int, column: int) {
     return (line: 3, column: 7);
 }
 
+# A generic function hands back the labels of its type argument.
+first_of&lt;T&gt;(items: Array&lt;T&gt;): T {
+    return items[0];
+}
+
 struct Token {
     var text: String = "";
     var at: (line: int, column: int);
@@ -4297,6 +4302,7 @@ main(): int {
     assert(counts[0].count == 2, "a labeled element");
     var found = Optional&lt;(line: int, column: int)&gt;.Value(p);
     assert(found.value().column == 7, "through an enum case");
+    assert(first_of(counts).count == 2, "through a generic function");
     return 0;
 }
 </code></pre>
@@ -4315,8 +4321,9 @@ method or an enum case called on the labeled type gives
 <code>Optional&lt;(int, int)&gt;</code>. A member takes back only the labels its declaration
 writes as a type parameter: a method of <code>Box&lt;(a: int, b: int)&gt;</code> declared to
 return <code>(int, int)</code> returns an unlabeled tuple. A generic function's result
-takes none: <code>identity&lt;(a: int, b: int)&gt;(p)</code> is unlabeled, so declare the
-variable's type to name its elements.</li>
+takes back the labels of its type arguments, written or inferred, the same
+way: <code>identity&lt;(a: int, b: int)&gt;(p).b</code> and, for <code>p: (a: int, b: int)</code>,
+<code>identity(p).b</code> read an element by its label.</li>
 <li><code>var p = (line: 3, column: 7);</code> gives <code>p</code> the labeled type
 <code>(line: int, column: int)</code>. A labeled value takes at least two elements.</li>
 <li>A labeled value initializing or returned as a labeled type must use its
@@ -18044,6 +18051,12 @@ the application and purpose; different contexts give unrelated keys.</li>
 <li><strong>Extended output</strong>: every <code>Blake3</code> hasher's <code>finish(length)</code> returns
 <code>length</code> bytes, in any of the three modes. The first 32 are the digest
 <code>finish()</code> returns.</li>
+<li><strong>PBKDF2</strong> (RFC 8018): <code>digest.pbkdf2_sha256(password, salt, rounds, length)</code> derives <code>length</code> bytes from a password (<code>u8[]</code> or <code>String</code>) and
+a <code>u8[]</code> salt, with <code>rounds</code> iterations of HMAC-SHA-256 per 32-byte
+block. It is SCRAM's <code>Hi()</code>, as PostgreSQL, MongoDB and SASL logins use.
+To store new passwords, use Argon2id (pepper-crypto's <code>crypto.hash_password</code>) instead,
+which costs an attacker's GPUs memory as well as time. It panics when
+<code>rounds</code> is 0 or <code>length</code> is over RFC 8018's limit.</li>
 </ul>
 <h2 id="using-the-systems-crypto-library"><a class="header" href="#using-the-systems-crypto-library">Using the system's crypto library</a></h2>
 <p>By default the hashes are written in Pepper, so a program that uses them
@@ -22458,6 +22471,12 @@ with the dependent's own dependencies does no harm.</li>
 <li><strong>Locked with the rest:</strong> <code>pep.lock</code> records them beside the other
 packages, each that only dev-dependencies lead to marked <code>dev = true</code>,
 and <code>pepper build</code> fetches them with the rest.</li>
+<li><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+<code>[dev-dependencies]</code> as an unknown table, a dependency's included. So a
+package that has one sets <code>minimum_toolchain = "0.11.0"</code> (or later) in
+<code>[package]</code>, and <code>pepper package</code> on an older toolchain skips its
+versions instead of failing to build them. <code>pepper package publish</code>
+checks it (see <a href="tools/pep-package.html#publish">pep-package</a>).</li>
 </ul>
 <p><code>pepper package add --dev</code> adds one, and <code>pepper package remove</code> removes one
 from either table (see <a href="tools/pep-package.html#add-ownernamerange">pep-package</a>). A
@@ -22663,6 +22682,8 @@ pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
+pepper package publish --dry-run             # check and test the release pep.toml's version names
+pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
 </code></pre>
 <pre><code class="language-text">pep-package [-C &lt;dir&gt;] [--locked] [--offline] [--frozen] &lt;command&gt; [arguments]
 </code></pre>
@@ -22689,6 +22710,8 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
+<tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="tools/pep-package.html#publish"><code>publish</code></a>)</td></tr>
+<tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
@@ -22741,6 +22764,47 @@ when one does:</p>
 <code>pep-package</code>, else on the <code>PATH</code>) on the project after each. An update
 that does not build is rolled back, and the command lists those it rolled
 back.</p>
+<h3 id="publish"><a class="header" href="#publish"><code>publish</code></a></h3>
+<p>Releases the package at the version <code>pep.toml</code>'s <code>[package]</code> <code>version</code>
+names: other projects then depend on it by that version (see
+<a href="tools/pep-package.html#resolving-versions">Resolving versions</a>). Raise <code>version</code>, commit,
+merge it to the default branch, then run it from the package's clone:</p>
+<pre><code class="language-text">$ pepper package publish
+pep-package: running 'pepper +0.11.0 test'
+pep-package: running 'pepper +latest test'
+pep-package: published shapes 1.2.0: tagged 3f9c2e01a7b4 v1.2.0 and pushed it to origin
+</code></pre>
+<p>First it checks, and lists every check that fails at once:</p>
+<ul>
+<li>the work tree has no changes <code>git status</code> shows, and <code>HEAD</code> is the tip
+of the default branch of <code>origin</code>, so the commit it tags is the one
+that branch holds;</li>
+<li><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
+<code>origin</code> has;</li>
+<li><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</li>
+<li>every dependency asks for a version range, not a branch, tag, commit,
+path or the default branch, so a project depending on this one can
+resolve it with its other packages. A dev-dependency may be anything,
+since a dependent ignores it;</li>
+<li><code>minimum_toolchain</code> is at least the release that reads each newer
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code> needs 0.11.0.</li>
+</ul>
+<pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
+  '[package]' has no 'license'
+  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
+</code></pre>
+<p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
+and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
+with the Pepper home's own <code>pepper</code> (in the home <code>PEPPER_HOME</code> names,
+else the default one; see <a href="tools/pep-install.html">Toolchains: pep-install</a>), so
+both toolchains must be installed there; <code>latest</code> is the newest
+installed release, not a prerelease. A failing run stops it and shows
+what the tests printed. Last, it tags <code>HEAD</code> <code>v&lt;version&gt;</code> and pushes the
+tag to <code>origin</code>; when the push fails, it deletes the tag again.</p>
+<p><code>--dry-run</code> checks and tests, then says what it would tag, without
+tagging or pushing anything. <code>publish</code> neither creates a release page on
+the host nor needs <code>pep.lock</code>, which a dependent does not read.</p>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
 <p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
 the dependency graph, its dependencies' dependencies included, and the
@@ -22861,6 +22925,7 @@ them out, each once per run.</p>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
+<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home whose <code>pepper</code> <a href="tools/pep-package.html#publish"><code>publish</code></a> runs the tests with, as for <code>pep-install</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody></table>
 </div>
@@ -55340,7 +55405,8 @@ such as git object ids</li>
 <li><a href="reference/digest-blake3.html">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code>, with keyed hashing,
 key derivation and output of any length</li>
 <li><a href="reference/digest-hmac.html">HMAC</a>: <code>Hmac</code>, <code>hmac_sha256</code>, <code>hmac_sha1</code>, and
-<code>equal_constant_time</code> to check a MAC</li>
+<code>equal_constant_time</code> to check a MAC, and <code>pbkdf2_sha256</code>, PBKDF2
+over HMAC-SHA-256</li>
 <li><a href="reference/digest-hex.html">Hexadecimal</a>: <code>to_hex</code> and <code>from_hex</code></li>
 </ul>
 <p>The implementations are portable Pepper with no link dependency, unless
@@ -55757,7 +55823,8 @@ assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of noth
 <h1 id="hmac"><a class="header" href="#hmac">HMAC</a></h1>
 <p>HMAC (RFC 2104): a message authentication code from a hash and a secret
 key, as webhook signatures, JWTs (HS256) and S3-style request signing
-use, and a constant-time comparison to check one.</p>
+use, and a constant-time comparison to check one. Also PBKDF2, the
+password-based key derivation built on HMAC-SHA-256.</p>
 <p>Source: <code>runtime/digest/hmac.pep</code></p>
 <h2 id="hmac-1"><a class="header" href="#hmac-1">Hmac</a></h2>
 <pre><code class="language-pepper">struct Hmac&lt;T&gt;
@@ -55907,6 +55974,70 @@ bytes of <code>key</code>.</p>
 <ul>
 <li>the 20-byte MAC</li>
 </ul>
+<h2 id="pbkdf2_sha256"><a class="header" href="#pbkdf2_sha256">pbkdf2_sha256</a></h2>
+<pre><code class="language-pepper">pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[]
+</code></pre>
+<p>Derives <code>length</code> bytes from <code>password</code> and <code>salt</code> with PBKDF2-HMAC-SHA256
+(RFC 8018), running <code>rounds</code> iterations of HMAC-SHA-256 for each 32-byte
+block of the output.</p>
+<p>This is SCRAM's <code>Hi()</code> (PostgreSQL, MongoDB and SASL logins), and it
+derives keys from passphrases for formats that specify it. To store new
+passwords, use Argon2id (<code>crypto.hash_password</code> in pepper-crypto)
+instead: PBKDF2 needs almost no memory, so GPUs and ASICs test guesses
+against it cheaply.
+Where PBKDF2 is required, give each password its own random salt of 16
+bytes or more, and as many rounds as the login can afford (OWASP suggests
+600,000).</p>
+<p>The time grows with <code>rounds</code> times the number of 32-byte blocks, so a
+<code>length</code> above 32 costs the caller more but an attacker, who needs only
+the first block, no more.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>password</code> — the password or passphrase</li>
+<li><code>salt</code> — the salt</li>
+<li><code>rounds</code> — the iteration count, at least 1</li>
+<li><code>length</code> — the number of bytes to derive; 0 returns none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the <code>length</code>-byte derived key</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.pbkdf2_sha256("passwd".bytes(), "salt".bytes(), 1, 16);
+assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+</code></pre>
+<h2 id="pbkdf2_sha256-1"><a class="header" href="#pbkdf2_sha256-1">pbkdf2_sha256</a></h2>
+<pre><code class="language-pepper">pbkdf2_sha256(password: String, salt: u8[], rounds: ulong, length: ulong): u8[]
+</code></pre>
+<p>Derives <code>length</code> bytes from the UTF-8 bytes of <code>password</code> and <code>salt</code>
+with PBKDF2-HMAC-SHA256, as the <code>u8[]</code> overload does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>password</code> — the password or passphrase</li>
+<li><code>salt</code> — the salt</li>
+<li><code>rounds</code> — the iteration count, at least 1</li>
+<li><code>length</code> — the number of bytes to derive; 0 returns none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the <code>length</code>-byte derived key</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 16);
+assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
+</code></pre>
 <h2 id="equal_constant_time"><a class="header" href="#equal_constant_time">equal_constant_time</a></h2>
 <pre><code class="language-pepper">equal_constant_time(a: u8[], b: u8[]): bool
 </code></pre>

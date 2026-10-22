@@ -192,6 +192,8 @@ pepper package remove geometry
 pepper package update                        # every dependency, as far as the ranges allow
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
+pepper package publish --dry-run             # check and test the release pep.toml's version names
+pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
 </code></pre>
 <pre><code class="language-text">pep-package [-C &lt;dir&gt;] [--locked] [--offline] [--frozen] &lt;command&gt; [arguments]
 </code></pre>
@@ -218,6 +220,8 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 <tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
+<tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="#publish"><code>publish</code></a>)</td></tr>
+<tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
@@ -270,6 +274,47 @@ when one does:</p>
 <code>pep-package</code>, else on the <code>PATH</code>) on the project after each. An update
 that does not build is rolled back, and the command lists those it rolled
 back.</p>
+<h3 id="publish"><a class="header" href="#publish"><code>publish</code></a></h3>
+<p>Releases the package at the version <code>pep.toml</code>'s <code>[package]</code> <code>version</code>
+names: other projects then depend on it by that version (see
+<a href="#resolving-versions">Resolving versions</a>). Raise <code>version</code>, commit,
+merge it to the default branch, then run it from the package's clone:</p>
+<pre><code class="language-text">$ pepper package publish
+pep-package: running 'pepper +0.11.0 test'
+pep-package: running 'pepper +latest test'
+pep-package: published shapes 1.2.0: tagged 3f9c2e01a7b4 v1.2.0 and pushed it to origin
+</code></pre>
+<p>First it checks, and lists every check that fails at once:</p>
+<ul>
+<li>the work tree has no changes <code>git status</code> shows, and <code>HEAD</code> is the tip
+of the default branch of <code>origin</code>, so the commit it tags is the one
+that branch holds;</li>
+<li><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
+<code>origin</code> has;</li>
+<li><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</li>
+<li>every dependency asks for a version range, not a branch, tag, commit,
+path or the default branch, so a project depending on this one can
+resolve it with its other packages. A dev-dependency may be anything,
+since a dependent ignores it;</li>
+<li><code>minimum_toolchain</code> is at least the release that reads each newer
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code> needs 0.11.0.</li>
+</ul>
+<pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
+  '[package]' has no 'license'
+  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
+</code></pre>
+<p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
+and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
+with the Pepper home's own <code>pepper</code> (in the home <code>PEPPER_HOME</code> names,
+else the default one; see <a href="pep-install.html">Toolchains: pep-install</a>), so
+both toolchains must be installed there; <code>latest</code> is the newest
+installed release, not a prerelease. A failing run stops it and shows
+what the tests printed. Last, it tags <code>HEAD</code> <code>v&lt;version&gt;</code> and pushes the
+tag to <code>origin</code>; when the push fails, it deletes the tag again.</p>
+<p><code>--dry-run</code> checks and tests, then says what it would tag, without
+tagging or pushing anything. <code>publish</code> neither creates a release page on
+the host nor needs <code>pep.lock</code>, which a dependent does not read.</p>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
 <p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
 the dependency graph, its dependencies' dependencies included, and the
@@ -390,6 +435,7 @@ them out, each once per run.</p>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
+<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home whose <code>pepper</code> <a href="#publish"><code>publish</code></a> runs the tests with, as for <code>pep-install</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody></table>
 </div>
