@@ -60,8 +60,8 @@ if [ -z "$version" ]; then
       break
     fi
     if [ "$delay" = 0 ]; then
-      echo "error: GET $url answered HTTP $status: $(sed -n 's/.*"message": *"\([^"]*\)".*/\1/p' <<< "$releases" | head -1)" >&2
-      echo "error: no release in its ${#releases} bytes, which start: ${releases:0:200}" >&2
+      message="$(sed -n 's/.*"message": *"\([^"]*\)".*/\1/p' <<< "$releases" | head -1)"
+      echo "error: GET $url answered HTTP $status${message:+: $message}, with no release in its ${#releases} bytes, which start: ${releases:0:200}" >&2
       exit 1
     fi
     echo "warning: GET $url answered HTTP $status (${#releases} bytes, no release); trying again in ${delay}s" >&2
