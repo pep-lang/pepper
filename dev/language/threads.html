@@ -221,6 +221,10 @@ main(): int {
     assert(first.is_finished(), "join waits for the body to return");
     assert(finished.load() == 2, "both bodies ran");
 
+    # A thread with 8 MiB of stack on every system.
+    async.Thread.spawn(count_to_a_million, "counter", 8388608).join();
+    assert(finished.load() == 3, "the third body ran");
+
     # How many threads can run at once, and on how many cores.
     assert(async.logical_cpus() &gt;= async.physical_cpus(), "hyperthreads count once in physical_cpus");
     return 0;
@@ -230,6 +234,12 @@ main(): int {
 <li><code>Thread.spawn(body, name)</code> starts a new thread that runs <code>body</code>, a function
 of type <code>ThreadBody</code> (an alias for <code>shared () =&gt; void</code>), and returns its
 <code>Thread</code>. The name is optional.</li>
+<li><code>Thread.spawn(body, name, stack_size)</code> gives the thread <code>stack_size</code> bytes
+of stack. Without it a thread gets the system's default: usually 8 MiB on
+Linux (<code>ulimit -s</code>), 1 MiB on Windows and 512 KiB on macOS. A thread that
+recurses deeply, such as one walking a deeply nested tree, passes a size so
+it has the same room everywhere. The stack is reserved address space: memory is used only as
+the thread reaches it.</li>
 <li><code>join()</code> waits for the body to return. After <code>join()</code>, the joining thread
 sees everything the other thread did. A thread can be joined once.</li>
 <li><code>Thread.current()</code> returns the calling thread's <code>Thread</code>. For a spawned
@@ -1288,9 +1298,11 @@ compiler works out, for every function, whether it keeps an argument (as
 arguments. A result that shares nothing, such as that of <code>+</code>, <code>substr</code>,
 <code>copy()</code> or a constructor, is <strong>fresh</strong>, and may cross in either direction.
 The language server shows "Returns a fresh value" when hovering over such a
-function. A call through a function value, a value an <code>extern</code> function
-hands back, and a value read through raw memory that a <code>[Shared]</code> struct
-holds are never fresh: something else may reference them. The runtime takes
+function. A call through a function value links its result with its
+arguments and with what the function value captured, so it is fresh only
+when the function value and its arguments are new. A value an <code>extern</code>
+function hands back, and a value read through raw memory that a <code>[Shared]</code>
+struct holds, are never fresh: something else may reference them. The runtime takes
 the few values it hands out that nothing else references out of raw memory
 with <code>move(p[i])</code>, a promise the compiler cannot check and allows only in the
 runtime: a channel's <code>receive()</code> (the value <code>send</code> handed over) and a Mutex's
@@ -1552,8 +1564,9 @@ it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the 
 <li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
 not re-entrant.</li>
 <li>The value a <code>Select</code>'s <code>wait()</code> returns is not a new value for a lock
-body, since <code>wrap</code> is a function value the compiler cannot follow; <code>copy</code>
-it to move it into a locked value.</li>
+body, since it comes from <code>wrap</code>, a function value the <code>Select</code> keeps,
+and may share what <code>wrap</code> captured; <code>copy</code> it to move it into a locked
+value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
 which panics.</li>
 </ul>

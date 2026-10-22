@@ -766,6 +766,60 @@ or to anything it reaches. A parameter can be moved only when it is
 note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
 </code></pre>
 </li>
+</ul>
+<p>Only a variable still in scope counts: one declared in a block that has
+ended no longer references anything. A
+<a href="function-types.html#captured-values">closure</a> references what it
+captures, so a captured value can be moved once no closure that holds it
+is left: its block has ended, it was only passed to a call that does not
+keep it, or the function that made it has returned. A closure still in a
+variable, stored in a field, or returned and kept still holds the value:</p>
+<pre><code class="language-pepper">import async;
+
+struct Counter {
+    var n: int;
+
+    construct(n: int) {
+        this.n = n;
+    }
+}
+
+repeat(times: int, f: () =&gt; void) {
+    for (var _ in 0..times) {
+        f();
+    }
+}
+
+main(): int {
+    var counters = async.Channel&lt;Counter&gt;();
+
+    var a = Counter(0);
+    {
+        var bump = () =&gt; {
+            a.n += 1;
+        };
+        bump();
+    }
+    # `bump` is gone with its block, so `a` holds the only reference.
+    counters.send(move(a));
+
+    var b = Counter(10);
+    # `repeat` calls the closure but does not keep it.
+    repeat(3, () =&gt; {
+        b.n += 1;
+    });
+    counters.send(move(b));
+
+    # var c = Counter(0);
+    # var show = () =&gt; print($"{c.n}");
+    # counters.send(move(c));   # error: 'show' also references its value
+
+    print($"{counters.receive().value().n}");  # 1
+    print($"{counters.receive().value().n}");  # 13
+    return 0;
+}
+</code></pre>
+<ul>
 <li>
 <p>A moved variable cannot be read again until it is assigned a new value,
 including on the next pass through a loop:</p>

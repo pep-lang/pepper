@@ -9255,6 +9255,60 @@ or to anything it reaches. A parameter can be moved only when it is
 note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
 </code></pre>
 </li>
+</ul>
+<p>Only a variable still in scope counts: one declared in a block that has
+ended no longer references anything. A
+<a href="language/function-types.html#captured-values">closure</a> references what it
+captures, so a captured value can be moved once no closure that holds it
+is left: its block has ended, it was only passed to a call that does not
+keep it, or the function that made it has returned. A closure still in a
+variable, stored in a field, or returned and kept still holds the value:</p>
+<pre><code class="language-pepper">import async;
+
+struct Counter {
+    var n: int;
+
+    construct(n: int) {
+        this.n = n;
+    }
+}
+
+repeat(times: int, f: () =&gt; void) {
+    for (var _ in 0..times) {
+        f();
+    }
+}
+
+main(): int {
+    var counters = async.Channel&lt;Counter&gt;();
+
+    var a = Counter(0);
+    {
+        var bump = () =&gt; {
+            a.n += 1;
+        };
+        bump();
+    }
+    # `bump` is gone with its block, so `a` holds the only reference.
+    counters.send(move(a));
+
+    var b = Counter(10);
+    # `repeat` calls the closure but does not keep it.
+    repeat(3, () =&gt; {
+        b.n += 1;
+    });
+    counters.send(move(b));
+
+    # var c = Counter(0);
+    # var show = () =&gt; print($"{c.n}");
+    # counters.send(move(c));   # error: 'show' also references its value
+
+    print($"{counters.receive().value().n}");  # 1
+    print($"{counters.receive().value().n}");  # 13
+    return 0;
+}
+</code></pre>
+<ul>
 <li>
 <p>A moved variable cannot be read again until it is assigned a new value,
 including on the next pass through a loop:</p>
@@ -13875,6 +13929,10 @@ main(): int {
     assert(first.is_finished(), "join waits for the body to return");
     assert(finished.load() == 2, "both bodies ran");
 
+    # A thread with 8 MiB of stack on every system.
+    async.Thread.spawn(count_to_a_million, "counter", 8388608).join();
+    assert(finished.load() == 3, "the third body ran");
+
     # How many threads can run at once, and on how many cores.
     assert(async.logical_cpus() &gt;= async.physical_cpus(), "hyperthreads count once in physical_cpus");
     return 0;
@@ -13884,6 +13942,12 @@ main(): int {
 <li><code>Thread.spawn(body, name)</code> starts a new thread that runs <code>body</code>, a function
 of type <code>ThreadBody</code> (an alias for <code>shared () =&gt; void</code>), and returns its
 <code>Thread</code>. The name is optional.</li>
+<li><code>Thread.spawn(body, name, stack_size)</code> gives the thread <code>stack_size</code> bytes
+of stack. Without it a thread gets the system's default: usually 8 MiB on
+Linux (<code>ulimit -s</code>), 1 MiB on Windows and 512 KiB on macOS. A thread that
+recurses deeply, such as one walking a deeply nested tree, passes a size so
+it has the same room everywhere. The stack is reserved address space: memory is used only as
+the thread reaches it.</li>
 <li><code>join()</code> waits for the body to return. After <code>join()</code>, the joining thread
 sees everything the other thread did. A thread can be joined once.</li>
 <li><code>Thread.current()</code> returns the calling thread's <code>Thread</code>. For a spawned
@@ -14942,9 +15006,11 @@ compiler works out, for every function, whether it keeps an argument (as
 arguments. A result that shares nothing, such as that of <code>+</code>, <code>substr</code>,
 <code>copy()</code> or a constructor, is <strong>fresh</strong>, and may cross in either direction.
 The language server shows "Returns a fresh value" when hovering over such a
-function. A call through a function value, a value an <code>extern</code> function
-hands back, and a value read through raw memory that a <code>[Shared]</code> struct
-holds are never fresh: something else may reference them. The runtime takes
+function. A call through a function value links its result with its
+arguments and with what the function value captured, so it is fresh only
+when the function value and its arguments are new. A value an <code>extern</code>
+function hands back, and a value read through raw memory that a <code>[Shared]</code>
+struct holds, are never fresh: something else may reference them. The runtime takes
 the few values it hands out that nothing else references out of raw memory
 with <code>move(p[i])</code>, a promise the compiler cannot check and allows only in the
 runtime: a channel's <code>receive()</code> (the value <code>send</code> handed over) and a Mutex's
@@ -15206,8 +15272,9 @@ it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the 
 <li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
 not re-entrant.</li>
 <li>The value a <code>Select</code>'s <code>wait()</code> returns is not a new value for a lock
-body, since <code>wrap</code> is a function value the compiler cannot follow; <code>copy</code>
-it to move it into a locked value.</li>
+body, since it comes from <code>wrap</code>, a function value the <code>Select</code> keeps,
+and may share what <code>wrap</code> captured; <code>copy</code> it to move it into a locked
+value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
 which panics.</li>
 </ul>
@@ -22902,6 +22969,9 @@ pepper package update --verify               # one at a time, keeping the update
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
+pepper package tree                          # the dependency graph pep.lock records
+pepper package why numbers                   # every path from the project to numbers
+pepper package outdated                      # packages behind their ranges or the newest version
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 </code></pre>
@@ -22939,6 +23009,11 @@ Every package is downloaded once per machine, into a
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
 <tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="tools/pep-package.html#publish"><code>publish</code></a>)</td></tr>
 <tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
+<tr><td><code>tree</code></td><td>Prints the dependency graph <code>pep.lock</code> records (see <a href="tools/pep-package.html#tree"><code>tree</code></a>)</td></tr>
+<tr><td><code>tree --depth &lt;n&gt;</code>, <code>-d &lt;n&gt;</code></td><td>Prints only <code>&lt;n&gt;</code> levels of dependencies below the project</td></tr>
+<tr><td><code>why &lt;name&gt;</code></td><td>Prints every path from the project to a package (see <a href="tools/pep-package.html#why-name"><code>why</code></a>)</td></tr>
+<tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="tools/pep-package.html#outdated"><code>outdated</code></a>)</td></tr>
+<tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="tools/pep-package.html#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -23054,6 +23129,62 @@ tag to <code>origin</code>; when the push fails, it deletes the tag again.</p>
 <p><code>--dry-run</code> checks and tests, then says what it would tag, without
 tagging or pushing anything. <code>publish</code> neither creates a release page on
 the host nor needs <code>pep.lock</code>, which a dependent does not read.</p>
+<h3 id="tree"><a class="header" href="#tree"><code>tree</code></a></h3>
+<p>Prints the dependency graph <code>pep.lock</code> records, as the <code>pep.toml</code> of the
+project and of each locked package declare it. Each line is the name the
+dependent imports the package by, when that is not the package's own
+(<code>win: winapi</code>), its locked version (or short commit) and source, and
+marks:</p>
+<ul>
+<li><code>[dev]</code>: only the project's dev-dependencies lead to it;</li>
+<li><code>[target: &lt;condition&gt;]</code>: only builds for the targets the condition
+selects need it (see <a href="tools/projects.html#targetconditiondependencies"><code>[target]</code> tables</a>);</li>
+<li><code>[optional]</code> and <code>[features: ...]</code>: the dependent's entry says
+<code>optional = true</code>, and the features its <code>features</code> turns on. A build
+turns on more: each package's <code>default</code> feature, and what the features
+it turns on list (see <a href="tools/projects.html#features">Features</a>).</li>
+</ul>
+<p>A package whose dependencies were listed above ends in <code>(*)</code> instead of
+listing them again:</p>
+<pre><code class="language-text">$ pepper package tree
+app
+|-- geometry 1.0.0 (github:someone/geometry)
+|   `-- numbers 1.3.1 (github:other/numbers)
+|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- geometry 1.0.0 (github:someone/geometry) (*)
+</code></pre>
+<p><code>--depth &lt;n&gt;</code> stops <code>&lt;n&gt;</code> levels below the project (<code>--depth 1</code>: only its
+own dependencies). <code>tree</code>, <code>why</code> and <code>outdated</code> read the graph from
+<code>pep.lock</code>, checking each locked package out at its commit (with
+<code>--offline</code>, only from what it holds), and never change <code>pep.lock</code>. When
+<code>pep.toml</code> names a package <code>pep.lock</code> does not list, they fail and say to
+run <code>fetch</code> first.</p>
+<h3 id="why-name"><a class="header" href="#why-name"><code>why &lt;name&gt;</code></a></h3>
+<p>Prints every path from the project to the package, one per line. The
+package is named by its own name, its <code>owner/name</code> or source, or the name
+a dependency imports it by:</p>
+<pre><code class="language-text">$ pepper package why numbers
+app -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
+app -&gt; fixtures 1.0.0 -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
+</code></pre>
+<h3 id="outdated"><a class="header" href="#outdated"><code>outdated</code></a></h3>
+<p>Lists each locked package that is behind, with its locked version, the
+revision its requirements now choose (<code>wanted</code>: the newest version
+every range on it in the locked graph allows and this toolchain builds,
+or a branch's newest commit; updating a package that depends on it can
+change those ranges), and the newest version it offers (<code>latest</code>, not a prerelease):</p>
+<pre><code class="language-text">$ pepper package outdated
+package   locked  wanted  latest  source
+numbers   1.3.1   1.3.1   3.0.0   github:other/numbers
+geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry
+</code></pre>
+<p>Here <code>pepper package update</code> moves geometry to 1.1.0, and numbers stays
+below 3.0.0 until geometry's range on it allows that. With none behind,
+it prints <code>every package is at the newest version</code>. It reads what each
+package offers over the network, so with <code>--offline</code> it fails, saying it
+cannot check. The exit status is 0 whatever it finds, unless
+<code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
 <p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
 the dependency graph, its dependencies' dependencies included, and the
@@ -44829,15 +44960,22 @@ directly is not attached to any thread and cannot be joined.</p>
 </ul>
 <h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
 <h4 id="spawn"><a class="header" href="#spawn">spawn</a></h4>
-<pre><code class="language-pepper">static spawn(body: ThreadBody, name: String = ""): Thread
+<pre><code class="language-pepper">static spawn(body: ThreadBody, name: String = "", stack_size: ulong = 0): Thread
 </code></pre>
 <p>Starts a new thread that runs <code>body</code>.</p>
 <p>The new thread starts right away and runs until <code>body</code> returns. Its
 <code>Thread.current()</code> is the <code>Thread</code> returned here.</p>
+<p>The stack the operating system gives a thread by default differs:
+usually 8 MiB on Linux (<code>ulimit -s</code>), 1 MiB on Windows, and 512 KiB
+on macOS. A thread that recurses deeply, such as one walking a
+deeply nested tree, passes <code>stack_size</code> to get the same stack
+everywhere. The stack is reserved address space; memory is used
+only as the thread reaches it.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>body</code> — the function to run on the new thread</li>
 <li><code>name</code> — a name for the thread, returned by <code>name()</code>; empty by default</li>
+<li><code>stack_size</code> — the bytes of stack the thread gets, rounded up to 64 KiB; 0, the default, for the system's default</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -44845,11 +44983,13 @@ directly is not attached to any thread and cannot be joined.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if the operating system cannot create another thread</li>
+<li>if the operating system cannot create another thread, or refuses <code>stack_size</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var worker = Thread.spawn(do_work, "worker");
 worker.join();
+var deep = Thread.spawn(walk_tree, "walker", 8388608);   # 8 MiB
+deep.join();
 </code></pre>
 <h4 id="current-33"><a class="header" href="#current-33">current</a></h4>
 <pre><code class="language-pepper">static current(): Thread
