@@ -81,11 +81,20 @@ spawn_with_a_stack_size() {
 [Test]
 dropped_thread_runs_to_completion() {
     # A dropped, unjoined thread is detached and still runs to completion.
+    var before = _pep_live_allocs();
     async.Thread.spawn(work, "worker");
     while (ran.load() < 1) {
         async.Thread.sleep(1);
     }
     expect_equal(names_ok.load(), 1);
+    # It frees its Thread and thread-locals after its body returns, and
+    # nothing can join it: wait (up to 10 s) until it has, so the leak check
+    # does not count what it still holds.
+    var waited = 0;
+    while (_pep_live_allocs() > before and waited < 10000) {
+        async.Thread.sleep(1);
+        waited += 1;
+    }
 }
 
 struct Tracker {
