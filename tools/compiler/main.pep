@@ -143,7 +143,7 @@ main(args: String[]): int {
     );
     var offline = parser.flag(
         "offline",
-        help = "Fetch nothing over the network: build with what the project's `.pep/deps` holds, and fail on a locked dependency missing from it (also `PEPPER_OFFLINE=1`)"
+        help = "Fetch nothing over the network: build with what the project's `.pep/deps` and pep-package's download cache hold, and fail on a locked dependency missing from both (also `PEPPER_OFFLINE=1`)"
     );
     var frozen = parser.flag("frozen", help = "Both `--locked` and `--offline`");
     var ir = parser.flag("emit-llvm", help = "Emit LLVM IR (optimized at the `-O` level)");
