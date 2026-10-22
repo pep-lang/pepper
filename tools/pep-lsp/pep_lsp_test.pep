@@ -1659,16 +1659,32 @@ an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
     var cache = incremental.Cache(folder);
     var warnings = Array<Diagnostic>();
     var keep = Optional<(incremental.Cache, String)>.Value((cache, "inputs"));
-    var program = loaded_program("recheck_whole", "main.pep", "main(): int {\n    return 2;\n}\n");
+    var old = "[Deprecated(\"use 'main' instead\", \"main\")]\nold(): int {\n    return 2;\n}\n";
+    var program = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    return 2;\n}\n");
     expect_true(check_whole(program, warnings, keep).is_ok());
-    var edited = loaded_program("recheck_whole", "main.pep", "main(): int {\n    var x = 3;\n    return x;\n}\n");
+    expect_true(warnings.is_empty);
+    var edited = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    var x = 3;\n    return x;\n}\n");
     var again = recheck_whole(edited, cache, "inputs", warnings);
     expect_true(again.is_value() and again.value().is_ok());
     # Checked with other build options: no record to start from.
     expect_true(recheck_whole(edited, cache, "other", warnings).is_empty());
-    # An error is left to the check after the cache fills.
-    var wrong = loaded_program("recheck_whole", "main.pep", "main(): int {\n    return \"two\";\n}\n");
-    expect_true(recheck_whole(wrong, cache, "inputs", warnings).is_empty());
+    # An error or a warning shows without waiting for the cache to fill.
+    var wrong = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    return \"two\";\n}\n");
+    var error = recheck_whole(wrong, cache, "inputs", warnings);
+    expect_true(error.is_value() and error.value().is_err());
+    match (error.value().error()) {
+        Checking(found) => {
+            expect_true(found.message.contains("String"));
+        }
+        else => {
+            expect_true(false);
+        }
+    }
+    var deprecated = loaded_program("recheck_whole", "main.pep", old + "main(): int {\n    return old();\n}\n");
+    var warned = recheck_whole(deprecated, cache, "inputs", warnings);
+    expect_true(warned.is_value() and warned.value().is_ok());
+    expect_equal(warnings.count, 1);
+    expect_true(warnings[0].message.contains("deprecated"));
     Directory.remove_all(folder);
 }
 
