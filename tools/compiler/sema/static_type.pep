@@ -23,6 +23,7 @@ _struct_info(st: StructDef): StructInfo {
         info.fields.append((f.name, f.ty));
     }
     info._add_methods(st.method_members);
+    info.generic_methods = st.generic_methods;
     for (var p in st.generic_params) {
         info.params.append(p.name);
     }
@@ -248,6 +249,30 @@ export struct StructTable {
             return ty.labeled_through(labeled.value(), generic.value().ty, param_names(generic.value().generic_params));
         }
         return ty.as_written(labeled);
+    }
+
+    ## Returns `ret`, what a generic method call of `receiver` written with
+    ## labeled type arguments `labeled` (`MethodCallExpression.labeled`)
+    ## returns, with their labels: the method's declared result with them
+    ## put in (`TypeName.labeled_through`).
+    ##
+    ## @param ret the call's type, unlabeled
+    ## @param receiver the receiver's type
+    ## @param labeled the method as written, if its type arguments have labels
+    ## @returns the type, labeled
+    labeled_method_call(ret: TypeName, receiver: TypeName, labeled: TypeName?): TypeName {
+        if (!labeled.is_value()) {
+            return ret;
+        }
+        var info = lookup(receiver.without_pointers());
+        if (info.is_value()) {
+            for (var m in info.value().generic_methods) {
+                if (m.name == labeled.value().name) {
+                    return ret.labeled_through(labeled.value(), m.ty, param_names(m.generic_params));
+                }
+            }
+        }
+        return ret;
     }
 
     # The entry of `receiver`'s generic declaration when its type arguments
@@ -499,7 +524,10 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             if (!this_type.is_value()) {
                 return none;
             }
-            return table.method_return(this_type.value(), node.method);
+            var ret = table.method_return(this_type.value(), node.method);
+            return ret.is_value() ?
+                _known(table.labeled_method_call(ret.value(), this_type.value(), node.labeled)) :
+                ret;
         }
         Weak(op, ty, _) => {
             return _known(weak_result(op, ty));

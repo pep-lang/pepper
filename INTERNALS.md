@@ -218,8 +218,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   re-exports, then **rewrites each imported spelling in the AST**
   (`m.sqrt`, an alias `power`, a qualified type `m.Point`) to the name of the
   declaration it denotes. The type arguments of a generic method call
-  (`b.run<S>(...)`), which the parser keeps in the member name, are
-  rewritten the same way (`_member_type`). It also gives each file's
+  (`b.run<S>(...)`), which the parser keeps in the member name as source
+  writes them (`pass<(a: int, b: int)>`), are read back
+  (`ast.parse_type_text`) and rewritten the same way (`_member_type`); the
+  builder spells them as sema types (`_Builder.member_name`). It also gives each file's
   **private** top-level declarations, and every reference to them, a
   mangled name
   (`names.mangle`: `helper@io/file`), keyed on the
@@ -591,7 +593,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     return type with the call's type arguments put in the same way
     (`StructTable.labeled_call`, `_TypeScopes._labeled_call`); type
     arguments that `resolve_implicit_types` infers or completes go in
-    `FunctionCallExpression.labeled` too when they have labels.
+    `FunctionCallExpression.labeled` too when they have labels. A generic
+    method call keeps them in `MethodCallExpression.labeled`, and its
+    result is the method's declared return type with them put in
+    (`StructTable.labeled_method_call`, `_TypeScopes._labeled_method_call`).
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
     literal `[k: v, k2: v2]` becomes `_map_literal(k, v)._literal_insert(k2,

@@ -2157,10 +2157,10 @@ struct _Expander {
                 }
             }
             MemberAccess(lhs, name, name_span, _) => {
-                var spelled = parse_type_string(name);
+                var spelled = ast.parse_type_text(name, name_span);
                 var type_args = Array<TypeName>();
-                for (var t in spelled.sub_types) {
-                    type_args.append(resolve_type(t));
+                for (var t in spelled.generic_types) {
+                    type_args.append(from_ast(t));
                 }
                 if (lhs is SymbolRef(id, _)) {
                     if (reflect_in_scope and id == REFLECT) {

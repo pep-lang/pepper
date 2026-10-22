@@ -50,9 +50,10 @@ so `p.line` and `p.0` read the same element:
   `Optional<(line: int, column: int)>` is the same type as
   `Optional<(int, int)>`. A member takes back only the labels its declaration
   writes as a type parameter: a method of `Box<(a: int, b: int)>` declared to
-  return `(int, int)` returns an unlabeled tuple. A generic function's result
-  takes back the labels of its type arguments, written or inferred, the same
-  way: `identity<(a: int, b: int)>(p).b` and, for `p: (a: int, b: int)`,
+  return `(int, int)` returns an unlabeled tuple. A generic function's or
+  generic method's result takes back the labels of its type arguments,
+  written or inferred, the same way: `identity<(a: int, b: int)>(p).b`,
+  `box.pass<(a: int, b: int)>(p).b` and, for `p: (a: int, b: int)`,
   `identity(p).b` read an element by its label.
 - `var p = (line: 3, column: 7);` gives `p` the labeled type
   `(line: int, column: int)`. A labeled value takes at least two elements.
