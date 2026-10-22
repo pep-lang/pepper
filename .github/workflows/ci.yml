@@ -182,22 +182,31 @@ jobs:
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # The whole suite on one 4-core runner, from a warm build cache when an
-    # earlier run left one.
-    timeout-minutes: 150
+    # The whole suite on one 4-core runner (3 on macOS), from a warm build
+    # cache when an earlier run left one. The bounds are the slowest
+    # passing runs plus a fifth (scripts/ci-monitor.sh's samples and the
+    # Diagnostics step say what a job that hit one was doing).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
+        timeout-minutes: 30
         with:
           compiler: ${{ needs.changes.outputs.compiler }}
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`.
+      # by `pepper test`, with the runner's memory, disk and biggest
+      # processes printed beside them each minute (scripts/ci-monitor.sh):
+      # a runner that dies mid-test leaves what it ran out of in the log.
       - name: Pepper tests
+        timeout-minutes: 95
         shell: bash
         run: |
+          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" &
+          monitor=$!
+          trap 'kill "$monitor"' EXIT
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
@@ -206,8 +215,18 @@ jobs:
       # declaration, and on a tool option missing from its page, reading the
       # tools the Pepper tests step built, pep-doc among them.
       - name: Documentation is current
+        timeout-minutes: 5
         shell: bash
         run: '"$PEPPER_TARGET_DIR/pepper-tests/bin/pep-doc" check'
+
+      # A failed, cancelled or timed-out job: the samples with the least
+      # memory free, and every process, its age and size, the disks, and
+      # on Linux the kernel's out-of-memory kills, as the job ended.
+      - name: Diagnostics
+        if: failure() || cancelled()
+        timeout-minutes: 5
+        shell: bash
+        run: bash scripts/ci-monitor.sh --report "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE"
 
   # The suite on macOS against the default LLVM, from Homebrew. Required,
   # through `test` (see the top of this file).
@@ -216,20 +235,26 @@ jobs:
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # The whole suite on one 4-core runner, from a warm build cache when an
-    # earlier run left one.
-    timeout-minutes: 150
+    # The whole suite on one 4-core runner (3 on macOS), from a warm build
+    # cache when an earlier run left one. The bounds are the slowest
+    # passing runs plus a fifth (scripts/ci-monitor.sh's samples and the
+    # Diagnostics step say what a job that hit one was doing).
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
+        timeout-minutes: 30
         with:
           compiler: ${{ needs.changes.outputs.compiler }}
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`.
+      # by `pepper test`, with the runner's memory, disk and biggest
+      # processes printed beside them each minute (scripts/ci-monitor.sh):
+      # a runner that dies mid-test leaves what it ran out of in the log.
       - name: Pepper tests
+        timeout-minutes: 95
         shell: bash
         env:
           # The hosted macOS runner has 7 GB. Uncapped, 8 tests at once each
@@ -237,7 +262,19 @@ jobs:
           # memory (214 pep-build processes).
           PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
+          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" &
+          monitor=$!
+          trap 'kill "$monitor"' EXIT
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 3
+
+      # A failed, cancelled or timed-out job: the samples with the least
+      # memory free, and every process, its age and size, the disks, and
+      # on Linux the kernel's out-of-memory kills, as the job ended.
+      - name: Diagnostics
+        if: failure() || cancelled()
+        timeout-minutes: 5
+        shell: bash
+        run: bash scripts/ci-monitor.sh --report "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE"
 
   # The suite on Linux. Required: `test` gates on it.
   # build_cache_tests verify the cache (`--verify-cache`) on every
@@ -248,22 +285,31 @@ jobs:
     needs: [changes, release]
     # Runs after `release` whether it published, failed or was skipped.
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    # The whole suite on one 4-core runner, from a warm build cache when an
-    # earlier run left one.
-    timeout-minutes: 150
+    # The whole suite on one 4-core runner (3 on macOS), from a warm build
+    # cache when an earlier run left one. The bounds are the slowest
+    # passing runs plus a fifth (scripts/ci-monitor.sh's samples and the
+    # Diagnostics step say what a job that hit one was doing).
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
+        timeout-minutes: 30
         with:
           compiler: ${{ needs.changes.outputs.compiler }}
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`.
+      # by `pepper test`, with the runner's memory, disk and biggest
+      # processes printed beside them each minute (scripts/ci-monitor.sh):
+      # a runner that dies mid-test leaves what it ran out of in the log.
       - name: Pepper tests
+        timeout-minutes: 80
         shell: bash
         run: |
+          bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" &
+          monitor=$!
+          trap 'kill "$monitor"' EXIT
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
@@ -271,6 +317,7 @@ jobs:
       # check they print what the host build prints. Linking for the other
       # operating systems needs their SDKs: the cross-link jobs below do that.
       - name: Cross-compile for Linux arm64
+        timeout-minutes: 10
         shell: bash
         # This checkout's runtime, not the installed toolchain's.
         env:
@@ -296,6 +343,15 @@ jobs:
           # Every SIMD vector operation, on NEON.
           "$compiler" --target aarch64-unknown-linux-gnu tests/Simd.Basic/test.pep -o "$out/simd-arm64" --build "$out/build"
           test "$(qemu-aarch64 -L /usr/aarch64-linux-gnu "$out/simd-arm64")" = "simd ok"
+
+      # A failed, cancelled or timed-out job: the samples with the least
+      # memory free, and every process, its age and size, the disks, and
+      # on Linux the kernel's out-of-memory kills, as the job ended.
+      - name: Diagnostics
+        if: failure() || cancelled()
+        timeout-minutes: 5
+        shell: bash
+        run: bash scripts/ci-monitor.sh --report "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE"
 
   # Cross-linking for the other operating systems: each host builds a
   # few examples for the other two, with `--target` and their system roots,

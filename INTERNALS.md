@@ -3649,7 +3649,10 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     the changed compiler; actions/cache, saved again after the job), build `tools/compiler` when it changed
     (`ci-build-compiler.sh`), and give the compiler a time taken from its
     contents, since the cache keys on the compiler's path, size and time.
-    Then `scripts/pepper-tests.sh` runs. The Windows job also runs `pep-doc
+    Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
+    which prints the runner's memory, disk and biggest processes each
+    minute; a job that fails, is cancelled or times out ends with its
+    `--report` (Diagnostics). The Windows job also runs `pep-doc
     check`, and the Linux job cross-compiles a few examples for Linux arm64
     and runs them under qemu. All three are required, through `test`,
     which fails on a cancelled or timed-out job as on a failed one.

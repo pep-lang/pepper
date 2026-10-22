@@ -30,7 +30,9 @@
 #
 # The tools' tests take the longest, mostly building their test programs,
 # so they start as soon as the tools they run are built and run beside
-# the runtime's; their output follows the runtime's.
+# the runtime's. Their output is interleaved with the runtime's as it
+# comes, each line starting `tools| `, so a slow or stuck test shows in
+# a live log.
 #
 # Every build the tests make checks that sema left no injected construct
 # half resolved (PEPC_VERIFY_INJECTED, INTERNALS.md "Debugging").
@@ -153,7 +155,8 @@ run() {
 
 # Tests run in the folder they belong to, so data files beside them are
 # found by a path from there; the builds go to its .pep/ folder.
-tools_log="$bin/pepper-tests-tools.log"
+tools_status="$bin/pepper-tests-tools.status"
+rm -f "$tools_status"
 (
   cd "$root/tools"
   [ -z "$llvm_path" ] || PATH="$llvm_path:$PATH"
@@ -167,8 +170,9 @@ tools_log="$bin/pepper-tests-tools.log"
     # the arguments still wins).
     PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run "${llvm[@]+"${llvm[@]}"}" -t 600 "$@"
   fi
-  exit $failed
-) > "$tools_log" 2>&1 &
+  echo "$failed" > "$tools_status"
+) 2>&1 | while IFS= read -r line; do printf 'tools| %s\n' "$line"; done &
+# The pipeline's last process, which ends once all the tools' output is out.
 tools=$!
 
 cd "$root/runtime"
@@ -192,8 +196,9 @@ if [ -d digest/test ]; then
   run -D USE_LIBCRYPTO "${libcrypto[@]+"${libcrypto[@]}"}" "$@" digest/test
 fi
 
-wait "$tools" || failed=1
-cat "$tools_log"
+wait "$tools"
+# No status when the tools' subshell stopped early.
+[ "$(cat "$tools_status" 2>/dev/null)" = 0 ] || failed=1
 for pid in "${pids[@]:8}"; do
   wait "$pid"
 done

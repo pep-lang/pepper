@@ -68,8 +68,9 @@ and runs `pepper test`:
 The tools' run, the longest, starts as soon as the tools its tests run
 (`pepper`, `pep-test`, `pep-fmt`, `pep-profile`, `pep-package`,
 `pep-run`, `pep-new` and `pep-init`) are
-built, and runs beside the runtime's runs; its output is printed after
-theirs.
+built, and runs beside the runtime's runs. Its output is interleaved with
+theirs as it comes, each line starting `tools| `, so a slow test shows
+while it runs.
 
 Once `pepper` is built, run any part of them by hand:
 
@@ -99,7 +100,14 @@ CI runs `scripts/pepper-tests.sh` with the installed build of main on
 Linux, macOS and Windows, one job on each, starting from the build cache
 the previous run saved. A PR that changes the compiler (`tools/compiler/`) is tested with
 that compiler instead: CI builds it with the build of main first
-(`scripts/ci-build-compiler.sh`) and runs the suite with it.
+(`scripts/ci-build-compiler.sh`) and runs the suite with it. Each job has
+a time limit a little above its slowest passing runs, and prints the
+runner's memory, swap, disk and biggest processes every minute beside the
+tests (`scripts/ci-monitor.sh`). A job that fails, is cancelled or runs out
+of time ends with a Diagnostics step (`scripts/ci-monitor.sh --report`):
+the samples with the least memory free, every process still running with
+its age and size (a hung build or test is the old one), the disks, and on
+Linux the kernel's out-of-memory kills.
 
 CI also builds the compiler for a commit that leaves `tools/compiler/`
 alone when the published build of main is stale. The build of main
