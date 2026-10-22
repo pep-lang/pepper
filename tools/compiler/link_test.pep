@@ -175,7 +175,7 @@ reports_linking_errors() {
         # module, which this file does not import.
         [
             "main.pep",
-            "# expect: deps/shop/b.pep:2:42: error: 'Circle' is declared in deps/shop/c.pep, another file of this module, which this file does not import; add an import for it\nimport [use] from shop;\nmain(): int { return 0; }\n",
+            "# expect: deps/shop/b.pep:2:41: error: 'Circle' is declared in deps/shop/c.pep, another file of this module, which this file does not import; add an import for it\nimport [use] from shop;\nmain(): int { return 0; }\n",
             "deps/shop/module.pep",
             "import \"c\";\nexport * from \"b\";\n",
             "deps/shop/a.pep",

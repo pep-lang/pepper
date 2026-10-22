@@ -156,7 +156,7 @@ a_case_named_like_a_type_of_its_module_matches_the_case() {
     var error = build_program(
         folder.path.join("demo").join("main.pep"), program, folder.path.join("build"), ["-I", folder.path.to_string()]
     );
-    expect_true(error.is_empty(), error.value_or(""));
+    expect_equal(error.value_or(""), "");
     expect_exit(run(process.Command(program.to_string())), 143);
 }
 
