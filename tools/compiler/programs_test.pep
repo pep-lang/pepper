@@ -560,6 +560,13 @@ move_takes_a_call_through_a_shared_function_value() {
     expect_equal(output.stdout, "1\n6\n");
 }
 
+[Test]
+move_takes_a_value_once_no_closure_holds_it() {
+    var output = _run("move_after_closure");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "2\n11\n22\n");
+}
+
 # ── externs ─────────────────────────────────────────────────────────────────
 
 [Test]

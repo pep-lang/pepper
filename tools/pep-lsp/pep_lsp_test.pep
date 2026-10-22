@@ -1689,8 +1689,8 @@ has_body(analysis: Analysis, name: String): bool {
 [Test]
 an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
     # A model of the program checked whole holds every file's bodies; the
-    # copy the server's thread gets keeps those of `bodies_read` only, so
-    # handing it over costs the document's compilation unit, not the program.
+    # analysis the server's thread gets keeps those of `bodies_read` only, so
+    # it holds the document's compilation unit, not the program.
     var test = "unread_bodies";
     var text = "import \"other\";\nmain(): int {\n    return twice(1);\n}\n";
     var uri = fresh_file(test, "main.pep", text);
