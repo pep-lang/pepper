@@ -16,8 +16,9 @@
 #     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
-#     pepper package tree [--depth 1]           # the locked graph
-#     pepper package why numbers                # every path from the project to it
+#     pepper package tree [--depth 1] [--json]  # the locked graph
+#     pepper package tree --invert numbers      # what depends on numbers
+#     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
 #     pepper package install someone/tool@1     # builds its program into the Pepper home's bin
 #     pepper package install --path .           # the package in a folder
@@ -124,15 +125,22 @@ main(args: String[]): int {
     var depth = tree.option<ulong>(
         "depth", "d", "print only N levels of dependencies below the project", value_name = "N"
     );
-    var why = parser.command("why", "Prints every path from the project to a package");
+    var invert = tree.option(
+        "invert", "i", "print what depends on a package instead, down to the project", value_name = "NAME"
+    );
+    var tree_json = tree.flag("json", help = "print the tree as JSON");
+    var why = parser.command("why", "Prints the paths from the project to a package, the first 20 unless --all");
     var why_package = why.positional(
         "package", "the package's name, owner/name or source, or the name a dependency is imported by"
     );
+    var all_paths = why.flag("all", help = "print every path, not only the first 20");
+    var why_json = why.flag("json", help = "print the paths as JSON");
     var outdated = parser.command(
         "outdated",
         "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
+    var outdated_json = outdated.flag("json", help = "print the outdated packages as JSON");
     var install = parser.command(
         "install", "Builds a package's program optimized and puts it in the Pepper home's bin, which is on the PATH"
     );
@@ -253,13 +261,13 @@ main(args: String[]): int {
         return project.publish(dry_run.is_set);
     }
     if (tree.is_selected) {
-        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF);
+        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF, invert.value_or(""), tree_json.is_set);
     }
     if (why.is_selected) {
-        return project.why(why_package.value());
+        return project.why(why_package.value(), all_paths.is_set ? 0xFFFFFFFFFFFFFFFF : 20, why_json.is_set);
     }
     if (outdated.is_selected) {
-        return project.outdated(exit_code.is_set);
+        return project.outdated(exit_code.is_set, outdated_json.is_set);
     }
     print(parser.help());
     return 2;
@@ -1077,16 +1085,26 @@ struct Project {
         return graph;
     }
 
-    tree(depth: ulong): int {
+    # Prints the graph, or with `invert` what depends on that package.
+    tree(depth: ulong, invert: String, json: bool): int {
         var graph = _graph();
         if (graph.is_err()) {
             return fail(graph.error().message);
         }
-        File.stdout().write_all(graph.value().tree(depth));
+        if (invert.is_empty) {
+            File.stdout().write_all(graph.value().tree(depth, json));
+            return 0;
+        }
+        var targets = graph.value().find(invert);
+        if (targets.is_empty) {
+            return fail($"no package '{invert}' in pep.lock");
+        }
+        File.stdout().write_all(graph.value().inverted(targets, depth, json));
         return 0;
     }
 
-    why(spec: String): int {
+    # Prints the first `limit` paths from the project to `spec`.
+    why(spec: String, limit: ulong, json: bool): int {
         var graph = _graph();
         if (graph.is_err()) {
             return fail(graph.error().message);
@@ -1095,14 +1113,12 @@ struct Project {
         if (targets.is_empty) {
             return fail($"no package '{spec}' in pep.lock");
         }
-        for (var path in graph.value().why(targets)) {
-            print(path);
-        }
+        File.stdout().write_all(graph.value().why(targets, limit, json));
         return 0;
     }
 
     # Lists what is outdated; with `exit_code`, any is status 1.
-    outdated(exit_code: bool): int {
+    outdated(exit_code: bool, json: bool): int {
         if (offline) {
             return fail(
                 "--offline, and 'outdated' reads which versions each package offers over the network, so it cannot check; run it without --offline (or PEPPER_OFFLINE)"
@@ -1115,6 +1131,10 @@ struct Project {
         var rows = graph.value().outdated();
         if (rows.is_err()) {
             return fail(rows.error().message);
+        }
+        if (json) {
+            File.stdout().write_all(graph.value().outdated_json(rows.value()));
+            return exit_code and !rows.value().is_empty ? 1 : 0;
         }
         if (rows.value().is_empty) {
             print("every package is at the newest version");

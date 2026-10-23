@@ -3755,14 +3755,19 @@ real with the `platform-test` workflow (`.agents/skills/platform-test`).
 Every job in every workflow but `llvm-package.yml` runs on a GitHub-hosted
 runner: **`windows-2025`** and **`ubuntu-24.04`** (x64), and **`macos-15`**
 (arm64). A new job picks one of those labels. Every job
-installs the published build of main (`scripts/ci-install-toolchain.sh`)
-and builds and tests with it, except where the compiler changed: a merge
-that changes `tools/compiler/` (`changes` classifies it), or a dispatch on
-a branch, has each test and
-cross-link job build that compiler with the installed one first
-(`scripts/ci-build-compiler.sh`, the release's stage 1), and every later
-step uses it, so the whole suite tests the changed compiler. The test jobs of `ci.yml` build into a folder beside the checkout
-(`PEPPER_TARGET_DIR`).
+installs the published build of main (`scripts/ci-install-toolchain.sh
+--newest`) and builds and tests with it, except where the compiler changed:
+a merge that changes `tools/compiler/` or `.github/stage0` (`changes`
+classifies it), or a dispatch on a branch, has each test and cross-link
+job install stage 0 instead, the build of main `.github/stage0` pins
+(`scripts/ci-install-toolchain.sh`), and build that compiler with it
+first (`scripts/ci-build-compiler.sh`, the release's stage 1); every later
+step uses it, so the whole suite tests the changed compiler. The release
+and `scripts/stage0-check.sh` build with stage 0 too. The build of main
+replaces its archives on each merge, so `stage0.yml` copies the build it
+pins onto the `stage0` release (`<commit>-<asset>`) and moves the pin
+in a pull request. The test jobs of `ci.yml` build into a folder beside
+the checkout (`PEPPER_TARGET_DIR`).
 
 - **`ci.yml`** (pull requests, pushes to main, and dispatch; main's ruleset
   requires its `test` check before a pull request merges):
@@ -3780,12 +3785,13 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
     it through pepper-llvm) and the libraries the tests link, install the
     newest published toolchain (the `x.y.z-dev` prerelease `release.yml`
     publishes on each merge, or a release with a higher version, through
-    `install.sh` / `install.ps1`), name `PEPPER_CACHE_DIR` (one build
+    `install.sh` / `install.ps1`), or stage 0 when the compiler changed, name `PEPPER_CACHE_DIR` (one build
     cache every build in the job shares, the tools' tests' own builds
     included; it starts empty, since its keys name the compiler, new in
     nearly every run), and build `tools/compiler` when it changed
     (`ci-build-compiler.sh`, from its own build cache, which actions/cache
-    carries between runs keyed on stage 0's contents). Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
+    carries between runs keyed on stage 0's contents, the same until the
+    pin moves). Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
     which prints the runner's memory, disk and biggest processes each
     minute; a job that fails, is cancelled or times out ends with its
     `--report` (Diagnostics). The Windows `others` job also runs `pep-doc
@@ -3829,7 +3835,7 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
   package, or built from source when none is published), macos-arm64
   (`macos-15`) and windows-x64 (`windows-2025`)
   with `scripts/release-build.sh`: it provisions LLVM and clang, installs
-  stage 0 (the newest published toolchain, whatever `VERSION` holds,
+  stage 0 (the build `.github/stage0` pins, whatever `VERSION` holds,
   as CI installs it), builds pepc with
   stage 0, then with itself, builds every tool with that, archives an
   install layout (`bin/`, `runtime/`) and smoke-tests it
@@ -3840,6 +3846,11 @@ step uses it, so the whole suite tests the changed compiler. The test jobs of `c
 - **`docs.yml`**: builds the mdBook site to `gh-pages` (`dev/` on `main`,
   run by `ci.yml`'s `docs` job after its `release` job; `X.Y.Z/` on tags),
   with `pep-doc` built by the build of main.
+- **`stage0.yml`**: nightly and on dispatch, copies the newest build of
+  main, once its publish has passed, onto the `stage0` release and pushes
+  `stage0/bump`, which pins it in `.github/stage0`, unless a pull request
+  from it is open. Actions may not open pull requests here, so its summary
+  links to open one, whose CI runs as any pull request's.
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped
   Windows LLVM 20 package that CI installs, and with `platforms=manylinux`
   the Linux release's LLVM (`build-llvm-manylinux.sh`), so a runner without
