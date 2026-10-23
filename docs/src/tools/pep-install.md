@@ -28,6 +28,9 @@ uses: the one `pepper +<version>` names, else `PEPPER_TOOLCHAIN`'s, else the
 one the project's `pep.toml` pins with `toolchain = "0.3"`, else the default
 (see [Toolchains](pepper.md#toolchains)).
 
+To install a command-line tool built from a package, rather than a
+toolchain, use [`pepper package install`](pep-package.md#install).
+
 ## Options and commands
 
 | Command or option | What it does |

@@ -19,6 +19,10 @@
 #     pepper package tree [--depth 1]           # the locked graph
 #     pepper package why numbers                # every path from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
+#     pepper package install someone/tool@1     # builds its program into the Pepper home's bin
+#     pepper package install --path .           # the package in a folder
+#     pepper package install --list             # what is installed, and from where
+#     pepper package uninstall tool
 #     pepper package cache info                 # the download cache every project shares
 #     pepper package cache clean
 #
@@ -39,6 +43,7 @@ import toml;
 import toolchain;
 import "git";
 import "graph";
+import "install";
 import "lock";
 import "manifest";
 import "resolve";
@@ -128,6 +133,32 @@ main(args: String[]): int {
         "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
+    var install = parser.command(
+        "install", "Builds a package's program optimized and puts it in the Pepper home's bin, which is on the PATH"
+    );
+    var install_package = install.positional(
+        "package",
+        "[host:]owner/name[@range]: the newest version the range allows (default: the newest release); install it again to upgrade",
+        required = false
+    );
+    var install_path = install.option("path", "", "install the package in this folder instead", value_name = "DIR");
+    var install_list = install.flag("list", help = "list what is installed, and from where, instead");
+    var install_force = install.flag(
+        "force",
+        "f",
+        "replace a program in bin that was installed from another source, or not by 'pepper package install'"
+    );
+    var install_features = install.multiple(
+        "features",
+        "F",
+        "the package's features to turn on: a comma-separated list, or repeat the option",
+        value_name = "NAMES"
+    );
+    var install_no_default_features = install.flag(
+        "no-default-features", help = "leave the package's default feature off"
+    );
+    var uninstall = parser.command("uninstall", "Removes a program 'install' put in the Pepper home's bin");
+    var uninstall_name = uninstall.positional("name", "the program's name, as 'install --list' shows it");
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
     cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
@@ -136,6 +167,41 @@ main(args: String[]): int {
     }
     if (cache.is_selected) {
         return cache_info.is_selected ? show_cache() : clean_cache();
+    }
+    if (install.is_selected) {
+        if (install_list.is_set) {
+            return list_installed();
+        }
+        var options = Array<String>();
+        for (var names in install_features.values()) {
+            options.append_all(["--features", names]);
+        }
+        if (install_no_default_features.is_set) {
+            options.append("--no-default-features");
+        }
+        # These are for the build, and its package's own pep.lock;
+        # `PEPPER_LOCKED` and `PEPPER_OFFLINE` reach it as they are.
+        if (locked.is_set or frozen.is_set) {
+            options.append("--locked");
+        }
+        if (offline.is_set or frozen.is_set) {
+            options.append("--offline");
+        }
+        return install_tool(
+            install_package.value_or(""),
+            install_path.value_or(""),
+            install_force.is_set,
+            options,
+            offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE")
+        );
+    }
+    if (uninstall.is_selected) {
+        var removed = uninstall_program(uninstall_name.value());
+        if (removed.is_err()) {
+            return fail(removed.error().message);
+        }
+        say(removed.value());
+        return 0;
     }
     var start = directory.is_set ? Path(directory.value()) : Path(".");
     var found = find_manifest(start);
@@ -301,6 +367,104 @@ clean_cache(): int {
     return 0;
 }
 
+# `install`: builds the program of the package `spec` names, or of the one
+# in the folder `path`, with `-O` and `options`, and puts it in the Pepper
+# home's `bin`.
+install_tool(spec: String, path: String, force: bool, options: Array<String>, offline: bool): int {
+    if (spec.is_empty == path.is_empty) {
+        return fail("give 'install' a package or --path, and not both");
+    }
+    var record = InstalledTool();
+    record.toolchain_version = version();
+    if (!path.is_empty) {
+        var dir = Path(path).canonicalize();
+        if (dir.is_err()) {
+            return fail($"cannot find {path}: {dir.error().message}");
+        }
+        record.source = "path:" + dir.value().to_string();
+        var text = File.read_to_string(dir.value().join("pep.toml"));
+        var parsed = toml.parse(text.is_ok() ? text.value() : "");
+        if (parsed.is_ok()) {
+            record.version = _package_string(parsed.value(), "version");
+        }
+        return _report(install_program(dir.value(), record, force, options));
+    }
+    if (offline) {
+        return fail(
+            "--offline, and installing a package looks its versions up over the network; run it without --offline (or PEPPER_OFFLINE), or install a folder with --path"
+        );
+    }
+    # A project of its own whose one dependency is the package: adding it
+    # resolves the newest version the range allows and fetches it, through
+    # the download cache, into the project's `.pep/deps`.
+    var staging = toolchain.find_home().root.join("cache").join("install");
+    if (staging.exists()) {
+        var cleared = remove_tree(staging);
+        if (cleared.is_err()) {
+            return fail($"cannot remove {staging.to_string()}: {cleared.error().message}");
+        }
+    }
+    var project_dir = staging.join("project");
+    var created = Directory.create_all(project_dir);
+    if (created.is_err()) {
+        return fail($"cannot create {project_dir.to_string()}: {created.error().message}");
+    }
+    var manifest_path = project_dir.join("pep.toml");
+    var written = File.write_text(manifest_path, "[package]\nname = \"install\"\n");
+    if (written.is_err()) {
+        return fail($"cannot write {manifest_path.to_string()}: {written.error().message}");
+    }
+    var project = Project(manifest_path);
+    project.quiet = true;
+    var added = project.add(spec, "tool", false, "", toml.TomlValue.table());
+    if (added != 0) {
+        return added;
+    }
+    var requirement = read_manifest(manifest_path).value().requirement("tool").value();
+    var lock = read_lock(lock_path(project_dir)).value();
+    for (var package in lock) {
+        if (package.source == requirement.source()) {
+            record.source = package.source;
+            record.version = package.version;
+            record.commit = package.commit;
+        }
+    }
+    # The package is built in a folder of its own: under `.pep`, it would
+    # build as part of the project outside.
+    var package_folder = staging.join("package");
+    var fetched = Resolver(
+        project_dir, Manifest(), lock
+    ).fetch(requirement.host, requirement.repository, package_folder, record.commit);
+    if (fetched.is_err()) {
+        return fail($"cannot fetch {record.source}: {fetched.error().message}");
+    }
+    var result = _report(install_program(package_folder, record, force, options));
+    remove_tree(staging);
+    return result;
+}
+
+# Says what `done` did, or fails with why it could not.
+_report(done: Result<String>): int {
+    if (done.is_err()) {
+        return fail(done.error().message);
+    }
+    say(done.value());
+    return 0;
+}
+
+# `install --list`: each program `install` put in the home's `bin`, with
+# its version and source.
+list_installed(): int {
+    var records = read_installed();
+    if (records.is_err()) {
+        return fail(records.error().message);
+    }
+    for (var (name, record) in records.value()) {
+        print($"{name} {record.describe()}");
+    }
+    return 0;
+}
+
 # Prints `message` as progress.
 say(message: String) {
     File.stderr().write_all($"pep-package: {message}\n");
@@ -360,6 +524,9 @@ struct Project {
     var locked: bool = false;
     # `--offline`: use only what `.pep/deps` and the download cache hold.
     var offline: bool = false;
+    # Whether to keep quiet about what changed (for `install`, whose
+    # project is its own).
+    var quiet: bool = false;
 
     construct(manifest_path: Path) {
         this.manifest_path = manifest_path;
@@ -417,7 +584,9 @@ struct Project {
             return Result<Graph>.Err(written.error().message);
         }
         for (var change in changes) {
-            say(change);
+            if (!quiet) {
+                say(change);
+            }
         }
         return graph;
     }
@@ -649,7 +818,9 @@ struct Project {
             }
         }
         _notes(graph.value());
-        say($"'import {name};' now imports {host}:{rest}");
+        if (!quiet) {
+            say($"'import {name};' now imports {host}:{rest}");
+        }
         return 0;
     }
 
@@ -842,16 +1013,7 @@ struct Project {
     # the PATH) run in the project's folder with no file, and `--all` in a
     # workspace.
     _builds(): bool {
-        var compiler = "pep-build";
-        var executable = process.executable_path();
-        if (executable.is_ok() and executable.value().parent().is_value()) {
-            var name = Path.separator() == "\\" ? "pep-build.exe" : "pep-build";
-            var beside = executable.value().parent().value().join(name);
-            if (beside.is_file()) {
-                compiler = beside.to_string();
-            }
-        }
-        var command = process.Command(compiler).working_directory(dir);
+        var command = process.Command(pep_build()).working_directory(dir);
         if (is_workspace) {
             command.argument("--all");
         }

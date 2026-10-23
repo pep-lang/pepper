@@ -237,3 +237,60 @@ export is_windows(): bool {
 export executable_suffix(): String {
     return is_windows() ? ".exe" : "";
 }
+
+## Puts `contents` at `path`, an executable: written beside it as
+## `<path>.new`, then renamed into place, the file there first moved aside
+## to `<path>.old`. Windows cannot remove or overwrite a running program's
+## file but can rename it, so there the `.old` file of one that still runs
+## stays, and the next call for `path` removes it.
+##
+## @param path the executable to write
+## @param contents its bytes
+## @returns nothing, or why it cannot be written or put in place
+export replace_executable(path: Path, contents: u8[]): Result<void> {
+    var old = Path(path.to_string() + ".old");
+    if (old.exists()) {
+        File.remove(old);
+    }
+    var fresh = Path(path.to_string() + ".new");
+    var written = File.write_bytes(fresh, contents);
+    if (written.is_err()) {
+        return Result<void>.Err($"cannot write {fresh.to_string()}: {written.error().message}");
+    }
+    fresh.set_executable(true);
+    if (path.exists()) {
+        var moved = File.rename(path, old);
+        if (moved.is_err()) {
+            File.remove(fresh);
+            return Result<void>.Err($"cannot move {path.to_string()} aside: {moved.error().message}");
+        }
+    }
+    var placed = File.rename(fresh, path);
+    if (placed.is_err()) {
+        return Result<void>.Err($"cannot replace {path.to_string()}: {placed.error().message}");
+    }
+    # Only Windows keeps it, while the old program still runs.
+    File.remove(old);
+    return Result<void>.ok();
+}
+
+## Removes the executable `path`. Where it cannot be removed because it
+## runs (on Windows), it is moved aside to `<path>.old` instead, which the
+## next `replace_executable` or `remove_executable` for `path` removes.
+##
+## @param path the executable to remove
+## @returns nothing, or why it can be neither removed nor moved aside
+export remove_executable(path: Path): Result<void> {
+    var old = Path(path.to_string() + ".old");
+    if (old.exists()) {
+        File.remove(old);
+    }
+    if (File.remove(path).is_ok()) {
+        return Result<void>.ok();
+    }
+    var moved = File.rename(path, old);
+    if (moved.is_err()) {
+        return Result<void>.Err($"cannot remove {path.to_string()}: {moved.error().message}");
+    }
+    return Result<void>.ok();
+}

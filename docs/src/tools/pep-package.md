@@ -18,6 +18,9 @@ pepper package publish                       # ... then tag it v<version> and pu
 pepper package tree                          # the dependency graph pep.lock records
 pepper package why numbers                   # every path from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package install someone/tool          # builds its program into the Pepper home's bin
+pepper package install --list                # what is installed there, and from where
+pepper package uninstall tool
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 ```
@@ -72,6 +75,13 @@ Every package is downloaded once per machine, into a
 | `why <name>` | Prints every path from the project to a package (see [`why`](#why-name)) |
 | `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
+| `install <owner/name>[@<range>]` | Builds a package's program optimized and puts it in the Pepper home's `bin`; installing it again upgrades it (see [`install`](#install)) |
+| `install --path <dir>` | Installs the package in `<dir>` instead |
+| `install --list` | Lists the programs `install` put in `bin`, with their versions and sources |
+| `install ... --force`, `-f` | Replaces a program in `bin` that was installed from another source, or not by `install` |
+| `install ... --features <names>`, `-F <names>` | The package's features to turn on: a comma-separated list, or repeat the option |
+| `install ... --no-default-features` | Leaves the package's `default` feature off |
+| `uninstall <name>` | Removes a program `install` put in `bin` |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -304,6 +314,51 @@ package offers over the network, so with `--offline` it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 `--exit-code` asks for 1 when a package is outdated, for CI.
 
+### `install`
+
+Installs a command-line tool from a package, as `cargo install` and
+`go install` do: it builds the package's program, the one `pepper build`
+builds in its folder, with `-O`, and puts it in the Pepper home's `bin`,
+which [`pep-install setup`](pep-install.md#setting-a-machine-up) puts on
+the `PATH`. It needs no project.
+
+```bash
+pepper package install someone/tool          # the newest release
+pepper package install github:someone/tool@1.2
+pepper package install --path .              # the package in this folder
+pepper package install --list
+pepper package uninstall tool
+```
+
+- **Which version:** the newest release the range allows (any, without
+  one) that this toolchain builds, as [`add`](#add-ownernamerange) picks
+  it; a package with no version tags is installed from its default
+  branch. Installing it again upgrades it, or moves it to another range.
+- **Its dependencies** are those its own `pep.lock` records, when it has
+  one, fetched through the [download cache](#the-download-cache);
+  `--locked` fails rather than build with a `pep.lock` that is out of
+  date, and `--offline` works only with `--path`, since choosing a version
+  reads the network. `--features` and `--no-default-features` choose the
+  package's features, as for `pepper build`.
+- **The program's name** is its `[build]` table's `output`, else its
+  package's `name` (with `.exe` on Windows).
+- **What it installed** is recorded in `installed-tools.toml` in the home:
+  each program's source, version, commit and the toolchain that built it,
+  which `install --list` prints and `uninstall` reads.
+- **Overwriting:** a program already in `bin` is replaced only when
+  `install` put it there from the same source; one from another package,
+  or one it did not install (`pepper` and `pep-install` are the home's
+  own), needs `--force`.
+- **Replacing a running program:** the new program is written beside the
+  old one and renamed into place, the old one first moved aside to
+  `<name>.old`. On Windows a running program cannot be removed, so its
+  `.old` file stays until the next `install` or `uninstall` of that
+  program removes it.
+
+The home is `PEPPER_HOME`, else `%LOCALAPPDATA%\pepper` on Windows and
+`~/.pepper` elsewhere, as for [`pep-install`](pep-install.md#where-toolchains-go).
+`pepper install` is a different command: it installs toolchains.
+
 ## pep.lock
 
 `pep.lock`, beside `pep.toml`, records the exact commit of every package in
@@ -534,7 +589,7 @@ them out, each once per run.
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
 | `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
 | `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |
-| `PEPPER_HOME` | The Pepper home that holds the [download cache](#the-download-cache), and whose `pepper` [`publish`](#publish) runs the tests with, as for `pep-install` |
+| `PEPPER_HOME` | The Pepper home that holds the [download cache](#the-download-cache), whose `pepper` [`publish`](#publish) runs the tests with, and whose `bin` [`install`](#install) puts programs in, as for `pep-install` |
 | `PEPPER_RUNTIME` | The runtime folder whose modules a dependency may not be named like, as for the compiler |
 
 ## Building it

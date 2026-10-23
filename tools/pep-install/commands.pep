@@ -135,35 +135,10 @@ export update_entry_points(home: toolchain.Home, version: toolchain.Version): Re
         if (current.is_ok() and current.value() == contents.value()) {
             continue;
         }
-        _replace(to, old, contents.value())?;
+        toolchain.replace_executable(to, contents.value())?;
         updated.append(name);
     }
     return Result<Array<String>>.ok(updated);
-}
-
-# Puts `contents` at `path`, an executable: written beside it, then renamed
-# into place, the file there first moved aside to `old`.
-_replace(path: Path, old: Path, contents: u8[]): Result<void> {
-    var fresh = Path(path.to_string() + ".new");
-    var written = File.write_bytes(fresh, contents);
-    if (written.is_err()) {
-        return Result<void>.Err($"cannot write {fresh.to_string()}: {written.error().message}");
-    }
-    fresh.set_executable(true);
-    if (path.exists()) {
-        var moved = File.rename(path, old);
-        if (moved.is_err()) {
-            File.remove(fresh);
-            return Result<void>.Err($"cannot move {path.to_string()} aside: {moved.error().message}");
-        }
-    }
-    var placed = File.rename(fresh, path);
-    if (placed.is_err()) {
-        return Result<void>.Err($"cannot replace {path.to_string()}: {placed.error().message}");
-    }
-    # Only Windows keeps it, while the old program still runs.
-    File.remove(old);
-    return Result<void>.ok();
 }
 
 # Makes the newest installed toolchain `spec` names the default.
