@@ -483,10 +483,13 @@ runtime/string.pep:1621:8: note: previous declaration is here
     1 | import "nope";
       |        ^~~~~~
 </code></pre>
-<p><strong>Code nested too deeply.</strong> Parentheses, blocks, calls, and each operator of
-a chain (<code>a + b + c</code> is two levels) nest the program one level deeper, and a
-file may nest at most 256 levels. The error points at the token that crosses
-the limit, here the 255th <code>+</code> of a long sum:</p>
+<p><strong>Code nested too deeply.</strong> Parentheses, blocks, <code>else if</code>s, prefix
+operators, type arguments and patterns nest the program one level deeper,
+and so does each operator of a chain (<code>a + b + c</code> is two levels) and each
+member, call or index of a chain (<code>f(x)</code> is two levels: the call and its
+argument), and an interpolated string's <code>{hole}</code> is two levels too. A file may nest at most 256 levels, which bounds the stack the
+compiler and the language server need. The error points at the token that
+crosses the limit, here the 255th <code>+</code> of a long sum:</p>
 <pre><code class="language-text">main.pep:2:1030: error: code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions
     2 |     return 0 + 1 + 1 + ... + 1;
       |                             ^
