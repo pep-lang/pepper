@@ -16,6 +16,9 @@
 #     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
+#     pepper package tree [--depth 1]           # the locked graph
+#     pepper package why numbers                # every path from the project to it
+#     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
 #     pepper package cache info                 # the download cache every project shares
 #     pepper package cache clean
 #
@@ -35,6 +38,7 @@ import syntax;
 import toml;
 import toolchain;
 import "git";
+import "graph";
 import "lock";
 import "manifest";
 import "resolve";
@@ -111,6 +115,19 @@ main(args: String[]): int {
         "publish", "Checks the package and runs its tests, then tags its version and pushes the tag"
     );
     var dry_run = publish.flag("dry-run", help = "check and test, but neither tag nor push");
+    var tree = parser.command("tree", "Prints the dependency graph pep.lock records");
+    var depth = tree.option<ulong>(
+        "depth", "d", "print only N levels of dependencies below the project", value_name = "N"
+    );
+    var why = parser.command("why", "Prints every path from the project to a package");
+    var why_package = why.positional(
+        "package", "the package's name, owner/name or source, or the name a dependency is imported by"
+    );
+    var outdated = parser.command(
+        "outdated",
+        "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
+    );
+    var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
     cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
@@ -169,12 +186,31 @@ main(args: String[]): int {
     if (publish.is_selected) {
         return project.publish(dry_run.is_set);
     }
+    if (tree.is_selected) {
+        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF);
+    }
+    if (why.is_selected) {
+        return project.why(why_package.value());
+    }
+    if (outdated.is_selected) {
+        return project.outdated(exit_code.is_set);
+    }
     print(parser.help());
     return 2;
 }
 
 # Prints `message` as an error; returns the exit status for one.
 fail(message: String): int {
+    # A clang-style diagnostic (`pep.toml:3:1: error: ...`) names itself.
+    var first = message.split_once("\n");
+    var located = (first.is_value() ? first.value().0 : message).split_once(": error: ");
+    var place = located.is_value() ? located.value().0.split(":") : Array<String>();
+    if (place.count >= 3
+        and ulong.parse(place[place.count - 1]).is_value()
+        and ulong.parse(place[place.count - 2]).is_value()) {
+        File.stderr().write_all(message.ends_with("\n") ? message : message + "\n");
+        return 1;
+    }
     File.stderr().write_all($"pep-package: error: {message}\n");
     return 1;
 }
@@ -343,6 +379,9 @@ struct Project {
         if (graph.is_err()) {
             return graph;
         }
+        for (var warning in graph.value().warnings) {
+            File.stderr().write_all(warning);
+        }
         var changes = _changes(previous.value(), graph.value().packages);
         # Unchanged, pep.lock is left as it is, line endings and all.
         if (lock_text(graph.value().packages) == lock_text(previous.value())) {
@@ -404,7 +443,7 @@ struct Project {
         if (locked.is_ok()) {
             for (var package in locked.value()) {
                 var (host, repository) = split_source(package.source);
-                if (!package_dir(dir, host, repository).is_directory()) {
+                if (!package.commit.is_empty and !package_dir(dir, host, repository).is_directory()) {
                     missing.append(package);
                 }
             }
@@ -444,10 +483,14 @@ struct Project {
             if (found.is_empty()) {
                 return fail($"pep.lock does not list '{source}'");
             }
+            # A folder overrides it: nothing to fetch.
+            if (found.value().commit.is_empty) {
+                continue;
+            }
             var (host, repository) = split_source(source);
             var package = package_dir(dir, host, repository);
             var was_there = package.is_directory();
-            var fetched = resolver.fetch(host, repository, package, found.value().commit);
+            var fetched = resolver.fetch(host, repository, package, found.value().commit, found.value().replaced_by);
             if (fetched.is_err()) {
                 return fail($"cannot fetch {source}: {fetched.error().message}");
             }
@@ -808,6 +851,66 @@ struct Project {
         return true;
     }
 
+    # The graph pep.lock records, for the reports.
+    _graph(): Result<LockedGraph> {
+        var manifest = read_manifest(manifest_path);
+        if (manifest.is_err()) {
+            return Result<LockedGraph>.Err(manifest.error().message);
+        }
+        var graph = read_graph(dir, manifest.value(), offline);
+        if (graph.is_ok()) {
+            graph.value().resolver.toolchain = version();
+        }
+        return graph;
+    }
+
+    tree(depth: ulong): int {
+        var graph = _graph();
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        File.stdout().write_all(graph.value().tree(depth));
+        return 0;
+    }
+
+    why(spec: String): int {
+        var graph = _graph();
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var targets = graph.value().find(spec);
+        if (targets.is_empty) {
+            return fail($"no package '{spec}' in pep.lock");
+        }
+        for (var path in graph.value().why(targets)) {
+            print(path);
+        }
+        return 0;
+    }
+
+    # Lists what is outdated; with `exit_code`, any is status 1.
+    outdated(exit_code: bool): int {
+        if (offline) {
+            return fail(
+                "--offline, and 'outdated' reads which versions each package offers over the network, so it cannot check; run it without --offline (or PEPPER_OFFLINE)"
+            );
+        }
+        var graph = _graph();
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var rows = graph.value().outdated();
+        if (rows.is_err()) {
+            return fail(rows.error().message);
+        }
+        if (rows.value().is_empty) {
+            print("every package is at the newest version");
+            return 0;
+        }
+        File.stdout().write_all(table(["package", "locked", "wanted", "latest", "source"], rows.value()));
+        return exit_code ? 1 : 0;
+    }
+
     # Checks that the package is ready to release at pep.toml's `version`
     # and runs its tests with its `minimum_toolchain` and the newest
     # toolchain installed; then, unless `dry_run`, tags the commit
@@ -845,6 +948,13 @@ struct Project {
             var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
             problems.append(
                 $"dependency '{requirement.name}' names {what}, not a version range, so a dependent cannot resolve it"
+            );
+        }
+        # A dependent gets the packages it overrides, not the overrides it
+        # was tested with.
+        if (!manifest.value().overrides.is_empty) {
+            problems.append(
+                "'[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it"
             );
         }
         var minimum = manifest.value().minimum_toolchain;

@@ -51,7 +51,13 @@ import compiler.parse;
 import process;
 import compiler.sema;
 
-main(args: String[]): int {
+# On a stack of `parse.STACK_SIZE`, which the deepest source fits in: the
+# main thread's is 1 MiB on Windows.
+main(): int {
+    return parse.on_compiler_stack(() => _main(process.arguments()));
+}
+
+_main(args: String[]): int {
     var parser = cli.Parser("pep-build", "Pepper compiler", version());
     var files = parser.positionals(
         "SOURCE_FILES",

@@ -1,7 +1,7 @@
 ## Traits used as types (`Shape s`, `Array<Shape>`), as far as the passes
 ## ask about them. A module with no checked runtime is assumed.
 
-import [copy_without_body] from "checked";
+import [checked_member_counts, copy_without_body, unit_decls] from "checked";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
 import [TraitTypeMemo] from "state";
 import [parse_type_string] from "type_name";
@@ -165,14 +165,7 @@ _add_checked_function(found: _TraitTypes, memo: TraitTypeMemo, function: Functio
 _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName[] {
     # A checked struct gains methods (a generic method specialized for it)
     # with bodies: what it holds is then looked through again.
-    ulong fields = 0;
-    ulong methods = 0;
-    for (var st in module.structs) {
-        if (module.checked.structs.contains(st.name)) {
-            fields += st.field_members.count;
-            methods += st.method_members.count;
-        }
-    }
+    var (fields, methods) = checked_member_counts(module);
     var counts = (module.checked.structs.count as ulong, module.checked.functions.count as ulong, fields, methods);
     if (!memo.checked_types.is_value() or memo.checked_types_counts != counts) {
         var checked = _TraitTypes(module.traits);
@@ -203,7 +196,13 @@ _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName
     found.types.append_all(types);
     found.base_seen = seen;
     found.base_visited = visited;
-    for (var st in module.structs) {
+    # Only the unit's own declarations (`unit_decls`) are looked through,
+    # unless a checked one may be too: an unsettled struct, or a function
+    # whose body `check_confinement` put back.
+    var own = unit_decls(module);
+    var structs = unsettled.count == 0 ? own.structs : module.structs;
+    var functions = memo.bodies_back ? module.functions : own.functions;
+    for (var st in structs) {
         if (st.ty.is_generic() and st.name == st.ty.name) {
             continue;
         }
@@ -212,7 +211,7 @@ _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName
         }
         found.add_struct(st);
     }
-    for (var function in module.functions) {
+    for (var function in functions) {
         if (function.is_generic_func) {
             continue;
         }

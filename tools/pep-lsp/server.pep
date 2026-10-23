@@ -64,7 +64,7 @@ export struct PepperServer {
         this._results = results;
         async.Thread.spawn(() => {
             analyze_documents(jobs, results, client);
-        }, "pep-lsp-analysis");
+        }, "pep-lsp-analysis", parse.STACK_SIZE);
     }
 
     # Queues the document's current text for analysis.

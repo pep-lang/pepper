@@ -3,10 +3,10 @@
 ## the constraints are checked, with the type arguments substituted into its
 ## signature and body.
 
-import [Module, Statement, StaticItem, TypeName] from "model";
+import [FunctionDef, Module, Statement, StaticItem, StructDef, TypeName] from "model";
 import "replace_types";
 import [specialization_too_deep, rewrite_static_calls] from "specialize_structs";
-import [PassState] from "state";
+import [GrowingList, PassMemo, PassState] from "state";
 import [parse_type_string, replace_map] from "type_name";
 
 ## Clones each requested function specialization from its generic base.
@@ -15,17 +15,19 @@ import [parse_type_string, replace_map] from "type_name";
 ## @param state the passes' state, which takes the first error
 export specialize_functions(module: Module, state: PassState) {
     var specs = module.func_specs.copy();
-    # Looked up once per spec, and a checked runtime brings many.
-    var structs = HashSet<String>();
-    for (var st in module.structs) {
-        structs.insert(st.name);
-        structs.insert(st.ty.to_string());
+    # Looked up once per spec, and a checked runtime brings many: kept for
+    # the unit's next round, which takes in only what was added since.
+    var kept = state.unit_memos.try_get("specialize_functions");
+    var memo = kept.is_value() ? (kept.value() as? _FunctionSpecsMemo).value() : _FunctionSpecsMemo();
+    state.unit_memos["specialize_functions"] = memo;
+    if (memo.specs_done > specs.count) {
+        memo.specs_done = 0;
     }
-    var functions = HashSet<String>();
-    for (var f in module.functions) {
-        functions.insert(f.name);
-    }
-    for (var spec in specs) {
+    memo.update(module);
+    var structs = memo.structs;
+    var functions = memo.functions;
+    for (var at in memo.specs_done..specs.count) {
+        var spec = specs[at];
         var spelled = spec.to_string();
         # Constructor-shaped specs are struct specs.
         if (structs.contains(spec.name) or structs.contains(spelled) or functions.contains(spelled)) {
@@ -34,14 +36,7 @@ export specialize_functions(module: Module, state: PassState) {
         if (specialization_too_deep(module, spec, state)) {
             return;
         }
-        var bases = module.templates.frozen ? module.templates.functions : module.functions;
-        var base = Optional<FunctionDef>.Empty;
-        for (var f in bases) {
-            if (f.name == spec.name and f.is_generic_func) {
-                base = Optional<FunctionDef>.Value(f);
-                break;
-            }
-        }
+        var base = memo.bases.try_get(spec.name);
         if (!base.is_value()) {
             continue;
         }
@@ -81,7 +76,58 @@ export specialize_functions(module: Module, state: PassState) {
         functions.insert(specialized.name);
         module.functions.append(specialized);
     }
+    memo.specs_done = specs.count;
 }
+
+## What `specialize_functions` keeps for the compilation unit's next round
+## (`PassState.unit_memos`): the structs' names and spelled types, the
+## functions' names, the first generic base of each name, and how many specs
+## were done. Specs only grow, at the end: a spec done is made, or cannot
+## be, for good.
+struct _FunctionSpecsMemo {
+    var structs: HashSet<String> = HashSet<String>();
+    var functions: HashSet<String> = HashSet<String>();
+    var bases: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
+    var specs_done: ulong = 0;
+    var _structs: GrowingList<StructDef> = GrowingList<StructDef>();
+    var _functions: GrowingList<FunctionDef> = GrowingList<FunctionDef>();
+    var _bases_of: GrowingList<FunctionDef> = GrowingList<FunctionDef>();
+
+    construct() {}
+
+    ## Takes in what was added to `module` since.
+    update(module: Module) {
+        var (structure, fresh_structs) = _structs.since(module.structs);
+        if (fresh_structs) {
+            structs = HashSet<String>();
+        }
+        for (var at in structure..module.structs.count) {
+            var st = module.structs[at];
+            structs.insert(st.name);
+            structs.insert(st.ty.to_string());
+        }
+        var (function, fresh_functions) = _functions.since(module.functions);
+        if (fresh_functions) {
+            functions = HashSet<String>();
+        }
+        for (var at in function..module.functions.count) {
+            functions.insert(module.functions[at].name);
+        }
+        var of = module.templates.frozen ? module.templates.functions : module.functions;
+        var (base, fresh_bases) = _bases_of.since(of);
+        if (fresh_bases) {
+            bases = HashMap<String, FunctionDef>();
+        }
+        for (var at in base..of.count) {
+            var f = of[at];
+            if (f.is_generic_func and !bases.contains(f.name)) {
+                bases[f.name] = f;
+            }
+        }
+    }
+}
+
+extend _FunctionSpecsMemo with PassMemo;
 
 ## Replaces the types of `type_map` in `block`, as a function
 ## specialization does.

@@ -3,7 +3,8 @@
 ## `larger<int>(3, 9)`: each parameter's declared type is matched against
 ## its argument's type, binding the generic parameters it mentions.
 
-import [FunctionDef, GenericParam, Module, TypeName] from "model";
+import [unit_decls] from "checked";
+import [FunctionDef, GenericParam, Module, StructDef, TypeName] from "model";
 import [PassState] from "state";
 import [replace_map] from "type_name";
 
@@ -13,32 +14,61 @@ import [replace_map] from "type_name";
 ## @param module the model
 ## @param state the passes' state, which keeps them
 export record_conformances(module: Module, state: PassState) {
-    var table = HashMap<String, (String[], TypeName[])>();
-    for (var st in module.structs) {
-        if (st.traits.count == 0) {
-            continue;
-        }
-        if (st.ty.is_generic() and st.name == st.ty.name) {
-            var params = Array<String>();
-            for (var p in st.generic_params) {
-                params.append(p.name);
+    # The checked structs' traits are found once per compilation unit; the
+    # unit's own structs (`unit_decls`, with the checked ones it extended)
+    # are filed over them.
+    bool checked = module.checked.structs.count > 0;
+    if (checked and !state.checked_conformances.is_value()) {
+        var kept = HashMap<String, (String[], TypeName[])>();
+        for (var st in module.structs) {
+            if (module.checked.structs.contains(st.name)) {
+                _record_conformance(kept, st);
             }
-            table[st.name] = (params, st.traits);
-        } else {
-            table[st.ty.to_string()] = (Array<String>(), st.traits);
         }
+        state.checked_conformances = Optional<HashMap<String, (String[], TypeName[])>>.Value(kept);
+    }
+    var table = HashMap<String, (String[], TypeName[])>();
+    for (var st in checked ? unit_decls(module).structs : module.structs) {
+        _record_conformance(table, st);
     }
     state.conformances = table;
 }
 
+# Files the traits `st` declares, if any, under its type (a generic base
+# under its name, with its parameters).
+_record_conformance(table: HashMap<String, (String[], TypeName[])>, st: StructDef) {
+    if (st.traits.count == 0) {
+        return;
+    }
+    if (st.ty.is_generic() and st.name == st.ty.name) {
+        var params = Array<String>();
+        for (var p in st.generic_params) {
+            params.append(p.name);
+        }
+        table[st.name] = (params, st.traits);
+    } else {
+        table[st.ty.to_string()] = (Array<String>(), st.traits);
+    }
+}
+
+# What `record_conformances` filed under `key`: the unit's own, else the
+# checked structs'.
+_conformance(state: PassState, key: String): (String[], TypeName[])? {
+    var found = state.conformances.try_get(key);
+    if (found.is_value() or !state.checked_conformances.is_value()) {
+        return found;
+    }
+    return state.checked_conformances.value().try_get(key);
+}
+
 ## The traits `actual` declares, with its type arguments substituted.
 _conformances_of(state: PassState, actual: TypeName): TypeName[] {
-    var exact = state.conformances.try_get(actual.to_string());
+    var exact = _conformance(state, actual.to_string());
     if (exact.is_value()) {
         var (_, traits) = exact.value();
         return traits;
     }
-    var base = state.conformances.try_get(actual.name);
+    var base = _conformance(state, actual.name);
     if (!base.is_value()) {
         return Array<TypeName>();
     }

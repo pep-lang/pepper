@@ -187,6 +187,7 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
     # alive after it (a compilation unit worker kept every unit's, #167).
     state.checked_implicit = Optional<PassMemo>.Empty;
     state.trait_memo.members = HashMap<String, PassMemo>();
+    state.unit_memos = HashMap<String, PassMemo>();
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
         return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));
@@ -295,7 +296,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
     for (var round in 0..4096) {
         var structs = module.structs.count;
         var functions = module.functions.count;
-        gather_generics(module);
+        gather_generics(module, state);
         if (steps.stepped("gather_generics(module)")) {
             return;
         }
@@ -347,7 +348,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
         # Done only when gathering asks for nothing new.
         var struct_specs = module.struct_specs.count;
         var func_specs = module.func_specs.count;
-        gather_generics(module);
+        gather_generics(module, state);
         if (steps.stepped("gather_generics(module)")) {
             return;
         }
@@ -575,7 +576,12 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
 _step(index: ulong, module: Module, state: PassState): Diagnostic? {
     match (index) {
         0 => {
-            return apply_platform_filters(module, state.target);
+            # A struct whose method is checked again has a new body.
+            var rechecked = HashSet<String>();
+            for (var key in state.rechecked_methods) {
+                rechecked.insert(key.split(" ")[1]);
+            }
+            return apply_platform_filters(module, state.target, rechecked);
         }
         1 => {
             # `[Equatable]` structs get their `==` and `__hash` first, so
@@ -667,7 +673,7 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             return Optional<Diagnostic>.Empty;
         }
         19 => {
-            gather_generics(module);
+            gather_generics(module, state);
             return Optional<Diagnostic>.Empty;
         }
         20 => {

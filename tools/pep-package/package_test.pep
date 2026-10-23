@@ -312,6 +312,104 @@ a_dependent_ignores_a_packages_dev_dependencies() {
     expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
 }
 
+# A project on geometry and numbers, both of which reach other/numbers,
+# whose pep.toml ends in `overrides` and whose program prints the version
+# each sees.
+override_project(name: String, overrides: String): Project {
+    var project = Project(
+        name,
+        "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+            + "numbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    write_file(project.dir.join("pep.toml"), project.manifest() + overrides);
+    write_file(
+        project.dir.join("main.pep"),
+        "import geometry;\nimport numbers;\n\nmain(): int {\n"
+            + "    print(\"{0} {1}\", geometry.geometry_version(), numbers.numbers_version());\n    return 0;\n}\n"
+    );
+    return project;
+}
+
+[Test]
+an_override_replaces_a_package_everywhere_with_a_fork() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("override_fork");
+    var fork = ["module.pep", "export numbers_version(): String {\n    return \"fork\";\n}\n"];
+    fork.append_all(["pep.toml", "[package]\nname = \"numbers\"\n"]);
+    add_version(hosts.folder.path, "me/numbers", "1.0.0", fork);
+    publish(hosts.folder.path, "me/numbers");
+    var project = override_project("override_fork", "");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1 1.3.1\n");
+
+    # The fork replaces numbers for the project and for geometry, whatever
+    # range each asks, and the lock records it.
+    write_file(
+        project.dir.join("pep.toml"),
+        project.manifest()
+            + "\n[overrides]\n\"github:other/numbers\" = { github = \"me/numbers\", branch = \"main\" }\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 1);
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(
+        project.lock(),
+        $"source = \"github:other/numbers\"\noverride = \"github:me/numbers\"\ncommit = \"{hosts.commit_of("me/numbers", "main")}\"\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
+    # tree and why mark it.
+    var tree = hosts.package(project.dir, ["tree"]).stdout;
+    expect_contains(tree, " (github:other/numbers) [override: github:me/numbers]\n");
+    var why = hosts.package(project.dir, ["why", "numbers"]).stdout;
+    expect_contains(why, "app -> geometry 1.1.0 -> numbers ");
+    expect_contains(why, " [override: github:me/numbers]\n");
+    # A fresh clone builds the fork from pep.lock, under --locked.
+    Directory.remove_all(project.dir.join(".pep"));
+    expect_equal(hosts.build_and_run(project.dir, ["--locked"]), "1.1.0 fork fork\n");
+
+    # A replacement of another name, and one that matches nothing.
+    var text = project.manifest();
+    write_file(
+        project.dir.join("pep.toml"),
+        text.replace("\"me/numbers\", branch = \"main\"", "\"someone/geometry\", tag = \"v1.0.0\"")
+    );
+    var renamed = hosts.package(project.dir, ["fetch"]);
+    expect_exit(renamed, 1);
+    expect_contains(
+        renamed.stderr,
+        "pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'\n"
+    );
+    write_file(project.dir.join("pep.toml"), text + "\"github:nobody/nothing\" = { path = \"nothing\" }\n");
+    var unused = hosts.package(project.dir, ["fetch"]);
+    expect_exit(unused, 0);
+    expect_contains(
+        unused.stderr,
+        "pep.toml:10:1: warning: override of 'github:nobody/nothing' matches no package in the dependency graph\n"
+    );
+}
+
+[Test]
+an_override_replaces_a_package_everywhere_with_a_folder() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("override_path");
+    var project = override_project("override_path", "\n[overrides]\n\"github:other/numbers\" = { path = \"local\" }\n");
+    write_file(project.dir.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
+    write_file(
+        project.dir.join("local").join("module.pep"), "export numbers_version(): String {\n    return \"local\";\n}\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\noverride = \"path:local\"\n\n");
+    expect_false(project.dir.join(".pep").join("deps").join("github.com").join("other").exists());
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
+    expect_contains(
+        hosts.package(project.dir, ["tree"]).stdout, "numbers (github:other/numbers) [override: path:local]\n"
+    );
+    expect_equal(hosts.build_and_run(project.dir, ["--locked"]), "1.1.0 local local\n");
+}
+
 # What `parent` (empty for the project) asks of `source` under
 # `condition`, for `lock_targets`.
 ask(wanted: OrderedMap<String, Array<Wanted>>, parent: String, source: String, condition: String) {
@@ -786,6 +884,89 @@ an_unfetched_dependency_fails_under_offline() {
 }
 
 [Test]
+tree_why_and_outdated_report_on_the_locked_graph() {
+    if (!has_git()) {
+        return;
+    }
+    # `other/fixtures` needs geometry, so geometry is reached twice; it is
+    # a dev-dependency, and `other/winapi` is needed only on Windows.
+    var hosts = Hosts("report");
+    add_version(
+        hosts.folder.path,
+        "other/fixtures",
+        "1.0.0",
+        [
+            "module.pep",
+            "",
+            "pep.toml",
+            "[package]\nname = \"fixtures\"\n\n[dependencies]\n"
+                + "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+        ]
+    );
+    add_version(hosts.folder.path, "other/winapi", "1.0.0", ["module.pep", ""]);
+    publish(hosts.folder.path, "other/fixtures");
+    publish(hosts.folder.path, "other/winapi");
+    var project = Project(
+        "report",
+        "geometry = { github = \"someone/geometry\", version = \"=1.0.0\" }\n"
+            + "\n[dev-dependencies]\nfixtures = { github = \"other/fixtures\", version = \"1\" }\n"
+            + "\n[target.'OS(Windows)'.dependencies]\n"
+            + "win = { github = \"other/winapi\", version = \"1\", optional = true, features = [\"wide\"] }\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    var tree = hosts.package(project.dir, ["tree", "--offline"]);
+    expect_exit(tree, 0);
+    expect_equal(
+        tree.stdout,
+        "app\n"
+            + "|-- geometry 1.0.0 (github:someone/geometry)\n"
+            + "|   `-- numbers 1.3.1 (github:other/numbers)\n"
+            + "|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]\n"
+            + "`-- fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+            + "    `-- geometry 1.0.0 (github:someone/geometry) (*)\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["tree", "--depth", "1"]).stdout,
+        "app\n|-- geometry 1.0.0 (github:someone/geometry)\n"
+            + "|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]\n"
+            + "`-- fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["why", "numbers"]).stdout,
+        "app -> geometry 1.0.0 -> numbers 1.3.1\napp -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1\n"
+    );
+    expect_equal(hosts.package(project.dir, ["why", "win"]).stdout, "app -> winapi 1.0.0\n");
+    var unknown = hosts.package(project.dir, ["why", "nothing"]);
+    expect_exit(unknown, 1);
+    expect_contains(unknown.stderr, "no package 'nothing' in pep.lock");
+
+    # Widened, geometry's range allows 1.1.0; geometry's own keeps numbers
+    # below 3.0.0. outdated says so and leaves pep.lock as it is.
+    write_file(project.dir.join("pep.toml"), project.manifest().replace("\"=1.0.0\"", "\"1.0\""));
+    var lock = project.lock();
+    var outdated = hosts.package(project.dir, ["outdated", "--exit-code"]);
+    expect_exit(outdated, 1);
+    expect_equal(
+        outdated.stdout,
+        "package   locked  wanted  latest  source\n"
+            + "numbers   1.3.1   1.3.1   3.0.0   github:other/numbers\n"
+            + "geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry\n"
+    );
+    expect_exit(hosts.package(project.dir, ["outdated"]), 0);
+    expect_equal(project.lock(), lock);
+    var offline = hosts.package(project.dir, ["outdated", "--offline"]);
+    expect_exit(offline, 1);
+    expect_contains(offline.stderr, "--offline, and 'outdated' reads which versions each package offers");
+    # A dependency pep.lock does not list yet: fetch resolves it first.
+    write_file(
+        project.dir.join("pep.toml"), project.manifest() + "\n[dependencies.more]\ngithub = \"other/unlisted\"\n"
+    );
+    var stale = hosts.package(project.dir, ["tree"]);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "pep.lock does not list github:other/unlisted");
+}
+
+[Test]
 projects_share_the_download_cache() {
     if (!has_git()) {
         return;
@@ -1063,6 +1244,7 @@ publish_checks_tests_tags_and_pushes_the_version() {
             + "\n[features]\ngzip = [\"dep:zlib\"]\n"
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
             + "\n[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
+            + "\n[overrides]\n\"github:other/numbers\" = { path = \"../near\" }\n"
     );
     var refused = package(["publish", "--dry-run"]);
     expect_exit(refused, 1);
@@ -1091,6 +1273,10 @@ publish_checks_tests_tags_and_pushes_the_version() {
         "\n  'optional' of dependency 'zlib' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
     );
     expect_false(refused.stderr.contains("winapi"));
+    expect_contains(
+        refused.stderr,
+        "\n  '[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it\n"
+    );
     expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");
     expect_contains(
         refused.stderr, "\n  'version' 1.0.0 is not newer than the newest tag, 1.0.0; raise it in pep.toml\n"

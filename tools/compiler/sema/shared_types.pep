@@ -7,7 +7,7 @@
 import compiler.ast;
 import [SHARED_ATTRIBUTE] from "builder";
 import [Module, StructDef, TypeName] from "model";
-import [PassState] from "state";
+import [GrowingList, PassMemo, PassState] from "state";
 import [parse_type_string, SIMD] from "type_name";
 
 ## The names of the thread-safe structs.
@@ -21,19 +21,16 @@ export struct ThreadSafeStructs {
     ## @param state the passes' state, which knows the enums
     construct(module: Module, state: PassState) {
         this.state = state;
-        names = HashSet<String>();
-        for (var st in module.structs) {
-            if (ast.has_attribute(st.attributes, SHARED_ATTRIBUTE) or st.ty.is_shared_function_type()) {
-                names.insert(st.name);
-            }
-        }
+        # Which structs are `[Shared]` and which are value structs is kept
+        # for the compilation unit (`PassState.unit_memos`), taken in as
+        # structs are added.
+        var kept = state.unit_memos.try_get("thread_safe_structs");
+        var memo = kept.is_value() ? (kept.value() as? _SharedStructs).value() : _SharedStructs();
+        state.unit_memos["thread_safe_structs"] = memo;
+        memo.update(module);
+        names = memo.shared.copy();
         # A value struct holding another counts once that one does.
-        var values = Array<StructDef>();
-        for (var st in module.structs) {
-            if (st.is_value() and !(st.ty.is_generic() and st.name == st.ty.name)) {
-                values.append(st);
-            }
-        }
+        var values = memo.values;
         var growing = true;
         while (growing) {
             var found = Array<String>();
@@ -59,6 +56,37 @@ export struct ThreadSafeStructs {
         }
     }
 }
+
+## The `[Shared]` structs and shared function types of a module, by name,
+## and its value structs.
+struct _SharedStructs {
+    var shared: HashSet<String> = HashSet<String>();
+    var values: Array<StructDef> = Array<StructDef>();
+    var _structs: GrowingList<StructDef> = GrowingList<StructDef>();
+
+    construct() {}
+
+    ## Takes in the structs added to `module` since; all of them again
+    ## when a pass replaced the list.
+    update(module: Module) {
+        var (from, fresh) = _structs.since(module.structs);
+        if (fresh) {
+            shared = HashSet<String>();
+            values = Array<StructDef>();
+        }
+        for (var at in from..module.structs.count) {
+            var st = module.structs[at];
+            if (ast.has_attribute(st.attributes, SHARED_ATTRIBUTE) or st.ty.is_shared_function_type()) {
+                shared.insert(st.name);
+            }
+            if (st.is_value() and !(st.ty.is_generic() and st.name == st.ty.name)) {
+                values.append(st);
+            }
+        }
+    }
+}
+
+extend _SharedStructs with PassMemo;
 
 ## The first type inside `ty` that is not thread-safe, if any.
 ##

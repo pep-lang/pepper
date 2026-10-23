@@ -32,7 +32,7 @@ on:
       script:
         description: "Command to run (bash, from the repo root)"
         required: false
-        default: bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+        default: bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1
       provision:
         description: "Provision LLVM before running the script (false to probe the bare image)"
         required: false
@@ -159,10 +159,9 @@ jobs:
         # 10 + 5 + 40 < the job's 60, so a stall trips the step -- naming the
         # phase and running diagnostics -- rather than cancelling the job.
         timeout-minutes: 10
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-provision-llvm.sh
+        uses: ./.github/actions/provision-llvm
+        with:
+          token: ${{ github.token }}
 
       # Under CI on Linux the corpus test fails without them, as in ci.yml.
       - name: Provision wasi-sdk and wasmtime

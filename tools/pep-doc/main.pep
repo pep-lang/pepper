@@ -11,6 +11,7 @@
 #     pep-build tools/pep-doc/main.pep -o target/bin/pep-doc
 
 import [Directory, File, Path] from io;
+import compiler.parse;
 import process;
 import "book";
 import "checks";
@@ -44,7 +45,12 @@ Options:
   -V, --version        with no command: show pep-doc's version
 ";
 
-main(args: String[]): int {
+# On a stack of `parse.STACK_SIZE`, which the deepest source fits in.
+main(): int {
+    return parse.on_compiler_stack(() => _main(process.arguments()));
+}
+
+_main(args: String[]): int {
     var arguments = Array<String>();
     for (var i in 1..args.count) {
         arguments.append(args[i]);

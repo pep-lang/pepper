@@ -96,7 +96,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]' and '[fetch]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]' and '[fetch]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -196,6 +196,60 @@ reports_an_unfetched_dependency_of_a_path_dependency() {
     expect_true(report.is_value());
     expect_true(report.value().contains("module.pep:1:8: error: dependency 'term' is not fetched: no "));
     expect_true(report.value().contains("; run 'pepper package fetch'"));
+}
+
+[Test]
+overrides_put_a_folder_in_place_of_a_package() {
+    var folder = TempFolder("project_overrides");
+    var root = folder.path;
+    Directory.create_all(root.join(Path("geo")));
+    File.write_text(
+        root.join(Path("pep.toml")),
+        "[package]\nname = \"p\"\n[dependencies]\ngeo = { github = \"x/geo\" }\n"
+            + "[overrides]\n\"github:x/geo\" = { path = \"geo\" }\n"
+            + "\"github:x/net\" = { github = \"me/net\", branch = \"fix\" }\n"
+    );
+    File.write_text(
+        root.join(Path("geo")).join(Path("pep.toml")),
+        "[package]\nname = \"geo\"\n[dependencies]\nterm = { github = \"nobody/term\" }\n"
+    );
+    File.write_text(root.join(Path("geo")).join(Path("module.pep")), "export area(): int {\n    return 0;\n}\n");
+    File.write_text(root.join(Path("main.pep")), "import geo;\nmain(): int {\n    return geo.area();\n}\n");
+
+    # The folder's Git dependencies are fetched, not the package it replaces.
+    var manifest = link.load_manifest(root.join(Path("pep.toml")), Array<Path>());
+    expect_true(manifest.is_ok());
+    var names = Array<String>();
+    for (var d in manifest.value().git_dependencies()) {
+        names.append(d.name);
+    }
+    expect_equal(", ".join(names), "term");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    expect_false(program.value().check().is_value());
+
+    # The lock clones a fork's commit from the fork, and a folder has
+    # nothing to fetch.
+    File.write_text(
+        root.join(Path("pep.lock")),
+        "version = 1\n\n[[package]]\nname = \"geo\"\nsource = \"github:x/geo\"\noverride = \"path:geo\"\n"
+            + "\n[[package]]\nname = \"net\"\nsource = \"github:x/net\"\noverride = \"github:me/net\"\ncommit = \"abc\"\n"
+    );
+    var locked = link.read_lock(root.join(Path("pep.lock")));
+    expect_true(locked.is_ok());
+    expect_equal(locked.value().count, 1);
+    expect_equal(locked.value()[0].clone_url(), link.Host.GitHub.clone_url("me/net"));
+
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[overrides]\n\"x/geo\" = { path = \"geo\" }\n"),
+        "x/geo: override 'x/geo' does not name a package's source, such as 'github:owner/name'"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[overrides]\n\"github:x/geo\" = { path = \"geo\", optional = true }\n"),
+        "optional: an override takes a source and a revision, not 'optional'; set it on the dependency"
+    );
 }
 
 [Test]

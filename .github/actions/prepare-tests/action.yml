@@ -44,12 +44,11 @@ runs:
         path: ~/AppData/Local/pepper/cache
         key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
 
-    # apt and Homebrew serve the others in seconds.
-    - name: Provision LLVM
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.token }}
-      run: bash scripts/ci-provision-llvm.sh
+    # apt and Homebrew serve the others in seconds, Linux from a cache of
+    # apt's packages when it can (.github/actions/provision-llvm).
+    - uses: ./.github/actions/provision-llvm
+      with:
+        token: ${{ inputs.token }}
 
     # Builds go beside the checkout. Every build shares one build cache
     # (PEPPER_CACHE_DIR):

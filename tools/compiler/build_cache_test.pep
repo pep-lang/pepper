@@ -466,6 +466,39 @@ finds_a_reused_key_a_prune_moves_aside_and_back() {
     expect_false(cache.look_again(() => cache.unit_objects("+unit", "other", below, "0.o")).is_value());
 }
 
+# The objects a build links are hard links to the cache's, so a build
+# pruning the unit that moves the key's folder aside and removes it after
+# this build's last look (`_prune`) leaves the link its objects
+# (pep-lang/pepper#178). Objects outside the cache are linked as they are.
+[Test]
+pins_a_reused_keys_objects_for_the_link() {
+    var folder = TempFolder("pin");
+    var root = folder.path;
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var below = [incremental.Defines("f\n")];
+    expect_equal(cache.store_unit(_unit_built(root, "built"), "+unit", "key", "f\n", below, "0.o").value(), "key");
+    var kept = cache.reused_objects("+unit", "key", "o").value();
+    var own = root.join(Path("own.o"));
+    File.write_text(own, "own");
+    var objects = kept.copy();
+    objects.append(own);
+    var pinned = cache.pin(objects, root.join(Path("pinned"))).value();
+    expect_equal(pinned.count, objects.count);
+    expect_equal(pinned[pinned.count - 1].to_string(), own.to_string());
+
+    var key = cache.objects("+unit", "key");
+    var aside = key.parent().value().join(Path(".removing.1.0"));
+    expect_true(File.rename(key, aside).is_ok());
+    expect_true(Directory.remove_all(aside).is_ok());
+    for (var i in 0..kept.count) {
+        expect_false(kept[i].is_file());
+        expect_true(pinned[i].is_file());
+    }
+
+    # An object gone for good fails the build, after about a second of looks.
+    expect_true(cache.pin(kept, root.join(Path("again"))).is_err());
+}
+
 # A key reused by a build counts as the unit's newest, and no key stored
 # or reused lately is pruned, so a build linking it at the same time finds
 # its objects.
@@ -912,6 +945,27 @@ checks_again_only_the_bodies_an_edit_changed() {
     var (declared, _) = _build_rechecked(root);
     expect_true(declared.misses.contains(a));
     expect_true(declared.rechecked.is_empty);
+}
+
+# A method body checked again is filtered for the target like the rest: a
+# block for another platform, which names nothing that exists, goes before
+# the passes check the body, though its struct was checked before.
+[Test]
+filters_the_platform_blocks_of_a_body_checked_again() {
+    var folder = TempFolder("rechecked-platform");
+    var root = folder.path;
+    var shifted = (
+        sum: String
+    ) => "    shifted(): int {\n        [Target(OS(Wasi))] {\n            return nope;\n        }\n        return "
+        + sum
+        + ";\n    }\n";
+    var count = "_Counter(0).next() + _Counter(0).shifted()";
+    _write_rechecked(root, "", "x + 1", "n + 1", shifted("n + 0"), count);
+    _build_rechecked(root);
+    var a = _unit_of(_load(root), "a.pep");
+    _write_rechecked(root, "", "x + 1", "n + 1", shifted("0 + n"), count);
+    var (method, _) = _build_rechecked(root);
+    expect_true(method.rechecked.contains(a));
 }
 
 # An edit that adds a struct, a function or a method no code named before checks

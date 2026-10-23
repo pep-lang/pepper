@@ -15,6 +15,9 @@ pepper package update --verify               # one at a time, keeping the update
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v<version> and push the tag
+pepper package tree                          # the dependency graph pep.lock records
+pepper package why numbers                   # every path from the project to numbers
+pepper package outdated                      # packages behind their ranges or the newest version
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 ```
@@ -59,6 +62,11 @@ Every package is downloaded once per machine, into a
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
 | `publish` | Checks the package and runs its tests, then tags its version and pushes the tag (see [`publish`](#publish)) |
 | `publish --dry-run` | Checks and tests, but neither tags nor pushes |
+| `tree` | Prints the dependency graph `pep.lock` records (see [`tree`](#tree)) |
+| `tree --depth <n>`, `-d <n>` | Prints only `<n>` levels of dependencies below the project |
+| `why <name>` | Prints every path from the project to a package (see [`why`](#why-name)) |
+| `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
+| `outdated --exit-code` | Exits with status 1 when a package is outdated |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -181,9 +189,12 @@ First it checks, and lists every check that fails at once:
   resolve it with its other packages. A dev-dependency may be anything,
   since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`
-  and `[features]` tables, and a dependency's `optional`, `features` and
-  `default-features`, need 0.11.0.
+  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
+  `[features]` and `[overrides]` tables, and a dependency's `optional`,
+  `features` and `default-features`, need 0.11.0;
+- `pep.toml` has no `[overrides]`: a dependent builds with the packages
+  they replace, not the code the package was tested with, so a release
+  waits until the fix it needs is released too.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
@@ -204,6 +215,81 @@ tag to `origin`; when the push fails, it deletes the tag again.
 `--dry-run` checks and tests, then says what it would tag, without
 tagging or pushing anything. `publish` neither creates a release page on
 the host nor needs `pep.lock`, which a dependent does not read.
+
+### `tree`
+
+Prints the dependency graph `pep.lock` records, as the `pep.toml` of the
+project and of each locked package declare it. Each line is the name the
+dependent imports the package by, when that is not the package's own
+(`win: winapi`), its locked version (or short commit) and source, and
+marks:
+
+- `[dev]`: only the project's dev-dependencies lead to it;
+- `[target: <condition>]`: only builds for the targets the condition
+  selects need it (see [`[target]` tables](projects.md#targetconditiondependencies));
+- `[override: <source>]`: the project's [`[overrides]`](projects.md#overrides)
+  replace it with a fork (`github:me/numbers`) or a folder (`path:../numbers`),
+  in `tree` and `why` alike;
+- `[optional]` and `[features: ...]`: the dependent's entry says
+  `optional = true`, and the features its `features` turns on. A build
+  turns on more: each package's `default` feature, and what the features
+  it turns on list (see [Features](projects.md#features)).
+
+A package whose dependencies were listed above ends in `(*)` instead of
+listing them again:
+
+```text
+$ pepper package tree
+app
+|-- geometry 1.0.0 (github:someone/geometry)
+|   `-- numbers 1.3.1 (github:other/numbers)
+|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- geometry 1.0.0 (github:someone/geometry) (*)
+```
+
+`--depth <n>` stops `<n>` levels below the project (`--depth 1`: only its
+own dependencies). `tree`, `why` and `outdated` read the graph from
+`pep.lock`, checking each locked package out at its commit (with
+`--offline`, only from what it holds), and never change `pep.lock`. When
+`pep.toml` names a package `pep.lock` does not list, they fail and say to
+run `fetch` first.
+
+### `why <name>`
+
+Prints every path from the project to the package, one per line. The
+package is named by its own name, its `owner/name` or source, or the name
+a dependency imports it by:
+
+```text
+$ pepper package why numbers
+app -> geometry 1.0.0 -> numbers 1.3.1
+app -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1
+```
+
+### `outdated`
+
+Lists each locked package that is behind, with its locked version, the
+revision its requirements now choose (`wanted`: the newest version
+every range on it in the locked graph allows and this toolchain builds,
+or a branch's newest commit; updating a package that depends on it can
+change those ranges), and the newest version it offers (`latest`, not a prerelease).
+A package `[overrides]` replaces is left out, since its revision is the
+override's:
+
+```text
+$ pepper package outdated
+package   locked  wanted  latest  source
+numbers   1.3.1   1.3.1   3.0.0   github:other/numbers
+geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry
+```
+
+Here `pepper package update` moves geometry to 1.1.0, and numbers stays
+below 3.0.0 until geometry's range on it allows that. With none behind,
+it prints `every package is at the newest version`. It reads what each
+package offers over the network, so with `--offline` it fails, saying it
+cannot check. The exit status is 0 whatever it finds, unless
+`--exit-code` asks for 1 when a package is outdated, for CI.
 
 ## pep.lock
 
@@ -266,6 +352,21 @@ checksums:
 
 ```text
 pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+```
+
+A package the project's [`[overrides]`](projects.md#overrides) replace
+keeps its own `source` and has `override`, the replacement's source: a
+fork, whose commit `commit` is and whose files `sha256` covers, or
+`path:` and the folder as `pep.toml` writes it, with no commit, since a
+folder has none to pin:
+
+```toml
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
 ```
 
 A command that leaves the graph as it was leaves `pep.lock` untouched, so
@@ -375,6 +476,11 @@ name each imports it by.
   declares, and `pep-package` says which requirement it overrode.
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
+- The project's [`[overrides]`](projects.md#overrides) replace a package
+  wherever the graph reaches it: the override's own revision is chosen,
+  from the fork, whatever the dependents ask, and a `path` override's
+  folder is read in its place. A locked revision of an override stays
+  until the override changes or `update` names the package.
 - The project's own `[dev-dependencies]` are resolved with its
   dependencies, as requirements of the project; a dependency's
   `[dev-dependencies]` are not part of the graph at all.
