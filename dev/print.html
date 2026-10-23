@@ -21599,8 +21599,10 @@ its tests, which then install that build. CI and the workers install the
 newest published toolchain, that prerelease or a release with a higher
 version, whatever <code>VERSION</code> holds, instead of building the compiler. The newest release, the default, never picks a prerelease.</li>
 <li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand. Its stage 0, the
-compiler that builds it, is the newest published toolchain too, so the release
-may take any version, not only the one main was developing:
+compiler that builds it, is the build of main that <code>.github/stage0</code> pins
+(see <a href="tools/../contributing/tests.html#stage-0">Stage 0</a>), as for every build of
+main, so the release may take any version, not only the one main was
+developing:
 <ol>
 <li>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
 version everywhere a tool reads it.</li>
@@ -23189,7 +23191,8 @@ pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
 pepper package tree                          # the dependency graph pep.lock records
-pepper package why numbers                   # every path from the project to numbers
+pepper package tree --invert numbers         # what depends on numbers
+pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
@@ -23234,9 +23237,14 @@ Every package is downloaded once per machine, into a
 <tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
 <tr><td><code>tree</code></td><td>Prints the dependency graph <code>pep.lock</code> records (see <a href="tools/pep-package.html#tree"><code>tree</code></a>)</td></tr>
 <tr><td><code>tree --depth &lt;n&gt;</code>, <code>-d &lt;n&gt;</code></td><td>Prints only <code>&lt;n&gt;</code> levels of dependencies below the project</td></tr>
-<tr><td><code>why &lt;name&gt;</code></td><td>Prints every path from the project to a package (see <a href="tools/pep-package.html#why-name"><code>why</code></a>)</td></tr>
+<tr><td><code>tree --invert &lt;name&gt;</code>, <code>-i &lt;name&gt;</code></td><td>Prints what depends on a package instead, down to the project (see <a href="tools/pep-package.html#tree---invert-name"><code>tree --invert</code></a>)</td></tr>
+<tr><td><code>tree --json</code></td><td>Prints the tree as JSON (see <a href="tools/pep-package.html#json-output">JSON output</a>)</td></tr>
+<tr><td><code>why &lt;name&gt;</code></td><td>Prints the paths from the project to a package, the first 20 (see <a href="tools/pep-package.html#why-name"><code>why</code></a>)</td></tr>
+<tr><td><code>why --all</code></td><td>Prints every path</td></tr>
+<tr><td><code>why --json</code></td><td>Prints the paths as JSON</td></tr>
 <tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="tools/pep-package.html#outdated"><code>outdated</code></a>)</td></tr>
 <tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
+<tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="tools/pep-package.html#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -23396,14 +23404,30 @@ own dependencies). <code>tree</code>, <code>why</code> and <code>outdated</code>
 <code>--offline</code>, only from what it holds), and never change <code>pep.lock</code>. When
 <code>pep.toml</code> names a package <code>pep.lock</code> does not list, they fail and say to
 run <code>fetch</code> first.</p>
+<h3 id="tree---invert-name"><a class="header" href="#tree---invert-name"><code>tree --invert &lt;name&gt;</code></a></h3>
+<p>Prints the tree upside down: the package, then each package whose
+<code>pep.toml</code> asks for it, and so on down to the project. The package is
+named as for <a href="tools/pep-package.html#why-name"><code>why</code></a>. Each line has the same marks as in
+<code>tree</code>, except that <code>[optional]</code> and <code>[features: ...]</code> describe the
+dependent's entry for the package on the line above, and <code>(*)</code> ends a
+package whose dependents were listed already. <code>--depth</code> counts levels
+below the package:</p>
+<pre><code class="language-text">$ pepper package tree --invert geometry
+geometry 1.0.0 (github:someone/geometry)
+|-- app
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- app
+</code></pre>
 <h3 id="why-name"><a class="header" href="#why-name"><code>why &lt;name&gt;</code></a></h3>
-<p>Prints every path from the project to the package, one per line. The
+<p>Prints the paths from the project to the package, one per line. The
 package is named by its own name, its <code>owner/name</code> or source, or the name
 a dependency imports it by:</p>
 <pre><code class="language-text">$ pepper package why numbers
 app -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
 app -&gt; fixtures 1.0.0 -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
 </code></pre>
+<p>It prints the first 20, then a line saying how many more there are
+(<code>and 7 more paths; --all prints every one</code>); <code>--all</code> prints every one.</p>
 <h3 id="outdated"><a class="header" href="#outdated"><code>outdated</code></a></h3>
 <p>Lists each locked package that is behind, with its locked version, the
 revision its requirements now choose (<code>wanted</code>: the newest version
@@ -23423,6 +23447,82 @@ it prints <code>every package is at the newest version</code>. It reads what eac
 package offers over the network, so with <code>--offline</code> it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 <code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
+<h3 id="json-output"><a class="header" href="#json-output">JSON output</a></h3>
+<p><code>--json</code> makes <code>tree</code>, <code>why</code> and <code>outdated</code> print one JSON object instead,
+for scripts. Its form is stable: a later release may add members, but
+does not rename or remove one.</p>
+<p><code>tree --json</code> writes the project's name and its dependencies as nodes,
+each with the nodes of its own dependencies:</p>
+<pre><code class="language-json">{
+  "name": "app",
+  "dependencies": [
+    {
+      "name": "win",
+      "package": "winapi",
+      "version": "1.0.0",
+      "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
+      "source": "github:other/winapi",
+      "dev": false,
+      "target": "OS(Windows)",
+      "override": null,
+      "optional": true,
+      "features": ["wide"],
+      "repeated": false,
+      "dependencies": []
+    }
+  ]
+}
+</code></pre>
+<p>A node holds the package and the entry in its dependent's <code>pep.toml</code> that
+asks for it:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>The name the dependent imports the package by</td></tr>
+<tr><td><code>package</code></td><td>The package's own name (the project's, for the project)</td></tr>
+<tr><td><code>version</code></td><td>Its locked version, or <code>null</code> when it is locked by commit</td></tr>
+<tr><td><code>commit</code></td><td>Its locked commit, or <code>null</code> for the project and a folder</td></tr>
+<tr><td><code>source</code></td><td>Its source (<code>github:other/winapi</code>); <code>""</code> for the project</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it (<code>[dev]</code>)</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it (<code>[target: ...]</code>), or <code>null</code> for every target</td></tr>
+<tr><td><code>override</code></td><td>What <code>[overrides]</code> replaces it with (<code>[override: ...]</code>), or <code>null</code></td></tr>
+<tr><td><code>optional</code></td><td>Whether the entry says <code>optional = true</code> (<code>[optional]</code>)</td></tr>
+<tr><td><code>features</code></td><td>The features the entry turns on (<code>[features: ...]</code>)</td></tr>
+<tr><td><code>repeated</code></td><td>Whether its dependencies were listed already (<code>(*)</code>), so its <code>dependencies</code> is empty</td></tr>
+<tr><td><code>dependencies</code></td><td>The nodes of its dependencies, empty below <code>--depth</code></td></tr>
+</tbody></table>
+</div>
+<p><code>tree --invert &lt;name&gt; --json</code> writes the project's name and <code>packages</code>:
+a node for each package the name matches, whose <code>name</code>, <code>optional</code> and
+<code>features</code> are its own name, <code>false</code> and <code>[]</code>, and which has no
+<code>repeated</code>. In place of <code>dependencies</code>, each node has <code>dependents</code>: the
+nodes of the packages that ask for it, the project among them as a
+node whose <code>source</code> is <code>""</code>. In those, <code>name</code>, <code>optional</code> and <code>features</code>
+describe the dependent's entry for the package above.</p>
+<p><code>why --json</code> writes <code>paths</code>, the paths it prints (every one with
+<code>--all</code>), each an array of the nodes from the project's dependency to the
+package, without <code>repeated</code> or <code>dependencies</code>, and <code>total</code>, the number of
+paths there are:</p>
+<pre><code class="language-text">{
+  "paths": [
+    [
+      { "name": "geometry", "package": "geometry", "version": "1.0.0", ... },
+      { "name": "numbers", "package": "numbers", "version": "1.3.1", ... }
+    ]
+  ],
+  "total": 1
+}
+</code></pre>
+<p><code>outdated --json</code> writes <code>packages</code>, an object for each row of the table,
+with <code>--exit-code</code> as without <code>--json</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>package</code></td><td>The package's name</td></tr>
+<tr><td><code>locked</code></td><td>Its locked version, or short commit</td></tr>
+<tr><td><code>wanted</code></td><td>The revision its requirements now choose</td></tr>
+<tr><td><code>latest</code></td><td>The newest version it offers, or <code>null</code> when it has none</td></tr>
+<tr><td><code>source</code></td><td>Its source</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
+</tbody></table>
+</div>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
 <p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
 the dependency graph, its dependencies' dependencies included, and the
@@ -56752,7 +56852,7 @@ the first block, no more.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit; under <code>-D USE_LIBCRYPTO</code>, also if a size or <code>rounds</code> is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1 bytes for CNG), or the platform's PBKDF2 fails</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import digest;
@@ -56778,7 +56878,7 @@ with PBKDF2-HMAC-SHA256, as the <code>u8[]</code> overload does.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit; under <code>-D USE_LIBCRYPTO</code>, also if a size or <code>rounds</code> is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1 bytes for CNG), or the platform's PBKDF2 fails</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import digest;
@@ -59798,11 +59898,11 @@ files uses a fresh folder under the system's temporary folder
 Linux, macOS and Windows, in two jobs on each: one runs the compiler's
 tests (<code>PEPPER_TESTS_PART=compiler</code>), the other everything else
 (<code>PEPPER_TESTS_PART=others</code>), and every build in a job shares one build
-cache. A PR that changes the compiler (<code>tools/compiler/</code>) is tested with
-that compiler instead: CI builds it with the build of main first
-(<code>scripts/ci-build-compiler.sh</code>, from a build cache CI keeps between runs,
-keyed on the build of main's contents) and runs the suite with it. Each
-job has
+cache. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0's
+pin (<code>.github/stage0</code>) is tested with that compiler instead: CI builds it
+with stage 0 first (<code>scripts/ci-build-compiler.sh</code>, from a build cache CI
+keeps between runs, keyed on stage 0's contents) and runs the suite with
+it. Each job has
 a time limit a little above its slowest passing runs, and prints the
 runner's memory, swap, disk and biggest processes every minute beside the
 tests (<code>scripts/ci-monitor.sh</code>). A job that fails, is cancelled or runs out
@@ -59818,20 +59918,53 @@ tests would run with the old compiler. <code>scripts/ci-published-compiler.sh</c
 decides: the published compiler is used only when the commit the
 <code>v&lt;VERSION&gt;</code> tag is on is on the commit's history and its
 <code>tools/compiler/</code> is the commit's. Otherwise, or when VERSION is not
-published, CI builds the commit's compiler. CI's <code>changes</code> job runs it on
+published, CI builds the commit's compiler with stage 0. CI's <code>changes</code> job runs it on
 pull requests, on pushes to main and on dispatches on main. It prints the
 decision and its reason in its log and in the run's summary, under
 "Compiler". To check a commit by hand:</p>
 <pre><code class="language-bash">scripts/ci-published-compiler.sh [&lt;commit&gt;]   # exit 0: the published compiler will do
 </code></pre>
-<p>That compiler can hide a runtime change that needs a compiler fix the
-published build of main does not have yet, which breaks main's CI and the
-release, since both build the compiler with the published one. So a PR
-that changes <code>tools/compiler/</code> or <code>runtime/</code> also runs, before it merges:</p>
-<pre><code class="language-bash">scripts/stage0-check.sh                    # with the newest published toolchain
-scripts/stage0-check.sh --version 0.10.0   # with an older one
+<p>Two Pepper tools depend on packages in other repositories. The compiler
+written in Pepper, <code>tools/compiler</code>, depends on <code>pep-lang/pepper-llvm</code>, and
+the language server <code>tools/pep-lsp</code> depends on <code>pep-lang/pepper-lsp</code>. Both
+are public, so the build clones them over HTTPS with no credentials.</p>
+<h2 id="stage-0"><a class="header" href="#stage-0">Stage 0</a></h2>
+<p>Stage 0 is the published compiler that builds the compiler: in CI, in the
+release build and in <code>scripts/stage0-check.sh</code>. It is a pinned build of
+main, named in <code>.github/stage0</code>: its version, the commit it is the build
+of, and the SHA-256 sum of each archive. The build of main replaces its
+archives on every merge, so the pinned ones are copies on the repository's
+<code>stage0</code> release, named <code>&lt;commit&gt;-&lt;asset&gt;</code> with the commit's first 12 hex
+digits. <code>scripts/ci-install-toolchain.sh</code> installs stage 0 by default
+(<code>--newest</code> installs the newest published toolchain, <code>--version</code> a
+release). A stage 0 that stays the same from run to run keeps the
+compiler's build cache, which is keyed on it.</p>
+<p>The <code>Stage 0</code> workflow (<code>.github/workflows/stage0.yml</code>) moves the pin. Every
+night, and when dispatched, it takes the newest build of main once its
+publish has passed, copies it onto the <code>stage0</code> release, and pushes the
+branch <code>stage0/bump</code> that pins it. GitHub Actions may not open pull
+requests in this repository, so the run's summary and a warning link to
+open one. Its CI runs as any pull request's, building the compiler with
+the new stage 0 and running the whole suite with it, so it may auto-merge.
+While that pull request is open the branch stays put (a push with the
+workflow's token would start no CI on it); the run after it merges pins
+the next build. The <code>stage0</code> release keeps the newest 20 builds and the
+one main pins, so an older branch whose pin is gone (a patch release made
+from it, say) copies main's <code>.github/stage0</code> first.</p>
+<pre><code class="language-bash">gh workflow run stage0.yml                                  # pin the newest build of main now
+gh pr create --head stage0/bump --fill                      # then open its pull request
 </code></pre>
-<p>It installs the newest published toolchain (stage 0) with
+<p>So runtime code may only use what stage 0 accepts. A runtime change that
+needs a newer compiler than stage 0 dispatches the workflow and merges its
+pull request first.</p>
+<p>The branch's compiler can hide a runtime change that needs a compiler fix
+stage 0 does not have, which breaks main's CI and the release, since both
+build the compiler with stage 0. So a PR that changes <code>tools/compiler/</code> or
+<code>runtime/</code> also runs, before it merges:</p>
+<pre><code class="language-bash">scripts/stage0-check.sh                    # with stage 0
+scripts/stage0-check.sh --version 0.10.0   # with a release
+</code></pre>
+<p>It installs stage 0 with
 <code>scripts/ci-install-toolchain.sh</code> into <code>target/pepper-home</code>, builds
 <code>tools/compiler</code> with it (<code>scripts/ci-build-compiler.sh</code>, into
 <code>target/compiler</code>), then runs the runtime's tests with stage 0's own
@@ -59839,10 +59972,6 @@ scripts/stage0-check.sh --version 0.10.0   # with an older one
 <code>GH_TOKEN</code> while the repository is private, and on macOS and Windows
 LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
 or this checkout's <code>.pep/llvm-prefix</code>).</p>
-<p>Two Pepper tools depend on packages in other repositories. The compiler
-written in Pepper, <code>tools/compiler</code>, depends on <code>pep-lang/pepper-llvm</code>, and
-the language server <code>tools/pep-lsp</code> depends on <code>pep-lang/pepper-lsp</code>. Both
-are public, so the build clones them over HTTPS with no credentials.</p>
 <h2 id="tests-that-run-the-tools"><a class="header" href="#tests-that-run-the-tools">Tests that run the tools</a></h2>
 <p>Some tests run programs rather than call functions: <code>pep-build</code> on
 programs, and the Pepper tools on files and folders, checking their

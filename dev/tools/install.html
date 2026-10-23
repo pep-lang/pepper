@@ -342,8 +342,10 @@ its tests, which then install that build. CI and the workers install the
 newest published toolchain, that prerelease or a release with a higher
 version, whatever <code>VERSION</code> holds, instead of building the compiler. The newest release, the default, never picks a prerelease.</li>
 <li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand. Its stage 0, the
-compiler that builds it, is the newest published toolchain too, so the release
-may take any version, not only the one main was developing:
+compiler that builds it, is the build of main that <code>.github/stage0</code> pins
+(see <a href="../contributing/tests.html#stage-0">Stage 0</a>), as for every build of
+main, so the release may take any version, not only the one main was
+developing:
 <ol>
 <li>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
 version everywhere a tool reads it.</li>

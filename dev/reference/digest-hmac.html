@@ -367,7 +367,7 @@ the first block, no more.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit; under <code>-D USE_LIBCRYPTO</code>, also if a size or <code>rounds</code> is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1 bytes for CNG), or the platform's PBKDF2 fails</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import digest;
@@ -393,7 +393,7 @@ with PBKDF2-HMAC-SHA256, as the <code>u8[]</code> overload does.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit</li>
+<li>if <code>rounds</code> is 0, or <code>length</code> is over (2^32 - 1) * 32 bytes, RFC 8018's limit; under <code>-D USE_LIBCRYPTO</code>, also if a size or <code>rounds</code> is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1 bytes for CNG), or the platform's PBKDF2 fails</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import digest;

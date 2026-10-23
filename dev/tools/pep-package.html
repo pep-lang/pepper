@@ -197,7 +197,8 @@ pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
 pepper package tree                          # the dependency graph pep.lock records
-pepper package why numbers                   # every path from the project to numbers
+pepper package tree --invert numbers         # what depends on numbers
+pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
@@ -242,9 +243,14 @@ Every package is downloaded once per machine, into a
 <tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
 <tr><td><code>tree</code></td><td>Prints the dependency graph <code>pep.lock</code> records (see <a href="#tree"><code>tree</code></a>)</td></tr>
 <tr><td><code>tree --depth &lt;n&gt;</code>, <code>-d &lt;n&gt;</code></td><td>Prints only <code>&lt;n&gt;</code> levels of dependencies below the project</td></tr>
-<tr><td><code>why &lt;name&gt;</code></td><td>Prints every path from the project to a package (see <a href="#why-name"><code>why</code></a>)</td></tr>
+<tr><td><code>tree --invert &lt;name&gt;</code>, <code>-i &lt;name&gt;</code></td><td>Prints what depends on a package instead, down to the project (see <a href="#tree---invert-name"><code>tree --invert</code></a>)</td></tr>
+<tr><td><code>tree --json</code></td><td>Prints the tree as JSON (see <a href="#json-output">JSON output</a>)</td></tr>
+<tr><td><code>why &lt;name&gt;</code></td><td>Prints the paths from the project to a package, the first 20 (see <a href="#why-name"><code>why</code></a>)</td></tr>
+<tr><td><code>why --all</code></td><td>Prints every path</td></tr>
+<tr><td><code>why --json</code></td><td>Prints the paths as JSON</td></tr>
 <tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="#outdated"><code>outdated</code></a>)</td></tr>
 <tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
+<tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -404,14 +410,30 @@ own dependencies). <code>tree</code>, <code>why</code> and <code>outdated</code>
 <code>--offline</code>, only from what it holds), and never change <code>pep.lock</code>. When
 <code>pep.toml</code> names a package <code>pep.lock</code> does not list, they fail and say to
 run <code>fetch</code> first.</p>
+<h3 id="tree---invert-name"><a class="header" href="#tree---invert-name"><code>tree --invert &lt;name&gt;</code></a></h3>
+<p>Prints the tree upside down: the package, then each package whose
+<code>pep.toml</code> asks for it, and so on down to the project. The package is
+named as for <a href="#why-name"><code>why</code></a>. Each line has the same marks as in
+<code>tree</code>, except that <code>[optional]</code> and <code>[features: ...]</code> describe the
+dependent's entry for the package on the line above, and <code>(*)</code> ends a
+package whose dependents were listed already. <code>--depth</code> counts levels
+below the package:</p>
+<pre><code class="language-text">$ pepper package tree --invert geometry
+geometry 1.0.0 (github:someone/geometry)
+|-- app
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- app
+</code></pre>
 <h3 id="why-name"><a class="header" href="#why-name"><code>why &lt;name&gt;</code></a></h3>
-<p>Prints every path from the project to the package, one per line. The
+<p>Prints the paths from the project to the package, one per line. The
 package is named by its own name, its <code>owner/name</code> or source, or the name
 a dependency imports it by:</p>
 <pre><code class="language-text">$ pepper package why numbers
 app -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
 app -&gt; fixtures 1.0.0 -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
 </code></pre>
+<p>It prints the first 20, then a line saying how many more there are
+(<code>and 7 more paths; --all prints every one</code>); <code>--all</code> prints every one.</p>
 <h3 id="outdated"><a class="header" href="#outdated"><code>outdated</code></a></h3>
 <p>Lists each locked package that is behind, with its locked version, the
 revision its requirements now choose (<code>wanted</code>: the newest version
@@ -431,6 +453,82 @@ it prints <code>every package is at the newest version</code>. It reads what eac
 package offers over the network, so with <code>--offline</code> it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 <code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
+<h3 id="json-output"><a class="header" href="#json-output">JSON output</a></h3>
+<p><code>--json</code> makes <code>tree</code>, <code>why</code> and <code>outdated</code> print one JSON object instead,
+for scripts. Its form is stable: a later release may add members, but
+does not rename or remove one.</p>
+<p><code>tree --json</code> writes the project's name and its dependencies as nodes,
+each with the nodes of its own dependencies:</p>
+<pre><code class="language-json">{
+  "name": "app",
+  "dependencies": [
+    {
+      "name": "win",
+      "package": "winapi",
+      "version": "1.0.0",
+      "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
+      "source": "github:other/winapi",
+      "dev": false,
+      "target": "OS(Windows)",
+      "override": null,
+      "optional": true,
+      "features": ["wide"],
+      "repeated": false,
+      "dependencies": []
+    }
+  ]
+}
+</code></pre>
+<p>A node holds the package and the entry in its dependent's <code>pep.toml</code> that
+asks for it:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>The name the dependent imports the package by</td></tr>
+<tr><td><code>package</code></td><td>The package's own name (the project's, for the project)</td></tr>
+<tr><td><code>version</code></td><td>Its locked version, or <code>null</code> when it is locked by commit</td></tr>
+<tr><td><code>commit</code></td><td>Its locked commit, or <code>null</code> for the project and a folder</td></tr>
+<tr><td><code>source</code></td><td>Its source (<code>github:other/winapi</code>); <code>""</code> for the project</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it (<code>[dev]</code>)</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it (<code>[target: ...]</code>), or <code>null</code> for every target</td></tr>
+<tr><td><code>override</code></td><td>What <code>[overrides]</code> replaces it with (<code>[override: ...]</code>), or <code>null</code></td></tr>
+<tr><td><code>optional</code></td><td>Whether the entry says <code>optional = true</code> (<code>[optional]</code>)</td></tr>
+<tr><td><code>features</code></td><td>The features the entry turns on (<code>[features: ...]</code>)</td></tr>
+<tr><td><code>repeated</code></td><td>Whether its dependencies were listed already (<code>(*)</code>), so its <code>dependencies</code> is empty</td></tr>
+<tr><td><code>dependencies</code></td><td>The nodes of its dependencies, empty below <code>--depth</code></td></tr>
+</tbody></table>
+</div>
+<p><code>tree --invert &lt;name&gt; --json</code> writes the project's name and <code>packages</code>:
+a node for each package the name matches, whose <code>name</code>, <code>optional</code> and
+<code>features</code> are its own name, <code>false</code> and <code>[]</code>, and which has no
+<code>repeated</code>. In place of <code>dependencies</code>, each node has <code>dependents</code>: the
+nodes of the packages that ask for it, the project among them as a
+node whose <code>source</code> is <code>""</code>. In those, <code>name</code>, <code>optional</code> and <code>features</code>
+describe the dependent's entry for the package above.</p>
+<p><code>why --json</code> writes <code>paths</code>, the paths it prints (every one with
+<code>--all</code>), each an array of the nodes from the project's dependency to the
+package, without <code>repeated</code> or <code>dependencies</code>, and <code>total</code>, the number of
+paths there are:</p>
+<pre><code class="language-text">{
+  "paths": [
+    [
+      { "name": "geometry", "package": "geometry", "version": "1.0.0", ... },
+      { "name": "numbers", "package": "numbers", "version": "1.3.1", ... }
+    ]
+  ],
+  "total": 1
+}
+</code></pre>
+<p><code>outdated --json</code> writes <code>packages</code>, an object for each row of the table,
+with <code>--exit-code</code> as without <code>--json</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>package</code></td><td>The package's name</td></tr>
+<tr><td><code>locked</code></td><td>Its locked version, or short commit</td></tr>
+<tr><td><code>wanted</code></td><td>The revision its requirements now choose</td></tr>
+<tr><td><code>latest</code></td><td>The newest version it offers, or <code>null</code> when it has none</td></tr>
+<tr><td><code>source</code></td><td>Its source</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
+</tbody></table>
+</div>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
 <p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
 the dependency graph, its dependencies' dependencies included, and the
