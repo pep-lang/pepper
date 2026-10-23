@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Checks that the newest published toolchain (stage 0) still builds this
-# checkout, as main's CI and the release build do: it builds the compiler
+# Checks that stage 0, the build of main .github/stage0 pins, still builds
+# this checkout, as CI and the release build do: it builds the compiler
 # (tools/compiler) and runs the runtime's tests against this checkout's
 # runtime/. The branch's own compiler can hide a runtime change that needs
 # a compiler fix stage 0 does not have yet (the `char` compare
-# break), so a PR that changes tools/compiler runs this before it merges.
+# break), so a PR that changes tools/compiler or runtime/ runs this before
+# it merges. A change that needs a newer compiler than stage 0 moves the
+# pin first (.github/workflows/stage0.yml).
 #
 #   scripts/stage0-check.sh [--version <version>] [pep-test options...]
 #
 # It installs stage 0 with scripts/ci-install-toolchain.sh (--version
-# names an older one), builds tools/compiler with it with
+# names a release instead), builds tools/compiler with it with
 # scripts/ci-build-compiler.sh, then runs `pepper test` in runtime/ with
 # stage 0's own tools. Further arguments go to that `pepper test`.
 #
