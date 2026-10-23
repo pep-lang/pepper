@@ -280,11 +280,13 @@ main(): int {
 <tr><td><code>optional</code></td><td><code>true</code>: a build uses it only when a <a href="#features">feature</a> turns it on</td></tr>
 <tr><td><code>features</code></td><td>An array of the dependency's features to turn on</td></tr>
 <tr><td><code>default-features</code></td><td><code>false</code> leaves the dependency's <code>default</code> feature off</td></tr>
+<tr><td><code>workspace</code></td><td><code>true</code>: its source and revision are its <a href="#workspaces-workspace">workspace's</a></td></tr>
 </tbody></table>
 </div>
 <p>A dependency has exactly one source, and at most one of <code>version</code>, <code>branch</code>,
 <code>tag</code> and <code>commit</code>; with none, it follows the repository's default branch.
-A <code>path</code> dependency takes none of them.</p>
+A <code>path</code> dependency takes only a <code>version</code>, which a build ignores and
+<a href="pep-package.html#publish"><code>publish</code></a> asks for.</p>
 <h3 id="imports"><a class="header" href="#imports">Imports</a></h3>
 <p><code>import geometry</code> imports the package's root module, its <code>module.pep</code>.
 <code>import geometry.solids</code> imports the module in its <code>solids</code> folder, and binds
@@ -488,6 +490,150 @@ as for <a href="#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pe
 <p><code>pepper package add --optional</code>, <code>--features</code> and <code>--no-default-features</code>
 write a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code> (see
 <a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<h2 id="workspaces-workspace"><a class="header" href="#workspaces-workspace">Workspaces: <code>[workspace]</code></a></h2>
+<p>A repository holding several related packages, such as a library with its
+examples or a client and a server, makes them one workspace: a <code>pep.toml</code>
+at the root lists them, and they share one <code>pep.lock</code> and one
+<code>.pep/deps</code>, so every member builds with the same revision of each
+dependency.</p>
+<pre><code class="language-text">shapes/
+  pep.toml            [workspace]
+  pep.lock            one lock for every member
+  app/pep.toml        [package] name = "app"
+  libs/geo/pep.toml   [package] name = "geo"
+  libs/draw/pep.toml  [package] name = "draw"
+</code></pre>
+<pre><code class="language-toml"># shapes/pep.toml
+[workspace]
+members = ["app", "libs/*"]
+
+[workspace.dependencies]
+numbers = { github = "someone/numbers", version = "1.2" }
+geo     = { path = "libs/geo", version = "0.3" }
+</code></pre>
+<pre><code class="language-toml"># shapes/app/pep.toml
+[package]
+name = "app"
+
+[dependencies]
+numbers = { workspace = true }                   # someone/numbers 1.2
+geo     = { workspace = true, features = ["3d"] }
+draw    = { path = "../libs/draw", version = "0.1" }
+</code></pre>
+<ul>
+<li><strong><code>members</code></strong> lists the member folders, relative to the root: a folder
+(<code>app</code>), or a glob of folders (<code>libs/*</code>, see
+<a href="../reference/io-glob.html"><code>io.glob</code></a>). Each holds a package's <code>pep.toml</code>.
+The root may be a package too, with a <code>[package]</code> of its own: it is
+then a member without being listed. A root without one only holds the
+workspace.</li>
+<li><strong>One lock:</strong> <code>pepper package</code> and <code>pepper build</code>, run in the root or
+any member, resolve every member's dependencies together into the
+root's <code>pep.lock</code>, and fetch into the root's <code>.pep/deps</code>. The members'
+own dependencies count as the project's, so when two ask for one
+package, both ranges must hold (see
+<a href="pep-package.html#resolving-versions">Resolving versions</a>).</li>
+<li><strong><code>[workspace.dependencies]</code></strong> gives a source and revision once, for
+each member to inherit with <code>workspace = true</code>. A member's entry adds
+<code>optional</code>, <code>features</code> and <code>default-features</code>, and nothing else; a
+<code>path</code> there is relative to the root.</li>
+<li><strong>Members depend on each other</strong> with <code>path</code>. A <code>version</code> beside the
+<code>path</code> is for <a href="pep-package.html#publish"><code>publish</code></a>, which refuses a
+<code>path</code> without one; a build uses the folder.</li>
+<li><strong>Building:</strong> <code>pepper build</code> in a member builds that member; in a root
+with no <code>[package]</code>, every member. <code>--all</code> builds every member, and
+<code>-p &lt;name&gt;</code> (repeated for more) the members by package name, from the
+root or any member, each into its own output; a member with no entry
+file, a library, is skipped. <code>pepper test --all</code> and <code>pepper test -p &lt;name&gt;</code> test them the same way (see <a href="pep-build.html">pep-build</a> and
+<a href="pep-test.html">pep-test</a>).</li>
+<li><strong>Features are unified</strong> across the members a build selects, as in
+Cargo: each member's <code>default</code> and its dependencies' features are on
+in every one of them, and <code>--features</code> turns a feature on in each
+member that has it.</li>
+<li><strong><a href="#overrides"><code>[overrides]</code></a></strong> belong in the root, and apply to every
+member; a member's own are ignored.</li>
+<li><strong>One level:</strong> a member cannot be a workspace itself, and a package is
+in the workspace of the nearest <code>pep.toml</code> above it with
+<code>[workspace]</code>, when that lists it. A package in <code>.pep/deps</code> is in none
+of the project's.</li>
+<li><strong>Needs toolchain 0.11.0,</strong> as for
+<a href="#dev-dependencies"><code>[dev-dependencies]</code></a>: <code>[workspace]</code> and a
+dependency's <code>workspace</code> are unknown to older toolchains.</li>
+</ul>
+<p>The problems of a workspace are errors at the member in the root's
+<code>members</code>, or at the dependency that inherits:</p>
+<pre><code class="language-text">pep.toml:2:19: error: workspace member 'app' is listed twice
+    2 | members = ["app", "app"]
+      |                   ^~~~~
+</code></pre>
+<ul>
+<li>a member that is not a package (no <code>pep.toml</code>), one listed twice, or
+one that is a workspace itself;</li>
+<li><code>workspace = true</code> with a source or revision of its own, in a package
+no workspace lists, or naming what <code>[workspace.dependencies]</code> lacks;</li>
+<li><code>optional</code>, <code>features</code>, <code>default-features</code> or <code>workspace</code> in
+<code>[workspace.dependencies]</code>.</li>
+</ul>
+<h2 id="overrides"><a class="header" href="#overrides"><code>[overrides]</code></a></h2>
+<p>To try a fix in a package deep in the graph, or to use a fork until the
+fix is released, the project replaces the package wherever the graph
+reaches it, without editing the <code>pep.toml</code> of each package on the way:</p>
+<pre><code class="language-toml">[overrides]
+"github:other/numbers" = { github = "me/numbers", branch = "fix-overflow" }
+"github:someone/geometry" = { path = "../geometry" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The key</strong> is the source of the package it replaces, as
+<a href="pep-package.html#peplock"><code>pep.lock</code></a> writes it: the host's key, <code>:</code>,
+and the repository (<code>github:owner/name</code>). One table keyed by the source
+is enough, since a source is what makes two dependencies the same
+package in the graph; the name each dependent imports it by does not.</p>
+</li>
+<li>
+<p><strong>The value</strong> is the package that replaces it, written as a dependency
+is: a repository (<code>github</code>, <code>gitlab</code>, <code>codeberg</code>) with at most one of
+<code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>, or a <code>path</code>, relative to this
+<code>pep.toml</code>. It takes no <code>optional</code>, <code>features</code> or <code>default-features</code>;
+those stay on each dependency.</p>
+</li>
+<li>
+<p><strong>Everywhere, whatever is asked:</strong> every package that depends on the
+source gets the replacement, the project included, whatever version
+range or branch each asks for. A fork is checked out in the original's
+folder, <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>, and a <code>path</code> override's
+folder is read in its place, its own dependencies included. Imports do
+not change.</p>
+</li>
+<li>
+<p><strong>Locked:</strong> <code>pep.lock</code> records the replacement in the package's
+<code>override</code>, with the fork's commit (see
+<a href="pep-package.html#peplock">pep.lock</a>), so <code>--locked</code> and <code>--offline</code>
+builds stay reproducible, and adding, changing or removing an override
+changes the lock.</p>
+</li>
+<li>
+<p><strong>Only the project's own:</strong> a dependency's <code>[overrides]</code> do not apply
+to the projects that use it, and <code>pepper package publish</code> refuses a
+package with any (see <a href="pep-package.html#publish">publish</a>). In a
+<a href="#workspaces-workspace">workspace</a>, only the root's apply, to every
+member; a member's are ignored, which <code>pepper package</code> warns about.</p>
+</li>
+<li>
+<p><strong>Checked by <code>pepper package</code>:</strong> an override that matches no package in
+the graph is a warning at its key, and a replacement whose <code>[package]</code>
+<code>name</code> differs from the name <code>pep.lock</code> records for the package it
+replaces is an error there:</p>
+<pre><code class="language-text">pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'
+    9 | "github:other/numbers" = { github = "someone/geometry", tag = "v1.0.0" }
+      | ^~~~~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code>
+with <code>[overrides]</code> as an unknown table.</p>
+</li>
+</ul>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -517,6 +663,8 @@ the package is fetched.</li>
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
 or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>.</li>
+<li>An <code>[overrides]</code> key that is not a source (<code>github:owner/name</code>), or an
+override with <code>optional</code>, <code>features</code> or <code>default-features</code>.</li>
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
 </ul>
 <p>An import of a dependency that is not on disk says which folder is missing:</p>

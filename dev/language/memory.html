@@ -819,6 +819,47 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>In a loop, the check counts every reference the loop's body makes,
+wherever in the body it is made: a statement after the <code>move</code> runs again
+before the next pass's <code>move</code>. So a loop can move a variable it gives a
+new value each pass, but not one it also stores in a variable from outside
+the loop, even after the <code>move</code>:</p>
+<pre><code class="language-pepper">import async;
+
+struct Counter {
+    var n: int;
+
+    construct(n: int) {
+        this.n = n;
+    }
+}
+
+main(): int {
+    var counters = async.Channel&lt;Counter&gt;();
+
+    var a = Counter(1);
+    for (var i in 0..3) {
+        counters.send(move(a));
+        # A new value before the next pass, so `a` holds the only reference.
+        a = Counter(i + 2);
+    }
+
+    # var last = Counter(0);
+    # var b = Counter(1);
+    # for (var i in 0..3) {
+    #     counters.send(move(b));   # error: 'last' also references its value
+    #     b = Counter(i + 2);
+    #     last = b;                 # still there on the next pass
+    # }
+
+    var total = 0;
+    for (var _ in 0..3) {
+        total += counters.receive().value().n;
+    }
+    print($"{total}");  # 6
+    return 0;
+}
+</code></pre>
 <ul>
 <li>
 <p>A moved variable cannot be read again until it is assigned a new value,

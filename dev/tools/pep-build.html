@@ -228,6 +228,8 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
 <tr><td><code>--no-default-features</code></td><td>Leave the project's package's <code>default</code> feature off</td><td>off</td></tr>
+<tr><td><code>--all</code></td><td>Build every member of the project's workspace</td><td>the project alone, or every member in a root with no <code>[package]</code></td></tr>
+<tr><td><code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></td><td>Build this workspace member; repeatable</td><td></td></tr>
 <tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
 <tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project's folder when building it)</td></tr>
@@ -235,7 +237,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
-<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts</td><td></td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
 </tbody></table>
@@ -647,6 +649,21 @@ whole dependency graph; see <a href="projects.html#features">Features</a>. A fea
 the package does not have is an error that lists those it has:</p>
 <pre><code class="language-text">unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
 </code></pre>
+<h3 id="--all--p-name---package-name"><a class="header" href="#--all--p-name---package-name"><code>--all</code>, <code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></a></h3>
+<p>In a <a href="projects.html#workspaces-workspace">workspace</a>, <code>--all</code> builds every
+member and <code>-p</code> (repeated for more) the members it names by package
+name, from the root or any member. Each member builds into its own
+output, as <code>pepper build</code> in its folder would, one after another, and
+the first that fails stops the rest; a member with no <code>[build]</code> entry
+and no <code>main.pep</code>, a library, is skipped. Their features are unified:
+the build of each turns on what every selected member turns on in a
+package they share, and <code>--features</code> turns a feature on in each member
+that has it. In a workspace's root with no <code>[package]</code> of its own,
+<code>pepper build</code> builds every member. <code>-o</code> names one output, so it takes
+one member.</p>
+<pre><code class="language-bash">pepper build --all          # every member
+pepper build -p app -O      # the member named app, optimized
+</code></pre>
 <h2 id="runtime-checks"><a class="header" href="#runtime-checks">Runtime checks</a></h2>
 <h3 id="--no-runtime-checkslist"><a class="header" href="#--no-runtime-checkslist"><code>--no-runtime-checks=&lt;list&gt;</code></a></h3>
 <p>Integer overflow, division by zero, an oversized shift, an index out of
@@ -737,6 +754,16 @@ number and the object to write it to. Nothing else is read.</li>
 <li><code>--compilation-unit-worker &lt;dir&gt;</code>, after the build's own arguments, checks
 the compilation units the build passes through <code>&lt;dir&gt;</code> and compiles their
 objects.</li>
+<li><code>--members &lt;names&gt;</code> names, comma-separated, the workspace members a
+build of several (<code>--all</code>, <code>-p</code>) builds together, so each child unifies
+its features with theirs. With a file, <code>--all</code> and <code>-p</code> do the same.</li>
+<li><code>--member &lt;dir&gt;</code>, with no file, builds the project in <code>&lt;dir&gt;</code> rather
+than the one around the current folder; a build of several members
+starts each child with it, in its own folder, so relative paths such
+as <code>-o</code> keep their meaning.</li>
+<li><code>--print-members</code> prints the package name and folder of each member
+<code>--all</code> or <code>-p</code> selects, a tab between them, a line each, and builds
+nothing; <code>pep-test --all</code> and <code>-p</code> run it.</li>
 </ul>
 <h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
 <ul>

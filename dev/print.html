@@ -9308,6 +9308,47 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>In a loop, the check counts every reference the loop's body makes,
+wherever in the body it is made: a statement after the <code>move</code> runs again
+before the next pass's <code>move</code>. So a loop can move a variable it gives a
+new value each pass, but not one it also stores in a variable from outside
+the loop, even after the <code>move</code>:</p>
+<pre><code class="language-pepper">import async;
+
+struct Counter {
+    var n: int;
+
+    construct(n: int) {
+        this.n = n;
+    }
+}
+
+main(): int {
+    var counters = async.Channel&lt;Counter&gt;();
+
+    var a = Counter(1);
+    for (var i in 0..3) {
+        counters.send(move(a));
+        # A new value before the next pass, so `a` holds the only reference.
+        a = Counter(i + 2);
+    }
+
+    # var last = Counter(0);
+    # var b = Counter(1);
+    # for (var i in 0..3) {
+    #     counters.send(move(b));   # error: 'last' also references its value
+    #     b = Counter(i + 2);
+    #     last = b;                 # still there on the next pass
+    # }
+
+    var total = 0;
+    for (var _ in 0..3) {
+        total += counters.receive().value().n;
+    }
+    print($"{total}");  # 6
+    return 0;
+}
+</code></pre>
 <ul>
 <li>
 <p>A moved variable cannot be read again until it is assigned a new value,
@@ -21919,6 +21960,8 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
 <tr><td><code>--no-default-features</code></td><td>Leave the project's package's <code>default</code> feature off</td><td>off</td></tr>
+<tr><td><code>--all</code></td><td>Build every member of the project's workspace</td><td>the project alone, or every member in a root with no <code>[package]</code></td></tr>
+<tr><td><code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></td><td>Build this workspace member; repeatable</td><td></td></tr>
 <tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
 <tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
 <tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project's folder when building it)</td></tr>
@@ -21926,7 +21969,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
-<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts</td><td></td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
 </tbody></table>
@@ -22338,6 +22381,21 @@ whole dependency graph; see <a href="tools/projects.html#features">Features</a>.
 the package does not have is an error that lists those it has:</p>
 <pre><code class="language-text">unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
 </code></pre>
+<h3 id="--all--p-name---package-name"><a class="header" href="#--all--p-name---package-name"><code>--all</code>, <code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></a></h3>
+<p>In a <a href="tools/projects.html#workspaces-workspace">workspace</a>, <code>--all</code> builds every
+member and <code>-p</code> (repeated for more) the members it names by package
+name, from the root or any member. Each member builds into its own
+output, as <code>pepper build</code> in its folder would, one after another, and
+the first that fails stops the rest; a member with no <code>[build]</code> entry
+and no <code>main.pep</code>, a library, is skipped. Their features are unified:
+the build of each turns on what every selected member turns on in a
+package they share, and <code>--features</code> turns a feature on in each member
+that has it. In a workspace's root with no <code>[package]</code> of its own,
+<code>pepper build</code> builds every member. <code>-o</code> names one output, so it takes
+one member.</p>
+<pre><code class="language-bash">pepper build --all          # every member
+pepper build -p app -O      # the member named app, optimized
+</code></pre>
 <h2 id="runtime-checks"><a class="header" href="#runtime-checks">Runtime checks</a></h2>
 <h3 id="--no-runtime-checkslist"><a class="header" href="#--no-runtime-checkslist"><code>--no-runtime-checks=&lt;list&gt;</code></a></h3>
 <p>Integer overflow, division by zero, an oversized shift, an index out of
@@ -22428,6 +22486,16 @@ number and the object to write it to. Nothing else is read.</li>
 <li><code>--compilation-unit-worker &lt;dir&gt;</code>, after the build's own arguments, checks
 the compilation units the build passes through <code>&lt;dir&gt;</code> and compiles their
 objects.</li>
+<li><code>--members &lt;names&gt;</code> names, comma-separated, the workspace members a
+build of several (<code>--all</code>, <code>-p</code>) builds together, so each child unifies
+its features with theirs. With a file, <code>--all</code> and <code>-p</code> do the same.</li>
+<li><code>--member &lt;dir&gt;</code>, with no file, builds the project in <code>&lt;dir&gt;</code> rather
+than the one around the current folder; a build of several members
+starts each child with it, in its own folder, so relative paths such
+as <code>-o</code> keep their meaning.</li>
+<li><code>--print-members</code> prints the package name and folder of each member
+<code>--all</code> or <code>-p</code> selects, a tab between them, a line each, and builds
+nothing; <code>pep-test --all</code> and <code>-p</code> run it.</li>
 </ul>
 <h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
 <ul>
@@ -22556,11 +22624,13 @@ main(): int {
 <tr><td><code>optional</code></td><td><code>true</code>: a build uses it only when a <a href="tools/projects.html#features">feature</a> turns it on</td></tr>
 <tr><td><code>features</code></td><td>An array of the dependency's features to turn on</td></tr>
 <tr><td><code>default-features</code></td><td><code>false</code> leaves the dependency's <code>default</code> feature off</td></tr>
+<tr><td><code>workspace</code></td><td><code>true</code>: its source and revision are its <a href="tools/projects.html#workspaces-workspace">workspace's</a></td></tr>
 </tbody></table>
 </div>
 <p>A dependency has exactly one source, and at most one of <code>version</code>, <code>branch</code>,
 <code>tag</code> and <code>commit</code>; with none, it follows the repository's default branch.
-A <code>path</code> dependency takes none of them.</p>
+A <code>path</code> dependency takes only a <code>version</code>, which a build ignores and
+<a href="tools/pep-package.html#publish"><code>publish</code></a> asks for.</p>
 <h3 id="imports"><a class="header" href="#imports">Imports</a></h3>
 <p><code>import geometry</code> imports the package's root module, its <code>module.pep</code>.
 <code>import geometry.solids</code> imports the module in its <code>solids</code> folder, and binds
@@ -22764,6 +22834,150 @@ as for <a href="tools/projects.html#dev-dependencies"><code>[dev-dependencies]</
 <p><code>pepper package add --optional</code>, <code>--features</code> and <code>--no-default-features</code>
 write a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code> (see
 <a href="tools/pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<h2 id="workspaces-workspace"><a class="header" href="#workspaces-workspace">Workspaces: <code>[workspace]</code></a></h2>
+<p>A repository holding several related packages, such as a library with its
+examples or a client and a server, makes them one workspace: a <code>pep.toml</code>
+at the root lists them, and they share one <code>pep.lock</code> and one
+<code>.pep/deps</code>, so every member builds with the same revision of each
+dependency.</p>
+<pre><code class="language-text">shapes/
+  pep.toml            [workspace]
+  pep.lock            one lock for every member
+  app/pep.toml        [package] name = "app"
+  libs/geo/pep.toml   [package] name = "geo"
+  libs/draw/pep.toml  [package] name = "draw"
+</code></pre>
+<pre><code class="language-toml"># shapes/pep.toml
+[workspace]
+members = ["app", "libs/*"]
+
+[workspace.dependencies]
+numbers = { github = "someone/numbers", version = "1.2" }
+geo     = { path = "libs/geo", version = "0.3" }
+</code></pre>
+<pre><code class="language-toml"># shapes/app/pep.toml
+[package]
+name = "app"
+
+[dependencies]
+numbers = { workspace = true }                   # someone/numbers 1.2
+geo     = { workspace = true, features = ["3d"] }
+draw    = { path = "../libs/draw", version = "0.1" }
+</code></pre>
+<ul>
+<li><strong><code>members</code></strong> lists the member folders, relative to the root: a folder
+(<code>app</code>), or a glob of folders (<code>libs/*</code>, see
+<a href="tools/../reference/io-glob.html"><code>io.glob</code></a>). Each holds a package's <code>pep.toml</code>.
+The root may be a package too, with a <code>[package]</code> of its own: it is
+then a member without being listed. A root without one only holds the
+workspace.</li>
+<li><strong>One lock:</strong> <code>pepper package</code> and <code>pepper build</code>, run in the root or
+any member, resolve every member's dependencies together into the
+root's <code>pep.lock</code>, and fetch into the root's <code>.pep/deps</code>. The members'
+own dependencies count as the project's, so when two ask for one
+package, both ranges must hold (see
+<a href="tools/pep-package.html#resolving-versions">Resolving versions</a>).</li>
+<li><strong><code>[workspace.dependencies]</code></strong> gives a source and revision once, for
+each member to inherit with <code>workspace = true</code>. A member's entry adds
+<code>optional</code>, <code>features</code> and <code>default-features</code>, and nothing else; a
+<code>path</code> there is relative to the root.</li>
+<li><strong>Members depend on each other</strong> with <code>path</code>. A <code>version</code> beside the
+<code>path</code> is for <a href="tools/pep-package.html#publish"><code>publish</code></a>, which refuses a
+<code>path</code> without one; a build uses the folder.</li>
+<li><strong>Building:</strong> <code>pepper build</code> in a member builds that member; in a root
+with no <code>[package]</code>, every member. <code>--all</code> builds every member, and
+<code>-p &lt;name&gt;</code> (repeated for more) the members by package name, from the
+root or any member, each into its own output; a member with no entry
+file, a library, is skipped. <code>pepper test --all</code> and <code>pepper test -p &lt;name&gt;</code> test them the same way (see <a href="tools/pep-build.html">pep-build</a> and
+<a href="tools/pep-test.html">pep-test</a>).</li>
+<li><strong>Features are unified</strong> across the members a build selects, as in
+Cargo: each member's <code>default</code> and its dependencies' features are on
+in every one of them, and <code>--features</code> turns a feature on in each
+member that has it.</li>
+<li><strong><a href="tools/projects.html#overrides"><code>[overrides]</code></a></strong> belong in the root, and apply to every
+member; a member's own are ignored.</li>
+<li><strong>One level:</strong> a member cannot be a workspace itself, and a package is
+in the workspace of the nearest <code>pep.toml</code> above it with
+<code>[workspace]</code>, when that lists it. A package in <code>.pep/deps</code> is in none
+of the project's.</li>
+<li><strong>Needs toolchain 0.11.0,</strong> as for
+<a href="tools/projects.html#dev-dependencies"><code>[dev-dependencies]</code></a>: <code>[workspace]</code> and a
+dependency's <code>workspace</code> are unknown to older toolchains.</li>
+</ul>
+<p>The problems of a workspace are errors at the member in the root's
+<code>members</code>, or at the dependency that inherits:</p>
+<pre><code class="language-text">pep.toml:2:19: error: workspace member 'app' is listed twice
+    2 | members = ["app", "app"]
+      |                   ^~~~~
+</code></pre>
+<ul>
+<li>a member that is not a package (no <code>pep.toml</code>), one listed twice, or
+one that is a workspace itself;</li>
+<li><code>workspace = true</code> with a source or revision of its own, in a package
+no workspace lists, or naming what <code>[workspace.dependencies]</code> lacks;</li>
+<li><code>optional</code>, <code>features</code>, <code>default-features</code> or <code>workspace</code> in
+<code>[workspace.dependencies]</code>.</li>
+</ul>
+<h2 id="overrides"><a class="header" href="#overrides"><code>[overrides]</code></a></h2>
+<p>To try a fix in a package deep in the graph, or to use a fork until the
+fix is released, the project replaces the package wherever the graph
+reaches it, without editing the <code>pep.toml</code> of each package on the way:</p>
+<pre><code class="language-toml">[overrides]
+"github:other/numbers" = { github = "me/numbers", branch = "fix-overflow" }
+"github:someone/geometry" = { path = "../geometry" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The key</strong> is the source of the package it replaces, as
+<a href="tools/pep-package.html#peplock"><code>pep.lock</code></a> writes it: the host's key, <code>:</code>,
+and the repository (<code>github:owner/name</code>). One table keyed by the source
+is enough, since a source is what makes two dependencies the same
+package in the graph; the name each dependent imports it by does not.</p>
+</li>
+<li>
+<p><strong>The value</strong> is the package that replaces it, written as a dependency
+is: a repository (<code>github</code>, <code>gitlab</code>, <code>codeberg</code>) with at most one of
+<code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>, or a <code>path</code>, relative to this
+<code>pep.toml</code>. It takes no <code>optional</code>, <code>features</code> or <code>default-features</code>;
+those stay on each dependency.</p>
+</li>
+<li>
+<p><strong>Everywhere, whatever is asked:</strong> every package that depends on the
+source gets the replacement, the project included, whatever version
+range or branch each asks for. A fork is checked out in the original's
+folder, <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>, and a <code>path</code> override's
+folder is read in its place, its own dependencies included. Imports do
+not change.</p>
+</li>
+<li>
+<p><strong>Locked:</strong> <code>pep.lock</code> records the replacement in the package's
+<code>override</code>, with the fork's commit (see
+<a href="tools/pep-package.html#peplock">pep.lock</a>), so <code>--locked</code> and <code>--offline</code>
+builds stay reproducible, and adding, changing or removing an override
+changes the lock.</p>
+</li>
+<li>
+<p><strong>Only the project's own:</strong> a dependency's <code>[overrides]</code> do not apply
+to the projects that use it, and <code>pepper package publish</code> refuses a
+package with any (see <a href="tools/pep-package.html#publish">publish</a>). In a
+<a href="tools/projects.html#workspaces-workspace">workspace</a>, only the root's apply, to every
+member; a member's are ignored, which <code>pepper package</code> warns about.</p>
+</li>
+<li>
+<p><strong>Checked by <code>pepper package</code>:</strong> an override that matches no package in
+the graph is a warning at its key, and a replacement whose <code>[package]</code>
+<code>name</code> differs from the name <code>pep.lock</code> records for the package it
+replaces is an error there:</p>
+<pre><code class="language-text">pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'
+    9 | "github:other/numbers" = { github = "someone/geometry", tag = "v1.0.0" }
+      | ^~~~~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code>
+with <code>[overrides]</code> as an unknown table.</p>
+</li>
+</ul>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
@@ -22793,6 +23007,8 @@ the package is fetched.</li>
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
 or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>.</li>
+<li>An <code>[overrides]</code> key that is not a source (<code>github:owner/name</code>), or an
+override with <code>optional</code>, <code>features</code> or <code>default-features</code>.</li>
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
 </ul>
 <p>An import of a dependency that is not on disk says which folder is missing:</p>
@@ -22988,6 +23204,10 @@ whatever lets <code>git clone</code> reach a repository lets <code>pep-package</
 Without git, <code>pep-package</code> downloads the host's archive of each commit
 <code>pep.lock</code> pins over HTTPS instead (see <a href="tools/pep-package.html#fetching-without-git">Fetching without git</a>),
 so a project with a <code>pep.lock</code> builds on a machine with no git.</p>
+<p>In a <a href="tools/projects.html#workspaces-workspace">workspace</a>, <code>pep.lock</code> and
+<code>.pep/deps</code> are the root's, resolved for every member at once, wherever
+it runs; <code>add</code> and <code>remove</code> change the <code>pep.toml</code> of the member it runs
+in, and <code>publish</code> publishes that member.</p>
 <p><code>pepper build</code> fetches on its own what <code>pep.lock</code> lists and <code>.pep/deps</code>
 lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.
 Every package is downloaded once per machine, into a
@@ -23086,7 +23306,8 @@ when one does:</p>
 <p>A dependency on a branch moves to the branch's newest commit.</p>
 <h3 id="update---verify"><a class="header" href="#update---verify"><code>update --verify</code></a></h3>
 <p>Updates one dependency at a time and runs <code>pep-build</code> (beside
-<code>pep-package</code>, else on the <code>PATH</code>) on the project after each. An update
+<code>pep-package</code>, else on the <code>PATH</code>) on the project after each, with
+<code>--all</code> in a workspace. An update
 that does not build is rolled back, and the command lists those it rolled
 back.</p>
 <h3 id="publish"><a class="header" href="#publish"><code>publish</code></a></h3>
@@ -23107,20 +23328,29 @@ that branch holds;</li>
 <li><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
 <code>origin</code> has;</li>
 <li><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</li>
-<li>every dependency asks for a version range, not a branch, tag, commit,
-path or the default branch, so a project depending on this one can
-resolve it with its other packages. A dev-dependency may be anything,
-since a dependent ignores it;</li>
+<li>every dependency asks for a version range, not a branch, tag, commit
+or the default branch, so a project depending on this one can resolve
+it with its other packages; a <code>path</code> dependency, such as a workspace
+sibling, needs a <code>version</code> beside it, and one inherited with
+<code>workspace = true</code> is checked as the workspace gives it. A
+dev-dependency may be anything, since a dependent ignores it;</li>
 <li><code>minimum_toolchain</code> is at least the release that reads each newer
-<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>
-and <code>[features]</code> tables, and a dependency's <code>optional</code>, <code>features</code> and
-<code>default-features</code>, need 0.11.0.</li>
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>,
+<code>[features]</code>, <code>[overrides]</code> and <code>[workspace]</code> tables, and a
+dependency's <code>optional</code>, <code>features</code>, <code>default-features</code> and
+<code>workspace</code>, need 0.11.0;</li>
+<li><code>pep.toml</code> has no <code>[overrides]</code>: a dependent builds with the packages
+they replace, not the code the package was tested with, so a release
+waits until the fix it needs is released too.</li>
 </ul>
 <pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
   dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  dependency 'draw' names path ../draw and no 'version', so a dependent cannot resolve it; give it the version of the package there
   'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
 </code></pre>
+<p>Run from a workspace member, it checks and tests that member, in its
+folder.</p>
 <p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
 and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
 with the Pepper home's own <code>pepper</code> (in the home <code>PEPPER_HOME</code> names,
@@ -23142,6 +23372,9 @@ marks:</p>
 <li><code>[dev]</code>: only the project's dev-dependencies lead to it;</li>
 <li><code>[target: &lt;condition&gt;]</code>: only builds for the targets the condition
 selects need it (see <a href="tools/projects.html#targetconditiondependencies"><code>[target]</code> tables</a>);</li>
+<li><code>[override: &lt;source&gt;]</code>: the project's <a href="tools/projects.html#overrides"><code>[overrides]</code></a>
+replace it with a fork (<code>github:me/numbers</code>) or a folder (<code>path:../numbers</code>),
+in <code>tree</code> and <code>why</code> alike;</li>
 <li><code>[optional]</code> and <code>[features: ...]</code>: the dependent's entry says
 <code>optional = true</code>, and the features its <code>features</code> turns on. A build
 turns on more: each package's <code>default</code> feature, and what the features
@@ -23176,7 +23409,9 @@ app -&gt; fixtures 1.0.0 -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
 revision its requirements now choose (<code>wanted</code>: the newest version
 every range on it in the locked graph allows and this toolchain builds,
 or a branch's newest commit; updating a package that depends on it can
-change those ranges), and the newest version it offers (<code>latest</code>, not a prerelease):</p>
+change those ranges), and the newest version it offers (<code>latest</code>, not a prerelease).
+A package <code>[overrides]</code> replaces is left out, since its revision is the
+override's:</p>
 <pre><code class="language-text">$ pepper package outdated
 package   locked  wanted  latest  source
 numbers   1.3.1   1.3.1   3.0.0   github:other/numbers
@@ -23237,6 +23472,18 @@ gains them on the next fetch.</p>
 <p>A package whose files do not match is an error that names it and both
 checksums:</p>
 <pre><code class="language-text">pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+</code></pre>
+<p>A package the project's <a href="tools/projects.html#overrides"><code>[overrides]</code></a> replace
+keeps its own <code>source</code> and has <code>override</code>, the replacement's source: a
+fork, whose commit <code>commit</code> is and whose files <code>sha256</code> covers, or
+<code>path:</code> and the folder as <code>pep.toml</code> writes it, with no commit, since a
+folder has none to pin:</p>
+<pre><code class="language-toml">[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
 </code></pre>
 <p>A command that leaves the graph as it was leaves <code>pep.lock</code> untouched, so
 a checkout with Windows line endings stays as git wrote it.</p>
@@ -23331,6 +23578,11 @@ names gets the revision it asks for, even outside the range a dependency
 declares, and <code>pep-package</code> says which requirement it overrode.</li>
 <li>A locked revision stays while it still satisfies every requirement;
 <code>update</code> is what moves it.</li>
+<li>The project's <a href="tools/projects.html#overrides"><code>[overrides]</code></a> replace a package
+wherever the graph reaches it: the override's own revision is chosen,
+from the fork, whatever the dependents ask, and a <code>path</code> override's
+folder is read in its place. A locked revision of an override stays
+until the override changes or <code>update</code> names the package.</li>
 <li>The project's own <code>[dev-dependencies]</code> are resolved with its
 dependencies, as requirements of the project; a dependency's
 <code>[dev-dependencies]</code> are not part of the graph at all.</li>
@@ -23705,6 +23957,8 @@ finds it and it finds the compiler:</p>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Passed to <code>pep-build</code>: features of the project's package to turn on, comma-separated; repeatable (see <a href="tools/projects.html#features">Features</a>)</td><td>the <code>default</code> feature</td></tr>
 <tr><td><code>--no-default-features</code></td><td>Passed to <code>pep-build</code>: leave the project's package's <code>default</code> feature off</td><td></td></tr>
+<tr><td><code>--all</code></td><td>Test every member of the project's <a href="tools/projects.html#workspaces-workspace">workspace</a>, with their features unified; no <code>&lt;path&gt;</code> with it</td><td></td></tr>
+<tr><td><code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></td><td>Test this workspace member, by package name; repeatable, the members' features then unified</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
 </tbody></table>
@@ -41395,6 +41649,26 @@ fails rather than copying.</p>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">File.rename(Path("draft.txt"), Path("final.txt"));
+</code></pre>
+<h4 id="hard_link"><a class="header" href="#hard_link">hard_link</a></h4>
+<pre><code class="language-pepper">static hard_link(from: Path, to: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a hard link at <code>to</code> to the file <code>from</code> (<code>link</code> on POSIX,
+<code>CreateHardLinkW</code> on Windows): a second name for the same file, which
+keeps its contents when <code>from</code> is renamed or removed.</p>
+<p>Both names must be on one file system (volume); across two it fails
+rather than copying, and so do directories.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the existing file</li>
+<li><code>to</code> — the new name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once <code>to</code> names the file; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or a path is empty, <code>is_already_exists()</code> when something is already at <code>to</code>, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">File.hard_link(Path("build/app.o"), Path("pinned/app.o"));
 </code></pre>
 <h4 id="symlink-1"><a class="header" href="#symlink-1">symlink</a></h4>
 <pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;

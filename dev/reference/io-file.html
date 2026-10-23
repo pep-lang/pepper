@@ -858,6 +858,26 @@ fails rather than copying.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
+<h4 id="hard_link"><a class="header" href="#hard_link">hard_link</a></h4>
+<pre><code class="language-pepper">static hard_link(from: Path, to: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a hard link at <code>to</code> to the file <code>from</code> (<code>link</code> on POSIX,
+<code>CreateHardLinkW</code> on Windows): a second name for the same file, which
+keeps its contents when <code>from</code> is renamed or removed.</p>
+<p>Both names must be on one file system (volume); across two it fails
+rather than copying, and so do directories.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the existing file</li>
+<li><code>to</code> — the new name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once <code>to</code> names the file; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or a path is empty, <code>is_already_exists()</code> when something is already at <code>to</code>, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">File.hard_link(Path("build/app.o"), Path("pinned/app.o"));
+</code></pre>
 <h4 id="symlink-1"><a class="header" href="#symlink-1">symlink</a></h4>
 <pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;
 </code></pre>

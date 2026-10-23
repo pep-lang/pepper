@@ -212,6 +212,10 @@ whatever lets <code>git clone</code> reach a repository lets <code>pep-package</
 Without git, <code>pep-package</code> downloads the host's archive of each commit
 <code>pep.lock</code> pins over HTTPS instead (see <a href="#fetching-without-git">Fetching without git</a>),
 so a project with a <code>pep.lock</code> builds on a machine with no git.</p>
+<p>In a <a href="projects.html#workspaces-workspace">workspace</a>, <code>pep.lock</code> and
+<code>.pep/deps</code> are the root's, resolved for every member at once, wherever
+it runs; <code>add</code> and <code>remove</code> change the <code>pep.toml</code> of the member it runs
+in, and <code>publish</code> publishes that member.</p>
 <p><code>pepper build</code> fetches on its own what <code>pep.lock</code> lists and <code>.pep/deps</code>
 lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.
 Every package is downloaded once per machine, into a
@@ -310,7 +314,8 @@ when one does:</p>
 <p>A dependency on a branch moves to the branch's newest commit.</p>
 <h3 id="update---verify"><a class="header" href="#update---verify"><code>update --verify</code></a></h3>
 <p>Updates one dependency at a time and runs <code>pep-build</code> (beside
-<code>pep-package</code>, else on the <code>PATH</code>) on the project after each. An update
+<code>pep-package</code>, else on the <code>PATH</code>) on the project after each, with
+<code>--all</code> in a workspace. An update
 that does not build is rolled back, and the command lists those it rolled
 back.</p>
 <h3 id="publish"><a class="header" href="#publish"><code>publish</code></a></h3>
@@ -331,20 +336,29 @@ that branch holds;</li>
 <li><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
 <code>origin</code> has;</li>
 <li><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</li>
-<li>every dependency asks for a version range, not a branch, tag, commit,
-path or the default branch, so a project depending on this one can
-resolve it with its other packages. A dev-dependency may be anything,
-since a dependent ignores it;</li>
+<li>every dependency asks for a version range, not a branch, tag, commit
+or the default branch, so a project depending on this one can resolve
+it with its other packages; a <code>path</code> dependency, such as a workspace
+sibling, needs a <code>version</code> beside it, and one inherited with
+<code>workspace = true</code> is checked as the workspace gives it. A
+dev-dependency may be anything, since a dependent ignores it;</li>
 <li><code>minimum_toolchain</code> is at least the release that reads each newer
-<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>
-and <code>[features]</code> tables, and a dependency's <code>optional</code>, <code>features</code> and
-<code>default-features</code>, need 0.11.0.</li>
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>,
+<code>[features]</code>, <code>[overrides]</code> and <code>[workspace]</code> tables, and a
+dependency's <code>optional</code>, <code>features</code>, <code>default-features</code> and
+<code>workspace</code>, need 0.11.0;</li>
+<li><code>pep.toml</code> has no <code>[overrides]</code>: a dependent builds with the packages
+they replace, not the code the package was tested with, so a release
+waits until the fix it needs is released too.</li>
 </ul>
 <pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
   dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  dependency 'draw' names path ../draw and no 'version', so a dependent cannot resolve it; give it the version of the package there
   'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
 </code></pre>
+<p>Run from a workspace member, it checks and tests that member, in its
+folder.</p>
 <p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
 and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
 with the Pepper home's own <code>pepper</code> (in the home <code>PEPPER_HOME</code> names,
@@ -366,6 +380,9 @@ marks:</p>
 <li><code>[dev]</code>: only the project's dev-dependencies lead to it;</li>
 <li><code>[target: &lt;condition&gt;]</code>: only builds for the targets the condition
 selects need it (see <a href="projects.html#targetconditiondependencies"><code>[target]</code> tables</a>);</li>
+<li><code>[override: &lt;source&gt;]</code>: the project's <a href="projects.html#overrides"><code>[overrides]</code></a>
+replace it with a fork (<code>github:me/numbers</code>) or a folder (<code>path:../numbers</code>),
+in <code>tree</code> and <code>why</code> alike;</li>
 <li><code>[optional]</code> and <code>[features: ...]</code>: the dependent's entry says
 <code>optional = true</code>, and the features its <code>features</code> turns on. A build
 turns on more: each package's <code>default</code> feature, and what the features
@@ -400,7 +417,9 @@ app -&gt; fixtures 1.0.0 -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
 revision its requirements now choose (<code>wanted</code>: the newest version
 every range on it in the locked graph allows and this toolchain builds,
 or a branch's newest commit; updating a package that depends on it can
-change those ranges), and the newest version it offers (<code>latest</code>, not a prerelease):</p>
+change those ranges), and the newest version it offers (<code>latest</code>, not a prerelease).
+A package <code>[overrides]</code> replaces is left out, since its revision is the
+override's:</p>
 <pre><code class="language-text">$ pepper package outdated
 package   locked  wanted  latest  source
 numbers   1.3.1   1.3.1   3.0.0   github:other/numbers
@@ -461,6 +480,18 @@ gains them on the next fetch.</p>
 <p>A package whose files do not match is an error that names it and both
 checksums:</p>
 <pre><code class="language-text">pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+</code></pre>
+<p>A package the project's <a href="projects.html#overrides"><code>[overrides]</code></a> replace
+keeps its own <code>source</code> and has <code>override</code>, the replacement's source: a
+fork, whose commit <code>commit</code> is and whose files <code>sha256</code> covers, or
+<code>path:</code> and the folder as <code>pep.toml</code> writes it, with no commit, since a
+folder has none to pin:</p>
+<pre><code class="language-toml">[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
 </code></pre>
 <p>A command that leaves the graph as it was leaves <code>pep.lock</code> untouched, so
 a checkout with Windows line endings stays as git wrote it.</p>
@@ -555,6 +586,11 @@ names gets the revision it asks for, even outside the range a dependency
 declares, and <code>pep-package</code> says which requirement it overrode.</li>
 <li>A locked revision stays while it still satisfies every requirement;
 <code>update</code> is what moves it.</li>
+<li>The project's <a href="projects.html#overrides"><code>[overrides]</code></a> replace a package
+wherever the graph reaches it: the override's own revision is chosen,
+from the fork, whatever the dependents ask, and a <code>path</code> override's
+folder is read in its place. A locked revision of an override stays
+until the override changes or <code>update</code> names the package.</li>
 <li>The project's own <code>[dev-dependencies]</code> are resolved with its
 dependencies, as requirements of the project; a dependency's
 <code>[dev-dependencies]</code> are not part of the graph at all.</li>

@@ -223,6 +223,8 @@ finds it and it finds the compiler:</p>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Passed to <code>pep-build</code>: features of the project's package to turn on, comma-separated; repeatable (see <a href="projects.html#features">Features</a>)</td><td>the <code>default</code> feature</td></tr>
 <tr><td><code>--no-default-features</code></td><td>Passed to <code>pep-build</code>: leave the project's package's <code>default</code> feature off</td><td></td></tr>
+<tr><td><code>--all</code></td><td>Test every member of the project's <a href="projects.html#workspaces-workspace">workspace</a>, with their features unified; no <code>&lt;path&gt;</code> with it</td><td></td></tr>
+<tr><td><code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></td><td>Test this workspace member, by package name; repeatable, the members' features then unified</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
 </tbody></table>
