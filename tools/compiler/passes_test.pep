@@ -409,6 +409,66 @@ reports_confinement_errors_part_12() {
     reports_confinement_error(11);
 }
 
+[Test]
+reports_confinement_errors_part_13() {
+    reports_confinement_error(12);
+}
+
+[Test]
+reports_confinement_errors_part_14() {
+    reports_confinement_error(13);
+}
+
+[Test]
+reports_confinement_errors_part_15() {
+    reports_confinement_error(14);
+}
+
+[Test]
+reports_confinement_errors_part_16() {
+    reports_confinement_error(15);
+}
+
+[Test]
+reports_confinement_errors_part_17() {
+    reports_confinement_error(16);
+}
+
+[Test]
+reports_confinement_errors_part_18() {
+    reports_confinement_error(17);
+}
+
+[Test]
+reports_confinement_errors_part_19() {
+    reports_confinement_error(18);
+}
+
+[Test]
+reports_confinement_errors_part_20() {
+    reports_confinement_error(19);
+}
+
+[Test]
+reports_confinement_errors_part_21() {
+    reports_confinement_error(20);
+}
+
+[Test]
+reports_confinement_errors_part_22() {
+    reports_confinement_error(21);
+}
+
+[Test]
+reports_confinement_errors_part_23() {
+    reports_confinement_error(22);
+}
+
+[Test]
+reports_confinement_errors_part_24() {
+    reports_confinement_error(23);
+}
+
 reports_confinement_error(index: ulong) {
     var folder = TempFolder($"passes_confinement_{index}");
     var programs = [confinement_error_programs()[index]];
@@ -441,7 +501,26 @@ confinement_error_programs(): String[] {
         "# expect: main.pep:20:17: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nwrap(b: Box): () => int {\n    return () => b.n;\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    var get = wrap(b);\n    c.send(move(b));\n    return get();\n}\n",
         # A `for` loop's hidden iterator holds the closure until the loop
         # ends.
-        "# expect: main.pep:20:21: error: 'b' cannot be moved: a hidden value of the code around it (such as a loop's iterator) also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nnumbers(): Array<int> {\n    return [1, 2, 3];\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    for (var x in numbers().iterate().map<int>((v: int): int => v + b.n)) {\n        c.send(move(b));\n        break;\n    }\n    return 0;\n}\n"
+        "# expect: main.pep:20:21: error: 'b' cannot be moved: a hidden value of the code around it (such as a loop's iterator) also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nnumbers(): Array<int> {\n    return [1, 2, 3];\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    for (var x in numbers().iterate().map<int>((v: int): int => v + b.n)) {\n        c.send(move(b));\n        break;\n    }\n    return 0;\n}\n",
+        # A link made later in a loop's body reaches a `move` on the next
+        # pass: `for` and `while`, past a `continue`, from an inner loop,
+        # and through a closure (#193).
+        "# expect: main.pep:17:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..2) {\n        c.send(move(b));\n        if (i == 1) {\n            break;\n        }\n        b = Box(2);\n        keep = b;\n    }\n    keep.n = 7;\n    return 0;\n}\n",
+        "# expect: main.pep:19:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    int i = 0;\n    while (i < 2) {\n        i += 1;\n        c.send(move(b));\n        b = Box(2);\n        keep = b;\n    }\n    return keep.n;\n}\n",
+        "# expect: main.pep:17:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..3) {\n        c.send(move(b));\n        b = Box(2);\n        if (i == 0) {\n            continue;\n        }\n        keep = b;\n    }\n    return keep.n;\n}\n",
+        "# expect: main.pep:18:25: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..2) {\n        for (var j in 0..2) {\n            c.send(move(b));\n            b = Box(2);\n        }\n        keep = b;\n    }\n    return keep.n;\n}\n",
+        "# expect: main.pep:17:21: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var get = () => 0;\n    var b = Box(1);\n    for (var i in 0..2) {\n        c.send(move(b));\n        b = Box(2);\n        var held = b;\n        get = () => held.n;\n    }\n    return get();\n}\n",
+        # A local of an enclosing `with` block outlives an inner lock: it
+        # cannot hold part of the inner value directly, in a field, by joining
+        # it, or from a loop's earlier pass, nor can a closure, a `return`
+        # or a `move` carry it out (#200).
+        "# expect: main.pep:11:17: error: 'o' is part of the value locked by 'other' and cannot outlive the lock\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        with (var o = other.lock()) {\n            t = o;\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:19:23: error: 'o' is part of the value locked by 'other' and cannot outlive the lock\nimport async;\n\nstruct Holder {\n    var items: Array<String>;\n\n    construct() {\n        items = Array<String>();\n    }\n}\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var h = Holder();\n        with (var o = other.lock()) {\n            h.items = o;\n        }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:11:22: error: 't' cannot move into the value locked by 'other'\nimport async;\n\nconst names = async.Mutex<Array<Array<String>>>(Array<Array<String>>());\nconst other = async.Mutex<Array<Array<String>>>(Array<Array<String>>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        with (var o = other.lock()) {\n            o.append(t);\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:12:17: error: closure captures 'held', which is part of the value locked by 'other'\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var f = (): ulong => 0;\n        with (var o = other.lock()) {\n            var held = o;\n            f = (): ulong => held.count;\n        }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:11:20: error: 'held' is part of the value locked by 'other' and cannot be returned from the block\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nlast(): Array<String> {\n    with (var list = names.lock()) {\n        with (var o = other.lock()) {\n            var held = o;\n            return held;\n        }\n    }\n    return Array<String>();\n}\n\nmain(): int {\n    return last().count as int;\n}\n",
+        "# expect: main.pep:12:22: error: 'held' cannot be moved: 'o' also references its value\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        with (var o = other.lock()) {\n            var held = o;\n            t = move(held);\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:15:21: error: 'o' is part of the value locked by 'other' and cannot outlive the lock\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\nconst lines = async.Channel<String>();\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        for (var i in 0..2) {\n            var line = \"x\";\n            lines.send(move(line));\n            with (var o = other.lock()) {\n                t = o;\n            }\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
     ];
 }
 
