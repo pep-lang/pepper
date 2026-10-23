@@ -91,7 +91,7 @@ jobs:
             echo "the publish of $built has not passed yet: trying again next time"
             exit 0
           fi
-          downloads="$RUNNER_TEMP/stage0"
+          downloads="$RUNNER_TEMP/pin"
           rm -rf "$downloads"
           gh release download "$tag" -R "$REPO" -D "$downloads" -p 'pepper-*' -p SHA256SUMS
           if [ "$(git ls-remote origin "refs/tags/$tag" | cut -f1)" != "$built" ]; then
@@ -134,15 +134,15 @@ jobs:
             echo "version $held"
             echo "commit $built"
             cat "$downloads/SHA256SUMS"
-          } > "$RUNNER_TEMP/stage0"
+          } > "$RUNNER_TEMP/pin"
           branch=stage0/bump
           if git fetch --no-tags origin "$branch" 2>/dev/null \
-              && git show "FETCH_HEAD:$pin" 2>/dev/null | cmp -s - "$RUNNER_TEMP/stage0"; then
+              && git show "FETCH_HEAD:$pin" 2>/dev/null | cmp -s - "$RUNNER_TEMP/pin"; then
             echo "$branch pins $built already"
             exit 0
           fi
           git switch -C "$branch"
-          cp "$RUNNER_TEMP/stage0" "$pin"
+          cp "$RUNNER_TEMP/pin" "$pin"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           printf '%s\n' \
