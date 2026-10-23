@@ -200,6 +200,7 @@ pepper package tree                          # the dependency graph pep.lock rec
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 </code></pre>
@@ -251,6 +252,7 @@ Every package is downloaded once per machine, into a
 <tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="#outdated"><code>outdated</code></a>)</td></tr>
 <tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
 <tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
+<tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="#vendor-dir"><code>vendor</code></a>)</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -453,6 +455,47 @@ it prints <code>every package is at the newest version</code>. It reads what eac
 package offers over the network, so with <code>--offline</code> it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 <code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
+<h3 id="vendor-dir"><a class="header" href="#vendor-dir"><code>vendor [&lt;dir&gt;]</code></a></h3>
+<p>Copies every package <code>pep.lock</code> lists into a folder of the project, so
+the repository carries its dependencies and builds with no network and no
+<a href="#the-download-cache">download cache</a>, as <code>cargo vendor</code> and
+<code>go mod vendor</code> do: for an air-gapped build, or a release archive. It
+first resolves and fetches as <a href="#fetch"><code>fetch</code></a> does, then writes each
+package at its locked commit to <code>&lt;dir&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>
+(<code>vendor/github.com/someone/geometry</code>), its files as <code>git archive</code> gives
+them, without <code>.git</code>, and sets <code>[fetch] vendor = "&lt;dir&gt;"</code> in <code>pep.toml</code>
+(see <a href="projects.html#fetch"><code>[fetch]</code></a>):</p>
+<pre><code class="language-text">$ pepper package vendor
+pep-package: vendored geometry 1.1.0 (github:someone/geometry)
+pep-package: vendored numbers 1.3.1 (github:other/numbers)
+pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
+</code></pre>
+<p>Commit the folder with <code>pep.toml</code> and <code>pep.lock</code>. It holds every package
+in the lock: every platform's, and those only <code>[dev-dependencies]</code> lead
+to, since <code>pepper test</code> and the examples build from it too (Cargo vendors
+everything for the same reason). A fork an <code>[overrides]</code> entry names is vendored in
+the original's place; a <code>path</code> override is not, its folder being the
+project's already. <code>&lt;dir&gt;/.gitattributes</code> turns git's
+line-ending conversion off there, so a checkout keeps the files byte for
+byte.</p>
+<p>Each package's folder also holds <code>.pep-commit</code>, its commit, and
+<code>.pep-checksum</code>, the SHA-256 of its files' paths and contents. In a
+vendored project, <code>pepper build</code> and <code>pepper test</code> fetch nothing: they read
+the packages from the vendor folder and check that each one the build
+needs is there at its locked commit and unedited, and fail otherwise, with
+or without <code>--locked</code> and <code>--offline</code>:</p>
+<pre><code class="language-text">error: the files in vendor/github.com/someone/geometry were changed since they were vendored (sha256 1c0f..., recorded 7b3e...); run 'pepper package vendor' to restore them, or make the change in the package itself
+</code></pre>
+<p><code>pepper package fetch</code> checks the same, and that <code>pep.lock</code> still matches
+<code>pep.toml</code>, reading only the vendor folder; it changes neither. To change
+a dependency, run <code>add</code>, <code>remove</code> or <code>update</code> (which fetch into <code>.pep/deps</code>
+as usual), then <code>vendor</code> again: that rewrites the packages that changed,
+restores edited ones, and removes those <code>pep.lock</code> no longer lists.
+<code>.pep/deps</code> is unchanged in a project that is not vendored.</p>
+<p>In a <a href="projects.html#workspaces">workspace</a>, run from the root or any member,
+<code>vendor</code> writes one folder at the workspace's root, holding every
+member's locked packages, and sets <code>[fetch] vendor</code> in the root's
+<code>pep.toml</code>; every member's build reads it.</p>
 <h3 id="json-output"><a class="header" href="#json-output">JSON output</a></h3>
 <p><code>--json</code> makes <code>tree</code>, <code>why</code> and <code>outdated</code> print one JSON object instead,
 for scripts. Its form is stable: a later release may add members, but
@@ -609,6 +652,9 @@ must read which versions a repository offers (<code>add</code>, <code>update</co
 <code>pep.toml</code> change <code>pep.lock</code> does not cover).</li>
 <li><strong><code>--frozen</code></strong>: both.</li>
 </ul>
+<p>A <a href="#vendor-dir">vendored</a> project needs neither the network nor the
+download cache, so <code>fetch --frozen</code> and <code>pepper build --frozen</code> pass with
+only the repository.</p>
 <pre><code class="language-text">$ pepper package fetch --locked
 pep-package: error: pep.lock would change, and --locked keeps it as it is:
   updated numbers: numbers 1.3.1 -&gt; numbers 2.0.0

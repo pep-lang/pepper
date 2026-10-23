@@ -218,7 +218,11 @@ builds and runs every example; each must return 0 from <code>main</code> and use
 empty one), and must print exactly that; leave it out where the output
 differs between runs or platforms. A failure is printed as it happens.
 <code>PEPPER_DOCS_EXAMPLE=structs</code> limits it to
-the examples whose name starts with <code>structs</code>. A sample of the examples is
+the examples whose name starts with <code>structs</code>, and
+<code>PEPPER_DOCS_EXAMPLES=platform</code> to those marked per platform, which is all
+a pull request's macOS and Windows jobs run (see
+<a href="tests.html">Testing</a>). An example whose code differs per platform marks it
+with <code>[Target(OS(...))]</code> or <code>[Target(Arch(...))]</code>. A sample of the examples is
 also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>

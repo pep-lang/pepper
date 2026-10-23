@@ -22673,6 +22673,9 @@ pepper build
 <code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
 <a href="tools/pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
 dev-dependencies as to the rest.</p>
+<p>A project that sets <code>[fetch] vendor</code> (<code>pepper package vendor</code> does) keeps
+its dependencies in that folder of the repository instead, and builds with
+no network and no download cache; see <a href="tools/projects.html#fetch"><code>[fetch]</code></a>.</p>
 <h2 id="dev-dependencies"><a class="header" href="#dev-dependencies"><code>[dev-dependencies]</code></a></h2>
 <p>A package the project's tests and examples use but its code does not, such
 as a test helper, goes in <code>[dev-dependencies]</code>, written as in
@@ -22983,9 +22986,11 @@ with <code>[overrides]</code> as an unknown table.</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
+vendor = "vendor"
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
 <tr><td><code>hosts</code></td><td>The hosts <code>pepper package add owner/name</code> looks a repository up on, in order, when the argument names none; it adds the first that has it</td><td><code>["github", "gitlab", "codeberg"]</code></td></tr>
+<tr><td><code>vendor</code></td><td>The folder, relative to the project, that <a href="tools/pep-package.html#vendor-dir"><code>pepper package vendor</code></a> copied every locked package into, which sets it. Builds then read each dependency from <code>&lt;vendor&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> instead of <code>.pep/deps</code>, fetch nothing, and fail when a package is missing, at another commit than <code>pep.lock</code>'s, or edited. A package that sets it needs <code>minimum_toolchain = "0.11.0"</code> or later</td><td>none: dependencies are fetched into <code>.pep/deps</code></td></tr>
 </tbody></table>
 </div>
 <h2 id="errors-5"><a class="header" href="#errors-5">Errors</a></h2>
@@ -23194,6 +23199,7 @@ pepper package tree                          # the dependency graph pep.lock rec
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 </code></pre>
@@ -23245,6 +23251,7 @@ Every package is downloaded once per machine, into a
 <tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="tools/pep-package.html#outdated"><code>outdated</code></a>)</td></tr>
 <tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
 <tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
+<tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="tools/pep-package.html#vendor-dir"><code>vendor</code></a>)</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="tools/pep-package.html#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -23447,6 +23454,47 @@ it prints <code>every package is at the newest version</code>. It reads what eac
 package offers over the network, so with <code>--offline</code> it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 <code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
+<h3 id="vendor-dir"><a class="header" href="#vendor-dir"><code>vendor [&lt;dir&gt;]</code></a></h3>
+<p>Copies every package <code>pep.lock</code> lists into a folder of the project, so
+the repository carries its dependencies and builds with no network and no
+<a href="tools/pep-package.html#the-download-cache">download cache</a>, as <code>cargo vendor</code> and
+<code>go mod vendor</code> do: for an air-gapped build, or a release archive. It
+first resolves and fetches as <a href="tools/pep-package.html#fetch"><code>fetch</code></a> does, then writes each
+package at its locked commit to <code>&lt;dir&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>
+(<code>vendor/github.com/someone/geometry</code>), its files as <code>git archive</code> gives
+them, without <code>.git</code>, and sets <code>[fetch] vendor = "&lt;dir&gt;"</code> in <code>pep.toml</code>
+(see <a href="tools/projects.html#fetch"><code>[fetch]</code></a>):</p>
+<pre><code class="language-text">$ pepper package vendor
+pep-package: vendored geometry 1.1.0 (github:someone/geometry)
+pep-package: vendored numbers 1.3.1 (github:other/numbers)
+pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
+</code></pre>
+<p>Commit the folder with <code>pep.toml</code> and <code>pep.lock</code>. It holds every package
+in the lock: every platform's, and those only <code>[dev-dependencies]</code> lead
+to, since <code>pepper test</code> and the examples build from it too (Cargo vendors
+everything for the same reason). A fork an <code>[overrides]</code> entry names is vendored in
+the original's place; a <code>path</code> override is not, its folder being the
+project's already. <code>&lt;dir&gt;/.gitattributes</code> turns git's
+line-ending conversion off there, so a checkout keeps the files byte for
+byte.</p>
+<p>Each package's folder also holds <code>.pep-commit</code>, its commit, and
+<code>.pep-checksum</code>, the SHA-256 of its files' paths and contents. In a
+vendored project, <code>pepper build</code> and <code>pepper test</code> fetch nothing: they read
+the packages from the vendor folder and check that each one the build
+needs is there at its locked commit and unedited, and fail otherwise, with
+or without <code>--locked</code> and <code>--offline</code>:</p>
+<pre><code class="language-text">error: the files in vendor/github.com/someone/geometry were changed since they were vendored (sha256 1c0f..., recorded 7b3e...); run 'pepper package vendor' to restore them, or make the change in the package itself
+</code></pre>
+<p><code>pepper package fetch</code> checks the same, and that <code>pep.lock</code> still matches
+<code>pep.toml</code>, reading only the vendor folder; it changes neither. To change
+a dependency, run <code>add</code>, <code>remove</code> or <code>update</code> (which fetch into <code>.pep/deps</code>
+as usual), then <code>vendor</code> again: that rewrites the packages that changed,
+restores edited ones, and removes those <code>pep.lock</code> no longer lists.
+<code>.pep/deps</code> is unchanged in a project that is not vendored.</p>
+<p>In a <a href="tools/projects.html#workspaces">workspace</a>, run from the root or any member,
+<code>vendor</code> writes one folder at the workspace's root, holding every
+member's locked packages, and sets <code>[fetch] vendor</code> in the root's
+<code>pep.toml</code>; every member's build reads it.</p>
 <h3 id="json-output"><a class="header" href="#json-output">JSON output</a></h3>
 <p><code>--json</code> makes <code>tree</code>, <code>why</code> and <code>outdated</code> print one JSON object instead,
 for scripts. Its form is stable: a later release may add members, but
@@ -23603,6 +23651,9 @@ must read which versions a repository offers (<code>add</code>, <code>update</co
 <code>pep.toml</code> change <code>pep.lock</code> does not cover).</li>
 <li><strong><code>--frozen</code></strong>: both.</li>
 </ul>
+<p>A <a href="tools/pep-package.html#vendor-dir">vendored</a> project needs neither the network nor the
+download cache, so <code>fetch --frozen</code> and <code>pepper build --frozen</code> pass with
+only the repository.</p>
 <pre><code class="language-text">$ pepper package fetch --locked
 pep-package: error: pep.lock would change, and --locked keeps it as it is:
   updated numbers: numbers 1.3.1 -&gt; numbers 2.0.0
@@ -59765,7 +59816,11 @@ builds and runs every example; each must return 0 from <code>main</code> and use
 empty one), and must print exactly that; leave it out where the output
 differs between runs or platforms. A failure is printed as it happens.
 <code>PEPPER_DOCS_EXAMPLE=structs</code> limits it to
-the examples whose name starts with <code>structs</code>. A sample of the examples is
+the examples whose name starts with <code>structs</code>, and
+<code>PEPPER_DOCS_EXAMPLES=platform</code> to those marked per platform, which is all
+a pull request's macOS and Windows jobs run (see
+<a href="contributing/tests.html">Testing</a>). An example whose code differs per platform marks it
+with <code>[Target(OS(...))]</code> or <code>[Target(Arch(...))]</code>. A sample of the examples is
 also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
@@ -59902,7 +59957,16 @@ cache. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0'
 pin (<code>.github/stage0</code>) is tested with that compiler instead: CI builds it
 with stage 0 first (<code>scripts/ci-build-compiler.sh</code>, from a build cache CI
 keeps between runs, keyed on stage 0's contents) and runs the suite with
-it. Each job has
+it.</p>
+<p>On a pull request, the docs examples (<code>tools/pep-doc/examples_test.pep</code>)
+build and run in full only on Linux. The macOS and Windows jobs set
+<code>PEPPER_DOCS_EXAMPLES=platform</code>, which keeps only the examples that select
+code per platform: those with a line holding a <code>[Target(...)]</code> that names
+an <code>OS(...)</code> or an <code>Arch(...)</code>. On main, and on every other event, every
+OS runs every example. To run only those examples by hand:</p>
+<pre><code class="language-bash">PEPPER_DOCS_EXAMPLES=platform scripts/pepper-tests.sh target/compiler
+</code></pre>
+<p>Each job has
 a time limit a little above its slowest passing runs, and prints the
 runner's memory, swap, disk and biggest processes every minute beside the
 tests (<code>scripts/ci-monitor.sh</code>). A job that fails, is cancelled or runs out

@@ -271,7 +271,16 @@ cache. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0'
 pin (<code>.github/stage0</code>) is tested with that compiler instead: CI builds it
 with stage 0 first (<code>scripts/ci-build-compiler.sh</code>, from a build cache CI
 keeps between runs, keyed on stage 0's contents) and runs the suite with
-it. Each job has
+it.</p>
+<p>On a pull request, the docs examples (<code>tools/pep-doc/examples_test.pep</code>)
+build and run in full only on Linux. The macOS and Windows jobs set
+<code>PEPPER_DOCS_EXAMPLES=platform</code>, which keeps only the examples that select
+code per platform: those with a line holding a <code>[Target(...)]</code> that names
+an <code>OS(...)</code> or an <code>Arch(...)</code>. On main, and on every other event, every
+OS runs every example. To run only those examples by hand:</p>
+<pre><code class="language-bash">PEPPER_DOCS_EXAMPLES=platform scripts/pepper-tests.sh target/compiler
+</code></pre>
+<p>Each job has
 a time limit a little above its slowest passing runs, and prints the
 runner's memory, swap, disk and biggest processes every minute beside the
 tests (<code>scripts/ci-monitor.sh</code>). A job that fails, is cancelled or runs out

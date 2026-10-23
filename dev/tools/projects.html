@@ -327,6 +327,9 @@ pepper build
 <code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
 <a href="pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
 dev-dependencies as to the rest.</p>
+<p>A project that sets <code>[fetch] vendor</code> (<code>pepper package vendor</code> does) keeps
+its dependencies in that folder of the repository instead, and builds with
+no network and no download cache; see <a href="#fetch"><code>[fetch]</code></a>.</p>
 <h2 id="dev-dependencies"><a class="header" href="#dev-dependencies"><code>[dev-dependencies]</code></a></h2>
 <p>A package the project's tests and examples use but its code does not, such
 as a test helper, goes in <code>[dev-dependencies]</code>, written as in
@@ -637,9 +640,11 @@ with <code>[overrides]</code> as an unknown table.</p>
 <h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
 <pre><code class="language-toml">[fetch]
 hosts = ["codeberg", "github"]
+vendor = "vendor"
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
 <tr><td><code>hosts</code></td><td>The hosts <code>pepper package add owner/name</code> looks a repository up on, in order, when the argument names none; it adds the first that has it</td><td><code>["github", "gitlab", "codeberg"]</code></td></tr>
+<tr><td><code>vendor</code></td><td>The folder, relative to the project, that <a href="pep-package.html#vendor-dir"><code>pepper package vendor</code></a> copied every locked package into, which sets it. Builds then read each dependency from <code>&lt;vendor&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> instead of <code>.pep/deps</code>, fetch nothing, and fail when a package is missing, at another commit than <code>pep.lock</code>'s, or edited. A package that sets it needs <code>minimum_toolchain = "0.11.0"</code> or later</td><td>none: dependencies are fetched into <code>.pep/deps</code></td></tr>
 </tbody></table>
 </div>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
