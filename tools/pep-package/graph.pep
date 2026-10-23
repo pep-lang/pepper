@@ -277,8 +277,9 @@ export struct LockedGraph {
     # paths as `--json` writes them.
     why(targets: HashSet<String>, limit: ulong, json: bool): String {
         var paths = Array<Array<Edge>>();
-        _why("", Array<Edge>(), HashSet<String>(), targets, paths);
-        var count = paths.count < limit ? paths.count : limit;
+        _why("", Array<Edge>(), HashSet<String>(), targets, limit, paths);
+        var (total, _) = _count("", HashSet<String>(), targets, HashMap<String, ulong>());
+        var count = paths.count;
         if (json) {
             var list = JsonValue.array();
             for (var index in 0..count) {
@@ -290,7 +291,7 @@ export struct LockedGraph {
             }
             var result = JsonValue.object();
             result["paths"] = list;
-            result["total"] = JsonValue.Integer(paths.count as long);
+            result["total"] = JsonValue.Integer(total as long);
             return result.to_pretty_string() + "\n";
         }
         var text = "";
@@ -301,19 +302,27 @@ export struct LockedGraph {
             }
             text += " -> ".join(steps) + "\n";
         }
-        if (paths.count > count) {
-            var more = paths.count - count;
+        if (total > count) {
+            var more = total - count;
             text += $"and {more} more {more == 1 ? "path" : "paths"}; --all prints every one\n";
         }
         return text;
     }
 
-    # shortcut: keeps every path, not only the `limit` printed; count the
-    # rest without keeping them if a graph's paths outgrow memory.
+    # Appends the paths below `parent` that reach one of `targets` to
+    # `paths`, depth first, until it holds `limit`.
     _why(
-        parent: String, path: Array<Edge>, on_path: HashSet<String>, targets: HashSet<String>, paths: Array<Array<Edge>>
+        parent: String,
+        path: Array<Edge>,
+        on_path: HashSet<String>,
+        targets: HashSet<String>,
+        limit: ulong,
+        paths: Array<Array<Edge>>
     ) {
         for (var edge in children(parent)) {
+            if (paths.count >= limit) {
+                return;
+            }
             if (on_path.contains(edge.source)) {
                 continue;
             }
@@ -324,9 +333,43 @@ export struct LockedGraph {
                 continue;
             }
             on_path.insert(edge.source);
-            _why(edge.source, longer, on_path, targets, paths);
+            _why(edge.source, longer, on_path, targets, limit, paths);
             on_path.remove(edge.source);
         }
+    }
+
+    # How many paths `_why` finds below `parent`, without listing them, and
+    # whether that number depends on `on_path` (it skipped a package on
+    # it, so the graph has a cycle there). Only a number that does not is
+    # kept in `counted`, so a graph without cycles takes one pass.
+    _count(
+        parent: String, on_path: HashSet<String>, targets: HashSet<String>, counted: HashMap<String, ulong>
+    ): (ulong, bool) {
+        var known = counted.try_get(parent);
+        if (known.is_value()) {
+            return (known.value(), false);
+        }
+        ulong total = 0;
+        var cut = false;
+        for (var edge in children(parent)) {
+            if (on_path.contains(edge.source)) {
+                cut = true;
+                continue;
+            }
+            if (targets.contains(edge.source)) {
+                total += 1;
+                continue;
+            }
+            on_path.insert(edge.source);
+            var (below, below_cut) = _count(edge.source, on_path, targets, counted);
+            on_path.remove(edge.source);
+            total += below;
+            cut = cut or below_cut;
+        }
+        if (!cut) {
+            counted[parent] = total;
+        }
+        return (total, cut);
     }
 
     # A row of `outdated` for each locked package that is behind the
