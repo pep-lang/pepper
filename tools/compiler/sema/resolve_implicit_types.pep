@@ -2573,9 +2573,10 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bind
         s += 1;
         # A checked unit's structs were resolved when it was checked, their
         # field defaults and methods; only those specialized on top of it
-        # (`_find<Point>`) have bodies. (Resolving their defaults again also
-        # added their call targets again.)
-        if (module.checked.structs.contains(st.name) and !_has_body(st)) {
+        # (`_find<Point>`) have bodies, and those it extended. (Resolving
+        # their defaults again also added their call targets again.)
+        if (module.checked.structs.contains(st.name)
+            and (!module.extended_checked.contains(st.name) or !_has_body(st))) {
             continue;
         }
         var place = $"s{st.ty.to_string()}";
@@ -2699,6 +2700,11 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bind
     var scopes = _TypeScopes(tables, overloads, resolved, state);
     var none = Optional<TypeName>.Empty;
     for (var global in module.globals) {
+        # A checked one was resolved with its unit.
+        if (module.checked.globals.contains(global.name)) {
+            scopes.symbols[0].append((global.name, global.ty));
+            continue;
+        }
         if (global.ty.is_auto() and global.default.is_value()) {
             var ty = scopes.type_of(global.default.value(), none);
             if (!ty.is_empty() and !ty.is_auto()) {
@@ -2796,7 +2802,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
     var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(result.trait_types));
     var values = function_value_search(module, state, tables);
     var functions = generic_function_search(module, state);
-    var methods = generic_method_search(module);
+    var methods = generic_method_search(module, state);
     var filters = Array<SiteFilter>();
     var applied = Array<bool>();
     if (values.is_value()) {
@@ -2842,7 +2848,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
         tables.reset(Optional<TypeName[]>.Value(result.trait_types));
     }
     if (result.bound or result.specialized) {
-        methods = generic_method_search(module);
+        methods = generic_method_search(module, state);
         method_sites = _method_sites(module, methods);
     }
     if (methods.is_value()) {

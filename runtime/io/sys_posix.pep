@@ -58,6 +58,8 @@ extern int futimens(int fd, void* times);
 [Target(!OS(Windows))]
 extern int symlink(char* target, char* link);
 [Target(!OS(Windows))]
+extern int link(char* from, char* to);
+[Target(!OS(Windows))]
 extern long readlink(char* path, char* buf, ulong size);
 
 # WASI preview 1 has no permission bits, and wasi-libc no chmod.
@@ -1072,6 +1074,14 @@ _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
         return IoResult<void>.err(_io_posix_empty_path());
     }
     return _io_posix_check(symlink(target._value.c_str(), link._value.c_str()));
+}
+
+[Target(!OS(Windows))]
+_io_sys_hard_link(from: Path, to: Path): IoResult<void> {
+    if (from._value.size == 0 || to._value.size == 0) {
+        return IoResult<void>.err(_io_posix_empty_path());
+    }
+    return _io_posix_check(link(from._value.c_str(), to._value.c_str()));
 }
 
 # readlink does not say when the buffer was too small, only fills it: retry

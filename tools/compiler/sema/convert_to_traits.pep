@@ -17,6 +17,7 @@ import compiler.ast;
 import [Location] from compiler.diagnostic;
 import [bit_width, is_float_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
+import [checked_decls, unit_decls] from "checked";
 import "closure_sites";
 import "closures";
 import "common";
@@ -55,35 +56,27 @@ import [Rewriter, rewrite_children] from "walk";
 ## @param module the model, changed in place
 ## @param state the passes' state, which takes the error
 export convert_to_traits(module: Module, state: PassState) {
-    var implicit = HashMap<String, _Implicit>();
-    for (var st in module.structs) {
-        if (_is_generic_base(st)) {
-            continue;
-        }
-        for (var c in st.constructors) {
-            if (ast.has_attribute(c.attributes, IMPLICIT_ATTRIBUTE)) {
-                if (c.parameters.count > 0) {
-                    var entry = _Implicit(c.parameters[0].ty, c.name, c.loc);
-                    implicit[st.name] = entry;
-                    implicit[st.ty.to_string()] = entry;
-                }
-                break;
-            }
-        }
+    # A checked declaration's values were converted with its unit: only the
+    # unit's own code is walked, and a checked declaration is looked up by
+    # name when the walk names it (`checked_decls`).
+    var own = unit_decls(module);
+    var implicit = _Implicits(module, state);
+    for (var st in own.structs) {
+        implicit.add(st);
     }
     # shortcut: a program with no traits (only one built without the
     # runtime) skips this pass, so its decimal literals past `long`'s range
     # go unchecked; walk it for them if such programs ever matter.
-    if (module.traits.count == 0 and implicit.count == 0) {
+    if (module.traits.count == 0 and !implicit.any(module)) {
         return;
     }
     var converter = _TraitConversions(module, state, implicit);
-    converter.check_covariant_returns(module);
+    converter.check_covariant_returns(own.structs);
     converter.current = Optional<TypeName>.Empty;
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         converter.function(f);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if (_is_generic_base(st) or st.ty.is_function_type()) {
             continue;
         }
@@ -97,6 +90,9 @@ export convert_to_traits(module: Module, state: PassState) {
     }
     converter.current = Optional<TypeName>.Empty;
     for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            continue;
+        }
         var fallback = g.type_loc.is_none() ? g.loc : g.type_loc;
         if (g.default.is_value()) {
             var value = converter.expression(g.default.value());
@@ -115,6 +111,74 @@ export convert_to_traits(module: Module, state: PassState) {
     trait_types.sort((a: TraitType, b: TraitType) => _compare_bytes(a.ty.to_string(), b.ty.to_string()) as int);
     module.trait_types = trait_types;
     module.conversions = converter.conversions;
+}
+
+## The structs whose constructor is `[Implicit]`, by name and by type: the
+## unit's own, and a checked one found when a lookup names it.
+struct _Implicits {
+    var module: Module;
+    var state: PassState;
+    var own: HashMap<String, _Implicit> = HashMap<String, _Implicit>();
+    var _checked: HashMap<String, _Implicit?> = HashMap<String, _Implicit?>();
+
+    construct(module: Module, state: PassState) {
+        this.module = module;
+        this.state = state;
+    }
+
+    ## Takes in `st`, one of the unit's own structs.
+    add(st: StructDef) {
+        var entry = _implicit_of(st);
+        if (entry.is_value()) {
+            own[st.name] = entry.value();
+            own[st.ty.to_string()] = entry.value();
+        }
+    }
+
+    ## Whether any struct has an `[Implicit]` constructor.
+    any(module: Module): bool {
+        if (own.count > 0) {
+            return true;
+        }
+        for (var st in module.structs) {
+            if (module.checked.structs.contains(st.name) and _implicit_of(st).is_value()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ## The struct of type `name` whose constructor is `[Implicit]`, if any.
+    find(name: String): _Implicit? {
+        var found = own.try_get(name);
+        if (found.is_value() or (module.checked.structs.count == 0 and module.checked.functions.count == 0)) {
+            return found;
+        }
+        var known = _checked.try_get(name);
+        if (known.is_value()) {
+            return known.value();
+        }
+        var st = checked_decls(module, state).structs.try_get(name);
+        var entry = st.is_value() ? _implicit_of(st.value()) : Optional<_Implicit>.Empty;
+        _checked[name] = entry;
+        return entry;
+    }
+}
+
+# The `[Implicit]` constructor of `st`, not a generic base, if it has one.
+_implicit_of(st: StructDef): _Implicit? {
+    if (_is_generic_base(st)) {
+        return Optional<_Implicit>.Empty;
+    }
+    for (var c in st.constructors) {
+        if (ast.has_attribute(c.attributes, IMPLICIT_ATTRIBUTE)) {
+            if (c.parameters.count > 0) {
+                return Optional<_Implicit>.Value(_Implicit(c.parameters[0].ty, c.name, c.loc));
+            }
+            break;
+        }
+    }
+    return Optional<_Implicit>.Empty;
 }
 
 ## A struct whose constructor is `[Implicit]`.
@@ -163,7 +227,8 @@ _same_type(a: TypeName, b: TypeName): bool {
 
 struct _TraitConversions {
     var state: PassState;
-    var implicit: HashMap<String, _Implicit>;
+    var module: Module;
+    var implicit: _Implicits;
     var conversions: Array<Conversion> = Array<Conversion>();
     var table: StructTable;
     var trait_defs: Array<TraitDef>;
@@ -174,17 +239,23 @@ struct _TraitConversions {
     ## a conditional conformance a struct does not meet.
     var conformance: Conformance?;
     var trait_types: HashMap<String, TraitType> = HashMap<String, TraitType>();
-    ## Free functions and constructors → parameter types.
+    ## The unit's own free functions and constructors → parameter types; a
+    ## checked one's are found as a lookup names it (`_params`).
     var functions: HashMap<String, Array<TypeName>> = HashMap<String, Array<TypeName>>();
+    var constructors: HashMap<String, Array<TypeName>> = HashMap<String, Array<TypeName>>();
     ## C functions' parameter types, by name: only a `StringConstant`
     ## argument converts there (to its bytes).
     var externs: HashMap<String, Array<TypeName>> = HashMap<String, Array<TypeName>>();
-    var structs: HashMap<String, _StructFacts> = HashMap<String, _StructFacts>();
+    ## The unit's own structs, and the checked ones looked up so far (`_facts`).
+    var structs: HashMap<String, _StructFacts?> = HashMap<String, _StructFacts?>();
     var current: TypeName? = Optional<TypeName>.Empty;
+    var _checked: bool;
 
-    construct(module: Module, state: PassState, implicit: HashMap<String, _Implicit>) {
+    construct(module: Module, state: PassState, implicit: _Implicits) {
         this.state = state;
+        this.module = module;
         this.implicit = implicit;
+        _checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         table = StructTable(module, memo = state.trait_types_memo());
         trait_defs = module.traits;
         bool restated = false;
@@ -205,24 +276,60 @@ struct _TraitConversions {
         for (var e in module.externs) {
             externs[e.name] = _parameter_types(e.parameters);
         }
-        for (var f in module.functions) {
+        var own = unit_decls(module);
+        for (var f in own.functions) {
             if (!f.is_generic_func) {
                 functions[f.name] = _types_of(f);
             }
         }
-        for (var st in module.structs) {
+        for (var st in own.structs) {
             if (_is_generic_base(st)) {
                 continue;
             }
             for (var c in st.constructors) {
-                functions[c.name] = _types_of(c);
+                constructors[c.name] = _types_of(c);
+            }
+            structs[st.name] = Optional<_StructFacts>.Value(_StructFacts(st));
+        }
+    }
+
+    ## The parameter types of the free function or constructor `name`: a
+    ## constructor's first, the unit's own before a checked one's.
+    _params(name: String): Array<TypeName>? {
+        var found = constructors.try_get(name);
+        if (found.is_value()) {
+            return found;
+        }
+        if (_checked) {
+            var c = checked_decls(module, state).constructors.try_get(name);
+            if (c.is_value()) {
+                return Optional<Array<TypeName>>.Value(_types_of(c.value()));
             }
         }
-        for (var st in module.structs) {
-            if (!_is_generic_base(st)) {
-                structs[st.name] = _StructFacts(st);
-            }
+        found = functions.try_get(name);
+        if (found.is_value() or !_checked) {
+            return found;
         }
+        var f = checked_decls(module, state).functions.try_get(name);
+        return f.is_value() ? Optional<Array<TypeName>>.Value(_types_of(f.value())) : Optional<Array<TypeName>>.Empty;
+    }
+
+    ## What the conversions need of the struct of type `name`, if it is one
+    ## and not a generic base.
+    _facts(name: String): _StructFacts? {
+        var found = structs.try_get(name);
+        if (found.is_value()) {
+            return found.value();
+        }
+        if (!_checked) {
+            return Optional<_StructFacts>.Empty;
+        }
+        var st = checked_decls(module, state).structs.try_get(name);
+        var facts = st.is_value() and !_is_generic_base(st.value()) ?
+            Optional<_StructFacts>.Value(_StructFacts(st.value())) :
+            Optional<_StructFacts>.Empty;
+        structs[name] = facts;
+        return facts;
     }
 
     is_trait(ty: TypeName): bool {
@@ -294,7 +401,7 @@ struct _TraitConversions {
         if (value is ToTrait(existing)) {
             return value;
         }
-        if (!to_trait and !implicit.contains(expected.to_string())) {
+        if (!to_trait and !implicit.find(expected.to_string()).is_value()) {
             return value;
         }
         # Each arm converts on its own: they may be different structs.
@@ -328,7 +435,7 @@ struct _TraitConversions {
                 }
                 return value;
             }
-            var facts = structs.try_get(actual.to_string());
+            var facts = _facts(actual.to_string());
             if (!facts.is_value()) {
                 # A number, `bool` or enum may conform to the trait, for
                 # constraints, but is never a trait value.
@@ -479,7 +586,7 @@ struct _TraitConversions {
         if (_is_null(value)) {
             return value;
         }
-        var found = implicit.try_get(expected.to_string());
+        var found = implicit.find(expected.to_string());
         if (!found.is_value()) {
             return value;
         }
@@ -533,7 +640,7 @@ struct _TraitConversions {
             return true;
         }
         if (is_trait(to)) {
-            var facts = structs.try_get(actual.to_string());
+            var facts = _facts(actual.to_string());
             return facts.is_value() and _conforms_to(facts.value(), to);
         }
         if (value is IntLiteral(v)) {
@@ -545,8 +652,8 @@ struct _TraitConversions {
     ## A trait method implemented with a struct return type where the trait
     ## returns a trait type: that struct must conform to the declared trait
     ## type.
-    check_covariant_returns(module: Module) {
-        for (var st in module.structs) {
+    check_covariant_returns(structs: StructDef[]) {
+        for (var st in structs) {
             if (_is_generic_base(st)) {
                 continue;
             }
@@ -571,7 +678,7 @@ struct _TraitConversions {
                         continue;
                     }
                     var method = have.value();
-                    var facts = structs.try_get(method.ty.to_string());
+                    var facts = _facts(method.ty.to_string());
                     if (!(facts.is_value() and _conforms_to(facts.value(), required.ty))) {
                         state.report(
                             error_at(
@@ -679,7 +786,7 @@ struct _TraitConversions {
                     return expr;
                 }
                 # Constructors are listed with the functions, by name.
-                var params = functions.try_get(node.function);
+                var params = _params(node.function);
                 if (params.is_value()) {
                     arguments(params.value(), node.args, node.loc);
                 }
@@ -693,7 +800,7 @@ struct _TraitConversions {
                 if (is_trait(receiver.value())) {
                     params = trait_method_params(receiver.value(), node.method, node.loc);
                 } else {
-                    var facts = structs.try_get(receiver.value().to_string());
+                    var facts = _facts(receiver.value().to_string());
                     if (facts.is_value()) {
                         params = facts.value().methods.try_get(node.method);
                     }

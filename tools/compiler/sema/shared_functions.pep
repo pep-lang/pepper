@@ -11,7 +11,7 @@
 import [Location] from compiler.diagnostic;
 import text;
 import [is_numeric_type] from "arithmetic";
-import [unit_decls] from "checked";
+import [checked_decls, unit_decls] from "checked";
 import [CALL_METHOD, closure_struct, field_def, is_closure_struct, THIS_FIELD] from "closures";
 import "common";
 import [RECEIVER_FIELD] from "function_references";
@@ -58,11 +58,13 @@ const _INNER_FIELD = "__inner";
 export shared_functions(module: Module, state: PassState) {
     _check_c_signatures(module, state);
     var converter = _SharedFunctions(module, state);
-    for (var function in module.functions) {
+    # A checked declaration's conversions were applied with its unit.
+    var own = unit_decls(module);
+    for (var function in own.functions) {
         converter.owned_by(function.name);
         converter.function(function, Optional<TypeName>.Empty);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if ((st.ty.is_generic() and st.name == st.ty.name) or st.ty.is_function_type() or st.ty.is_weak()) {
             continue;
         }
@@ -78,6 +80,9 @@ export shared_functions(module: Module, state: PassState) {
     }
     converter.current = Optional<TypeName>.Empty;
     for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            continue;
+        }
         converter.owned_by(g.name);
         if (g.default.is_value()) {
             var value = converter.expression(g.default.value());
@@ -165,15 +170,40 @@ struct _SharedFunctions {
     var owner: String = "";
     var made: ulong = 0;
     var current: TypeName? = Optional<TypeName>.Empty;
+    ## The externs' parameter types, which a function of the same name's
+    ## give way to.
+    var externs: HashMap<String, Array<TypeName>> = HashMap<String, Array<TypeName>>();
+    var module: Module;
+    var _checked: bool;
+    # The checked structs taken in (`_checked_struct`), by type.
+    var _taken: HashSet<String> = HashSet<String>();
 
     construct(module: Module, state: PassState) {
         this.state = state;
+        this.module = module;
+        _checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         table = StructTable(module, memo = state.trait_types_memo());
         safe = ThreadSafeStructs(module, state);
-        for (var st in module.structs) {
-            if (!is_closure_struct(st.name)) {
-                continue;
+        # The unit's own declarations; a checked one is taken in when a
+        # lookup names it (`checked_decls`).
+        var own = unit_decls(module);
+        for (var f in own.functions) {
+            if (!f.is_generic_func) {
+                functions[f.name] = _parameter_types(f.parameters);
             }
+        }
+        for (var e in module.externs) {
+            externs[e.name] = _parameter_types(e.parameters);
+        }
+        for (var st in own.structs) {
+            _add_struct(st);
+        }
+    }
+
+    # Takes in struct `st`: a closure's call and captures, a concrete
+    # struct's constructors and methods.
+    _add_struct(st: StructDef) {
+        if (is_closure_struct(st.name)) {
             for (var m in st.method_members) {
                 if (m.name == CALL_METHOD) {
                     var call = m.copy();
@@ -191,27 +221,62 @@ struct _SharedFunctions {
             captures[st.ty.to_string()] = fields;
             captures[st.name] = fields;
         }
-        for (var f in module.functions) {
-            if (!f.is_generic_func) {
-                functions[f.name] = _parameter_types(f.parameters);
+        if (st.ty.is_generic() and st.name == st.ty.name) {
+            return;
+        }
+        for (var c in st.constructors) {
+            constructors[c.name] = _parameter_types(c.parameters);
+        }
+        var by_name = HashMap<String, Array<TypeName>>();
+        for (var m in st.method_members) {
+            by_name[m.name] = _parameter_types(m.parameters);
+        }
+        methods[st.name] = by_name;
+    }
+
+    # Takes in the checked struct of type `key`, once, unless the unit's own
+    # entry for it stands.
+    _checked_struct(key: String) {
+        if (!_checked or methods.contains(key) or captures.contains(key) or !_taken.insert(key)) {
+            return;
+        }
+        var st = checked_decls(module, state).structs.try_get(key);
+        if (st.is_value()) {
+            _add_struct(st.value());
+        }
+    }
+
+    # The captures of closure struct `closure`.
+    _captures(closure: String): Array<VariableDef>? {
+        _checked_struct(closure);
+        return captures.try_get(closure);
+    }
+
+    # The parameter types of the free function, extern or constructor a
+    # call names.
+    _params(name: String): Array<TypeName>? {
+        var found = externs.try_get(name);
+        if (found.is_value()) {
+            return found;
+        }
+        found = functions.try_get(name);
+        if (found.is_value()) {
+            return found;
+        }
+        if (_checked) {
+            var f = checked_decls(module, state).functions.try_get(name);
+            if (f.is_value()) {
+                return Optional<Array<TypeName>>.Value(_parameter_types(f.value().parameters));
             }
         }
-        for (var e in module.externs) {
-            functions[e.name] = _parameter_types(e.parameters);
+        found = constructors.try_get(name);
+        if (found.is_value() or !_checked) {
+            return found;
         }
-        for (var st in module.structs) {
-            if (st.ty.is_generic() and st.name == st.ty.name) {
-                continue;
-            }
-            for (var c in st.constructors) {
-                constructors[c.name] = _parameter_types(c.parameters);
-            }
-            var by_name = HashMap<String, Array<TypeName>>();
-            for (var m in st.method_members) {
-                by_name[m.name] = _parameter_types(m.parameters);
-            }
-            methods[st.name] = by_name;
-        }
+        var c = checked_decls(module, state).constructors.try_get(name);
+        return c.is_value() ?
+            Optional<Array<TypeName>>.Value(_parameter_types(c.value().parameters)) :
+            Optional<Array<TypeName>>.Empty;
     }
 
     owned_by(owner: String) {
@@ -303,7 +368,7 @@ struct _SharedFunctions {
                 if (!_same_signature(_parsed(node.ty), signature.value())) {
                     return value;
                 }
-                var fields = captures.try_get(node.closure);
+                var fields = _captures(node.closure);
                 if (fields.is_value() and fields.value().count > 0) {
                     var capture = fields.value()[0];
                     var at = capture.loc.is_none() ? node.loc : capture.loc;
@@ -319,6 +384,7 @@ struct _SharedFunctions {
                     );
                     return value;
                 }
+                _checked_struct(node.closure);
                 var call = calls.try_get(node.closure);
                 if (!call.is_value()) {
                     return value;
@@ -357,7 +423,7 @@ struct _SharedFunctions {
 
     ## Every value closure `closure` captures must be thread-safe.
     check_captures(closure: String, expected: TypeName, closure_loc: Loc, site: String) {
-        var fields = captures.try_get(closure);
+        var fields = _captures(closure);
         if (!fields.is_value()) {
             return;
         }
@@ -452,10 +518,7 @@ struct _SharedFunctions {
         var expr = rewrite_children(e, this);
         match (expr) {
             FunctionCall(node) => {
-                var params = functions.try_get(node.function);
-                if (!params.is_value()) {
-                    params = constructors.try_get(node.function);
-                }
+                var params = _params(node.function);
                 if (params.is_value()) {
                     arguments(params.value(), node.args);
                 }
@@ -463,6 +526,7 @@ struct _SharedFunctions {
             MethodCall(node) => {
                 var receiver = static_type_of(node.this_value, table, current, state);
                 if (receiver.is_value()) {
+                    _checked_struct(receiver.value().to_string());
                     var by_name = methods.try_get(receiver.value().to_string());
                     if (by_name.is_value()) {
                         var params = by_name.value().try_get(node.method);

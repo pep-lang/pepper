@@ -938,6 +938,7 @@ struct _Confinement {
             return none;
         }
         body.function.body = stashed;
+        state.trait_memo.bodies_back = true;
         _by_key()[key] = body;
         _restored[key] = body;
         bodies.insert(key);
@@ -1834,10 +1835,12 @@ _lower_moved_arguments(module: Module) {
         return;
     }
     var lower = _MoveArguments(moved);
-    for (var f in module.functions) {
+    # A checked body was lowered with its unit (and is stashed).
+    var own = unit_decls(module);
+    for (var f in own.functions) {
         lower.function(f);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if (_is_generic_base(st)) {
             continue;
         }
@@ -2005,7 +2008,8 @@ _attribute_text(program: _Confinement, loc: Loc): String {
 
 ## A guard kept in a struct's field would hold its lock past any block.
 _check_guard_fields(program: _Confinement): bool {
-    for (var st in program.module.structs) {
+    # A checked struct's fields were checked with its unit.
+    for (var st in unit_decls(program.module).structs) {
         if (program.isolated.contains(st.name) or _is_generic_base(st)) {
             continue;
         }
@@ -2032,7 +2036,8 @@ _check_guard_fields(program: _Confinement): bool {
 ## `Mutex<T>` of a number: its `with` binding would be a copy the block
 ## could never change back.
 _check_mutex_arguments(program: _Confinement): bool {
-    for (var st in program.module.structs) {
+    # A checked specialization was checked with its unit.
+    for (var st in unit_decls(program.module).structs) {
         if (st.ty.sub_types.count == 0 or demangle_name(st.ty.name) != "Mutex" or st.name == st.ty.name) {
             continue;
         }
@@ -2139,6 +2144,14 @@ struct _RegionWalk {
     ## Which parts the last failed `union` would have joined.
     var clash_into: _RegionPart = _RegionPart.Fresh;
     var clash_moving: _RegionPart = _RegionPart.Fresh;
+    ## How many `move`s the walk has checked.
+    var moves: ulong = 0;
+    ## How many loops the walk is inside.
+    var loops: ulong = 0;
+    ## On a loop's second pass, the lock its first pass made for the next
+    ## `with` block, which stays the same lock.
+    var relock: ulong = 0;
+    var relocking: bool = false;
 
     construct(program: _Confinement, checking: bool, current: TypeName?) {
         this.program = program;
@@ -2520,7 +2533,12 @@ struct _RegionWalk {
         }
         declare(scope.name, -1, scope.ty);
         var index = locks.count;
-        locks.append(lock);
+        if (relocking) {
+            index = relock;
+            relock += 1;
+        } else {
+            locks.append(lock);
+        }
         long r = -1;
         if (program.has_region(binding.ty) or binding.ty.is_auto()) {
             r = region(_RegionPart.Locked(index));
@@ -2559,8 +2577,23 @@ struct _RegionWalk {
                 }
             }
             While(loop) => {
+                # A link made later in the body is there on the next pass,
+                # so a check walks an outermost loop that moves a second
+                # time: links only add up, so the first pass made them all.
+                var moved = moves;
+                var outermost = checking and loops == 0;
+                var first_lock = locks.count;
+                loops += 1;
                 eval(loop.condition);
                 block(loop.block);
+                if (outermost and moves != moved) {
+                    relock = first_lock;
+                    relocking = true;
+                    eval(loop.condition);
+                    block(loop.block);
+                    relocking = false;
+                }
+                loops -= 1;
             }
             Return(ret) => {
                 long value = -1;
@@ -2902,6 +2935,7 @@ struct _RegionWalk {
     ## disconnected value hands it over; a raw slot (runtime only) hands
     ## over a value the runtime promises nothing else references.
     eval_move(value: Expression): long {
+        moves += 1;
         if (value is SymbolRef(node)) {
             var found = local(node.id);
             if (found.is_value()) {

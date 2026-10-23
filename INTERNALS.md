@@ -1238,7 +1238,7 @@ is a field of the `PassState`.
 | final | `check_casts` (`sema/casts.pep`) | Reports each `as` or `unsafe_cast` whose conversion `casts.check` rejects, at the `as` or the `unsafe_cast` name (`cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret`). Runs after `convert_to_traits`, which turns an `s as Trait` into the `ToTrait` a trait-typed slot gets. A cast whose operand `static_type_of` cannot type, or whose type still names a parameter of the generic base (`function_types_check._Bases`), is left to codegen: `codegen_cast` asks `casts.check` again with the operand's exact type, and lowers an `unsafe_cast` between a float and an integer as a `bitcast` and an integer to a pointer as `inttoptr`. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). A `[ThreadLocal]` variable is exempt from the `const` rule (each thread has its own copy) but keeps the type rule, since a non-thread-safe value parked in one from under a lock would escape `check_confinement`, and its initializer must fold to a constant (`thread_local_constant`), the image every thread starts from. The builder rejects `[ThreadLocal]` on a field or parameter (`reject_thread_local`). |
 | final | `destructures.lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
-| final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Move]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `move(x)` (the runtime's `move<T>`, whose `[MoveSource]` argument `_lower_moved_arguments` wraps in `Expression.Move`) out of raw memory, `move(p[i])`, is fresh (runtime files only, checked against the discovered runtime directory); a moved local is fresh when its region is unshared and untainted and no other local still in scope holds part of it (`_RegionWalk.sharers`; a local whose block ended holds nothing), and a `[Move]` parameter starts in a fresh region of its own; a closure's region is linked with each capture (`MakeClosure`), and a call through a function value links its result with the callee and the arguments (a function value reaches nothing else that is not thread-safe), so a captured value stays shared exactly as long as a closure holding it can be reached; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Move]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number; an argument to a `[Locked]` parameter must be a closure literal, whose lifted `__call` is walked with its parameters as a `Locked` region of their own (`_check_locked_closure`; such closures are summary roots, so their callees are summarized); `move` of anything but a sole-holder local or a runtime raw slot, and use after move (`_Moves`, a flow-sensitive dataflow over each function that moves: a loop reruns its body unless every path leaves it). A syntactic prefilter skips functions that mention no trigger name. For the build cache (`Module.record_summaries`), it summarizes every function and hands out, by location, the summaries that reach no trait call (`summaries_to_record`); a build that skips a cached unit's bodies seeds those (`recorded_summaries`, §4.3). |
+| final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Move]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `move(x)` (the runtime's `move<T>`, whose `[MoveSource]` argument `_lower_moved_arguments` wraps in `Expression.Move`) out of raw memory, `move(p[i])`, is fresh (runtime files only, checked against the discovered runtime directory); a moved local is fresh when its region is unshared and untainted and no other local still in scope holds part of it (`_RegionWalk.sharers`; a local whose block ended holds nothing; a check walks an outermost loop that moves twice, so a link made later in the body reaches the `move` as on the next pass), and a `[Move]` parameter starts in a fresh region of its own; a closure's region is linked with each capture (`MakeClosure`), and a call through a function value links its result with the callee and the arguments (a function value reaches nothing else that is not thread-safe), so a captured value stays shared exactly as long as a closure holding it can be reached; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Move]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number; an argument to a `[Locked]` parameter must be a closure literal, whose lifted `__call` is walked with its parameters as a `Locked` region of their own (`_check_locked_closure`; such closures are summary roots, so their callees are summarized); `move` of anything but a sole-holder local or a runtime raw slot, and use after move (`_Moves`, a flow-sensitive dataflow over each function that moves: a loop reruns its body unless every path leaves it). A syntactic prefilter skips functions that mention no trigger name. For the build cache (`Module.record_summaries`), it summarizes every function and hands out, by location, the summaries that reach no trait call (`summaries_to_record`); a build that skips a cached unit's bodies seeds those (`recorded_summaries`, §4.3). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
 | final | `matches.lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (a guarded arm's patterns handle nothing, but one after an unguarded arm for its case is still handled twice) (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `state.notes`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`_ArmTypes`). `check_function_types` keeps enums apart from integers and from each other (`_TypeKind.Enum`). Over a trait value (`trait_arm`, §4.2) each pattern's `ty` must name a struct that declares the trait or another trait (`_trait_target`), each type is handled once, a binding becomes `FromTrait`, and a `match` expression needs an `else`. A case pattern's values (`enum_test`) are tested on their payload fields after the tag (`element_test` over `_case_field`, typed by `_case_payload_types`), and the `CaseValue`s the builder left in nested tests are lowered to fields (`_CaseValueLowering`, `typed_path`). A pattern nested in a case's values handles part of the case: it is a row of the match's `spaces`, and `check_exhaustive` counts a case no pattern handles whole as handled when those rows cover it, else names the value they miss. A `match` over a tuple (`tuple_arm`) tests each element on its path (`element_test`, `&&` over the elements), resolves each bare element name to a case or a binding and drops the local of one that is a case (reporting one that binds where it may not), and checks coverage with the usefulness algorithm (`useful` over `_Space`s, a case with the spaces of its values, with each enum's and `bool`'s cases and their value types as `_DomainCase`s): a pattern the earlier ones cover is an error, a value no arm covers is reported with an example (`does not handle '(Line, _)'`), and an `else` after full coverage is a warning. |
 | final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type_of`, goes to `state.notes`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures._inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
@@ -1964,7 +1964,7 @@ changed.
   emitted again; the others are linked from the cache. Each folder is
   written to the build folder and moved into place as one. The same key
   gives the same objects, so they never change once there, and builds share
-  the cache without locks or copies: a hit is linked where it is. Each
+  the cache without locks or copies. Each
   unit, and each part, keeps its newest eight keys, and none stored or
   reused in the last ten minutes, since a build may be linking it; a unit
   hit marks its parts reused too, so a build storing newer keys of a part
@@ -1982,7 +1982,15 @@ changed.
   moved aside and back between two looks cannot end the list early. Once a
   build marked a key, a prune that reads its time later keeps it, so only a
   prune already past that check when the build marked it can move it, and
-  it moves it straight back. A unit's folder
+  it moves it straight back. Such a prune may stall between its check and
+  its rename past the build's last look, so the link does not read the
+  cache's objects where they are: `Cache.pin` hard-links each into the
+  build's folder (`pinned/`), looking again while one is missing (one on
+  another volume than the build's folder stays where it is), and the linker reads the links,
+  which keep the files wherever the folder goes (#178). A hard link costs
+  no copy, and the build's folder is removed after the link. A grace
+  period alone cannot close this: the prune's check and its rename are two
+  steps, and a stall between them has no bound. A unit's folder
   spells the `/` of its name as `.` (`u/process.command#0/`), so each
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
@@ -3158,7 +3166,9 @@ lines are always taken: the compiler's own code calls its functions by name
 checks every compilation unit but the last in `pepc --compilation-unit-worker <dir>` children,
 started with the build's own command line. A compilation unit is handed to an idle
 worker once every compilation unit it reads is done, as its number and key on the
-worker's standard input; before each one a worker reads and links the
+worker's standard input; of the ready ones, the one the longest chain of
+compilation units reading it waits on goes first (`_chain_lengths`), as a build
+system schedules its critical path; before each one a worker reads and links the
 bodies of its files only (`Program.link_bodies`, which links more files'
 bodies each time it is called), since the compilation units it reads come as
 records. The
@@ -3270,13 +3280,37 @@ the cache has one. Otherwise it checks the compilation unit:
    only when the compilation unit's code names it (`checked_decls`, built once per
    compilation unit), so a round costs in proportion to the compilation unit, not its closure.
    `SiteTable` works this way, and so do `resolve_implicit_types`' `ImplicitTables`,
-   `Callees` and declaration fingerprints: they walk `unit_decls`, whose structs
+   `Callees` and declaration fingerprints, `StructTable`, `used_trait_types`
+   and `record_conformances`, and the tables of `convert_to_traits`,
+   `reference_functions`, `shared_functions`, `check_type_arguments` and
+   `check_interpolations`: they walk `unit_decls`, whose structs
    include every checked one the compilation unit extended or specialized a method for.
-   So do `synthesize_function_types`, the C-signature check of
+   What a table needs of every checked declaration is found once per compilation
+   unit and kept in `PassState.unit_memos` (or `TraitTypeMemo`), read under
+   what the unit's own declarations give each round: `Overloads`' checked
+   structs' methods, constructor sets, `[Implicit]` constructors and traits
+   (and each checked function's member, made when a set first names it), the
+   names `bind_function_values` and `bind_generic_method_values` look for,
+   and the checked structs' conformances. A table a pass rebuilds each round
+   over lists that only grow (`gather_generics`' symbol table and the specs'
+   spellings, `specialize_structs`' and `specialize_functions`' names, bases
+   and the specs done) keeps itself for the unit and takes in only what was
+   appended since, or all of a list a pass replaced.
+   The walks over code skip the checked declarations too, whose code was
+   walked with its own compilation unit (and whose bodies are stashed): a unit
+   walk (`for_each_place(unit = true)`) leaves out the checked structs,
+   functions, extensions (`Checked.extensions`, the first ones) and
+   module-scope variables. So do `synthesize_function_types`, the C-signature check of
    `shared_functions`, `lift_closures` and `resolve_type_aliases`: a checked
    declaration's function, tuple and weak types got their structs, its signatures
    their check, its closures their structs and its aliases their expansion with its
-   own compilation unit. `restore_bodies` puts back only what `stash_bodies` took
+   own compilation unit; and `apply_platform_filters`, `resolve_enum_cases`,
+   `check_ranges`, `check_interpolations`, `resolve_injected`,
+   `resolve_operators`, `convert_to_traits`, `reference_functions`,
+   `shared_functions`, `check_overloads`, `check_type_arguments`,
+   `check_value_structs`' type checks, `check_casts`, `check_conditions`,
+   `check_function_types`, `convert_intrinsics`, `lower_with_blocks`,
+   `lower_matches` and `check_deprecated_members`. `restore_bodies` puts back only what `stash_bodies` took
    (`PassState.stashed_from`), and `stash_bodies` run again (before the passes
    that lower bodies) takes out only those of these that a pass put back: a
    method the compilation unit added to a checked struct (a generic method's
@@ -3353,7 +3387,7 @@ Loading a record costs a read and a merge, not a check. A worker, and a build
 with one job, checks one compilation unit after another in one process, so
 nothing a check makes may outlive it: `run_steps_with` drops the memos of
 `PassState` that hold `GenericSignature`s (`checked_implicit`,
-`trait_memo.members`), which hold the state. That cycle once kept every
+`trait_memo.members`, `unit_memos`), which hold the state. That cycle once kept every
 unit's state and the closure it reached alive, 8 GB in a worker and over 50
 GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
@@ -3423,7 +3457,12 @@ the old bytes. So a delta writes each location in a file of its base
 from the declaration at or before it (`LocAnchors`, from `anchors_of` the
 base: its structs, templates, traits and enums, their methods and
 constructors, and its functions, each by name), as the declaration's name, its
-start then, and the location's offsets from it. Reading the record onto a
+start then, and the location's offsets from it. `merged_module` keeps the
+anchors of the base it grows up to date as it reads (`MergeAnchors`): a read
+keeps the base's declarations but those it patches, and adds its own after
+them, so only a declaration not the one at its place before is taken in
+(finding them anew from the whole base before each record made merging a
+closure quadratic in its size). Reading the record onto a
 base puts it at that declaration's start there, or the start as written when
 no one declaration of that name is in that file now.
 
