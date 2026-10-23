@@ -159,7 +159,7 @@ export struct Resolver {
         var chosen = OrderedMap<String, Locked>();
         var notes = Array<String>();
         for (var round in 0..100) {
-            var gathered = _gather(chosen);
+            var gathered = gather(chosen);
             if (gathered.is_err()) {
                 return Result<Graph>.Err(gathered.error().message);
             }
@@ -170,7 +170,7 @@ export struct Resolver {
                 if (source.starts_with("path:")) {
                     continue;
                 }
-                var picked = _choose(source, asks, notes);
+                var picked = choose(source, asks, notes);
                 if (picked.is_err()) {
                     return Result<Graph>.Err(picked.error().message);
                 }
@@ -241,7 +241,7 @@ export struct Resolver {
     # of each package chosen so far (and of folders `path` names). What the
     # project's dependencies lead to is read first, then what only its
     # dev-dependencies do, which is marked `dev`.
-    _gather(chosen: OrderedMap<String, Locked>): Result<OrderedMap<String, Array<Wanted>>> {
+    gather(chosen: OrderedMap<String, Locked>): Result<OrderedMap<String, Array<Wanted>>> {
         var wanted = OrderedMap<String, Array<Wanted>>();
         var name = root.name.is_empty ? "pep.toml" : root.name;
         # Each manifest to read, who it is, whether it is the project's,
@@ -379,7 +379,7 @@ export struct Resolver {
     }
 
     # What `url`'s repository offers, read once per source.
-    _remote(source: String): Result<Array<RemoteRef>> {
+    remote(source: String): Result<Array<RemoteRef>> {
         var known = _refs.try_get(source);
         if (known.is_value()) {
             return Result<Array<RemoteRef>>.Ok(known.value());
@@ -417,7 +417,7 @@ export struct Resolver {
     }
 
     # The revision of `source` every requirement in `asks` accepts.
-    _choose(source: String, all_asks: Array<Wanted>, notes: Array<String>): Result<Locked> {
+    choose(source: String, all_asks: Array<Wanted>, notes: Array<String>): Result<Locked> {
         # The project's own pep.toml overrides its dependencies.
         var asks = Array<Wanted>();
         for (var ask in all_asks) {
@@ -447,7 +447,7 @@ export struct Resolver {
             if (kept.is_value() and (first.kind != "tag" or offline or !has_git())) {
                 return Result<Locked>.Ok(Locked("", source, "", kept.value().commit));
             }
-            var refs = _remote(source);
+            var refs = remote(source);
             if (refs.is_err()) {
                 return Result<Locked>.Err(refs.error().message);
             }
@@ -486,7 +486,7 @@ export struct Resolver {
                 return Result<Locked>.Ok(kept.value());
             }
         }
-        var refs = _remote(source);
+        var refs = remote(source);
         if (refs.is_err()) {
             return Result<Locked>.Err(refs.error().message);
         }

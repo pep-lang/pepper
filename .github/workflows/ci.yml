@@ -448,10 +448,9 @@ jobs:
 
       - name: Provision LLVM
         timeout-minutes: 15
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-provision-llvm.sh
+        uses: ./.github/actions/provision-llvm
+        with:
+          token: ${{ github.token }}
 
       # See test-windows: build beside the checkout, where its clean step
       # cannot reach. The test jobs' directory, so a runner builds once.
@@ -514,6 +513,7 @@ jobs:
           done
           ls "$RUNNER_WORKSPACE/cross-cache" "$RUNNER_WORKSPACE/cross-cache/sysroots"
           ls "$RUNNER_TEMP/sysroots"
+          ls -l "$RUNNER_TEMP/llvm-debs"
           [ -n "${PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC:-}" ] && find "$PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC" -maxdepth 6 -type d
 
   cross-run:

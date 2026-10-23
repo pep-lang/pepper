@@ -38,9 +38,14 @@ export struct Requirement {
     # `workspace = true`: its source and revision are those of the entry of
     # the same name in the workspace's `[workspace.dependencies]`.
     var inherits: bool = false;
+    # `optional = true`: only a feature turns it on.
+    var optional: bool = false;
+    # The features its `features` turns on, for `tree`.
+    var features: Array<String> = __null;
 
     construct() {
         feature_keys = Array<String>();
+        features = Array<String>();
     }
 
     # Where the package comes from, which identifies it in the whole
@@ -263,6 +268,13 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
         if (field == "optional" or field == "features" or field == "default-features" or field == "workspace") {
             requirement.feature_keys.append(field);
             requirement.inherits = requirement.inherits or field == "workspace";
+            if (field == "optional") {
+                requirement.optional = field_value.as_bool().value_or(false);
+            } else if (field == "features" and field_value.as_array().is_value()) {
+                for (var item in field_value.as_array().value()) {
+                    requirement.features.append(item.as_string().value_or(""));
+                }
+            }
             continue;
         }
         var text = field_value.as_string();
