@@ -106,8 +106,20 @@ tests (`PEPPER_TESTS_PART=compiler`), the other everything else
 cache. A PR that changes the compiler (`tools/compiler/`) is tested with
 that compiler instead: CI builds it with the build of main first
 (`scripts/ci-build-compiler.sh`, from a build cache CI keeps between runs,
-keyed on the build of main's contents) and runs the suite with it. Each
-job has
+keyed on the build of main's contents) and runs the suite with it.
+
+On a pull request, the docs examples (`tools/pep-doc/examples_test.pep`)
+build and run in full only on Linux. The macOS and Windows jobs set
+`PEPPER_DOCS_EXAMPLES=platform`, which keeps only the examples that select
+code per platform: those with a line holding a `[Target(...)]` that names
+an `OS(...)` or an `Arch(...)`. On main, and on every other event, every
+OS runs every example. To run only those examples by hand:
+
+```bash
+PEPPER_DOCS_EXAMPLES=platform scripts/pepper-tests.sh target/compiler
+```
+
+Each job has
 a time limit a little above its slowest passing runs, and prints the
 runner's memory, swap, disk and biggest processes every minute beside the
 tests (`scripts/ci-monitor.sh`). A job that fails, is cancelled or runs out

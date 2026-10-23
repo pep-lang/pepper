@@ -211,6 +211,9 @@ jobs:
         shell: bash
         env:
           PEPPER_TESTS_PART: ${{ matrix.part }}
+          # On a pull request, only the docs examples marked per platform;
+          # Linux runs them all (tools/pep-doc/examples_test.pep).
+          PEPPER_DOCS_EXAMPLES: ${{ github.event_name == 'pull_request' && 'platform' || '' }}
           # Two compilation units at once per build: with the default, one
           # per CPU, a Linux runner's 16 GB ran out (swap full) while the
           # tools' test programs built, and three runners died.
@@ -278,6 +281,9 @@ jobs:
         shell: bash
         env:
           PEPPER_TESTS_PART: ${{ matrix.part }}
+          # On a pull request, only the docs examples marked per platform;
+          # Linux runs them all (tools/pep-doc/examples_test.pep).
+          PEPPER_DOCS_EXAMPLES: ${{ github.event_name == 'pull_request' && 'platform' || '' }}
           # The hosted macOS runner has 7 GB. Uncapped, 8 tests at once each
           # checking 8 compilation units at once ran a 16 GB Mac out of
           # memory (214 pep-build processes).

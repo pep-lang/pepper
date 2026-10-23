@@ -13,7 +13,10 @@
 # of each unit, including the inlined-at chains optimization creates.
 #
 # `PEPPER_DOCS_EXAMPLE=structs` runs only the examples whose name starts
-# with `structs`.
+# with `structs`. `PEPPER_DOCS_EXAMPLES=platform` runs only the examples
+# that select code per platform (`marked_per_platform`): CI sets it on a
+# pull request's macOS and Windows jobs, where the others would only repeat
+# what Linux shows.
 
 import [Directory, File, Path] from io;
 import os;
@@ -177,7 +180,7 @@ struct Example {
 # Builds and runs every `PARTS`th example, from the `part`th, unoptimized.
 builds_and_runs(part: ulong) {
     var examples = all_examples();
-    expect_true(examples.count > 100 or !only().is_empty);
+    expect_true(examples.count > 100 or !only().is_empty or (platform_only() and examples.count > 0));
     var failures = Array<String>();
     var index = part;
     while (index < examples.count) {
@@ -201,7 +204,7 @@ builds_and_runs_optimized(part: ulong) {
                 found = true;
             }
         }
-        if (!found and only().is_empty) {
+        if (!found and only().is_empty and !platform_only()) {
             fail(failures, $"docs/examples has no '{name}'; update sample()");
         }
     }
@@ -260,7 +263,57 @@ only(): String {
     return os.environment("PEPPER_DOCS_EXAMPLE").value_or("");
 }
 
-# Every example under `docs/examples`, sorted by name, limited by `only()`.
+[Test]
+marks_the_examples_that_select_code_per_platform() {
+    var root = Path("../docs/examples");
+    expect_true(marked_per_platform(root.join("platform-externs.pep")));
+    expect_true(marked_per_platform(root.join("visibility-basics")));
+    expect_false(marked_per_platform(root.join("hello.pep")));
+    expect_false(marked_per_platform(root.join("build-options.pep")));
+}
+
+# Whether `PEPPER_DOCS_EXAMPLES=platform` limits the examples to those
+# `marked_per_platform`.
+platform_only(): bool {
+    return os.environment("PEPPER_DOCS_EXAMPLES").value_or("") == "platform";
+}
+
+# Whether the example at `path`, a file or a folder of files, selects code
+# per platform: a line with a `[Target(...)]` that names an `OS(...)` or an
+# `Arch(...)`.
+marked_per_platform(path: Path): bool {
+    var files = Array<Path>();
+    if (path.is_directory()) {
+        var listing = Directory.open(path);
+        expect_true(listing.is_ok());
+        if (listing.is_err()) {
+            return false;
+        }
+        for (var entry in listing.value().entries().value()) {
+            if (entry.name.ends_with(".pep")) {
+                files.append(path.join(entry.name));
+            }
+        }
+    } else {
+        files.append(path);
+    }
+    for (var file in files) {
+        var text = File.read_to_string(file);
+        expect_true(text.is_ok());
+        if (text.is_err()) {
+            continue;
+        }
+        for (var line in text.value().split("\n")) {
+            if (line.contains("[Target(") and (line.contains("OS(") or line.contains("Arch("))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+# Every example under `docs/examples`, sorted by name, limited by `only()`
+# and `platform_only()`.
 all_examples(): Array<Example> {
     var examples = Array<Example>();
     var root = Path("../docs/examples");
@@ -274,15 +327,16 @@ all_examples(): Array<Example> {
         if (!entry.name.starts_with(prefix)) {
             continue;
         }
+        var path = root.join(entry.name);
         if (entry.is_directory) {
-            var main = root.join(entry.name).join("main.pep");
-            if (main.is_file()) {
+            var main = path.join("main.pep");
+            if (main.is_file() and (!platform_only() or marked_per_platform(path))) {
                 examples.append(Example(entry.name, main));
             }
             continue;
         }
-        if (entry.name.ends_with(".pep")) {
-            examples.append(Example(entry.name.substr_bytes(0, entry.name.size - 4), root.join(entry.name)));
+        if (entry.name.ends_with(".pep") and (!platform_only() or marked_per_platform(path))) {
+            examples.append(Example(entry.name.substr_bytes(0, entry.name.size - 4), path));
         }
     }
     examples.sort((a, b) => a.name.compare(b.name));
