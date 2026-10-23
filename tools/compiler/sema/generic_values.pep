@@ -4,6 +4,7 @@
 ## names.
 
 import "builder";
+import [unit_decls] from "checked";
 import [
     for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
@@ -22,7 +23,7 @@ import [
 ] from "model";
 import "overload_select";
 import "properties";
-import [PassState] from "state";
+import [PassMemo, PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [GenericSignature, specialization] from "type_arguments";
 import [FUNCTION] from "type_name";
@@ -403,14 +404,38 @@ export struct GenericMethodSearch {
     }
 }
 
+extend GenericMethodSearch with PassMemo;
+
 ## What `bind_generic_method_values` looks for in `module`, if it has
 ## generic methods.
 ##
 ## @param module the model
+## @param state the passes' state, which keeps the checked structs' names
+##     for the compilation unit
 ## @returns the search, or none when no method is generic
-export generic_method_search(module: Module): GenericMethodSearch? {
+export generic_method_search(module: Module, state: PassState): GenericMethodSearch? {
     var names = HashSet<String>();
-    for (var st in module.structs) {
+    var structs = module.structs;
+    if (module.checked.structs.count > 0) {
+        # The checked structs' generic methods are found once per unit;
+        # a checked struct the unit extended is one of its own too.
+        var kept = state.unit_memos.try_get("generic_methods");
+        if (!kept.is_value()) {
+            var checked = GenericMethodSearch(HashSet<String>());
+            for (var st in module.structs) {
+                if (module.checked.structs.contains(st.name)) {
+                    for (var m in st.generic_methods) {
+                        checked.names.insert(m.name);
+                    }
+                }
+            }
+            kept = Optional<PassMemo>.Value(checked);
+            state.unit_memos["generic_methods"] = checked;
+        }
+        names = (kept.value() as? GenericMethodSearch).value().names.copy();
+        structs = unit_decls(module).structs;
+    }
+    for (var st in structs) {
         for (var m in st.generic_methods) {
             names.insert(m.name);
         }

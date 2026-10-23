@@ -40,7 +40,7 @@ import [Rewriter] from "walk";
 ##
 ## @param module the model, changed in place
 export resolve_injected(module: Module) {
-    rewrite_places(module, _Injected(), templates = true);
+    rewrite_places(module, _Injected(), unit = true, templates = true);
 }
 
 ## Converts what `resolve_injected` converts, at each expression.

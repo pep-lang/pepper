@@ -874,6 +874,11 @@ export lift_closures(module: Module, state: PassState) {
     var extension_contexts = Array<_ClosureContext>();
     for (var ext in module.extensions) {
         var ctx = _ClosureContext();
+        # A checked extension's closures were lifted with its unit.
+        if (extension_contexts.count < module.checked.extensions) {
+            extension_contexts.append(ctx);
+            continue;
+        }
         for (var t in ext.target.sub_types) {
             if (t.sub_types.count == 0 and !types.contains(t.name) and !state.is_integral(t.name)) {
                 ctx.generics.append(GenericParam(name = t.name, loc = Loc.none(), default_loc = Loc.none()));
@@ -937,7 +942,7 @@ export lift_closures(module: Module, state: PassState) {
         }
         s += 1;
     }
-    ulong e = 0;
+    ulong e = module.checked.extensions;
     while (e < module.extensions.count) {
         for (var method in module.extensions[e].methods) {
             var from = lifted.count;
@@ -967,7 +972,7 @@ export lift_closures(module: Module, state: PassState) {
         }
     }
     for (var global in module.globals) {
-        if (global.default.is_value()) {
+        if (global.default.is_value() and !module.checked.globals.contains(global.name)) {
             _lift_default(state, global, plain, lifted);
         }
     }

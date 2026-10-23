@@ -1335,6 +1335,14 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         objects.append(entry_object);
         clock.lap("objects");
     }
+    if (options.cache.is_value()) {
+        var pinned = options.cache.value().pin(objects, work.join(Path("pinned")));
+        if (pinned.is_err()) {
+            Directory.remove_all(work);
+            return Result<Built, String>.err(pinned.error());
+        }
+        objects = pinned.value();
+    }
     if (lto) {
         var optimized = optimize_whole(
             objects,

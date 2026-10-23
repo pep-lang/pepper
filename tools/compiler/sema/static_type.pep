@@ -4,6 +4,7 @@
 ## table is not consulted: these passes run over programs without one.)
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
+import [checked_member_counts, unit_decls] from "checked";
 import "closures";
 import [case_value_type, FieldTypes] from "enums";
 import [param_names] from "generics";
@@ -57,14 +58,7 @@ _named_info(module: Module, st: StructDef, memo: TraitTypeMemo?): (String, Struc
 # methods have (a generic method specialized for it, say), or
 # `apply_extensions` dropped it.
 _checked_table(module: Module, memo: TraitTypeMemo): StructTable {
-    ulong fields = 0;
-    ulong methods = 0;
-    for (var st in module.structs) {
-        if (module.checked.structs.contains(st.name)) {
-            fields += st.field_members.count;
-            methods += st.method_members.count;
-        }
-    }
+    var (fields, methods) = checked_member_counts(module);
     var counts = (module.checked.structs.count as ulong, module.checked.functions.count as ulong, fields, methods);
     var kept = memo.checked_table.is_value() ? memo.checked_table.value() as? StructTable : Optional<StructTable>.Empty;
     if (!kept.is_value() or memo.checked_counts != counts) {
@@ -112,7 +106,17 @@ export struct StructTable {
             _base = Optional<StructTable>.Value(_checked_table(module, memo.value()));
         }
         bool shared = _base.is_value();
-        for (var st in module.structs) {
+        # The checked declarations are in the base: only the unit's own
+        # are walked (`unit_decls`, which also holds the checked structs
+        # the unit extended).
+        var own_structs = module.structs;
+        var own_functions = module.functions;
+        if (shared) {
+            var own = unit_decls(module);
+            own_structs = own.structs;
+            own_functions = own.functions;
+        }
+        for (var st in own_structs) {
             if (shared and module.checked.structs.contains(st.name)) {
                 continue;
             }
@@ -136,7 +140,7 @@ export struct StructTable {
                 }
             }
         }
-        for (var f in module.functions) {
+        for (var f in own_functions) {
             if (shared and module.checked.functions.contains(f.name)) {
                 continue;
             }

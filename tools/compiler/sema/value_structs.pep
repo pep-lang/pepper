@@ -7,7 +7,7 @@
 ## an error.
 
 import [Diagnostic, Location] from compiler.diagnostic;
-import [stashed_member] from "checked";
+import [stashed_member, unit_decls] from "checked";
 import [THIS_FIELD] from "closures";
 import "common";
 import [Loc] from "loc";
@@ -155,7 +155,9 @@ _written_at(variable: VariableDef): Loc {
 ## reported instead.
 _check_value_types(module: Module, state: PassState) {
     var declared = Array<VariableDef>();
-    for (var st in module.structs) {
+    # A checked declaration's types were checked with its unit.
+    var own = unit_decls(module);
+    for (var st in own.structs) {
         if (_is_generic_base(st)) {
             continue;
         }
@@ -173,13 +175,15 @@ _check_value_types(module: Module, state: PassState) {
             }
         }
     }
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         for (var p in f.parameters) {
             declared.append(p);
         }
     }
     for (var g in module.globals) {
-        declared.append(g);
+        if (!module.checked.globals.contains(g.name)) {
+            declared.append(g);
+        }
     }
     for (var variable in declared) {
         var value = _weak_of_value(variable.ty, state);

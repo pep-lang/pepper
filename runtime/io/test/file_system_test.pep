@@ -1,5 +1,5 @@
 # Files and directories: writing and reading bytes and text, OpenOptions,
-# seeking, set_length, metadata, whole-file locks, directories, copy, rename and remove, the
+# seeking, set_length, metadata, whole-file locks, directories, copy, hard links, rename and remove, the
 # error kinds each reports, a File closing its handle on last release, the
 # io enums (ErrorKind, SeekFrom, FileType, StdStream), streaming a directory
 # and a file's lines, and a File moved to another thread (FileTransfer).
@@ -356,6 +356,21 @@ copy_rename_and_remove_files() {
     expect_true(gone.is_err());
     expect_true(gone.error().is_not_found());
     expect_true(File.copy(moved, c).error().is_not_found());
+}
+
+# A hard link names the same file, and keeps it when the first name moves.
+[Test]
+hard_links_keep_a_file_its_first_name_leaves() {
+    var folder = TempFolder("hard_links");
+    var d = folder.path;
+    var a = d.join("a.txt");
+    var b = d.join("b.txt");
+    expect_true(File.write_text(a, "a").is_ok());
+    expect_true(File.hard_link(a, b).is_ok());
+    expect_true(File.hard_link(a, b).error().is_already_exists());
+    expect_true(File.rename(a, d.join("moved.txt")).is_ok());
+    expect_equal(text(b), "a");
+    expect_true(File.hard_link(a, d.join("c.txt")).error().is_not_found());
 }
 
 [Test]

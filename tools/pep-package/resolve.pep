@@ -337,6 +337,18 @@ export struct Resolver {
                     );
                 }
             }
+            # Only the workspace root's apply.
+            for (var member in root.member_manifests) {
+                for (var replacement in member.overrides) {
+                    graph.warnings.append(
+                        member.at_override(
+                            "warning",
+                            replacement.name,
+                            $"override of '{replacement.name}' in a workspace member is ignored; move it to the root's pep.toml"
+                        )
+                    );
+                }
+            }
             return Result<Graph>.Ok(graph);
         }
         return Result<Graph>.Err(
@@ -354,8 +366,19 @@ export struct Resolver {
         # Each manifest to read, who it is, whether it is the project's,
         # whether a dev-dependency leads to it, and its source.
         var queue = Array<(Manifest, String, bool, bool, String)>();
-        queue.append((root, name, true, false, ""));
+        # A workspace's members are the project's own too, read once each.
+        var roots = [(root, name)];
         var read = HashSet<String>();
+        for (var member in root.member_manifests) {
+            roots.append((member, member.name));
+            var folder = member.dir().canonicalize();
+            if (folder.is_ok()) {
+                read.insert("path:" + folder.value().to_string());
+            }
+        }
+        for (var (manifest, label) in roots) {
+            queue.append((manifest, label, true, false, ""));
+        }
         ulong next = 0;
         var dev_queued = false;
         while (true) {
@@ -364,7 +387,9 @@ export struct Resolver {
                     break;
                 }
                 dev_queued = true;
-                queue.append((root, name, true, true, ""));
+                for (var (manifest, label) in roots) {
+                    queue.append((manifest, label, true, true, ""));
+                }
             }
             var (manifest, requirer, from_root, dev, parent) = queue[next];
             next += 1;

@@ -100,7 +100,7 @@ export share_string_literals(module: Module, state: PassState) {
         _SharedLiterals(program, _LiteralScope.of(callee)).block(callee.function.body.value());
     }
     for (var variable in module.globals) {
-        if (variable.default.is_value()) {
+        if (variable.default.is_value() and !module.checked.globals.contains(variable.name)) {
             var shared = _SharedLiterals(program, _LiteralScope.global());
             variable.default = Optional<Expression>.Value(shared.root(variable.default.value()));
         }
@@ -647,19 +647,32 @@ _indirectly_called(module: Module, state: PassState, checked_too: bool): HashSet
         }
     }
     for (var variable in module.globals) {
-        if (variable.default.is_value()) {
+        # A checked one's calls were noted with its unit, as its body's.
+        if (variable.default.is_value() and (checked_too or !module.checked.globals.contains(variable.name))) {
             rewrite_expression(variable.default.value(), note);
         }
     }
+    # Each trait's method sets, by name: the first trait of a name.
+    var trait_slots = HashMap<String, HashSet<String>>();
+    for (var def in module.traits) {
+        if (!trait_slots.contains(def.name)) {
+            var names = HashSet<String>();
+            for (var m in def.methods) {
+                names.insert(set_name(m.name));
+            }
+            trait_slots[def.name] = names;
+        }
+    }
     for (var st in module.structs) {
+        if (st.traits.count == 0) {
+            continue;
+        }
         var slots = HashSet<String>();
         for (var t in st.traits) {
-            for (var def in module.traits) {
-                if (def.name == t.name) {
-                    for (var m in def.methods) {
-                        slots.insert(set_name(m.name));
-                    }
-                    break;
+            var names = trait_slots.try_get(t.name);
+            if (names.is_value()) {
+                for (var name in names.value()) {
+                    slots.insert(name);
                 }
             }
         }

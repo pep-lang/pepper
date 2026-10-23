@@ -251,6 +251,77 @@ verify_injected_finds_what_the_passes_left() {
     expect_false(state.take_error().is_value());
 }
 
+# `MergeAnchors`, kept up to date as a merge grows its module, finds what
+# `anchors_of` finds anew: after declarations are added, after one is
+# replaced by a patched copy with a member more, after one is declared a
+# second time (then no one declaration of it is found), and after the
+# last is dropped.
+[Test]
+merge_anchors_follow_a_growing_module() {
+    var folder = TempFolder("sema_merge_anchors");
+    var path = folder.path.join("main.pep");
+    File.write_text(
+        path,
+        "struct Point {\n    var x: int;\n    construct(x: int) {\n        this.x = x;\n    }\n    twice(): int {\n        return x + x;\n    }\n}\n"
+            + "half(p: Point): int {\n    return p.x / 2;\n}\nmain(): int {\n    return half(Point(4)) - 2;\n}\n"
+    );
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(path, setup);
+    expect_true(program.is_ok());
+    var built = sema.merge(program.value());
+    expect_true(built.is_ok());
+    var module = built.value();
+    var anchors = sema.MergeAnchors();
+    anchors.update(module);
+    _expect_same_anchors(module, anchors);
+    # A patch replaces a struct with a copy, here with a method more.
+    var point = module.structs[0];
+    var patched = point.copy();
+    var extra = point.method_members[0].copy();
+    extra.name = "thrice";
+    patched.method_members.append(extra);
+    module.structs[0] = patched;
+    anchors.update(module);
+    _expect_same_anchors(module, anchors);
+    expect_true(anchors.anchors.start("m Point\nthrice", extra.loc.file).is_value());
+    # A function declared twice has no one place; dropping one gives it back.
+    module.functions.append(module.functions[0].copy());
+    anchors.update(module);
+    _expect_same_anchors(module, anchors);
+    expect_false(anchors.anchors.start($"f {module.functions[0].name}", module.functions[0].loc.file).is_value());
+    module.functions.pop();
+    anchors.update(module);
+    _expect_same_anchors(module, anchors);
+    expect_true(anchors.anchors.start($"f {module.functions[0].name}", module.functions[0].loc.file).is_value());
+}
+
+# Each declaration's anchor is where `anchors_of(module)` puts it.
+_expect_same_anchors(module: sema.Module, anchors: sema.MergeAnchors) {
+    var fresh = sema.anchors_of(module);
+    var names = Array<(String, uint)>();
+    for (var s in module.structs) {
+        names.append(($"s {s.name}", s.loc.file));
+        for (var m in s.method_members) {
+            names.append(($"m {s.name}\n{m.name}", m.loc.file));
+        }
+        for (var c in s.constructors) {
+            names.append(($"m {s.name}\n{c.name}", c.loc.file));
+        }
+    }
+    for (var f in module.functions) {
+        names.append(($"f {f.name}", f.loc.file));
+    }
+    for (var (name, file) in names) {
+        var kept = anchors.anchors.start(name, file);
+        var found = fresh.start(name, file);
+        expect_equal(kept.is_value(), found.is_value());
+        if (kept.is_value() and found.is_value()) {
+            expect_equal(kept.value(), found.value());
+        }
+    }
+}
+
 # `module` written to a record and read back, as JSON.
 _round_trip(module: sema.Module): String {
     var out = sema.RecordOut();

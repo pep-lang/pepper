@@ -5,6 +5,7 @@
 ## nothing here: `__ptr<T>` is the only spelling of one, which the parser
 ## makes of C's `T*`.
 
+import [unit_decls] from "checked";
 import "common";
 import [Loc] from "loc";
 import [
@@ -302,17 +303,19 @@ extend _FunctionPointers with Rewriter;
 ## @param module the model, changed in place
 ## @param state the passes' state, which takes the first error
 export convert_intrinsics(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
     var free_functions = HashSet<String>();
     for (var f in module.functions) {
         free_functions.insert(f.name);
     }
     var free = _FunctionPointers(Optional<TypeName>.Empty, HashSet<String>(), free_functions, state);
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         if (f.body.is_value()) {
             rewrite_block(f.body.value(), free);
         }
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         var statics = HashSet<String>();
         for (var m in st.method_members) {
             if (m.is_static) {
@@ -327,17 +330,20 @@ export convert_intrinsics(module: Module, state: PassState) {
         }
     }
     var converter = _IntrinsicConverter(state);
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         _convert_intrinsics_of(f, converter);
     }
     for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            continue;
+        }
         if (g.default.is_value()) {
             g.default = Optional<Expression>.Value(rewrite_expression(g.default.value(), converter));
         }
     }
     # The bodies of a trait's default methods are converted in the structs
     # they are copied into.
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         for (var m in st.method_members) {
             _convert_intrinsics_of(m, converter);
         }

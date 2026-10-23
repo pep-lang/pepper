@@ -69,9 +69,42 @@ struct _Worker {
     }
 }
 
+# How many compilation units, itself included, the longest chain of units
+# reading `k` (directly or through others) holds, for each of `0..count`:
+# the ready compilation unit that most others wait on goes to a worker first,
+# as a build system schedules its critical path.
+_chain_lengths(units: CompilationUnit[], count: ulong): Array<ulong> {
+    var readers = Array<Array<ulong>>();
+    var lengths = Array<ulong>();
+    for (var _ in 0..count) {
+        readers.append(Array<ulong>());
+        lengths.append(1);
+    }
+    for (var k in 0..count) {
+        for (var d in units[k].reads) {
+            if (d < count) {
+                readers[d].append(k);
+            }
+        }
+    }
+    # The compilation units come after those they read: one pass from the
+    # last settles every length.
+    var k = count;
+    while (k > 0) {
+        k -= 1;
+        for (var reader in readers[k]) {
+            if (lengths[reader] + 1 > lengths[k]) {
+                lengths[k] = lengths[reader] + 1;
+            }
+        }
+    }
+    return lengths;
+}
+
 ## Checks compilation units `0..count` in up to `jobs` worker children of this
 ## executable (`<worker_args> --compilation-unit-worker <dir>`), each
-## compilation unit once the compilation units it reads are done, and puts in
+## compilation unit once the compilation units it reads are done (the one
+## the longest chain of others waits on first), and puts in
 ## `prechecked` the record, own interface and warnings of every one, found in
 ## the cache or checked: `check_compilation_units` takes them from there, not
 ## from the cache again, which builds running at once may have changed since. A
@@ -139,6 +172,7 @@ export check_in_workers(
         started.append(false);
     }
     var ready = Array<ulong>();
+    var lengths = _chain_lengths(units, count);
     var workers = Array<_Worker>();
     if (early_worker.is_value()) {
         workers.append(_Worker(early_worker.value()));
@@ -238,7 +272,13 @@ export check_in_workers(
                 workers.append(_Worker(spawned.value()));
                 idle = Optional<ulong>.Value(workers.count - 1);
             }
-            var k = ready.remove_at(0);
+            ulong first = 0;
+            for (var at in 1..ready.count) {
+                if (lengths[ready[at]] > lengths[ready[first]]) {
+                    first = at;
+                }
+            }
+            var k = ready.remove_at(first);
             var worker = workers[idle.value()];
             var sent = worker.child.stdin().write_all($"{k} {units[k].key}\n");
             if (sent.is_err()) {

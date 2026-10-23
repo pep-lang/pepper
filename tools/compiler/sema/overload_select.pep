@@ -9,6 +9,7 @@
 import [demangle_name] from compiler.link;
 import [int_literal_type, is_numeric_type] from "arithmetic";
 import [has_bare_attribute, IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
+import [checked_decls, unit_decls] from "checked";
 import [
     for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
@@ -88,6 +89,7 @@ struct _KeptMembers {
 }
 
 extend _KeptMembers with PassMemo;
+extend Overloads with PassMemo;
 
 ## What an argument tells resolution beyond its type.
 export enum ArgKind {
@@ -347,9 +349,22 @@ export struct Overloads {
     ## still waiting, or a generic member chosen): code whose walk made none
     ## comes out of a walk that settles unchanged.
     var settleable: ulong = 0;
-    ## What deciding generic constraints needs, when any is written.
+    ## What deciding generic constraints needs, when any is written: found
+    ## when a generic member is first checked (`_unmet`), from the module
+    ## the overloads were built of (most builds check none).
     var conformance: Conformance? = Optional<Conformance>.Empty;
+    var _unbuilt: Module? = Optional<Module>.Empty;
     var state: PassState;
+    # What the checked structs file, built once per compilation unit
+    # (`PassState.unit_memos`): their methods, constructor sets, `[Implicit]`
+    # constructors and traits. Each lookup reads these too, under what the
+    # rest of the module files.
+    var _base: Overloads? = Optional<Overloads>.Empty;
+    # In a base: each struct it filed, with how many methods, generic
+    # methods and constructors it had then.
+    var _covered: HashMap<String, (StructDef, ulong, ulong, ulong)> = HashMap<String, (StructDef, ulong, ulong, ulong)>();
+    # In a base: the checked functions' members, as lookups made them.
+    var _members_of: HashMap<String, Member?> = HashMap<String, Member?>();
 
     ## Returns the overload sets of `module`.
     ##
@@ -364,11 +379,106 @@ export struct Overloads {
         }
     }
 
-    _build(module: Module, known_trait_types: TypeName[]?) {
-        if (has_constraints(module)) {
-            conformance = Optional<Conformance>.Value(Conformance(module, state));
+    construct(state: PassState) {
+        this.state = state;
+    }
+
+    # The checked structs' entries, built once per compilation unit.
+    static _checked_base(module: Module, state: PassState): Overloads {
+        var kept = state.unit_memos.try_get("overloads");
+        if (kept.is_value()) {
+            var base = kept.value() as? Overloads;
+            if (base.is_value()) {
+                return base.value();
+            }
         }
+        var out = Overloads(state);
         for (var st in module.structs) {
+            if (!module.checked.structs.contains(st.name) or state.extended_checked.contains(st.name)) {
+                continue;
+            }
+            out._covered[st.name] = (st, st.method_members.count, st.generic_methods.count, st.constructors.count);
+            for (var (key, set, member) in out._struct_members(module, st, state)) {
+                out._add_method(key, set, member);
+            }
+            out._add_constructors(st);
+            if (st.traits.count > 0) {
+                out._conform(st.ty.to_string(), st.traits);
+            }
+        }
+        state.unit_memos["overloads"] = out;
+        return out;
+    }
+
+    # Whether this base's entries stand for `st`.
+    _covers(st: StructDef): bool {
+        var found = _covered.try_get(st.name);
+        if (!found.is_value()) {
+            return false;
+        }
+        var (was, methods, generics, constructors) = found.value();
+        return was === st
+            and methods == st.method_members.count
+            and generics == st.generic_methods.count
+            and constructors == st.constructors.count
+            and !state.extended_checked.contains(st.name);
+    }
+
+    # The member checked function `name` makes, if it is one.
+    _checked_member(module: Module, name: String): Member? {
+        var known = _members_of.try_get(name);
+        if (known.is_value()) {
+            return known.value();
+        }
+        var decls = checked_decls(module, state);
+        var f = decls.functions.try_get(name);
+        if (!f.is_value()) {
+            f = decls.generic_functions.try_get(name);
+        }
+        var member = f.is_value() ? Optional<Member>.Value(Member(f.value(), state)) : Optional<Member>.Empty;
+        _members_of[name] = member;
+        return member;
+    }
+
+    # Files `st`'s constructor set, when it has more than one, and its
+    # `[Implicit]` constructor.
+    _add_constructors(st: StructDef) {
+        if (st.ty.is_generic() and st.name == st.ty.name) {
+            return;
+        }
+        if (st.constructors.count > 1) {
+            var set = st.ty.to_string();
+            var members = Array<Member>();
+            for (var c in st.constructors) {
+                members.append(Member(c, state));
+            }
+            sets[set] = members;
+            constructors.insert(set);
+        }
+        for (var c in st.constructors) {
+            if (has_bare_attribute(c.attributes, IMPLICIT_ATTRIBUTE)) {
+                if (c.parameters.count > 0) {
+                    implicit[_canonical(st.ty).to_string()] = c.parameters[0].ty;
+                }
+                break;
+            }
+        }
+    }
+
+    _build(module: Module, known_trait_types: TypeName[]?) {
+        _unbuilt = Optional<Module>.Value(module);
+        if (module.checked.structs.count > 0) {
+            _base = Optional<Overloads>.Value(Overloads._checked_base(module, state));
+        }
+        # A struct the base files is left to it; one it does not is one of
+        # the unit's own, or a checked one the unit changed.
+        var own = Array<StructDef>();
+        for (var st in module.structs) {
+            if (!_base.is_value() or !_base.value()._covers(st)) {
+                own.append(st);
+            }
+        }
+        for (var st in own) {
             for (var (key, set, member) in _struct_members(module, st, state)) {
                 _add_method(key, set, member);
             }
@@ -385,7 +495,7 @@ export struct Overloads {
                 continue;
             }
             var key = _canonical(ty).to_string();
-            if (methods.contains(key)) {
+            if (_methods_of(key).is_value()) {
                 continue;
             }
             for (var method in instance(def.value(), ty).methods) {
@@ -403,7 +513,9 @@ export struct Overloads {
             }
         }
         var functions = HashMap<String, FunctionDef>();
-        for (var f in module.functions) {
+        # The checked functions are looked up by name (`checked_decls`).
+        var candidates = _base.is_value() ? unit_decls(module).functions : module.functions;
+        for (var f in candidates) {
             if (wanted.contains(f.name)) {
                 functions[f.name] = f;
             }
@@ -414,6 +526,11 @@ export struct Overloads {
                 var f = functions.try_get(m);
                 if (f.is_value()) {
                     members.append(Member(f.value(), state));
+                } else if (_base.is_value()) {
+                    var checked = _base.value()._checked_member(module, m);
+                    if (checked.is_value()) {
+                        members.append(checked.value());
+                    }
                 }
             }
             sets[set] = members;
@@ -435,30 +552,11 @@ export struct Overloads {
                 }
             }
         }
-        for (var st in module.structs) {
-            if (st.ty.is_generic() and st.name == st.ty.name) {
-                continue;
-            }
-            if (st.constructors.count > 1) {
-                var set = st.ty.to_string();
-                var members = Array<Member>();
-                for (var c in st.constructors) {
-                    members.append(Member(c, state));
-                }
-                sets[set] = members;
-                constructors.insert(set);
-            }
-            for (var c in st.constructors) {
-                if (has_bare_attribute(c.attributes, IMPLICIT_ATTRIBUTE)) {
-                    if (c.parameters.count > 0) {
-                        implicit[_canonical(st.ty).to_string()] = c.parameters[0].ty;
-                    }
-                    break;
-                }
-            }
+        for (var st in own) {
+            _add_constructors(st);
         }
         # A type with no traits needs no entry: one with none reads the same.
-        for (var st in module.structs) {
+        for (var st in own) {
             if (st.traits.count > 0) {
                 _conform(st.ty.to_string(), st.traits);
             }
@@ -517,6 +615,13 @@ export struct Overloads {
     ## Why `type_args` do not meet `signature`'s constraints, as a note
     ## (`'T' does not conform to 'Hashable'`); empty when they do.
     _unmet(signature: GenericSignature, type_args: TypeName[]): String? {
+        if (_unbuilt.is_value()) {
+            var module = _unbuilt.value();
+            _unbuilt = Optional<Module>.Empty;
+            if (has_constraints(module)) {
+                conformance = Optional<Conformance>.Value(Conformance(module, state));
+            }
+        }
         if (!conformance.is_value()) {
             return Optional<String>.Empty;
         }
@@ -526,6 +631,16 @@ export struct Overloads {
     _add_method(key: String, set: String, member: Member) {
         if (!methods.contains(key)) {
             methods[key] = HashMap<String, Array<Member>>();
+            # Two spellings of one type, one of them the base's: its
+            # members come first, as the base's structs did.
+            if (_base.is_value()) {
+                var filed = _base.value().methods.try_get(key);
+                if (filed.is_value()) {
+                    for (var (name, members) in filed.value()) {
+                        methods[key][name] = members.clone();
+                    }
+                }
+            }
         }
         var sets_of = methods[key];
         if (!sets_of.contains(set)) {
@@ -546,25 +661,50 @@ export struct Overloads {
     _conform(key: String, more: TypeName[]) {
         if (!conforms.contains(key)) {
             conforms[key] = Array<TypeName>();
+            if (_base.is_value()) {
+                var filed = _base.value().conforms.try_get(key);
+                if (filed.is_value()) {
+                    conforms[key].append_all(filed.value());
+                }
+            }
         }
         conforms[key].append_all(more);
     }
 
     ## Returns whether `name` names an overload set.
     is_set(name: String): bool {
-        return sets.contains(name);
+        return sets.contains(name) or (_base.is_value() and _base.value().sets.contains(name));
     }
 
     ## Returns whether there is nothing to resolve.
     is_empty(): bool {
-        return sets.count == 0 and methods.count == 0;
+        return sets.count == 0 and methods.count == 0 and (!_base.is_value() or _base.value().is_empty());
+    }
+
+    # Whether `set` is a struct's constructor set.
+    _is_constructor_set(set: String): bool {
+        return constructors.contains(set) or (_base.is_value() and _base.value().constructors.contains(set));
+    }
+
+    # The method sets filed under struct type `key`.
+    _methods_of(key: String): HashMap<String, Array<Member>>? {
+        var found = methods.try_get(key);
+        if (found.is_value() or !_base.is_value()) {
+            return found;
+        }
+        return _base.value().methods.try_get(key);
+    }
+
+    # Whether some struct has a method set named `name`.
+    _has_method_set_name(name: String): bool {
+        return method_set_names.contains(name) or (_base.is_value() and _base.value().method_set_names.contains(name));
     }
 
     ## Returns the set a call to `function` names and the type arguments
     ## it spells: `f<int>` is set `f` with `[int]`, but `Box<int>` is the
     ## constructor set of `Box<int>`.
     call_set(function: String): (String, TypeName[]?) {
-        if (constructors.contains(function)) {
+        if (_is_constructor_set(function)) {
             return (function, Optional<TypeName[]>.Empty);
         }
         return split_type_arguments(function);
@@ -573,7 +713,7 @@ export struct Overloads {
     ## Returns the set a call to `function` names, without parsing its type
     ## arguments.
     call_set_name(function: String): String {
-        if (constructors.contains(function) or set_name(function) != function) {
+        if (_is_constructor_set(function) or set_name(function) != function) {
             return function;
         }
         var at = function.find("<");
@@ -583,6 +723,9 @@ export struct Overloads {
     ## The members of `set` code at `at` can see.
     _set(set: String, at: Loc): Array<Member>? {
         var all = sets.try_get(set);
+        if (!all.is_value() and _base.is_value()) {
+            all = _base.value().sets.try_get(set);
+        }
         if (!all.is_value()) {
             return Optional<Array<Member>>.Empty;
         }
@@ -670,7 +813,7 @@ export struct Overloads {
     ## Returns `candidate function` notes, one per member of `set` visible
     ## at `at`.
     candidate_notes(set: String, at: Loc): Array<(String, Loc)> {
-        var what = constructors.contains(set) ? "candidate constructor" : "candidate function";
+        var what = _is_constructor_set(set) ? "candidate constructor" : "candidate function";
         var out = Array<(String, Loc)>();
         var members = _set(set, at);
         if (members.is_value()) {
@@ -753,6 +896,9 @@ export struct Overloads {
         }
         if (traits.contains(p.name)) {
             var declared = conforms.try_get(a_name);
+            if (!declared.is_value() and _base.is_value()) {
+                declared = _base.value().conforms.try_get(a_name);
+            }
             if (declared.is_value()) {
                 for (var t in declared.value()) {
                     if (_canonical(t) == p) {
@@ -786,6 +932,9 @@ export struct Overloads {
         }
         if (implicit_allowed) {
             var from = implicit.try_get(p_name);
+            if (!from.is_value() and _base.is_value()) {
+                from = _base.value().implicit.try_get(p_name);
+            }
             if (from.is_value()) {
                 var inner = _rank_class(arg, from.value(), false);
                 if (inner.is_value() and inner.value() <= 1) {
@@ -807,7 +956,7 @@ export struct Overloads {
         }
         var outcome = _select_in(members.value(), demangle_name(set), explicit, args);
         if (outcome is Failed(failure)) {
-            if (constructors.contains(set)) {
+            if (_is_constructor_set(set)) {
                 return Outcome.Failed(_constructor_failure(failure, set));
             }
         }
@@ -832,7 +981,7 @@ export struct Overloads {
     ## The members of method set `set` of `receiver`'s struct code at `at`
     ## can see.
     _method_set(receiver: TypeName, set: String, at: Loc): Array<Member>? {
-        var sets_of = methods.try_get(_canonical(receiver).to_string());
+        var sets_of = _methods_of(_canonical(receiver).to_string());
         if (!sets_of.is_value()) {
             return Optional<Array<Member>>.Empty;
         }
@@ -856,17 +1005,17 @@ export struct Overloads {
 
     ## Returns whether some struct has a method overload set named `set`.
     is_any_method_set(set: String): bool {
-        return method_set_names.contains(_method_set_name(set));
+        return _has_method_set_name(_method_set_name(set));
     }
 
     ## Returns whether `set` names a method overload set of `receiver`'s
     ## struct.
     is_method_set(receiver: TypeName, set: String): bool {
         var name = _method_set_name(set);
-        if (!method_set_names.contains(name)) {
+        if (!_has_method_set_name(name)) {
             return false;
         }
-        var sets_of = methods.try_get(_canonical(receiver).to_string());
+        var sets_of = _methods_of(_canonical(receiver).to_string());
         return sets_of.is_value() and sets_of.value().contains(name);
     }
 
@@ -1499,7 +1648,7 @@ export struct FunctionValueSearch {
         this.module = module;
         this.state = state;
         this.trait_types = trait_types;
-        this.filter = _CandidateNames(module);
+        this.filter = _CandidateNames(module, state);
     }
 
     ## The overloads, built on first use: most runs find no site to bind.
@@ -1522,26 +1671,50 @@ export struct FunctionValueSearch {
 struct _CandidateNames {
     var sets: HashSet<String> = HashSet<String>();
     var method_set_names: HashSet<String> = HashSet<String>();
+    # The checked structs' names, found once per unit
+    # (`TraitTypeMemo.candidates`): a checked struct only gains methods, and
+    # then it is one of the unit's own (`unit_decls`) too.
+    var _base: _CandidateNames? = Optional<_CandidateNames>.Empty;
 
-    construct(module: Module) {
+    construct() {}
+
+    construct(module: Module, state: PassState) {
         for (var (set, _) in module.overload_sets) {
             sets.insert(set);
         }
-        for (var st in module.structs) {
-            for (var method in st.method_members) {
-                _method(method.name);
+        var memo = state.trait_memo;
+        bool checked = module.checked.structs.count > 0;
+        if (checked and !memo.candidates.is_value()) {
+            var base = _CandidateNames();
+            for (var st in module.structs) {
+                if (module.checked.structs.contains(st.name)) {
+                    base._struct(st);
+                }
             }
-            for (var method in st.generic_methods) {
-                _method(method.name);
-            }
-            if (!(st.ty.is_generic() and st.name == st.ty.name) and st.constructors.count > 1) {
-                sets.insert(st.ty.to_string());
-            }
+            memo.candidates = Optional<PassMemo>.Value(base);
+        }
+        if (checked) {
+            _base = memo.candidates.value() as? _CandidateNames;
+        }
+        for (var st in unit_decls(module).structs) {
+            _struct(st);
         }
         for (var t in module.traits) {
             for (var method in t.methods) {
                 _method(method.name);
             }
+        }
+    }
+
+    _struct(st: StructDef) {
+        for (var method in st.method_members) {
+            _method(method.name);
+        }
+        for (var method in st.generic_methods) {
+            _method(method.name);
+        }
+        if (!(st.ty.is_generic() and st.name == st.ty.name) and st.constructors.count > 1) {
+            sets.insert(st.ty.to_string());
         }
     }
 
@@ -1555,10 +1728,13 @@ struct _CandidateNames {
     wants(e: Expression): bool {
         match (e) {
             SymbolRef(node) => {
-                return node.ty.contains_auto() and sets.contains(node.id);
+                return node.ty.contains_auto()
+                    and (sets.contains(node.id) or (_base.is_value() and _base.value().sets.contains(node.id)));
             }
             MemberRef(node) => {
-                return method_set_names.contains(_method_set_name(node.name));
+                var set = _method_set_name(node.name);
+                return method_set_names.contains(set)
+                    or (_base.is_value() and _base.value().method_set_names.contains(set));
             }
             else => {}
         }
@@ -1567,6 +1743,7 @@ struct _CandidateNames {
 }
 
 extend _CandidateNames with SiteFilter;
+extend _CandidateNames with PassMemo;
 
 ## What `bind_function_values` looks for in `module`, if it has overloads.
 ##

@@ -898,6 +898,31 @@ fails rather than copying.
 File.rename(Path("draft.txt"), Path("final.txt"));
 ```
 
+#### hard_link
+
+```pepper
+static hard_link(from: Path, to: Path): IoResult<void>
+```
+
+Creates a hard link at `to` to the file `from` (`link` on POSIX,
+`CreateHardLinkW` on Windows): a second name for the same file, which
+keeps its contents when `from` is renamed or removed.
+
+Both names must be on one file system (volume); across two it fails
+rather than copying, and so do directories.
+
+**Parameters**
+- `from` — the existing file
+- `to` — the new name
+
+**Returns**
+- an Ok result once `to` names the file; an error with `is_not_found()` when `from` (or the parent of `to`) does not exist or a path is empty, `is_already_exists()` when something is already at `to`, `is_permission_denied()`, or another platform error
+
+**Example**
+```pepper
+File.hard_link(Path("build/app.o"), Path("pinned/app.o"));
+```
+
 #### symlink
 
 ```pepper
