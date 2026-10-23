@@ -55,6 +55,8 @@ extern int RemoveDirectoryW(ushort* path);
 [Target(OS(Windows))]
 extern int DeleteFileW(ushort* path);
 [Target(OS(Windows))]
+extern int CreateHardLinkW(ushort* link, ushort* existing, void* security);
+[Target(OS(Windows))]
 extern int MoveFileExW(ushort* from, ushort* to, uint flags);
 [Target(OS(Windows))]
 extern uint GetFullPathNameW(ushort* name, uint size, ushort* buf, void* file_part);
@@ -603,6 +605,17 @@ _io_sys_rename(from: Path, to: Path): IoResult<void> {
     var wf = _io_win_path(from);
     var wt = _io_win_path(to);
     var ok = MoveFileExW(wf, wt, 1);
+    var code = GetLastError();
+    _pep_free(wf);
+    _pep_free(wt);
+    return _io_win_check_code(ok, code);
+}
+
+[Target(OS(Windows))]
+_io_sys_hard_link(from: Path, to: Path): IoResult<void> {
+    var wf = _io_win_path(from);
+    var wt = _io_win_path(to);
+    var ok = CreateHardLinkW(wt, wf, __null);
     var code = GetLastError();
     _pep_free(wf);
     _pep_free(wt);

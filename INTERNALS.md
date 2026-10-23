@@ -1964,7 +1964,7 @@ changed.
   emitted again; the others are linked from the cache. Each folder is
   written to the build folder and moved into place as one. The same key
   gives the same objects, so they never change once there, and builds share
-  the cache without locks or copies: a hit is linked where it is. Each
+  the cache without locks or copies. Each
   unit, and each part, keeps its newest eight keys, and none stored or
   reused in the last ten minutes, since a build may be linking it; a unit
   hit marks its parts reused too, so a build storing newer keys of a part
@@ -1982,7 +1982,15 @@ changed.
   moved aside and back between two looks cannot end the list early. Once a
   build marked a key, a prune that reads its time later keeps it, so only a
   prune already past that check when the build marked it can move it, and
-  it moves it straight back. A unit's folder
+  it moves it straight back. Such a prune may stall between its check and
+  its rename past the build's last look, so the link does not read the
+  cache's objects where they are: `Cache.pin` hard-links each into the
+  build's folder (`pinned/`), looking again while one is missing (one on
+  another volume than the build's folder stays where it is), and the linker reads the links,
+  which keep the files wherever the folder goes (#178). A hard link costs
+  no copy, and the build's folder is removed after the link. A grace
+  period alone cannot close this: the prune's check and its rename are two
+  steps, and a stall between them has no bound. A unit's folder
   spells the `/` of its name as `.` (`u/process.command#0/`), so each
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
