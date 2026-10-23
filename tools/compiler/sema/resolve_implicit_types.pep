@@ -44,6 +44,7 @@ import [
     Module,
     Statement,
     StructDef,
+    SubjectExpression,
     SymbolRefExpression,
     TraitDef,
     TypeName,
@@ -1978,7 +1979,10 @@ struct _TypeScopes {
             if (!lhs_type.is_empty() and !lhs_type.is_auto()) {
                 var args = Array<Expression>();
                 args.append(node.rhs);
-                var call = Expression.MethodCall(MethodCallExpression(node.lhs, "__index_get", args, node.loc));
+                # The receiver stands typed: typing `node.lhs` again would
+                # double the work at each level of `a[0][0]...`.
+                var receiver = Expression.Subject(SubjectExpression(id = 0, ty = lhs_type, loc = node.loc));
+                var call = Expression.MethodCall(MethodCallExpression(receiver, "__index_get", args, node.loc));
                 return type_of(call, current);
             }
         }
