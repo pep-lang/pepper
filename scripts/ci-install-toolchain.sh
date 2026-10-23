@@ -134,8 +134,10 @@ fi
 # to check it against.
 if [ "$mode" = pin ]; then
   pin=.github/stage0
-  version="$(sed -n 's/^version //p' "$pin")"
-  commit="$(sed -n 's/^commit //p' "$pin")"
+  # A Windows checkout may end its lines with CRLF.
+  pinned="$(tr -d '\r' < "$pin")"
+  version="$(sed -n 's/^version //p' <<< "$pinned")"
+  commit="$(sed -n 's/^commit //p' <<< "$pinned")"
   case "$windows-$(uname -s)-$(uname -m)" in
     1-*) platform=windows-x64 ext=.zip ;;
     0-Linux-x86_64) platform=linux-x64 ext=.tar.gz ;;
@@ -147,7 +149,7 @@ if [ "$mode" = pin ]; then
   mkdir -p "$downloads"
   echo "=== stage 0 ($pin): Pepper $version, the build of $commit"
   for name in "pepper-$version-$platform$ext" "pepper-install-$version-$platform$ext"; do
-    grep -E "^[0-9a-f]{64} [ *]$name\$" "$pin" > "$downloads/$name.sha256" \
+    grep -E "^[0-9a-f]{64} [ *]$name\$" <<< "$pinned" > "$downloads/$name.sha256" \
       || { echo "error: $pin pins no $name" >&2; exit 1; }
     curl -fsSL --retry 5 --retry-all-errors -o "$downloads/$name" \
       "https://github.com/pep-lang/pepper/releases/download/stage0/${commit:0:12}-$name"
