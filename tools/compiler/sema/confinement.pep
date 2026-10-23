@@ -9,8 +9,9 @@
 ## the lock's region with the outer one (or another lock's) is an error at the
 ## value that would cross, as is returning part of the locked value from the
 ## block. A local declared inside a `with` block is new, but outlives every
-## lock opened after it, so it cannot hold part of one (`_Region.depth`). Summaries are a least fixed point over the call graph; a call through
-## a trait value joins the summaries of the methods implementing it. A summary a
+## lock opened after it, so it cannot hold part of one (`_Region.depth`).
+## Summaries are a least fixed point over the call graph; a call through a
+## trait value joins the summaries of the methods implementing it. A summary a
 ## checked compilation unit recorded keeps, for each trait call it reaches, the
 ## join it was made with rather than the structs it reached, and holds in a
 ## later compilation unit wherever those joins are the same (`_stale`). The pass
