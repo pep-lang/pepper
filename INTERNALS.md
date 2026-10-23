@@ -3158,7 +3158,9 @@ lines are always taken: the compiler's own code calls its functions by name
 checks every compilation unit but the last in `pepc --compilation-unit-worker <dir>` children,
 started with the build's own command line. A compilation unit is handed to an idle
 worker once every compilation unit it reads is done, as its number and key on the
-worker's standard input; before each one a worker reads and links the
+worker's standard input; of the ready ones, the one the longest chain of
+compilation units reading it waits on goes first (`_chain_lengths`), as a build
+system schedules its critical path; before each one a worker reads and links the
 bodies of its files only (`Program.link_bodies`, which links more files'
 bodies each time it is called), since the compilation units it reads come as
 records. The
@@ -3270,13 +3272,37 @@ the cache has one. Otherwise it checks the compilation unit:
    only when the compilation unit's code names it (`checked_decls`, built once per
    compilation unit), so a round costs in proportion to the compilation unit, not its closure.
    `SiteTable` works this way, and so do `resolve_implicit_types`' `ImplicitTables`,
-   `Callees` and declaration fingerprints: they walk `unit_decls`, whose structs
+   `Callees` and declaration fingerprints, `StructTable`, `used_trait_types`
+   and `record_conformances`, and the tables of `convert_to_traits`,
+   `reference_functions`, `shared_functions`, `check_type_arguments` and
+   `check_interpolations`: they walk `unit_decls`, whose structs
    include every checked one the compilation unit extended or specialized a method for.
-   So do `synthesize_function_types`, the C-signature check of
+   What a table needs of every checked declaration is found once per compilation
+   unit and kept in `PassState.unit_memos` (or `TraitTypeMemo`), read under
+   what the unit's own declarations give each round: `Overloads`' checked
+   structs' methods, constructor sets, `[Implicit]` constructors and traits
+   (and each checked function's member, made when a set first names it), the
+   names `bind_function_values` and `bind_generic_method_values` look for,
+   and the checked structs' conformances. A table a pass rebuilds each round
+   over lists that only grow (`gather_generics`' symbol table and the specs'
+   spellings, `specialize_structs`' and `specialize_functions`' names, bases
+   and the specs done) keeps itself for the unit and takes in only what was
+   appended since, or all of a list a pass replaced.
+   The walks over code skip the checked declarations too, whose code was
+   walked with its own compilation unit (and whose bodies are stashed): a unit
+   walk (`for_each_place(unit = true)`) leaves out the checked structs,
+   functions, extensions (`Checked.extensions`, the first ones) and
+   module-scope variables. So do `synthesize_function_types`, the C-signature check of
    `shared_functions`, `lift_closures` and `resolve_type_aliases`: a checked
    declaration's function, tuple and weak types got their structs, its signatures
    their check, its closures their structs and its aliases their expansion with its
-   own compilation unit. `restore_bodies` puts back only what `stash_bodies` took
+   own compilation unit; and `apply_platform_filters`, `resolve_enum_cases`,
+   `check_ranges`, `check_interpolations`, `resolve_injected`,
+   `resolve_operators`, `convert_to_traits`, `reference_functions`,
+   `shared_functions`, `check_overloads`, `check_type_arguments`,
+   `check_value_structs`' type checks, `check_casts`, `check_conditions`,
+   `check_function_types`, `convert_intrinsics`, `lower_with_blocks`,
+   `lower_matches` and `check_deprecated_members`. `restore_bodies` puts back only what `stash_bodies` took
    (`PassState.stashed_from`), and `stash_bodies` run again (before the passes
    that lower bodies) takes out only those of these that a pass put back: a
    method the compilation unit added to a checked struct (a generic method's
@@ -3353,7 +3379,7 @@ Loading a record costs a read and a merge, not a check. A worker, and a build
 with one job, checks one compilation unit after another in one process, so
 nothing a check makes may outlive it: `run_steps_with` drops the memos of
 `PassState` that hold `GenericSignature`s (`checked_implicit`,
-`trait_memo.members`), which hold the state. That cycle once kept every
+`trait_memo.members`, `unit_memos`), which hold the state. That cycle once kept every
 unit's state and the closure it reached alive, 8 GB in a worker and over 50
 GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
@@ -3423,7 +3449,12 @@ the old bytes. So a delta writes each location in a file of its base
 from the declaration at or before it (`LocAnchors`, from `anchors_of` the
 base: its structs, templates, traits and enums, their methods and
 constructors, and its functions, each by name), as the declaration's name, its
-start then, and the location's offsets from it. Reading the record onto a
+start then, and the location's offsets from it. `merged_module` keeps the
+anchors of the base it grows up to date as it reads (`MergeAnchors`): a read
+keeps the base's declarations but those it patches, and adds its own after
+them, so only a declaration not the one at its place before is taken in
+(finding them anew from the whole base before each record made merging a
+closure quadratic in its size). Reading the record onto a
 base puts it at that declaration's start there, or the start as written when
 no one declaration of that name is in that file now.
 

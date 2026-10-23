@@ -186,6 +186,9 @@ export struct PassState {
     ## generic base, by its name with its parameters, as
     ## `type_arguments.record_conformances` sets them.
     var conformances: HashMap<String, (String[], TypeName[])> = HashMap<String, (String[], TypeName[])>();
+    ## The same for the checked structs, found once per compilation unit:
+    ## `conformances` then holds only the unit's own structs.
+    var checked_conformances: HashMap<String, (String[], TypeName[])>? = Optional<HashMap<String, (String[], TypeName[])>>.Empty;
     ## Every trait's name, for a `match` on a trait value, as
     ## `enums.install_traits` records them.
     var trait_names: HashSet<String> = HashSet<String>();
@@ -215,6 +218,10 @@ export struct PassState {
     ## once per unit: an `ImplicitTables`, as `resolve_implicit_types`
     ## keeps it.
     var checked_implicit: PassMemo? = Optional<PassMemo>.Empty;
+    ## What a pass found in the checked declarations, by pass, built once
+    ## per compilation unit (`resolve_implicit_types`, `check_interpolations`,
+    ## ...): those stay as they are while the passes run.
+    var unit_memos: HashMap<String, PassMemo> = HashMap<String, PassMemo>();
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
@@ -401,11 +408,17 @@ export struct TraitTypeMemo {
     ## Each checked struct's overloaded methods for `Overloads`, by name,
     ## as `overload_select` keeps them.
     var members: HashMap<String, PassMemo> = HashMap<String, PassMemo>();
+    ## The names the checked structs' methods and constructors make
+    ## overload sets of, as `overload_select` keeps them.
+    var candidates: PassMemo? = Optional<PassMemo>.Empty;
     var checked_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
     ## Whether the checked declarations' bodies are stashed: from
     ## `stash_bodies` to `restore_bodies`. While they are, `used_trait_types`
     ## looks through the checked declarations once, into `checked_types`.
     var stashed: bool = false;
+    ## Whether `check_confinement` put a checked function's body back since
+    ## the bodies were stashed.
+    var bodies_back: bool = false;
     ## What `used_trait_types` found in the settled checked declarations
     ## (the trait types, and the names and types it looked through), with
     ## the checked structs it must look through each time (not settled),
@@ -415,6 +428,34 @@ export struct TraitTypeMemo {
     var checked_types_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
 
     construct() {}
+}
+
+## Follows a list the passes only append to (the module's structs and
+## functions, its specs), so a table a pass keeps from it for the
+## compilation unit takes in only what was appended since it last looked: all
+## of it again when a pass replaced the list.
+##
+## @typeParam T the list's items
+export struct GrowingList<T> {
+    var _list: T[] = Array<T>();
+    var _taken: ulong = 0;
+
+    construct() {}
+
+    ## Where the items of `list` not taken in yet start, and whether that is
+    ## its first (`list` is not the list taken from before, or is shorter):
+    ## the table kept from it then starts over. Every item counts as taken
+    ## once this returns.
+    ##
+    ## @param list the list as it is now
+    ## @returns the first item not taken in, and whether the list is a new one
+    since(list: T[]): (ulong, bool) {
+        bool fresh = !(_list === list) or _taken > list.count;
+        var from = fresh ? 0 : _taken;
+        _list = list;
+        _taken = list.count;
+        return (from, fresh);
+    }
 }
 
 ## What a run of `resolve_implicit_types` leaves for the next: what each

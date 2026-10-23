@@ -7,7 +7,7 @@
 import [Location] from compiler.diagnostic;
 import [mangle] from compiler.link;
 import text;
-import [has_body] from "checked";
+import [checked_decls, has_body, unit_decls] from "checked";
 import [closure_struct, CLOSURE_PREFIX, field_def] from "closures";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
@@ -60,7 +60,9 @@ struct _Signature {
     }
 }
 
-## What the program declares that a reference can name.
+## What the program declares that a reference can name: the unit's own
+## declarations (`unit_decls`), and a checked one taken in when a lookup
+## names it (`checked_decls`).
 struct _Referenceable {
     var methods: HashMap<String, HashMap<String, _Signature>> = HashMap<String, HashMap<String, _Signature>>();
     var fields: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
@@ -69,62 +71,34 @@ struct _Referenceable {
     var generic_functions: HashMap<String, _Signature> = HashMap<String, _Signature>();
     var variadic_externs: HashSet<String> = HashSet<String>();
     var statics: StructTable;
+    var module: Module;
+    var state: PassState;
+    var _checked: bool;
+    # The checked structs' types taken in, and the checked names looked up.
+    var _taken: HashSet<String> = HashSet<String>();
+    var _looked_up: HashSet<String> = HashSet<String>();
 
     construct(module: Module, state: PassState) {
+        this.module = module;
+        this.state = state;
+        _checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         statics = StructTable(module, memo = state.trait_types_memo());
-        for (var st in module.structs) {
-            if (st.generic_params.count != 0) {
-                continue;
-            }
-            var key = st.ty.to_string();
-            if (!methods.contains(key)) {
-                methods[key] = HashMap<String, _Signature>();
-            }
-            var own = methods[key];
-            for (var m in st.method_members) {
-                if (!m.name.starts_with("__") and !own.contains(m.name)) {
-                    own[m.name] = _Signature(m);
-                }
-            }
-            var names = Array<String>();
-            for (var f in st.field_members) {
-                names.append(f.name);
-            }
-            fields[key] = names;
-            for (var c in st.constructors) {
-                var ctor = _Signature(c);
-                ctor.ret = st.ty;
-                ulong i = 0;
-                while (i < ctor.params.count) {
-                    var (name, ty) = ctor.params[i];
-                    if (ty.contains_auto() or ty.is_empty()) {
-                        for (var f in st.field_members) {
-                            if (f.name == name) {
-                                ctor.params[i] = (name, f.ty);
-                                break;
-                            }
-                        }
-                    }
-                    i += 1;
-                }
-                constructors[c.name] = ctor;
-            }
-            if (!st.name.starts_with("__") and !key.contains("<")) {
-                plain_structs[st.name] = st.ty;
-            }
+        var own = unit_decls(module);
+        for (var st in own.structs) {
+            _add_struct(st);
         }
         for (var ty in used_trait_types(module, state.trait_types_memo())) {
             var def = trait_def(module.traits, ty);
             var key = ty.to_string();
             if (def.is_value() and !methods.contains(key)) {
-                var own = HashMap<String, _Signature>();
+                var own_methods = HashMap<String, _Signature>();
                 for (var m in instance(def.value(), ty).methods) {
-                    own[m.name] = _Signature(m);
+                    own_methods[m.name] = _Signature(m);
                 }
-                methods[key] = own;
+                methods[key] = own_methods;
             }
         }
-        for (var f in module.functions) {
+        for (var f in own.functions) {
             if (!f.is_generic_func and f.name.contains("<") and has_body(module, state, f)) {
                 generic_functions[f.name] = _Signature(f);
             }
@@ -136,7 +110,91 @@ struct _Referenceable {
         }
     }
 
+    # Takes in `st`, unless it is generic.
+    _add_struct(st: StructDef) {
+        if (st.generic_params.count != 0) {
+            return;
+        }
+        var key = st.ty.to_string();
+        if (!methods.contains(key)) {
+            methods[key] = HashMap<String, _Signature>();
+        }
+        var own = methods[key];
+        for (var m in st.method_members) {
+            if (!m.name.starts_with("__") and !own.contains(m.name)) {
+                own[m.name] = _Signature(m);
+            }
+        }
+        var names = Array<String>();
+        for (var f in st.field_members) {
+            names.append(f.name);
+        }
+        fields[key] = names;
+        for (var c in st.constructors) {
+            var ctor = _Signature(c);
+            ctor.ret = st.ty;
+            ulong i = 0;
+            while (i < ctor.params.count) {
+                var (name, ty) = ctor.params[i];
+                if (ty.contains_auto() or ty.is_empty()) {
+                    for (var f in st.field_members) {
+                        if (f.name == name) {
+                            ctor.params[i] = (name, f.ty);
+                            break;
+                        }
+                    }
+                }
+                i += 1;
+            }
+            constructors[c.name] = ctor;
+        }
+        if (!st.name.starts_with("__") and !key.contains("<")) {
+            plain_structs[st.name] = st.ty;
+        }
+    }
+
+    # Takes in the checked struct of type `key`, once, unless the unit's own
+    # entry for it stands.
+    _checked_struct(key: String) {
+        if (!_checked or fields.contains(key) or !_taken.insert(key)) {
+            return;
+        }
+        var st = checked_decls(module, state).structs.try_get(key);
+        if (st.is_value()) {
+            _add_struct(st.value());
+        }
+    }
+
+    # Takes in the checked declarations named `name`, once: the struct, a
+    # constructor's struct, and the specialized function.
+    _checked_name(name: String) {
+        if (!_checked or !_looked_up.insert(name)) {
+            return;
+        }
+        var dollar = name.find("$");
+        _checked_struct(dollar < 0 ? name : name.substr_bytes(0, dollar as ulong));
+        if (!generic_functions.contains(name)) {
+            var f = checked_decls(module, state).functions.try_get(name);
+            if (f.is_value() and f.value().name.contains("<") and has_body(module, state, f.value())) {
+                generic_functions[name] = _Signature(f.value());
+            }
+        }
+    }
+
+    ## The constructor a call named `name` names, if any.
+    constructor(name: String): _Signature? {
+        _checked_name(name);
+        return constructors.try_get(name);
+    }
+
+    ## The specialized function named `name`, if any.
+    generic_function(name: String): _Signature? {
+        _checked_name(name);
+        return generic_functions.try_get(name);
+    }
+
     method(owner: TypeName, name: String): _Signature? {
+        _checked_struct(owner.without_pointers().to_string());
         var own = methods.try_get(owner.without_pointers().to_string());
         if (!own.is_value()) {
             return Optional<_Signature>.Empty;
@@ -145,6 +203,7 @@ struct _Referenceable {
     }
 
     has_field(owner: TypeName, name: String): bool {
+        _checked_struct(owner.without_pointers().to_string());
         var names = fields.try_get(owner.without_pointers().to_string());
         return names.is_value() and names.value().contains(name);
     }
@@ -152,10 +211,11 @@ struct _Referenceable {
     named_struct(e: Expression): TypeName? {
         match (e) {
             SymbolRef(node) => {
+                _checked_name(node.id);
                 return plain_structs.try_get(node.id);
             }
             FunctionCall(node) => {
-                if (node.args.count == 0 and node.function.contains("<") and constructors.contains(node.function)) {
+                if (node.args.count == 0 and node.function.contains("<") and constructor(node.function).is_value()) {
                     return Optional<TypeName>.Value(parse_type_string(node.function));
                 }
             }
@@ -179,7 +239,9 @@ enum _Target {
 ## @param state the passes' state, which takes the first error
 export reference_functions(module: Module, state: PassState) {
     var replacer = _References(_Referenceable(module, state), state);
-    for (var st in module.structs) {
+    # A checked declaration's references were made with its unit.
+    var own = unit_decls(module);
+    for (var st in own.structs) {
         if (st.generic_params.count != 0) {
             continue;
         }
@@ -202,14 +264,14 @@ export reference_functions(module: Module, state: PassState) {
         replacer.function(st.destructor);
     }
     replacer.current = Optional<TypeName>.Empty;
-    for (var function in module.functions) {
+    for (var function in own.functions) {
         if (!function.is_generic_func) {
             replacer.owned_by(function.name);
             replacer.function(function);
         }
     }
     for (var g in module.globals) {
-        if (g.default.is_value()) {
+        if (g.default.is_value() and !module.checked.globals.contains(g.name)) {
             replacer.owned_by(g.name);
             g.default = Optional<Expression>.Value(replacer.expression(g.default.value(), false));
         }
@@ -402,8 +464,8 @@ struct _References {
             }
             FunctionCall(node) => {
                 if (node.args.count == 0 and !receiver) {
-                    var generic = declared.generic_functions.try_get(node.function);
-                    var constructor = declared.constructors.try_get(node.function);
+                    var generic = declared.generic_function(node.function);
+                    var constructor = declared.constructor(node.function);
                     if ((generic.is_value() and generic.value().requires_arguments)
                         or (node.function.contains("<")
                             and constructor.is_value()
@@ -435,9 +497,9 @@ struct _References {
                 found = declared.method(owner, method);
             }
             Call(function) => {
-                found = declared.generic_functions.try_get(function);
+                found = declared.generic_function(function);
                 if (!found.is_value()) {
-                    found = declared.constructors.try_get(function);
+                    found = declared.constructor(function);
                 }
             }
         }

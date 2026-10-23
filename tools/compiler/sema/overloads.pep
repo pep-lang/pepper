@@ -150,16 +150,21 @@ export name_overloads(module: Module, state: PassState) {
         i += 1;
     }
     var groups = grouping.sorted();
+    # The externs by file and name, in order.
+    var externs_named = HashMap<String, Array<ExternDef>>();
+    for (var e in module.externs) {
+        var key = $"{e.loc.file} {e.name}";
+        if (!externs_named.contains(key)) {
+            externs_named[key] = Array<ExternDef>();
+        }
+        externs_named[key].append(e);
+    }
     for (var group in groups) {
         # An extern names one C symbol, so it cannot share its name with
         # another function of the file; redeclaring the same prototype is
         # allowed.
-        var externs = Array<ExternDef>();
-        for (var e in module.externs) {
-            if (e.loc.file == group.file and e.name == group.name) {
-                externs.append(e);
-            }
-        }
+        var named = externs_named.try_get($"{group.file} {group.name}");
+        var externs = named.is_value() ? named.value() : Array<ExternDef>();
         if (group.members.count > 0 and externs.count > 0) {
             var function = module.functions[group.members[0]];
             var later = function.loc;
@@ -646,10 +651,8 @@ _overrides(module: Module, member: String, args: TypeName[], params: String[]): 
 ##
 ## @param module the model, changed in place
 export concrete_overrides(module: Module) {
-    var struct_names = HashSet<String>();
-    for (var st in module.structs) {
-        struct_names.insert(st.ty.name);
-    }
+    # Found once a function needs them: most rounds find none to look at.
+    var struct_names = Optional<HashSet<String>>.Empty;
     var rewrites = Array<(ulong, String)>();
     ulong index = 0;
     while (index < module.functions.count) {
@@ -676,13 +679,20 @@ export concrete_overrides(module: Module) {
         }
         bool all_concrete = is_concrete_override(params) or argument;
         if (!all_concrete and !module.linked) {
+            if (!struct_names.is_value()) {
+                var names = HashSet<String>();
+                for (var st in module.structs) {
+                    names.insert(st.ty.name);
+                }
+                struct_names = Optional<HashSet<String>>.Value(names);
+            }
             bool all_types = true;
             for (var p in params) {
-                if (!_names_type(p, struct_names)) {
+                if (!_names_type(p, struct_names.value())) {
                     all_types = false;
                 }
             }
-            all_concrete = all_types and _has_base(module, function, struct_names);
+            all_concrete = all_types and _has_base(module, function, struct_names.value());
         }
         if (all_concrete) {
             rewrites.append((index - 1, $"{function.name}<{", ".join(params)}>"));

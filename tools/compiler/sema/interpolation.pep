@@ -8,13 +8,14 @@
 
 import [Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
+import [is_checked_function, unit_decls] from "checked";
 import "common";
 import [Loc] from "loc";
-import [Expression, FunctionDef, Module] from "model";
+import [Expression, FunctionDef, Module, StructDef] from "model";
 import [display_name, set_name] from "names";
 import [rewrite_concrete_places] from "places";
 import "resolve_implicit_types";
-import [PassState] from "state";
+import [PassMemo, PassState] from "state";
 import [parse_type_string] from "type_name";
 import [Rewriter] from "walk";
 
@@ -89,41 +90,43 @@ export is_text_conversion(function: String): bool {
 ## @param state the passes' state, which takes the first error
 export check_interpolations(module: Module, state: PassState) {
     # Generic bases are checked through their specializations.
-    rewrite_concrete_places(module, _InterpolationChecker(module, state));
+    rewrite_concrete_places(module, _InterpolationChecker(module, state), unit = true);
 }
 
-struct _InterpolationChecker {
+## What the interpolation checks need to know of some functions and
+## structs: which types convert to text.
+struct _ToStrings {
     ## Every type argument with a concrete override `to_string<X>`.
     var overrides: HashSet<String> = HashSet<String>();
     ## The types with a `to_string()` method.
     var with_method: HashSet<String> = HashSet<String>();
-    var traits: HashSet<String> = HashSet<String>();
     var struct_locs: HashMap<String, Loc> = HashMap<String, Loc>();
-    var state: PassState;
+    ## The generic `to_string<T>` functions' locations: their own
+    ## specializations (`to_string<Foo>` made for a call) keep them, so
+    ## they are not overrides.
+    var generic_locs: HashSet<Loc> = HashSet<Loc>();
 
-    construct(module: Module, state: PassState) {
-        this.state = state;
-        # The generic's own specializations (`to_string<Foo>` made for a
-        # call) keep the generic's location, so they are not overrides.
-        var generic_locs = HashSet<Loc>();
-        for (var f in module.functions) {
+    construct(functions: FunctionDef[], structs: StructDef[], base: _ToStrings?) {
+        for (var f in functions) {
             if (f.is_generic_func and demangle_name(_base_of(f.name)) == _TO_STRING) {
                 generic_locs.insert(f.loc);
             }
         }
-        for (var f in module.functions) {
-            if (f.is_generic_func or generic_locs.contains(f.loc)) {
+        for (var f in functions) {
+            if (f.is_generic_func
+                or generic_locs.contains(f.loc)
+                or (base.is_value() and base.value().generic_locs.contains(f.loc))) {
                 continue;
             }
             var split = _split_generic(f.name);
             if (split.is_value()) {
-                var (base, args) = split.value();
-                if (demangle_name(base) == _TO_STRING) {
+                var (name, args) = split.value();
+                if (demangle_name(name) == _TO_STRING) {
                     overrides.insert(args);
                 }
             }
         }
-        for (var s in module.structs) {
+        for (var s in structs) {
             for (var m in s.method_members) {
                 if (_is_to_string_method(m)) {
                     with_method.insert(s.name);
@@ -132,25 +135,78 @@ struct _InterpolationChecker {
             }
             struct_locs[s.name] = s.loc;
         }
-        for (var t in module.traits) {
-            for (var m in t.methods) {
-                if (_is_to_string_method(m)) {
-                    with_method.insert(_base_of(t.name));
-                    break;
-                }
-            }
-            traits.insert(_base_of(t.name));
-        }
         var suffix = $"::{_TO_STRING}";
-        for (var f in module.functions) {
+        for (var f in functions) {
             if (f.name.ends_with(suffix)) {
                 with_method.insert(f.name.substr_bytes(0, f.name.size - suffix.size));
             }
         }
     }
+}
+
+extend _ToStrings with PassMemo;
+
+struct _InterpolationChecker {
+    ## The unit's own functions and structs (`unit_decls`), and the traits.
+    var own: _ToStrings;
+    ## The checked ones, found once per compilation unit.
+    var base: _ToStrings? = Optional<_ToStrings>.Empty;
+    var traits: HashSet<String> = HashSet<String>();
+    var state: PassState;
+
+    construct(module: Module, state: PassState) {
+        this.state = state;
+        if (module.checked.functions.count > 0 or module.checked.structs.count > 0) {
+            var kept = state.unit_memos.try_get("interpolation");
+            if (!kept.is_value()) {
+                var functions = Array<FunctionDef>();
+                for (var f in module.functions) {
+                    if (is_checked_function(module, f)) {
+                        functions.append(f);
+                    }
+                }
+                var structs = Array<StructDef>();
+                for (var st in module.structs) {
+                    if (module.checked.structs.contains(st.name)) {
+                        structs.append(st);
+                    }
+                }
+                kept = Optional<PassMemo>.Value(_ToStrings(functions, structs, Optional<_ToStrings>.Empty));
+                state.unit_memos["interpolation"] = kept.value();
+            }
+            base = kept.value() as? _ToStrings;
+        }
+        var decls = unit_decls(module);
+        own = _ToStrings(decls.functions, decls.structs, base);
+        for (var t in module.traits) {
+            for (var m in t.methods) {
+                if (_is_to_string_method(m)) {
+                    own.with_method.insert(_base_of(t.name));
+                    break;
+                }
+            }
+            traits.insert(_base_of(t.name));
+        }
+    }
+
+    _overridden(ty: String): bool {
+        return own.overrides.contains(ty) or (base.is_value() and base.value().overrides.contains(ty));
+    }
+
+    _has_method(ty: String): bool {
+        return own.with_method.contains(ty) or (base.is_value() and base.value().with_method.contains(ty));
+    }
+
+    _struct_loc(ty: String): Loc? {
+        var found = own.struct_locs.try_get(ty);
+        if (found.is_value() or !base.is_value()) {
+            return found;
+        }
+        return base.value().struct_locs.try_get(ty);
+    }
 
     _convertible(ty: String): bool {
-        if (overrides.contains(ty) or with_method.contains(ty)) {
+        if (_overridden(ty) or _has_method(ty)) {
             return true;
         }
         if (ty.starts_with("__tuple<")) {
@@ -167,7 +223,7 @@ struct _InterpolationChecker {
         }
         var base = _base_of(ty);
         if (traits.contains(base)) {
-            return with_method.contains(base);
+            return _has_method(base);
         }
         # The runtime's overloads: every number type and `bool`.
         return _to_string_overload(ty);
@@ -223,7 +279,7 @@ struct _InterpolationChecker {
             $"cannot interpolate a value of type '{_shown(ty)}': it has no 'to_string()' method and no 'to_string' overload",
             call.loc
         );
-        var declared = struct_locs.try_get(ty);
+        var declared = _struct_loc(ty);
         if (declared.is_value()) {
             error = error.with_note(
                 $"declare 'to_string(): String' in '{_shown(ty)}', or implement 'ToString' with 'extend {_shown(ty)} with ToString'",

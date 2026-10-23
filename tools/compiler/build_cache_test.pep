@@ -865,6 +865,27 @@ checks_again_only_the_bodies_an_edit_changed() {
     expect_true(declared.rechecked.is_empty);
 }
 
+# A method body checked again is filtered for the target like the rest: a
+# block for another platform, which names nothing that exists, goes before
+# the passes check the body, though its struct was checked before.
+[Test]
+filters_the_platform_blocks_of_a_body_checked_again() {
+    var folder = TempFolder("rechecked-platform");
+    var root = folder.path;
+    var shifted = (
+        sum: String
+    ) => "    shifted(): int {\n        [Target(OS(Wasi))] {\n            return nope;\n        }\n        return "
+        + sum
+        + ";\n    }\n";
+    var count = "_Counter(0).next() + _Counter(0).shifted()";
+    _write_rechecked(root, "", "x + 1", "n + 1", shifted("n + 0"), count);
+    _build_rechecked(root);
+    var a = _unit_of(_load(root), "a.pep");
+    _write_rechecked(root, "", "x + 1", "n + 1", shifted("0 + n"), count);
+    var (method, _) = _build_rechecked(root);
+    expect_true(method.rechecked.contains(a));
+}
+
 # An edit that adds a struct, a function or a method no code named before checks
 # again only it and the bodies that changed; one named before checks the
 # compilation unit from its files.

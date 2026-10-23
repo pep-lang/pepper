@@ -30,9 +30,21 @@ const _TABLE = "_HashTable";
 ## @param state the passes' state, which takes the error
 export check_hash_keys(module: Module, state: PassState) {
     var keys = HashSet<String>();
+    # The first struct of each name, and the first function of each name
+    # that declares no type parameters: what the lookups below find.
+    var structs = HashMap<String, StructDef>();
     for (var st in module.structs) {
         if (st.ty.name == _TABLE and st.ty.sub_types.count > 0) {
             keys.insert(st.ty.sub_types[0].to_string());
+        }
+        if (!structs.contains(st.name)) {
+            structs[st.name] = st;
+        }
+    }
+    var overrides = HashMap<String, FunctionDef>();
+    for (var f in module.functions) {
+        if (f.generic_params.count == 0 and !overrides.contains(f.name)) {
+            overrides[f.name] = f;
         }
     }
     # An `[Equatable]` struct's hash is derived with its `==`; an override
@@ -42,7 +54,7 @@ export check_hash_keys(module: Module, state: PassState) {
             continue;
         }
         var hash_name = $"hash<{st.name}>";
-        var hash = _override(module, hash_name);
+        var hash = overrides.try_get(hash_name);
         if (hash.is_value()) {
             state.report(
                 _error_at_known(
@@ -62,13 +74,7 @@ export check_hash_keys(module: Module, state: PassState) {
     sorted.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
     var runtime = Optional<bool[]>.Empty;
     for (var key in sorted) {
-        StructDef? found = Optional<StructDef>.Empty;
-        for (var st in module.structs) {
-            if (st.name == key) {
-                found = Optional<StructDef>.Value(st);
-                break;
-            }
-        }
+        var found = structs.try_get(key);
         if (!found.is_value()) {
             continue;
         }
@@ -90,7 +96,7 @@ export check_hash_keys(module: Module, state: PassState) {
         var hash_name = $"hash<{key}>";
         # An override declares no type parameters; the generic `hash<T>`'s
         # own specialization for `key` has the same name but keeps them.
-        var hash = _override(module, hash_name);
+        var hash = overrides.try_get(hash_name);
         if (_is_derived(st)) {
             continue;
         }
@@ -116,16 +122,6 @@ export check_hash_keys(module: Module, state: PassState) {
             );
         }
     }
-}
-
-## The function named `name` that declares no type parameters.
-_override(module: Module, name: String): FunctionDef? {
-    for (var f in module.functions) {
-        if (f.name == name and f.generic_params.count == 0) {
-            return Optional<FunctionDef>.Value(f);
-        }
-    }
-    return Optional<FunctionDef>.Empty;
 }
 
 ## Whether `st` is `[Equatable]`: its `==` and hash are derived together.

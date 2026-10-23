@@ -28,7 +28,7 @@ import [
     Withheld
 ] from "model";
 import [set_name] from "names";
-import [PassState] from "state";
+import [GrowingList, PassMemo, PassState] from "state";
 import [apply_synthesized] from "synthesize";
 import [replace_map, VOID] from "type_name";
 import [method_is_static, substitute_block, value_type_key] from "value_types";
@@ -58,35 +58,76 @@ export freeze_templates(module: Module): Templates {
     return templates;
 }
 
+## What `specialize_structs` keeps for the compilation unit's next round
+## (`PassState.unit_memos`): the structs there are, by name and by spelled
+## type; the first generic base of each name; and how many specs were done.
+## Specs only grow, at the end: a spec done is made, or has no base, for
+## good.
+struct _StructSpecsMemo {
+    var existing: HashSet<String> = HashSet<String>();
+    var bases: HashMap<String, StructDef> = HashMap<String, StructDef>();
+    var specs_done: ulong = 0;
+    var _structs: GrowingList<StructDef> = GrowingList<StructDef>();
+    var _bases_of: GrowingList<StructDef> = GrowingList<StructDef>();
+
+    construct() {}
+
+    ## Takes in what was added to `module` since.
+    update(module: Module) {
+        var (structure, fresh_structs) = _structs.since(module.structs);
+        if (fresh_structs) {
+            existing = HashSet<String>();
+        }
+        for (var at in structure..module.structs.count) {
+            var st = module.structs[at];
+            existing.insert(st.name);
+            existing.insert(st.ty.to_string());
+        }
+        var of = module.templates.frozen ? module.templates.structs : module.structs;
+        var (base, fresh_bases) = _bases_of.since(of);
+        if (fresh_bases) {
+            bases = HashMap<String, StructDef>();
+        }
+        for (var at in base..of.count) {
+            var st = of[at];
+            if (st.ty.is_generic() and !bases.contains(st.name)) {
+                bases[st.name] = st;
+            }
+        }
+    }
+}
+
+extend _StructSpecsMemo with PassMemo;
+
 ## Clones each requested struct specialization from its generic base.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error
 export specialize_structs(module: Module, state: PassState) {
     var specs = module.struct_specs.copy();
+    var kept = state.unit_memos.try_get("specialize_structs");
+    var memo = kept.is_value() ? (kept.value() as? _StructSpecsMemo).value() : _StructSpecsMemo();
+    state.unit_memos["specialize_structs"] = memo;
+    if (memo.specs_done > specs.count) {
+        memo.specs_done = 0;
+    }
     # Constrained extensions give their members only to specializations
-    # whose arguments meet their constraints.
+    # whose arguments meet their constraints (found once a spec is made).
     var conformance = Optional<Conformance>.Empty;
+    bool constrained = false;
     for (var e in module.extensions) {
         if (e.restated.count > 0) {
-            conformance = Optional<Conformance>.Value(Conformance(module, state));
+            constrained = true;
             break;
         }
     }
     # The structs there are, by name and by spelled type, and the first
     # generic base of each name: looked up once per spec.
-    var existing = HashSet<String>();
-    for (var st in module.structs) {
-        existing.insert(st.name);
-        existing.insert(st.ty.to_string());
-    }
-    var bases = HashMap<String, StructDef>();
-    for (var st in module.templates.frozen ? module.templates.structs : module.structs) {
-        if (st.ty.is_generic() and !bases.contains(st.name)) {
-            bases[st.name] = st;
-        }
-    }
-    for (var spec in specs) {
+    memo.update(module);
+    var existing = memo.existing;
+    var bases = memo.bases;
+    for (var at in memo.specs_done..specs.count) {
+        var spec = specs[at];
         if (existing.contains(spec.to_string())) {
             continue;
         }
@@ -99,6 +140,9 @@ export specialize_structs(module: Module, state: PassState) {
         }
         var base = Optional<StructDef>.Value(found.value().copy());
         var specialized = _specialize_struct(base.value(), spec, state);
+        if (constrained and !conformance.is_value()) {
+            conformance = Optional<Conformance>.Value(Conformance(module, state));
+        }
         if (conformance.is_value()) {
             var withheld = withhold(module, conformance.value(), base.value(), specialized);
             # A withheld member leaves its overload set.
@@ -138,6 +182,7 @@ export specialize_structs(module: Module, state: PassState) {
         existing.insert(specialized.name);
         existing.insert(specialized.ty.to_string());
     }
+    memo.specs_done = specs.count;
 }
 
 ## Reports a specialization whose chain of requests is longer than the

@@ -8,6 +8,7 @@
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [integer_range, payload_field, TAG_FIELD] from "builder";
+import [unit_decls] from "checked";
 import "common";
 import "confinement";
 import [install_traits, is_trait, reference_cases] from "enums";
@@ -52,11 +53,13 @@ import [Rewriter, rewrite_block, rewrite_children, rewrite_expression] from "wal
 ## @param module the model
 ## @param state the passes' state, which takes the error
 export lower_matches(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
     var lowering = _MatchLowering(module, state);
     var table = StructTable(module, memo = state.trait_types_memo());
     install_traits(module, state);
     var bodies = Array<_MatchBody>();
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         var generic_base = _is_generic_base(st);
         var current = Optional<TypeName>.Value(st.ty);
         var methods = Array<FunctionDef>();
@@ -72,7 +75,7 @@ export lower_matches(module: Module, state: PassState) {
             }
         }
     }
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         if (!f.is_generic_func and f.body.is_value()) {
             bodies.append(_MatchBody(f, Optional<TypeName>.Empty));
         }
