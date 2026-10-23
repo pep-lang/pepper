@@ -91,7 +91,7 @@ jobs:
             echo "the publish of $built has not passed yet: trying again next time"
             exit 0
           fi
-          downloads="$RUNNER_TEMP/pin"
+          downloads="$RUNNER_TEMP/downloads"
           rm -rf "$downloads"
           gh release download "$tag" -R "$REPO" -D "$downloads" -p 'pepper-*' -p SHA256SUMS
           if [ "$(git ls-remote origin "refs/tags/$tag" | cut -f1)" != "$built" ]; then
