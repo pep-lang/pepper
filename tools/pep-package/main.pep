@@ -796,6 +796,13 @@ struct Project {
     # Updates one dependency at a time, building the project after each,
     # and keeps only the updates that build.
     update_verified(specs: Array<String>): int {
+        var manifest = read_manifest(manifest_path);
+        if (manifest.is_ok() and !manifest.value().vendor.is_empty) {
+            # Its builds read the vendor folder, which an update leaves as it was.
+            return fail(
+                "the project is vendored ('[fetch] vendor'), so a build would not see an update; run 'pepper package update', then 'pepper package vendor', then build"
+            );
+        }
         var sources = _sources(specs);
         if (sources.is_err()) {
             return fail(sources.error().message);
@@ -969,7 +976,7 @@ struct Project {
         for (var package in graph.value().packages) {
             var (host, repository) = split_source(package.source);
             var target = package_dir(dir, host, repository, folder);
-            kept.insert(target.to_string());
+            kept.insert(target.normalize().to_string());
             if (toolchain.check_vendored(target, package.commit).is_ok()) {
                 continue;
             }
@@ -1022,7 +1029,7 @@ struct Project {
             return Result<void>.ok();
         }
         if (dir.join(Path(toolchain.VENDOR_COMMIT_FILE)).is_file()) {
-            if (kept.contains(dir.to_string())) {
+            if (kept.contains(dir.normalize().to_string())) {
                 return Result<void>.ok();
             }
             var removed = remove_tree(dir);

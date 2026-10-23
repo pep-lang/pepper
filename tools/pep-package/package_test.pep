@@ -838,7 +838,15 @@ a_vendored_project_builds_with_no_host_or_cache() {
     var unlocked = unreachable("pep-build", Array<String>());
     expect_exit(unlocked, 1);
     expect_contains(unlocked.stderr, "names github:nobody/x, which pep.lock does not list");
+    # fetch checks that pep.lock matches pep.toml, and changes neither.
+    write_file(project.dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[fetch]\nvendor = \"vendor\"\n");
+    var stale = unreachable("pep-package", ["fetch"]);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "pep.lock does not match pep.toml, and the project is vendored");
     write_file(project.dir.join("pep.toml"), manifest);
+    var verify = unreachable("pep-package", ["update", "--verify"]);
+    expect_exit(verify, 1);
+    expect_contains(verify.stderr, "the project is vendored ('[fetch] vendor'), so a build would not see an update");
 
     # Vendoring again after a dependency is removed removes its packages.
     expect_exit(hosts.package(project.dir, ["remove", "geometry"]), 0);
