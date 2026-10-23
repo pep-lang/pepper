@@ -28,6 +28,10 @@ main(): int {
     assert(first.is_finished(), "join waits for the body to return");
     assert(finished.load() == 2, "both bodies ran");
 
+    # A thread with 8 MiB of stack on every system.
+    async.Thread.spawn(count_to_a_million, "counter", 8388608).join();
+    assert(finished.load() == 3, "the third body ran");
+
     # How many threads can run at once, and on how many cores.
     assert(async.logical_cpus() >= async.physical_cpus(), "hyperthreads count once in physical_cpus");
     return 0;

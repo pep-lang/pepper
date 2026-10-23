@@ -16,6 +16,12 @@ import io;
 [Target(OS(Linux) || OS(Mac))]
 extern int pthread_create(void* thread, void* attributes, void* start, void* argument);
 [Target(OS(Linux) || OS(Mac))]
+extern int pthread_attr_init(void* attributes);
+[Target(OS(Linux) || OS(Mac))]
+extern int pthread_attr_setstacksize(void* attributes, ulong size);
+[Target(OS(Linux) || OS(Mac))]
+extern int pthread_attr_destroy(void* attributes);
+[Target(OS(Linux) || OS(Mac))]
 extern int pthread_join(void* thread, void* result);
 [Target(OS(Linux) || OS(Mac))]
 extern int pthread_detach(void* thread);
@@ -54,11 +60,30 @@ extern int __ulock_wake(uint operation, void* address, ulong wake_value);
 
 # ── Threads ──────────────────────────────────────────────────────────────────
 
-# Starts a thread running `start(argument)`; its handle, or null on failure.
+# Starts a thread running `start(argument)` with a stack of `stack_size`
+# bytes, rounded up to 64 KiB (0: the system's default, usually 8 MiB on
+# Linux and 512 KiB on macOS); its handle, or null on failure.
 [Target(OS(Linux) || OS(Mac))]
-_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
+_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>, stack_size: ulong): __ptr<void> {
+    # A pthread_attr_t: 56 or 64 bytes on the targets supported.
+    __ptr<void> attributes = __null;
+    if (stack_size > 0) {
+        attributes = _pep_malloc(128);
+        pthread_attr_init(attributes);
+        # macOS takes only whole pages (16 KiB on arm64). A size refused
+        # fails the spawn rather than leaving the thread the default stack.
+        if (pthread_attr_setstacksize(attributes, (stack_size + 65535) / 65536 * 65536) != 0) {
+            pthread_attr_destroy(attributes);
+            _pep_free(attributes);
+            return __null;
+        }
+    }
     __ptr<__ptr<void>> thread = _pep_malloc(8);
-    var result = pthread_create(thread, __null, start, argument);
+    var result = pthread_create(thread, attributes, start, argument);
+    if (attributes != __null) {
+        pthread_attr_destroy(attributes);
+        _pep_free(attributes);
+    }
     __ptr<void> handle = thread[0];
     _pep_free(thread);
     if (result != 0) {

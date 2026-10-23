@@ -35,9 +35,14 @@ export struct Requirement {
     # Which of `optional`, `features` and `default-features` it sets, as
     # pep.toml writes them, which only newer toolchains read.
     var feature_keys: Array<String> = __null;
+    # `optional = true`: only a feature turns it on.
+    var optional: bool = false;
+    # The features its `features` turns on, for `tree`.
+    var features: Array<String> = __null;
 
     construct() {
         feature_keys = Array<String>();
+        features = Array<String>();
     }
 
     # Where the package comes from, which identifies it in the whole
@@ -225,6 +230,13 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
         # The compiler checks these.
         if (field == "optional" or field == "features" or field == "default-features") {
             requirement.feature_keys.append(field);
+            if (field == "optional") {
+                requirement.optional = field_value.as_bool().value_or(false);
+            } else if (field == "features" and field_value.as_array().is_value()) {
+                for (var item in field_value.as_array().value()) {
+                    requirement.features.append(item.as_string().value_or(""));
+                }
+            }
             continue;
         }
         var text = field_value.as_string();
