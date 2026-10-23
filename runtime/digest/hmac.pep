@@ -116,17 +116,6 @@ export struct Hmac<T> {
         return mac;
     }
 
-    # Replaces the contents of `out` with the MAC, then resets: `finish`
-    # without allocating, for PBKDF2's rounds. Only `Sha256` has the
-    # `_finish_into` this needs.
-    _finish_into(out: u8[]) {
-        _inner._finish_into(out);
-        _outer.update(_outer_pad);
-        _outer.update(out);
-        _outer._finish_into(out);
-        reset();
-    }
-
     ## Returns the MAC as `finish` does, written as lowercase hexadecimal
     ## digits.
     ##
@@ -222,7 +211,14 @@ const _PBKDF2_SHA256_MAX_LENGTH: ulong = 0xffffffff * 32;
 export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
     assert(rounds > 0, "pbkdf2_sha256: 'rounds' must be at least 1");
     assert(length <= _PBKDF2_SHA256_MAX_LENGTH, "pbkdf2_sha256: 'length' is over RFC 8018's limit");
+    # The hash states after the key's inner and outer pad blocks, computed
+    # once: each HMAC below starts from copies of them, so a round
+    # compresses 2 blocks rather than 4. `mac` only pads the key.
     var mac = Hmac<Sha256>(password);
+    var inner = mac._inner;
+    var outer = mac._outer;
+    outer.update(mac._outer_pad);
+    var hasher = Sha256();
     var key = Array<u8>(length);
     # One round's U_j, the XOR of a block's rounds (T_i), and INT(i). The
     # rounds reuse them, so the portable path allocates nothing per round.
@@ -233,15 +229,17 @@ export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): 
     while (key.count < length) {
         counter.clear();
         _digest_append_be(counter, index);
-        mac.update(salt);
-        mac.update(counter);
-        mac._finish_into(round);
+        hasher._copy_from(inner);
+        hasher.update(salt);
+        hasher.update(counter);
+        _pbkdf2_finish(hasher, outer, round);
         block.clear();
         block.append_all(round);
         ulong done = 1;
         while (done < rounds) {
-            mac.update(round);
-            mac._finish_into(round);
+            hasher._copy_from(inner);
+            hasher.update(round);
+            _pbkdf2_finish(hasher, outer, round);
             ulong byte = 0;
             while (byte < 32) {
                 block[byte] = block[byte] ^ round[byte];
@@ -254,6 +252,16 @@ export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): 
         index += 1;
     }
     return key;
+}
+
+# Replaces the contents of `out` with the HMAC of the message in `hasher`,
+# which started from the inner pad state, using `outer`, the outer pad
+# state. Allocates nothing on the portable path.
+_pbkdf2_finish(hasher: Sha256, outer: Sha256, out: u8[]) {
+    hasher._finish_into(out);
+    hasher._copy_from(outer);
+    hasher.update(out);
+    hasher._finish_into(out);
 }
 
 ## Derives `length` bytes from the UTF-8 bytes of `password` and `salt`

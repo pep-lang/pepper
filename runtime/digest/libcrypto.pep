@@ -8,6 +8,8 @@
 # - `reset()`: discards the input
 # - `update(data, size)`: hashes `size` bytes at `data`
 # - `finish(out)`: appends the digest to `out`, then resets
+# - `_copy_from(other)` (SHA-256 only): takes `other`'s state and pending
+#   input
 #
 # Every declaration here carries `BuildOption(USE_LIBCRYPTO)`, so a build
 # without it links neither library.
@@ -37,6 +39,9 @@ extern int EVP_DigestUpdate(void* context, void* data, ulong size);
 [Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
 [Link("crypto")]
 extern int EVP_DigestFinal_ex(void* context, u8* digest, uint* size);
+[Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
+[Link("crypto")]
+extern int EVP_MD_CTX_copy_ex(void* out, void* in);
 
 # A libcrypto digest context for one algorithm, freed with the struct.
 [Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
@@ -73,6 +78,11 @@ struct _DigestNative {
         out._append_raw(digest._data, _size);
         reset();
     }
+
+    _copy_from(other: _DigestNative) {
+        var copied = EVP_MD_CTX_copy_ex(_context.value, other._context.value);
+        assert(copied == 1, "libcrypto could not copy a digest context");
+    }
 }
 
 [Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
@@ -101,6 +111,9 @@ extern int BCryptFinishHash(void* hash, u8* output, uint size, uint flags);
 [Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
 [Link("bcrypt")]
 extern int BCryptDestroyHash(void* hash);
+[Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
+[Link("bcrypt")]
+extern int BCryptDuplicateHash(void* hash, void** duplicate, u8* object, uint object_size, uint flags);
 
 # The pseudo-handles of the algorithms (Windows 10 and later), which need
 # no BCryptOpenAlgorithmProvider: `BCRYPT_SHA1_ALG_HANDLE` and
@@ -128,9 +141,7 @@ struct _DigestNative {
             unsafe_cast<__ptr<void>>(algorithm), slot._data, __null, 0, __null, 0, _DIGEST_CNG_REUSABLE
         );
         assert(status == 0, "CNG could not create a hash object");
-        _hash = Handle<__ptr<void>>(slot[0], (h) => {
-            BCryptDestroyHash(h);
-        });
+        _hash = _digest_cng_handle(slot[0]);
         _size = size;
     }
 
@@ -158,6 +169,24 @@ struct _DigestNative {
         BCryptFinishHash(_hash.value, digest._data, _size as uint, 0);
         out._append_raw(digest._data, _size);
     }
+
+    # Replaces the hash object with a duplicate of `other`'s, which keeps
+    # its reusable flag.
+    _copy_from(other: _DigestNative) {
+        var slot = Array<__ptr<void>>(1);
+        slot.append(__null);
+        var status = BCryptDuplicateHash(other._hash.value, slot._data, __null, 0, 0);
+        assert(status == 0, "CNG could not duplicate a hash object");
+        _hash = _digest_cng_handle(slot[0]);
+    }
+}
+
+# Owns the CNG hash object `hash`, destroying it with the handle.
+[Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
+_digest_cng_handle(hash: __ptr<void>): Handle<__ptr<void>> {
+    return Handle<__ptr<void>>(hash, (h) => {
+        BCryptDestroyHash(h);
+    });
 }
 
 [Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
@@ -190,6 +219,10 @@ struct _Sha256Engine {
 
     finish(out: u8[]) {
         _native.finish(out);
+    }
+
+    _copy_from(other: _Sha256Engine) {
+        _native._copy_from(other._native);
     }
 }
 
