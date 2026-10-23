@@ -13,7 +13,8 @@
 # whose case shares its name with a type of the module; a `[Move]`
 # argument called through a `shared` function value; externs bound to C symbols Pepper functions are
 # named after, at each `-O` level; reference chains 100,000 deep, released
-# without overflowing the stack; the message a stack overflow prints on
+# without overflowing the stack; source nested as deep as the parser
+# allows, and one level deeper; the message a stack overflow prints on
 # the main thread, a `Thread` and a task; and the panic hook, which every
 # other kind of panic runs first. The programs are in
 # `testdata/`.
@@ -22,9 +23,19 @@ import [File, Path] from io;
 import process;
 import [TempFolder] from testing;
 import [
-    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, tool, write_file
+    build_program,
+    exit_code,
+    expect_contains,
+    expect_ends_with,
+    expect_exit,
+    expect_starts_with,
+    read_file,
+    run,
+    tool,
+    write_file
 ] from tool_testing;
 import toolchain;
+import [check_programs, headline, nesting_programs] from "expected_outcomes";
 
 # Builds `testdata/<name>.pep`, copied into `folder` so that no project
 # around this one applies, into the executable `name` there, with `pep-build`
@@ -567,6 +578,13 @@ move_takes_a_value_once_no_closure_holds_it() {
     expect_equal(output.stdout, "2\n11\n22\n");
 }
 
+[Test]
+move_in_a_loop_takes_a_value_given_again_before_the_next_pass() {
+    var output = _run("move_in_loop");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "40 2 10\n");
+}
+
 # ── externs ─────────────────────────────────────────────────────────────────
 
 [Test]
@@ -610,6 +628,27 @@ steered_chains_release_without_overflow_and_shallow_order_holds() {
         expect_exit(output, 0);
         expect_equal(output.stdout, expected);
     }
+}
+
+# ── nesting ─────────────────────────────────────────────────────────────────
+
+# `pep-build` builds source nested as deep as the parser allows, on the
+# stack it gives the compiler (`parse.STACK_SIZE`; Windows gives the main
+# thread 1 MiB), and the programs run; one level deeper is the parser's
+# error.
+[Test]
+builds_and_runs_the_deepest_source() {
+    var folder = TempFolder("programs_nesting");
+    var mismatches = check_programs(folder, nesting_programs(), (root: Path): String => {
+        var program = root.parent().value().join("main" + toolchain.executable_suffix());
+        var error = build_program(root, program, root.parent().value().join("build"));
+        if (error.is_value()) {
+            return headline(error.value(), root);
+        }
+        var output = run(process.Command(program.to_string()));
+        return output.status.success() ? "accepted" : $"exited with {exit_code(output)}";
+    });
+    expect_equal(mismatches, 0 as ulong);
 }
 
 # ── stack overflow ──────────────────────────────────────────────────────────

@@ -5,13 +5,15 @@
 # compiler's byte for byte (the self-hosting cutover); a change that alters one
 # changes a diagnostic or what the language accepts, on purpose or not.
 
+import [Channel, Thread] from async;
 import [Diagnostic, render_all] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
+import compiler.parse;
 import compiler.sema;
 import [TempFolder] from testing;
-import [check_programs as check_expected, headline, headlines] from "expected_outcomes";
+import [check_programs as check_expected, headline, headlines, nesting_programs] from "expected_outcomes";
 
 # The programs are split in parts, each a test of its own, to keep each
 # within the time a test may take. The programs that use much of the
@@ -223,6 +225,18 @@ runs_passes(part: ulong) {
     expect_equal(rejected, 0 as ulong);
 }
 
+# Source nested as deep as the parser allows checks on half the stack the
+# compiler runs on (`parse.STACK_SIZE`), whether this test is built
+# optimized or not, and one level deeper is the parser's error.
+[Test]
+checks_the_deepest_source_in_half_the_compiler_stack() {
+    var mismatches = Channel<ulong>();
+    Thread.spawn(() => {
+        mismatches.send(check_programs(TempFolder("passes_nesting"), nesting_programs(), true));
+    }, "passes", parse.STACK_SIZE / 2).join();
+    expect_equal(mismatches.receive().value(), 0 as ulong);
+}
+
 # Programs without the runtime whose platform attributes a pass rejects:
 # each error, its place and its message are the expected ones.
 [Test]
@@ -395,6 +409,31 @@ reports_confinement_errors_part_12() {
     reports_confinement_error(11);
 }
 
+[Test]
+reports_confinement_errors_part_13() {
+    reports_confinement_error(12);
+}
+
+[Test]
+reports_confinement_errors_part_14() {
+    reports_confinement_error(13);
+}
+
+[Test]
+reports_confinement_errors_part_15() {
+    reports_confinement_error(14);
+}
+
+[Test]
+reports_confinement_errors_part_16() {
+    reports_confinement_error(15);
+}
+
+[Test]
+reports_confinement_errors_part_17() {
+    reports_confinement_error(16);
+}
+
 reports_confinement_error(index: ulong) {
     var folder = TempFolder($"passes_confinement_{index}");
     var programs = [confinement_error_programs()[index]];
@@ -427,7 +466,15 @@ confinement_error_programs(): String[] {
         "# expect: main.pep:20:17: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nwrap(b: Box): () => int {\n    return () => b.n;\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    var get = wrap(b);\n    c.send(move(b));\n    return get();\n}\n",
         # A `for` loop's hidden iterator holds the closure until the loop
         # ends.
-        "# expect: main.pep:20:21: error: 'b' cannot be moved: a hidden value of the code around it (such as a loop's iterator) also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nnumbers(): Array<int> {\n    return [1, 2, 3];\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    for (var x in numbers().iterate().map<int>((v: int): int => v + b.n)) {\n        c.send(move(b));\n        break;\n    }\n    return 0;\n}\n"
+        "# expect: main.pep:20:21: error: 'b' cannot be moved: a hidden value of the code around it (such as a loop's iterator) also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nnumbers(): Array<int> {\n    return [1, 2, 3];\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var b = Box(1);\n    for (var x in numbers().iterate().map<int>((v: int): int => v + b.n)) {\n        c.send(move(b));\n        break;\n    }\n    return 0;\n}\n",
+        # A link made later in a loop's body reaches a `move` on the next
+        # pass: `for` and `while`, past a `continue`, from an inner loop,
+        # and through a closure (#193).
+        "# expect: main.pep:17:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..2) {\n        c.send(move(b));\n        if (i == 1) {\n            break;\n        }\n        b = Box(2);\n        keep = b;\n    }\n    keep.n = 7;\n    return 0;\n}\n",
+        "# expect: main.pep:19:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    int i = 0;\n    while (i < 2) {\n        i += 1;\n        c.send(move(b));\n        b = Box(2);\n        keep = b;\n    }\n    return keep.n;\n}\n",
+        "# expect: main.pep:17:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..3) {\n        c.send(move(b));\n        b = Box(2);\n        if (i == 0) {\n            continue;\n        }\n        keep = b;\n    }\n    return keep.n;\n}\n",
+        "# expect: main.pep:18:25: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..2) {\n        for (var j in 0..2) {\n            c.send(move(b));\n            b = Box(2);\n        }\n        keep = b;\n    }\n    return keep.n;\n}\n",
+        "# expect: main.pep:17:21: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var get = () => 0;\n    var b = Box(1);\n    for (var i in 0..2) {\n        c.send(move(b));\n        b = Box(2);\n        var held = b;\n        get = () => held.n;\n    }\n    return get();\n}\n",
     ];
 }
 

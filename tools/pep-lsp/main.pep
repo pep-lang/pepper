@@ -8,11 +8,19 @@
 #     PEPPER_RUNTIME=$PWD/runtime pep-build -O tools/pep-lsp/main.pep -o pep-lsp
 
 import lsp;
+import compiler.parse;
+import process;
 import "arguments";
 import "server";
 import "supervisor";
 
-main(args: String[]): int {
+# On a stack of `parse.STACK_SIZE`, as is the analysis thread: a
+# `--compilation-unit-worker` checks source on this one.
+main(): int {
+    return parse.on_compiler_stack(() => _main(process.arguments()));
+}
+
+_main(args: String[]): int {
     if (handle_arguments(args) is Value(code)) {
         return code;
     }

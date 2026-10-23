@@ -173,3 +173,49 @@ _without_runtime_folder(line: String): String {
     out.append(line.substr_bytes(copied, line.size - copied));
     return out.to_string();
 }
+
+## Programs nested `MAX_NESTING` levels deep (`compiler.parse`), which
+## build and run, and one level deeper, which the parser rejects at the
+## token that crosses the limit: parentheses, nested `if`s, a chain of
+## `+` and nested type arguments. The counts leave out the levels the
+## program around them adds: `main`'s block, the statement's expression
+## and an assignment's value.
+##
+## @returns the programs, each starting with `# expect: ...`
+export nesting_programs(): String[] {
+    var too_deep = "error: code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions";
+    var out = Array<String>();
+    for (var n in [253 as ulong, 254]) {
+        var deeper = n > 253;
+        out.append(
+            _nested(
+                deeper ? $"main.pep:5:263: {too_deep}" : "accepted",
+                "    x = " + "(".repeat(n) + "x" + ")".repeat(n) + ";"
+            )
+        );
+        out.append(
+            _nested(
+                deeper ? $"main.pep:258:7: {too_deep}" : "accepted",
+                "if (x == 1) {\n".repeat(n) + "x = 2;" + "}\n".repeat(n)
+            )
+        );
+        out.append(_nested(deeper ? $"main.pep:5:1023: {too_deep}" : "accepted", "    x = 1" + " + x".repeat(n) + ";"));
+        # One more for the variable's type.
+        out.append(
+            _nested(
+                deeper ? $"main.pep:5:1535: {too_deep}" : "accepted",
+                "    " + "__ptr<".repeat(n + 1) + "int" + ">".repeat(n + 1) + " p = __null;"
+            )
+        );
+    }
+    return out;
+}
+
+# A program expecting `expect` whose `main` runs `body`, from line 5.
+_nested(expect: String, body: String): String {
+    return "# expect: "
+        + expect
+        + "\nf(x: int): int { return x; }\nexport main(): int {\n    var x = 1;\n"
+        + body
+        + "\n    return 0;\n}\n";
+}
