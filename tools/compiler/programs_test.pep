@@ -578,6 +578,13 @@ move_takes_a_value_once_no_closure_holds_it() {
     expect_equal(output.stdout, "2\n11\n22\n");
 }
 
+[Test]
+move_in_a_loop_takes_a_value_given_again_before_the_next_pass() {
+    var output = _run("move_in_loop");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "40 2 10\n");
+}
+
 # ── externs ─────────────────────────────────────────────────────────────────
 
 [Test]

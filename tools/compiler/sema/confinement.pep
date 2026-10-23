@@ -2139,6 +2139,14 @@ struct _RegionWalk {
     ## Which parts the last failed `union` would have joined.
     var clash_into: _RegionPart = _RegionPart.Fresh;
     var clash_moving: _RegionPart = _RegionPart.Fresh;
+    ## How many `move`s the walk has checked.
+    var moves: ulong = 0;
+    ## How many loops the walk is inside.
+    var loops: ulong = 0;
+    ## On a loop's second pass, the lock its first pass made for the next
+    ## `with` block, which stays the same lock.
+    var relock: ulong = 0;
+    var relocking: bool = false;
 
     construct(program: _Confinement, checking: bool, current: TypeName?) {
         this.program = program;
@@ -2520,7 +2528,12 @@ struct _RegionWalk {
         }
         declare(scope.name, -1, scope.ty);
         var index = locks.count;
-        locks.append(lock);
+        if (relocking) {
+            index = relock;
+            relock += 1;
+        } else {
+            locks.append(lock);
+        }
         long r = -1;
         if (program.has_region(binding.ty) or binding.ty.is_auto()) {
             r = region(_RegionPart.Locked(index));
@@ -2559,8 +2572,23 @@ struct _RegionWalk {
                 }
             }
             While(loop) => {
+                # A link made later in the body is there on the next pass,
+                # so a check walks an outermost loop that moves a second
+                # time: links only add up, so the first pass made them all.
+                var moved = moves;
+                var outermost = checking and loops == 0;
+                var first_lock = locks.count;
+                loops += 1;
                 eval(loop.condition);
                 block(loop.block);
+                if (outermost and moves != moved) {
+                    relock = first_lock;
+                    relocking = true;
+                    eval(loop.condition);
+                    block(loop.block);
+                    relocking = false;
+                }
+                loops -= 1;
             }
             Return(ret) => {
                 long value = -1;
@@ -2902,6 +2930,7 @@ struct _RegionWalk {
     ## disconnected value hands it over; a raw slot (runtime only) hands
     ## over a value the runtime promises nothing else references.
     eval_move(value: Expression): long {
+        moves += 1;
         if (value is SymbolRef(node)) {
             var found = local(node.id);
             if (found.is_value()) {
