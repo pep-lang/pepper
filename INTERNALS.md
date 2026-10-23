@@ -2289,14 +2289,8 @@ check when `StructDesc.immortal` (a reference enum's bare cases, a plain
 function type's static objects), in place of `synthesize`'s body, so it
 reaches the same last release; every other struct keeps that body, and a
 struct no cycle runs through compiles exactly as before. The analysis sees
-the whole program, but a field steers only into a struct its struct sees
-(`_Views`): one declared in the files that the files of the struct and of
-the types it names read (`link.unit_inputs`). A unit's object, which the
-cache keeps for every program its file is in, then names no struct only
-some of those programs have (#170); an edge to one it does not see makes
-the cycle `deep_recursive` instead. A unit cached before another unit
-made a type recursive keeps its plain last release: still correct, only
-unbounded.
+the whole program, so a unit cached before another unit made a type
+recursive keeps its plain last release: still correct, only unbounded.
 So taking
 or dropping a reference costs no call even across units and at `-O0`, and
 the cache keys need nothing new: the step depends only on the head layout

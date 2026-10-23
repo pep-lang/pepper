@@ -536,15 +536,7 @@ _compile_unit(
     var owners = HashMap<String, uint>();
     var declared = union_of(below);
     var generated = codegen.generate(
-        module,
-        state,
-        namespaces,
-        unit.name,
-        setup,
-        owners,
-        others,
-        Optional<HashSet<String>>.Value(declared),
-        Optional<link.Program>.Value(program)
+        module, state, namespaces, unit.name, setup, owners, others, Optional<HashSet<String>>.Value(declared)
     );
     if (generated.is_err()) {
         return Result<Path, String>.err(render_all([generated.error()], program.sources()));
@@ -1094,15 +1086,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             var below = union_of(last_below);
             setup.separate_locations = true;
             var generated = codegen.generate(
-                module,
-                state,
-                namespaces,
-                stem,
-                setup,
-                owners,
-                others,
-                Optional<HashSet<String>>.Value(below),
-                Optional<link.Program>.Value(program)
+                module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)
             );
             if (generated.is_err()) {
                 return Result<Built, String>.err(render_all([generated.error()], sources));
@@ -1195,16 +1179,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 }
             }
         }
-        var generated = codegen.generate(
-            module,
-            state,
-            namespaces,
-            stem,
-            setup,
-            owners,
-            cached_files,
-            program = Optional<link.Program>.Value(program)
-        );
+        var generated = codegen.generate(module, state, namespaces, stem, setup, owners, cached_files);
         if (generated.is_err()) {
             return Result<Built, String>.err(render_all([generated.error()], sources));
         }
