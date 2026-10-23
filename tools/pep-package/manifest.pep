@@ -90,6 +90,9 @@ export struct Manifest {
     var requirements: Array<Requirement> = __null;
     # `[fetch]`'s `hosts`: where `add` looks a repository up, in order.
     var hosts: Array<String> = __null;
+    # `[fetch]`'s `vendor`: the folder `vendor` copied every locked package
+    # into, which builds read; empty when the project is not vendored.
+    var vendor: String = "";
 
     construct() {
         requirements = Array<Requirement>();
@@ -157,6 +160,13 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             manifest.hosts.append(host.value());
         }
     }
+    var vendor = root.lookup("fetch.vendor");
+    if (vendor.is_value()) {
+        if (vendor.value().as_string().is_empty()) {
+            return Result<Manifest>.Err($"{path.to_string()}: '[fetch]' 'vendor' must be a folder's name");
+        }
+        manifest.vendor = vendor.value().as_string().value();
+    }
     for (var name in ["dependencies", "dev-dependencies"]) {
         var dependencies = root.try_get(name);
         if (dependencies.is_empty()) {
@@ -210,7 +220,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
 # reads it. A package using one sets `minimum_toolchain` to that release
 # or later, which `publish` checks.
 export newer_manifest_features(): Array<(String, String)> {
-    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0")];
+    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0"), ("fetch.vendor", "0.11.0")];
 }
 
 # The first release that reads a dependency's `optional`, `features` and

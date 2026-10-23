@@ -171,6 +171,10 @@ In CI, `pepper build --locked` and `pepper test --locked` fail when
 [Reproducible builds](pep-package.md#reproducible-builds). They apply to
 dev-dependencies as to the rest.
 
+A project that sets `[fetch] vendor` (`pepper package vendor` does) keeps
+its dependencies in that folder of the repository instead, and builds with
+no network and no download cache; see [`[fetch]`](#fetch).
+
 ## `[dev-dependencies]`
 
 A package the project's tests and examples use but its code does not, such
@@ -343,11 +347,13 @@ write a dependency's `optional`, `features` and `default-features` (see
 ```toml
 [fetch]
 hosts = ["codeberg", "github"]
+vendor = "vendor"
 ```
 
 | Key | What it is | Default |
 | --- | --- | --- |
 | `hosts` | The hosts `pepper package add owner/name` looks a repository up on, in order, when the argument names none; it adds the first that has it | `["github", "gitlab", "codeberg"]` |
+| `vendor` | The folder, relative to the project, that [`pepper package vendor`](pep-package.md#vendor-dir) copied every locked package into, which sets it. Builds then read each dependency from `<vendor>/<host>/<owner>/<name>` instead of `.pep/deps`, fetch nothing, and fail when a package is missing, at another commit than `pep.lock`'s, or edited. A package that sets it needs `minimum_toolchain = "0.11.0"` or later | none: dependencies are fetched into `.pep/deps` |
 
 ## Errors
 

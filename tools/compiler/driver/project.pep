@@ -5,6 +5,7 @@ import io;
 import [Directory, File, Path] from io;
 import compiler.link;
 import process;
+import toolchain;
 
 ## What a build takes from the project it is in.
 export struct ProjectSetup {
@@ -106,6 +107,12 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
 ## package `.pep/deps` lacks from the download cache or fails; without
 ## `pep-package`, such a package is an error.
 ##
+## A vendored project (`[fetch] vendor`) fetches nothing, so it needs
+## neither the network nor the download cache: every Git dependency must
+## be in `pep.lock`, and every locked package the build needs must be in
+## the vendor folder at its locked commit, its files as vendored
+## (`toolchain.check_vendored`).
+##
 ## @param entry the file being built
 ## @param locked whether a stale `pep.lock` is an error (`--locked`)
 ## @param offline whether fetching over the network is an error (`--offline`)
@@ -126,6 +133,9 @@ export fetch_dependencies(
     var needed = _needs_fetch(project.value(), manifest.value(), target);
     if (needed.is_err()) {
         return Result<void, String>.err(needed.error());
+    }
+    if (!manifest.value().vendor.is_empty) {
+        return _check_vendor(project.value(), manifest.value(), needed.value(), target);
     }
     var refused = _refuse(project.value(), needed.value(), locked, offline);
     if (refused.is_err()) {
@@ -186,7 +196,7 @@ _needs_fetch(project: Path, manifest: link.Manifest, target: link.Target): Resul
     }
     var missing = _Missing();
     for (var package in locked.value()) {
-        var dir = link.package_directory(project, package.host, package.repository);
+        var dir = link.package_directory(project, package.host, package.repository, manifest.vendor);
         if (!package.matches(target)) {
             missing.skipped = true;
         } else if (!dir.is_directory() or _is_stale(dir, package)) {
@@ -210,12 +220,37 @@ _needs_fetch(project: Path, manifest: link.Manifest, target: link.Target): Resul
         }
         if (!is_locked) {
             missing.not_locked.append(source);
-            if (needed.contains(source) and !d.directory(project, project).is_directory()) {
+            if (needed.contains(source) and !d.directory(project, project, manifest.vendor).is_directory()) {
                 missing.not_fetched.append(source);
             }
         }
     }
     return Result<_Missing, String>.ok(missing);
+}
+
+## Checks the vendored `project` for a build for `target`, which lacks
+## `missing`: no dependency `pep.lock` does not list, and each locked
+## package the build needs vendored, unedited.
+_check_vendor(project: Path, manifest: link.Manifest, missing: _Missing, target: link.Target): Result<void, String> {
+    if (!missing.not_locked.is_empty) {
+        return Result<void, String>.err(
+            $"{project.join(Path(link.MANIFEST_FILE))} names {", ".join(missing.not_locked)}, which {link.LOCK_FILE} does not list, and the project is vendored ('[fetch] vendor'); run 'pepper package vendor'"
+        );
+    }
+    var locked = link.read_lock(project.join(Path(link.LOCK_FILE)));
+    if (locked.is_err()) {
+        return Result<void, String>.err(locked.error());
+    }
+    for (var package in locked.value()) {
+        if (package.matches(target)) {
+            var dir = link.package_directory(project, package.host, package.repository, manifest.vendor);
+            var checked = toolchain.check_vendored(dir, package.commit);
+            if (checked.is_err()) {
+                return checked;
+            }
+        }
+    }
+    return Result<void, String>.ok();
 }
 
 ## Why `--locked` or `--offline` refuses what `project` lacks, `missing`:

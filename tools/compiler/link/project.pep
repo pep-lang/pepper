@@ -98,9 +98,14 @@ export host_named(key: String): Host? {
 }
 
 ## Where a package's files live in the project `project`:
-## `<project>/.pep/deps/<host domain>/<owner>/<name>`.
-export package_directory(project: Path, host: Host, repository: String): Path {
-    var dir = project.join(Path(".pep")).join(Path(DEPS_DIR)).join(Path(host.domain()));
+## `<project>/.pep/deps/<host domain>/<owner>/<name>`, or under the
+## project's `[fetch] vendor` folder when it has one.
+##
+## @param vendor the project's `[fetch] vendor` folder, relative to it;
+##   empty when it is not vendored
+export package_directory(project: Path, host: Host, repository: String, vendor: String = ""): Path {
+    var deps = vendor.is_empty ? project.join(Path(".pep")).join(Path(DEPS_DIR)) : project.join(Path(vendor));
+    var dir = deps.join(Path(host.domain()));
     for (var part in repository.split("/")) {
         dir = dir.join(Path(part));
     }
@@ -243,10 +248,11 @@ export struct Dependency {
     }
 
     ## Where the dependency's files are, for a project rooted at `project`
-    ## whose manifest (the one naming the dependency) is in `manifest_dir`.
-    directory(project: Path, manifest_dir: Path): Path {
+    ## (vendored into its folder `vendor`, unless that is empty) whose
+    ## manifest (the one naming the dependency) is in `manifest_dir`.
+    directory(project: Path, manifest_dir: Path, vendor: String = ""): Path {
         if (host.is_value()) {
-            return package_directory(project, host.value(), location);
+            return package_directory(project, host.value(), location, vendor);
         }
         return manifest_dir.join(Path(location));
     }
@@ -319,6 +325,10 @@ export struct Manifest {
     var include: String[] = Array<String>();
     ## `[build]`'s libraries to link.
     var link: String[] = Array<String>();
+    ## `[fetch]`'s `vendor`: the folder, relative to the project, that
+    ## `pepper package vendor` copied every locked package into, which
+    ## builds read instead of `.pep/deps`; empty when not vendored.
+    var vendor: String = "";
     ## In the order they are written.
     var dependencies: Dependency[] = Array<Dependency>();
     ## `[dev-dependencies]`, in the order they are written: seen only by a
@@ -841,11 +851,15 @@ struct _Reader {
         }
     }
 
-    fetch(members: OrderedMap<String, TomlValue>) {
+    fetch(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
         for (var (key, value) in members) {
             var path = ["fetch", key];
+            if (key == "vendor") {
+                manifest.vendor = string(path, key, value).value_or("");
+                continue;
+            }
             if (key != "hosts") {
-                unknown_key(["fetch"], key, "fetch", ["hosts"]);
+                unknown_key(["fetch"], key, "fetch", ["hosts", "vendor"]);
                 continue;
             }
             var items = value.as_array();
@@ -1179,7 +1193,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
         } else if (key == "fetch") {
             var table = reader.table(at, key, value);
             if (table.is_value()) {
-                reader.fetch(table.value());
+                reader.fetch(manifest, table.value());
             }
         } else if (key == "features") {
             var table = reader.table(at, key, value);
@@ -1394,6 +1408,12 @@ export struct Packages {
         return Optional<Manifest>.Value(found.value().value());
     }
 
+    ## The project's `[fetch] vendor` folder, or empty.
+    _vendor(): String {
+        var root = _manifest_at(project.value());
+        return root.is_value() ? root.value().vendor : "";
+    }
+
     ## Turns on the dependencies of `manifest` that are not optional (and
     ## the project's dev-dependencies, in a dev build).
     _visit(manifest: Manifest) {
@@ -1420,7 +1440,7 @@ export struct Packages {
             return Optional<Manifest>.Empty;
         }
         var first = _on.insert(_key(manifest) + "\n" + d.name);
-        var found = _manifest_at(d.directory(project.value(), manifest.dir()));
+        var found = _manifest_at(d.directory(project.value(), manifest.dir(), _vendor()));
         if (found.is_value() and first) {
             _visit(found.value());
             if (d.default_features and found.value().feature("default").is_value()) {
@@ -1565,11 +1585,12 @@ export struct Packages {
                 $"'{first}' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:{first}' on the import"
             );
         }
-        var package = dependency.value().directory(project.value(), manifest.dir());
+        var vendor = _vendor();
+        var package = dependency.value().directory(project.value(), manifest.dir(), vendor);
         if (!package.is_directory()) {
             if (dependency.value().host.is_value()) {
                 return Resolution.Missing(
-                    $"dependency '{first}' is not fetched: no {package}; run 'pepper package fetch'"
+                    $"dependency '{first}' is not fetched: no {package}; run 'pepper package {vendor.is_empty ? "fetch" : "vendor"}'"
                 );
             }
             return Resolution.Missing($"dependency '{first}' names the folder {package}, which does not exist");
