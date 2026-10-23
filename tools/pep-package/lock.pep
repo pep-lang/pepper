@@ -54,11 +54,11 @@ export struct Locked {
         this.commit = commit;
     }
 
-    # For messages: `geometry 1.2.3`, else its short commit, else the folder
-    # that overrides it.
+    # For messages: `geometry 1.2.3`, else its short commit; only the name
+    # when a folder overrides it.
     describe(): String {
         if (version.is_empty and commit.is_empty) {
-            return name + " " + replaced_by;
+            return name;
         }
         return name + " " + (version.is_empty ? commit.substr(0, 12) : version);
     }

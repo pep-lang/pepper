@@ -493,8 +493,7 @@ syntax_offers_quick_fixes() {
     var at = (line: int, character: int) => lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
     var actions = code_actions(document, none, Array<lsp.CodeAction>(), at(2, 5));
     expect_equal(action_list(actions), "Replace `new` with `construct` [2:4-2:7 construct]");
-    # `<String>`: a whole-program build infers `StringConstant` (#175).
-    expect_equal<String>(actions[0].kind.value(), lsp.QUICK_FIX);
+    expect_equal(actions[0].kind.value(), lsp.QUICK_FIX);
     var shown = actions[0].diagnostics.value()[0];
     expect_equal(shown.severity.value(), lsp.SEVERITY_WARNING);
     expect_equal(shown.tags.value()[0], lsp.TAG_DEPRECATED);
@@ -1690,8 +1689,8 @@ has_body(analysis: Analysis, name: String): bool {
 [Test]
 an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
     # A model of the program checked whole holds every file's bodies; the
-    # copy the server's thread gets keeps those of `bodies_read` only, so
-    # handing it over costs the document's compilation unit, not the program.
+    # analysis the server's thread gets keeps those of `bodies_read` only, so
+    # it holds the document's compilation unit, not the program.
     var test = "unread_bodies";
     var text = "import \"other\";\nmain(): int {\n    return twice(1);\n}\n";
     var uri = fresh_file(test, "main.pep", text);
@@ -1774,8 +1773,10 @@ deepest_program(body: String): String {
 
 [Test]
 deepest_source_fits_the_server_stack() {
-    # The server analyzes on a thread of its own, with the default stack:
-    # a stack overflow cannot be caught, and ends the server.
+    # The server analyzes on a thread of its own, with a stack of
+    # ANALYSIS_STACK_SIZE: a stack overflow cannot be caught, and ends the
+    # server. Half of it here, so the deepest source fits with room to
+    # spare, whether this test is built optimized or not.
     var n = DEEPEST;
     var programs = [
         deepest_program("    x = 1" + " + x".repeat(n) + ";"),
@@ -1794,7 +1795,7 @@ deepest_source_fits_the_server_stack() {
         Thread.spawn(() => {
             var uri = documents.receive().value();
             outcomes.send(copy(outcome_of(analyze(uri, documents.receive().value()))));
-        }, "pep-lsp-analysis").join();
+        }, "pep-lsp-analysis", ANALYSIS_STACK_SIZE / 2).join();
         expect_equal($"{i}: " + outcomes.receive().value(), $"{i}: passed");
     }
 }

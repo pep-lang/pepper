@@ -32,7 +32,7 @@ on:
       script:
         description: "Command to run (bash, from the repo root)"
         required: false
-        default: bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+        default: bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1
       provision:
         description: "Provision LLVM before running the script (false to probe the bare image)"
         required: false

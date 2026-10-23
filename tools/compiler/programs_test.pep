@@ -7,7 +7,8 @@
 # runs), `main`'s arguments, children that are copies of the program, and
 # `exec`; and the error for a member a value's type lacks inside an
 # interpolation or for another module's private extern; string literals
-# that hold a NUL or sit in default arguments; a `match` in a generic
+# that hold a NUL or sit in default arguments; an imported `const` string,
+# typed alike whole and in compilation units; a `match` in a generic
 # method of another module's struct, and a `match` arm in a module's file
 # whose case shares its name with a type of the module; a `[Move]`
 # argument called through a `shared` function value; externs bound to C symbols Pepper functions are
@@ -21,7 +22,7 @@ import [File, Path] from io;
 import process;
 import [TempFolder] from testing;
 import [
-    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, write_file
+    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, tool, write_file
 ] from tool_testing;
 import toolchain;
 
@@ -515,6 +516,41 @@ string_literals_in_default_arguments_arrive_whole() {
     expect_equal(output.stdout, "3 default 4 5\n7 rex\n2 6 module\n");
 }
 
+# An imported `const` string types alike whole and in compilation units: a
+# generic call infers `String` from it beside `Optional<String>.value()`,
+# `var` and overloads take it as a `StringConstant` (#175).
+[Test]
+const_string_types_alike_whole_and_in_units() {
+    var folder = TempFolder("programs_const_string_inference");
+    var testdata = Path("compiler").join("testdata");
+    var module = Path("k").join("module.pep");
+    write_file(folder.path.join(module), read_file(testdata.join("const_string_inference").join(module)));
+    var source = folder.path.join("const_string_inference.pep");
+    write_file(source, read_file(testdata.join("const_string_inference.pep")));
+    for (var whole in [true, false]) {
+        var name = whole ? "whole" : "units";
+        var program = folder.path.join(name + toolchain.executable_suffix());
+        var command = process
+            .Command(tool("pep-build").to_string())
+            .arguments([source.to_string(), "-I", folder.path.to_string(), "-o", program.to_string()])
+            .arguments(["--build", folder.path.join(name + ".build").to_string()]);
+        if (whole) {
+            command.environment("PEPC_NO_COMPILATION_UNITS", "1");
+        } else {
+            command.remove_environment("PEPC_NO_COMPILATION_UNITS");
+        }
+        var built = run(command);
+        if (!built.status.success()) {
+            panic($"the {name} build fails:\n{built.stdout}{built.stderr}");
+        }
+        var output = run(process.Command(program.to_string()));
+        expect_exit(output, 0);
+        expect_equal(
+            output.stdout, "true\nfalse\ntrue\nStringConstant quickfix\nStringConstant quickfix\nquickfix/local\n"
+        );
+    }
+}
+
 # ── moves ───────────────────────────────────────────────────────────────────
 
 [Test]
@@ -522,6 +558,13 @@ move_takes_a_call_through_a_shared_function_value() {
     var output = _run("move_shared_call");
     expect_exit(output, 0);
     expect_equal(output.stdout, "1\n6\n");
+}
+
+[Test]
+move_takes_a_value_once_no_closure_holds_it() {
+    var output = _run("move_after_closure");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "2\n11\n22\n");
 }
 
 # ── externs ─────────────────────────────────────────────────────────────────

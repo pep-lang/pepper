@@ -24,7 +24,7 @@ extern ushort __wasi_poll_oneoff(void* subscriptions, void* events, ulong count,
 
 # WASI preview 1 has no threads.
 [Target(OS(Wasi))]
-_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
+_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>, stack_size: ulong): __ptr<void> {
     panic("Thread.spawn: threads are not supported on WASI");
     return __null;
 }
