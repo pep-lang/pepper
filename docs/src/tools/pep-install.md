@@ -95,7 +95,8 @@ toolchain one of whose programs is running (a `pep-lsp` the editor
 started, say) cannot be moved, and the install fails, leaving it in place.
 
 The home is the folder above the running `pep-install` when that is a home
-(it has a `toolchains` folder), else `PEPPER_HOME`, else
+(it has a `toolchains` folder), or the one whose toolchain it is
+(`<home>/toolchains/<version>/bin`), else `PEPPER_HOME`, else
 `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere.
 
 ## Setting a machine up

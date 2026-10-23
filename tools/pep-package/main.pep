@@ -397,13 +397,24 @@ install_tool(spec: String, path: String, force: bool, options: Array<String>, of
     # A project of its own whose one dependency is the package: adding it
     # resolves the newest version the range allows and fetches it, through
     # the download cache, into the project's `.pep/deps`.
-    var staging = toolchain.find_home().root.join("cache").join("install");
+    # shortcut: this also resolves and checks out the package's own
+    # dependencies, which the build fetches again from its pep.lock; pick
+    # the version without resolving if installs grow slow.
+    # A folder per process, so that two installs at once stay apart.
+    var staging = toolchain.find_home().root.join("cache").join($"install-{process.id()}");
     if (staging.exists()) {
         var cleared = remove_tree(staging);
         if (cleared.is_err()) {
             return fail($"cannot remove {staging.to_string()}: {cleared.error().message}");
         }
     }
+    var result = _install_through(staging, spec, record, force, options);
+    remove_tree(staging);
+    return result;
+}
+
+# Installs the package `spec` names through a project in `staging`.
+_install_through(staging: Path, spec: String, record: InstalledTool, force: bool, options: Array<String>): int {
     var project_dir = staging.join("project");
     var created = Directory.create_all(project_dir);
     if (created.is_err()) {
@@ -438,9 +449,7 @@ install_tool(spec: String, path: String, force: bool, options: Array<String>, of
     if (fetched.is_err()) {
         return fail($"cannot fetch {record.source}: {fetched.error().message}");
     }
-    var result = _report(install_program(package_folder, record, force, options));
-    remove_tree(staging);
-    return result;
+    return _report(install_program(package_folder, record, force, options));
 }
 
 # Says what `done` did, or fails with why it could not.

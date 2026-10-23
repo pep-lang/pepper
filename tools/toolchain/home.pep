@@ -6,7 +6,8 @@
 #     <home>/toolchains/0.3.0/runtime/  and its runtime
 #     <home>/default-toolchain          the default toolchain's version
 #
-# A program installed in a home's `bin` uses that home. Any other uses
+# A program installed in a home's `bin`, or in one of its toolchains, uses
+# that home. Any other uses
 # `PEPPER_HOME`, else `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper`
 # elsewhere. Toolchains are also found in the folders `PEPPER_TOOLCHAIN_PATH`
 # lists, each laid out as `<home>/toolchains` is.
@@ -144,14 +145,25 @@ export struct Home {
     }
 }
 
-## Returns the Pepper home: the one the running program is installed in,
-## else `PEPPER_HOME` when it is set, else `%LOCALAPPDATA%\pepper` on
+## Returns the Pepper home: the one the running program is installed in
+## (in its `bin`, or in a toolchain's), else `PEPPER_HOME` when it is set, else `%LOCALAPPDATA%\pepper` on
 ## Windows and `~/.pepper` elsewhere. Its `search` folders are those
 ## `PEPPER_TOOLCHAIN_PATH` lists.
 export find_home(): Home {
     var installed = home_of_executable();
     if (installed.is_value()) {
         return installed.value();
+    }
+    # A toolchain's tool, `<home>/toolchains/<version>/bin/<tool>`.
+    var executable = process.executable_path();
+    if (executable.is_ok()) {
+        var toolchains = executable.value().join("..").join("..").join("..").normalize();
+        var root = toolchains.parent();
+        if (toolchains.file_name().value_or("") == "toolchains" and root.is_value()) {
+            var found = Home(root.value());
+            found.search = toolchain_path();
+            return found;
+        }
     }
     var home = Home(_default_root());
     home.search = toolchain_path();

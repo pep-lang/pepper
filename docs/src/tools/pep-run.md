@@ -47,7 +47,8 @@ pep-run [BUILD OPTIONS] -- [ARGUMENTS]...
    build the program into a folder of its own:
    `<Pepper home>/run/<key>/<entry stem>` (`main` for a project), where the
    key is a hash of the current folder, the build options and the entry
-   file, and the Pepper home is `PEPPER_HOME`, else `~/.pepper`
+   file, and the Pepper home is the one whose toolchain `pep-run` is, else
+   `PEPPER_HOME`, else `~/.pepper`
    (`%LOCALAPPDATA%\pepper` on Windows; see
    [Toolchains: pep-install](pep-install.md)).
 2. The build cache is `PEPPER_CACHE_DIR` when it is set, else

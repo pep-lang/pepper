@@ -228,8 +228,8 @@ folder.
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),
-with the Pepper home's own `pepper` (in the home `PEPPER_HOME` names,
-else the default one; see [Toolchains: pep-install](pep-install.md)), so
+with the Pepper home's own `pepper` (in the home whose toolchain
+`pep-package` is, else the one `PEPPER_HOME` names, else the default one; see [Toolchains: pep-install](pep-install.md)), so
 both toolchains must be installed there; `latest` is the newest
 installed release, not a prerelease. A failing run stops it and shows
 what the tests printed. Last, it tags `HEAD` `v<version>` and pushes the
@@ -355,8 +355,9 @@ pepper package uninstall tool
   `.old` file stays until the next `install` or `uninstall` of that
   program removes it.
 
-The home is `PEPPER_HOME`, else `%LOCALAPPDATA%\pepper` on Windows and
-`~/.pepper` elsewhere, as for [`pep-install`](pep-install.md#where-toolchains-go).
+The home is the one whose toolchain `pep-package` is, else `PEPPER_HOME`,
+else `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere, as for
+[`pep-install`](pep-install.md#where-toolchains-go).
 `pepper install` is a different command: it installs toolchains.
 
 ## pep.lock
@@ -474,7 +475,8 @@ fetch they do on their own (see [The compiler: pep-build](pep-build.md)).
 
 Each package is downloaded once per machine, into a cache in the Pepper
 home that every project shares, as Cargo's `~/.cargo/registry` and Go's
-module cache are: `cache/packages` in the home `PEPPER_HOME` names, else
+module cache are: `cache/packages` in the home whose toolchain
+`pep-package` is, else the one `PEPPER_HOME` names, else
 `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere (see
 [Toolchains: pep-install](pep-install.md)). It holds, for each package,
 

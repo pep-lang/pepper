@@ -1504,4 +1504,16 @@ install_puts_a_packages_program_in_the_homes_bin() {
     var again = hosts.package(root, ["uninstall", "hello"]);
     expect_exit(again, 1);
     expect_contains(again.stderr, "'hello' was not installed by 'pepper package install'");
+
+    # A toolchain's pep-package uses the home it is installed in, over
+    # PEPPER_HOME.
+    var other = root.join("other");
+    var bin = other.join("toolchains").join("0.1.0").join("bin");
+    Directory.create_all(bin);
+    var copy = bin.join("pep-package" + toolchain.executable_suffix());
+    copy_executable(tool("pep-package"), copy);
+    var info = run(hosts.command(copy.to_string(), root, ["cache", "info"]));
+    expect_equal(
+        Path(info.stdout.trim()).normalize().to_string(), other.join("cache").join("packages").normalize().to_string()
+    );
 }
