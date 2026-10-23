@@ -574,6 +574,13 @@ move_in_a_loop_takes_a_value_given_again_before_the_next_pass() {
     expect_equal(output.stdout, "40 2 10\n");
 }
 
+[Test]
+a_local_of_an_enclosing_with_block_keeps_a_copy_of_an_inner_locked_value() {
+    var output = _run("nested_with");
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "32\n");
+}
+
 # ── externs ─────────────────────────────────────────────────────────────────
 
 [Test]

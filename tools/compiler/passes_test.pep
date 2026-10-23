@@ -420,6 +420,41 @@ reports_confinement_errors_part_17() {
     reports_confinement_error(16);
 }
 
+[Test]
+reports_confinement_errors_part_18() {
+    reports_confinement_error(17);
+}
+
+[Test]
+reports_confinement_errors_part_19() {
+    reports_confinement_error(18);
+}
+
+[Test]
+reports_confinement_errors_part_20() {
+    reports_confinement_error(19);
+}
+
+[Test]
+reports_confinement_errors_part_21() {
+    reports_confinement_error(20);
+}
+
+[Test]
+reports_confinement_errors_part_22() {
+    reports_confinement_error(21);
+}
+
+[Test]
+reports_confinement_errors_part_23() {
+    reports_confinement_error(22);
+}
+
+[Test]
+reports_confinement_errors_part_24() {
+    reports_confinement_error(23);
+}
+
 reports_confinement_error(index: ulong) {
     var folder = TempFolder($"passes_confinement_{index}");
     var programs = [confinement_error_programs()[index]];
@@ -461,6 +496,17 @@ confinement_error_programs(): String[] {
         "# expect: main.pep:17:21: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..3) {\n        c.send(move(b));\n        b = Box(2);\n        if (i == 0) {\n            continue;\n        }\n        keep = b;\n    }\n    return keep.n;\n}\n",
         "# expect: main.pep:18:25: error: 'b' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var keep = Box(0);\n    var b = Box(1);\n    for (var i in 0..2) {\n        for (var j in 0..2) {\n            c.send(move(b));\n            b = Box(2);\n        }\n        keep = b;\n    }\n    return keep.n;\n}\n",
         "# expect: main.pep:17:21: error: 'b' cannot be moved: 'get' also references its value\nimport async;\n\nstruct Box {\n    var n: int;\n\n    construct(n: int) {\n        this.n = n;\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Box>();\n    var get = () => 0;\n    var b = Box(1);\n    for (var i in 0..2) {\n        c.send(move(b));\n        b = Box(2);\n        var held = b;\n        get = () => held.n;\n    }\n    return get();\n}\n",
+        # A local of an enclosing `with` block outlives an inner lock: it
+        # cannot hold part of the inner value directly, in a field, by joining
+        # it, or from a loop's earlier pass, nor can a closure, a `return`
+        # or a `move` carry it out (#200).
+        "# expect: main.pep:11:17: error: 'o' is part of the value locked by 'other' and cannot outlive the lock\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        with (var o = other.lock()) {\n            t = o;\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:19:23: error: 'o' is part of the value locked by 'other' and cannot outlive the lock\nimport async;\n\nstruct Holder {\n    var items: Array<String>;\n\n    construct() {\n        items = Array<String>();\n    }\n}\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var h = Holder();\n        with (var o = other.lock()) {\n            h.items = o;\n        }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:11:22: error: 't' cannot move into the value locked by 'other'\nimport async;\n\nconst names = async.Mutex<Array<Array<String>>>(Array<Array<String>>());\nconst other = async.Mutex<Array<Array<String>>>(Array<Array<String>>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        with (var o = other.lock()) {\n            o.append(t);\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:12:17: error: closure captures 'held', which is part of the value locked by 'other'\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var f = (): ulong => 0;\n        with (var o = other.lock()) {\n            var held = o;\n            f = (): ulong => held.count;\n        }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:11:20: error: 'held' is part of the value locked by 'other' and cannot be returned from the block\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nlast(): Array<String> {\n    with (var list = names.lock()) {\n        with (var o = other.lock()) {\n            var held = o;\n            return held;\n        }\n    }\n    return Array<String>();\n}\n\nmain(): int {\n    return last().count as int;\n}\n",
+        "# expect: main.pep:12:22: error: 'held' cannot be moved: 'o' also references its value\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        with (var o = other.lock()) {\n            var held = o;\n            t = move(held);\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:15:21: error: 'o' is part of the value locked by 'other' and cannot outlive the lock\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\nconst other = async.Mutex<Array<String>>(Array<String>());\nconst lines = async.Channel<String>();\n\nmain(): int {\n    with (var list = names.lock()) {\n        var t = Array<String>();\n        for (var i in 0..2) {\n            var line = \"x\";\n            lines.send(move(line));\n            with (var o = other.lock()) {\n                t = o;\n            }\n        }\n        t.append(\"unlocked\");\n    }\n    return 0;\n}\n",
     ];
 }
 
