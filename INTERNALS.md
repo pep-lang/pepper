@@ -1965,7 +1965,8 @@ changed.
   checked, and warns, again), and `parts`, the list of its parts' objects.
   Each part is cached on its own, `<cache>/v3/u/<unit>#<n>/<key>/0.o`,
   keyed like a C file's object (`Keys.part`): the part's files by their
-  text, and every other file the unit reads by its interface hash. So when
+  text, every other file the unit reads by its interface hash, and what the
+  unit's last releases steer into (below). So when
   a body edit misses a unit, only the edited file's part is optimized and
   emitted again; the others are linked from the cache. Each folder is
   written to the build folder and moved into place as one. The same key
@@ -2001,6 +2002,24 @@ changed.
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
   whole, objects a build was about to link among them.
+- **Steering.** A recursive struct's last release steers into the
+  conformers of a trait it holds and the closures of a function type
+  (`find_chains`), which are the whole program's, so a unit's code can name
+  structs of files it does not read, which another program may not have
+  (#170). `codegen.generate` hands out each cycle's structs with their
+  files (`Generator.cycles`), and `Keys.steering` lists, once per unit, the
+  structs of the cycles the unit's files see into that lie outside them,
+  each by name and its files' hashes. That list goes into each part's key,
+  and the unit's objects are stored beside its key's folder under the key
+  and the list's hash (`Cache.steered`, `<key>.<hash>/`, holding the list
+  as `steers`). Before sema, `reuse` takes the one that steers into the most
+  structs whose files are all in the program (`Cache.best_steered`). After
+  codegen, a hit whose list lacks a line this program's cycles give
+  (`steers_within`; closures of files whose bodies sema skipped are not
+  seen, so the program's list can only be shorter) ends the build, and
+  `build` runs it again with that unit compiled (`Built.again`), printing
+  its warnings once. The compilation units' own objects need none of this:
+  a unit is generated from the records of what it reads only.
 - **Short paths.** The cache sits in the project's folder, and Windows
   tools fail on a path over 260 characters, so its paths stay short:
   one-letter folders, a unit's folder cut to 20 characters, the last 9 a
@@ -2295,8 +2314,8 @@ check when `StructDesc.immortal` (a reference enum's bare cases, a plain
 function type's static objects), in place of `synthesize`'s body, so it
 reaches the same last release; every other struct keeps that body, and a
 struct no cycle runs through compiles exactly as before. The analysis sees
-the whole program, so a unit cached before another unit made a type
-recursive keeps its plain last release: still correct, only unbounded.
+the whole program, so the build cache keys a file's objects on the structs
+outside its files that its cycles hold (§ build cache, "Steering").
 So taking
 or dropping a reference costs no call even across units and at `-O0`, and
 the cache keys need nothing new: the step depends only on the head layout
