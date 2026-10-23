@@ -20,6 +20,7 @@
 #     pepper package tree --invert numbers      # what depends on numbers
 #     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
+#     pepper package vendor [vendor]            # every locked package into the repository
 #     pepper package cache info                 # the download cache every project shares
 #     pepper package cache clean
 #
@@ -38,6 +39,7 @@ import [parse_range] from semver;
 import syntax;
 import toml;
 import toolchain;
+import "archive";
 import "git";
 import "graph";
 import "lock";
@@ -136,6 +138,15 @@ main(args: String[]): int {
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
     var outdated_json = outdated.flag("json", help = "print the outdated packages as JSON");
+    var vendor = parser.command(
+        "vendor",
+        "Copies every locked package into a folder of the project, and sets pep.toml's '[fetch] vendor' so builds read it, with no network or download cache"
+    );
+    var vendor_dir = vendor.positional(
+        "dir",
+        "the folder, relative to the project (default: pep.toml's '[fetch] vendor', else 'vendor')",
+        required = false
+    );
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
     cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
@@ -202,6 +213,9 @@ main(args: String[]): int {
     }
     if (outdated.is_selected) {
         return project.outdated(exit_code.is_set, outdated_json.is_set);
+    }
+    if (vendor.is_selected) {
+        return project.vendor(vendor_dir.value_or(""));
     }
     print(parser.help());
     return 2;
@@ -386,8 +400,9 @@ struct Project {
 
     # Resolves the graph, keeping locked revisions unless `update_all` or
     # `update` names them, checks every package out and writes pep.lock.
-    # Returns the graph, or prints why it failed.
-    _resolve(update_all: bool, update: Array<String>): Result<Graph> {
+    # With `vendor`, the packages are read from that folder instead, and
+    # pep.lock is never changed. Returns the graph, or prints why it failed.
+    _resolve(update_all: bool, update: Array<String>, vendor: String = ""): Result<Graph> {
         var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<Graph>.Err(manifest.error().message);
@@ -401,6 +416,7 @@ struct Project {
         resolver.update = update;
         resolver.offline = offline;
         resolver.toolchain = version();
+        resolver.vendor = vendor;
         var graph = resolver.resolve();
         if (graph.is_err()) {
             return graph;
@@ -412,6 +428,13 @@ struct Project {
         # Unchanged, pep.lock is left as it is, line endings and all.
         if (lock_text(graph.value().packages) == lock_text(previous.value())) {
             return graph;
+        }
+        if (!vendor.is_empty) {
+            return Result<Graph>.Err(
+                $"pep.lock does not match pep.toml, and the project is vendored ('[fetch] vendor'):\n  "
+                    + "\n  ".join(changes)
+                    + "\nrun 'pepper package vendor', which updates pep.lock and the vendor folder"
+            );
         }
         if (locked) {
             return Result<Graph>.Err(
@@ -463,6 +486,18 @@ struct Project {
     }
 
     fetch(): int {
+        var manifest = read_manifest(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        # A vendored project fetches nothing: it checks the vendor folder.
+        if (!manifest.value().vendor.is_empty) {
+            var checked = _resolve(false, Array<String>(), manifest.value().vendor);
+            if (checked.is_err()) {
+                return fail(checked.error().message);
+            }
+            return 0;
+        }
         # The locked packages not on disk yet, to say they were fetched.
         var missing = Array<Locked>();
         var locked = read_lock(lock_path(dir));
@@ -497,8 +532,15 @@ struct Project {
         if (locked.is_err()) {
             return fail(locked.error().message);
         }
+        var manifest = read_manifest(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        var vendor = manifest.value().vendor;
         var resolver = Resolver(dir, Manifest(), locked.value());
         resolver.offline = offline;
+        # Vendored, each package is only checked.
+        resolver.vendor = vendor;
         for (var source in sources) {
             var found = Optional<Locked>.Empty;
             for (var package in locked.value()) {
@@ -514,7 +556,7 @@ struct Project {
                 continue;
             }
             var (host, repository) = split_source(source);
-            var package = package_dir(dir, host, repository);
+            var package = package_dir(dir, host, repository, vendor);
             var was_there = package.is_directory();
             var fetched = resolver.fetch(host, repository, package, found.value().commit, found.value().replaced_by);
             if (fetched.is_err()) {
@@ -797,6 +839,13 @@ struct Project {
     # Updates one dependency at a time, building the project after each,
     # and keeps only the updates that build.
     update_verified(specs: Array<String>): int {
+        var manifest = read_manifest(root_path);
+        if (manifest.is_ok() and !manifest.value().vendor.is_empty) {
+            # Its builds read the vendor folder, which an update leaves as it was.
+            return fail(
+                "the project is vendored ('[fetch] vendor'), so a build would not see an update; run 'pepper package update', then 'pepper package vendor', then build"
+            );
+        }
         var sources = _sources(specs);
         if (sources.is_err()) {
             return fail(sources.error().message);
@@ -952,6 +1001,141 @@ struct Project {
         }
         File.stdout().write_all(table(["package", "locked", "wanted", "latest", "source"], rows.value()));
         return exit_code ? 1 : 0;
+    }
+
+    # Resolves the graph into `.pep/deps` as `fetch` does, then copies every
+    # locked package (dev-dependencies and every platform's included) into
+    # `folder`, removes the packages there pep.lock no longer lists, and
+    # sets pep.toml's `[fetch] vendor` to `folder`, so builds read it. In a
+    # workspace, all of that is at its root, for every member.
+    vendor(given: String): int {
+        var manifest = read_manifest(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        var folder = !given.is_empty ? given : !manifest.value().vendor.is_empty ? manifest.value().vendor : "vendor";
+        folder = folder.replace("\\", "/");
+        while (folder.ends_with("/")) {
+            folder = folder.substr(0, folder.length - 1);
+        }
+        # Stale packages are removed from it, so it stays inside the project.
+        var parts = folder.split("/");
+        if (folder.is_empty
+            or folder.starts_with("/")
+            or folder.contains(":")
+            or parts.contains("..")
+            or parts.contains(".")
+            or parts[0] == ".pep"
+            or parts[0] == ".git") {
+            return fail($"'{folder}' must be a folder inside the project, such as 'vendor'");
+        }
+        var graph = _resolve(false, Array<String>());
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var kept = HashSet<String>();
+        for (var package in graph.value().packages) {
+            # A `path` override's folder is the project's own.
+            if (package.replaced_by.starts_with("path:")) {
+                continue;
+            }
+            var (host, repository) = split_source(package.source);
+            var target = package_dir(dir, host, repository, folder);
+            kept.insert(target.normalize().to_string());
+            if (toolchain.check_vendored(target, package.commit).is_ok()) {
+                continue;
+            }
+            # A fork is checked out where the original would be, and its
+            # archive is the fork's.
+            var (from_host, from_repository) = split_source(
+                package.replaced_by.is_empty ? package.source : package.replaced_by
+            );
+            var written = vendor_package(
+                from_host,
+                from_repository,
+                package_dir(dir, host, repository),
+                target,
+                package.commit,
+                package.sha256,
+                offline
+            );
+            if (written.is_err()) {
+                return fail($"cannot vendor {package.source}: {written.error().message}");
+            }
+            say($"vendored {package.describe()} ({package.source})");
+        }
+        var root = dir.join(folder);
+        for (var domain in ["github.com", "gitlab.com", "codeberg.org"]) {
+            var removed = _remove_unlocked(root.join(domain), kept);
+            if (removed.is_err()) {
+                return fail(removed.error().message);
+            }
+        }
+        if (root.is_directory()) {
+            # Git keeps the files byte for byte, so the checksums still match
+            # in a checkout with `core.autocrlf`.
+            var attributes = File.write_text(root.join(".gitattributes"), "* -text\n");
+            if (attributes.is_err()) {
+                return fail($"cannot write {root.join(".gitattributes").to_string()}: {attributes.error().message}");
+            }
+        }
+        if (manifest.value().vendor != folder) {
+            var document = toml.parse_document(manifest.value().text, path = root_path.to_string());
+            if (document.is_err()) {
+                return fail(document.error().to_string());
+            }
+            var edited = document.value();
+            var set = edited.set(["fetch", "vendor"], toml.TomlValue.String(folder));
+            if (set.is_err()) {
+                return fail(set.error().to_string());
+            }
+            var written = File.write_text(root_path, edited.to_string());
+            if (written.is_err()) {
+                return fail($"cannot write {root_path.to_string()}: {written.error().message}");
+            }
+            say($"set '[fetch] vendor = \"{folder}\"' in pep.toml: builds now read the packages from {folder}");
+        }
+        return 0;
+    }
+
+    # Removes each vendored package under `dir` (a folder holding
+    # `.pep-commit`) whose folder is not in `kept`, and folders left empty.
+    _remove_unlocked(dir: Path, kept: HashSet<String>): Result<void> {
+        if (!dir.is_directory()) {
+            return Result<void>.ok();
+        }
+        if (dir.join(Path(toolchain.VENDOR_COMMIT_FILE)).is_file()) {
+            if (kept.contains(dir.normalize().to_string())) {
+                return Result<void>.ok();
+            }
+            var removed = remove_tree(dir);
+            if (removed.is_err()) {
+                return Result<void>.Err($"cannot remove {dir.to_string()}: {removed.error().message}");
+            }
+            say($"removed {dir.to_string()}, which pep.lock no longer lists");
+            return Result<void>.ok();
+        }
+        var listed = Directory.open(dir);
+        if (listed.is_err()) {
+            return Result<void>.Err($"cannot open {dir.to_string()}: {listed.error().message}");
+        }
+        var entries = listed.value().entries();
+        if (entries.is_err()) {
+            return Result<void>.Err($"cannot list {dir.to_string()}: {entries.error().message}");
+        }
+        for (var entry in entries.value()) {
+            if (entry.is_directory) {
+                var nested = _remove_unlocked(entry.path, kept);
+                if (nested.is_err()) {
+                    return nested;
+                }
+            }
+        }
+        var left = Directory.open(dir).value().entries();
+        if (left.is_ok() and left.value().is_empty) {
+            Directory.remove(dir);
+        }
+        return Result<void>.ok();
     }
 
     # Checks that the package is ready to release at pep.toml's `version`

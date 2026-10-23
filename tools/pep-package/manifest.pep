@@ -96,6 +96,9 @@ export struct Manifest {
     var requirements: Array<Requirement> = __null;
     # `[fetch]`'s `hosts`: where `add` looks a repository up, in order.
     var hosts: Array<String> = __null;
+    # `[fetch]`'s `vendor`: the folder `vendor` copied every locked package
+    # into, which builds read; empty when the project is not vendored.
+    var vendor: String = "";
     # Whether it has `[workspace]`: it is a workspace's root.
     var is_workspace: bool = false;
     # `[workspace]`'s `members` as written: folders, or globs of them.
@@ -223,6 +226,13 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             }
         }
     }
+    var vendor = root.lookup("fetch.vendor");
+    if (vendor.is_value()) {
+        if (vendor.value().as_string().is_empty()) {
+            return Result<Manifest>.Err($"{path.to_string()}: '[fetch]' 'vendor' must be a folder's name");
+        }
+        manifest.vendor = vendor.value().as_string().value();
+    }
     for (var name in ["dependencies", "dev-dependencies"]) {
         var dependencies = root.try_get(name);
         if (dependencies.is_empty()) {
@@ -295,7 +305,8 @@ export newer_manifest_features(): Array<(String, String)> {
         ("target", "0.11.0"),
         ("features", "0.11.0"),
         ("overrides", "0.11.0"),
-        ("workspace", "0.11.0")
+        ("workspace", "0.11.0"),
+        ("fetch.vendor", "0.11.0")
     ];
 }
 
