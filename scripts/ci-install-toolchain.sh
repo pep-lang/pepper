@@ -151,7 +151,7 @@ if [ "$mode" = pin ]; then
   for name in "pepper-$version-$platform$ext" "pepper-install-$version-$platform$ext"; do
     grep -E "^[0-9a-f]{64} [ *]$name\$" <<< "$pinned" > "$downloads/$name.sha256" \
       || { echo "error: $pin pins no $name" >&2; exit 1; }
-    curl -fsSL --retry 5 --retry-all-errors -o "$downloads/$name" \
+    curl -fsSL --retry 5 -o "$downloads/$name" \
       "https://github.com/pep-lang/pepper/releases/download/stage0/${commit:0:12}-$name"
   done
   archive="$downloads/pepper-$version-$platform$ext"
