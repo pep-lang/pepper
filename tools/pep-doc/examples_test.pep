@@ -278,35 +278,32 @@ platform_only(): bool {
     return os.environment("PEPPER_DOCS_EXAMPLES").value_or("") == "platform";
 }
 
-# Whether the example at `path`, a file or a folder of files, selects code
+# Whether the example at `path`, a file or a folder of files at any depth, selects code
 # per platform: a line with a `[Target(...)]` that names an `OS(...)` or an
 # `Arch(...)`.
 marked_per_platform(path: Path): bool {
-    var files = Array<Path>();
     if (path.is_directory()) {
         var listing = Directory.open(path);
         expect_true(listing.is_ok());
         if (listing.is_err()) {
             return false;
         }
+        # Its modules' folders too.
         for (var entry in listing.value().entries().value()) {
-            if (entry.name.ends_with(".pep")) {
-                files.append(path.join(entry.name));
-            }
-        }
-    } else {
-        files.append(path);
-    }
-    for (var file in files) {
-        var text = File.read_to_string(file);
-        expect_true(text.is_ok());
-        if (text.is_err()) {
-            continue;
-        }
-        for (var line in text.value().split("\n")) {
-            if (line.contains("[Target(") and (line.contains("OS(") or line.contains("Arch("))) {
+            if ((entry.is_directory or entry.name.ends_with(".pep")) and marked_per_platform(path.join(entry.name))) {
                 return true;
             }
+        }
+        return false;
+    }
+    var text = File.read_to_string(path);
+    expect_true(text.is_ok());
+    if (text.is_err()) {
+        return false;
+    }
+    for (var line in text.value().split("\n")) {
+        if (line.contains("[Target(") and (line.contains("OS(") or line.contains("Arch("))) {
+            return true;
         }
     }
     return false;
