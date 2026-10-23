@@ -1277,6 +1277,19 @@ a_workspace_shares_one_lock_and_builds_its_members() {
     expect_false(app.join("pep.lock").exists());
     expect_false(app.join(".pep").join("deps").exists());
 
+    # `tree` and `why`, from inside a member, report the whole workspace's
+    # graph: geo's geometry and shapes' inherited numbers too.
+    var tree = hosts.package(app, ["tree", "--offline"]);
+    expect_exit(tree, 0);
+    expect_contains(
+        tree.stdout, "-- geometry 1.1.0 (github:someone/geometry)\n|   `-- numbers 1.3.1 (github:other/numbers)\n"
+    );
+    expect_contains(tree.stdout, "`-- numbers 1.3.1 (github:other/numbers)\n");
+    var why = hosts.package(app, ["why", "numbers", "--offline"]);
+    expect_exit(why, 0);
+    expect_contains(why.stdout, "pep.toml -> geometry 1.1.0 -> numbers 1.3.1\n");
+    expect_contains(why.stdout, "pep.toml -> numbers 1.3.1\n");
+
     # `--all`, from any member: each member with an entry file, into its own
     # output; a library has none.
     var built = run(hosts.command(tool("pep-build").to_string(), shapes, ["--all"]));
