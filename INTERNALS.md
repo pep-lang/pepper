@@ -1254,7 +1254,11 @@ arguments, and `_TypeScopes.overload_call` checks that a call names a set
 (`Overloads.call_set_name`) before parsing its type arguments; and
 `traits.used_trait_types` prints and parses only types that spell a
 trait's name as a whole word (`ArrayIterator` does not mention
-`Iterator`). `specialize_methods` builds its `StructTable` only once a call
+`Iterator`). The walk rewrites a call before its arguments, so
+`_TypeScopes._call_type` types a generic call not rewritten yet as the
+specialization its arguments select (`inferred_type_arguments`, which
+`_infer_type_arguments` shares): calls nested in each other's arguments
+(`[[1]]`, `id(id(1))`) resolve in one walk, not one per run or round. `specialize_methods` builds its `StructTable` only once a call
 names a generic method. Between its runs it keeps, in
 `PassState.implicit` (`ImplicitMemo`), what each callable looked up and its
 fingerprint (`_Worklist`), so a run walks only the callables whose code or

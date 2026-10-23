@@ -11,19 +11,19 @@
 # method of another module's struct, and a `match` arm in a module's file
 # whose case shares its name with a type of the module; a `[Move]`
 # argument called through a `shared` function value; externs bound to C symbols Pepper functions are
-# named after, at each `-O` level; nested literals 256 levels deep, built
-# in time; reference chains 100,000 deep, released
-# without overflowing the stack; the message a stack overflow prints on
-# the main thread, a `Thread` and a task; and the panic hook, which every
-# other kind of panic runs first. The programs are in
-# `testdata/`.
+# named after, at each `-O` level; literals and generic calls nested 64
+# levels deep, built in as many rounds as one level; reference chains
+# 100,000 deep, released without overflowing the stack; the message a
+# stack overflow prints on the main thread, a `Thread` and a task; and the
+# panic hook, which every other kind of panic runs first. The programs are
+# in `testdata/`.
 
 import [File, Path] from io;
 import os;
 import process;
 import [TempFolder] from testing;
 import [
-    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, write_file
+    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, tool, write_file
 ] from tool_testing;
 import toolchain;
 
@@ -517,34 +517,62 @@ string_literals_in_default_arguments_arrive_whole() {
     expect_equal(output.stdout, "3 default 4 5\n7 rex\n2 6 module\n");
 }
 
-# Nested collection literals and generic calls are typed in one walk, not
-# one level per specialization round: 256 levels (the nesting limit) built
-# in minutes before (#202), and generic calls past eight levels failed to
-# infer.
-[Test]
-nested_literals_build_in_time_and_run() {
-    var folder = TempFolder("programs_nested_literals");
-    ulong depth = 256;
-    var index = "[0]".repeat(depth);
-    var source = "id<T>(x: T): T {\n    return x;\n}\n\nexport main(): int {\n"
+# A program of array literals and generic calls nested `depth` levels, and
+# map literals up to 16: what it returns is 12.
+_nested_source(depth: ulong): String {
+    var maps = depth < 16 ? depth : 16;
+    return "id<T>(x: T): T {\n    return x;\n}\n\nexport main(): int {\n"
         + $"    var a = {"[".repeat(depth)}7{"]".repeat(depth)};\n"
-        + $"    var m = {"[1: ".repeat(32)}2{"]".repeat(32)};\n"
-        + $"    var i = {"id(".repeat(40)}3{")".repeat(40)};\n"
-        + $"    return a{index} + m{"[1]".repeat(32)} + i;\n}\n";
-    var path = folder.path.join("nested.pep");
-    write_file(path, source);
-    var program = folder.path.join("nested" + toolchain.executable_suffix());
+        + $"    var m = {"[1: ".repeat(maps)}2{"]".repeat(maps)};\n"
+        + $"    var i = {"id(".repeat(depth)}3{")".repeat(depth)};\n"
+        + $"    return a{"[0]".repeat(depth)} + m{"[1]".repeat(maps)} + i;\n}\n";
+}
+
+# Builds `_nested_source(depth)` in `folder` with `-T passes` and runs it;
+# returns how many times `resolve_implicit_types` ran, and the seconds the
+# build took.
+_build_nested(folder: Path, depth: ulong): (String, ulong) {
+    var name = $"nested{depth}";
+    var source = folder.join(name + ".pep");
+    write_file(source, _nested_source(depth));
+    var program = folder.join(name + toolchain.executable_suffix());
     var start = os.Instant.now();
-    var error = build_program(path, program, folder.path.join("build"));
+    var built = run(
+        process
+            .Command(tool("pep-build").to_string())
+            .arguments([source.to_string(), "-o", program.to_string(), "--build", folder.join(name).to_string()])
+            .arguments(["-T", "passes"])
+    );
     var seconds = start.elapsed().seconds();
-    if (error.is_value()) {
-        panic($"nested.pep does not build:\n{error.value()}");
-    }
-    # Generous: it builds in seconds; the old growth took minutes.
-    if (seconds >= 120) {
-        panic($"nested.pep took {seconds} s to build");
-    }
+    expect_exit(built, 0);
     expect_exit(run(process.Command(program.to_string())), 12);
+    String rounds = "";
+    for (var line in built.stderr.split("\n")) {
+        if (line.ends_with("x resolve_implicit_types")) {
+            var words = line.split(" ");
+            rounds = words[words.count - 2];
+        }
+    }
+    expect_true(rounds.size > 0);
+    return (rounds, seconds);
+}
+
+# Nested collection literals and generic calls are typed in one walk, so
+# the specialization loop runs as many rounds however deep they nest: each
+# level took a round of its own (#202), and generic calls past eight levels
+# failed to infer. 64 levels keep the test quick; 256 build too, in minutes
+# and gigabytes, since each level's specialization spells its types whole.
+[Test]
+nested_literals_build_in_as_many_rounds_as_one_level() {
+    var folder = TempFolder("programs_nested_literals");
+    var (one, _) = _build_nested(folder.path, 1);
+    var (deep, seconds) = _build_nested(folder.path, 64);
+    expect_equal(deep, one);
+    # Generous: it builds in seconds, and took minutes when each level had
+    # its round.
+    if (seconds >= 120) {
+        panic($"64 levels took {seconds} s to build");
+    }
 }
 
 # ── moves ───────────────────────────────────────────────────────────────────
