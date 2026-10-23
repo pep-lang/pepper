@@ -48,10 +48,14 @@ extern ulong GetTickCount64();
 
 # ── Threads ──────────────────────────────────────────────────────────────────
 
-# Starts a thread running `start(argument)`; its handle, or null on failure.
+# Starts a thread running `start(argument)` with `stack_size` bytes of
+# stack reserved (0: the executable's default, 1 MiB); its handle, or null
+# on failure.
 [Target(OS(Windows))]
-_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
-    return CreateThread(__null, 0, start, argument, 0, __null);
+_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>, stack_size: ulong): __ptr<void> {
+    # STACK_SIZE_PARAM_IS_A_RESERVATION: reserve the size, commit as used.
+    uint flags = stack_size > 0 ? 65536 : 0;
+    return CreateThread(__null, stack_size, start, argument, flags, __null);
 }
 
 [Target(OS(Windows))]

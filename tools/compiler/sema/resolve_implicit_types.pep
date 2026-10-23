@@ -1069,6 +1069,19 @@ struct _TypeScopes {
             return out;
         }
         out.append_all(tables.field_lists(key));
+        var generic = out.count == 0 ? _unspecialized(key) : Optional<(String, Array<(String, TypeName)>)>.Empty;
+        if (generic.is_value()) {
+            var (generic_key, map) = generic.value();
+            for (var fields in field_tables(generic_key)) {
+                var substituted = Array<VariableDef>();
+                for (var f in fields) {
+                    var copy = f.copy();
+                    replace_map(copy.ty, map);
+                    substituted.append(copy);
+                }
+                out.append(substituted);
+            }
+        }
         return out;
     }
 
@@ -1082,7 +1095,49 @@ struct _TypeScopes {
             return out;
         }
         out.append_all(tables.method_lists(key));
+        var generic = out.count == 0 ? _unspecialized(key) : Optional<(String, Array<(String, TypeName)>)>.Empty;
+        if (generic.is_value()) {
+            var (generic_key, map) = generic.value();
+            for (var methods in method_tables(generic_key, name)) {
+                var substituted = Array<(String, TypeName)>();
+                for (var (m, ret) in methods) {
+                    var copy = ret.copy();
+                    replace_map(copy, map);
+                    substituted.append((m, copy));
+                }
+                out.append(substituted);
+            }
+        }
         return out;
+    }
+
+    # For `key`, a specialization not made yet, its generic declaration's
+    # table key and the type arguments for its parameters. Its fields and
+    # methods type from that declaration, so `opt.value()` types the same
+    # before `Optional<String>` is made (a whole-program build) as after (a
+    # build in units loads it with the runtime), and a generic call infers
+    # its type arguments alike (#175).
+    _unspecialized(key: String): (String, Array<(String, TypeName)>)? {
+        var none = Optional<(String, Array<(String, TypeName)>)>.Empty;
+        if (!key.ends_with(">")) {
+            return none;
+        }
+        var ty = parse_type_string(key);
+        var generic = tables.struct_type_of(ty.name);
+        if (!generic.is_value() or generic.value().sub_types.count != ty.sub_types.count) {
+            return none;
+        }
+        var generic_key = generic.value().to_string();
+        if (generic_key == key) {
+            return none;
+        }
+        var map = Array<(String, TypeName)>();
+        ulong i = 0;
+        while (i < ty.sub_types.count) {
+            map.append((generic.value().sub_types[i].name, ty.sub_types[i]));
+            i += 1;
+        }
+        return Optional<(String, Array<(String, TypeName)>)>.Value((generic_key, map));
     }
 
     ## Declared type of field `name` on struct type `ty`.
