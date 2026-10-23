@@ -2,3 +2,4 @@
 ## one source file, straight from the tokens that the `syntax` library's
 ## lexer reads.
 export * from "parser";
+export * from "stack";

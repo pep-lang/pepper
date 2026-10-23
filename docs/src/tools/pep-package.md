@@ -198,8 +198,12 @@ First it checks, and lists every check that fails at once:
   dev-dependency may be anything, since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
   `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
-  `[features]` and `[workspace]` tables, and a dependency's `optional`,
-  `features`, `default-features` and `workspace`, need 0.11.0.
+  `[features]`, `[overrides]` and `[workspace]` tables, and a
+  dependency's `optional`, `features`, `default-features` and
+  `workspace`, need 0.11.0;
+- `pep.toml` has no `[overrides]`: a dependent builds with the packages
+  they replace, not the code the package was tested with, so a release
+  waits until the fix it needs is released too.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
@@ -236,6 +240,9 @@ marks:
 - `[dev]`: only the project's dev-dependencies lead to it;
 - `[target: <condition>]`: only builds for the targets the condition
   selects need it (see [`[target]` tables](projects.md#targetconditiondependencies));
+- `[override: <source>]`: the project's [`[overrides]`](projects.md#overrides)
+  replace it with a fork (`github:me/numbers`) or a folder (`path:../numbers`),
+  in `tree` and `why` alike;
 - `[optional]` and `[features: ...]`: the dependent's entry says
   `optional = true`, and the features its `features` turns on. A build
   turns on more: each package's `default` feature, and what the features
@@ -279,7 +286,9 @@ Lists each locked package that is behind, with its locked version, the
 revision its requirements now choose (`wanted`: the newest version
 every range on it in the locked graph allows and this toolchain builds,
 or a branch's newest commit; updating a package that depends on it can
-change those ranges), and the newest version it offers (`latest`, not a prerelease):
+change those ranges), and the newest version it offers (`latest`, not a prerelease).
+A package `[overrides]` replaces is left out, since its revision is the
+override's:
 
 ```text
 $ pepper package outdated
@@ -356,6 +365,21 @@ checksums:
 
 ```text
 pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+```
+
+A package the project's [`[overrides]`](projects.md#overrides) replace
+keeps its own `source` and has `override`, the replacement's source: a
+fork, whose commit `commit` is and whose files `sha256` covers, or
+`path:` and the folder as `pep.toml` writes it, with no commit, since a
+folder has none to pin:
+
+```toml
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
 ```
 
 A command that leaves the graph as it was leaves `pep.lock` untouched, so
@@ -465,6 +489,11 @@ name each imports it by.
   declares, and `pep-package` says which requirement it overrode.
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
+- The project's [`[overrides]`](projects.md#overrides) replace a package
+  wherever the graph reaches it: the override's own revision is chosen,
+  from the fork, whatever the dependents ask, and a `path` override's
+  folder is read in its place. A locked revision of an override stays
+  until the override changes or `update` names the package.
 - The project's own `[dev-dependencies]` are resolved with its
   dependencies, as requirements of the project; a dependency's
   `[dev-dependencies]` are not part of the graph at all.
