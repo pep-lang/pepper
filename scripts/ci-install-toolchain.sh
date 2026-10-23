@@ -3,41 +3,52 @@
 # names the folder of its `pep-build` in PEPPER_COMPILER_DIR (through
 # $GITHUB_ENV when it is set, else on standard output).
 #
-#   scripts/ci-install-toolchain.sh [--version <version>]
+#   scripts/ci-install-toolchain.sh [--newest | --version <version>]
 #
 # It installs a published toolchain with the install scripts, as a user
 # would: install.sh, or install.ps1 on Windows, into a fresh home under
-# $RUNNER_TEMP. By default that is the newest published toolchain: the
-# build of main, the `vX.Y.Z-dev` prerelease release.yml publishes on every
-# merge that changes the compiler, the runtime or the tools, or a release
-# with a higher version (while main holds a release's version, nothing
-# moves the -dev tag). That is whatever version this checkout's VERSION
-# file holds, so a change of VERSION (a release, or the next -dev) never
-# asks for a build that is not published yet; --version names a release
-# instead. The release build, and a CI job testing a commit whose compiler
-# this toolchain lacks (ci.yml's `changes` job decides), build the compiler
-# with the toolchain this installs.
+# $RUNNER_TEMP. By default that is stage 0, the build of main that
+# .github/stage0 pins: the release build, scripts/stage0-check.sh, Docs,
+# and a CI job testing a commit whose compiler the build of main lacks
+# (ci.yml's `changes` job decides) build with it. The pin names the build's
+# version and commit and each archive's SHA-256 sum, which the install
+# checks. The archives are copies on the `stage0` release, named
+# `<commit>-<asset>` (the commit's first 12 hex digits), since the build
+# of main replaces its own on every merge. The Stage 0 workflow
+# (.github/workflows/stage0.yml) moves the pin.
+#
+# --newest installs the newest published toolchain instead, which CI tests
+# a commit with when its compiler is the build of main's: the `vX.Y.Z-dev`
+# prerelease release.yml publishes on every merge that changes the
+# compiler, the runtime or the tools, or a release with a higher version
+# (while main holds a release's version, nothing moves the -dev tag).
+# --version names a release.
 #
 # Environment: GH_TOKEN or GITHUB_TOKEN, to list and download the releases
 # while the repository is private; RUNNER_TEMP, where the home goes
 # (default: target/); PEPPER_TARGET_DIR, the folder target/ stands for;
-# PEPPER_EXPECT_COMMIT, the commit a -dev toolchain must be the build of:
-# CI sets it to the merge once its own release has published that build,
-# so a job that installs the build before it fails instead.
+# PEPPER_EXPECT_COMMIT, the commit a -dev toolchain that --newest or
+# --version installs must be the build of: CI sets it to the merge once
+# its own release has published that build, so a job that installs the
+# build before it fails instead.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 target="${PEPPER_TARGET_DIR:-$root/target}"
 
+usage="usage: ci-install-toolchain.sh [--newest | --version <version>]"
+mode=pin
 version=""
 case "${1:-}" in
   --version)
+    mode=version
     version="${2:-}"
-    [ -n "$version" ] || { echo "usage: ci-install-toolchain.sh [--version <version>]" >&2; exit 2; }
+    [ -n "$version" ] || { echo "$usage" >&2; exit 2; }
     ;;
+  --newest) mode=newest ;;
   "") ;;
-  *) echo "usage: ci-install-toolchain.sh [--version <version>]" >&2; exit 2 ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
 
 windows=0
@@ -45,7 +56,7 @@ case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) windows=1 ;;
 esac
 
-if [ -z "$version" ]; then
+if [ "$mode" = newest ]; then
   api="https://api.github.com/repos/pep-lang/pepper"
   token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
   # Gets the API url $1 into $body, whose answer must name the key $2.
@@ -104,7 +115,7 @@ fi
 # built (release.yml); a release VERSION publishes nothing until tagged.
 expected="${PEPPER_EXPECT_COMMIT:-}"
 held="$(tr -d '\r' < VERSION)"
-if [ -n "$expected" ] && [ "${held%-dev}" != "$held" ]; then
+if [ "$mode" != pin ] && [ -n "$expected" ] && [ "${held%-dev}" != "$held" ]; then
   built=""
   [ "$version" != "$held" ] || built="$(git ls-remote origin "refs/tags/v$version" | cut -f1)"
   if [ "$built" != "$expected" ]; then
@@ -114,12 +125,46 @@ if [ -n "$expected" ] && [ "${held%-dev}" != "$held" ]; then
 fi
 home="${RUNNER_TEMP:-$target}/pepper-home"
 rm -rf "$home"
+if [ "$windows" = 1 ]; then
+  source=(-Version "$version")
+else
+  source=(--version "$version")
+fi
+# Stage 0: the pinned archives, each with a .sha256 from the pin beside it
+# to check it against.
+if [ "$mode" = pin ]; then
+  pin=.github/stage0
+  version="$(sed -n 's/^version //p' "$pin")"
+  commit="$(sed -n 's/^commit //p' "$pin")"
+  case "$windows-$(uname -s)-$(uname -m)" in
+    1-*) platform=windows-x64 ext=.zip ;;
+    0-Linux-x86_64) platform=linux-x64 ext=.tar.gz ;;
+    0-Darwin-arm64) platform=macos-arm64 ext=.tar.gz ;;
+    *) echo "error: $pin pins no build for $(uname -s) on $(uname -m)" >&2; exit 1 ;;
+  esac
+  downloads="${RUNNER_TEMP:-$target}/pepper-stage0"
+  rm -rf "$downloads"
+  mkdir -p "$downloads"
+  echo "=== stage 0 ($pin): Pepper $version, the build of $commit"
+  for name in "pepper-$version-$platform$ext" "pepper-install-$version-$platform$ext"; do
+    grep -E "^[0-9a-f]{64} [ *]$name\$" "$pin" > "$downloads/$name.sha256" \
+      || { echo "error: $pin pins no $name" >&2; exit 1; }
+    curl -fsSL --retry 5 --retry-all-errors -o "$downloads/$name" \
+      "https://github.com/pep-lang/pepper/releases/download/stage0/${commit:0:12}-$name"
+  done
+  archive="$downloads/pepper-$version-$platform$ext"
+  if [ "$windows" = 1 ]; then
+    source=(-Archive "$(cygpath -w "$archive")")
+  else
+    source=(--archive "$archive")
+  fi
+fi
 echo "=== installing Pepper $version into $home"
 if [ "$windows" = 1 ]; then
   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 \
-    -Version "$version" -Prefix "$(cygpath -w "$home")" -NoModifyPath -NoPrerequisites
+    "${source[@]}" -Prefix "$(cygpath -w "$home")" -NoModifyPath -NoPrerequisites
 else
-  sh scripts/install.sh --version "$version" --prefix "$home" --no-modify-path --no-prerequisites < /dev/null
+  sh scripts/install.sh "${source[@]}" --prefix "$home" --no-modify-path --no-prerequisites < /dev/null
 fi
 exe=""
 [ "$windows" = 0 ] || exe=".exe"

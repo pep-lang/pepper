@@ -1,0 +1,6 @@
+# Stage 0: the build of main that CI, the release and
+# scripts/stage0-check.sh build the compiler with
+# (scripts/ci-install-toolchain.sh). Its archives are copies on the
+# `stage0` release, named <commit>-<asset>. The Stage 0 workflow
+# (.github/workflows/stage0.yml) moves this pin: it writes the version,
+# the commit, and the build's SHA256SUMS below these comments.

@@ -1,0 +1,171 @@
+# Moves CI's stage 0, the pinned build in .github/stage0 that CI, the
+# release and scripts/stage0-check.sh build the compiler with
+# (scripts/ci-install-toolchain.sh), to the newest build of main.
+#
+# The build of main (the `vX.Y.Z-dev` prerelease) is replaced on every
+# merge, so a pin cannot name its assets. This workflow copies them, once
+# that build's publish has finished, onto the `stage0` release, named
+# `<commit>-<asset>` (the first 12 hex digits of the commit), and opens a
+# pull request from `stage0/bump` that pins them: their version, the commit
+# they are the build of, and their SHA-256 sums, which the install checks.
+# A newer build moves the same pull request. The release keeps the newest
+# 20 builds' assets and the pinned one's.
+#
+# It runs every night and by hand (`gh workflow run stage0.yml`), for a
+# change that needs a newer compiler than the pinned one: merge the pull
+# request it opens before that change.
+#
+# A pull request opened with the workflow's own token starts no
+# workflows, so the job dispatches CI on the branch. That run does not
+# count toward the `test` check main's ruleset requires, so the pull request
+# cannot auto-merge: like Release's version bump, merge it as an admin once
+# that run passes (`gh pr merge stage0/bump --squash --admin`).
+name: Stage 0
+
+on:
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ci-pin-stage0]
+
+concurrency:
+  group: stage0
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      # Every commit (without file contents), to check the pin only moves
+      # forward.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Pin the newest build of main
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.ref_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euxo pipefail
+          pin=.github/stage0
+          held=$(tr -d '\r' < VERSION)
+          case "$held" in
+            *-dev) ;;
+            *) echo "$BASE holds release $held, whose -dev nothing publishes: nothing to pin"; exit 0 ;;
+          esac
+          tag="v$held"
+          built=$(git ls-remote origin "refs/tags/$tag" | cut -f1)
+          if [ -z "$built" ]; then
+            echo "$tag is not published: nothing to pin"
+            exit 0
+          fi
+          pinned=$(sed -n 's/^commit //p' "$pin" 2>/dev/null || true)
+          if [ "$built" = "$pinned" ]; then
+            echo "stage 0 is the newest build of main, $built, already"
+            exit 0
+          fi
+          if [ -n "$pinned" ] && ! git merge-base --is-ancestor "$pinned" "$built"; then
+            echo "::warning::the published $tag ($built) does not follow the pinned $pinned: leaving the pin"
+            exit 0
+          fi
+          # The publish job moves the tag first and then replaces the
+          # assets, so they are all the build of $built only once its
+          # publish has passed, and until the tag moves again.
+          published=$(gh api "repos/$REPO/commits/$built/check-runs?per_page=100" \
+            --jq '[.check_runs[] | select((.name == "publish" or .name == "release / publish") and .conclusion == "success")] | length')
+          if [ "$published" = 0 ]; then
+            echo "the publish of $built has not passed yet: trying again next time"
+            exit 0
+          fi
+          downloads="$RUNNER_TEMP/stage0"
+          rm -rf "$downloads"
+          gh release download "$tag" -R "$REPO" -D "$downloads" -p 'pepper-*' -p SHA256SUMS
+          if [ "$(git ls-remote origin "refs/tags/$tag" | cut -f1)" != "$built" ]; then
+            echo "::warning::$tag moved while its assets downloaded: trying again next time"
+            exit 0
+          fi
+          (cd "$downloads" && sha256sum -c SHA256SUMS)
+
+          # The assets, onto the `stage0` release.
+          prefix="${built:0:12}"
+          if ! gh release view stage0 -R "$REPO" >/dev/null 2>&1; then
+            printf '%s\n' \
+              "Copies of builds of main that CI's stage 0 pins (.github/stage0, .github/workflows/stage0.yml)," \
+              "named <commit>-<asset>. Not for installing: install a release or v<version>-dev." \
+              > "$RUNNER_TEMP/notes.md"
+            gh release create stage0 -R "$REPO" --target "$built" --prerelease --latest=false \
+              --title "CI's stage 0" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
+          mkdir "$downloads/upload"
+          for file in "$downloads"/pepper-*; do
+            case "$file" in *.sha256) continue ;; esac
+            cp "$file" "$downloads/upload/$prefix-$(basename "$file")"
+          done
+          gh release upload stage0 -R "$REPO" "$downloads"/upload/* --clobber
+
+          # The newest 20 builds' assets and the pinned one's stay; a release
+          # holds at most 1000 assets.
+          release=$(gh api "repos/$REPO/releases/tags/stage0" --jq .id)
+          gh api --paginate "repos/$REPO/releases/$release/assets?per_page=100" --jq '.[] | [.created_at, .id, .name] | @tsv' \
+            | sort > "$RUNNER_TEMP/assets.tsv"
+          keep=" $(cut -f3 "$RUNNER_TEMP/assets.tsv" | cut -d- -f1 | awk '!seen[$0]++' | tail -n 20 | tr '\n' ' ') ${pinned:0:12} "
+          while IFS=$'\t' read -r _ id name; do
+            case "$keep" in *" ${name%%-*} "*) continue ;; esac
+            gh api -X DELETE "repos/$REPO/releases/assets/$id"
+          done < "$RUNNER_TEMP/assets.tsv"
+
+          # The pin: this file's comments, then what the install checks.
+          {
+            grep '^#' "$pin" 2>/dev/null || true
+            echo "version $held"
+            echo "commit $built"
+            cat "$downloads/SHA256SUMS"
+          } > "$RUNNER_TEMP/stage0"
+          branch=stage0/bump
+          if git fetch --no-tags origin "$branch" 2>/dev/null \
+              && git show "FETCH_HEAD:$pin" 2>/dev/null | cmp -s - "$RUNNER_TEMP/stage0"; then
+            echo "$branch pins $built already"
+            exit 0
+          fi
+          git switch -C "$branch"
+          cp "$RUNNER_TEMP/stage0" "$pin"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '%s\n' \
+            "Pin stage 0 to the build of $prefix" \
+            "" \
+            "CI's stage 0 (.github/stage0) moves from ${pinned:-nothing} to the published $tag, the build of $built." \
+            > "$RUNNER_TEMP/message.txt"
+          git add "$pin"
+          git commit -F "$RUNNER_TEMP/message.txt"
+          git push --force origin "$branch"
+          printf '%s\n' \
+            "Moves CI's stage 0 (\`.github/stage0\`) to the build of $built, the published \`$tag\`, from ${pinned:-nothing}." \
+            "" \
+            "Opened by the Stage 0 workflow, which moves this pull request to each newer build of main. Merge it as an admin once the CI run dispatched on \`$branch\` passes (\`gh pr merge $branch --squash --admin\`): that run does not count toward \`test\`." \
+            > "$RUNNER_TEMP/body.md"
+          number=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh api -X PATCH "repos/$REPO/pulls/$number" -F "body=@$RUNNER_TEMP/body.md" > /dev/null
+          else
+            gh pr create -R "$REPO" --base "$BASE" --head "$branch" --title "Pin stage 0 to the newest build of main" --body-file "$RUNNER_TEMP/body.md"
+          fi
+          # Only on the default branch: a test run on another branch dispatches nothing.
+          if [ "$BASE" = "$DEFAULT" ]; then
+            gh workflow run ci.yml -R "$REPO" --ref "$branch"
+            echo "::notice::$branch pins $built; merge it with 'gh pr merge $branch --squash --admin' once its CI passes"
+          fi
