@@ -658,7 +658,7 @@ export parse_type_string(text: String): TypeName {
 # Reads a type spelled only with names and type arguments, as `to_string`
 # spells them (`Array<Array<i32>>`), in one pass: splitting the text at
 # each level copied a nested type once per level. Anything else (an
-# overload member's `$`, a function type, a space) is left to the general
+# overload member's `$`, a function type, whitespace) is left to the general
 # parse, which reads it as before.
 struct _TypeCursor {
     var text: String;
@@ -678,7 +678,7 @@ struct _TypeCursor {
             if (b == '<' or b == '>' or b == ',') {
                 break;
             }
-            if (b == '$' or b == '(' or b == ')' or b == ' ') {
+            if (b == '$' or b == '(' or b == ')' or b <= ' ') {
                 return none;
             }
             at += 1;
