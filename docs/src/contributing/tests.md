@@ -153,16 +153,18 @@ compiler's build cache, which is keyed on it.
 
 The `Stage 0` workflow (`.github/workflows/stage0.yml`) moves the pin. Every
 night, and when dispatched, it takes the newest build of main once its
-publish has passed, copies it onto the `stage0` release, and opens the
-pull request from `stage0/bump` that pins it, or moves that pull request to
-it. The workflow's own token starts no CI on a pull request, so it
-dispatches CI on the branch; a dispatched run does not count toward
-`test`, so the pull request cannot auto-merge. Merge it as an admin once
-that run passes:
+publish has passed, copies it onto the `stage0` release, and pushes the
+branch `stage0/bump` that pins it. GitHub Actions may not open pull
+requests in this repository, so the run's summary and a warning link to
+open one. Its CI runs as any pull request's, building the compiler with
+the new stage 0 and running the whole suite with it, so it may auto-merge.
+While that pull request is open the branch stays put (a push with the
+workflow's token would start no CI on it); the run after it merges pins
+the next build.
 
 ```bash
-gh workflow run stage0.yml                   # pin the newest build of main now
-gh pr merge stage0/bump --squash --admin     # once its CI passes
+gh workflow run stage0.yml                                  # pin the newest build of main now
+gh pr create --head stage0/bump --fill                      # then open its pull request
 ```
 
 So runtime code may only use what stage 0 accepts. A runtime change that

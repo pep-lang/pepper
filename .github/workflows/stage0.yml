@@ -5,21 +5,27 @@
 # The build of main (the `vX.Y.Z-dev` prerelease) is replaced on every
 # merge, so a pin cannot name its assets. This workflow copies them, once
 # that build's publish has finished, onto the `stage0` release, named
-# `<commit>-<asset>` (the first 12 hex digits of the commit), and opens a
-# pull request from `stage0/bump` that pins them: their version, the commit
-# they are the build of, and their SHA-256 sums, which the install checks.
-# A newer build moves the same pull request. The release keeps the newest
-# 20 builds' assets and the pinned one's.
+# `<commit>-<asset>` (the first 12 hex digits of the commit), and pushes
+# `stage0/bump`, which pins them: their version, the commit they are the
+# build of, and their SHA-256 sums, which the install checks. The release
+# keeps the newest 20 builds' assets and the pinned one's. While a pull
+# request from `stage0/bump` is open, the branch stays put, since a push
+# with the workflow's token starts no CI on it.
 #
 # It runs every night and by hand (`gh workflow run stage0.yml`), for a
 # change that needs a newer compiler than the pinned one: merge the pull
-# request it opens before that change.
+# request before that change.
 #
-# A pull request opened with the workflow's own token starts no
-# workflows, so the job dispatches CI on the branch. That run does not
-# count toward the `test` check main's ruleset requires, so the pull request
-# cannot auto-merge: like Release's version bump, merge it as an admin once
-# that run passes (`gh pr merge stage0/bump --squash --admin`).
+# The repository does not let GitHub Actions open pull requests, so the run
+# says, as a warning and in its summary, where to open it. One a person
+# opens runs CI as any pull request does, and may auto-merge once it
+# passes: that run builds the compiler with the new stage 0 and runs the
+# whole suite with it. Should Actions be allowed to open pull requests, the
+# workflow opens it itself and dispatches CI on the branch, since a pull
+# request opened with its token starts no workflows; that run does not
+# count toward the `test` check main's ruleset requires, so merge it as an
+# admin once the run passes (`gh pr merge stage0/bump --squash --admin`),
+# as Release's version bump says.
 name: Stage 0
 
 on:
@@ -135,12 +141,15 @@ jobs:
             echo "commit $built"
             cat "$downloads/SHA256SUMS"
           } > "$RUNNER_TEMP/pin"
+          # A push with this token starts no CI on an open pull request, so
+          # one that is open keeps its build until it merges.
           branch=stage0/bump
-          if git fetch --no-tags origin "$branch" 2>/dev/null \
-              && git show "FETCH_HEAD:$pin" 2>/dev/null | cmp -s - "$RUNNER_TEMP/pin"; then
-            echo "$branch pins $built already"
+          number=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            echo "::notice::pull request #$number moves stage 0 already: merge it, and the next run pins $built"
             exit 0
           fi
+          # Made afresh on the base each time, so it holds nothing else.
           git switch -C "$branch"
           cp "$RUNNER_TEMP/pin" "$pin"
           git config user.name "github-actions[bot]"
@@ -154,18 +163,16 @@ jobs:
           git commit -F "$RUNNER_TEMP/message.txt"
           git push --force origin "$branch"
           printf '%s\n' \
-            "Moves CI's stage 0 (\`.github/stage0\`) to the build of $built, the published \`$tag\`, from ${pinned:-nothing}." \
-            "" \
-            "Opened by the Stage 0 workflow, which moves this pull request to each newer build of main. Merge it as an admin once the CI run dispatched on \`$branch\` passes (\`gh pr merge $branch --squash --admin\`): that run does not count toward \`test\`." \
+            "Moves CI's stage 0 (\`.github/stage0\`) to the build of $built, the published \`$tag\`, from ${pinned:-nothing} (.github/workflows/stage0.yml)." \
             > "$RUNNER_TEMP/body.md"
-          number=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            gh api -X PATCH "repos/$REPO/pulls/$number" -F "body=@$RUNNER_TEMP/body.md" > /dev/null
+          if gh pr create -R "$REPO" --base "$BASE" --head "$branch" --title "Pin stage 0 to the build of $prefix" --body-file "$RUNNER_TEMP/body.md"; then
+            # Only on the default branch: a test run on another branch dispatches nothing.
+            if [ "$BASE" = "$DEFAULT" ]; then
+              gh workflow run ci.yml -R "$REPO" --ref "$branch"
+              echo "::notice::$branch pins $built; merge it with 'gh pr merge $branch --squash --admin' once its CI passes"
+            fi
           else
-            gh pr create -R "$REPO" --base "$BASE" --head "$branch" --title "Pin stage 0 to the newest build of main" --body-file "$RUNNER_TEMP/body.md"
-          fi
-          # Only on the default branch: a test run on another branch dispatches nothing.
-          if [ "$BASE" = "$DEFAULT" ]; then
-            gh workflow run ci.yml -R "$REPO" --ref "$branch"
-            echo "::notice::$branch pins $built; merge it with 'gh pr merge $branch --squash --admin' once its CI passes"
+            url="https://github.com/$REPO/compare/$BASE...$branch?expand=1"
+            echo "::warning::GitHub Actions may not open pull requests in $REPO; open $branch's: $url"
+            printf '### Stage 0\n\n%s pins %s. Open its pull request: %s\n' "$branch" "$built" "$url" >> "$GITHUB_STEP_SUMMARY"
           fi

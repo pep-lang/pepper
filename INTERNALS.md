@@ -3841,10 +3841,10 @@ the checkout (`PEPPER_TARGET_DIR`).
   run by `ci.yml`'s `docs` job after its `release` job; `X.Y.Z/` on tags),
   with `pep-doc` built by the build of main.
 - **`stage0.yml`**: nightly and on dispatch, copies the newest build of
-  main, once its publish has passed, onto the `stage0` release and opens
-  (or moves) the `stage0/bump` pull request that pins it in
-  `.github/stage0`, dispatching CI on it. A person merges it as an admin,
-  as with Release's version bump.
+  main, once its publish has passed, onto the `stage0` release and pushes
+  `stage0/bump`, which pins it in `.github/stage0`, unless a pull request
+  from it is open. Actions may not open pull requests here, so its summary
+  links to open one, whose CI runs as any pull request's.
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped
   Windows LLVM 20 package that CI installs, and with `platforms=manylinux`
   the Linux release's LLVM (`build-llvm-manylinux.sh`), so a runner without
