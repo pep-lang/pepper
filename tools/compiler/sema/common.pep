@@ -149,13 +149,18 @@ _expression_loc(e: Expression): Loc {
 ## `ty` spelled one way, its integer types by their sized names (`i32` for
 ## `int`), a pointer `__ptr<T>` among them.
 _canonical(ty: TypeName): TypeName {
-    var parsed = parse_type_string(ty.to_string());
-    var name = sized_number_name(parsed.name);
+    return _sized(parse_type_string(ty.to_string()));
+}
+
+# Parsed type `ty` with its number types by their sized names. Its
+# arguments are parsed already: spelling and parsing each again made
+# `_canonical` quadratic in how deep a type nests.
+_sized(ty: TypeName): TypeName {
     var args = Array<TypeName>();
-    for (var t in parsed.sub_types) {
-        args.append(_canonical(t));
+    for (var t in ty.sub_types) {
+        args.append(_sized(t));
     }
-    return TypeName.with_args(name, args);
+    return TypeName.with_args(sized_number_name(ty.name), args);
 }
 
 ## `ty` spelled one way, its integer and float types by their sized names
