@@ -493,8 +493,7 @@ syntax_offers_quick_fixes() {
     var at = (line: int, character: int) => lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
     var actions = code_actions(document, none, Array<lsp.CodeAction>(), at(2, 5));
     expect_equal(action_list(actions), "Replace `new` with `construct` [2:4-2:7 construct]");
-    # `<String>`: a whole-program build infers `StringConstant` (#175).
-    expect_equal<String>(actions[0].kind.value(), lsp.QUICK_FIX);
+    expect_equal(actions[0].kind.value(), lsp.QUICK_FIX);
     var shown = actions[0].diagnostics.value()[0];
     expect_equal(shown.severity.value(), lsp.SEVERITY_WARNING);
     expect_equal(shown.tags.value()[0], lsp.TAG_DEPRECATED);
@@ -1690,8 +1689,8 @@ has_body(analysis: Analysis, name: String): bool {
 [Test]
 an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
     # A model of the program checked whole holds every file's bodies; the
-    # copy the server's thread gets keeps those of `bodies_read` only, so
-    # handing it over costs the document's compilation unit, not the program.
+    # analysis the server's thread gets keeps those of `bodies_read` only, so
+    # it holds the document's compilation unit, not the program.
     var test = "unread_bodies";
     var text = "import \"other\";\nmain(): int {\n    return twice(1);\n}\n";
     var uri = fresh_file(test, "main.pep", text);
@@ -1763,38 +1762,60 @@ arguments_start_the_server_or_answer_without_it() {
     expect_equal(handle_arguments(["pep-lsp", "--port", "9000"]).value(), 2);
 }
 
-# How deep the Rust parser let source nest (`MAX_NESTING`, 256), less the
-# levels the wrapper adds.
-const DEEPEST: ulong = 252;
-
 # A program whose `main` runs `body`.
 deepest_program(body: String): String {
     return "f(x: int): int { return x; }\nexport main(): int {\n    var x = 1;\n" + body + "\n    return x;\n}\n";
 }
 
-[Test]
-deepest_source_fits_the_server_stack() {
-    # The server analyzes on a thread of its own, with the default stack:
-    # a stack overflow cannot be caught, and ends the server.
-    var n = DEEPEST;
-    var programs = [
-        deepest_program("    x = 1" + " + x".repeat(n) + ";"),
-        deepest_program("    x = " + "(".repeat(n) + "x" + ")".repeat(n) + ";"),
-        deepest_program("    x = " + "f(".repeat(n / 2) + "x" + ")".repeat(n / 2) + ";"),
-        deepest_program("if (x == 1) {\n".repeat(n) + "x = 2;" + "}\n".repeat(n)),
-        deepest_program("    if (x == 0) { x = 1; }" + " else if (x == 2) { x = 3; }".repeat(n / 2)),
-        deepest_program("    x = " + "- ".repeat(n) + "x;"),
-        deepest_program("    var s = \"a\"" + " + \"a\"".repeat(n) + ";"),
+# Programs nested `n` levels past `parse.MAX_NESTING`, in the ways that
+# nest. The counts leave out the levels the program around them adds:
+# `main`'s block, the statement's expression and an assignment's value.
+deepest_programs(n: ulong): String[] {
+    return [
+        deepest_program("    x = 1" + " + x".repeat(n + 253) + ";"),
+        deepest_program("    x = " + "(".repeat(n + 253) + "x" + ")".repeat(n + 253) + ";"),
+        # A call is two levels: the call, and its argument.
+        deepest_program("    x = " + "f(".repeat(n + 126) + "x" + ")".repeat(n + 126) + ";"),
+        deepest_program("if (x == 1) {\n".repeat(n + 253) + "x = 2;" + "}\n".repeat(n + 253)),
+        deepest_program("    if (x == 0) { x = 1; }" + " else if (x == 2) { x = 3; }".repeat(n + 252)),
+        deepest_program("    x = " + "- ".repeat(n + 253) + "x;"),
+        deepest_program("    var s = \"a\"" + " + \"a\"".repeat(n + 254) + ";"),
     ];
+}
+
+# How analyzing each of `programs` ends, on a thread with a stack of
+# `stack_size`, each prefixed with its index.
+analyzed_on(programs: String[], stack_size: ulong): String[] {
     var documents = Channel<String>();
     var outcomes = Channel<String>();
+    var out = Array<String>();
     for (var i in 0..programs.count) {
         documents.send(temp_file_in("deepest", "main.pep", programs[i]));
         documents.send(copy(programs[i]));
         Thread.spawn(() => {
             var uri = documents.receive().value();
             outcomes.send(copy(outcome_of(analyze(uri, documents.receive().value()))));
-        }, "pep-lsp-analysis").join();
-        expect_equal($"{i}: " + outcomes.receive().value(), $"{i}: passed");
+        }, "pep-lsp-analysis", stack_size).join();
+        out.append($"{i}: " + outcomes.receive().value());
+    }
+    return out;
+}
+
+const _TOO_DEEP = "code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions";
+
+[Test]
+deepest_source_fits_the_server_stack() {
+    # The server analyzes on a thread of its own, with a stack of
+    # parse.STACK_SIZE: a stack overflow cannot be caught, and ends the
+    # server. Half of it here, so the deepest source fits with room to
+    # spare, whether this test is built optimized or not.
+    var outcomes = analyzed_on(deepest_programs(0), parse.STACK_SIZE / 2);
+    for (var i in 0..outcomes.count) {
+        expect_equal(outcomes[i], $"{i}: passed");
+    }
+    # One level deeper is the parser's error.
+    outcomes = analyzed_on(deepest_programs(1), parse.STACK_SIZE / 2);
+    for (var i in 0..outcomes.count) {
+        expect_equal(outcomes[i], $"{i}: did not parse | {_TOO_DEEP}");
     }
 }

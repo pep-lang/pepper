@@ -3,8 +3,11 @@
 # `[target.'<condition>'.dependencies]`. The compiler checks the rest of the
 # file, the conditions and `[features]` included, when it builds. Features
 # do not change what is locked: an optional dependency is resolved and
-# locked like any other.
+# locked like any other. `[overrides]` replaces a package wherever the
+# graph reaches it; only the project's own apply.
 
+import [Span] from compiler.ast;
+import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
 import [File, Path] from io;
 import toml;
 
@@ -35,9 +38,14 @@ export struct Requirement {
     # Which of `optional`, `features` and `default-features` it sets, as
     # pep.toml writes them, which only newer toolchains read.
     var feature_keys: Array<String> = __null;
+    # `optional = true`: only a feature turns it on.
+    var optional: bool = false;
+    # The features its `features` turns on, for `tree`.
+    var features: Array<String> = __null;
 
     construct() {
         feature_keys = Array<String>();
+        features = Array<String>();
     }
 
     # Where the package comes from, which identifies it in the whole
@@ -85,10 +93,36 @@ export struct Manifest {
     var requirements: Array<Requirement> = __null;
     # `[fetch]`'s `hosts`: where `add` looks a repository up, in order.
     var hosts: Array<String> = __null;
+    # `[overrides]`: each the package that replaces another, its `name` the
+    # source it replaces (`github:owner/name`).
+    var overrides: Array<Requirement> = __null;
 
     construct() {
         requirements = Array<Requirement>();
         hosts = ["github", "gitlab", "codeberg"];
+        overrides = Array<Requirement>();
+    }
+
+    # What `[overrides]` replaces `source` with, if anything.
+    override_of(source: String): Optional<Requirement> {
+        for (var replacement in overrides) {
+            if (replacement.name == source) {
+                return Optional<Requirement>.Value(replacement);
+            }
+        }
+        return Optional<Requirement>.Empty;
+    }
+
+    # `message` as a clang-style `severity` diagnostic at the key of the
+    # override of `source`.
+    at_override(severity: String, source: String, message: String): String {
+        var start = text.find("\"" + source + "\"");
+        if (start < 0) {
+            start = text.find("'" + source + "'");
+        }
+        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + source.length + 2);
+        var diagnostic = severity == "error" ? Diagnostic.error(message) : Diagnostic.warning(message);
+        return render_all([diagnostic.at(Location(0, at))], [SourceText(path.to_string(), text)]);
     }
 
     # The folder holding it: the package's root.
@@ -170,6 +204,20 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             manifest.requirements.append(requirement.value());
         }
     }
+    var overrides = root.try_get("overrides");
+    if (overrides.is_value()) {
+        var table = overrides.value().as_table();
+        if (table.is_empty()) {
+            return Result<Manifest>.Err($"{path.to_string()}: '[overrides]' must be a table");
+        }
+        for (var (source, value) in table.value()) {
+            var replacement = _requirement(path, source, value);
+            if (replacement.is_err()) {
+                return Result<Manifest>.Err(replacement.error().message);
+            }
+            manifest.overrides.append(replacement.value());
+        }
+    }
     var targets = root.try_get("target");
     if (targets.is_value()) {
         var conditions = targets.value().as_table();
@@ -205,7 +253,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
 # reads it. A package using one sets `minimum_toolchain` to that release
 # or later, which `publish` checks.
 export newer_manifest_features(): Array<(String, String)> {
-    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0")];
+    return [("dev-dependencies", "0.11.0"), ("target", "0.11.0"), ("features", "0.11.0"), ("overrides", "0.11.0")];
 }
 
 # The first release that reads a dependency's `optional`, `features` and
@@ -225,6 +273,13 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
         # The compiler checks these.
         if (field == "optional" or field == "features" or field == "default-features") {
             requirement.feature_keys.append(field);
+            if (field == "optional") {
+                requirement.optional = field_value.as_bool().value_or(false);
+            } else if (field == "features" and field_value.as_array().is_value()) {
+                for (var item in field_value.as_array().value()) {
+                    requirement.features.append(item.as_string().value_or(""));
+                }
+            }
             continue;
         }
         var text = field_value.as_string();

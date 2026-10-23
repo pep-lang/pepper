@@ -12,6 +12,7 @@
 ## be null, and assigning to the binding.
 
 import [Location] from compiler.diagnostic;
+import [unit_decls] from "checked";
 import "closures";
 import "common";
 import "confinement";
@@ -39,8 +40,10 @@ import [Rewriter, rewrite_statement] from "walk";
 ## @param module the model
 ## @param state the passes' state, which takes the error
 export lower_with_blocks(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
     var types = _WithTypes(module);
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         # Generic bases never reach codegen; their `enter()` types are
         # still template parameters.
         if (_is_generic_base(st)) {
@@ -54,7 +57,7 @@ export lower_with_blocks(module: Module, state: PassState) {
         }
         _lower_function_body(st.destructor.body, types, state);
     }
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         if (!f.is_generic_func) {
             _lower_function_body(f.body, types, state);
         }

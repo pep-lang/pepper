@@ -591,14 +591,28 @@ export extend TypeName {
     }
 }
 
-## Replaces each generic parameter of `type_map` in `ty` with its type, in
-## order.
+## Replaces each generic parameter of `type_map` in `ty` with its type, all
+## at once: `K -> V, V -> K` swaps them (#189).
 ##
 ## @param ty the type, changed in place
 ## @param type_map the parameters and their types
 export replace_map(ty: TypeName, type_map: Array<(String, TypeName)>) {
-    for (var (param, arg) in type_map) {
-        ty.replace(param, arg);
+    if (type_map.count < 2) {
+        for (var (param, arg) in type_map) {
+            ty.replace(param, arg);
+        }
+        return;
+    }
+    # Through names no type can have, so no argument is replaced again.
+    ulong i = 0;
+    while (i < type_map.count) {
+        ty.replace(type_map[i].0, TypeName.named($"#{i}"));
+        i += 1;
+    }
+    i = 0;
+    while (i < type_map.count) {
+        ty.replace($"#{i}", type_map[i].1);
+        i += 1;
     }
 }
 

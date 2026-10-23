@@ -9,10 +9,21 @@ import [unit_decls] from "checked";
 import [is_closure_struct] from "closures";
 import [Loc] from "loc";
 import [
-    Block, Expression, ExtensionDef, GenericParam, Module, SpecRequest, StructDef, TypeFlags, TypeName, VariableDef
+    Block,
+    Expression,
+    ExtensionDef,
+    FunctionDef,
+    GenericParam,
+    Module,
+    SpecRequest,
+    StructDef,
+    TypeFlags,
+    TypeName,
+    VariableDef
 ] from "model";
 import [concrete_overrides] from "overloads";
 import [for_each_place, Place, PlaceVisitor] from "places";
+import [GrowingList, PassMemo, PassState] from "state";
 import [parse_type_string] from "type_name";
 import [Rewriter] from "walk";
 
@@ -212,28 +223,75 @@ _gather_locals(block: Block, structs: _Requests, params: String[], owner: String
     }
 }
 
+## The symbol table `gather_generics` looks requests up in, and the specs
+## made, by `_type_key`: kept for the compilation unit's next round
+## (`PassState.unit_memos`), which takes in only what was appended since.
+## A list a pass replaced is taken in again whole.
+struct _GatherMemo {
+    var function_index: HashMap<String, ulong> = HashMap<String, ulong>();
+    var struct_index: HashMap<String, ulong> = HashMap<String, ulong>();
+    var struct_spelled: HashSet<String> = HashSet<String>();
+    var func_spelled: HashSet<String> = HashSet<String>();
+    var functions: GrowingList<FunctionDef> = GrowingList<FunctionDef>();
+    var structs: GrowingList<StructDef> = GrowingList<StructDef>();
+    var struct_specs: GrowingList<TypeName> = GrowingList<TypeName>();
+    var func_specs: GrowingList<TypeName> = GrowingList<TypeName>();
+
+    construct() {}
+
+    ## Brings the tables up to `module`'s lists: a later declaration of a
+    ## name wins.
+    update(module: Module) {
+        var (function, fresh_functions) = functions.since(module.functions);
+        if (fresh_functions) {
+            function_index = HashMap<String, ulong>();
+        }
+        for (var at in function..module.functions.count) {
+            function_index[module.functions[at].name] = at;
+        }
+        var (structure, fresh_structs) = structs.since(module.structs);
+        if (fresh_structs) {
+            struct_index = HashMap<String, ulong>();
+        }
+        for (var at in structure..module.structs.count) {
+            var st = module.structs[at];
+            struct_index[st.name] = at;
+            if (st.ty.is_generic()) {
+                struct_index[st.ty.to_string()] = at;
+            }
+        }
+        var (struct_spec, fresh_struct_specs) = struct_specs.since(module.struct_specs);
+        if (fresh_struct_specs) {
+            struct_spelled = HashSet<String>();
+        }
+        for (var at in struct_spec..module.struct_specs.count) {
+            struct_spelled.insert(_type_key(module.struct_specs[at]));
+        }
+        var (func_spec, fresh_func_specs) = func_specs.since(module.func_specs);
+        if (fresh_func_specs) {
+            func_spelled = HashSet<String>();
+        }
+        for (var at in func_spec..module.func_specs.count) {
+            func_spelled.insert(_type_key(module.func_specs[at]));
+        }
+    }
+}
+
+extend _GatherMemo with PassMemo;
+
 ## Records the module's generic uses as struct and function specs.
 ##
 ## @param module the model, changed in place
-export gather_generics(module: Module) {
+## @param state the passes' state, which keeps the symbol table for the
+##     compilation unit's next round
+export gather_generics(module: Module, state: PassState) {
     concrete_overrides(module);
-    # The symbol table: a later declaration of a name wins.
-    var function_index = HashMap<String, ulong>();
-    ulong i = 0;
-    while (i < module.functions.count) {
-        function_index[module.functions[i].name] = i;
-        i += 1;
-    }
-    var struct_index = HashMap<String, ulong>();
-    i = 0;
-    while (i < module.structs.count) {
-        var st = module.structs[i];
-        struct_index[st.name] = i;
-        if (st.ty.is_generic()) {
-            struct_index[st.ty.to_string()] = i;
-        }
-        i += 1;
-    }
+    var kept = state.unit_memos.try_get("gather_generics");
+    var memo = kept.is_value() ? (kept.value() as? _GatherMemo).value() : _GatherMemo();
+    state.unit_memos["gather_generics"] = memo;
+    memo.update(module);
+    var function_index = memo.function_index;
+    var struct_index = memo.struct_index;
     var functions = _Requests();
     var structs = _Requests();
     # What a checked declaration asks for was made when it was checked:
@@ -320,7 +378,9 @@ export gather_generics(module: Module) {
         }
     }
     var struct_specs = module.struct_specs.copy();
-    var struct_spelled = _spelled_types(struct_specs);
+    # What the specs spell, which the memo took in from the module's list
+    # and this round adds to.
+    var struct_spelled = memo.struct_spelled;
     for (var (name, _) in structs.entries) {
         var ty = parse_type_string(name);
         if (struct_spelled.contains(_type_key(ty))) {
@@ -337,7 +397,7 @@ export gather_generics(module: Module) {
     }
     module.struct_specs = struct_specs;
     var func_specs = module.func_specs.copy();
-    var func_spelled = _spelled_types(func_specs);
+    var func_spelled = memo.func_spelled;
     for (var (name, _) in functions.entries) {
         var ty = parse_type_string(name);
         if (func_spelled.contains(_type_key(ty))) {
@@ -359,6 +419,9 @@ export gather_generics(module: Module) {
         func_spelled.insert(_type_key(ty));
     }
     module.func_specs = func_specs;
+    # What this round added is in the spellings already.
+    memo.struct_specs.since(module.struct_specs);
+    memo.func_specs.since(func_specs);
 }
 
 # Each of `types` by `_type_key`, to tell whether a type is among them.

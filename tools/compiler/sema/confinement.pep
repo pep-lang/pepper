@@ -616,8 +616,6 @@ struct _Region {
     ## A tuple value: the region of each element (-1 for a thread-safe
     ## one). Never unioned: linking goes element by element.
     var parts: long[] = Array<long>();
-    ## The locals and parameters whose value is in the region.
-    var holders: String[] = Array<String>();
     ## Reachable from outside the function.
     var shared: bool = false;
 
@@ -940,6 +938,7 @@ struct _Confinement {
             return none;
         }
         body.function.body = stashed;
+        state.trait_memo.bodies_back = true;
         _by_key()[key] = body;
         _restored[key] = body;
         bodies.insert(key);
@@ -1836,10 +1835,12 @@ _lower_moved_arguments(module: Module) {
         return;
     }
     var lower = _MoveArguments(moved);
-    for (var f in module.functions) {
+    # A checked body was lowered with its unit (and is stashed).
+    var own = unit_decls(module);
+    for (var f in own.functions) {
         lower.function(f);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if (_is_generic_base(st)) {
             continue;
         }
@@ -2007,7 +2008,8 @@ _attribute_text(program: _Confinement, loc: Loc): String {
 
 ## A guard kept in a struct's field would hold its lock past any block.
 _check_guard_fields(program: _Confinement): bool {
-    for (var st in program.module.structs) {
+    # A checked struct's fields were checked with its unit.
+    for (var st in unit_decls(program.module).structs) {
         if (program.isolated.contains(st.name) or _is_generic_base(st)) {
             continue;
         }
@@ -2034,7 +2036,8 @@ _check_guard_fields(program: _Confinement): bool {
 ## `Mutex<T>` of a number: its `with` binding would be a copy the block
 ## could never change back.
 _check_mutex_arguments(program: _Confinement): bool {
-    for (var st in program.module.structs) {
+    # A checked specialization was checked with its unit.
+    for (var st in unit_decls(program.module).structs) {
         if (st.ty.sub_types.count == 0 or demangle_name(st.ty.name) != "Mutex" or st.name == st.ty.name) {
             continue;
         }
@@ -2141,6 +2144,14 @@ struct _RegionWalk {
     ## Which parts the last failed `union` would have joined.
     var clash_into: _RegionPart = _RegionPart.Fresh;
     var clash_moving: _RegionPart = _RegionPart.Fresh;
+    ## How many `move`s the walk has checked.
+    var moves: ulong = 0;
+    ## How many loops the walk is inside.
+    var loops: ulong = 0;
+    ## On a loop's second pass, the lock its first pass made for the next
+    ## `with` block, which stays the same lock.
+    var relock: ulong = 0;
+    var relocking: bool = false;
 
     construct(program: _Confinement, checking: bool, current: TypeName?) {
         this.program = program;
@@ -2241,10 +2252,6 @@ struct _RegionWalk {
             ra.operands.append(slot);
         }
         rb.operands = Array<ulong>();
-        for (var holder in rb.holders) {
-            ra.holders.append(holder);
-        }
-        rb.holders = Array<String>();
         ra.shared = ra.shared or rb.shared;
         return a;
     }
@@ -2389,24 +2396,12 @@ struct _RegionWalk {
         return found.is_value() and program.has_region(found.value());
     }
 
-    ## Whether `e` is a `shared` function value.
-    is_shared_function(e: Expression): bool {
-        var found = ty(e);
-        return found.is_value() and found.value().is_shared_function_type();
-    }
-
     is_pointer_typed(e: Expression): bool {
         var found = ty(e);
         return found.is_value() and found.value().is_pointer();
     }
 
     declare(name: String, region: long, declared: TypeName) {
-        if (region >= 0) {
-            var root = regions[find(region) as ulong];
-            if (!root.holders.contains(name)) {
-                root.holders.append(name);
-            }
-        }
         scopes.last().append(_ScopeLocal(name, region, declared));
     }
 
@@ -2538,7 +2533,12 @@ struct _RegionWalk {
         }
         declare(scope.name, -1, scope.ty);
         var index = locks.count;
-        locks.append(lock);
+        if (relocking) {
+            index = relock;
+            relock += 1;
+        } else {
+            locks.append(lock);
+        }
         long r = -1;
         if (program.has_region(binding.ty) or binding.ty.is_auto()) {
             r = region(_RegionPart.Locked(index));
@@ -2577,8 +2577,23 @@ struct _RegionWalk {
                 }
             }
             While(loop) => {
+                # A link made later in the body is there on the next pass,
+                # so a check walks an outermost loop that moves a second
+                # time: links only add up, so the first pass made them all.
+                var moved = moves;
+                var outermost = checking and loops == 0;
+                var first_lock = locks.count;
+                loops += 1;
                 eval(loop.condition);
                 block(loop.block);
+                if (outermost and moves != moved) {
+                    relock = first_lock;
+                    relocking = true;
+                    eval(loop.condition);
+                    block(loop.block);
+                    relocking = false;
+                }
+                loops -= 1;
             }
             Return(ret) => {
                 long value = -1;
@@ -2801,9 +2816,9 @@ struct _RegionWalk {
                 return call_method(e, node.this_value, node.method, node.args);
             }
             Invoke(node) => {
-                # A `shared` function value reaches only thread-safe state
-                # besides its arguments, so its result links only those.
-                bool shared = is_shared_function(node.callee);
+                # A function value reaches nothing that is not thread-safe
+                # besides its arguments and its captures (its own region),
+                # so its result links only those.
                 var acc = eval(node.callee);
                 for (var arg in node.args) {
                     var r = eval(arg);
@@ -2812,22 +2827,18 @@ struct _RegionWalk {
                 if (!has_region(e)) {
                     return -1;
                 }
-                if (shared) {
-                    return acc >= 0 ? acc : fresh();
-                }
-                var r = acc >= 0 ? acc : region(checking ? _RegionPart.Outer : _RegionPart.Fresh);
-                regions[find(r) as ulong].tainted = true;
-                return r;
+                return acc >= 0 ? acc : fresh();
             }
             MakeClosure(node) => {
                 # The closure struct's constructor call, with the captures
-                # as arguments.
+                # as arguments: the closure's region holds what it captures.
+                long r = has_region(e) ? fresh() : -1;
                 if (node.value is FunctionCall(call)) {
                     for (var arg in call.args) {
-                        captured(arg);
+                        r = captured(r, arg);
                     }
                 }
-                return has_region(e) ? fresh() : -1;
+                return r;
             }
             CallPointer(node) => {
                 eval(node.pointer);
@@ -2870,13 +2881,13 @@ struct _RegionWalk {
         }
     }
 
-    ## A capture of a closure made here: part of a locked value is an
-    ## error, and the captured value may be reached through the closure
-    ## later.
-    captured(arg: Expression) {
+    ## A capture of a closure made here, whose region is `closure`: part of
+    ## a locked value is an error, and the captured value joins the
+    ## closure's region, so it is shared for as long as the closure is.
+    captured(closure: long, arg: Expression): long {
         var r = eval(arg);
         if (r < 0) {
-            return;
+            return closure;
         }
         var locked = locked_leaf(r);
         if (locked >= 0) {
@@ -2895,7 +2906,13 @@ struct _RegionWalk {
                 )
             );
         }
-        regions[find(r) as ulong].tainted = true;
+        if (closure < 0) {
+            # A closure without a region of its own: what it captures may
+            # be reached through it from anywhere.
+            regions[find(r) as ulong].tainted = true;
+            return closure;
+        }
+        return link(closure, r, arg);
     }
 
     ## `p[i]`: the pointer's region; a reference read through a pointer an
@@ -2918,19 +2935,16 @@ struct _RegionWalk {
     ## disconnected value hands it over; a raw slot (runtime only) hands
     ## over a value the runtime promises nothing else references.
     eval_move(value: Expression): long {
+        moves += 1;
         if (value is SymbolRef(node)) {
             var found = local(node.id);
             if (found.is_value()) {
                 if (found.value().region < 0) {
                     return -1;
                 }
-                var root = regions[find(found.value().region) as ulong];
-                var others = Array<String>();
-                for (var h in root.holders) {
-                    if (h != node.id and !h.starts_with("__")) {
-                        others.append(h);
-                    }
-                }
+                var root_index = find(found.value().region);
+                var root = regions[root_index as ulong];
+                var others = sharers(root_index, node.id);
                 bool shares = _locked_index(root.part) >= 0
                     or _is_operand_part(root.part)
                     or root.shared
@@ -2941,9 +2955,18 @@ struct _RegionWalk {
                     }
                 }
                 if (checking and (shares or others.count > 0)) {
-                    var why = others.count > 0 ?
-                        $"'{others[0]}' also references its value" :
-                        "its value shares objects with the rest of the program";
+                    var why = "its value shares objects with the rest of the program";
+                    if (others.count > 0) {
+                        # A hidden local (a `for` loop's iterator) is named
+                        # only when no local of the user's is.
+                        why = "a hidden value of the code around it (such as a loop's iterator) also references its value";
+                        for (var other in others) {
+                            if (!other.starts_with("__")) {
+                                why = $"'{other}' also references its value";
+                                break;
+                            }
+                        }
+                    }
                     report(
                         _error_at_known(
                             $"'{node.id}' cannot be moved: {why}",
@@ -2984,6 +3007,36 @@ struct _RegionWalk {
             );
         }
         return eval(value);
+    }
+
+    ## The locals still in scope, other than the innermost one named
+    ## `moving`, whose value is in the region `root`: those that would
+    ## still reference a value moved out of `moving`. A local whose scope
+    ## has ended, a closure included, references nothing any more.
+    sharers(root: long, moving: String): Array<String> {
+        var out = Array<String>();
+        bool skipped = false;
+        var s = scopes.count;
+        while (s > 0) {
+            s -= 1;
+            var scope = scopes[s];
+            var i = scope.count;
+            while (i > 0) {
+                i -= 1;
+                var l = scope[i];
+                if (l.name == moving and !skipped) {
+                    skipped = true;
+                } else if (l.region >= 0) {
+                    for (var leaf in leaves(l.region)) {
+                        if (find(leaf) == root) {
+                            out.append(l.name);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     ## The region an assignment to `target` stores into.
@@ -3697,9 +3750,10 @@ struct _Checks {
                 }
                 return call_disconnected(e, resolved.callee, operands);
             }
-            # A `shared` function value's result links only its arguments.
+            # A function value's result links only its arguments and its
+            # captures (a `shared` one's are thread-safe).
             Invoke(node) => {
-                if (!walk.is_shared_function(node.callee)) {
+                if (!disconnected(node.callee)) {
                     return false;
                 }
                 for (var a in node.args) {

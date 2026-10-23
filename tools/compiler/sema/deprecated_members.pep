@@ -17,6 +17,7 @@
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
 import [declared_deprecation, Deprecation, deprecation_warning, is_identifier] from compiler.link;
+import [unit_decls] from "checked";
 import [location_of] from "common";
 import [method_of] from "enums";
 import [Loc] from "loc";
@@ -76,12 +77,14 @@ export check_deprecated_members(module: Module, state: PassState) {
         return;
     }
     var checker = _DeprecatedUses(members, StructTable(module, memo = state.trait_types_memo()), state);
-    for (var function in module.functions) {
+    # A checked declaration's uses were reported with its unit.
+    var own = unit_decls(module);
+    for (var function in own.functions) {
         if (!declared_deprecation(function.attributes).is_value()) {
             checker.function(function, Optional<TypeName>.Empty);
         }
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if (declared_deprecation(st.attributes).is_value()) {
             continue;
         }
@@ -97,7 +100,9 @@ export check_deprecated_members(module: Module, state: PassState) {
         }
     }
     for (var variable in module.globals) {
-        if (!declared_deprecation(variable.attributes).is_value() and variable.default.is_value()) {
+        if (!declared_deprecation(variable.attributes).is_value()
+            and variable.default.is_value()
+            and !module.checked.globals.contains(variable.name)) {
             checker.current = Optional<TypeName>.Empty;
             rewrite_expression(variable.default.value(), checker);
         }

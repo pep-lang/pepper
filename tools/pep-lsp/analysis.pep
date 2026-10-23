@@ -135,11 +135,13 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         client.publish_diagnostics(analysis.uri, analysis.diagnostics);
         _publish_others(client, analysis, open, shown);
         var handing = os.Instant.now();
-        # shortcut: a copy, since the confinement check refuses
-        # `move(analysis)` (#173); move it once that is lifted.
+        # The server's thread keeps the analysis until the next one, so it
+        # holds only the bodies it reads.
         drop_unread_bodies(analysis);
         var dropped = (os.Instant.now() - handing).nanoseconds() / 1000000;
-        results.send(copy(analysis));
+        # `_publish_others` keeps copies of the URIs it shows, so nothing else
+        # references the analysis: it moves, uncopied (#173).
+        results.send(move(analysis));
         client.wake();
         var handed = (os.Instant.now() - handing).nanoseconds() / 1000000;
         client.log_message(
@@ -202,7 +204,7 @@ _publish_others(
             continue;
         }
         client.publish_diagnostics(uri, diagnostics);
-        now.insert(uri);
+        now.insert(copy(uri));
     }
     var before = shown.try_get(analysis.uri);
     if (before.is_value()) {
@@ -212,7 +214,7 @@ _publish_others(
             }
         }
     }
-    shown[analysis.uri] = now;
+    shown[copy(analysis.uri)] = now;
 }
 
 # The last segment of a URI, for the log.
@@ -225,8 +227,8 @@ _file_name(uri: String): String {
 ## read, when it holds every file's (`Analysis.bodies_read`): those of the
 ## files outside the document's compilation unit, which a check on the
 ## cache's records does not load either. Most of a program checked whole is
-## those bodies, so the copy that goes to the server's thread is the size of
-## the document's compilation unit, not of the program.
+## those bodies, so what the server's thread keeps is the size of the
+## document's compilation unit, not of the program.
 ##
 ## @param analysis the analysis, its model changed in place
 export drop_unread_bodies(analysis: Analysis) {
