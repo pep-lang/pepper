@@ -135,7 +135,7 @@ runs:
     - name: Build the changed compiler
       if: inputs.compiler == 'true'
       shell: bash
-      run: bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- bash -euxo pipefail scripts/ci-build-compiler.sh
+      run: bash scripts/ci-monitor.sh 15 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- bash -euxo pipefail scripts/ci-build-compiler.sh
 
     # Saved by every run, pull requests' too, since it is small: the
     # repository keeps 10 GB of caches, which the tests' caches used to fill.
