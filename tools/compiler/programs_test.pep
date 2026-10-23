@@ -11,13 +11,15 @@
 # method of another module's struct, and a `match` arm in a module's file
 # whose case shares its name with a type of the module; a `[Move]`
 # argument called through a `shared` function value; externs bound to C symbols Pepper functions are
-# named after, at each `-O` level; reference chains 100,000 deep, released
+# named after, at each `-O` level; nested literals 256 levels deep, built
+# in time; reference chains 100,000 deep, released
 # without overflowing the stack; the message a stack overflow prints on
 # the main thread, a `Thread` and a task; and the panic hook, which every
 # other kind of panic runs first. The programs are in
 # `testdata/`.
 
 import [File, Path] from io;
+import os;
 import process;
 import [TempFolder] from testing;
 import [
@@ -513,6 +515,36 @@ string_literals_in_default_arguments_arrive_whole() {
     var output = run(process.Command(program.to_string()));
     expect_exit(output, 0);
     expect_equal(output.stdout, "3 default 4 5\n7 rex\n2 6 module\n");
+}
+
+# Nested collection literals and generic calls are typed in one walk, not
+# one level per specialization round: 256 levels (the nesting limit) built
+# in minutes before (#202), and generic calls past eight levels failed to
+# infer.
+[Test]
+nested_literals_build_in_time_and_run() {
+    var folder = TempFolder("programs_nested_literals");
+    ulong depth = 256;
+    var index = "[0]".repeat(depth);
+    var source = "id<T>(x: T): T {\n    return x;\n}\n\nexport main(): int {\n"
+        + $"    var a = {"[".repeat(depth)}7{"]".repeat(depth)};\n"
+        + $"    var m = {"[1: ".repeat(32)}2{"]".repeat(32)};\n"
+        + $"    var i = {"id(".repeat(40)}3{")".repeat(40)};\n"
+        + $"    return a{index} + m{"[1]".repeat(32)} + i;\n}\n";
+    var path = folder.path.join("nested.pep");
+    write_file(path, source);
+    var program = folder.path.join("nested" + toolchain.executable_suffix());
+    var start = os.Instant.now();
+    var error = build_program(path, program, folder.path.join("build"));
+    var seconds = start.elapsed().seconds();
+    if (error.is_value()) {
+        panic($"nested.pep does not build:\n{error.value()}");
+    }
+    # Generous: it builds in seconds; the old growth took minutes.
+    if (seconds >= 120) {
+        panic($"nested.pep took {seconds} s to build");
+    }
+    expect_exit(run(process.Command(program.to_string())), 12);
 }
 
 # ── moves ───────────────────────────────────────────────────────────────────
