@@ -1546,3 +1546,87 @@ a_workspace_shares_one_lock_and_builds_its_members() {
     );
     expect_equal(hosts.build_and_run(app), "shapes local\n");
 }
+
+# The files of the tool package `hello` `version`, whose program prints its
+# version and the version of other/numbers it was built with.
+hello_files(version: String, numbers_range: String): Array<String> {
+    return [
+        "pep.toml",
+        "[package]\nname = \"hello\"\nversion = \""
+            + version
+            + "\"\n\n[dependencies]\nnumbers = { github = \"other/numbers\", version = \""
+            + numbers_range
+            + "\" }\n",
+        "main.pep",
+        "import numbers;\n\nmain(): int {\n    print(\"hello "
+            + version
+            + " \" + numbers.numbers_version());\n    return 0;\n}\n",
+        ".gitignore",
+        ".pep/\n"
+    ];
+}
+
+[Test]
+install_puts_a_packages_program_in_the_homes_bin() {
+    if (!has_git()) {
+        return;
+    }
+    # someone/hello 1.0.0 has no pep.lock; 1.1.0's pins numbers at 1.0.0,
+    # below the 1.3.1 its range allows.
+    var hosts = Hosts("install");
+    var root = hosts.folder.path;
+    var work = root.join("work").join("someone").join("hello");
+    add_version(root, "someone/hello", "1.0.0", hello_files("1.0.0", "1"));
+    write_file(work.join("pep.toml"), hello_files("1.1.0", "=1.0.0")[1]);
+    expect_exit(hosts.package(work, ["fetch"]), 0);
+    add_version(root, "someone/hello", "1.1.0", hello_files("1.1.0", "1"));
+    publish(root, "someone/hello");
+    var program = hosts.home().join("bin").join("hello" + toolchain.executable_suffix());
+
+    # A program in bin that install did not put there stays.
+    write_file(program, "not installed");
+    var refused = hosts.package(root, ["install", "someone/hello@=1.0.0"]);
+    expect_exit(refused, 1);
+    expect_contains(refused.stderr, "exists and was not installed by 'pepper package install'; give --force");
+    File.remove(program);
+
+    expect_exit(hosts.package(root, ["install", "someone/hello@=1.0.0"]), 0);
+    expect_equal(run(process.Command(program.to_string())).stdout, "hello 1.0.0 1.3.1\n");
+    expect_equal(hosts.package(root, ["install", "--list"]).stdout, "hello 1.0.0 (github:someone/hello)\n");
+
+    # Installing it again upgrades it, built with its pep.lock.
+    var upgraded = hosts.package(root, ["install", "--locked", "someone/hello"]);
+    expect_exit(upgraded, 0);
+    expect_contains(upgraded.stderr, "replaced hello 1.0.0 (github:someone/hello) with 1.1.0 (github:someone/hello)");
+    expect_equal(run(process.Command(program.to_string())).stdout, "hello 1.1.0 1.0.0\n");
+
+    # A folder's package of the same name replaces it only with --force.
+    var local = TempFolder("install_local");
+    write_file(local.path.join("pep.toml"), "[package]\nname = \"hello\"\n");
+    write_file(local.path.join("main.pep"), "main(): int {\n    print(\"local\");\n    return 0;\n}\n");
+    var taken = hosts.package(root, ["install", "--path", local.path.to_string()]);
+    expect_exit(taken, 1);
+    expect_contains(taken.stderr, "exists and was installed from github:someone/hello; give --force");
+    expect_exit(hosts.package(root, ["install", "--force", "--path", local.path.to_string()]), 0);
+    expect_equal(run(process.Command(program.to_string())).stdout, "local\n");
+    expect_contains(hosts.package(root, ["install", "--list"]).stdout, "hello (path:");
+
+    expect_exit(hosts.package(root, ["uninstall", "hello"]), 0);
+    expect_false(program.exists());
+    expect_equal(hosts.package(root, ["install", "--list"]).stdout, "");
+    var again = hosts.package(root, ["uninstall", "hello"]);
+    expect_exit(again, 1);
+    expect_contains(again.stderr, "'hello' was not installed by 'pepper package install'");
+
+    # A toolchain's pep-package uses the home it is installed in, over
+    # PEPPER_HOME.
+    var other = root.join("other");
+    var bin = other.join("toolchains").join("0.1.0").join("bin");
+    Directory.create_all(bin);
+    var copy = bin.join("pep-package" + toolchain.executable_suffix());
+    copy_executable(tool("pep-package"), copy);
+    var info = run(hosts.command(copy.to_string(), root, ["cache", "info"]));
+    expect_equal(
+        Path(info.stdout.trim()).normalize().to_string(), other.join("cache").join("packages").normalize().to_string()
+    );
+}
