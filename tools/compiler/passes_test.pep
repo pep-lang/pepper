@@ -5,13 +5,15 @@
 # compiler's byte for byte (the self-hosting cutover); a change that alters one
 # changes a diagnostic or what the language accepts, on purpose or not.
 
+import [Channel, Thread] from async;
 import [Diagnostic, render_all] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
+import compiler.parse;
 import compiler.sema;
 import [TempFolder] from testing;
-import [check_programs as check_expected, headline, headlines] from "expected_outcomes";
+import [check_programs as check_expected, headline, headlines, nesting_programs] from "expected_outcomes";
 
 # The programs are split in parts, each a test of its own, to keep each
 # within the time a test may take. The programs that use much of the
@@ -221,6 +223,18 @@ runs_passes(part: ulong) {
         i += PARTS;
     }
     expect_equal(rejected, 0 as ulong);
+}
+
+# Source nested as deep as the parser allows checks on half the stack the
+# compiler runs on (`parse.STACK_SIZE`), whether this test is built
+# optimized or not, and one level deeper is the parser's error.
+[Test]
+checks_the_deepest_source_in_half_the_compiler_stack() {
+    var mismatches = Channel<ulong>();
+    Thread.spawn(() => {
+        mismatches.send(check_programs(TempFolder("passes_nesting"), nesting_programs(), true));
+    }, "passes", parse.STACK_SIZE / 2).join();
+    expect_equal(mismatches.receive().value(), 0 as ulong);
 }
 
 # Programs without the runtime whose platform attributes a pass rejects:
