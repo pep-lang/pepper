@@ -117,8 +117,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n"), "");
     expect_equal(
-        errors("[package]\nname = \"a\"\n[fetch]\nvendor = [\"x\"]\n"),
-        "[: 'vendor' must be a string, not an array"
+        errors("[package]\nname = \"a\"\n[fetch]\nvendor = [\"x\"]\n"), "[: 'vendor' must be a string, not an array"
     );
 }
 
