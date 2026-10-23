@@ -7,12 +7,12 @@
 
 import [drop_body] from "checked";
 import [Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
-import [set_name, without_type_arguments] from "names";
+import [set_name] from "names";
 import [for_each_place, Place, PlaceVisitor] from "places";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import "type_name";
-import [Rewriter, rewrite_block] from "walk";
+import [Rewriter] from "walk";
 
 ## The methods the passes and code generation call without a use in the
 ## source naming them: iteration, copies, hashing, interpolation and the
@@ -93,22 +93,20 @@ _trait_methods(module: Module): HashSet<String> {
 ## @param specialized a struct specialization, just made
 ## @param state the passes' state
 export defer_methods(module: Module, specialized: StructDef, state: PassState) {
-    if (!state.lazy_methods) {
+    # A struct with generic methods keeps its methods' bodies: a call in a
+    # body given back late to one of its generic methods would be bound
+    # without that method's specializations (`describe([u])` to the plain
+    # `describe(bool)` beside `describe<T>(Array<T>)`).
+    if (!state.lazy_methods or specialized.generic_methods.count > 0) {
         return;
     }
     if (!state.trait_method_names.is_value()) {
         state.trait_method_names = Optional<HashSet<String>>.Value(_trait_methods(module));
     }
     var trait_methods = state.trait_method_names.value();
-    # A method naming one of the struct's generic methods keeps its body: a
-    # call in a body given back late would be bound without that method's
-    # specializations (`describe([u])` to the plain `describe(bool)` beside
-    # `describe<T>(Array<T>)`). Deferring the rest keeps the specializations
-    # of `Array`, which has generic methods, from each carrying every body.
-    var generic = _GenericNames(specialized);
     var deferred = HashMap<String, Block>();
     for (var m in specialized.method_members) {
-        if (m.body.is_value() and !_needed_at_once(m, trait_methods) and !generic.named_in(m.body.value())) {
+        if (m.body.is_value() and !_needed_at_once(m, trait_methods)) {
             deferred[m.name] = m.body.value();
             drop_body(m);
         }
@@ -117,53 +115,6 @@ export defer_methods(module: Module, specialized: StructDef, state: PassState) {
         state.deferred[specialized.name] = deferred;
     }
 }
-
-## The names of a struct's generic methods, and whether code names one.
-struct _GenericNames {
-    var names: HashSet<String> = HashSet<String>();
-    var found: bool = false;
-
-    construct(st: StructDef) {
-        for (var g in st.generic_methods) {
-            names.insert(set_name(without_type_arguments(g.name)));
-        }
-    }
-
-    ## Whether `body` calls or refers to one of the generic methods.
-    named_in(body: Block): bool {
-        if (names.count == 0) {
-            return false;
-        }
-        found = false;
-        rewrite_block(body, this);
-        return found;
-    }
-
-    rewrite(e: Expression): Expression {
-        match (e) {
-            MethodCall(node) => {
-                _check(node.method);
-            }
-            MemberRef(node) => {
-                _check(node.name);
-            }
-            FunctionCall(node) => {
-                _check(node.function);
-            }
-            SymbolRef(node) => {
-                _check(node.id);
-            }
-            else => {}
-        }
-        return e;
-    }
-
-    _check(name: String) {
-        found = found or names.contains(set_name(without_type_arguments(name)));
-    }
-}
-
-extend _GenericNames with Rewriter;
 
 ## Gives back the bodies of the deferred methods that the code walked so
 ## far names, as `_MethodUses` finds them.
