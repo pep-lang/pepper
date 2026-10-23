@@ -1,3 +1,4 @@
+# MEASUREMENT ONLY (reverted before merge): makes CI build this compiler.
 # pepc: the Pepper compiler written in Pepper, built and shipped as
 # `pep-build`: the same command line, `pep-build --help` for the options.
 # `main` declares every option with the `cli` module, which prints
