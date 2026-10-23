@@ -394,12 +394,6 @@ install_tool(spec: String, path: String, force: bool, options: Array<String>, of
             "--offline, and installing a package looks its versions up over the network; run it without --offline (or PEPPER_OFFLINE), or install a folder with --path"
         );
     }
-    # A project of its own whose one dependency is the package: adding it
-    # resolves the newest version the range allows and fetches it, through
-    # the download cache, into the project's `.pep/deps`.
-    # shortcut: this also resolves and checks out the package's own
-    # dependencies, which the build fetches again from its pep.lock; pick
-    # the version without resolving if installs grow slow.
     # A folder per process, so that two installs at once stay apart.
     var staging = toolchain.find_home().root.join("cache").join($"install-{process.id()}");
     if (staging.exists()) {
@@ -413,39 +407,44 @@ install_tool(spec: String, path: String, force: bool, options: Array<String>, of
     return result;
 }
 
-# Installs the package `spec` names through a project in `staging`.
+# Installs the package `spec` names, at the newest version its range
+# allows that this toolchain builds, fetched through the download cache
+# into `staging`.
 _install_through(staging: Path, spec: String, record: InstalledTool, force: bool, options: Array<String>): int {
-    var project_dir = staging.join("project");
-    var created = Directory.create_all(project_dir);
-    if (created.is_err()) {
-        return fail($"cannot create {project_dir.to_string()}: {created.error().message}");
+    var parsed = parse_package(spec);
+    if (parsed.is_err()) {
+        return fail(parsed.error().message);
     }
-    var manifest_path = project_dir.join("pep.toml");
-    var written = File.write_text(manifest_path, "[package]\nname = \"install\"\n");
-    if (written.is_err()) {
-        return fail($"cannot write {manifest_path.to_string()}: {written.error().message}");
+    var (host, repository, range) = parsed.value();
+    var found = find_package(host, repository, range, Manifest().hosts);
+    if (found.is_err()) {
+        return fail(found.error().message);
     }
-    var project = Project(manifest_path);
-    project.quiet = true;
-    var added = project.add(spec, "tool", false, "", toml.TomlValue.table());
-    if (added != 0) {
-        return added;
+    var requirement = found.value().0;
+    requirement.name = default_name(requirement.repository);
+    # Only the package's own revision: its dependencies are its pep.lock's.
+    var resolver = Resolver(staging, Manifest(), Array<Locked>());
+    resolver.toolchain = version();
+    var notes = Array<String>();
+    var chosen = resolver.choose(requirement.source(), [Wanted("install", true, false, "", requirement)], notes);
+    if (chosen.is_err()) {
+        return fail(chosen.error().message);
     }
-    var requirement = read_manifest(manifest_path).value().requirement("tool").value();
-    var lock = read_lock(lock_path(project_dir)).value();
-    for (var package in lock) {
-        if (package.source == requirement.source()) {
-            record.source = package.source;
-            record.version = package.version;
-            record.commit = package.commit;
-        }
+    for (var note in notes) {
+        say(note);
     }
-    # The package is built in a folder of its own: under `.pep`, it would
-    # build as part of the project outside.
+    record.source = requirement.source();
+    record.version = chosen.value().version;
+    record.commit = chosen.value().commit;
+    # Built in a folder of its own: under `.pep`, it would build as part
+    # of the project outside. Reading which toolchain a version needs
+    # checked it out in `.pep/deps`, which then only moves.
     var package_folder = staging.join("package");
-    var fetched = Resolver(
-        project_dir, Manifest(), lock
-    ).fetch(requirement.host, requirement.repository, package_folder, record.commit);
+    var read = package_dir(staging, requirement.host, requirement.repository);
+    if (read.is_directory()) {
+        File.rename(read, package_folder);
+    }
+    var fetched = resolver.fetch(requirement.host, requirement.repository, package_folder, record.commit);
     if (fetched.is_err()) {
         return fail($"cannot fetch {record.source}: {fetched.error().message}");
     }
@@ -516,6 +515,114 @@ default_name(repository: String): String {
     return syntax.to_identifier(name);
 }
 
+# The host (or empty), `owner/name` and range (or empty) that `spec`,
+# `[host:]owner/name[@range]`, names.
+parse_package(spec: String): Result<(String, String, String)> {
+    var host = "";
+    var rest = spec;
+    var prefixed = spec.split_once(":");
+    if (prefixed.is_value() and is_host(prefixed.value().0)) {
+        host = prefixed.value().0;
+        rest = prefixed.value().1;
+    }
+    var range = "";
+    var at = rest.split_once("@");
+    if (at.is_value()) {
+        rest = at.value().0;
+        range = at.value().1;
+        var parsed = parse_range(range);
+        if (parsed.is_err()) {
+            return Result<(String, String, String)>.Err(parsed.error().message);
+        }
+    }
+    var parts = rest.split("/");
+    if (parts.count < 2 or (parts.count > 2 and host != "gitlab" and !host.is_empty) or parts.contains("")) {
+        return Result<(String, String, String)>.Err($"'{spec}' must name a repository as owner/name");
+    }
+    return Result<(String, String, String)>.Ok((host, rest, range));
+}
+
+# The requirement on `repository` at `range`, on `host` or, when that is
+# empty, the first of `hosts` that has it. With no range it asks for any
+# release (`*`), and says so with true, or the default branch when there
+# is no release.
+find_package(host: String, repository: String, range: String, hosts: Array<String>): Result<(Requirement, bool)> {
+    var requirement = Requirement();
+    requirement.host = host;
+    requirement.repository = repository;
+    var refs = Array<RemoteRef>();
+    if (host.is_empty) {
+        var found = look_up(repository, hosts);
+        if (found.is_err()) {
+            return Result<(Requirement, bool)>.Err(found.error().message);
+        }
+        var (found_host, found_refs) = found.value();
+        requirement.host = found_host;
+        refs = found_refs;
+    } else if (range.is_empty) {
+        var read = remote_refs(repository_url(host, repository));
+        if (read.is_err()) {
+            return Result<(Requirement, bool)>.Err($"cannot read {host}:{repository}: {read.error().message}");
+        }
+        refs = read.value();
+    }
+    var any = false;
+    if (range.is_empty) {
+        for (var ref in refs) {
+            if (ref.name.starts_with("refs/tags/")) {
+                var version = tag_version(ref.name.substr(10, ref.name.length));
+                any = any or (version.is_value() and version.value().prerelease.is_empty);
+            }
+        }
+    }
+    if (any or !range.is_empty) {
+        requirement.kind = "version";
+        requirement.value = any ? "*" : range;
+    }
+    return Result<(Requirement, bool)>.Ok((requirement, any));
+}
+
+# The first of `hosts` that has `repository`, and what it offers. Says so
+# when another host has it too.
+look_up(repository: String, hosts: Array<String>): Result<(String, Array<RemoteRef>)> {
+    if (!has_git()) {
+        return Result<(String, Array<RemoteRef>)>.Err(
+            $"git is not on the PATH: looking {repository} up needs it; install git"
+        );
+    }
+    var found = Array<String>();
+    var chosen = Array<RemoteRef>();
+    var failures = Array<String>();
+    for (var host in hosts) {
+        # Only GitLab has nested groups.
+        if (repository.split("/").count > 2 and host != "gitlab") {
+            continue;
+        }
+        var refs = remote_refs(repository_url(host, repository));
+        if (refs.is_err()) {
+            failures.append($"{host}: {refs.error().message}");
+            continue;
+        }
+        if (found.is_empty) {
+            chosen = refs.value();
+        }
+        found.append(host);
+    }
+    if (found.is_empty) {
+        var text = $"no host has {repository} (looked on {", ".join(hosts)})";
+        for (var failure in failures) {
+            text += "\n  " + failure;
+        }
+        return Result<(String, Array<RemoteRef>)>.Err(text);
+    }
+    if (found.count > 1) {
+        say(
+            $"{repository} is on {" and ".join(found)}; adding {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
+        );
+    }
+    return Result<(String, Array<RemoteRef>)>.Ok((found[0], chosen));
+}
+
 # A project: its pep.toml, pep.lock and `.pep/deps`. In a workspace, the
 # pep.toml is the member's or root's the command runs in, which `add`,
 # `remove` and `publish` read, and pep.lock and `.pep/deps` are the
@@ -533,9 +640,6 @@ struct Project {
     var locked: bool = false;
     # `--offline`: use only what `.pep/deps` and the download cache hold.
     var offline: bool = false;
-    # Whether to keep quiet about what changed (for `install`, whose
-    # project is its own).
-    var quiet: bool = false;
 
     construct(manifest_path: Path) {
         this.manifest_path = manifest_path;
@@ -593,9 +697,7 @@ struct Project {
             return Result<Graph>.Err(written.error().message);
         }
         for (var change in changes) {
-            if (!quiet) {
-                say(change);
-            }
+            say(change);
         }
         return graph;
     }
@@ -705,27 +807,11 @@ struct Project {
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
             );
         }
-        var host = "";
-        var rest = spec;
-        var prefixed = spec.split_once(":");
-        if (prefixed.is_value() and is_host(prefixed.value().0)) {
-            host = prefixed.value().0;
-            rest = prefixed.value().1;
+        var parsed = parse_package(spec);
+        if (parsed.is_err()) {
+            return fail(parsed.error().message);
         }
-        var range = "";
-        var at = rest.split_once("@");
-        if (at.is_value()) {
-            rest = at.value().0;
-            range = at.value().1;
-            var parsed = parse_range(range);
-            if (parsed.is_err()) {
-                return fail(parsed.error().message);
-            }
-        }
-        var parts = rest.split("/");
-        if (parts.count < 2 or (parts.count > 2 and host != "gitlab" and !host.is_empty) or parts.contains("")) {
-            return fail($"'{spec}' must name a repository as owner/name");
-        }
+        var (given_host, rest, given_range) = parsed.value();
         var name = given_name.is_empty ? default_name(rest) : given_name;
         if (!syntax.is_identifier(name)) {
             return fail($"'{name}' is not a name 'import' can use; give one with --name");
@@ -743,39 +829,15 @@ struct Project {
         if (runtime_has_module(name)) {
             return fail($"'{name}' is the name of a runtime module; add the dependency with --name");
         }
-        var refs = Array<RemoteRef>();
-        if (host.is_empty) {
-            var found = _look_up(rest, manifest.value().hosts);
-            if (found.is_err()) {
-                return fail(found.error().message);
-            }
-            var (found_host, found_refs) = found.value();
-            host = found_host;
-            refs = found_refs;
-        } else if (range.is_empty) {
-            var read = remote_refs(repository_url(host, rest));
-            if (read.is_err()) {
-                return fail($"cannot read {host}:{rest}: {read.error().message}");
-            }
-            refs = read.value();
+        var found = find_package(given_host, rest, given_range, manifest.value().hosts);
+        if (found.is_err()) {
+            return fail(found.error().message);
         }
+        var (requirement, pin) = found.value();
+        var host = requirement.host;
+        var range = requirement.value;
         # With no range, any release resolves, and pep.toml then names the
-        # one chosen (the newest this toolchain builds) as a caret range;
-        # with no version tags, the default branch.
-        var pin = false;
-        if (range.is_empty) {
-            for (var ref in refs) {
-                if (ref.name.starts_with("refs/tags/")) {
-                    var version = tag_version(ref.name.substr(10, ref.name.length));
-                    if (version.is_value() and version.value().prerelease.is_empty) {
-                        pin = true;
-                    }
-                }
-            }
-            if (pin) {
-                range = "*";
-            }
-        }
+        # one chosen (the newest this toolchain builds) as a caret range.
         var entry = toml.TomlValue.table();
         entry[host] = toml.TomlValue.String(rest);
         if (!range.is_empty) {
@@ -827,51 +889,8 @@ struct Project {
             }
         }
         _notes(graph.value());
-        if (!quiet) {
-            say($"'import {name};' now imports {host}:{rest}");
-        }
+        say($"'import {name};' now imports {host}:{rest}");
         return 0;
-    }
-
-    # The first of `hosts` that has `repository`, and what it offers. Says
-    # so when another host has it too.
-    _look_up(repository: String, hosts: Array<String>): Result<(String, Array<RemoteRef>)> {
-        if (!has_git()) {
-            return Result<(String, Array<RemoteRef>)>.Err(
-                $"git is not on the PATH: looking {repository} up needs it; install git"
-            );
-        }
-        var found = Array<String>();
-        var chosen = Array<RemoteRef>();
-        var failures = Array<String>();
-        for (var host in hosts) {
-            # Only GitLab has nested groups.
-            if (repository.split("/").count > 2 and host != "gitlab") {
-                continue;
-            }
-            var refs = remote_refs(repository_url(host, repository));
-            if (refs.is_err()) {
-                failures.append($"{host}: {refs.error().message}");
-                continue;
-            }
-            if (found.is_empty) {
-                chosen = refs.value();
-            }
-            found.append(host);
-        }
-        if (found.is_empty) {
-            var text = $"no host has {repository} (looked on {", ".join(hosts)})";
-            for (var failure in failures) {
-                text += "\n  " + failure;
-            }
-            return Result<(String, Array<RemoteRef>)>.Err(text);
-        }
-        if (found.count > 1) {
-            say(
-                $"{repository} is on {" and ".join(found)}; adding {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
-            );
-        }
-        return Result<(String, Array<RemoteRef>)>.Ok((found[0], chosen));
     }
 
     remove(spec: String): int {
