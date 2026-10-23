@@ -57,10 +57,14 @@ export struct LockedGraph {
         return edges.try_get(source).value_or(Array<Edge>());
     }
 
-    # `geometry 1.2.0`, or the name and folder of a path dependency.
+    # `geometry 1.2.0`, or the name and folder of a path dependency, with
+    # what overrides it.
     short(edge: Edge): String {
         var locked = packages.try_get(edge.source);
-        return locked.is_value() ? locked.value().describe() : edge.wanted.requirement.name;
+        if (!locked.is_value()) {
+            return edge.wanted.requirement.name;
+        }
+        return locked.value().describe() + _overridden(locked.value());
     }
 
     # A line of `tree`: the name it is imported by when that is not the
@@ -83,6 +87,7 @@ export struct LockedGraph {
             if (!package.target.is_empty) {
                 text += $" [target: {package.target}]";
             }
+            text += _overridden(package);
         }
         if (requirement.optional) {
             text += " [optional]";
@@ -179,7 +184,8 @@ export struct LockedGraph {
         var rows = Array<Array<String>>();
         for (var (source, package) in packages) {
             var asks = wanted.try_get(source);
-            if (asks.is_empty()) {
+            # An override's revision is the project's own choice.
+            if (asks.is_empty() or !package.replaced_by.is_empty) {
                 continue;
             }
             var chosen = resolver.choose(source, asks.value(), Array<String>());
@@ -297,4 +303,10 @@ export table(header: Array<String>, rows: Array<Array<String>>): String {
         text += line + "\n";
     }
     return text;
+}
+
+# ` [override: github:you/name]` for a package `[overrides]` replaces, else
+# nothing.
+_overridden(package: Locked): String {
+    return package.replaced_by.is_empty ? "" : $" [override: {package.replaced_by}]";
 }

@@ -338,7 +338,7 @@ _fetch_locked(
 ## through a `.partial` folder so an interrupted fetch leaves no package.
 _check_out(project: Path, package: link.LockedPackage): Result<void, String> {
     var dir = link.package_directory(project, package.host, package.repository);
-    var url = package.host.clone_url(package.repository);
+    var url = package.clone_url();
     var short = package.commit.size > 12 ? package.commit.substr_bytes(0, 12) : package.commit;
     io.File.stderr().write_all($"pepc: fetching {package.source()} {short}\n");
     var partial = Path(dir.to_string() + ".partial");

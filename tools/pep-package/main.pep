@@ -201,6 +201,16 @@ main(args: String[]): int {
 
 # Prints `message` as an error; returns the exit status for one.
 fail(message: String): int {
+    # A clang-style diagnostic (`pep.toml:3:1: error: ...`) names itself.
+    var first = message.split_once("\n");
+    var located = (first.is_value() ? first.value().0 : message).split_once(": error: ");
+    var place = located.is_value() ? located.value().0.split(":") : Array<String>();
+    if (place.count >= 3
+        and ulong.parse(place[place.count - 1]).is_value()
+        and ulong.parse(place[place.count - 2]).is_value()) {
+        File.stderr().write_all(message.ends_with("\n") ? message : message + "\n");
+        return 1;
+    }
     File.stderr().write_all($"pep-package: error: {message}\n");
     return 1;
 }
@@ -369,6 +379,9 @@ struct Project {
         if (graph.is_err()) {
             return graph;
         }
+        for (var warning in graph.value().warnings) {
+            File.stderr().write_all(warning);
+        }
         var changes = _changes(previous.value(), graph.value().packages);
         # Unchanged, pep.lock is left as it is, line endings and all.
         if (lock_text(graph.value().packages) == lock_text(previous.value())) {
@@ -430,7 +443,7 @@ struct Project {
         if (locked.is_ok()) {
             for (var package in locked.value()) {
                 var (host, repository) = split_source(package.source);
-                if (!package_dir(dir, host, repository).is_directory()) {
+                if (!package.commit.is_empty and !package_dir(dir, host, repository).is_directory()) {
                     missing.append(package);
                 }
             }
@@ -470,10 +483,14 @@ struct Project {
             if (found.is_empty()) {
                 return fail($"pep.lock does not list '{source}'");
             }
+            # A folder overrides it: nothing to fetch.
+            if (found.value().commit.is_empty) {
+                continue;
+            }
             var (host, repository) = split_source(source);
             var package = package_dir(dir, host, repository);
             var was_there = package.is_directory();
-            var fetched = resolver.fetch(host, repository, package, found.value().commit);
+            var fetched = resolver.fetch(host, repository, package, found.value().commit, found.value().replaced_by);
             if (fetched.is_err()) {
                 return fail($"cannot fetch {source}: {fetched.error().message}");
             }
@@ -931,6 +948,13 @@ struct Project {
             var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
             problems.append(
                 $"dependency '{requirement.name}' names {what}, not a version range, so a dependent cannot resolve it"
+            );
+        }
+        # A dependent gets the packages it overrides, not the overrides it
+        # was tested with.
+        if (!manifest.value().overrides.is_empty) {
+            problems.append(
+                "'[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it"
             );
         }
         var minimum = manifest.value().minimum_toolchain;
