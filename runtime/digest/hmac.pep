@@ -4,6 +4,7 @@
 ## password-based key derivation built on HMAC-SHA-256.
 
 import "hex";
+import "libcrypto";
 import "sha1";
 import "sha256";
 import "words";
@@ -202,7 +203,9 @@ const _PBKDF2_SHA256_MAX_LENGTH: ulong = 0xffffffff * 32;
 ## @param length the number of bytes to derive; 0 returns none
 ## @returns the `length`-byte derived key
 ## @panics if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes,
-##     RFC 8018's limit
+##     RFC 8018's limit; under `-D USE_LIBCRYPTO`, also if a size or `rounds`
+##     is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1
+##     bytes for CNG), or the platform's PBKDF2 fails
 ## @example
 ##     import digest;
 ##
@@ -211,17 +214,24 @@ const _PBKDF2_SHA256_MAX_LENGTH: ulong = 0xffffffff * 32;
 export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
     assert(rounds > 0, "pbkdf2_sha256: 'rounds' must be at least 1");
     assert(length <= _PBKDF2_SHA256_MAX_LENGTH, "pbkdf2_sha256: 'length' is over RFC 8018's limit");
+    return _digest_pbkdf2_sha256(password, salt, rounds, length);
+}
+
+# PBKDF2-HMAC-SHA256 on the portable engine; libcrypto.pep has the
+# platform's under `USE_LIBCRYPTO`. The caller has checked the arguments.
+[Target(!BuildOption(USE_LIBCRYPTO))]
+_digest_pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
     # The hash states after the key's inner and outer pad blocks, computed
     # once: each HMAC below starts from copies of them, so a round
     # compresses 2 blocks rather than 4. `mac` only pads the key.
     var mac = Hmac<Sha256>(password);
-    var inner = mac._inner;
-    var outer = mac._outer;
-    outer.update(mac._outer_pad);
-    var hasher = Sha256();
+    var inner = mac._inner._engine;
+    var outer = mac._outer._engine;
+    outer.update(mac._outer_pad._data, mac._outer_pad.count);
+    var hasher = _Sha256Engine();
     var key = Array<u8>(length);
     # One round's U_j, the XOR of a block's rounds (T_i), and INT(i). The
-    # rounds reuse them, so the portable path allocates nothing per round.
+    # rounds reuse them, so they allocate nothing.
     var round = Array<u8>(32);
     var block = Array<u8>(32);
     var counter = Array<u8>(4);
@@ -230,15 +240,15 @@ export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): 
         counter.clear();
         _digest_append_be(counter, index);
         hasher._copy_from(inner);
-        hasher.update(salt);
-        hasher.update(counter);
+        hasher.update(salt._data, salt.count);
+        hasher.update(counter._data, counter.count);
         _pbkdf2_finish(hasher, outer, round);
         block.clear();
         block.append_all(round);
         ulong done = 1;
         while (done < rounds) {
             hasher._copy_from(inner);
-            hasher.update(round);
+            hasher.update(round._data, round.count);
             _pbkdf2_finish(hasher, outer, round);
             ulong byte = 0;
             while (byte < 32) {
@@ -256,12 +266,16 @@ export pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): 
 
 # Replaces the contents of `out` with the HMAC of the message in `hasher`,
 # which started from the inner pad state, using `outer`, the outer pad
-# state. Allocates nothing on the portable path.
-_pbkdf2_finish(hasher: Sha256, outer: Sha256, out: u8[]) {
-    hasher._finish_into(out);
+# state.
+[Target(!BuildOption(USE_LIBCRYPTO))]
+_pbkdf2_finish(hasher: _Sha256Engine, outer: _Sha256Engine, out: u8[]) {
+    out.clear();
+    hasher.finish(out);
     hasher._copy_from(outer);
-    hasher.update(out);
-    hasher._finish_into(out);
+    # `update` takes the 32 bytes into the buffer before `out` is cleared.
+    hasher.update(out._data, out.count);
+    out.clear();
+    hasher.finish(out);
 }
 
 ## Derives `length` bytes from the UTF-8 bytes of `password` and `salt`
@@ -273,7 +287,9 @@ _pbkdf2_finish(hasher: Sha256, outer: Sha256, out: u8[]) {
 ## @param length the number of bytes to derive; 0 returns none
 ## @returns the `length`-byte derived key
 ## @panics if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes,
-##     RFC 8018's limit
+##     RFC 8018's limit; under `-D USE_LIBCRYPTO`, also if a size or `rounds`
+##     is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1
+##     bytes for CNG), or the platform's PBKDF2 fails
 ## @example
 ##     import digest;
 ##

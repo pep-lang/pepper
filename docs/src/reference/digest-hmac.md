@@ -231,7 +231,7 @@ the first block, no more.
 - the `length`-byte derived key
 
 **Panics**
-- if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes, RFC 8018's limit
+- if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes, RFC 8018's limit; under `-D USE_LIBCRYPTO`, also if a size or `rounds` is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1 bytes for CNG), or the platform's PBKDF2 fails
 
 **Example**
 ```pepper
@@ -260,7 +260,7 @@ with PBKDF2-HMAC-SHA256, as the `u8[]` overload does.
 - the `length`-byte derived key
 
 **Panics**
-- if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes, RFC 8018's limit
+- if `rounds` is 0, or `length` is over (2^32 - 1) * 32 bytes, RFC 8018's limit; under `-D USE_LIBCRYPTO`, also if a size or `rounds` is over what the platform takes (2^31 - 1 for libcrypto, 2^32 - 1 bytes for CNG), or the platform's PBKDF2 fails
 
 **Example**
 ```pepper
