@@ -8,7 +8,7 @@
 # It installs a published toolchain with the install scripts, as a user
 # would: install.sh, or install.ps1 on Windows, into a fresh home under
 # $RUNNER_TEMP. By default that is stage 0, the build of main that
-# .github/stage0 pins: the release build, scripts/stage0-check.sh, Docs,
+# .github/stage0 pins: the release build, scripts/stage0-check.sh
 # and a CI job testing a commit whose compiler the build of main lacks
 # (ci.yml's `changes` job decides) build with it. The pin names the build's
 # version and commit and each archive's SHA-256 sum, which the install

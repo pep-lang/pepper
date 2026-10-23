@@ -160,7 +160,9 @@ open one. Its CI runs as any pull request's, building the compiler with
 the new stage 0 and running the whole suite with it, so it may auto-merge.
 While that pull request is open the branch stays put (a push with the
 workflow's token would start no CI on it); the run after it merges pins
-the next build.
+the next build. The `stage0` release keeps the newest 20 builds and the
+one main pins, so an older branch whose pin is gone (a patch release made
+from it, say) copies main's `.github/stage0` first.
 
 ```bash
 gh workflow run stage0.yml                                  # pin the newest build of main now

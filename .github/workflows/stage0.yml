@@ -86,6 +86,14 @@ jobs:
             echo "::warning::the published $tag ($built) does not follow the pinned $pinned: leaving the pin"
             exit 0
           fi
+          # A push with this token starts no CI on an open pull request, so
+          # one that is open keeps its build (and its assets) until it merges.
+          branch=stage0/bump
+          number=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            echo "::notice::pull request #$number moves stage 0 already: merge it, and the next run pins $built"
+            exit 0
+          fi
           # The publish job moves the tag first and then replaces the
           # assets, so they are all the build of $built only once its
           # publish has passed, and until the tag moves again.
@@ -139,14 +147,6 @@ jobs:
             echo "commit $built"
             cat "$downloads/SHA256SUMS"
           } > "$RUNNER_TEMP/pin"
-          # A push with this token starts no CI on an open pull request, so
-          # one that is open keeps its build until it merges.
-          branch=stage0/bump
-          number=$(gh pr list -R "$REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$number" ]; then
-            echo "::notice::pull request #$number moves stage 0 already: merge it, and the next run pins $built"
-            exit 0
-          fi
           # Made afresh on the base each time, so it holds nothing else.
           git switch -C "$branch"
           cp "$RUNNER_TEMP/pin" "$pin"
