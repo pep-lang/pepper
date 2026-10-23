@@ -14,12 +14,16 @@
 # before it; Docs (`docs`) waits the same way. A failed release does not
 # stop them: they test with the newest build that did publish, and the run
 # shows the release's failure beside their results. A commit that changes
-# the compiler (tools/compiler/), a dispatch on a branch other than main, or
-# a commit whose compiler the published build lacks (main's run that would
-# have published it was cancelled; scripts/ci-published-compiler.sh)
-# is tested with its own compiler instead: each test and cross-link job
-# builds it with the installed pep-build (scripts/ci-build-compiler.sh,
-# the release's stage 1), and every later step uses it.
+# the compiler (tools/compiler/) or stage 0's pin (.github/stage0), a
+# dispatch on a branch other than main, or a commit whose compiler the
+# published build lacks (main's run that would have published it was
+# cancelled; scripts/ci-published-compiler.sh) is tested with its own
+# compiler instead: each test and cross-link job installs stage 0, the
+# build of main .github/stage0 pins, builds the compiler with it
+# (scripts/ci-build-compiler.sh, the release's stage 1), and every later
+# step uses that. Stage 0 stays the same until the pin moves
+# (.github/workflows/stage0.yml), so the compiler's build cache, keyed on
+# it, carries between runs.
 #
 # Every job runs on a GitHub-hosted runner: windows-2025, ubuntu-24.04 and
 # macos-15 (arm64). Hosted runners start clean, so each job provisions LLVM
@@ -124,6 +128,11 @@ jobs:
                   code=true
                   compiler=true
                   why="build the commit's compiler: it changes tools/compiler/"
+                  ;;
+                .github/stage0)
+                  code=true
+                  compiler=true
+                  why="build the commit's compiler: it moves stage 0"
                   ;;
                 docs/src/SUMMARY.md|docs/src/reference/*) code=true ;;
                 .agents/*|.claude/*|*.md) ;;
@@ -477,7 +486,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+          # The build of main, or stage 0 to build the changed compiler with.
+          NEWEST: ${{ needs.changes.outputs.compiler != 'true' && '--newest' || '' }}
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $NEWEST
 
       # See test-windows.
       - name: Build the changed compiler

@@ -343,10 +343,19 @@ default_name(repository: String): String {
     return syntax.to_identifier(name);
 }
 
-# A project: its pep.toml, pep.lock and `.pep/deps`.
+# A project: its pep.toml, pep.lock and `.pep/deps`. In a workspace, the
+# pep.toml is the member's or root's the command runs in, which `add`,
+# `remove` and `publish` read, and pep.lock and `.pep/deps` are the
+# root's, resolved for every member.
 struct Project {
     var manifest_path: Path = Path("pep.toml");
+    # The folder holding pep.lock and `.pep/deps`: the workspace's root,
+    # else the package's own.
     var dir: Path = Path(".");
+    # The pep.toml in `dir`.
+    var root_path: Path = Path("pep.toml");
+    # Whether `root_path` is a workspace's root.
+    var is_workspace: bool = false;
     # `--locked`: fail rather than change pep.lock.
     var locked: bool = false;
     # `--offline`: use only what `.pep/deps` and the download cache hold.
@@ -354,15 +363,24 @@ struct Project {
 
     construct(manifest_path: Path) {
         this.manifest_path = manifest_path;
-        var parent = manifest_path.parent();
+        var workspace = find_workspace(manifest_path);
+        is_workspace = workspace.is_value();
+        root_path = workspace.value_or(manifest_path);
+        var parent = root_path.parent();
         dir = parent.is_value() ? parent.value() : Path(".");
+    }
+
+    # The folder of `manifest_path`: the package the command is about.
+    _package_dir(): Path {
+        var parent = manifest_path.parent();
+        return parent.is_value() ? parent.value() : Path(".");
     }
 
     # Resolves the graph, keeping locked revisions unless `update_all` or
     # `update` names them, checks every package out and writes pep.lock.
     # Returns the graph, or prints why it failed.
     _resolve(update_all: bool, update: Array<String>): Result<Graph> {
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<Graph>.Err(manifest.error().message);
         }
@@ -719,7 +737,7 @@ struct Project {
     # names nothing.
     _sources(specs: Array<String>): Result<Array<String>> {
         var sources = Array<String>();
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(manifest_path);
         if (manifest.is_err()) {
             return Result<Array<String>>.Err(manifest.error().message);
         }
@@ -821,7 +839,8 @@ struct Project {
     }
 
     # Whether the project builds: `pep-build` (beside this program, else on
-    # the PATH) run in the project's folder with no file.
+    # the PATH) run in the project's folder with no file, and `--all` in a
+    # workspace.
     _builds(): bool {
         var compiler = "pep-build";
         var executable = process.executable_path();
@@ -832,7 +851,11 @@ struct Project {
                 compiler = beside.to_string();
             }
         }
-        return _succeeds(process.Command(compiler).working_directory(dir));
+        var command = process.Command(compiler).working_directory(dir);
+        if (is_workspace) {
+            command.argument("--all");
+        }
+        return _succeeds(command);
     }
 
     # Runs `command`, and whether it succeeded; prints what it printed when
@@ -853,7 +876,7 @@ struct Project {
 
     # The graph pep.lock records, for the reports.
     _graph(): Result<LockedGraph> {
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<LockedGraph>.Err(manifest.error().message);
         }
@@ -921,11 +944,11 @@ struct Project {
                 "--offline, and publishing reads and pushes to the repository's remote; run 'pepper package publish' without --offline (or PEPPER_OFFLINE)"
             );
         }
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(manifest_path);
         if (manifest.is_err()) {
             return fail(manifest.error().message);
         }
-        # read_manifest parsed it already.
+        # read_project parsed it already.
         var root = toml.parse(manifest.value().text).value();
         var problems = Array<String>();
         var package_version = _package_string(root, "version");
@@ -941,13 +964,20 @@ struct Project {
             }
         }
         for (var requirement in manifest.value().requirements) {
-            # A dependent ignores dev-dependencies, so they may be anything.
-            if (requirement.dev or (requirement.kind == "version" and !requirement.is_path())) {
+            # A dependent ignores dev-dependencies, so they may be anything;
+            # a `path` (a workspace sibling) needs the `version` it is
+            # published with.
+            if (requirement.dev or requirement.kind == "version") {
                 continue;
             }
-            var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
+            if (requirement.is_path()) {
+                problems.append(
+                    $"dependency '{requirement.name}' names path {requirement.repository} and no 'version', so a dependent cannot resolve it; give it the version of the package there"
+                );
+                continue;
+            }
             problems.append(
-                $"dependency '{requirement.name}' names {what}, not a version range, so a dependent cannot resolve it"
+                $"dependency '{requirement.name}' names {requirement.describe()}, not a version range, so a dependent cannot resolve it"
             );
         }
         # A dependent gets the packages it overrides, not the overrides it
@@ -972,7 +1002,7 @@ struct Project {
                 );
             }
         }
-        var at = dir.to_string();
+        var at = _package_dir().to_string();
         var changes = git(["status", "--porcelain"], at);
         if (changes.is_err()) {
             return fail(changes.error().message);
@@ -1030,7 +1060,7 @@ struct Project {
         for (var release in releases) {
             say($"running 'pepper +{release} test'");
             if (!_succeeds(
-                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(dir)
+                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(_package_dir())
             )) {
                 return fail($"'pepper +{release} test' failed, so {name} {package_version} is not published");
             }

@@ -35,6 +35,11 @@ Without git, `pep-package` downloads the host's archive of each commit
 `pep.lock` pins over HTTPS instead (see [Fetching without git](#fetching-without-git)),
 so a project with a `pep.lock` builds on a machine with no git.
 
+In a [workspace](projects.md#workspaces-workspace), `pep.lock` and
+`.pep/deps` are the root's, resolved for every member at once, wherever
+it runs; `add` and `remove` change the `pep.toml` of the member it runs
+in, and `publish` publishes that member.
+
 `pepper build` fetches on its own what `pep.lock` lists and `.pep/deps`
 lacks, so a fresh clone of a project builds with `pepper build` alone.
 Every package is downloaded once per machine, into a
@@ -158,7 +163,8 @@ A dependency on a branch moves to the branch's newest commit.
 ### `update --verify`
 
 Updates one dependency at a time and runs `pep-build` (beside
-`pep-package`, else on the `PATH`) on the project after each. An update
+`pep-package`, else on the `PATH`) on the project after each, with
+`--all` in a workspace. An update
 that does not build is rolled back, and the command lists those it rolled
 back.
 
@@ -184,14 +190,17 @@ First it checks, and lists every check that fails at once:
 - `version` is a version (`1.2.0`), newer than every version tag
   `origin` has;
 - `[package]` has a `description`, `license` and `repository`;
-- every dependency asks for a version range, not a branch, tag, commit,
-  path or the default branch, so a project depending on this one can
-  resolve it with its other packages. A dev-dependency may be anything,
-  since a dependent ignores it;
+- every dependency asks for a version range, not a branch, tag, commit
+  or the default branch, so a project depending on this one can resolve
+  it with its other packages; a `path` dependency, such as a workspace
+  sibling, needs a `version` beside it, and one inherited with
+  `workspace = true` is checked as the workspace gives it. A
+  dev-dependency may be anything, since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
   `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
-  `[features]` and `[overrides]` tables, and a dependency's `optional`,
-  `features` and `default-features`, need 0.11.0;
+  `[features]`, `[overrides]` and `[workspace]` tables, and a
+  dependency's `optional`, `features`, `default-features` and
+  `workspace`, need 0.11.0;
 - `pep.toml` has no `[overrides]`: a dependent builds with the packages
   they replace, not the code the package was tested with, so a release
   waits until the fix it needs is released too.
@@ -200,8 +209,12 @@ First it checks, and lists every check that fails at once:
 pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
   dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  dependency 'draw' names path ../draw and no 'version', so a dependent cannot resolve it; give it the version of the package there
   'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
 ```
+
+Run from a workspace member, it checks and tests that member, in its
+folder.
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),

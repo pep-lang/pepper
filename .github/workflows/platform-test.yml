@@ -177,7 +177,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh --newest
 
       # The command is supplied by someone with write access (dispatch requires
       # it), and reaches the shell through the environment rather than template

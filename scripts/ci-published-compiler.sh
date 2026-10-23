@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Says whether CI can test a commit with the published build of main (the
-# toolchain scripts/ci-install-toolchain.sh installs) instead of building
-# the commit's compiler: only when that build's compiler is the commit's.
+# toolchain `scripts/ci-install-toolchain.sh --newest` installs) instead of
+# building the commit's compiler with stage 0 (the build .github/stage0
+# pins): only when the published build's compiler is the commit's.
 # The build of main publishes after main's CI passes, so a cancelled run
 # leaves it behind main's newest compiler changes (pep-lang/pepper#124).
 #
