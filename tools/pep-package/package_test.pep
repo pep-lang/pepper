@@ -1416,9 +1416,7 @@ a_workspace_shares_one_lock_and_builds_its_members() {
     # Only the root's `[overrides]` apply, to every member; a member's are
     # ignored, with a warning.
     write_file(root.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
-    write_file(
-        root.join("local").join("module.pep"), "export numbers_version(): String {\n    return \"local\";\n}\n"
-    );
+    write_file(root.join("local").join("module.pep"), "export numbers_version(): String {\n    return \"local\";\n}\n");
     write_file(
         root.join("pep.toml"),
         read_file(root.join("pep.toml")) + "\n[overrides]\n\"github:other/numbers\" = { path = \"local\" }\n"
