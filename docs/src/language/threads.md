@@ -588,9 +588,11 @@ compiler works out, for every function, whether it keeps an argument (as
 arguments. A result that shares nothing, such as that of `+`, `substr`,
 `copy()` or a constructor, is **fresh**, and may cross in either direction.
 The language server shows "Returns a fresh value" when hovering over such a
-function. A call through a function value, a value an `extern` function
-hands back, and a value read through raw memory that a `[Shared]` struct
-holds are never fresh: something else may reference them. The runtime takes
+function. A call through a function value links its result with its
+arguments and with what the function value captured, so it is fresh only
+when the function value and its arguments are new. A value an `extern`
+function hands back, and a value read through raw memory that a `[Shared]`
+struct holds, are never fresh: something else may reference them. The runtime takes
 the few values it hands out that nothing else references out of raw memory
 with `move(p[i])`, a promise the compiler cannot check and allows only in the
 runtime: a channel's `receive()` (the value `send` handed over) and a Mutex's
@@ -720,7 +722,8 @@ The [Once reference](../reference/async-once.md) has the details.
 - There is no reader-writer lock, and no barrier or semaphore. A Mutex is
   not re-entrant.
 - The value a `Select`'s `wait()` returns is not a new value for a lock
-  body, since `wrap` is a function value the compiler cannot follow; `copy`
-  it to move it into a locked value.
+  body, since it comes from `wrap`, a function value the `Select` keeps,
+  and may share what `wrap` captured; `copy` it to move it into a locked
+  value.
 - Deadlocks are not detected, except locking a Mutex twice on one thread,
   which panics.

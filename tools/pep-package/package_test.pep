@@ -786,6 +786,89 @@ an_unfetched_dependency_fails_under_offline() {
 }
 
 [Test]
+tree_why_and_outdated_report_on_the_locked_graph() {
+    if (!has_git()) {
+        return;
+    }
+    # `other/fixtures` needs geometry, so geometry is reached twice; it is
+    # a dev-dependency, and `other/winapi` is needed only on Windows.
+    var hosts = Hosts("report");
+    add_version(
+        hosts.folder.path,
+        "other/fixtures",
+        "1.0.0",
+        [
+            "module.pep",
+            "",
+            "pep.toml",
+            "[package]\nname = \"fixtures\"\n\n[dependencies]\n"
+                + "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+        ]
+    );
+    add_version(hosts.folder.path, "other/winapi", "1.0.0", ["module.pep", ""]);
+    publish(hosts.folder.path, "other/fixtures");
+    publish(hosts.folder.path, "other/winapi");
+    var project = Project(
+        "report",
+        "geometry = { github = \"someone/geometry\", version = \"=1.0.0\" }\n"
+            + "\n[dev-dependencies]\nfixtures = { github = \"other/fixtures\", version = \"1\" }\n"
+            + "\n[target.'OS(Windows)'.dependencies]\n"
+            + "win = { github = \"other/winapi\", version = \"1\", optional = true, features = [\"wide\"] }\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    var tree = hosts.package(project.dir, ["tree", "--offline"]);
+    expect_exit(tree, 0);
+    expect_equal(
+        tree.stdout,
+        "app\n"
+            + "|-- geometry 1.0.0 (github:someone/geometry)\n"
+            + "|   `-- numbers 1.3.1 (github:other/numbers)\n"
+            + "|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]\n"
+            + "`-- fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+            + "    `-- geometry 1.0.0 (github:someone/geometry) (*)\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["tree", "--depth", "1"]).stdout,
+        "app\n|-- geometry 1.0.0 (github:someone/geometry)\n"
+            + "|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]\n"
+            + "`-- fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["why", "numbers"]).stdout,
+        "app -> geometry 1.0.0 -> numbers 1.3.1\napp -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1\n"
+    );
+    expect_equal(hosts.package(project.dir, ["why", "win"]).stdout, "app -> winapi 1.0.0\n");
+    var unknown = hosts.package(project.dir, ["why", "nothing"]);
+    expect_exit(unknown, 1);
+    expect_contains(unknown.stderr, "no package 'nothing' in pep.lock");
+
+    # Widened, geometry's range allows 1.1.0; geometry's own keeps numbers
+    # below 3.0.0. outdated says so and leaves pep.lock as it is.
+    write_file(project.dir.join("pep.toml"), project.manifest().replace("\"=1.0.0\"", "\"1.0\""));
+    var lock = project.lock();
+    var outdated = hosts.package(project.dir, ["outdated", "--exit-code"]);
+    expect_exit(outdated, 1);
+    expect_equal(
+        outdated.stdout,
+        "package   locked  wanted  latest  source\n"
+            + "numbers   1.3.1   1.3.1   3.0.0   github:other/numbers\n"
+            + "geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry\n"
+    );
+    expect_exit(hosts.package(project.dir, ["outdated"]), 0);
+    expect_equal(project.lock(), lock);
+    var offline = hosts.package(project.dir, ["outdated", "--offline"]);
+    expect_exit(offline, 1);
+    expect_contains(offline.stderr, "--offline, and 'outdated' reads which versions each package offers");
+    # A dependency pep.lock does not list yet: fetch resolves it first.
+    write_file(
+        project.dir.join("pep.toml"), project.manifest() + "\n[dependencies.more]\ngithub = \"other/unlisted\"\n"
+    );
+    var stale = hosts.package(project.dir, ["tree"]);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "pep.lock does not list github:other/unlisted");
+}
+
+[Test]
 projects_share_the_download_cache() {
     if (!has_git()) {
         return;
