@@ -158,14 +158,23 @@ export struct LockedGraph {
         var lines = Array<String>();
         var roots = JsonValue.array();
         var shown = HashSet<String>();
-        for (var (source, asks) in wanted) {
-            if (!targets.contains(source)) {
-                continue;
+        # Locked packages, even one nothing asks for, then path dependencies.
+        var sources = Array<String>();
+        for (var (source, _) in packages) {
+            if (targets.contains(source)) {
+                sources.append(source);
             }
+        }
+        for (var (source, _) in wanted) {
+            if (targets.contains(source) and !packages.contains(source)) {
+                sources.append(source);
+            }
+        }
+        for (var source in sources) {
             # The package itself, which no entry asks for here.
             var root = Wanted();
             var locked = packages.try_get(source);
-            root.requirement.name = locked.is_value() ? locked.value().name : asks[0].requirement.name;
+            root.requirement.name = locked.is_value() ? locked.value().name : wanted[source][0].requirement.name;
             lines.append(_describe(source, root.requirement.name));
             shown.insert(source);
             var node = _json(Edge(source, root));

@@ -124,7 +124,7 @@ main(args: String[]): int {
         "invert", "i", "print what depends on a package instead, down to the project", value_name = "NAME"
     );
     var tree_json = tree.flag("json", help = "print the tree as JSON");
-    var why = parser.command("why", "Prints every path from the project to a package");
+    var why = parser.command("why", "Prints the paths from the project to a package, the first 20 unless --all");
     var why_package = why.positional(
         "package", "the package's name, owner/name or source, or the name a dependency is imported by"
     );
