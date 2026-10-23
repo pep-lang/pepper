@@ -9,6 +9,7 @@
 
 import async;
 import [Directory, File, OpenOptions, Path] from io;
+import json;
 import [system_name] from os;
 import process;
 import [serve_folder] from tool_testing.server;
@@ -940,6 +941,72 @@ tree_why_and_outdated_report_on_the_locked_graph() {
     expect_exit(unknown, 1);
     expect_contains(unknown.stderr, "no package 'nothing' in pep.lock");
 
+    # --invert: what depends on a package, with the dependent's marks.
+    expect_equal(
+        hosts.package(project.dir, ["tree", "--invert", "geometry", "--offline"]).stdout,
+        "geometry 1.0.0 (github:someone/geometry)\n"
+            + "|-- app\n"
+            + "`-- fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+            + "    `-- app\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["tree", "-i", "win", "--offline"]).stdout,
+        "winapi 1.0.0 (github:other/winapi) [target: OS(Windows)]\n`-- app [optional] [features: wide]\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["tree", "--invert", "numbers", "--depth", "1"]).stdout,
+        "numbers 1.3.1 (github:other/numbers)\n`-- geometry 1.0.0 (github:someone/geometry)\n"
+    );
+    expect_exit(hosts.package(project.dir, ["tree", "--invert", "nothing"]), 1);
+
+    # --json: the same graphs, field by field.
+    var tree_json = json.parse(hosts.package(project.dir, ["tree", "--json"]).stdout).value();
+    expect_equal(tree_json["name"].as_string().value(), "app");
+    var geometry = tree_json["dependencies"][0];
+    expect_equal(geometry["name"].as_string().value(), "geometry");
+    expect_equal(geometry["package"].as_string().value(), "geometry");
+    expect_equal(geometry["version"].as_string().value(), "1.0.0");
+    expect_equal(geometry["commit"].as_string().value().length, 40 as ulong);
+    expect_equal(geometry["source"].as_string().value(), "github:someone/geometry");
+    expect_false(geometry["dev"].as_bool().value());
+    expect_true(geometry["target"].is_null());
+    expect_true(geometry["override"].is_null());
+    expect_false(geometry["optional"].as_bool().value());
+    expect_true(geometry["features"].as_array().value().is_empty);
+    expect_false(geometry["repeated"].as_bool().value());
+    expect_equal(geometry["dependencies"][0]["package"].as_string().value(), "numbers");
+    expect_equal(geometry["dependencies"][0]["version"].as_string().value(), "1.3.1");
+    expect_true(geometry["dependencies"][0]["dependencies"].as_array().value().is_empty);
+    var win = tree_json["dependencies"][1];
+    expect_equal(win["name"].as_string().value(), "win");
+    expect_equal(win["package"].as_string().value(), "winapi");
+    expect_equal(win["target"].as_string().value(), "OS(Windows)");
+    expect_true(win["optional"].as_bool().value());
+    expect_equal(win["features"][0].as_string().value(), "wide");
+    var fixtures = tree_json["dependencies"][2];
+    expect_true(fixtures["dev"].as_bool().value());
+    expect_true(fixtures["dependencies"][0]["repeated"].as_bool().value());
+    expect_true(fixtures["dependencies"][0]["dependencies"].as_array().value().is_empty);
+    expect_true(tree_json["dependencies"][3].is_null());
+
+    var inverted_json = json.parse(hosts.package(project.dir, ["tree", "-i", "geometry", "--json"]).stdout).value();
+    expect_equal(inverted_json["name"].as_string().value(), "app");
+    var inverted = inverted_json["packages"][0];
+    expect_equal(inverted["source"].as_string().value(), "github:someone/geometry");
+    expect_equal(inverted["dependents"][0]["source"].as_string().value(), "");
+    expect_equal(inverted["dependents"][0]["package"].as_string().value(), "app");
+    expect_equal(inverted["dependents"][1]["package"].as_string().value(), "fixtures");
+    expect_true(inverted["dependents"][1]["dev"].as_bool().value());
+    expect_equal(inverted["dependents"][1]["dependents"][0]["source"].as_string().value(), "");
+
+    var why_json = json.parse(hosts.package(project.dir, ["why", "numbers", "--json"]).stdout).value();
+    expect_equal(why_json["total"].as_int().value(), 2 as long);
+    var second = why_json["paths"][1];
+    expect_equal(second.as_array().value().count, 3 as ulong);
+    expect_equal(second[0]["package"].as_string().value(), "fixtures");
+    expect_true(second[0]["dev"].as_bool().value());
+    expect_equal(second[2]["source"].as_string().value(), "github:other/numbers");
+
     # Widened, geometry's range allows 1.1.0; geometry's own keeps numbers
     # below 3.0.0. outdated says so and leaves pep.lock as it is.
     write_file(project.dir.join("pep.toml"), project.manifest().replace("\"=1.0.0\"", "\"1.0\""));
@@ -953,6 +1020,18 @@ tree_why_and_outdated_report_on_the_locked_graph() {
             + "geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry\n"
     );
     expect_exit(hosts.package(project.dir, ["outdated"]), 0);
+    var outdated_json = hosts.package(project.dir, ["outdated", "--json", "--exit-code"]);
+    expect_exit(outdated_json, 1);
+    var rows = json.parse(outdated_json.stdout).value()["packages"];
+    expect_equal(rows[0]["package"].as_string().value(), "numbers");
+    expect_equal(rows[0]["locked"].as_string().value(), "1.3.1");
+    expect_equal(rows[0]["wanted"].as_string().value(), "1.3.1");
+    expect_equal(rows[0]["latest"].as_string().value(), "3.0.0");
+    expect_equal(rows[0]["source"].as_string().value(), "github:other/numbers");
+    expect_false(rows[0]["dev"].as_bool().value());
+    expect_true(rows[0]["target"].is_null());
+    expect_equal(rows[1]["wanted"].as_string().value(), "1.1.0");
+    expect_true(rows[2].is_null());
     expect_equal(project.lock(), lock);
     var offline = hosts.package(project.dir, ["outdated", "--offline"]);
     expect_exit(offline, 1);
@@ -964,6 +1043,40 @@ tree_why_and_outdated_report_on_the_locked_graph() {
     var stale = hosts.package(project.dir, ["tree"]);
     expect_exit(stale, 1);
     expect_contains(stale.stderr, "pep.lock does not list github:other/unlisted");
+
+    # More paths than `why` prints: the project needs a1 to a3, each of
+    # them b1 to b3, each of them c1 to c3, each of them numbers: 27.
+    var below = "numbers = { github = \"other/numbers\", version = \"1\" }\n";
+    for (var layer in ["c", "b", "a"]) {
+        var needs = "";
+        for (var index in 1..4) {
+            var name = $"{layer}{index}";
+            add_version(
+                hosts.folder.path,
+                "other/" + name,
+                "1.0.0",
+                ["module.pep", "", "pep.toml", "[package]\nname = \"" + name + "\"\n\n[dependencies]\n" + below]
+            );
+            publish(hosts.folder.path, "other/" + name);
+            needs += name + " = { github = \"other/" + name + "\", version = \"1\" }\n";
+        }
+        below = needs;
+    }
+    var wide = Project("report_wide", below);
+    expect_exit(hosts.package(wide.dir, ["fetch"]), 0);
+    var capped = hosts.package(wide.dir, ["why", "numbers", "--offline"]).stdout.split("\n");
+    expect_equal(capped.count, 22 as ulong);
+    expect_equal(capped[0], "app -> a1 1.0.0 -> b1 1.0.0 -> c1 1.0.0 -> numbers 1.3.1");
+    expect_equal(capped[20], "and 7 more paths; --all prints every one");
+    expect_equal(hosts.package(wide.dir, ["why", "numbers", "--all"]).stdout.split("\n").count, 28 as ulong);
+    var capped_json = json.parse(hosts.package(wide.dir, ["why", "numbers", "--json"]).stdout).value();
+    expect_equal(capped_json["total"].as_int().value(), 27 as long);
+    expect_equal(capped_json["paths"].as_array().value().count, 20 as ulong);
+    # Inverted, c2 lists b1 to b3 below c1's, so each ends in (*).
+    expect_contains(
+        hosts.package(wide.dir, ["tree", "--invert", "numbers"]).stdout,
+        "|-- c2 1.0.0 (github:other/c2)\n|   |-- b1 1.0.0 (github:other/b1) (*)\n"
+    );
 }
 
 [Test]
