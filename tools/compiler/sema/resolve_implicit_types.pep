@@ -1284,6 +1284,25 @@ struct _TypeScopes {
         return Optional<(Expression, TypeName)>.Value((callee, field.value()));
     }
 
+    ## The type arguments that call `call`, to a generic function without
+    ## them, takes from its arguments; none while they do not select them,
+    ## or when the name is a function value or the current struct's method.
+    inferred_type_arguments(call: FunctionCallExpression, current: TypeName?): TypeName[]? {
+        tables.note(_function_read(call.function));
+        var signature = tables.generic_function(call.function);
+        if (!signature.is_value() or value_callee(call.function, current).is_value()) {
+            return Optional<TypeName[]>.Empty;
+        }
+        # Inside a method, a bare call may be one of the struct's methods.
+        if (current.is_value()) {
+            var st = current.value();
+            if (calls_method(st, call.function, call.args.count) or field_type(st, call.function).is_value()) {
+                return Optional<TypeName[]>.Empty;
+            }
+        }
+        return signature.value().infer(argument_types(call.args, current));
+    }
+
     _mentions_unbound(ty: TypeName): bool {
         for (var p in unbound) {
             if (ty.mentions(p)) {
@@ -1808,10 +1827,21 @@ struct _TypeScopes {
             var choice = select_overload(function, node.args, node.loc, current);
             return choice.is_value() ? choice.value().ret : TypeName.auto();
         }
-        # A generic function called without type arguments has no type
-        # until they are inferred.
+        # A generic function called without type arguments has the type of
+        # the specialization its arguments select, once they do. Typing it
+        # before the call is rewritten lets a call nested in another's
+        # arguments (`[[1]]`) type its caller in the same walk.
         if (!function.contains("<") and tables.generic_function(function).is_value()) {
-            return TypeName.auto();
+            if (generic_base) {
+                return TypeName.auto();
+            }
+            var type_args = inferred_type_arguments(node, current);
+            if (!type_args.is_value()) {
+                return TypeName.auto();
+            }
+            var specialized = FunctionCallExpression(specialization(function, type_args.value()), node.args, node.loc);
+            specialized.labeled = _labeled_arguments(function, type_args.value());
+            return _labeled_call(_call_type(specialized, current), specialized.labeled);
         }
         var declared = tables.function_of(function);
         if (declared.is_value()) {
@@ -2290,20 +2320,7 @@ struct _ImplicitResolver {
             }
             return;
         }
-        scopes.tables.note(_function_read(call.function));
-        var signature = scopes.tables.generic_function(call.function);
-        if (!signature.is_value() or scopes.value_callee(call.function, current).is_value()) {
-            return;
-        }
-        # Inside a method, a bare call may be one of the struct's methods.
-        if (current.is_value()) {
-            var st = current.value();
-            if (scopes.calls_method(st, call.function, call.args.count)
-                or scopes.field_type(st, call.function).is_value()) {
-                return;
-            }
-        }
-        var type_args = signature.value().infer(scopes.argument_types(call.args, current));
+        var type_args = scopes.inferred_type_arguments(call, current);
         if (type_args.is_value()) {
             scopes.edits += 1;
             call.labeled = _labeled_arguments(call.function, type_args.value());
