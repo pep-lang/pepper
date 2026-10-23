@@ -305,27 +305,27 @@ the compiler checks every call:
   note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
   ```
 
-  Only a variable still in scope counts: one declared in a block that has
-  ended no longer references anything. A
-  [closure](function-types.md#captured-values) references what it
-  captures, so a captured value can be moved once no closure that holds it
-  is left: its block has ended, it was only passed to a call that does not
-  keep it, or the function that made it has returned. A closure still in a
-  variable, stored in a field, or returned and kept still holds the value:
+Only a variable still in scope counts: one declared in a block that has
+ended no longer references anything. A
+[closure](function-types.md#captured-values) references what it
+captures, so a captured value can be moved once no closure that holds it
+is left: its block has ended, it was only passed to a call that does not
+keep it, or the function that made it has returned. A closure still in a
+variable, stored in a field, or returned and kept still holds the value:
 
-  ```pepper
-  {{#include ../../examples/memory-move-closure.pep}}
-  ```
+```pepper
+{{#include ../../examples/memory-move-closure.pep}}
+```
 
-  In a loop, the check counts every reference the loop's body makes,
-  wherever in the body it is made: a statement after the `move` runs again
-  before the next pass's `move`. So a loop can move a variable it gives a
-  new value each pass, but not one it also stores in a variable from
-  outside the loop, even after the `move`:
+In a loop, the check counts every reference the loop's body makes,
+wherever in the body it is made: a statement after the `move` runs again
+before the next pass's `move`. So a loop can move a variable it gives a
+new value each pass, but not one it also stores in a variable from outside
+the loop, even after the `move`:
 
-  ```pepper
-  {{#include ../../examples/memory-move-loop.pep}}
-  ```
+```pepper
+{{#include ../../examples/memory-move-loop.pep}}
+```
 
 - A moved variable cannot be read again until it is assigned a new value,
   including on the next pass through a loop:

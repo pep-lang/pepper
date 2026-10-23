@@ -1,6 +1,7 @@
 # Fetching packages without git: the host's `.tar.gz` of a commit,
-# downloaded over HTTPS and unpacked into `.pep/deps`, and the checksum of
-# a package's files that pep.lock records for each package.
+# downloaded over HTTPS into the download cache and unpacked into
+# `.pep/deps`, and the checksum of a package's files that pep.lock records
+# for each package.
 #
 # The checksum covers the files, not the archive's bytes: hosts make their
 # archives on demand and have changed how they compress them, which changes
@@ -12,7 +13,7 @@ import archive;
 import compress;
 import digest;
 import http;
-import [File, Path] from io;
+import [Directory, File, Path] from io;
 import io;
 import os;
 import "git";
@@ -154,6 +155,33 @@ export unpacked(directory: Path): Optional<String> {
     return Optional<String>.Value(text.value().trim());
 }
 
+# The bytes of `file`.
+_read(file: Path): Result<u8[]> {
+    var bytes = File.read_bytes(file);
+    return bytes.is_err() ?
+        Result<u8[]>.Err($"cannot read {file.to_string()}: {bytes.error().message}") :
+        Result<u8[]>.Ok(bytes.value());
+}
+
+# Writes `bytes` to `file` through a `.partial` file beside it, so a reader
+# never sees half of it.
+_store(file: Path, bytes: u8[]): Result<void> {
+    var partial = Path(file.to_string() + ".partial");
+    var parent = file.parent();
+    if (parent.is_value()) {
+        Directory.create_all(parent.value());
+    }
+    var written = File.write_bytes(partial, bytes);
+    if (written.is_err()) {
+        return Result<void>.Err($"cannot write {partial.to_string()}: {written.error().message}");
+    }
+    var moved = File.rename(partial, file);
+    if (moved.is_err()) {
+        return Result<void>.Err($"cannot move {partial.to_string()} to {file.to_string()}: {moved.error().message}");
+    }
+    return Result<void>.ok();
+}
+
 # Downloads `url`, following up to five redirects.
 _download(url: String): Result<u8[]> {
     var client = http.Client();
@@ -195,14 +223,26 @@ _resolve_location(base: String, location: String): String {
     return protocol + "://" + authority + (location.starts_with("/") ? location : "/" + location);
 }
 
-# Makes `directory` hold `commit` of `repository` on `host`, downloaded as
-# the host's archive, when it does not already. When `expected` is not
-# empty, the files must have that checksum. Returns the checksum.
+# Makes `directory` hold `commit` of `repository` on `host`, the host's
+# archive of it, when it does not already. The archive comes from the
+# download cache, which downloads it first when it lacks it; `offline`
+# fails instead. When `expected` is not empty, the files must have that
+# checksum. Returns the checksum.
 export fetch_archive(
-    host: String, repository: String, directory: Path, commit: String, expected: String
+    host: String, repository: String, directory: Path, commit: String, expected: String, offline: bool = false
 ): Result<String> {
     var url = archive_url(host, repository, commit);
-    var packed = _download(url);
+    var cached = cached_package(host, repository).join(commit + ".tar.gz");
+    if (offline and !cached.is_file()) {
+        return Result<String>.Err(not_held_offline(directory, commit));
+    }
+    var lock = lock_cache(host, repository);
+    if (lock.is_err()) {
+        return Result<String>.Err(lock.error().message);
+    }
+    # Another process may have stored it while this one waited.
+    var from_cache = cached.is_file();
+    var packed = from_cache ? _read(cached) : _download(url);
     if (packed.is_err()) {
         return Result<String>.Err(packed.error().message);
     }
@@ -218,6 +258,12 @@ export fetch_archive(
         return Result<String>.Err(
             $"the files of {host}:{repository} {commit.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {expected}"
         );
+    }
+    if (!from_cache) {
+        var stored = _store(cached, packed.value());
+        if (stored.is_err()) {
+            return Result<String>.Err(stored.error().message);
+        }
     }
     # Unpack beside the package's folder, and only a complete copy takes
     # its place.

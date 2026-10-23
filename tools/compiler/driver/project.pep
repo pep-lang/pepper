@@ -102,8 +102,9 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
 ## `locked` fails rather than change `pep.lock`: a dependency `pep.toml`
 ## names that the lock does not list is an error, and `pep-package fetch
 ## --locked` checks the rest of the lock even when nothing is missing.
-## `offline` fails on a locked package `.pep/deps` lacks, rather than fetch
-## it, and passes `--offline` to `pep-package`.
+## `offline` passes `--offline` to `pep-package`, which takes a locked
+## package `.pep/deps` lacks from the download cache or fails; without
+## `pep-package`, such a package is an error.
 ##
 ## @param entry the file being built
 ## @param locked whether a stale `pep.lock` is an error (`--locked`)
@@ -219,14 +220,15 @@ _needs_fetch(project: Path, manifest: link.Manifest, target: link.Target): Resul
 
 ## Why `--locked` or `--offline` refuses what `project` lacks, `missing`:
 ## under `locked`, a dependency `pep.lock` does not list; under `offline`,
-## a package `.pep/deps` does not hold at all.
+## with no `pep-package` to take it from the download cache, a package
+## `.pep/deps` does not hold at all.
 _refuse(project: Path, missing: _Missing, locked: bool, offline: bool): Result<void, String> {
     if (locked and !missing.not_locked.is_empty) {
         return Result<void, String>.err(
             $"{project.join(Path(link.LOCK_FILE))} is out of date: {project.join(Path(link.MANIFEST_FILE))} names {", ".join(missing.not_locked)}, which pep.lock does not list; run 'pepper package fetch' without --locked, and commit pep.lock"
         );
     }
-    if (!offline) {
+    if (!offline or process.find_companion("pep-package").is_value()) {
         return Result<void, String>.ok();
     }
     var absent = Array<String>();

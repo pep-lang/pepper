@@ -10,6 +10,7 @@ import [JsonValue] from json;
 import compiler.link;
 import lsp;
 import compiler.parse;
+import compiler.sema;
 import "actions";
 import "analysis";
 import "arguments";
@@ -492,8 +493,7 @@ syntax_offers_quick_fixes() {
     var at = (line: int, character: int) => lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
     var actions = code_actions(document, none, Array<lsp.CodeAction>(), at(2, 5));
     expect_equal(action_list(actions), "Replace `new` with `construct` [2:4-2:7 construct]");
-    # `<String>`: a whole-program build infers `StringConstant` (#175).
-    expect_equal<String>(actions[0].kind.value(), lsp.QUICK_FIX);
+    expect_equal(actions[0].kind.value(), lsp.QUICK_FIX);
     var shown = actions[0].diagnostics.value()[0];
     expect_equal(shown.severity.value(), lsp.SEVERITY_WARNING);
     expect_equal(shown.tags.value()[0], lsp.TAG_DEPRECATED);
@@ -1675,6 +1675,47 @@ a_program_checked_whole_passes_or_finds_its_error() {
     }
 }
 
+# Whether `analysis`'s model has a free function `name` with its body.
+has_body(analysis: Analysis, name: String): bool {
+    for (var function in analysis.model.value().functions) {
+        # Linking names a module's function `name@module`.
+        if (function.name == name or function.name.starts_with(name + "@")) {
+            return function.body.is_value();
+        }
+    }
+    return false;
+}
+
+[Test]
+an_analysis_handed_over_keeps_only_the_bodies_the_server_reads() {
+    # A model of the program checked whole holds every file's bodies; the
+    # analysis the server's thread gets keeps those of `bodies_read` only, so
+    # it holds the document's compilation unit, not the program.
+    var test = "unread_bodies";
+    var text = "import \"other\";\nmain(): int {\n    return twice(1);\n}\n";
+    var uri = fresh_file(test, "main.pep", text);
+    temp_file_in(test, "other.pep", "export twice(x: int): int {\n    return x * 2;\n}\n");
+    var setup = link.Setup();
+    setup.defer_bodies = true;
+    var program = link.load_program(Path(lsp.uri_to_path(uri).value()), setup).value();
+    var checked = check_whole(program, Array<Diagnostic>());
+    expect_true(checked.is_ok());
+    var analysis = Analysis(uri, text);
+    analysis.model = Optional<sema.Module>.Value(checked.value().module);
+    # No files named: nothing to drop.
+    drop_unread_bodies(analysis);
+    expect_true(has_body(analysis, "main") and has_body(analysis, "twice"));
+    # What `_check` records for a model checked whole: the document's
+    # compilation unit's files, not the runtime's or `other`'s module.
+    var files = document_unit_files(compilation_units_of(program));
+    expect_true(files.contains(0));
+    expect_false(files.contains(1));
+    analysis.bodies_read.append_all(files);
+    drop_unread_bodies(analysis);
+    expect_true(has_body(analysis, "main"));
+    expect_false(has_body(analysis, "twice"));
+}
+
 [Test]
 an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
     # What an analysis does while a `--fill-cache` child fills the cache.
@@ -1732,8 +1773,10 @@ deepest_program(body: String): String {
 
 [Test]
 deepest_source_fits_the_server_stack() {
-    # The server analyzes on a thread of its own, with the default stack:
-    # a stack overflow cannot be caught, and ends the server.
+    # The server analyzes on a thread of its own, with a stack of
+    # ANALYSIS_STACK_SIZE: a stack overflow cannot be caught, and ends the
+    # server. Half of it here, so the deepest source fits with room to
+    # spare, whether this test is built optimized or not.
     var n = DEEPEST;
     var programs = [
         deepest_program("    x = 1" + " + x".repeat(n) + ";"),
@@ -1752,7 +1795,7 @@ deepest_source_fits_the_server_stack() {
         Thread.spawn(() => {
             var uri = documents.receive().value();
             outcomes.send(copy(outcome_of(analyze(uri, documents.receive().value()))));
-        }, "pep-lsp-analysis").join();
+        }, "pep-lsp-analysis", ANALYSIS_STACK_SIZE / 2).join();
         expect_equal($"{i}: " + outcomes.receive().value(), $"{i}: passed");
     }
 }
