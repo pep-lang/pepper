@@ -1239,7 +1239,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
         clone.join("pep.toml"),
         manifest("1.0.0", "")
             + "\n[dependencies]\nnumbers = { github = \"other/numbers\", branch = \"main\" }\n"
-            + "near = { path = \"../near\", version = \"1\" }\n"
+            + "near = { path = \"../near\" }\n"
+            + "sibling = { path = \"../sibling\", version = \"1\" }\n"
             + "zlib = { github = \"someone/zlib\", version = \"1\", optional = true }\n"
             + "\n[features]\ngzip = [\"dep:zlib\"]\n"
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
@@ -1254,8 +1255,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
         refused.stderr,
         "\n  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it\n"
     );
-    # A version beside a path does not make it one a dependent can reach.
-    expect_contains(refused.stderr, "\n  dependency 'near' names path ../near, not a version range, ");
+    # A path needs the version it is published with, as a workspace sibling has.
+    expect_contains(refused.stderr, "\n  dependency 'near' names path ../near and no 'version', ");
     expect_contains(
         refused.stderr,
         "\n  'dev-dependencies' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
@@ -1282,6 +1283,7 @@ publish_checks_tests_tags_and_pushes_the_version() {
         refused.stderr, "\n  'version' 1.0.0 is not newer than the newest tag, 1.0.0; raise it in pep.toml\n"
     );
     expect_false(refused.stderr.contains("fixtures"));
+    expect_false(refused.stderr.contains("sibling"));
 
     # A commit origin does not have yet.
     release(manifest("1.1.0", licensed));
@@ -1325,4 +1327,109 @@ publish_checks_tests_tags_and_pushes_the_version() {
         failed.stderr, "pep-package: error: 'pepper +latest test' failed, so shapes 1.2.0 is not published\n"
     );
     expect_equal(tags_of(bare), "v1.0.0\nv1.1.0\n");
+}
+
+[Test]
+a_workspace_shares_one_lock_and_builds_its_members() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("workspace");
+    var folder = TempFolder("package_workspace");
+    var root = folder.path;
+    write_file(
+        root.join("pep.toml"),
+        "[workspace]\nmembers = [\"app\", \"libs/*\"]\n\n[workspace.dependencies]\n"
+            + "numbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    # `shapes` inherits numbers; `geo` needs geometry, which needs numbers too.
+    var shapes = root.join("libs").join("shapes");
+    write_file(
+        shapes.join("pep.toml"), "[package]\nname = \"shapes\"\n\n[dependencies]\nnumbers = { workspace = true }\n"
+    );
+    write_file(
+        shapes.join("module.pep"),
+        "import numbers;\n\nexport describe(): String {\n    return \"shapes \" + numbers.numbers_version();\n}\n"
+    );
+    write_file(shapes.join("shapes_test.pep"), "[Test]\nshapes_work() {\n    expect_equal(1 + 1, 2);\n}\n");
+    var geo = root.join("libs").join("geo");
+    write_file(
+        geo.join("pep.toml"),
+        "[package]\nname = \"geo\"\n\n[dependencies]\ngeometry = { github = \"someone/geometry\", version = \"1.0\" }\n"
+    );
+    write_file(
+        geo.join("main.pep"),
+        "import geometry;\n\nmain(): int {\n    print(geometry.geometry_version());\n    return 0;\n}\n"
+    );
+    var app = root.join("app");
+    write_file(
+        app.join("pep.toml"),
+        "[package]\nname = \"app\"\n\n[dependencies]\nshapes = { path = \"../libs/shapes\", version = \"0.1\" }\n"
+    );
+    write_file(
+        app.join("main.pep"), "import shapes;\n\nmain(): int {\n    print(shapes.describe());\n    return 0;\n}\n"
+    );
+
+    # Built from inside a member: one pep.lock and `.pep/deps`, at the root,
+    # resolved for every member, so numbers is locked once.
+    expect_equal(hosts.build_and_run(app), "shapes 1.3.1\n");
+    var lock = read_file(root.join("pep.lock"));
+    expect_contains(lock, "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    expect_contains(lock, "source = \"github:someone/geometry\"\n");
+    expect_equal(lock.split("github:other/numbers").count, 2);
+    expect_false(app.join("pep.lock").exists());
+    expect_false(app.join(".pep").join("deps").exists());
+
+    # `tree` and `why`, from inside a member, report the whole workspace's
+    # graph: geo's geometry and shapes' inherited numbers too.
+    var tree = hosts.package(app, ["tree", "--offline"]);
+    expect_exit(tree, 0);
+    expect_contains(
+        tree.stdout, "-- geometry 1.1.0 (github:someone/geometry)\n|   `-- numbers 1.3.1 (github:other/numbers)\n"
+    );
+    expect_contains(tree.stdout, "`-- numbers 1.3.1 (github:other/numbers)\n");
+    var why = hosts.package(app, ["why", "numbers", "--offline"]);
+    expect_exit(why, 0);
+    expect_contains(why.stdout, "pep.toml -> geometry 1.1.0 -> numbers 1.3.1\n");
+    expect_contains(why.stdout, "pep.toml -> numbers 1.3.1\n");
+
+    # `--all`, from any member: each member with an entry file, into its own
+    # output; a library has none.
+    var built = run(hosts.command(tool("pep-build").to_string(), shapes, ["--all"]));
+    expect_exit(built, 0);
+    expect_contains(built.stderr, "pepc: skipping shapes: no entry file to build");
+    var exe = toolchain.executable_suffix();
+    expect_equal(run(process.Command(geo.join("geo" + exe).to_string())).stdout, "1.1.0 1.3.1\n");
+    expect_true(app.join("app" + exe).is_file());
+    # `-o` is relative to where the build runs, not to the member.
+    expect_exit(run(hosts.command(tool("pep-build").to_string(), root, ["-p", "geo", "-o", "geo_out" + exe])), 0);
+    expect_true(root.join("geo_out" + exe).is_file());
+    var unknown = run(hosts.command(tool("pep-build").to_string(), root, ["-p", "nope"]));
+    expect_exit(unknown, 1);
+    expect_contains(unknown.stderr, "no workspace member named 'nope' in '-p'; the members are 'app', 'geo', 'shapes'");
+
+    # `pepper test -p` tests a member, from the root.
+    var tested = run(hosts.command(tool("pep-test").to_string(), root, ["-p", "shapes"]));
+    expect_exit(tested, 0);
+    expect_contains(tested.stdout, "1 passed, 0 failed");
+
+    # Only the root's `[overrides]` apply, to every member; a member's are
+    # ignored, with a warning.
+    write_file(root.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
+    write_file(root.join("local").join("module.pep"), "export numbers_version(): String {\n    return \"local\";\n}\n");
+    write_file(
+        root.join("pep.toml"),
+        read_file(root.join("pep.toml")) + "\n[overrides]\n\"github:other/numbers\" = { path = \"local\" }\n"
+    );
+    write_file(
+        shapes.join("pep.toml"),
+        read_file(shapes.join("pep.toml")) + "\n[overrides]\n\"github:someone/geometry\" = { path = \"../nowhere\" }\n"
+    );
+    var fetched = hosts.package(app, ["fetch"]);
+    expect_exit(fetched, 0);
+    expect_contains(
+        fetched.stderr,
+        "warning: override of 'github:someone/geometry' in a workspace member is ignored; move it to the root's pep.toml"
+    );
+    expect_equal(hosts.build_and_run(app), "shapes local\n");
 }
