@@ -5,7 +5,7 @@
 #   scripts/release-build.sh <target> <version> <output-dir> [<stage0-dir>]
 #
 # <stage0-dir> holds the stage 0 pep-build (default: $PEPPER_COMPILER_DIR,
-# else, with PEPPER_STAGE0_INSTALL=1, the newest published toolchain, installed,
+# else, with PEPPER_STAGE0_INSTALL=1, the build .github/stage0 pins, installed,
 # else the installed toolchain's, the one `pepper install which` names).
 #
 # <target> is one of:
@@ -144,9 +144,8 @@ fi
 
 # Stage 0, the compiler that builds pepc: the previously published
 # toolchain's pep-build, from <stage0-dir>, else $PEPPER_COMPILER_DIR; else,
-# with PEPPER_STAGE0_INSTALL=1 (release.yml), the newest published
-# toolchain (the build of main, or a newer release, whatever VERSION
-# holds) installed here
+# with PEPPER_STAGE0_INSTALL=1 (release.yml), the build of main that
+# .github/stage0 pins, whatever VERSION holds, installed here
 # by scripts/ci-install-toolchain.sh, now that the provisioning above has
 # put clang on the PATH (the install builds a program to check itself);
 # else the installed toolchain's.

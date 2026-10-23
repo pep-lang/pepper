@@ -16,8 +16,9 @@
 #     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
-#     pepper package tree [--depth 1]           # the locked graph
-#     pepper package why numbers                # every path from the project to it
+#     pepper package tree [--depth 1] [--json]  # the locked graph
+#     pepper package tree --invert numbers      # what depends on numbers
+#     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
 #     pepper package cache info                 # the download cache every project shares
 #     pepper package cache clean
@@ -119,15 +120,22 @@ main(args: String[]): int {
     var depth = tree.option<ulong>(
         "depth", "d", "print only N levels of dependencies below the project", value_name = "N"
     );
-    var why = parser.command("why", "Prints every path from the project to a package");
+    var invert = tree.option(
+        "invert", "i", "print what depends on a package instead, down to the project", value_name = "NAME"
+    );
+    var tree_json = tree.flag("json", help = "print the tree as JSON");
+    var why = parser.command("why", "Prints the paths from the project to a package, the first 20 unless --all");
     var why_package = why.positional(
         "package", "the package's name, owner/name or source, or the name a dependency is imported by"
     );
+    var all_paths = why.flag("all", help = "print every path, not only the first 20");
+    var why_json = why.flag("json", help = "print the paths as JSON");
     var outdated = parser.command(
         "outdated",
         "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
+    var outdated_json = outdated.flag("json", help = "print the outdated packages as JSON");
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
     cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
@@ -187,13 +195,13 @@ main(args: String[]): int {
         return project.publish(dry_run.is_set);
     }
     if (tree.is_selected) {
-        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF);
+        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF, invert.value_or(""), tree_json.is_set);
     }
     if (why.is_selected) {
-        return project.why(why_package.value());
+        return project.why(why_package.value(), all_paths.is_set ? 0xFFFFFFFFFFFFFFFF : 20, why_json.is_set);
     }
     if (outdated.is_selected) {
-        return project.outdated(exit_code.is_set);
+        return project.outdated(exit_code.is_set, outdated_json.is_set);
     }
     print(parser.help());
     return 2;
@@ -343,10 +351,19 @@ default_name(repository: String): String {
     return syntax.to_identifier(name);
 }
 
-# A project: its pep.toml, pep.lock and `.pep/deps`.
+# A project: its pep.toml, pep.lock and `.pep/deps`. In a workspace, the
+# pep.toml is the member's or root's the command runs in, which `add`,
+# `remove` and `publish` read, and pep.lock and `.pep/deps` are the
+# root's, resolved for every member.
 struct Project {
     var manifest_path: Path = Path("pep.toml");
+    # The folder holding pep.lock and `.pep/deps`: the workspace's root,
+    # else the package's own.
     var dir: Path = Path(".");
+    # The pep.toml in `dir`.
+    var root_path: Path = Path("pep.toml");
+    # Whether `root_path` is a workspace's root.
+    var is_workspace: bool = false;
     # `--locked`: fail rather than change pep.lock.
     var locked: bool = false;
     # `--offline`: use only what `.pep/deps` and the download cache hold.
@@ -354,15 +371,24 @@ struct Project {
 
     construct(manifest_path: Path) {
         this.manifest_path = manifest_path;
-        var parent = manifest_path.parent();
+        var workspace = find_workspace(manifest_path);
+        is_workspace = workspace.is_value();
+        root_path = workspace.value_or(manifest_path);
+        var parent = root_path.parent();
         dir = parent.is_value() ? parent.value() : Path(".");
+    }
+
+    # The folder of `manifest_path`: the package the command is about.
+    _package_dir(): Path {
+        var parent = manifest_path.parent();
+        return parent.is_value() ? parent.value() : Path(".");
     }
 
     # Resolves the graph, keeping locked revisions unless `update_all` or
     # `update` names them, checks every package out and writes pep.lock.
     # Returns the graph, or prints why it failed.
     _resolve(update_all: bool, update: Array<String>): Result<Graph> {
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<Graph>.Err(manifest.error().message);
         }
@@ -719,7 +745,7 @@ struct Project {
     # names nothing.
     _sources(specs: Array<String>): Result<Array<String>> {
         var sources = Array<String>();
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(manifest_path);
         if (manifest.is_err()) {
             return Result<Array<String>>.Err(manifest.error().message);
         }
@@ -821,7 +847,8 @@ struct Project {
     }
 
     # Whether the project builds: `pep-build` (beside this program, else on
-    # the PATH) run in the project's folder with no file.
+    # the PATH) run in the project's folder with no file, and `--all` in a
+    # workspace.
     _builds(): bool {
         var compiler = "pep-build";
         var executable = process.executable_path();
@@ -832,7 +859,11 @@ struct Project {
                 compiler = beside.to_string();
             }
         }
-        return _succeeds(process.Command(compiler).working_directory(dir));
+        var command = process.Command(compiler).working_directory(dir);
+        if (is_workspace) {
+            command.argument("--all");
+        }
+        return _succeeds(command);
     }
 
     # Runs `command`, and whether it succeeded; prints what it printed when
@@ -853,7 +884,7 @@ struct Project {
 
     # The graph pep.lock records, for the reports.
     _graph(): Result<LockedGraph> {
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<LockedGraph>.Err(manifest.error().message);
         }
@@ -864,16 +895,26 @@ struct Project {
         return graph;
     }
 
-    tree(depth: ulong): int {
+    # Prints the graph, or with `invert` what depends on that package.
+    tree(depth: ulong, invert: String, json: bool): int {
         var graph = _graph();
         if (graph.is_err()) {
             return fail(graph.error().message);
         }
-        File.stdout().write_all(graph.value().tree(depth));
+        if (invert.is_empty) {
+            File.stdout().write_all(graph.value().tree(depth, json));
+            return 0;
+        }
+        var targets = graph.value().find(invert);
+        if (targets.is_empty) {
+            return fail($"no package '{invert}' in pep.lock");
+        }
+        File.stdout().write_all(graph.value().inverted(targets, depth, json));
         return 0;
     }
 
-    why(spec: String): int {
+    # Prints the first `limit` paths from the project to `spec`.
+    why(spec: String, limit: ulong, json: bool): int {
         var graph = _graph();
         if (graph.is_err()) {
             return fail(graph.error().message);
@@ -882,14 +923,12 @@ struct Project {
         if (targets.is_empty) {
             return fail($"no package '{spec}' in pep.lock");
         }
-        for (var path in graph.value().why(targets)) {
-            print(path);
-        }
+        File.stdout().write_all(graph.value().why(targets, limit, json));
         return 0;
     }
 
     # Lists what is outdated; with `exit_code`, any is status 1.
-    outdated(exit_code: bool): int {
+    outdated(exit_code: bool, json: bool): int {
         if (offline) {
             return fail(
                 "--offline, and 'outdated' reads which versions each package offers over the network, so it cannot check; run it without --offline (or PEPPER_OFFLINE)"
@@ -902,6 +941,10 @@ struct Project {
         var rows = graph.value().outdated();
         if (rows.is_err()) {
             return fail(rows.error().message);
+        }
+        if (json) {
+            File.stdout().write_all(graph.value().outdated_json(rows.value()));
+            return exit_code and !rows.value().is_empty ? 1 : 0;
         }
         if (rows.value().is_empty) {
             print("every package is at the newest version");
@@ -921,11 +964,11 @@ struct Project {
                 "--offline, and publishing reads and pushes to the repository's remote; run 'pepper package publish' without --offline (or PEPPER_OFFLINE)"
             );
         }
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(manifest_path);
         if (manifest.is_err()) {
             return fail(manifest.error().message);
         }
-        # read_manifest parsed it already.
+        # read_project parsed it already.
         var root = toml.parse(manifest.value().text).value();
         var problems = Array<String>();
         var package_version = _package_string(root, "version");
@@ -941,13 +984,20 @@ struct Project {
             }
         }
         for (var requirement in manifest.value().requirements) {
-            # A dependent ignores dev-dependencies, so they may be anything.
-            if (requirement.dev or (requirement.kind == "version" and !requirement.is_path())) {
+            # A dependent ignores dev-dependencies, so they may be anything;
+            # a `path` (a workspace sibling) needs the `version` it is
+            # published with.
+            if (requirement.dev or requirement.kind == "version") {
                 continue;
             }
-            var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
+            if (requirement.is_path()) {
+                problems.append(
+                    $"dependency '{requirement.name}' names path {requirement.repository} and no 'version', so a dependent cannot resolve it; give it the version of the package there"
+                );
+                continue;
+            }
             problems.append(
-                $"dependency '{requirement.name}' names {what}, not a version range, so a dependent cannot resolve it"
+                $"dependency '{requirement.name}' names {requirement.describe()}, not a version range, so a dependent cannot resolve it"
             );
         }
         # A dependent gets the packages it overrides, not the overrides it
@@ -972,7 +1022,7 @@ struct Project {
                 );
             }
         }
-        var at = dir.to_string();
+        var at = _package_dir().to_string();
         var changes = git(["status", "--porcelain"], at);
         if (changes.is_err()) {
             return fail(changes.error().message);
@@ -1030,7 +1080,7 @@ struct Project {
         for (var release in releases) {
             say($"running 'pepper +{release} test'");
             if (!_succeeds(
-                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(dir)
+                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(_package_dir())
             )) {
                 return fail($"'pepper +{release} test' failed, so {name} {package_version} is not published");
             }

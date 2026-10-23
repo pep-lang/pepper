@@ -16,7 +16,8 @@ pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v<version> and push the tag
 pepper package tree                          # the dependency graph pep.lock records
-pepper package why numbers                   # every path from the project to numbers
+pepper package tree --invert numbers         # what depends on numbers
+pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
@@ -34,6 +35,11 @@ whatever lets `git clone` reach a repository lets `pep-package` fetch it.
 Without git, `pep-package` downloads the host's archive of each commit
 `pep.lock` pins over HTTPS instead (see [Fetching without git](#fetching-without-git)),
 so a project with a `pep.lock` builds on a machine with no git.
+
+In a [workspace](projects.md#workspaces-workspace), `pep.lock` and
+`.pep/deps` are the root's, resolved for every member at once, wherever
+it runs; `add` and `remove` change the `pep.toml` of the member it runs
+in, and `publish` publishes that member.
 
 `pepper build` fetches on its own what `pep.lock` lists and `.pep/deps`
 lacks, so a fresh clone of a project builds with `pepper build` alone.
@@ -64,9 +70,14 @@ Every package is downloaded once per machine, into a
 | `publish --dry-run` | Checks and tests, but neither tags nor pushes |
 | `tree` | Prints the dependency graph `pep.lock` records (see [`tree`](#tree)) |
 | `tree --depth <n>`, `-d <n>` | Prints only `<n>` levels of dependencies below the project |
-| `why <name>` | Prints every path from the project to a package (see [`why`](#why-name)) |
+| `tree --invert <name>`, `-i <name>` | Prints what depends on a package instead, down to the project (see [`tree --invert`](#tree---invert-name)) |
+| `tree --json` | Prints the tree as JSON (see [JSON output](#json-output)) |
+| `why <name>` | Prints the paths from the project to a package, the first 20 (see [`why`](#why-name)) |
+| `why --all` | Prints every path |
+| `why --json` | Prints the paths as JSON |
 | `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
+| `outdated --json` | Prints the outdated packages as JSON |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -158,7 +169,8 @@ A dependency on a branch moves to the branch's newest commit.
 ### `update --verify`
 
 Updates one dependency at a time and runs `pep-build` (beside
-`pep-package`, else on the `PATH`) on the project after each. An update
+`pep-package`, else on the `PATH`) on the project after each, with
+`--all` in a workspace. An update
 that does not build is rolled back, and the command lists those it rolled
 back.
 
@@ -184,14 +196,17 @@ First it checks, and lists every check that fails at once:
 - `version` is a version (`1.2.0`), newer than every version tag
   `origin` has;
 - `[package]` has a `description`, `license` and `repository`;
-- every dependency asks for a version range, not a branch, tag, commit,
-  path or the default branch, so a project depending on this one can
-  resolve it with its other packages. A dev-dependency may be anything,
-  since a dependent ignores it;
+- every dependency asks for a version range, not a branch, tag, commit
+  or the default branch, so a project depending on this one can resolve
+  it with its other packages; a `path` dependency, such as a workspace
+  sibling, needs a `version` beside it, and one inherited with
+  `workspace = true` is checked as the workspace gives it. A
+  dev-dependency may be anything, since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
   `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
-  `[features]` and `[overrides]` tables, and a dependency's `optional`,
-  `features` and `default-features`, need 0.11.0;
+  `[features]`, `[overrides]` and `[workspace]` tables, and a
+  dependency's `optional`, `features`, `default-features` and
+  `workspace`, need 0.11.0;
 - `pep.toml` has no `[overrides]`: a dependent builds with the packages
   they replace, not the code the package was tested with, so a release
   waits until the fix it needs is released too.
@@ -200,8 +215,12 @@ First it checks, and lists every check that fails at once:
 pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
   dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  dependency 'draw' names path ../draw and no 'version', so a dependent cannot resolve it; give it the version of the package there
   'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
 ```
+
+Run from a workspace member, it checks and tests that member, in its
+folder.
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),
@@ -255,9 +274,27 @@ own dependencies). `tree`, `why` and `outdated` read the graph from
 `pep.toml` names a package `pep.lock` does not list, they fail and say to
 run `fetch` first.
 
+### `tree --invert <name>`
+
+Prints the tree upside down: the package, then each package whose
+`pep.toml` asks for it, and so on down to the project. The package is
+named as for [`why`](#why-name). Each line has the same marks as in
+`tree`, except that `[optional]` and `[features: ...]` describe the
+dependent's entry for the package on the line above, and `(*)` ends a
+package whose dependents were listed already. `--depth` counts levels
+below the package:
+
+```text
+$ pepper package tree --invert geometry
+geometry 1.0.0 (github:someone/geometry)
+|-- app
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- app
+```
+
 ### `why <name>`
 
-Prints every path from the project to the package, one per line. The
+Prints the paths from the project to the package, one per line. The
 package is named by its own name, its `owner/name` or source, or the name
 a dependency imports it by:
 
@@ -266,6 +303,9 @@ $ pepper package why numbers
 app -> geometry 1.0.0 -> numbers 1.3.1
 app -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1
 ```
+
+It prints the first 20, then a line saying how many more there are
+(`and 7 more paths; --all prints every one`); `--all` prints every one.
 
 ### `outdated`
 
@@ -290,6 +330,93 @@ it prints `every package is at the newest version`. It reads what each
 package offers over the network, so with `--offline` it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 `--exit-code` asks for 1 when a package is outdated, for CI.
+
+### JSON output
+
+`--json` makes `tree`, `why` and `outdated` print one JSON object instead,
+for scripts. Its form is stable: a later release may add members, but
+does not rename or remove one.
+
+`tree --json` writes the project's name and its dependencies as nodes,
+each with the nodes of its own dependencies:
+
+```json
+{
+  "name": "app",
+  "dependencies": [
+    {
+      "name": "win",
+      "package": "winapi",
+      "version": "1.0.0",
+      "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
+      "source": "github:other/winapi",
+      "dev": false,
+      "target": "OS(Windows)",
+      "override": null,
+      "optional": true,
+      "features": ["wide"],
+      "repeated": false,
+      "dependencies": []
+    }
+  ]
+}
+```
+
+A node holds the package and the entry in its dependent's `pep.toml` that
+asks for it:
+
+| Member | What it holds |
+| --- | --- |
+| `name` | The name the dependent imports the package by |
+| `package` | The package's own name (the project's, for the project) |
+| `version` | Its locked version, or `null` when it is locked by commit |
+| `commit` | Its locked commit, or `null` for the project and a folder |
+| `source` | Its source (`github:other/winapi`); `""` for the project |
+| `dev` | Whether only the project's dev-dependencies lead to it (`[dev]`) |
+| `target` | The condition of the targets that need it (`[target: ...]`), or `null` for every target |
+| `override` | What `[overrides]` replaces it with (`[override: ...]`), or `null` |
+| `optional` | Whether the entry says `optional = true` (`[optional]`) |
+| `features` | The features the entry turns on (`[features: ...]`) |
+| `repeated` | Whether its dependencies were listed already (`(*)`), so its `dependencies` is empty |
+| `dependencies` | The nodes of its dependencies, empty below `--depth` |
+
+`tree --invert <name> --json` writes the project's name and `packages`:
+a node for each package the name matches, whose `name`, `optional` and
+`features` are its own name, `false` and `[]`, and which has no
+`repeated`. In place of `dependencies`, each node has `dependents`: the
+nodes of the packages that ask for it, the project among them as a
+node whose `source` is `""`. In those, `name`, `optional` and `features`
+describe the dependent's entry for the package above.
+
+`why --json` writes `paths`, the paths it prints (every one with
+`--all`), each an array of the nodes from the project's dependency to the
+package, without `repeated` or `dependencies`, and `total`, the number of
+paths there are:
+
+```text
+{
+  "paths": [
+    [
+      { "name": "geometry", "package": "geometry", "version": "1.0.0", ... },
+      { "name": "numbers", "package": "numbers", "version": "1.3.1", ... }
+    ]
+  ],
+  "total": 1
+}
+```
+
+`outdated --json` writes `packages`, an object for each row of the table,
+with `--exit-code` as without `--json`:
+
+| Member | What it holds |
+| --- | --- |
+| `package` | The package's name |
+| `locked` | Its locked version, or short commit |
+| `wanted` | The revision its requirements now choose |
+| `latest` | The newest version it offers, or `null` when it has none |
+| `source` | Its source |
+| `dev` | Whether only the project's dev-dependencies lead to it |
+| `target` | The condition of the targets that need it, or `null` |
 
 ## pep.lock
 
