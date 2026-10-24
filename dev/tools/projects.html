@@ -647,6 +647,40 @@ vendor = "vendor"
 <tr><td><code>vendor</code></td><td>The folder, relative to the project, that <a href="pep-package.html#vendor-dir"><code>pepper package vendor</code></a> copied every locked package into, which sets it. Builds then read each dependency from <code>&lt;vendor&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> instead of <code>.pep/deps</code>, fetch nothing, and fail when a package is missing, at another commit than <code>pep.lock</code>'s, or edited. A package that sets it needs <code>minimum_toolchain = "0.11.0"</code> or later</td><td>none: dependencies are fetched into <code>.pep/deps</code></td></tr>
 </tbody></table>
 </div>
+<h2 id="retract"><a class="header" href="#retract"><code>[retract]</code></a></h2>
+<p>A package withdraws its own broken releases, as Go's <code>retract</code> does: each
+key is a version, or a range as dependencies write it, and its value says
+why.</p>
+<pre><code class="language-toml">[retract]
+"1.1.0" = "loses data on Windows"
+"&gt;=1.2.0, &lt;1.2.3" = "PEP-2026-0001"
+</code></pre>
+<p>A key that is a version names that version alone, not the <code>^</code> range a
+dependency's <code>version = "1.1.0"</code> means; keys are quoted, as TOML reads
+<code>1.1.0</code> unquoted as three nested keys. Release the table in a newer
+version: the <code>[retract]</code> of a package's newest release speaks for every
+version, so a range no longer picks a retracted one, <code>pepper package outdated</code> flags one <code>pep.lock</code> holds, and <code>update</code> moves off it (see
+<a href="pep-package.html#retracted-versions">Retracted versions</a>). A key that is
+neither a version nor a range is an error at the key in the project's
+own <code>pep.toml</code> (a dependency's retracts nothing, so its dependents still
+resolve):</p>
+<pre><code class="language-text">pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range: ...
+</code></pre>
+<ul>
+<li><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+<code>[retract]</code> as an unknown table, so a package that has one sets
+<code>minimum_toolchain = "0.11.0"</code> (or later), which <code>pepper package publish</code> checks.</li>
+</ul>
+<h2 id="audit"><a class="header" href="#audit"><code>[audit]</code></a></h2>
+<pre><code class="language-toml">[audit]
+ignore = ["PEP-2026-0001"]   # its code is never called here
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>ignore</code></td><td>The advisories, by id, that <a href="pep-package.html#audit"><code>pepper package audit</code></a> reports but does not fail on, with <code>--ignore</code></td><td><code>[]</code></td></tr>
+</tbody></table>
+</div>
+<p>Only the project's own (in a workspace, its root's) <code>[audit]</code> applies.
+An older toolchain than 0.11.0 rejects the table.</p>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A problem in <code>pep.toml</code> is an error located at the key or value to change:</p>
 <pre><code class="language-text">pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports

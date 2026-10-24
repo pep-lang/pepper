@@ -200,6 +200,7 @@ pepper package tree                          # the dependency graph pep.lock rec
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package audit                         # locked packages a security advisory affects
 pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
@@ -252,6 +253,9 @@ Every package is downloaded once per machine, into a
 <tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="#outdated"><code>outdated</code></a>)</td></tr>
 <tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
 <tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
+<tr><td><code>audit</code></td><td>Checks every package <code>pep.lock</code> records against the security advisory database, and exits with status 1 when one is affected (see <a href="#audit"><code>audit</code></a>)</td></tr>
+<tr><td><code>audit --ignore &lt;id&gt;</code></td><td>Reports that advisory but does not fail on it; repeat it for more</td></tr>
+<tr><td><code>audit --json</code></td><td>Prints the affected packages as JSON</td></tr>
 <tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="#vendor-dir"><code>vendor</code></a>)</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
@@ -455,6 +459,56 @@ it prints <code>every package is at the newest version</code>. It reads what eac
 package offers over the network, so with <code>--offline</code> it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 <code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
+<p>A locked version its author <a href="#retracted-versions">retracted</a> is outdated
+too: its <code>locked</code> cell says <code>(retracted)</code>, and a line after the table says
+why:</p>
+<pre><code class="language-text">$ pepper package outdated
+package  locked             wanted  latest  source
+shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes
+shapes 1.1.0 is retracted: loses data
+</code></pre>
+<h3 id="audit"><a class="header" href="#audit"><code>audit</code></a></h3>
+<p>Checks every package <code>pep.lock</code> records, for every platform and
+dev-dependencies included, against a database of security advisories, as
+<code>cargo audit</code> does with RustSec. For each advisory that affects a locked
+version it prints the advisory, the package (marked <code>[dev]</code> or with its
+<code>[target: ...]</code> as in <a href="#tree"><code>tree</code></a>), and the paths that lead to it, as
+<a href="#why-name"><code>why</code></a> prints them:</p>
+<pre><code class="language-text">$ pepper package audit
+PEP-2026-0001 (high): numbers 1.3.1 (github:other/numbers)
+  numbers_version() lies
+  patched: &gt;=2.0.0
+  https://example.com/PEP-2026-0001
+  app -&gt; geometry 1.1.0 -&gt; numbers 1.3.1
+1 advisory affects pep.lock
+</code></pre>
+<p>The exit status is 1 when an advisory affects a package, for CI, and 0
+when none does (<code>no advisory affects pep.lock (12 in &lt;database&gt;)</code>).
+<code>--ignore &lt;id&gt;</code>, or the project's <a href="projects.html#audit"><code>[audit] ignore</code></a>
+list, names an advisory that does not fail it, such as one whose code the
+project never calls; <code>audit</code> still says on stderr which package it
+affects. Only packages locked at a version are checked: one at a branch or
+commit names no version to match.</p>
+<p><strong>The database</strong> is a Git repository of TOML files, one advisory each,
+anywhere in it: <code>https://github.com/pep-lang/advisories.git</code>, or the
+repository <code>PEPPER_ADVISORY_DB</code> names (a mirror, a private database, or a
+<code>file://</code> folder). <code>audit</code> clones it into the
+<a href="#the-download-cache">download cache</a>'s home, <code>cache/advisories</code>, and
+fetches it again once the copy is an hour old; a fetch that fails fails
+<code>audit</code>, rather than check against an old copy. With <code>--offline</code> it uses
+the copy as it is, and fails when there is none. An advisory:</p>
+<pre><code class="language-toml">id = "PEP-2026-0001"                      # required
+package = "github:other/numbers"          # required: the source pep.lock records
+title = "numbers_version() lies"
+severity = "high"                          # as written: low, medium, high, critical
+url = "https://example.com/PEP-2026-0001"
+patched = ["&gt;=2.0.0"]                      # the versions that fix it
+unaffected = ["&lt;1.0.0"]                    # the versions it never affected
+</code></pre>
+<p>A version is affected unless a <code>patched</code> or <code>unaffected</code> entry holds it.
+Each entry is a version, which names that version alone (<code>"1.2.3"</code>), or a
+range as dependencies write it (<code>"&gt;=1.2.3, &lt;2"</code>, <code>"^1.4"</code>). A malformed
+advisory fails <code>audit</code> with an error at its key.</p>
 <h3 id="vendor-dir"><a class="header" href="#vendor-dir"><code>vendor [&lt;dir&gt;]</code></a></h3>
 <p>Copies every package <code>pep.lock</code> lists into a folder of the project, so
 the repository carries its dependencies and builds with no network and no
@@ -570,6 +624,18 @@ with <code>--exit-code</code> as without <code>--json</code>:</p>
 <tr><td><code>source</code></td><td>Its source</td></tr>
 <tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
 <tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
+<tr><td><code>retracted</code></td><td>Why its author retracted the locked version, or <code>null</code></td></tr>
+</tbody></table>
+</div>
+<p><code>audit --json</code> writes <code>advisories</code>, an object for each affected package,
+with the exit status as without <code>--json</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>id</code>, <code>title</code>, <code>severity</code>, <code>url</code></td><td>The advisory's, each <code>""</code> when it gives none</td></tr>
+<tr><td><code>patched</code></td><td>Its <code>patched</code> versions, as written</td></tr>
+<tr><td><code>package</code>, <code>version</code>, <code>source</code></td><td>The affected package, its locked version and its source</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
+<tr><td><code>paths</code>, <code>total</code></td><td>The first 20 paths to it and how many there are, as <code>why --json</code> writes them</td></tr>
 </tbody></table>
 </div>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
@@ -766,10 +832,31 @@ this toolchain builds. So is a branch, tag or commit that needs one.</p>
 <p>Only the <code>pep.toml</code> of the version picked, and of the newer ones the ranges
 accept, are read: from the package's clone in <code>.pep/deps</code>, without checking
 them out, each once per run.</p>
+<h3 id="retracted-versions"><a class="header" href="#retracted-versions">Retracted versions</a></h3>
+<p>A package's author withdraws a broken release in the
+<a href="projects.html#retract"><code>[retract]</code></a> table of a newer release's <code>pep.toml</code>,
+as Go's <code>retract</code> does: the <code>[retract]</code> of a package's newest version
+(not a prerelease) speaks for every version.</p>
+<ul>
+<li>
+<p>A version range skips each retracted version, picking the newest one
+left, and says so:</p>
+<pre><code class="language-text">pep-package: github:other/shapes skipped 1.1.0 (retracted: loses data)
+</code></pre>
+<p>When every version the ranges accept is retracted, resolution fails and
+names each with its reason.</p>
+</li>
+<li>
+<p>A version <code>pep.lock</code> already holds stays, and builds: <code>fetch</code> reads no
+network for it. <a href="#outdated"><code>outdated</code></a> flags it, and <code>update</code> moves off
+it.</p>
+</li>
+</ul>
 <h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host's repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td><code>PEPPER_ADVISORY_DB</code></td><td>The Git repository of the advisory database <a href="#audit"><code>audit</code></a> reads, instead of <code>https://github.com/pep-lang/advisories.git</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
 <tr><td><code>PEPPER_HOME</code></td><td>The Pepper home that holds the <a href="#the-download-cache">download cache</a>, and whose <code>pepper</code> <a href="#publish"><code>publish</code></a> runs the tests with, as for <code>pep-install</code></td></tr>
