@@ -21,6 +21,7 @@
 #     pepper package tree --invert numbers      # what depends on numbers
 #     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
+#     pepper package audit [--ignore ID] [--json]  # the locked packages an advisory affects
 #     pepper package vendor [vendor]            # every locked package into the repository
 #     pepper package cache info                 # the download cache every project shares
 #     pepper package cache clean
@@ -33,6 +34,7 @@
 import cli;
 import [Directory, File, Path] from io;
 import io;
+import [JsonValue] from json;
 import os;
 import process;
 import semver;
@@ -40,6 +42,7 @@ import [parse_range] from semver;
 import syntax;
 import toml;
 import toolchain;
+import "advisory";
 import "archive";
 import "git";
 import "graph";
@@ -145,6 +148,14 @@ main(args: String[]): int {
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
     var outdated_json = outdated.flag("json", help = "print the outdated packages as JSON");
+    var audit = parser.command(
+        "audit",
+        "Checks every package pep.lock records against the security advisory database; exits 1 when one is affected"
+    );
+    var audit_ignore = audit.multiple(
+        "ignore", help = "an advisory to report but not fail on, by its id; repeat it for more", value_name = "ID"
+    );
+    var audit_json = audit.flag("json", help = "print the affected packages as JSON");
     var vendor = parser.command(
         "vendor",
         "Copies every locked package into a folder of the project, and sets pep.toml's '[fetch] vendor' so builds read it, with no network or download cache"
@@ -227,6 +238,9 @@ main(args: String[]): int {
     }
     if (outdated.is_selected) {
         return project.outdated(exit_code.is_set, outdated_json.is_set);
+    }
+    if (audit.is_selected) {
+        return project.audit(audit_ignore.values(), audit_json.is_set);
     }
     if (vendor.is_selected) {
         return project.vendor(vendor_dir.value_or(""));
@@ -1020,8 +1034,93 @@ struct Project {
             print("every package is at the newest version");
             return 0;
         }
-        File.stdout().write_all(table(["package", "locked", "wanted", "latest", "source"], rows.value()));
+        File.stdout().write_all(graph.value().outdated_text(rows.value()));
         return exit_code ? 1 : 0;
+    }
+
+    # Reports each locked package, on every platform, that an advisory
+    # affects, with the paths that lead to it; status 1 when there is one
+    # `ignore` or pep.toml's `[audit] ignore` does not name.
+    audit(ignore: Array<String>, json: bool): int {
+        var manifest = read_project(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        var locked = read_lock(lock_path(dir));
+        if (locked.is_err()) {
+            return fail(locked.error().message);
+        }
+        var database = fetch_database(advisory_database(), offline);
+        if (database.is_err()) {
+            return fail(database.error().message);
+        }
+        var advisories = read_advisories(database.value());
+        if (advisories.is_err()) {
+            return fail(advisories.error().message);
+        }
+        var ignored = ignore.copy();
+        ignored.append_all(manifest.value().audit_ignore);
+        var hits = Array<(Advisory, Locked)>();
+        for (var (advisory, package) in affected(advisories.value(), locked.value())) {
+            if (ignored.contains(advisory.id)) {
+                say($"ignored {advisory.id}, which affects {package.describe()} ({package.source})");
+            } else {
+                hits.append((advisory, package));
+            }
+        }
+        if (hits.is_empty and !json) {
+            print($"no advisory affects pep.lock ({advisories.value().count} in {advisory_database()})");
+            return 0;
+        }
+        # The paths, which need the graph, only for what is affected.
+        var graph = hits.is_empty ? Result<LockedGraph>.Err("") : _graph();
+        if (!hits.is_empty and graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var list = JsonValue.array();
+        var text = "";
+        for (var (advisory, package) in hits) {
+            var targets = HashSet<String>();
+            targets.insert(package.source);
+            var patched = JsonValue.array();
+            for (var range in advisory.patched) {
+                patched.append(JsonValue.String(range));
+            }
+            var entry = graph.value().why_json(targets, 20);
+            entry["id"] = JsonValue.String(advisory.id);
+            entry["title"] = JsonValue.String(advisory.title);
+            entry["severity"] = JsonValue.String(advisory.severity);
+            entry["url"] = JsonValue.String(advisory.url);
+            entry["patched"] = patched;
+            entry["package"] = JsonValue.String(package.name);
+            entry["version"] = JsonValue.String(package.version);
+            entry["source"] = JsonValue.String(package.source);
+            entry["dev"] = JsonValue.Bool(package.dev);
+            entry["target"] = package.target.is_empty ? JsonValue.Null : JsonValue.String(package.target);
+            list.append(entry);
+            var severity = advisory.severity.is_empty ? "" : $" ({advisory.severity})";
+            text += $"{advisory.id}{severity}: {graph.value().describe_source(package.source, package.name)}\n";
+            for (var line in [
+                advisory.title,
+                advisory.patched.is_empty ? "no patched version" : "patched: " + ", ".join(advisory.patched),
+                advisory.url
+            ]) {
+                text += line.is_empty ? "" : "  " + line + "\n";
+            }
+            for (var line in graph.value().why(targets, 20, false).lines()) {
+                text += "  " + line + "\n";
+            }
+        }
+        if (json) {
+            var result = JsonValue.object();
+            result["advisories"] = list;
+            File.stdout().write_all(result.to_pretty_string() + "\n");
+        } else {
+            File.stdout().write_all(
+                text + $"{hits.count} {hits.count == 1 ? "advisory affects" : "advisories affect"} pep.lock\n"
+            );
+        }
+        return hits.is_empty ? 0 : 1;
     }
 
     # Resolves the graph into `.pep/deps` as `fetch` does, then copies every

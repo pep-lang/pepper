@@ -19,6 +19,7 @@ pepper package tree                          # the dependency graph pep.lock rec
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package audit                         # locked packages a security advisory affects
 pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
@@ -80,6 +81,9 @@ Every package is downloaded once per machine, into a
 | `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
 | `outdated --json` | Prints the outdated packages as JSON |
+| `audit` | Checks every package `pep.lock` records against the security advisory database, and exits with status 1 when one is affected (see [`audit`](#audit)) |
+| `audit --ignore <id>` | Reports that advisory but does not fail on it; repeat it for more |
+| `audit --json` | Prints the affected packages as JSON |
 | `vendor [<dir>]` | Copies every locked package into `<dir>` in the project (default: `pep.toml`'s `[fetch] vendor`, else `vendor`), and sets `[fetch] vendor` so builds read it (see [`vendor`](#vendor-dir)) |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
@@ -361,6 +365,68 @@ package offers over the network, so with `--offline` it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 `--exit-code` asks for 1 when a package is outdated, for CI.
 
+A locked version its author [retracted](#retracted-versions) is outdated
+too: its `locked` cell says `(retracted)`, and a line after the table says
+why:
+
+```text
+$ pepper package outdated
+package  locked             wanted  latest  source
+shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes
+shapes 1.1.0 is retracted: loses data
+```
+
+### `audit`
+
+Checks every package `pep.lock` records, for every platform and
+dev-dependencies included, against a database of security advisories, as
+`cargo audit` does with RustSec. For each advisory that affects a locked
+version it prints the advisory, the package (marked `[dev]` or with its
+`[target: ...]` as in [`tree`](#tree)), and the paths that lead to it, as
+[`why`](#why-name) prints them:
+
+```text
+$ pepper package audit
+PEP-2026-0001 (high): numbers 1.3.1 (github:other/numbers)
+  numbers_version() lies
+  patched: >=2.0.0
+  https://example.com/PEP-2026-0001
+  app -> geometry 1.1.0 -> numbers 1.3.1
+1 advisory affects pep.lock
+```
+
+The exit status is 1 when an advisory affects a package, for CI, and 0
+when none does (`no advisory affects pep.lock (12 in <database>)`).
+`--ignore <id>`, or the project's [`[audit] ignore`](projects.md#audit)
+list, names an advisory that does not fail it, such as one whose code the
+project never calls; `audit` still says on stderr which package it
+affects. Only packages locked at a version are checked: one at a branch or
+commit names no version to match.
+
+**The database** is a Git repository of TOML files, one advisory each,
+anywhere in it: `https://github.com/pep-lang/advisories.git`, or the
+repository `PEPPER_ADVISORY_DB` names (a mirror, a private database, or a
+`file://` folder). `audit` clones it into the
+[download cache](#the-download-cache)'s home, `cache/advisories`, and
+fetches it again once the copy is an hour old; a fetch that fails fails
+`audit`, rather than check against an old copy. With `--offline` it uses
+the copy as it is, and fails when there is none. An advisory:
+
+```toml
+id = "PEP-2026-0001"                      # required
+package = "github:other/numbers"          # required: the source pep.lock records (a member's: github:owner/name#member)
+title = "numbers_version() lies"
+severity = "high"                          # as written: low, medium, high, critical
+url = "https://example.com/PEP-2026-0001"
+patched = [">=2.0.0"]                      # the versions that fix it
+unaffected = ["<1.0.0"]                    # the versions it never affected
+```
+
+A version is affected unless a `patched` or `unaffected` entry holds it.
+Each entry is a version, which names that version alone (`"1.2.3"`), or a
+range as dependencies write it (`">=1.2.3, <2"`, `"^1.4"`). A malformed
+advisory fails `audit` with an error at its key.
+
 ### `vendor [<dir>]`
 
 Copies every package `pep.lock` lists into a folder of the project, so
@@ -498,6 +564,19 @@ with `--exit-code` as without `--json`:
 | `source` | Its source |
 | `dev` | Whether only the project's dev-dependencies lead to it |
 | `target` | The condition of the targets that need it, or `null` |
+| `retracted` | Why its author retracted the locked version, or `null` |
+
+`audit --json` writes `advisories`, an object for each affected package,
+with the exit status as without `--json`:
+
+| Member | What it holds |
+| --- | --- |
+| `id`, `title`, `severity`, `url` | The advisory's, each `""` when it gives none |
+| `patched` | Its `patched` versions, as written |
+| `package`, `version`, `source` | The affected package, its locked version and its source |
+| `dev` | Whether only the project's dev-dependencies lead to it |
+| `target` | The condition of the targets that need it, or `null` |
+| `paths`, `total` | The first 20 paths to it and how many there are, as `why --json` writes them |
 
 ## pep.lock
 
@@ -749,12 +828,33 @@ package with its name among the folders its root's `[workspace] members`
 lists at that version's commit, so a member that moved between releases is
 read where each release has it.
 
+### Retracted versions
+
+A package's author withdraws a broken release in the
+[`[retract]`](projects.md#retract) table of a newer release's `pep.toml`,
+as Go's `retract` does: the `[retract]` of a package's newest version
+(not a prerelease) speaks for every version.
+
+- A version range skips each retracted version, picking the newest one
+  left, and says so:
+
+  ```text
+  pep-package: github:other/shapes skipped 1.1.0 (retracted: loses data)
+  ```
+
+  When every version the ranges accept is retracted, resolution fails and
+  names each with its reason.
+- A version `pep.lock` already holds stays, and builds: `fetch` reads no
+  network for it. [`outdated`](#outdated) flags it, and `update` moves off
+  it.
+
 ## Environment variables
 
 | Variable | What it does |
 | --- | --- |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Fetches that host's repositories from another address (a mirror, or a folder of repositories as a `file://` URL): `<address>/<owner>/<name>.git` |
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
+| `PEPPER_ADVISORY_DB` | The Git repository of the advisory database [`audit`](#audit) reads, instead of `https://github.com/pep-lang/advisories.git` |
 | `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
 | `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |
 | `PEPPER_HOME` | The Pepper home that holds the [download cache](#the-download-cache), and whose `pepper` [`publish`](#publish) runs the tests with, as for `pep-install` |

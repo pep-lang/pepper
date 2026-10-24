@@ -4,11 +4,15 @@
 # file, the conditions and `[features]` included, when it builds. Features
 # do not change what is locked: an optional dependency is resolved and
 # locked like any other. `[overrides]` replaces a package wherever the
-# graph reaches it; only the project's own apply.
+# graph reaches it; only the project's own apply. `[retract]` lists the
+# package's own withdrawn versions, and `[audit]` the advisories `audit`
+# ignores.
 
 import [Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
 import [File, glob, Path] from io;
+import semver;
+import [parse_range, Version, VersionRange] from semver;
 import toml;
 
 # Whether `key` names a Git host a dependency can come from.
@@ -87,6 +91,36 @@ export struct Requirement {
     }
 }
 
+# An entry of `[retract]`: versions the package's author withdrew, and why.
+export struct Retraction {
+    var range: VersionRange = VersionRange();
+    var reason: String = "";
+
+    construct() {}
+
+    construct(range: VersionRange, reason: String) {
+        this.range = range;
+        this.reason = reason;
+    }
+}
+
+# Why `version` is retracted, if one of `retractions` names it.
+export retracted(retractions: Array<Retraction>, version: Version): Optional<String> {
+    for (var retraction in retractions) {
+        if (retraction.range.matches(version)) {
+            return Optional<String>.Value(retraction.reason);
+        }
+    }
+    return Optional<String>.Empty;
+}
+
+# The versions `text` names in `[retract]` or an advisory: a version is
+# that version alone (`1.0.1`), anything else a range as dependencies
+# write it (`>=1.1.0, <1.1.3`).
+export version_range(text: String): Result<VersionRange> {
+    return parse_range(semver.parse(text.trim()).is_ok() ? "=" + text.trim() : text);
+}
+
 # A pep.toml.
 export struct Manifest {
     # The file.
@@ -117,6 +151,14 @@ export struct Manifest {
     # `[overrides]`: each the package that replaces another, its `name` the
     # source it replaces (`github:owner/name`).
     var overrides: Array<Requirement> = __null;
+    # `[retract]`: the versions of this package its author withdrew.
+    var retractions: Array<Retraction> = __null;
+    # The error at the first `[retract]` key that names no version, which
+    # `read_project` reports for the project's own pep.toml: a
+    # dependency's retracts nothing there, rather than break resolution.
+    var retract_error: String = "";
+    # `[audit]`'s `ignore`: the advisories `audit` does not fail on.
+    var audit_ignore: Array<String> = __null;
 
     construct() {
         requirements = Array<Requirement>();
@@ -125,6 +167,8 @@ export struct Manifest {
         workspace_requirements = Array<Requirement>();
         member_manifests = Array<Manifest>();
         overrides = Array<Requirement>();
+        retractions = Array<Retraction>();
+        audit_ignore = Array<String>();
     }
 
     # What `[overrides]` replaces `source` with, if anything.
@@ -137,20 +181,31 @@ export struct Manifest {
         return Optional<Requirement>.Empty;
     }
 
-    # `message` as a clang-style `severity` diagnostic at the first place
-    # `value` is written quoted: the key of the override of a source, or a
-    # dependency's `path` or `package`; else at the line starting with the
-    # key `key` (a dependency's, which inherits that value), when given.
-    at_value(severity: String, value: String, message: String, key: String = ""): String {
-        var start = text.find("\"" + value + "\"");
+    # `message` as `at_key` puts it at a dependency's `value` (its `path`
+    # or `package`), else at the dependency's key `name`, which inherits
+    # that value from its workspace.
+    at_value(severity: String, value: String, message: String, name: String): String {
+        var written = text.contains("\"" + value + "\"") or text.contains("'" + value + "'");
+        return at_key(severity, written ? value : name, message);
+    }
+
+    # `message` as a clang-style `severity` diagnostic at `key`, written
+    # quoted (the source of an override, a version `[retract]` names) or
+    # bare at the start of a line, looked for after the first `table`
+    # (`[retract]`) when it is given; at the file's start when it is not
+    # there.
+    at_key(severity: String, key: String, message: String, table: String = ""): String {
+        var found = table.is_empty ? 0 : text.find(table);
+        var from = found < 0 ? 0 : found as ulong;
+        var start = text.find("\"" + key + "\"", from);
+        var length = key.length + 2;
         if (start < 0) {
-            start = text.find("'" + value + "'");
+            start = text.find("'" + key + "'", from);
         }
-        var length = value.length + 2;
-        if (start < 0 and !key.is_empty) {
-            var line = text.find("\n" + key + " ");
-            start = line < 0 ? line : line + 1;
+        if (start < 0) {
             length = key.length;
+            start = text.starts_with(key + " ") ? 0 : text.find("\n" + key + " ", from);
+            start = start > 0 ? start + 1 : start;
         }
         var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + length);
         var diagnostic = severity == "error" ? Diagnostic.error(message) : Diagnostic.warning(message);
@@ -278,6 +333,33 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             manifest.overrides.append(replacement.value());
         }
     }
+    # The compiler checks the types of both, at their keys.
+    var retract = root.try_get("retract");
+    if (retract.is_value() and retract.value().as_table().is_value()) {
+        for (var (versions, reason) in retract.value().as_table().value()) {
+            var range = version_range(versions);
+            if (range.is_err()) {
+                if (manifest.retract_error.is_empty) {
+                    manifest.retract_error = manifest.at_key(
+                        "error",
+                        versions,
+                        $"'{versions}' in '[retract]' is not a version or range: {range.error().message}",
+                        "retract"
+                    );
+                }
+                continue;
+            }
+            manifest.retractions.append(Retraction(range.value(), reason.as_string().value_or("")));
+        }
+    }
+    var ignore = root.lookup("audit.ignore");
+    if (ignore.is_value() and ignore.value().as_array().is_value()) {
+        for (var id in ignore.value().as_array().value()) {
+            if (id.as_string().is_value()) {
+                manifest.audit_ignore.append(id.as_string().value());
+            }
+        }
+    }
     var targets = root.try_get("target");
     if (targets.is_value()) {
         var conditions = targets.value().as_table();
@@ -319,7 +401,9 @@ export newer_manifest_features(): Array<(String, String)> {
         ("features", "0.11.0"),
         ("overrides", "0.11.0"),
         ("workspace", "0.11.0"),
-        ("fetch.vendor", "0.11.0")
+        ("fetch.vendor", "0.11.0"),
+        ("retract", "0.11.0"),
+        ("audit", "0.11.0")
     ];
 }
 
@@ -378,11 +462,16 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
 # its members (`member_manifests`), and a root's or member's
 # `workspace = true` entries filled in from the root's
 # `[workspace.dependencies]`, a `path` there made absolute. The compiler
-# checks the workspace itself, reporting its problems at their keys.
-export read_project(path: Path): Result<Manifest> {
+# checks the workspace itself, reporting its problems at their keys. A
+# malformed `[retract]` is an error only when `strict`, for the project:
+# a dependency's retracts nothing.
+export read_project(path: Path, strict: bool = true): Result<Manifest> {
     var manifest = read_manifest(path);
     if (manifest.is_err()) {
         return manifest;
+    }
+    if (strict and !manifest.value().retract_error.is_empty) {
+        return Result<Manifest>.Err(manifest.value().retract_error);
     }
     var root_path = find_workspace(path);
     if (root_path.is_empty()) {
@@ -418,6 +507,9 @@ export read_project(path: Path): Result<Manifest> {
         var member = read_manifest(dir.join("pep.toml"));
         if (member.is_err()) {
             return member;
+        }
+        if (strict and !member.value().retract_error.is_empty) {
+            return Result<Manifest>.Err(member.value().retract_error);
         }
         var problem = _inherit(member.value(), root);
         if (problem.is_value()) {
