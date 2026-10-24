@@ -25,7 +25,7 @@
 # of the same workspace, so it is that member (or the root) of the same
 # repository, resolved by its own tags.
 
-import [Path] from io;
+import [glob_matches, Path] from io;
 import semver;
 import [Version, VersionRange, parse_range] from semver;
 import [check_vendored] from toolchain;
@@ -214,31 +214,19 @@ export struct Resolver {
     }
 
     # The `minimum_toolchain` the pep.toml at `commit` of `source` declares,
-    # read from its clone in `.pep/deps` without checking it out.
+    # read from its clone in `.pep/deps` without checking it out; a
+    # member's own, found at that commit (`_member_toml_at`).
     _minimum_at(source: String, commit: String): Result<String> {
         var known = _minimums.try_get(source + "@" + commit);
         if (known.is_value()) {
             return Result<String>.Ok(known.value());
         }
         var (host, repository) = split_source(_origin(source));
-        var file = "pep.toml";
-        if (!source_member(source).is_empty) {
-            # The clone, made by reading its root's pep.toml.
-            var made = file_at(host, repository, _dir(source), commit, file, offline);
-            if (made.is_err()) {
-                return Result<String>.Err(made.error().message);
-            }
-            # shortcut: the member's folder in the clone's work tree, which a member that
-            # moves between releases does not match; read it at `commit` if members move.
-            var folder = _folder(source);
-            var checkout = _dir(source).canonicalize();
-            if (folder.is_ok() and checkout.is_ok()) {
-                var path = folder.value().to_string();
-                file = path.substr(checkout.value().to_string().length + 1, path.length).replace("\\", "/")
-                    + "/pep.toml";
-            }
+        var text = file_at(host, repository, _dir(source), commit, "pep.toml", offline);
+        var member = source_member(source);
+        if (text.is_ok() and text.value().is_value() and !member.is_empty) {
+            text = _member_toml_at(host, repository, _dir(source), commit, member, text.value().value());
         }
-        var text = file_at(host, repository, _dir(source), commit, file, offline);
         if (text.is_err()) {
             return Result<String>.Err(
                 $"cannot read the pep.toml of {source} {commit.substr(0, 12)}: {text.error().message}"
@@ -254,6 +242,50 @@ export struct Resolver {
         }
         _minimums[source + "@" + commit] = minimum;
         return Result<String>.Ok(minimum);
+    }
+
+    # The pep.toml of the workspace member `member` at `commit` of the
+    # clone `dir`, whose root's pep.toml there is `root_text`: the one named
+    # `member` among the folders its `[workspace] members` lists at that
+    # commit, wherever the work tree has it. None when there is no such
+    # member.
+    _member_toml_at(
+        host: String, repository: String, dir: Path, commit: String, member: String, root_text: String
+    ): Result<Optional<String>> {
+        var root_manifest = parse_manifest(Path("pep.toml"), root_text);
+        if (root_manifest.is_err()) {
+            return Result<Optional<String>>.Ok(Optional<String>.Empty);
+        }
+        var listed = git(["ls-tree", "-r", "--name-only", commit], dir.to_string());
+        if (listed.is_err()) {
+            return Result<Optional<String>>.Err(listed.error().message);
+        }
+        for (var path in listed.value().lines()) {
+            if (!path.ends_with("/pep.toml")) {
+                continue;
+            }
+            var folder = path.substr(0, path.length - 9);
+            var listed_member = false;
+            for (var pattern in root_manifest.value().members) {
+                var trimmed = pattern.starts_with("./") ? pattern.substr(2, pattern.length) : pattern;
+                trimmed = trimmed.ends_with("/") ? trimmed.substr(0, trimmed.length - 1) : trimmed;
+                listed_member = listed_member or trimmed == folder or glob_matches(trimmed, folder);
+            }
+            if (!listed_member) {
+                continue;
+            }
+            var text = file_at(host, repository, dir, commit, path, offline);
+            if (text.is_err()) {
+                return text;
+            }
+            if (text.value().is_value()) {
+                var manifest = parse_manifest(Path(path), text.value().value());
+                if (manifest.is_ok() and manifest.value().name == member) {
+                    return text;
+                }
+            }
+        }
+        return Result<Optional<String>>.Ok(Optional<String>.Empty);
     }
 
     # Chooses a revision of every package, checking each out into

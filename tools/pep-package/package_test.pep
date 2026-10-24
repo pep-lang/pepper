@@ -1658,6 +1658,50 @@ a_workspace_shares_one_lock_and_builds_its_members() {
 }
 
 [Test]
+a_members_toolchain_is_read_where_its_tag_has_it() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("moved");
+    var root = hosts.folder.path;
+    var work = root.join("work").join("me").join("moved");
+    var member = (version: String, minimum: String) => {
+        return [
+            "pep.toml",
+            "[package]\nname = \"geo\"\nversion = \"" + version + "\"\nminimum_toolchain = \"" + minimum + "\"\n",
+            "module.pep",
+            "export geo_version(): String {\n    return \"" + version + "\";\n}\n"
+        ];
+    };
+    # 1.0.0 builds here, 1.1.0 needs a newer toolchain, and 1.2.0, which
+    # does too, moved `geo` from `geo` to `libs/geo`.
+    var at = (folder: String, files: Array<String>) => {
+        return [folder + "/" + files[0], files[1], folder + "/" + files[2], files[3]];
+    };
+    var first = at("geo", member("1.0.0", "0.1.0"));
+    first.append_all(["pep.toml", "[workspace]\nmembers = [\"geo\"]\n"]);
+    add_version(root, "me/moved", "1.0.0", first);
+    git(work, ["tag", "geo-v1.0.0"]);
+    add_version(root, "me/moved", "1.1.0", at("geo", member("1.1.0", "99.0.0")));
+    git(work, ["tag", "geo-v1.1.0"]);
+    git(work, ["rm", "-rq", "geo"]);
+    var moved = at("libs/geo", member("1.2.0", "99.0.0"));
+    moved.append_all(["pep.toml", "[workspace]\nmembers = [\"libs/*\"]\n"]);
+    add_version(root, "me/moved", "1.2.0", moved);
+    git(work, ["tag", "geo-v1.2.0"]);
+    publish(root, "me/moved");
+
+    var project = Project("moved", "geo = { github = \"me/moved\", package = \"geo\", version = \"1\" }\n");
+    var fetched = hosts.package(project.dir, ["fetch"]);
+    expect_exit(fetched, 0);
+    expect_contains(project.lock(), "source = \"github:me/moved#geo\"\nversion = \"1.0.0\"\n");
+    expect_contains(
+        fetched.stderr,
+        "github:me/moved#geo skipped 1.2.0 (needs toolchain 99.0.0), 1.1.0 (needs toolchain 99.0.0); this is "
+    );
+}
+
+[Test]
 a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
     if (!has_git()) {
         return;
@@ -1719,7 +1763,10 @@ a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
 
     # A project depends on geo by Git; geo's sibling is resolved by its own
     # tags, at 1.1.0, not as geo's commit holds it.
-    var project = Project("member", "geometry = { github = \"me/kit\", package = \"geo\", version = \"1\" }\n");
+    var project = Project("member", "");
+    var added = hosts.package(project.dir, ["add", "me/kit", "--package", "geo", "--name", "geometry"]);
+    expect_exit(added, 0);
+    expect_contains(project.manifest(), "geometry = { github = \"me/kit\", package = \"geo\", version = \"1.0.0\" }\n");
     expect_equal(hosts.build_and_run(project.dir), "geo 1.1.0\n");
     expect_contains(project.lock(), "name = \"geo\"\nsource = \"github:me/kit#geo\"\nversion = \"1.0.0\"\n");
     expect_contains(project.lock(), "name = \"numbers\"\nsource = \"github:me/kit#numbers\"\nversion = \"1.1.0\"\n");

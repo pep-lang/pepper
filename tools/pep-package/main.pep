@@ -9,6 +9,7 @@
 #     pepper package add --dev someone/fixtures  # only for tests and examples
 #     pepper package add --target 'OS(Windows)' someone/winapi  # only on Windows
 #     pepper package add --optional --features simd someone/zlib  # for a feature to turn on
+#     pepper package add someone/shapes --package geo  # the workspace member geo, by its own tags
 #     pepper package remove geometry
 #     pepper package update [geometry]          # newer versions the ranges allow
 #     pepper package update --verify            # one at a time, keeping those that build
@@ -85,6 +86,12 @@ main(args: String[]): int {
     );
     var add_name = add.option(
         "name", "n", "the name source code imports it by (default: the repository's name)", value_name = "NAME"
+    );
+    var add_member = add.option(
+        "package",
+        "",
+        "the member of the repository's workspace to depend on, by its package name; its version comes from its own NAME-v<version> tags",
+        value_name = "NAME"
     );
     var add_dev = add.flag(
         "dev", help = "add it to [dev-dependencies], which only the project's tests and examples import"
@@ -192,7 +199,14 @@ main(args: String[]): int {
         if (add_no_default_features.is_set) {
             extra["default-features"] = toml.TomlValue.Boolean(false);
         }
-        return project.add(add_package.value(), add_name.value_or(""), add_dev.is_set, add_target.value_or(""), extra);
+        return project.add(
+            add_package.value(),
+            add_name.value_or(""),
+            add_member.value_or(""),
+            add_dev.is_set,
+            add_target.value_or(""),
+            extra
+        );
     }
     if (remove.is_selected) {
         return project.remove(remove_package.value());
@@ -570,8 +584,9 @@ struct Project {
     }
 
     # `extra` holds the entry's keys beyond its source and version
-    # (`optional`, `features`, `default-features`).
-    add(spec: String, given_name: String, dev: bool, target: String, extra: toml.TomlValue): int {
+    # (`optional`, `features`, `default-features`). A `member` of the
+    # repository's workspace is its `package`, at a version of its own tags.
+    add(spec: String, given_name: String, member: String, dev: bool, target: String, extra: toml.TomlValue): int {
         if (offline) {
             return fail(
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
@@ -598,7 +613,10 @@ struct Project {
         if (parts.count < 2 or (parts.count > 2 and host != "gitlab" and !host.is_empty) or parts.contains("")) {
             return fail($"'{spec}' must name a repository as owner/name");
         }
-        var name = given_name.is_empty ? default_name(rest) : given_name;
+        if (!member.is_empty and !syntax.is_identifier(member)) {
+            return fail($"'--package' names a workspace member by its package name, and '{member}' is not one");
+        }
+        var name = !given_name.is_empty ? given_name : member.is_empty ? default_name(rest) : member;
         if (!syntax.is_identifier(name)) {
             return fail($"'{name}' is not a name 'import' can use; give one with --name");
         }
@@ -638,7 +656,7 @@ struct Project {
         if (range.is_empty) {
             for (var ref in refs) {
                 if (ref.name.starts_with("refs/tags/")) {
-                    var version = tag_version(ref.name.substr(10, ref.name.length));
+                    var version = member_tag_version(member, ref.name.substr(10, ref.name.length));
                     if (version.is_value() and version.value().prerelease.is_empty) {
                         pin = true;
                     }
@@ -650,6 +668,9 @@ struct Project {
         }
         var entry = toml.TomlValue.table();
         entry[host] = toml.TomlValue.String(rest);
+        if (!member.is_empty) {
+            entry["package"] = toml.TomlValue.String(member);
+        }
         if (!range.is_empty) {
             entry["version"] = toml.TomlValue.String(range);
         }
@@ -674,7 +695,7 @@ struct Project {
         if (written.is_err()) {
             return fail($"cannot write {manifest_path.to_string()}: {written.error().message}");
         }
-        var source = host + ":" + rest;
+        var source = host + ":" + rest + (member.is_empty ? "" : "#" + member);
         var graph = _resolve(false, [source]);
         if (graph.is_err()) {
             # Leave pep.toml as it was.
@@ -699,7 +720,7 @@ struct Project {
             }
         }
         _notes(graph.value());
-        say($"'import {name};' now imports {host}:{rest}");
+        say($"'import {name};' now imports {source}");
         return 0;
     }
 

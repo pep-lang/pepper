@@ -59,6 +59,7 @@ Every package is downloaded once per machine, into a
 | `fetch <source>...` | Fetches only those locked packages (`github:owner/name`), at their locked commits, resolving nothing |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
+| `add ... --package <name>` | Depends on the member `<name>` of the repository's workspace, at a version of its own `<name>-v<version>` tags (see [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)) |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
 | `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use |
 | `add ... --optional` | Marks it `optional = true`: a build uses it only when a feature turns it on |
@@ -133,6 +134,16 @@ branch. The name source code imports defaults to the repository's last part,
 with `-` and `.` turned into `_` (`other/json` adds `json`); `--name` gives
 another. A name already in `pep.toml`, or the name of a runtime module
 (`io`, `async`), is an error that suggests `--name`.
+
+`--package <name>` adds a member of the repository's
+[workspace](projects.md#a-member-as-a-git-dependency) instead of its root
+package: the entry gets `package = "<name>"`, its version comes from the
+member's own `<name>-v<version>` tags, and the name source code imports
+defaults to the member's:
+
+```bash
+pepper package add someone/shapes --package geo   # geo = { github = "someone/shapes", package = "geo", version = "0.3.1" }
+```
 
 `--dev` adds it to `[dev-dependencies]` instead: only the project's tests
 and examples import it, and projects that depend on this one ignore it
@@ -733,7 +744,10 @@ prints, which `pepper` picks with the rest of the toolchain):
 
 Only the `pep.toml` of the version picked, and of the newer ones the ranges
 accept, are read: from the package's clone in `.pep/deps`, without checking
-them out, each once per run.
+them out, each once per run. A workspace member's is the `pep.toml` of the
+package with its name among the folders its root's `[workspace] members`
+lists at that version's commit, so a member that moved between releases is
+read where each release has it.
 
 ## Environment variables
 

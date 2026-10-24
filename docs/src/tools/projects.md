@@ -437,6 +437,9 @@ with a package inside a Git repository's workspace:
 geo = { github = "someone/shapes", package = "geo", version = "0.3" }
 ```
 
+`pepper package add someone/shapes --package geo` writes that entry (see
+[pep-package](pep-package.md#add-ownernamerange)).
+
 - **Found through the root's `members`:** the member is the package of
   that name among the folders the root's `[workspace]` `members` lists, so
   it may move between folders without its dependents changing. Without
