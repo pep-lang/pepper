@@ -14,7 +14,7 @@ pepper package update                        # every dependency, as far as the r
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
-pepper package publish                       # ... then tag it v<version> and push the tag
+pepper package publish                       # ... then tag it v<version> (<member>-v<version>) and push the tag
 pepper package tree                          # the dependency graph pep.lock records
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
@@ -60,6 +60,7 @@ Every package is downloaded once per machine, into a
 | `fetch <source>...` | Fetches only those locked packages (`github:owner/name`), at their locked commits, resolving nothing |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
+| `add ... --package <name>` | Depends on the member `<name>` of the repository's workspace, at a version of its own `<name>-v<version>` tags (see [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)) |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
 | `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use |
 | `add ... --optional` | Marks it `optional = true`: a build uses it only when a feature turns it on |
@@ -138,6 +139,16 @@ with `-` and `.` turned into `_` (`other/json` adds `json`); `--name` gives
 another. A name already in `pep.toml`, or the name of a runtime module
 (`io`, `async`), is an error that suggests `--name`.
 
+`--package <name>` adds a member of the repository's
+[workspace](projects.md#a-member-as-a-git-dependency) instead of its root
+package: the entry gets `package = "<name>"`, its version comes from the
+member's own `<name>-v<version>` tags, and the name source code imports
+defaults to the member's:
+
+```bash
+pepper package add someone/shapes --package geo   # geo = { github = "someone/shapes", package = "geo", version = "0.3.1" }
+```
+
 `--dev` adds it to `[dev-dependencies]` instead: only the project's tests
 and examples import it, and projects that depend on this one ignore it
 (see [Projects: pep.toml](projects.md#dev-dependencies)).
@@ -208,11 +219,24 @@ First it checks, and lists every check that fails at once:
   sibling, needs a `version` beside it, and one inherited with
   `workspace = true` is checked as the workspace gives it. A
   dev-dependency may be anything, since a dependent ignores it;
+- every `path` dependency with a `version` is a package of this
+  workspace, its root or a member, published at a version the range
+  accepts: `origin` has its tag (`numbers-v1.2.0`, or `v1.2.0` for the
+  root), which a project outside the workspace resolves it by (see
+  [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)).
+  Each is an error at its `path`, printed before the list:
+
+  ```text
+  geo/pep.toml:9:20: error: 'numbers' is not published at a version '1' accepts: origin has no such tag numbers-v<version>, which a dependent resolves it by; publish numbers first
+      9 | numbers = { path = "../numbers", version = "1" }
+        |                    ^~~~~~~~~~~~
+  ```
+
 - `minimum_toolchain` is at least the release that reads each newer
   `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
   `[features]`, `[overrides]` and `[workspace]` tables, and a
-  dependency's `optional`, `features`, `default-features` and
-  `workspace`, need 0.11.0;
+  dependency's `optional`, `features`, `default-features`, `workspace`
+  and `package`, need 0.11.0;
 - `pep.toml` has no `[overrides]`: a dependent builds with the packages
   they replace, not the code the package was tested with, so a release
   waits until the fix it needs is released too.
@@ -226,7 +250,10 @@ pep-package: error: cannot publish shapes 1.2.0:
 ```
 
 Run from a workspace member, it checks and tests that member, in its
-folder.
+folder, and tags it `<name>-v<version>` (`geo-v0.3.1`): each member is
+released on its own, and its `version` need only be newer than its own
+tags. The workspace's root package, and a package that is no workspace's
+member, are tagged `v<version>`.
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),
@@ -234,7 +261,8 @@ with the Pepper home's own `pepper` (in the home `PEPPER_HOME` names,
 else the default one; see [Toolchains: pep-install](pep-install.md)), so
 both toolchains must be installed there; `latest` is the newest
 installed release, not a prerelease. A failing run stops it and shows
-what the tests printed. Last, it tags `HEAD` `v<version>` and pushes the
+what the tests printed. Last, it tags `HEAD` `v<version>` (a member's
+tag) and pushes the
 tag to `origin`; when the push fails, it deletes the tag again.
 
 `--dry-run` checks and tests, then says what it would tag, without
@@ -386,7 +414,7 @@ the copy as it is, and fails when there is none. An advisory:
 
 ```toml
 id = "PEP-2026-0001"                      # required
-package = "github:other/numbers"          # required: the source pep.lock records
+package = "github:other/numbers"          # required: the source pep.lock records (a member's: github:owner/name#member)
 title = "numbers_version() lies"
 severity = "high"                          # as written: low, medium, high, critical
 url = "https://example.com/PEP-2026-0001"
@@ -571,6 +599,21 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 A package that only the project's `[dev-dependencies]` lead to has
 `dev = true`; one that a dependency leads to as well does not.
 
+A member of a repository's workspace (a dependency with
+[`package`](projects.md#a-member-as-a-git-dependency)) has `#` and the
+member after the repository in its `source`, and its own commit, the one
+its own tag names, checked out in `.pep/deps/<host>/<owner>/<name>#<member>`
+(or the vendor folder). Its siblings are entries of their own:
+
+```toml
+[[package]]
+name = "geo"
+source = "github:someone/shapes#geo"
+version = "0.3.1"
+commit = "..."
+sha256 = "..."
+```
+
 Features do not change the lock: an optional dependency is resolved,
 locked and fetched like any other, whether or not a build turns it on, so
 `pep.lock` is the same whichever `--features` a build gives (see
@@ -675,7 +718,7 @@ module cache are: `cache/packages` in the home `PEPPER_HOME` names, else
 
 - `<host>/<owner>/<name>.git`: a bare git repository of every commit any
   project has fetched, fetched from the host only when it lacks the commit
-  a project needs;
+  a project needs, one for the repository and all its workspace members;
 - `<host>/<owner>/<name>/<commit>.tar.gz`: each archive fetched without
   git (see [Fetching without git](#fetching-without-git)).
 
@@ -732,7 +775,13 @@ name each imports it by.
 
 - A version range picks the newest version tag (`v1.2.3` or `1.2.3`) that
   every package's range accepts. When none does, resolution fails and names
-  each package's requirement and the versions the repository offers.
+  each package's requirement and the versions the repository offers. A
+  workspace member's range reads only its own tags (`geo-v1.2.3`), and a
+  repository's root package only the plain ones.
+- A `path` with a `version` in a fetched package's `pep.toml` is the
+  package of the same workspace it names, resolved by its own tags as a
+  dependency on that member of the same repository (see
+  [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)).
 - A branch, tag or commit must be the same in every package that names it.
 - The project's own `pep.toml` overrides its dependencies: a package it
   names gets the revision it asks for, even outside the range a dependency
@@ -774,7 +823,10 @@ prints, which `pepper` picks with the rest of the toolchain):
 
 Only the `pep.toml` of the version picked, and of the newer ones the ranges
 accept, are read: from the package's clone in `.pep/deps`, without checking
-them out, each once per run.
+them out, each once per run. A workspace member's is the `pep.toml` of the
+package with its name among the folders its root's `[workspace] members`
+lists at that version's commit, so a member that moved between releases is
+read where each release has it.
 
 ### Retracted versions
 

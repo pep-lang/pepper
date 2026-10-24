@@ -26,10 +26,11 @@ _commit_file(directory: Path): Path {
     return directory.join(Path(toolchain.VENDOR_COMMIT_FILE));
 }
 
-# The address of the `.tar.gz` of `commit` of `repository` (`owner/name`)
-# on `host`, or under the address in `PEPPER_PACKAGE_<HOST>_ARCHIVE_URL`
+# The address of the `.tar.gz` of `commit` of the repository `given`
+# (`owner/name`, or a member's `owner/name#member`) on `host`, or under the address in `PEPPER_PACKAGE_<HOST>_ARCHIVE_URL`
 # when that is set: `<address>/<owner>/<name>/<commit>.tar.gz`.
-export archive_url(host: String, repository: String, commit: String): String {
+export archive_url(host: String, given: String, commit: String): String {
+    var repository = repository_of(given);
     var variable = os.environment("PEPPER_PACKAGE_" + host.upper() + "_ARCHIVE_URL");
     if (variable.is_value() and !variable.value().is_empty) {
         return $"{variable.value()}/{repository}/{commit}.tar.gz";

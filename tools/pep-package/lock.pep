@@ -11,6 +11,8 @@
 #     commit = "0123456789abcdef0123456789abcdef01234567"
 #     sha256 = "<the checksum of its files: see archive.pep>"
 #
+# A member of a repository's workspace has the member after `#` in its
+# source (`github:someone/shapes#geo`), and its own commit and checkout.
 # A package only `[dev-dependencies]` lead to has `dev = true`, and one only
 # `[target.'<condition>'.dependencies]` lead to has `target`, the
 # condition under which a build needs it (`target = "OS(Windows)"`): the
@@ -27,7 +29,7 @@ import toml;
 export struct Locked {
     # The package's own name (its `[package]` `name`).
     var name: String = "";
-    # `github:owner/name`.
+    # `github:owner/name`, or `github:owner/name#member`.
     var source: String = "";
     # The version its tag names, when one was chosen by version.
     var version: String = "";
