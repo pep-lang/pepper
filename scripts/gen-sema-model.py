@@ -386,6 +386,8 @@ def gen_struct(name, fields, doc, internal=()):
         if f['skip']: continue
         setup,val=copy_of(f'this.{fname(f["name"])}',parse_type(f['type']))
         if name=='TypeName' and f['name']=='sub_types':
+            # copy_of still ran above: it numbers the `_cN` names, and
+            # skipping it would rename every later one in model.pep.
             setup,val=[],'this.sub_types.clone()'
         lines+=['        '+l for l in setup]
         vals.append(f'{fname(f["name"])} = {val}')
