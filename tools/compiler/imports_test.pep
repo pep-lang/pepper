@@ -7,36 +7,13 @@ import compiler.driver;
 import [Directory, File, Path] from io;
 import compiler.link;
 
-# The work is split in parts, each a test of its own, to keep each within
-# the time a test may take.
-const _PARTS: ulong = 4;
-
-[Test]
-modules_import_the_files_they_use_part_1() {
-    _check_part(0);
-}
-
-[Test]
-modules_import_the_files_they_use_part_2() {
-    _check_part(1);
-}
-
-[Test]
-modules_import_the_files_they_use_part_3() {
-    _check_part(2);
-}
-
-[Test]
-modules_import_the_files_they_use_part_4() {
-    _check_part(3);
-}
-
 # The repository, from `tools`, where the tests run.
 const _REPO = "..";
 
-# Checks every `_PARTS`th program from `part` on: each module folder, through
-# a program that imports it, and each test file, built for its tests.
-_check_part(part: ulong) {
+# Checks every program: each module folder, through a program that imports
+# it, and each test file, built for its tests.
+[Test]
+modules_import_the_files_they_use() {
     var programs = Array<(Path, link.Setup)>();
     for (var base in ["runtime", "tools", "docs/examples", "tests"]) {
         _modules(Path(_REPO).join(Path(base)), programs);
@@ -45,11 +22,7 @@ _check_part(part: ulong) {
         _test_files(Path(_REPO).join(Path(base)), programs);
     }
     var failures = Array<String>();
-    for (var i in 0..programs.count) {
-        if (i % _PARTS != part) {
-            continue;
-        }
-        var (entry, setup) = programs[i];
+    for (var (entry, setup) in programs) {
         var loaded = link.load_program(entry, setup);
         if (loaded.is_err()) {
             failures.append($"{entry}:\n{loaded.error()}");

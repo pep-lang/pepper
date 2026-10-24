@@ -479,7 +479,8 @@ _revision(package: Locked): String {
 
 # Reads the graph pep.lock records for the project in `dir`, whose
 # pep.toml is `manifest`, checking each locked package out at its commit
-# (only from `.pep/deps` when `offline`). Fails when pep.toml needs a
+# (only from `.pep/deps` when `offline`), or from the vendor folder of a
+# vendored project. Fails when pep.toml needs a
 # package pep.lock does not list: `fetch` resolves it.
 export read_graph(dir: Path, manifest: Manifest, offline: bool): Result<LockedGraph> {
     var locked = read_lock(lock_path(dir));
@@ -488,10 +489,11 @@ export read_graph(dir: Path, manifest: Manifest, offline: bool): Result<LockedGr
     }
     var resolver = Resolver(dir, manifest, locked.value());
     resolver.offline = offline;
+    resolver.vendor = manifest.vendor;
     var packages = OrderedMap<String, Locked>();
     for (var package in locked.value()) {
         var (host, repository) = split_source(package.source);
-        var at = package_dir(dir, host, repository);
+        var at = package_dir(dir, host, repository, manifest.vendor);
         # A checkout at the commit already is used as it is, without
         # hashing its files again.
         if (checked_out(at).value_or("") == package.commit) {

@@ -19,6 +19,7 @@ pepper package tree                          # the dependency graph pep.lock rec
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 ```
@@ -78,6 +79,7 @@ Every package is downloaded once per machine, into a
 | `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
 | `outdated --json` | Prints the outdated packages as JSON |
+| `vendor [<dir>]` | Copies every locked package into `<dir>` in the project (default: `pep.toml`'s `[fetch] vendor`, else `vendor`), and sets `[fetch] vendor` so builds read it (see [`vendor`](#vendor-dir)) |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -331,6 +333,57 @@ package offers over the network, so with `--offline` it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 `--exit-code` asks for 1 when a package is outdated, for CI.
 
+### `vendor [<dir>]`
+
+Copies every package `pep.lock` lists into a folder of the project, so
+the repository carries its dependencies and builds with no network and no
+[download cache](#the-download-cache), as `cargo vendor` and
+`go mod vendor` do: for an air-gapped build, or a release archive. It
+first resolves and fetches as [`fetch`](#fetch) does, then writes each
+package at its locked commit to `<dir>/<host>/<owner>/<name>`
+(`vendor/github.com/someone/geometry`), its files as `git archive` gives
+them, without `.git`, and sets `[fetch] vendor = "<dir>"` in `pep.toml`
+(see [`[fetch]`](projects.md#fetch)):
+
+```text
+$ pepper package vendor
+pep-package: vendored geometry 1.1.0 (github:someone/geometry)
+pep-package: vendored numbers 1.3.1 (github:other/numbers)
+pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
+```
+
+Commit the folder with `pep.toml` and `pep.lock`. It holds every package
+in the lock: every platform's, and those only `[dev-dependencies]` lead
+to, since `pepper test` and the examples build from it too (Cargo vendors
+everything for the same reason). A fork an `[overrides]` entry names is vendored in
+the original's place; a `path` override is not, its folder being the
+project's already. `<dir>/.gitattributes` turns git's
+line-ending conversion off there, so a checkout keeps the files byte for
+byte.
+
+Each package's folder also holds `.pep-commit`, its commit, and
+`.pep-checksum`, the SHA-256 of its files' paths and contents. In a
+vendored project, `pepper build` and `pepper test` fetch nothing: they read
+the packages from the vendor folder and check that each one the build
+needs is there at its locked commit and unedited, and fail otherwise, with
+or without `--locked` and `--offline`:
+
+```text
+error: the files in vendor/github.com/someone/geometry were changed since they were vendored (sha256 1c0f..., recorded 7b3e...); run 'pepper package vendor' to restore them, or make the change in the package itself
+```
+
+`pepper package fetch` checks the same, and that `pep.lock` still matches
+`pep.toml`, reading only the vendor folder; it changes neither. To change
+a dependency, run `add`, `remove` or `update` (which fetch into `.pep/deps`
+as usual), then `vendor` again: that rewrites the packages that changed,
+restores edited ones, and removes those `pep.lock` no longer lists.
+`.pep/deps` is unchanged in a project that is not vendored.
+
+In a [workspace](projects.md#workspaces), run from the root or any member,
+`vendor` writes one folder at the workspace's root, holding every
+member's locked packages, and sets `[fetch] vendor` in the root's
+`pep.toml`; every member's build reads it.
+
 ### JSON output
 
 `--json` makes `tree`, `why` and `outdated` print one JSON object instead,
@@ -515,6 +568,10 @@ CI builds want to fail rather than quietly change what they build:
   must read which versions a repository offers (`add`, `update`, or a
   `pep.toml` change `pep.lock` does not cover).
 - **`--frozen`**: both.
+
+A [vendored](#vendor-dir) project needs neither the network nor the
+download cache, so `fetch --frozen` and `pepper build --frozen` pass with
+only the repository.
 
 ```text
 $ pepper package fetch --locked
