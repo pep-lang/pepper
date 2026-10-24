@@ -12,19 +12,31 @@
 # method of another module's struct, and a `match` arm in a module's file
 # whose case shares its name with a type of the module; a `[Move]`
 # argument called through a `shared` function value; externs bound to C symbols Pepper functions are
-# named after, at each `-O` level; reference chains 100,000 deep, released
-# without overflowing the stack; the message a stack overflow prints on
+# named after, at each `-O` level; literals and generic calls nested 64
+# levels deep, built in time; reference chains 100,000 deep, released
+# without overflowing the stack; source nested as deep as the parser
+# allows, and one level deeper; the message a stack overflow prints on
 # the main thread, a `Thread` and a task; and the panic hook, which every
-# other kind of panic runs first. The programs are in
-# `testdata/`.
+# other kind of panic runs first. The programs are in `testdata/`.
 
 import [File, Path] from io;
+import os;
 import process;
 import [TempFolder] from testing;
 import [
-    build_program, expect_contains, expect_ends_with, expect_exit, expect_starts_with, read_file, run, tool, write_file
+    build_program,
+    exit_code,
+    expect_contains,
+    expect_ends_with,
+    expect_exit,
+    expect_starts_with,
+    read_file,
+    run,
+    tool,
+    write_file
 ] from tool_testing;
 import toolchain;
+import [check_programs, headline, nesting_programs] from "expected_outcomes";
 
 # Builds `testdata/<name>.pep`, copied into `folder` so that no project
 # around this one applies, into the executable `name` there, with `pep-build`
@@ -551,6 +563,37 @@ const_string_types_alike_whole_and_in_units() {
     }
 }
 
+# Nested collection literals and generic calls are typed in one walk, not
+# one level per specialization round: 20 levels took 11 s and 120 more than
+# 10 minutes (#202), and generic calls past eight levels failed to infer.
+# 64 levels keep the test quick; 256 build too, in minutes and gigabytes,
+# since each level's specialization spells its types whole (#210).
+[Test]
+nested_literals_build_in_time_and_run() {
+    var folder = TempFolder("programs_nested_literals");
+    ulong depth = 64;
+    var source = "id<T>(x: T): T {\n    return x;\n}\n\nexport main(): int {\n"
+        + $"    var a = {"[".repeat(depth)}7{"]".repeat(depth)};\n"
+        + $"    var m = {"[1: ".repeat(16)}2{"]".repeat(16)};\n"
+        + $"    var i = {"id(".repeat(depth)}3{")".repeat(depth)};\n"
+        + $"    return a{"[0]".repeat(depth)} + m{"[1]".repeat(16)} + i;\n}\n";
+    var path = folder.path.join("nested.pep");
+    write_file(path, source);
+    var program = folder.path.join("nested" + toolchain.executable_suffix());
+    var start = os.Instant.now();
+    var error = build_program(path, program, folder.path.join("build"));
+    var seconds = start.elapsed().seconds();
+    if (error.is_value()) {
+        panic($"nested.pep does not build:\n{error.value()}");
+    }
+    # Generous: it builds in under a minute, and took over three with a round
+    # a level.
+    if (seconds >= 150) {
+        panic($"nested.pep took {seconds} s to build");
+    }
+    expect_exit(run(process.Command(program.to_string())), 12);
+}
+
 # ── moves ───────────────────────────────────────────────────────────────────
 
 [Test]
@@ -624,6 +667,27 @@ steered_chains_release_without_overflow_and_shallow_order_holds() {
         expect_exit(output, 0);
         expect_equal(output.stdout, expected);
     }
+}
+
+# ── nesting ─────────────────────────────────────────────────────────────────
+
+# `pep-build` builds source nested as deep as the parser allows, on the
+# stack it gives the compiler (`parse.STACK_SIZE`; Windows gives the main
+# thread 1 MiB), and the programs run; one level deeper is the parser's
+# error.
+[Test]
+builds_and_runs_the_deepest_source() {
+    var folder = TempFolder("programs_nesting");
+    var mismatches = check_programs(folder, nesting_programs(), (root: Path): String => {
+        var program = root.parent().value().join("main" + toolchain.executable_suffix());
+        var error = build_program(root, program, root.parent().value().join("build"));
+        if (error.is_value()) {
+            return headline(error.value(), root);
+        }
+        var output = run(process.Command(program.to_string()));
+        return output.status.success() ? "accepted" : $"exited with {exit_code(output)}";
+    });
+    expect_equal(mismatches, 0 as ulong);
 }
 
 # ── stack overflow ──────────────────────────────────────────────────────────

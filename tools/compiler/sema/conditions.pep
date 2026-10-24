@@ -1,6 +1,7 @@
 ## Struct values left in a boolean context: `check_conditions`.
 
 import [Location] from compiler.diagnostic;
+import [unit_decls] from "checked";
 import "common";
 import [Loc] from "loc";
 import [BinaryOp, Block, Expression, FunctionDef, Module, TypeName, UnaryOp] from "model";
@@ -19,8 +20,10 @@ import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 ## @param module the model
 ## @param state the passes' state, which takes the error
 export check_conditions(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
     var checker = _Conditions(module, state);
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         # Generic bases are checked in their specializations.
         if (st.ty.is_generic() and st.name == st.ty.name) {
             continue;
@@ -34,10 +37,13 @@ export check_conditions(module: Module, state: PassState) {
         }
     }
     checker.current = Optional<TypeName>.Empty;
-    for (var f in module.functions) {
+    for (var f in own.functions) {
         checker.visit(f);
     }
     for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            continue;
+        }
         if (g.default.is_value()) {
             rewrite_expression(g.default.value(), checker);
         }

@@ -65,11 +65,12 @@ struct _Edge {
 }
 
 extend Generator {
-    ## Fills `recursive`, `deep_recursive` and `chain_fields` from the
-    ## program's structs: the strongly connected components of the graph
-    ## whose nodes are the structs and whose edges are what their fields can
-    ## hold (Tarjan's algorithm, with an explicit stack).
-    find_chains(all: StructDef[]) {
+    ## Fills `recursive`, `deep_recursive`, `chain_fields` and `cycles` from
+    ## the program's structs: the strongly connected components of the
+    ## graph whose nodes are the structs and whose edges are what their
+    ## fields can hold (Tarjan's algorithm, with an explicit stack).
+    ## `declared_traits` gives the files of the traits a struct names.
+    find_chains(all: StructDef[], declared_traits: sema.TraitDef[]) {
         var index = HashMap<String, ulong>();
         var nodes = Array<StructDef>();
         for (var st in all) {
@@ -145,12 +146,32 @@ extend Generator {
                 }
             }
         }
+        var trait_files = HashMap<String, ulong>();
+        for (var t in declared_traits) {
+            if (!t.loc.is_none()) {
+                trait_files[t.name] = t.loc.file as ulong;
+            }
+        }
+        var members = HashMap<ulong, Array<(String, ulong[])>>();
         for (var at in 0..nodes.count) {
             var c = component[at];
             if (!cyclic.contains(c)) {
                 continue;
             }
             var name = nodes[at].name;
+            var files = HashSet<ulong>();
+            if (!nodes[at].loc.is_none()) {
+                files.insert(nodes[at].loc.file as ulong);
+            }
+            _named_files(nodes[at].ty, trait_files, files);
+            if (!members.contains(c)) {
+                members[c] = Array<(String, ulong[])>();
+            }
+            var listed = Array<ulong>();
+            for (var file in files) {
+                listed.append(file);
+            }
+            members[c].append((name, listed));
             recursive.insert(name);
             if (deep.contains(c)) {
                 deep_recursive.insert(name);
@@ -172,6 +193,25 @@ extend Generator {
                     chain_moves.insert(name);
                 }
             }
+        }
+        for (var (_, cycle) in members) {
+            cycles.append(cycle);
+        }
+    }
+
+    ## Adds to `out` the file of each struct and trait `ty` names, its
+    ## type arguments' included: the files `trait_files` gives for traits.
+    _named_files(ty: TypeName, trait_files: HashMap<String, ulong>, out: HashSet<ulong>) {
+        var desc = structs.try_get(ty.to_string());
+        if (desc.is_value() and !desc.value().loc.is_none()) {
+            out.insert(desc.value().loc.file as ulong);
+        }
+        var file = trait_files.try_get(ty.name);
+        if (file.is_value()) {
+            out.insert(file.value());
+        }
+        for (var sub in ty.sub_types) {
+            _named_files(sub, trait_files, out);
         }
     }
 

@@ -146,7 +146,7 @@ export trait PlaceVisitor {
 ##
 ## @param module the model
 ## @param visitor what to do at each place
-## @param unit only the compilation unit's own structs and functions (`unit_decls`), not the checked ones
+## @param unit only the compilation unit's own structs, functions, extensions and module-scope variables (`unit_decls`), not the checked ones
 ## @param extensions the extensions' own copies of their methods too
 ## @param templates the code other code is copied from too: generic methods and trait default methods
 ## @param fields the fields' own initializers too, which `synthesize` copied into each constructor: the passes after it read them only for a field's type, and a specialization keeps its base's
@@ -160,6 +160,8 @@ export for_each_place(
 ) {
     var structs = module.structs;
     var functions = module.functions;
+    # The checked extensions come first (`Checked.extensions`).
+    var first_extension = unit ? module.checked.extensions : 0;
     if (unit) {
         var decls = unit_decls(module);
         structs = decls.structs;
@@ -197,7 +199,8 @@ export for_each_place(
         visitor.visit(place._function(PlaceKind.Function, function));
     }
     if (extensions) {
-        for (var ext in module.extensions) {
+        for (var e in first_extension..module.extensions.count) {
+            var ext = module.extensions[e];
             place.this_type = Optional<TypeName>.Value(ext.target);
             place.extension = Optional<ExtensionDef>.Value(ext);
             for (var method in ext.methods) {
@@ -216,7 +219,7 @@ export for_each_place(
     }
     place.this_type = Optional<TypeName>.Empty;
     for (var global in module.globals) {
-        if (global.default.is_value()) {
+        if (global.default.is_value() and !(unit and module.checked.globals.contains(global.name))) {
             visitor.visit(place._variable(PlaceKind.Global, global));
         }
     }
@@ -243,8 +246,9 @@ export rewrite_places(
 ##
 ## @param module the model
 ## @param rewriter what to do at each expression
-export rewrite_concrete_places(module: Module, rewriter: Rewriter) {
-    for_each_place(module, _RewriteEach(rewriter, true), extensions = false, fields = false);
+## @param unit only the compilation unit's own code, not the checked code
+export rewrite_concrete_places(module: Module, rewriter: Rewriter, unit: bool = false) {
+    for_each_place(module, _RewriteEach(rewriter, true), unit, extensions = false, fields = false);
 }
 
 ## Rewrites each place it visits, or each concrete one.

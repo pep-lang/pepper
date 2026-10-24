@@ -196,6 +196,10 @@ export struct Generator {
     ## `destruct` body sees them), so their last release moves a chain
     ## field's object out, leaving the field null.
     var chain_moves: HashSet<String> = HashSet<String>();
+    ## The structs of each cycle `find_chains` found, each with the files it
+    ## is declared in or names a type of: what the build cache keys a file's
+    ## object on when its last releases steer into one (`Keys.steering`).
+    var cycles: Array<Array<(String, ulong[])>> = Array<Array<(String, ulong[])>>();
     ## Traits used as types, by type name.
     var traits: HashMap<String, TraitDesc> = HashMap<String, TraitDesc>();
     ## Weak trait values (`__weak<Shape>`), laid out like a trait value.
@@ -613,7 +617,7 @@ export struct Generator {
         for (var st in structs) {
             instantiate_struct(st)?;
         }
-        find_chains(structs);
+        find_chains(structs, module.traits);
         # ABI sizes are only right once every body is set.
         for (var entry in this.structs) {
             var (_, desc) = entry;
@@ -1020,6 +1024,8 @@ export struct Build {
 ## @param declared compiling one compilation unit's object: the functions only
 ##   declared, by name, whoever owns them, which the objects of
 ##   the compilation units below define (`Generator.declared`)
+## @param cycles receives the structs of each cycle the last releases steer
+##   through (`Generator.cycles`)
 ## @returns the module, or the first error
 export generate(
     module: Module,
@@ -1029,11 +1035,13 @@ export generate(
     build: Build,
     owners: HashMap<String, uint> = HashMap<String, uint>(),
     cached_files: HashSet<uint> = HashSet<uint>(),
-    declared: HashSet<String>? = Optional<HashSet<String>>.Empty
+    declared: HashSet<String>? = Optional<HashSet<String>>.Empty,
+    cycles: Array<Array<(String, ulong[])>> = Array<Array<(String, ulong[])>>()
 ): Result<llvm.Module, Diagnostic> {
     var context = llvm.Context();
     var generator = Generator(context, name, build.machine, state);
     generator.owners = owners;
+    generator.cycles = cycles;
     generator.cached_files = cached_files;
     generator.declared = declared;
     generator.file_namespaces = namespaces;

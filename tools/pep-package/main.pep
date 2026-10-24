@@ -16,9 +16,12 @@
 #     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
 #     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
-#     pepper package tree [--depth 1]           # the locked graph
-#     pepper package why numbers                # every path from the project to it
+#     pepper package tree [--depth 1] [--json]  # the locked graph
+#     pepper package tree --invert numbers      # what depends on numbers
+#     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
+#     pepper package audit [--ignore ID] [--json]  # the locked packages an advisory affects
+#     pepper package vendor [vendor]            # every locked package into the repository
 #     pepper package cache info                 # the download cache every project shares
 #     pepper package cache clean
 #
@@ -30,6 +33,7 @@
 import cli;
 import [Directory, File, Path] from io;
 import io;
+import [JsonValue] from json;
 import os;
 import process;
 import semver;
@@ -37,6 +41,8 @@ import [parse_range] from semver;
 import syntax;
 import toml;
 import toolchain;
+import "advisory";
+import "archive";
 import "git";
 import "graph";
 import "lock";
@@ -119,15 +125,39 @@ main(args: String[]): int {
     var depth = tree.option<ulong>(
         "depth", "d", "print only N levels of dependencies below the project", value_name = "N"
     );
-    var why = parser.command("why", "Prints every path from the project to a package");
+    var invert = tree.option(
+        "invert", "i", "print what depends on a package instead, down to the project", value_name = "NAME"
+    );
+    var tree_json = tree.flag("json", help = "print the tree as JSON");
+    var why = parser.command("why", "Prints the paths from the project to a package, the first 20 unless --all");
     var why_package = why.positional(
         "package", "the package's name, owner/name or source, or the name a dependency is imported by"
     );
+    var all_paths = why.flag("all", help = "print every path, not only the first 20");
+    var why_json = why.flag("json", help = "print the paths as JSON");
     var outdated = parser.command(
         "outdated",
         "Lists the packages behind the newest version their ranges allow, or the newest overall, without changing pep.lock"
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
+    var outdated_json = outdated.flag("json", help = "print the outdated packages as JSON");
+    var audit = parser.command(
+        "audit",
+        "Checks every package pep.lock records against the security advisory database; exits 1 when one is affected"
+    );
+    var audit_ignore = audit.multiple(
+        "ignore", help = "an advisory to report but not fail on, by its id; repeat it for more", value_name = "ID"
+    );
+    var audit_json = audit.flag("json", help = "print the affected packages as JSON");
+    var vendor = parser.command(
+        "vendor",
+        "Copies every locked package into a folder of the project, and sets pep.toml's '[fetch] vendor' so builds read it, with no network or download cache"
+    );
+    var vendor_dir = vendor.positional(
+        "dir",
+        "the folder, relative to the project (default: pep.toml's '[fetch] vendor', else 'vendor')",
+        required = false
+    );
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
     cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
@@ -187,13 +217,19 @@ main(args: String[]): int {
         return project.publish(dry_run.is_set);
     }
     if (tree.is_selected) {
-        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF);
+        return project.tree(depth.is_set ? depth.value() : 0xFFFFFFFFFFFFFFFF, invert.value_or(""), tree_json.is_set);
     }
     if (why.is_selected) {
-        return project.why(why_package.value());
+        return project.why(why_package.value(), all_paths.is_set ? 0xFFFFFFFFFFFFFFFF : 20, why_json.is_set);
     }
     if (outdated.is_selected) {
-        return project.outdated(exit_code.is_set);
+        return project.outdated(exit_code.is_set, outdated_json.is_set);
+    }
+    if (audit.is_selected) {
+        return project.audit(audit_ignore.values(), audit_json.is_set);
+    }
+    if (vendor.is_selected) {
+        return project.vendor(vendor_dir.value_or(""));
     }
     print(parser.help());
     return 2;
@@ -201,6 +237,16 @@ main(args: String[]): int {
 
 # Prints `message` as an error; returns the exit status for one.
 fail(message: String): int {
+    # A clang-style diagnostic (`pep.toml:3:1: error: ...`) names itself.
+    var first = message.split_once("\n");
+    var located = (first.is_value() ? first.value().0 : message).split_once(": error: ");
+    var place = located.is_value() ? located.value().0.split(":") : Array<String>();
+    if (place.count >= 3
+        and ulong.parse(place[place.count - 1]).is_value()
+        and ulong.parse(place[place.count - 2]).is_value()) {
+        File.stderr().write_all(message.ends_with("\n") ? message : message + "\n");
+        return 1;
+    }
     File.stderr().write_all($"pep-package: error: {message}\n");
     return 1;
 }
@@ -333,10 +379,19 @@ default_name(repository: String): String {
     return syntax.to_identifier(name);
 }
 
-# A project: its pep.toml, pep.lock and `.pep/deps`.
+# A project: its pep.toml, pep.lock and `.pep/deps`. In a workspace, the
+# pep.toml is the member's or root's the command runs in, which `add`,
+# `remove` and `publish` read, and pep.lock and `.pep/deps` are the
+# root's, resolved for every member.
 struct Project {
     var manifest_path: Path = Path("pep.toml");
+    # The folder holding pep.lock and `.pep/deps`: the workspace's root,
+    # else the package's own.
     var dir: Path = Path(".");
+    # The pep.toml in `dir`.
+    var root_path: Path = Path("pep.toml");
+    # Whether `root_path` is a workspace's root.
+    var is_workspace: bool = false;
     # `--locked`: fail rather than change pep.lock.
     var locked: bool = false;
     # `--offline`: use only what `.pep/deps` and the download cache hold.
@@ -344,15 +399,25 @@ struct Project {
 
     construct(manifest_path: Path) {
         this.manifest_path = manifest_path;
-        var parent = manifest_path.parent();
+        var workspace = find_workspace(manifest_path);
+        is_workspace = workspace.is_value();
+        root_path = workspace.value_or(manifest_path);
+        var parent = root_path.parent();
         dir = parent.is_value() ? parent.value() : Path(".");
+    }
+
+    # The folder of `manifest_path`: the package the command is about.
+    _package_dir(): Path {
+        var parent = manifest_path.parent();
+        return parent.is_value() ? parent.value() : Path(".");
     }
 
     # Resolves the graph, keeping locked revisions unless `update_all` or
     # `update` names them, checks every package out and writes pep.lock.
-    # Returns the graph, or prints why it failed.
-    _resolve(update_all: bool, update: Array<String>): Result<Graph> {
-        var manifest = read_manifest(manifest_path);
+    # With `vendor`, the packages are read from that folder instead, and
+    # pep.lock is never changed. Returns the graph, or prints why it failed.
+    _resolve(update_all: bool, update: Array<String>, vendor: String = ""): Result<Graph> {
+        var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<Graph>.Err(manifest.error().message);
         }
@@ -365,14 +430,25 @@ struct Project {
         resolver.update = update;
         resolver.offline = offline;
         resolver.toolchain = version();
+        resolver.vendor = vendor;
         var graph = resolver.resolve();
         if (graph.is_err()) {
             return graph;
+        }
+        for (var warning in graph.value().warnings) {
+            File.stderr().write_all(warning);
         }
         var changes = _changes(previous.value(), graph.value().packages);
         # Unchanged, pep.lock is left as it is, line endings and all.
         if (lock_text(graph.value().packages) == lock_text(previous.value())) {
             return graph;
+        }
+        if (!vendor.is_empty) {
+            return Result<Graph>.Err(
+                $"pep.lock does not match pep.toml, and the project is vendored ('[fetch] vendor'):\n  "
+                    + "\n  ".join(changes)
+                    + "\nrun 'pepper package vendor', which updates pep.lock and the vendor folder"
+            );
         }
         if (locked) {
             return Result<Graph>.Err(
@@ -424,13 +500,25 @@ struct Project {
     }
 
     fetch(): int {
+        var manifest = read_manifest(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        # A vendored project fetches nothing: it checks the vendor folder.
+        if (!manifest.value().vendor.is_empty) {
+            var checked = _resolve(false, Array<String>(), manifest.value().vendor);
+            if (checked.is_err()) {
+                return fail(checked.error().message);
+            }
+            return 0;
+        }
         # The locked packages not on disk yet, to say they were fetched.
         var missing = Array<Locked>();
         var locked = read_lock(lock_path(dir));
         if (locked.is_ok()) {
             for (var package in locked.value()) {
                 var (host, repository) = split_source(package.source);
-                if (!package_dir(dir, host, repository).is_directory()) {
+                if (!package.commit.is_empty and !package_dir(dir, host, repository).is_directory()) {
                     missing.append(package);
                 }
             }
@@ -458,8 +546,15 @@ struct Project {
         if (locked.is_err()) {
             return fail(locked.error().message);
         }
+        var manifest = read_manifest(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        var vendor = manifest.value().vendor;
         var resolver = Resolver(dir, Manifest(), locked.value());
         resolver.offline = offline;
+        # Vendored, each package is only checked.
+        resolver.vendor = vendor;
         for (var source in sources) {
             var found = Optional<Locked>.Empty;
             for (var package in locked.value()) {
@@ -470,10 +565,14 @@ struct Project {
             if (found.is_empty()) {
                 return fail($"pep.lock does not list '{source}'");
             }
+            # A folder overrides it: nothing to fetch.
+            if (found.value().commit.is_empty) {
+                continue;
+            }
             var (host, repository) = split_source(source);
-            var package = package_dir(dir, host, repository);
+            var package = package_dir(dir, host, repository, vendor);
             var was_there = package.is_directory();
-            var fetched = resolver.fetch(host, repository, package, found.value().commit);
+            var fetched = resolver.fetch(host, repository, package, found.value().commit, found.value().replaced_by);
             if (fetched.is_err()) {
                 return fail($"cannot fetch {source}: {fetched.error().message}");
             }
@@ -702,7 +801,7 @@ struct Project {
     # names nothing.
     _sources(specs: Array<String>): Result<Array<String>> {
         var sources = Array<String>();
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(manifest_path);
         if (manifest.is_err()) {
             return Result<Array<String>>.Err(manifest.error().message);
         }
@@ -754,6 +853,13 @@ struct Project {
     # Updates one dependency at a time, building the project after each,
     # and keeps only the updates that build.
     update_verified(specs: Array<String>): int {
+        var manifest = read_manifest(root_path);
+        if (manifest.is_ok() and !manifest.value().vendor.is_empty) {
+            # Its builds read the vendor folder, which an update leaves as it was.
+            return fail(
+                "the project is vendored ('[fetch] vendor'), so a build would not see an update; run 'pepper package update', then 'pepper package vendor', then build"
+            );
+        }
         var sources = _sources(specs);
         if (sources.is_err()) {
             return fail(sources.error().message);
@@ -804,7 +910,8 @@ struct Project {
     }
 
     # Whether the project builds: `pep-build` (beside this program, else on
-    # the PATH) run in the project's folder with no file.
+    # the PATH) run in the project's folder with no file, and `--all` in a
+    # workspace.
     _builds(): bool {
         var compiler = "pep-build";
         var executable = process.executable_path();
@@ -815,7 +922,11 @@ struct Project {
                 compiler = beside.to_string();
             }
         }
-        return _succeeds(process.Command(compiler).working_directory(dir));
+        var command = process.Command(compiler).working_directory(dir);
+        if (is_workspace) {
+            command.argument("--all");
+        }
+        return _succeeds(command);
     }
 
     # Runs `command`, and whether it succeeded; prints what it printed when
@@ -836,7 +947,7 @@ struct Project {
 
     # The graph pep.lock records, for the reports.
     _graph(): Result<LockedGraph> {
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(root_path);
         if (manifest.is_err()) {
             return Result<LockedGraph>.Err(manifest.error().message);
         }
@@ -847,16 +958,26 @@ struct Project {
         return graph;
     }
 
-    tree(depth: ulong): int {
+    # Prints the graph, or with `invert` what depends on that package.
+    tree(depth: ulong, invert: String, json: bool): int {
         var graph = _graph();
         if (graph.is_err()) {
             return fail(graph.error().message);
         }
-        File.stdout().write_all(graph.value().tree(depth));
+        if (invert.is_empty) {
+            File.stdout().write_all(graph.value().tree(depth, json));
+            return 0;
+        }
+        var targets = graph.value().find(invert);
+        if (targets.is_empty) {
+            return fail($"no package '{invert}' in pep.lock");
+        }
+        File.stdout().write_all(graph.value().inverted(targets, depth, json));
         return 0;
     }
 
-    why(spec: String): int {
+    # Prints the first `limit` paths from the project to `spec`.
+    why(spec: String, limit: ulong, json: bool): int {
         var graph = _graph();
         if (graph.is_err()) {
             return fail(graph.error().message);
@@ -865,14 +986,12 @@ struct Project {
         if (targets.is_empty) {
             return fail($"no package '{spec}' in pep.lock");
         }
-        for (var path in graph.value().why(targets)) {
-            print(path);
-        }
+        File.stdout().write_all(graph.value().why(targets, limit, json));
         return 0;
     }
 
     # Lists what is outdated; with `exit_code`, any is status 1.
-    outdated(exit_code: bool): int {
+    outdated(exit_code: bool, json: bool): int {
         if (offline) {
             return fail(
                 "--offline, and 'outdated' reads which versions each package offers over the network, so it cannot check; run it without --offline (or PEPPER_OFFLINE)"
@@ -886,12 +1005,236 @@ struct Project {
         if (rows.is_err()) {
             return fail(rows.error().message);
         }
+        if (json) {
+            File.stdout().write_all(graph.value().outdated_json(rows.value()));
+            return exit_code and !rows.value().is_empty ? 1 : 0;
+        }
         if (rows.value().is_empty) {
             print("every package is at the newest version");
             return 0;
         }
-        File.stdout().write_all(table(["package", "locked", "wanted", "latest", "source"], rows.value()));
+        File.stdout().write_all(graph.value().outdated_text(rows.value()));
         return exit_code ? 1 : 0;
+    }
+
+    # Reports each locked package, on every platform, that an advisory
+    # affects, with the paths that lead to it; status 1 when there is one
+    # `ignore` or pep.toml's `[audit] ignore` does not name.
+    audit(ignore: Array<String>, json: bool): int {
+        var manifest = read_project(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        var locked = read_lock(lock_path(dir));
+        if (locked.is_err()) {
+            return fail(locked.error().message);
+        }
+        var database = fetch_database(advisory_database(), offline);
+        if (database.is_err()) {
+            return fail(database.error().message);
+        }
+        var advisories = read_advisories(database.value());
+        if (advisories.is_err()) {
+            return fail(advisories.error().message);
+        }
+        var ignored = ignore.copy();
+        ignored.append_all(manifest.value().audit_ignore);
+        var hits = Array<(Advisory, Locked)>();
+        for (var (advisory, package) in affected(advisories.value(), locked.value())) {
+            if (ignored.contains(advisory.id)) {
+                say($"ignored {advisory.id}, which affects {package.describe()} ({package.source})");
+            } else {
+                hits.append((advisory, package));
+            }
+        }
+        if (hits.is_empty and !json) {
+            print($"no advisory affects pep.lock ({advisories.value().count} in {advisory_database()})");
+            return 0;
+        }
+        # The paths, which need the graph, only for what is affected.
+        var graph = hits.is_empty ? Result<LockedGraph>.Err("") : _graph();
+        if (!hits.is_empty and graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var list = JsonValue.array();
+        var text = "";
+        for (var (advisory, package) in hits) {
+            var targets = HashSet<String>();
+            targets.insert(package.source);
+            var patched = JsonValue.array();
+            for (var range in advisory.patched) {
+                patched.append(JsonValue.String(range));
+            }
+            var entry = graph.value().why_json(targets, 20);
+            entry["id"] = JsonValue.String(advisory.id);
+            entry["title"] = JsonValue.String(advisory.title);
+            entry["severity"] = JsonValue.String(advisory.severity);
+            entry["url"] = JsonValue.String(advisory.url);
+            entry["patched"] = patched;
+            entry["package"] = JsonValue.String(package.name);
+            entry["version"] = JsonValue.String(package.version);
+            entry["source"] = JsonValue.String(package.source);
+            entry["dev"] = JsonValue.Bool(package.dev);
+            entry["target"] = package.target.is_empty ? JsonValue.Null : JsonValue.String(package.target);
+            list.append(entry);
+            var severity = advisory.severity.is_empty ? "" : $" ({advisory.severity})";
+            text += $"{advisory.id}{severity}: {graph.value().describe_source(package.source, package.name)}\n";
+            for (var line in [
+                advisory.title,
+                advisory.patched.is_empty ? "no patched version" : "patched: " + ", ".join(advisory.patched),
+                advisory.url
+            ]) {
+                text += line.is_empty ? "" : "  " + line + "\n";
+            }
+            for (var line in graph.value().why(targets, 20, false).lines()) {
+                text += "  " + line + "\n";
+            }
+        }
+        if (json) {
+            var result = JsonValue.object();
+            result["advisories"] = list;
+            File.stdout().write_all(result.to_pretty_string() + "\n");
+        } else {
+            File.stdout().write_all(
+                text + $"{hits.count} {hits.count == 1 ? "advisory affects" : "advisories affect"} pep.lock\n"
+            );
+        }
+        return hits.is_empty ? 0 : 1;
+    }
+
+    # Resolves the graph into `.pep/deps` as `fetch` does, then copies every
+    # locked package (dev-dependencies and every platform's included) into
+    # `folder`, removes the packages there pep.lock no longer lists, and
+    # sets pep.toml's `[fetch] vendor` to `folder`, so builds read it. In a
+    # workspace, all of that is at its root, for every member.
+    vendor(given: String): int {
+        var manifest = read_manifest(root_path);
+        if (manifest.is_err()) {
+            return fail(manifest.error().message);
+        }
+        var folder = !given.is_empty ? given : !manifest.value().vendor.is_empty ? manifest.value().vendor : "vendor";
+        folder = folder.replace("\\", "/");
+        while (folder.ends_with("/")) {
+            folder = folder.substr(0, folder.length - 1);
+        }
+        # Stale packages are removed from it, so it stays inside the project.
+        var parts = folder.split("/");
+        if (folder.is_empty
+            or folder.starts_with("/")
+            or folder.contains(":")
+            or parts.contains("..")
+            or parts.contains(".")
+            or parts[0] == ".pep"
+            or parts[0] == ".git") {
+            return fail($"'{folder}' must be a folder inside the project, such as 'vendor'");
+        }
+        var graph = _resolve(false, Array<String>());
+        if (graph.is_err()) {
+            return fail(graph.error().message);
+        }
+        var kept = HashSet<String>();
+        for (var package in graph.value().packages) {
+            # A `path` override's folder is the project's own.
+            if (package.replaced_by.starts_with("path:")) {
+                continue;
+            }
+            var (host, repository) = split_source(package.source);
+            var target = package_dir(dir, host, repository, folder);
+            kept.insert(target.normalize().to_string());
+            if (toolchain.check_vendored(target, package.commit).is_ok()) {
+                continue;
+            }
+            # A fork is checked out where the original would be, and its
+            # archive is the fork's.
+            var (from_host, from_repository) = split_source(
+                package.replaced_by.is_empty ? package.source : package.replaced_by
+            );
+            var written = vendor_package(
+                from_host,
+                from_repository,
+                package_dir(dir, host, repository),
+                target,
+                package.commit,
+                package.sha256,
+                offline
+            );
+            if (written.is_err()) {
+                return fail($"cannot vendor {package.source}: {written.error().message}");
+            }
+            say($"vendored {package.describe()} ({package.source})");
+        }
+        var root = dir.join(folder);
+        for (var domain in ["github.com", "gitlab.com", "codeberg.org"]) {
+            var removed = _remove_unlocked(root.join(domain), kept);
+            if (removed.is_err()) {
+                return fail(removed.error().message);
+            }
+        }
+        if (root.is_directory()) {
+            # Git keeps the files byte for byte, so the checksums still match
+            # in a checkout with `core.autocrlf`.
+            var attributes = File.write_text(root.join(".gitattributes"), "* -text\n");
+            if (attributes.is_err()) {
+                return fail($"cannot write {root.join(".gitattributes").to_string()}: {attributes.error().message}");
+            }
+        }
+        if (manifest.value().vendor != folder) {
+            var document = toml.parse_document(manifest.value().text, path = root_path.to_string());
+            if (document.is_err()) {
+                return fail(document.error().to_string());
+            }
+            var edited = document.value();
+            var set = edited.set(["fetch", "vendor"], toml.TomlValue.String(folder));
+            if (set.is_err()) {
+                return fail(set.error().to_string());
+            }
+            var written = File.write_text(root_path, edited.to_string());
+            if (written.is_err()) {
+                return fail($"cannot write {root_path.to_string()}: {written.error().message}");
+            }
+            say($"set '[fetch] vendor = \"{folder}\"' in pep.toml: builds now read the packages from {folder}");
+        }
+        return 0;
+    }
+
+    # Removes each vendored package under `dir` (a folder holding
+    # `.pep-commit`) whose folder is not in `kept`, and folders left empty.
+    _remove_unlocked(dir: Path, kept: HashSet<String>): Result<void> {
+        if (!dir.is_directory()) {
+            return Result<void>.ok();
+        }
+        if (dir.join(Path(toolchain.VENDOR_COMMIT_FILE)).is_file()) {
+            if (kept.contains(dir.normalize().to_string())) {
+                return Result<void>.ok();
+            }
+            var removed = remove_tree(dir);
+            if (removed.is_err()) {
+                return Result<void>.Err($"cannot remove {dir.to_string()}: {removed.error().message}");
+            }
+            say($"removed {dir.to_string()}, which pep.lock no longer lists");
+            return Result<void>.ok();
+        }
+        var listed = Directory.open(dir);
+        if (listed.is_err()) {
+            return Result<void>.Err($"cannot open {dir.to_string()}: {listed.error().message}");
+        }
+        var entries = listed.value().entries();
+        if (entries.is_err()) {
+            return Result<void>.Err($"cannot list {dir.to_string()}: {entries.error().message}");
+        }
+        for (var entry in entries.value()) {
+            if (entry.is_directory) {
+                var nested = _remove_unlocked(entry.path, kept);
+                if (nested.is_err()) {
+                    return nested;
+                }
+            }
+        }
+        var left = Directory.open(dir).value().entries();
+        if (left.is_ok() and left.value().is_empty) {
+            Directory.remove(dir);
+        }
+        return Result<void>.ok();
     }
 
     # Checks that the package is ready to release at pep.toml's `version`
@@ -904,11 +1247,11 @@ struct Project {
                 "--offline, and publishing reads and pushes to the repository's remote; run 'pepper package publish' without --offline (or PEPPER_OFFLINE)"
             );
         }
-        var manifest = read_manifest(manifest_path);
+        var manifest = read_project(manifest_path);
         if (manifest.is_err()) {
             return fail(manifest.error().message);
         }
-        # read_manifest parsed it already.
+        # read_project parsed it already.
         var root = toml.parse(manifest.value().text).value();
         var problems = Array<String>();
         var package_version = _package_string(root, "version");
@@ -924,13 +1267,27 @@ struct Project {
             }
         }
         for (var requirement in manifest.value().requirements) {
-            # A dependent ignores dev-dependencies, so they may be anything.
-            if (requirement.dev or (requirement.kind == "version" and !requirement.is_path())) {
+            # A dependent ignores dev-dependencies, so they may be anything;
+            # a `path` (a workspace sibling) needs the `version` it is
+            # published with.
+            if (requirement.dev or requirement.kind == "version") {
                 continue;
             }
-            var what = requirement.is_path() ? "path " + requirement.repository : requirement.describe();
+            if (requirement.is_path()) {
+                problems.append(
+                    $"dependency '{requirement.name}' names path {requirement.repository} and no 'version', so a dependent cannot resolve it; give it the version of the package there"
+                );
+                continue;
+            }
             problems.append(
-                $"dependency '{requirement.name}' names {what}, not a version range, so a dependent cannot resolve it"
+                $"dependency '{requirement.name}' names {requirement.describe()}, not a version range, so a dependent cannot resolve it"
+            );
+        }
+        # A dependent gets the packages it overrides, not the overrides it
+        # was tested with.
+        if (!manifest.value().overrides.is_empty) {
+            problems.append(
+                "'[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it"
             );
         }
         var minimum = manifest.value().minimum_toolchain;
@@ -948,7 +1305,7 @@ struct Project {
                 );
             }
         }
-        var at = dir.to_string();
+        var at = _package_dir().to_string();
         var changes = git(["status", "--porcelain"], at);
         if (changes.is_err()) {
             return fail(changes.error().message);
@@ -1006,7 +1363,7 @@ struct Project {
         for (var release in releases) {
             say($"running 'pepper +{release} test'");
             if (!_succeeds(
-                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(dir)
+                process.Command(pepper.to_string()).arguments(["+" + release, "test"]).working_directory(_package_dir())
             )) {
                 return fail($"'pepper +{release} test' failed, so {name} {package_version} is not published");
             }

@@ -16,8 +16,11 @@ pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
 pepper package publish                       # ... then tag it v<version> and push the tag
 pepper package tree                          # the dependency graph pep.lock records
-pepper package why numbers                   # every path from the project to numbers
+pepper package tree --invert numbers         # what depends on numbers
+pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package audit                         # locked packages a security advisory affects
+pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 ```
@@ -34,6 +37,11 @@ whatever lets `git clone` reach a repository lets `pep-package` fetch it.
 Without git, `pep-package` downloads the host's archive of each commit
 `pep.lock` pins over HTTPS instead (see [Fetching without git](#fetching-without-git)),
 so a project with a `pep.lock` builds on a machine with no git.
+
+In a [workspace](projects.md#workspaces-workspace), `pep.lock` and
+`.pep/deps` are the root's, resolved for every member at once, wherever
+it runs; `add` and `remove` change the `pep.toml` of the member it runs
+in, and `publish` publishes that member.
 
 `pepper build` fetches on its own what `pep.lock` lists and `.pep/deps`
 lacks, so a fresh clone of a project builds with `pepper build` alone.
@@ -64,9 +72,18 @@ Every package is downloaded once per machine, into a
 | `publish --dry-run` | Checks and tests, but neither tags nor pushes |
 | `tree` | Prints the dependency graph `pep.lock` records (see [`tree`](#tree)) |
 | `tree --depth <n>`, `-d <n>` | Prints only `<n>` levels of dependencies below the project |
-| `why <name>` | Prints every path from the project to a package (see [`why`](#why-name)) |
+| `tree --invert <name>`, `-i <name>` | Prints what depends on a package instead, down to the project (see [`tree --invert`](#tree---invert-name)) |
+| `tree --json` | Prints the tree as JSON (see [JSON output](#json-output)) |
+| `why <name>` | Prints the paths from the project to a package, the first 20 (see [`why`](#why-name)) |
+| `why --all` | Prints every path |
+| `why --json` | Prints the paths as JSON |
 | `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
+| `outdated --json` | Prints the outdated packages as JSON |
+| `audit` | Checks every package `pep.lock` records against the security advisory database, and exits with status 1 when one is affected (see [`audit`](#audit)) |
+| `audit --ignore <id>` | Reports that advisory but does not fail on it; repeat it for more |
+| `audit --json` | Prints the affected packages as JSON |
+| `vendor [<dir>]` | Copies every locked package into `<dir>` in the project (default: `pep.toml`'s `[fetch] vendor`, else `vendor`), and sets `[fetch] vendor` so builds read it (see [`vendor`](#vendor-dir)) |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -158,7 +175,8 @@ A dependency on a branch moves to the branch's newest commit.
 ### `update --verify`
 
 Updates one dependency at a time and runs `pep-build` (beside
-`pep-package`, else on the `PATH`) on the project after each. An update
+`pep-package`, else on the `PATH`) on the project after each, with
+`--all` in a workspace. An update
 that does not build is rolled back, and the command lists those it rolled
 back.
 
@@ -184,21 +202,31 @@ First it checks, and lists every check that fails at once:
 - `version` is a version (`1.2.0`), newer than every version tag
   `origin` has;
 - `[package]` has a `description`, `license` and `repository`;
-- every dependency asks for a version range, not a branch, tag, commit,
-  path or the default branch, so a project depending on this one can
-  resolve it with its other packages. A dev-dependency may be anything,
-  since a dependent ignores it;
+- every dependency asks for a version range, not a branch, tag, commit
+  or the default branch, so a project depending on this one can resolve
+  it with its other packages; a `path` dependency, such as a workspace
+  sibling, needs a `version` beside it, and one inherited with
+  `workspace = true` is checked as the workspace gives it. A
+  dev-dependency may be anything, since a dependent ignores it;
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`
-  and `[features]` tables, and a dependency's `optional`, `features` and
-  `default-features`, need 0.11.0.
+  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
+  `[features]`, `[overrides]` and `[workspace]` tables, and a
+  dependency's `optional`, `features`, `default-features` and
+  `workspace`, need 0.11.0;
+- `pep.toml` has no `[overrides]`: a dependent builds with the packages
+  they replace, not the code the package was tested with, so a release
+  waits until the fix it needs is released too.
 
 ```text
 pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
   dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  dependency 'draw' names path ../draw and no 'version', so a dependent cannot resolve it; give it the version of the package there
   'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
 ```
+
+Run from a workspace member, it checks and tests that member, in its
+folder.
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),
@@ -224,6 +252,9 @@ marks:
 - `[dev]`: only the project's dev-dependencies lead to it;
 - `[target: <condition>]`: only builds for the targets the condition
   selects need it (see [`[target]` tables](projects.md#targetconditiondependencies));
+- `[override: <source>]`: the project's [`[overrides]`](projects.md#overrides)
+  replace it with a fork (`github:me/numbers`) or a folder (`path:../numbers`),
+  in `tree` and `why` alike;
 - `[optional]` and `[features: ...]`: the dependent's entry says
   `optional = true`, and the features its `features` turns on. A build
   turns on more: each package's `default` feature, and what the features
@@ -249,9 +280,27 @@ own dependencies). `tree`, `why` and `outdated` read the graph from
 `pep.toml` names a package `pep.lock` does not list, they fail and say to
 run `fetch` first.
 
+### `tree --invert <name>`
+
+Prints the tree upside down: the package, then each package whose
+`pep.toml` asks for it, and so on down to the project. The package is
+named as for [`why`](#why-name). Each line has the same marks as in
+`tree`, except that `[optional]` and `[features: ...]` describe the
+dependent's entry for the package on the line above, and `(*)` ends a
+package whose dependents were listed already. `--depth` counts levels
+below the package:
+
+```text
+$ pepper package tree --invert geometry
+geometry 1.0.0 (github:someone/geometry)
+|-- app
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- app
+```
+
 ### `why <name>`
 
-Prints every path from the project to the package, one per line. The
+Prints the paths from the project to the package, one per line. The
 package is named by its own name, its `owner/name` or source, or the name
 a dependency imports it by:
 
@@ -261,13 +310,18 @@ app -> geometry 1.0.0 -> numbers 1.3.1
 app -> fixtures 1.0.0 -> geometry 1.0.0 -> numbers 1.3.1
 ```
 
+It prints the first 20, then a line saying how many more there are
+(`and 7 more paths; --all prints every one`); `--all` prints every one.
+
 ### `outdated`
 
 Lists each locked package that is behind, with its locked version, the
 revision its requirements now choose (`wanted`: the newest version
 every range on it in the locked graph allows and this toolchain builds,
 or a branch's newest commit; updating a package that depends on it can
-change those ranges), and the newest version it offers (`latest`, not a prerelease):
+change those ranges), and the newest version it offers (`latest`, not a prerelease).
+A package `[overrides]` replaces is left out, since its revision is the
+override's:
 
 ```text
 $ pepper package outdated
@@ -282,6 +336,219 @@ it prints `every package is at the newest version`. It reads what each
 package offers over the network, so with `--offline` it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 `--exit-code` asks for 1 when a package is outdated, for CI.
+
+A locked version its author [retracted](#retracted-versions) is outdated
+too: its `locked` cell says `(retracted)`, and a line after the table says
+why:
+
+```text
+$ pepper package outdated
+package  locked             wanted  latest  source
+shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes
+shapes 1.1.0 is retracted: loses data
+```
+
+### `audit`
+
+Checks every package `pep.lock` records, for every platform and
+dev-dependencies included, against a database of security advisories, as
+`cargo audit` does with RustSec. For each advisory that affects a locked
+version it prints the advisory, the package (marked `[dev]` or with its
+`[target: ...]` as in [`tree`](#tree)), and the paths that lead to it, as
+[`why`](#why-name) prints them:
+
+```text
+$ pepper package audit
+PEP-2026-0001 (high): numbers 1.3.1 (github:other/numbers)
+  numbers_version() lies
+  patched: >=2.0.0
+  https://example.com/PEP-2026-0001
+  app -> geometry 1.1.0 -> numbers 1.3.1
+1 advisory affects pep.lock
+```
+
+The exit status is 1 when an advisory affects a package, for CI, and 0
+when none does (`no advisory affects pep.lock (12 in <database>)`).
+`--ignore <id>`, or the project's [`[audit] ignore`](projects.md#audit)
+list, names an advisory that does not fail it, such as one whose code the
+project never calls; `audit` still says on stderr which package it
+affects. Only packages locked at a version are checked: one at a branch or
+commit names no version to match.
+
+**The database** is a Git repository of TOML files, one advisory each,
+anywhere in it: `https://github.com/pep-lang/advisories.git`, or the
+repository `PEPPER_ADVISORY_DB` names (a mirror, a private database, or a
+`file://` folder). `audit` clones it into the
+[download cache](#the-download-cache)'s home, `cache/advisories`, and
+fetches it again once the copy is an hour old; a fetch that fails fails
+`audit`, rather than check against an old copy. With `--offline` it uses
+the copy as it is, and fails when there is none. An advisory:
+
+```toml
+id = "PEP-2026-0001"                      # required
+package = "github:other/numbers"          # required: the source pep.lock records
+title = "numbers_version() lies"
+severity = "high"                          # as written: low, medium, high, critical
+url = "https://example.com/PEP-2026-0001"
+patched = [">=2.0.0"]                      # the versions that fix it
+unaffected = ["<1.0.0"]                    # the versions it never affected
+```
+
+A version is affected unless a `patched` or `unaffected` entry holds it.
+Each entry is a version, which names that version alone (`"1.2.3"`), or a
+range as dependencies write it (`">=1.2.3, <2"`, `"^1.4"`). A malformed
+advisory fails `audit` with an error at its key.
+
+### `vendor [<dir>]`
+
+Copies every package `pep.lock` lists into a folder of the project, so
+the repository carries its dependencies and builds with no network and no
+[download cache](#the-download-cache), as `cargo vendor` and
+`go mod vendor` do: for an air-gapped build, or a release archive. It
+first resolves and fetches as [`fetch`](#fetch) does, then writes each
+package at its locked commit to `<dir>/<host>/<owner>/<name>`
+(`vendor/github.com/someone/geometry`), its files as `git archive` gives
+them, without `.git`, and sets `[fetch] vendor = "<dir>"` in `pep.toml`
+(see [`[fetch]`](projects.md#fetch)):
+
+```text
+$ pepper package vendor
+pep-package: vendored geometry 1.1.0 (github:someone/geometry)
+pep-package: vendored numbers 1.3.1 (github:other/numbers)
+pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
+```
+
+Commit the folder with `pep.toml` and `pep.lock`. It holds every package
+in the lock: every platform's, and those only `[dev-dependencies]` lead
+to, since `pepper test` and the examples build from it too (Cargo vendors
+everything for the same reason). A fork an `[overrides]` entry names is vendored in
+the original's place; a `path` override is not, its folder being the
+project's already. `<dir>/.gitattributes` turns git's
+line-ending conversion off there, so a checkout keeps the files byte for
+byte.
+
+Each package's folder also holds `.pep-commit`, its commit, and
+`.pep-checksum`, the SHA-256 of its files' paths and contents. In a
+vendored project, `pepper build` and `pepper test` fetch nothing: they read
+the packages from the vendor folder and check that each one the build
+needs is there at its locked commit and unedited, and fail otherwise, with
+or without `--locked` and `--offline`:
+
+```text
+error: the files in vendor/github.com/someone/geometry were changed since they were vendored (sha256 1c0f..., recorded 7b3e...); run 'pepper package vendor' to restore them, or make the change in the package itself
+```
+
+`pepper package fetch` checks the same, and that `pep.lock` still matches
+`pep.toml`, reading only the vendor folder; it changes neither. To change
+a dependency, run `add`, `remove` or `update` (which fetch into `.pep/deps`
+as usual), then `vendor` again: that rewrites the packages that changed,
+restores edited ones, and removes those `pep.lock` no longer lists.
+`.pep/deps` is unchanged in a project that is not vendored.
+
+In a [workspace](projects.md#workspaces), run from the root or any member,
+`vendor` writes one folder at the workspace's root, holding every
+member's locked packages, and sets `[fetch] vendor` in the root's
+`pep.toml`; every member's build reads it.
+
+### JSON output
+
+`--json` makes `tree`, `why` and `outdated` print one JSON object instead,
+for scripts. Its form is stable: a later release may add members, but
+does not rename or remove one.
+
+`tree --json` writes the project's name and its dependencies as nodes,
+each with the nodes of its own dependencies:
+
+```json
+{
+  "name": "app",
+  "dependencies": [
+    {
+      "name": "win",
+      "package": "winapi",
+      "version": "1.0.0",
+      "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
+      "source": "github:other/winapi",
+      "dev": false,
+      "target": "OS(Windows)",
+      "override": null,
+      "optional": true,
+      "features": ["wide"],
+      "repeated": false,
+      "dependencies": []
+    }
+  ]
+}
+```
+
+A node holds the package and the entry in its dependent's `pep.toml` that
+asks for it:
+
+| Member | What it holds |
+| --- | --- |
+| `name` | The name the dependent imports the package by |
+| `package` | The package's own name (the project's, for the project) |
+| `version` | Its locked version, or `null` when it is locked by commit |
+| `commit` | Its locked commit, or `null` for the project and a folder |
+| `source` | Its source (`github:other/winapi`); `""` for the project |
+| `dev` | Whether only the project's dev-dependencies lead to it (`[dev]`) |
+| `target` | The condition of the targets that need it (`[target: ...]`), or `null` for every target |
+| `override` | What `[overrides]` replaces it with (`[override: ...]`), or `null` |
+| `optional` | Whether the entry says `optional = true` (`[optional]`) |
+| `features` | The features the entry turns on (`[features: ...]`) |
+| `repeated` | Whether its dependencies were listed already (`(*)`), so its `dependencies` is empty |
+| `dependencies` | The nodes of its dependencies, empty below `--depth` |
+
+`tree --invert <name> --json` writes the project's name and `packages`:
+a node for each package the name matches, whose `name`, `optional` and
+`features` are its own name, `false` and `[]`, and which has no
+`repeated`. In place of `dependencies`, each node has `dependents`: the
+nodes of the packages that ask for it, the project among them as a
+node whose `source` is `""`. In those, `name`, `optional` and `features`
+describe the dependent's entry for the package above.
+
+`why --json` writes `paths`, the paths it prints (every one with
+`--all`), each an array of the nodes from the project's dependency to the
+package, without `repeated` or `dependencies`, and `total`, the number of
+paths there are:
+
+```text
+{
+  "paths": [
+    [
+      { "name": "geometry", "package": "geometry", "version": "1.0.0", ... },
+      { "name": "numbers", "package": "numbers", "version": "1.3.1", ... }
+    ]
+  ],
+  "total": 1
+}
+```
+
+`outdated --json` writes `packages`, an object for each row of the table,
+with `--exit-code` as without `--json`:
+
+| Member | What it holds |
+| --- | --- |
+| `package` | The package's name |
+| `locked` | Its locked version, or short commit |
+| `wanted` | The revision its requirements now choose |
+| `latest` | The newest version it offers, or `null` when it has none |
+| `source` | Its source |
+| `dev` | Whether only the project's dev-dependencies lead to it |
+| `target` | The condition of the targets that need it, or `null` |
+| `retracted` | Why its author retracted the locked version, or `null` |
+
+`audit --json` writes `advisories`, an object for each affected package,
+with the exit status as without `--json`:
+
+| Member | What it holds |
+| --- | --- |
+| `id`, `title`, `severity`, `url` | The advisory's, each `""` when it gives none |
+| `patched` | Its `patched` versions, as written |
+| `package`, `version`, `source` | The affected package, its locked version and its source |
+| `dev` | Whether only the project's dev-dependencies lead to it |
+| `target` | The condition of the targets that need it, or `null` |
+| `paths`, `total` | The first 20 paths to it and how many there are, as `why --json` writes them |
 
 ## pep.lock
 
@@ -346,6 +613,21 @@ checksums:
 pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
 ```
 
+A package the project's [`[overrides]`](projects.md#overrides) replace
+keeps its own `source` and has `override`, the replacement's source: a
+fork, whose commit `commit` is and whose files `sha256` covers, or
+`path:` and the folder as `pep.toml` writes it, with no commit, since a
+folder has none to pin:
+
+```toml
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
+```
+
 A command that leaves the graph as it was leaves `pep.lock` untouched, so
 a checkout with Windows line endings stays as git wrote it.
 
@@ -365,6 +647,10 @@ CI builds want to fail rather than quietly change what they build:
   must read which versions a repository offers (`add`, `update`, or a
   `pep.toml` change `pep.lock` does not cover).
 - **`--frozen`**: both.
+
+A [vendored](#vendor-dir) project needs neither the network nor the
+download cache, so `fetch --frozen` and `pepper build --frozen` pass with
+only the repository.
 
 ```text
 $ pepper package fetch --locked
@@ -453,6 +739,11 @@ name each imports it by.
   declares, and `pep-package` says which requirement it overrode.
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
+- The project's [`[overrides]`](projects.md#overrides) replace a package
+  wherever the graph reaches it: the override's own revision is chosen,
+  from the fork, whatever the dependents ask, and a `path` override's
+  folder is read in its place. A locked revision of an override stays
+  until the override changes or `update` names the package.
 - The project's own `[dev-dependencies]` are resolved with its
   dependencies, as requirements of the project; a dependency's
   `[dev-dependencies]` are not part of the graph at all.
@@ -485,12 +776,33 @@ Only the `pep.toml` of the version picked, and of the newer ones the ranges
 accept, are read: from the package's clone in `.pep/deps`, without checking
 them out, each once per run.
 
+### Retracted versions
+
+A package's author withdraws a broken release in the
+[`[retract]`](projects.md#retract) table of a newer release's `pep.toml`,
+as Go's `retract` does: the `[retract]` of a package's newest version
+(not a prerelease) speaks for every version.
+
+- A version range skips each retracted version, picking the newest one
+  left, and says so:
+
+  ```text
+  pep-package: github:other/shapes skipped 1.1.0 (retracted: loses data)
+  ```
+
+  When every version the ranges accept is retracted, resolution fails and
+  names each with its reason.
+- A version `pep.lock` already holds stays, and builds: `fetch` reads no
+  network for it. [`outdated`](#outdated) flags it, and `update` moves off
+  it.
+
 ## Environment variables
 
 | Variable | What it does |
 | --- | --- |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Fetches that host's repositories from another address (a mirror, or a folder of repositories as a `file://` URL): `<address>/<owner>/<name>.git` |
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
+| `PEPPER_ADVISORY_DB` | The Git repository of the advisory database [`audit`](#audit) reads, instead of `https://github.com/pep-lang/advisories.git` |
 | `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
 | `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |
 | `PEPPER_HOME` | The Pepper home that holds the [download cache](#the-download-cache), and whose `pepper` [`publish`](#publish) runs the tests with, as for `pep-install` |

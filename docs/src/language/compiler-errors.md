@@ -378,10 +378,13 @@ main.pep:1:8: error: cannot find "nope.pep" or the module folder "nope" next to 
       |        ^~~~~~
 ```
 
-**Code nested too deeply.** Parentheses, blocks, calls, and each operator of
-a chain (`a + b + c` is two levels) nest the program one level deeper, and a
-file may nest at most 256 levels. The error points at the token that crosses
-the limit, here the 255th `+` of a long sum:
+**Code nested too deeply.** Parentheses, blocks, `else if`s, prefix
+operators, type arguments and patterns nest the program one level deeper,
+and so does each operator of a chain (`a + b + c` is two levels) and each
+member, call or index of a chain (`f(x)` is two levels: the call and its
+argument), and an interpolated string's `{hole}` is two levels too. A file may nest at most 256 levels, which bounds the stack the
+compiler and the language server need. The error points at the token that
+crosses the limit, here the 255th `+` of a long sum:
 
 ```text
 main.pep:2:1030: error: code is nested too deeply: the limit is 256 levels; split it into smaller expressions or functions

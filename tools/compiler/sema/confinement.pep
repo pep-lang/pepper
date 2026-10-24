@@ -945,6 +945,7 @@ struct _Confinement {
             return none;
         }
         body.function.body = stashed;
+        state.trait_memo.bodies_back = true;
         _by_key()[key] = body;
         _restored[key] = body;
         bodies.insert(key);
@@ -1841,10 +1842,12 @@ _lower_moved_arguments(module: Module) {
         return;
     }
     var lower = _MoveArguments(moved);
-    for (var f in module.functions) {
+    # A checked body was lowered with its unit (and is stashed).
+    var own = unit_decls(module);
+    for (var f in own.functions) {
         lower.function(f);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if (_is_generic_base(st)) {
             continue;
         }
@@ -2012,7 +2015,8 @@ _attribute_text(program: _Confinement, loc: Loc): String {
 
 ## A guard kept in a struct's field would hold its lock past any block.
 _check_guard_fields(program: _Confinement): bool {
-    for (var st in program.module.structs) {
+    # A checked struct's fields were checked with its unit.
+    for (var st in unit_decls(program.module).structs) {
         if (program.isolated.contains(st.name) or _is_generic_base(st)) {
             continue;
         }
@@ -2039,7 +2043,8 @@ _check_guard_fields(program: _Confinement): bool {
 ## `Mutex<T>` of a number: its `with` binding would be a copy the block
 ## could never change back.
 _check_mutex_arguments(program: _Confinement): bool {
-    for (var st in program.module.structs) {
+    # A checked specialization was checked with its unit.
+    for (var st in unit_decls(program.module).structs) {
         if (st.ty.sub_types.count == 0 or demangle_name(st.ty.name) != "Mutex" or st.name == st.ty.name) {
             continue;
         }

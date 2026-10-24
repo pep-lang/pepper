@@ -8,7 +8,8 @@
 # git is missing.
 
 import async;
-import [Directory, File, OpenOptions, Path] from io;
+import [Directory, File, glob, OpenOptions, Path] from io;
+import json;
 import [system_name] from os;
 import process;
 import [serve_folder] from tool_testing.server;
@@ -310,6 +311,104 @@ a_dependent_ignores_a_packages_dev_dependencies() {
     expect_false(project.lock().contains("2.0.0"));
     expect_false(project.lock().contains("dev = true"));
     expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
+}
+
+# A project on geometry and numbers, both of which reach other/numbers,
+# whose pep.toml ends in `overrides` and whose program prints the version
+# each sees.
+override_project(name: String, overrides: String): Project {
+    var project = Project(
+        name,
+        "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+            + "numbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    write_file(project.dir.join("pep.toml"), project.manifest() + overrides);
+    write_file(
+        project.dir.join("main.pep"),
+        "import geometry;\nimport numbers;\n\nmain(): int {\n"
+            + "    print(\"{0} {1}\", geometry.geometry_version(), numbers.numbers_version());\n    return 0;\n}\n"
+    );
+    return project;
+}
+
+[Test]
+an_override_replaces_a_package_everywhere_with_a_fork() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("override_fork");
+    var fork = ["module.pep", "export numbers_version(): String {\n    return \"fork\";\n}\n"];
+    fork.append_all(["pep.toml", "[package]\nname = \"numbers\"\n"]);
+    add_version(hosts.folder.path, "me/numbers", "1.0.0", fork);
+    publish(hosts.folder.path, "me/numbers");
+    var project = override_project("override_fork", "");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1 1.3.1\n");
+
+    # The fork replaces numbers for the project and for geometry, whatever
+    # range each asks, and the lock records it.
+    write_file(
+        project.dir.join("pep.toml"),
+        project.manifest()
+            + "\n[overrides]\n\"github:other/numbers\" = { github = \"me/numbers\", branch = \"main\" }\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 1);
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(
+        project.lock(),
+        $"source = \"github:other/numbers\"\noverride = \"github:me/numbers\"\ncommit = \"{hosts.commit_of("me/numbers", "main")}\"\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
+    # tree and why mark it.
+    var tree = hosts.package(project.dir, ["tree"]).stdout;
+    expect_contains(tree, " (github:other/numbers) [override: github:me/numbers]\n");
+    var why = hosts.package(project.dir, ["why", "numbers"]).stdout;
+    expect_contains(why, "app -> geometry 1.1.0 -> numbers ");
+    expect_contains(why, " [override: github:me/numbers]\n");
+    # A fresh clone builds the fork from pep.lock, under --locked.
+    Directory.remove_all(project.dir.join(".pep"));
+    expect_equal(hosts.build_and_run(project.dir, ["--locked"]), "1.1.0 fork fork\n");
+
+    # A replacement of another name, and one that matches nothing.
+    var text = project.manifest();
+    write_file(
+        project.dir.join("pep.toml"),
+        text.replace("\"me/numbers\", branch = \"main\"", "\"someone/geometry\", tag = \"v1.0.0\"")
+    );
+    var renamed = hosts.package(project.dir, ["fetch"]);
+    expect_exit(renamed, 1);
+    expect_contains(
+        renamed.stderr,
+        "pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'\n"
+    );
+    write_file(project.dir.join("pep.toml"), text + "\"github:nobody/nothing\" = { path = \"nothing\" }\n");
+    var unused = hosts.package(project.dir, ["fetch"]);
+    expect_exit(unused, 0);
+    expect_contains(
+        unused.stderr,
+        "pep.toml:10:1: warning: override of 'github:nobody/nothing' matches no package in the dependency graph\n"
+    );
+}
+
+[Test]
+an_override_replaces_a_package_everywhere_with_a_folder() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("override_path");
+    var project = override_project("override_path", "\n[overrides]\n\"github:other/numbers\" = { path = \"local\" }\n");
+    write_file(project.dir.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
+    write_file(
+        project.dir.join("local").join("module.pep"), "export numbers_version(): String {\n    return \"local\";\n}\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\noverride = \"path:local\"\n\n");
+    expect_false(project.dir.join(".pep").join("deps").join("github.com").join("other").exists());
+    expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
+    expect_contains(
+        hosts.package(project.dir, ["tree"]).stdout, "numbers (github:other/numbers) [override: path:local]\n"
+    );
+    expect_equal(hosts.build_and_run(project.dir, ["--locked"]), "1.1.0 local local\n");
 }
 
 # What `parent` (empty for the project) asks of `source` under
@@ -786,6 +885,77 @@ an_unfetched_dependency_fails_under_offline() {
 }
 
 [Test]
+a_vendored_project_builds_with_no_host_or_cache() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("vendor");
+    var project = Project("vendor", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_contains(project.manifest(), "[fetch]\nvendor = \"vendor\"\n");
+    var vendor = project.dir.join("vendor");
+    var geometry = vendor.join("github.com").join("someone").join("geometry");
+    expect_true(geometry.join("module.pep").is_file());
+    expect_true(vendor.join("github.com").join("other").join("numbers").join("module.pep").is_file());
+    expect_false(geometry.join(".git").exists());
+    expect_equal(read_file(vendor.join(".gitattributes")), "* -text\n");
+
+    # A fresh clone: no .pep, no download cache, and no host.
+    remove_tree(project.dir.join(".pep"));
+    remove_tree(hosts.home());
+    var unreachable = (program: String, arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool(program).to_string(), project.dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    expect_exit(unreachable("pep-package", ["fetch", "--locked", "--offline"]), 0);
+    expect_exit(unreachable("pep-build", ["--locked", "--offline"]), 0);
+    expect_equal(
+        run(process.Command(project.dir.join("app" + toolchain.executable_suffix()).to_string())).stdout,
+        "1.1.0 1.3.1\n"
+    );
+    expect_false(project.dir.join(".pep").join("deps").exists());
+    expect_false(hosts.home().exists());
+
+    # An edited vendored file fails the build and fetch; vendoring again
+    # restores it.
+    write_file(geometry.join("module.pep"), read_file(geometry.join("module.pep")) + "# edited\n");
+    var edited = unreachable("pep-build", Array<String>());
+    expect_exit(edited, 1);
+    expect_contains(edited.stderr, " were changed since they were vendored ");
+    expect_contains(edited.stderr, "; run 'pepper package vendor' to restore them");
+    expect_contains(unreachable("pep-package", ["fetch"]).stderr, " were changed since they were vendored ");
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_false(read_file(geometry.join("module.pep")).contains("# edited"));
+    expect_exit(unreachable("pep-build", Array<String>()), 0);
+
+    # A dependency pep.lock lacks needs vendoring first.
+    var manifest = project.manifest();
+    write_file(project.dir.join("pep.toml"), manifest + "\n[dev-dependencies]\nx = { github = \"nobody/x\" }\n");
+    var unlocked = unreachable("pep-build", Array<String>());
+    expect_exit(unlocked, 1);
+    expect_contains(unlocked.stderr, "names github:nobody/x, which pep.lock does not list");
+    # fetch checks that pep.lock matches pep.toml, and changes neither.
+    write_file(project.dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[fetch]\nvendor = \"vendor\"\n");
+    var stale = unreachable("pep-package", ["fetch"]);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "pep.lock does not match pep.toml, and the project is vendored");
+    write_file(project.dir.join("pep.toml"), manifest);
+    var verify = unreachable("pep-package", ["update", "--verify"]);
+    expect_exit(verify, 1);
+    expect_contains(verify.stderr, "the project is vendored ('[fetch] vendor'), so a build would not see an update");
+
+    # Vendoring again after a dependency is removed removes its packages.
+    expect_exit(hosts.package(project.dir, ["remove", "geometry"]), 0);
+    var removed = hosts.package(project.dir, ["vendor"]);
+    expect_exit(removed, 0);
+    expect_contains(removed.stderr, "which pep.lock no longer lists");
+    expect_false(vendor.join("github.com").exists());
+}
+
+[Test]
 tree_why_and_outdated_report_on_the_locked_graph() {
     if (!has_git()) {
         return;
@@ -842,6 +1012,72 @@ tree_why_and_outdated_report_on_the_locked_graph() {
     expect_exit(unknown, 1);
     expect_contains(unknown.stderr, "no package 'nothing' in pep.lock");
 
+    # --invert: what depends on a package, with the dependent's marks.
+    expect_equal(
+        hosts.package(project.dir, ["tree", "--invert", "geometry", "--offline"]).stdout,
+        "geometry 1.0.0 (github:someone/geometry)\n"
+            + "|-- app\n"
+            + "`-- fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+            + "    `-- app\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["tree", "-i", "win", "--offline"]).stdout,
+        "winapi 1.0.0 (github:other/winapi) [target: OS(Windows)]\n`-- app [optional] [features: wide]\n"
+    );
+    expect_equal(
+        hosts.package(project.dir, ["tree", "--invert", "numbers", "--depth", "1"]).stdout,
+        "numbers 1.3.1 (github:other/numbers)\n`-- geometry 1.0.0 (github:someone/geometry)\n"
+    );
+    expect_exit(hosts.package(project.dir, ["tree", "--invert", "nothing"]), 1);
+
+    # --json: the same graphs, field by field.
+    var tree_json = json.parse(hosts.package(project.dir, ["tree", "--json"]).stdout).value();
+    expect_equal(tree_json["name"].as_string().value(), "app");
+    var geometry = tree_json["dependencies"][0];
+    expect_equal(geometry["name"].as_string().value(), "geometry");
+    expect_equal(geometry["package"].as_string().value(), "geometry");
+    expect_equal(geometry["version"].as_string().value(), "1.0.0");
+    expect_equal(geometry["commit"].as_string().value().length, 40 as ulong);
+    expect_equal(geometry["source"].as_string().value(), "github:someone/geometry");
+    expect_false(geometry["dev"].as_bool().value());
+    expect_true(geometry["target"].is_null());
+    expect_true(geometry["override"].is_null());
+    expect_false(geometry["optional"].as_bool().value());
+    expect_true(geometry["features"].as_array().value().is_empty);
+    expect_false(geometry["repeated"].as_bool().value());
+    expect_equal(geometry["dependencies"][0]["package"].as_string().value(), "numbers");
+    expect_equal(geometry["dependencies"][0]["version"].as_string().value(), "1.3.1");
+    expect_true(geometry["dependencies"][0]["dependencies"].as_array().value().is_empty);
+    var win = tree_json["dependencies"][1];
+    expect_equal(win["name"].as_string().value(), "win");
+    expect_equal(win["package"].as_string().value(), "winapi");
+    expect_equal(win["target"].as_string().value(), "OS(Windows)");
+    expect_true(win["optional"].as_bool().value());
+    expect_equal(win["features"][0].as_string().value(), "wide");
+    var fixtures = tree_json["dependencies"][2];
+    expect_true(fixtures["dev"].as_bool().value());
+    expect_true(fixtures["dependencies"][0]["repeated"].as_bool().value());
+    expect_true(fixtures["dependencies"][0]["dependencies"].as_array().value().is_empty);
+    expect_true(tree_json["dependencies"][3].is_null());
+
+    var inverted_json = json.parse(hosts.package(project.dir, ["tree", "-i", "geometry", "--json"]).stdout).value();
+    expect_equal(inverted_json["name"].as_string().value(), "app");
+    var inverted = inverted_json["packages"][0];
+    expect_equal(inverted["source"].as_string().value(), "github:someone/geometry");
+    expect_equal(inverted["dependents"][0]["source"].as_string().value(), "");
+    expect_equal(inverted["dependents"][0]["package"].as_string().value(), "app");
+    expect_equal(inverted["dependents"][1]["package"].as_string().value(), "fixtures");
+    expect_true(inverted["dependents"][1]["dev"].as_bool().value());
+    expect_equal(inverted["dependents"][1]["dependents"][0]["source"].as_string().value(), "");
+
+    var why_json = json.parse(hosts.package(project.dir, ["why", "numbers", "--json"]).stdout).value();
+    expect_equal(why_json["total"].as_int().value(), 2 as long);
+    var second = why_json["paths"][1];
+    expect_equal(second.as_array().value().count, 3 as ulong);
+    expect_equal(second[0]["package"].as_string().value(), "fixtures");
+    expect_true(second[0]["dev"].as_bool().value());
+    expect_equal(second[2]["source"].as_string().value(), "github:other/numbers");
+
     # Widened, geometry's range allows 1.1.0; geometry's own keeps numbers
     # below 3.0.0. outdated says so and leaves pep.lock as it is.
     write_file(project.dir.join("pep.toml"), project.manifest().replace("\"=1.0.0\"", "\"1.0\""));
@@ -855,6 +1091,18 @@ tree_why_and_outdated_report_on_the_locked_graph() {
             + "geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry\n"
     );
     expect_exit(hosts.package(project.dir, ["outdated"]), 0);
+    var outdated_json = hosts.package(project.dir, ["outdated", "--json", "--exit-code"]);
+    expect_exit(outdated_json, 1);
+    var rows = json.parse(outdated_json.stdout).value()["packages"];
+    expect_equal(rows[0]["package"].as_string().value(), "numbers");
+    expect_equal(rows[0]["locked"].as_string().value(), "1.3.1");
+    expect_equal(rows[0]["wanted"].as_string().value(), "1.3.1");
+    expect_equal(rows[0]["latest"].as_string().value(), "3.0.0");
+    expect_equal(rows[0]["source"].as_string().value(), "github:other/numbers");
+    expect_false(rows[0]["dev"].as_bool().value());
+    expect_true(rows[0]["target"].is_null());
+    expect_equal(rows[1]["wanted"].as_string().value(), "1.1.0");
+    expect_true(rows[2].is_null());
     expect_equal(project.lock(), lock);
     var offline = hosts.package(project.dir, ["outdated", "--offline"]);
     expect_exit(offline, 1);
@@ -866,6 +1114,40 @@ tree_why_and_outdated_report_on_the_locked_graph() {
     var stale = hosts.package(project.dir, ["tree"]);
     expect_exit(stale, 1);
     expect_contains(stale.stderr, "pep.lock does not list github:other/unlisted");
+
+    # More paths than `why` prints: the project needs a1 to a3, each of
+    # them b1 to b3, each of them c1 to c3, each of them numbers: 27.
+    var below = "numbers = { github = \"other/numbers\", version = \"1\" }\n";
+    for (var layer in ["c", "b", "a"]) {
+        var needs = "";
+        for (var index in 1..4) {
+            var name = $"{layer}{index}";
+            add_version(
+                hosts.folder.path,
+                "other/" + name,
+                "1.0.0",
+                ["module.pep", "", "pep.toml", "[package]\nname = \"" + name + "\"\n\n[dependencies]\n" + below]
+            );
+            publish(hosts.folder.path, "other/" + name);
+            needs += name + " = { github = \"other/" + name + "\", version = \"1\" }\n";
+        }
+        below = needs;
+    }
+    var wide = Project("report_wide", below);
+    expect_exit(hosts.package(wide.dir, ["fetch"]), 0);
+    var capped = hosts.package(wide.dir, ["why", "numbers", "--offline"]).stdout.split("\n");
+    expect_equal(capped.count, 22 as ulong);
+    expect_equal(capped[0], "app -> a1 1.0.0 -> b1 1.0.0 -> c1 1.0.0 -> numbers 1.3.1");
+    expect_equal(capped[20], "and 7 more paths; --all prints every one");
+    expect_equal(hosts.package(wide.dir, ["why", "numbers", "--all"]).stdout.split("\n").count, 28 as ulong);
+    var capped_json = json.parse(hosts.package(wide.dir, ["why", "numbers", "--json"]).stdout).value();
+    expect_equal(capped_json["total"].as_int().value(), 27 as long);
+    expect_equal(capped_json["paths"].as_array().value().count, 20 as ulong);
+    # Inverted, c2 lists b1 to b3 below c1's, so each ends in (*).
+    expect_contains(
+        hosts.package(wide.dir, ["tree", "--invert", "numbers"]).stdout,
+        "|-- c2 1.0.0 (github:other/c2)\n|   |-- b1 1.0.0 (github:other/b1) (*)\n"
+    );
 }
 
 [Test]
@@ -1141,11 +1423,13 @@ publish_checks_tests_tags_and_pushes_the_version() {
         clone.join("pep.toml"),
         manifest("1.0.0", "")
             + "\n[dependencies]\nnumbers = { github = \"other/numbers\", branch = \"main\" }\n"
-            + "near = { path = \"../near\", version = \"1\" }\n"
+            + "near = { path = \"../near\" }\n"
+            + "sibling = { path = \"../sibling\", version = \"1\" }\n"
             + "zlib = { github = \"someone/zlib\", version = \"1\", optional = true }\n"
             + "\n[features]\ngzip = [\"dep:zlib\"]\n"
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
             + "\n[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
+            + "\n[overrides]\n\"github:other/numbers\" = { path = \"../near\" }\n"
     );
     var refused = package(["publish", "--dry-run"]);
     expect_exit(refused, 1);
@@ -1155,8 +1439,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
         refused.stderr,
         "\n  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it\n"
     );
-    # A version beside a path does not make it one a dependent can reach.
-    expect_contains(refused.stderr, "\n  dependency 'near' names path ../near, not a version range, ");
+    # A path needs the version it is published with, as a workspace sibling has.
+    expect_contains(refused.stderr, "\n  dependency 'near' names path ../near and no 'version', ");
     expect_contains(
         refused.stderr,
         "\n  'dev-dependencies' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
@@ -1174,11 +1458,16 @@ publish_checks_tests_tags_and_pushes_the_version() {
         "\n  'optional' of dependency 'zlib' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
     );
     expect_false(refused.stderr.contains("winapi"));
+    expect_contains(
+        refused.stderr,
+        "\n  '[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it\n"
+    );
     expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");
     expect_contains(
         refused.stderr, "\n  'version' 1.0.0 is not newer than the newest tag, 1.0.0; raise it in pep.toml\n"
     );
     expect_false(refused.stderr.contains("fixtures"));
+    expect_false(refused.stderr.contains("sibling"));
 
     # A commit origin does not have yet.
     release(manifest("1.1.0", licensed));
@@ -1222,4 +1511,320 @@ publish_checks_tests_tags_and_pushes_the_version() {
         failed.stderr, "pep-package: error: 'pepper +latest test' failed, so shapes 1.2.0 is not published\n"
     );
     expect_equal(tags_of(bare), "v1.0.0\nv1.1.0\n");
+}
+
+[Test]
+a_workspace_shares_one_lock_and_builds_its_members() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("workspace");
+    var folder = TempFolder("package_workspace");
+    var root = folder.path;
+    write_file(
+        root.join("pep.toml"),
+        "[workspace]\nmembers = [\"app\", \"libs/*\"]\n\n[workspace.dependencies]\n"
+            + "numbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    # `shapes` inherits numbers; `geo` needs geometry, which needs numbers too.
+    var shapes = root.join("libs").join("shapes");
+    write_file(
+        shapes.join("pep.toml"), "[package]\nname = \"shapes\"\n\n[dependencies]\nnumbers = { workspace = true }\n"
+    );
+    write_file(
+        shapes.join("module.pep"),
+        "import numbers;\n\nexport describe(): String {\n    return \"shapes \" + numbers.numbers_version();\n}\n"
+    );
+    write_file(shapes.join("shapes_test.pep"), "[Test]\nshapes_work() {\n    expect_equal(1 + 1, 2);\n}\n");
+    var geo = root.join("libs").join("geo");
+    write_file(
+        geo.join("pep.toml"),
+        "[package]\nname = \"geo\"\n\n[dependencies]\ngeometry = { github = \"someone/geometry\", version = \"1.0\" }\n"
+    );
+    write_file(
+        geo.join("main.pep"),
+        "import geometry;\n\nmain(): int {\n    print(geometry.geometry_version());\n    return 0;\n}\n"
+    );
+    var app = root.join("app");
+    write_file(
+        app.join("pep.toml"),
+        "[package]\nname = \"app\"\n\n[dependencies]\nshapes = { path = \"../libs/shapes\", version = \"0.1\" }\n"
+    );
+    write_file(
+        app.join("main.pep"), "import shapes;\n\nmain(): int {\n    print(shapes.describe());\n    return 0;\n}\n"
+    );
+
+    # Built from inside a member: one pep.lock and `.pep/deps`, at the root,
+    # resolved for every member, so numbers is locked once.
+    expect_equal(hosts.build_and_run(app), "shapes 1.3.1\n");
+    var lock = read_file(root.join("pep.lock"));
+    expect_contains(lock, "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    expect_contains(lock, "source = \"github:someone/geometry\"\n");
+    expect_equal(lock.split("github:other/numbers").count, 2);
+    expect_false(app.join("pep.lock").exists());
+    expect_false(app.join(".pep").join("deps").exists());
+
+    # `tree` and `why`, from inside a member, report the whole workspace's
+    # graph: geo's geometry and shapes' inherited numbers too.
+    var tree = hosts.package(app, ["tree", "--offline"]);
+    expect_exit(tree, 0);
+    expect_contains(
+        tree.stdout, "-- geometry 1.1.0 (github:someone/geometry)\n|   `-- numbers 1.3.1 (github:other/numbers)\n"
+    );
+    expect_contains(tree.stdout, "`-- numbers 1.3.1 (github:other/numbers)\n");
+    var why = hosts.package(app, ["why", "numbers", "--offline"]);
+    expect_exit(why, 0);
+    expect_contains(why.stdout, "pep.toml -> geometry 1.1.0 -> numbers 1.3.1\n");
+    expect_contains(why.stdout, "pep.toml -> numbers 1.3.1\n");
+
+    # `--all`, from any member: each member with an entry file, into its own
+    # output; a library has none.
+    var built = run(hosts.command(tool("pep-build").to_string(), shapes, ["--all"]));
+    expect_exit(built, 0);
+    expect_contains(built.stderr, "pepc: skipping shapes: no entry file to build");
+    var exe = toolchain.executable_suffix();
+    expect_equal(run(process.Command(geo.join("geo" + exe).to_string())).stdout, "1.1.0 1.3.1\n");
+    expect_true(app.join("app" + exe).is_file());
+    # `-o` is relative to where the build runs, not to the member.
+    expect_exit(run(hosts.command(tool("pep-build").to_string(), root, ["-p", "geo", "-o", "geo_out" + exe])), 0);
+    expect_true(root.join("geo_out" + exe).is_file());
+    var unknown = run(hosts.command(tool("pep-build").to_string(), root, ["-p", "nope"]));
+    expect_exit(unknown, 1);
+    expect_contains(unknown.stderr, "no workspace member named 'nope' in '-p'; the members are 'app', 'geo', 'shapes'");
+
+    # `pepper test -p` tests a member, from the root.
+    var tested = run(hosts.command(tool("pep-test").to_string(), root, ["-p", "shapes"]));
+    expect_exit(tested, 0);
+    expect_contains(tested.stdout, "1 passed, 0 failed");
+
+    # `vendor` from a member writes one folder at the root, for every
+    # member; another member then builds with no cache and no host.
+    var workspace_manifest = read_file(root.join("pep.toml"));
+    expect_exit(hosts.package(app, ["vendor"]), 0);
+    expect_contains(read_file(root.join("pep.toml")), "[fetch]\nvendor = \"vendor\"\n");
+    expect_true(root.join("vendor").join("github.com").join("someone").join("geometry").is_directory());
+    expect_false(app.join("vendor").exists());
+    remove_tree(root.join(".pep"));
+    remove_tree(hosts.home());
+    File.remove(geo.join("geo" + exe));
+    var offline = run(
+        hosts.command(
+            tool("pep-build").to_string(), geo, ["--offline"]
+        ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+    );
+    expect_exit(offline, 0);
+    expect_equal(run(process.Command(geo.join("geo" + exe).to_string())).stdout, "1.1.0 1.3.1\n");
+    write_file(root.join("pep.toml"), workspace_manifest);
+
+    # Only the root's `[overrides]` apply, to every member; a member's are
+    # ignored, with a warning.
+    write_file(root.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
+    write_file(root.join("local").join("module.pep"), "export numbers_version(): String {\n    return \"local\";\n}\n");
+    write_file(
+        root.join("pep.toml"),
+        read_file(root.join("pep.toml")) + "\n[overrides]\n\"github:other/numbers\" = { path = \"local\" }\n"
+    );
+    write_file(
+        shapes.join("pep.toml"),
+        read_file(shapes.join("pep.toml")) + "\n[overrides]\n\"github:someone/geometry\" = { path = \"../nowhere\" }\n"
+    );
+    var fetched = hosts.package(app, ["fetch"]);
+    expect_exit(fetched, 0);
+    expect_contains(
+        fetched.stderr,
+        "warning: override of 'github:someone/geometry' in a workspace member is ignored; move it to the root's pep.toml"
+    );
+    expect_equal(hosts.build_and_run(app), "shapes local\n");
+}
+
+[Test]
+resolution_skips_retracted_versions_and_outdated_flags_them() {
+    if (!has_git()) {
+        return;
+    }
+    # `other/shapes` 1.2.0 retracts 1.1.0, which speaks for every version.
+    var hosts = Hosts("retract");
+    for (var version in ["1.0.0", "1.1.0", "1.2.0"]) {
+        var retract = version == "1.2.0" ? "\n[retract]\n\"1.1.0\" = \"loses data\"\n" : "";
+        add_version(
+            hosts.folder.path,
+            "other/shapes",
+            version,
+            ["module.pep", "# " + version + "\n", "pep.toml", "[package]\nname = \"shapes\"\n" + retract]
+        );
+    }
+    publish(hosts.folder.path, "other/shapes");
+
+    # A range skips it, and says so.
+    var below = Project("retract_below", "shapes = { github = \"other/shapes\", version = \"<1.2\" }\n");
+    var fetched = hosts.package(below.dir, ["fetch"]);
+    expect_exit(fetched, 0);
+    expect_contains(fetched.stderr, "github:other/shapes skipped 1.1.0 (retracted: loses data)");
+    expect_contains(below.lock(), "source = \"github:other/shapes\"\nversion = \"1.0.0\"");
+    var exact = Project("retract_exact", "shapes = { github = \"other/shapes\", version = \"=1.1.0\" }\n");
+    var none = hosts.package(exact.dir, ["fetch"]);
+    expect_exit(none, 1);
+    expect_contains(
+        none.stderr,
+        "every version of github:other/shapes that every package accepts is retracted: 1.1.0 (retracted: loses data)"
+    );
+
+    # A lock that holds it keeps it; outdated flags it, and update moves off it.
+    var locked = Project("retract_lock", "shapes = { github = \"other/shapes\", version = \"1\" }\n");
+    write_file(
+        locked.dir.join("pep.lock"),
+        "version = 1\n\n[[package]]\nname = \"shapes\"\nsource = \"github:other/shapes\"\nversion = \"1.1.0\"\n"
+            + $"commit = \"{hosts.commit_of("other/shapes", "v1.1.0")}\"\n"
+    );
+    expect_exit(hosts.package(locked.dir, ["fetch"]), 0);
+    expect_contains(locked.lock(), "version = \"1.1.0\"");
+    var outdated = hosts.package(locked.dir, ["outdated"]);
+    expect_exit(outdated, 0);
+    expect_equal(
+        outdated.stdout,
+        "package  locked             wanted  latest  source\n"
+            + "shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes\n"
+            + "shapes 1.1.0 is retracted: loses data\n"
+    );
+    var rows = json.parse(hosts.package(locked.dir, ["outdated", "--json"]).stdout).value()["packages"];
+    expect_equal(rows[0]["locked"].as_string().value(), "1.1.0");
+    expect_equal(rows[0]["retracted"].as_string().value(), "loses data");
+    expect_exit(hosts.package(locked.dir, ["update"]), 0);
+    expect_contains(locked.lock(), "version = \"1.2.0\"");
+
+    # A project's own [retract] must name versions, checked at the key.
+    write_file(locked.dir.join("pep.toml"), locked.manifest() + "\n[retract]\n\"1.x.q\" = \"x\"\n");
+    var bad = hosts.package(locked.dir, ["fetch"]);
+    expect_exit(bad, 1);
+    expect_contains(bad.stderr, "pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range");
+
+    # A dependency's malformed [retract] retracts nothing, rather than
+    # break its dependents.
+    add_version(
+        hosts.folder.path,
+        "other/sloppy",
+        "1.0.0",
+        ["module.pep", "", "pep.toml", "[package]\nname = \"sloppy\"\n\n[retract]\n\"x.y\" = \"?\"\n"]
+    );
+    publish(hosts.folder.path, "other/sloppy");
+    var dependent = Project("retract_sloppy", "sloppy = { github = \"other/sloppy\", version = \"1\" }\n");
+    expect_exit(hosts.package(dependent.dir, ["fetch"]), 0);
+    expect_contains(dependent.lock(), "source = \"github:other/sloppy\"\nversion = \"1.0.0\"");
+}
+
+# Every copy of the advisory database in the cache of `hosts`, made a day
+# old, so the next audit fetches it again.
+age_advisories(hosts: Hosts) {
+    for (var stamp in glob(hosts.home().to_string().replace("\\", "/") + "/cache/advisories/*.fetched")) {
+        stamp.set_modified(0);
+    }
+}
+
+[Test]
+audit_reports_the_locked_packages_advisories_affect() {
+    if (!has_git()) {
+        return;
+    }
+    # `other/fixtures` needs geometry and is a dev-dependency. The
+    # database's advisories affect numbers 1.3.1 and fixtures 1.0.0.
+    var hosts = Hosts("audit");
+    add_version(
+        hosts.folder.path,
+        "other/fixtures",
+        "1.0.0",
+        [
+            "module.pep",
+            "",
+            "pep.toml",
+            "[package]\nname = \"fixtures\"\n\n[dependencies]\n"
+                + "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+        ]
+    );
+    publish(hosts.folder.path, "other/fixtures");
+    add_version(
+        hosts.folder.path,
+        "advisories",
+        "1",
+        [
+            "PEP-2026-0001.toml",
+            "id = \"PEP-2026-0001\"\npackage = \"github:other/numbers\"\ntitle = \"numbers_version() lies\"\n"
+                + "severity = \"high\"\nurl = \"https://example.com/PEP-2026-0001\"\npatched = [\">=2.0.0\"]\n",
+            "PEP-2026-0002.toml",
+            "id = \"PEP-2026-0002\"\npackage = \"github:other/fixtures\"\ntitle = \"fixtures leak\"\n"
+        ]
+    );
+    var database = "file://" + hosts.folder.path.join("work").join("advisories").to_string();
+    var audit = (dir: Path, arguments: Array<String>) => {
+        var all = ["audit"];
+        all.append_all(arguments);
+        return run(
+            hosts.command(tool("pep-package").to_string(), dir, all).environment("PEPPER_ADVISORY_DB", database)
+        );
+    };
+    var project = Project(
+        "audit",
+        "geometry = { github = \"someone/geometry\", version = \"1\" }\n"
+            + "\n[dev-dependencies]\nfixtures = { github = \"other/fixtures\", version = \"1\" }\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    var found = audit(project.dir, Array<String>());
+    expect_exit(found, 1);
+    expect_equal(
+        found.stdout,
+        "PEP-2026-0001 (high): numbers 1.3.1 (github:other/numbers)\n"
+            + "  numbers_version() lies\n  patched: >=2.0.0\n  https://example.com/PEP-2026-0001\n"
+            + "  app -> geometry 1.1.0 -> numbers 1.3.1\n"
+            + "  app -> fixtures 1.0.0 -> geometry 1.1.0 -> numbers 1.3.1\n"
+            + "PEP-2026-0002: fixtures 1.0.0 (github:other/fixtures) [dev]\n"
+            + "  fixtures leak\n  no patched version\n  app -> fixtures 1.0.0\n"
+            + "2 advisories affect pep.lock\n"
+    );
+
+    var report = json.parse(audit(project.dir, ["--json"]).stdout).value()["advisories"];
+    expect_equal(report[0]["id"].as_string().value(), "PEP-2026-0001");
+    expect_equal(report[0]["severity"].as_string().value(), "high");
+    expect_equal(report[0]["patched"][0].as_string().value(), ">=2.0.0");
+    expect_equal(report[0]["version"].as_string().value(), "1.3.1");
+    expect_false(report[0]["dev"].as_bool().value());
+    expect_true(report[0]["target"].is_null());
+    expect_equal(report[0]["total"].as_int().value(), 2 as long);
+    expect_equal(report[0]["paths"][1][0]["package"].as_string().value(), "fixtures");
+    expect_true(report[1]["dev"].as_bool().value());
+    expect_true(report[2].is_null());
+
+    # --ignore reports one but does not fail on it; pep.toml's list too.
+    var ignored = audit(project.dir, ["--ignore", "PEP-2026-0002"]);
+    expect_exit(ignored, 1);
+    expect_contains(ignored.stderr, "ignored PEP-2026-0002, which affects fixtures 1.0.0 (github:other/fixtures)");
+    expect_contains(ignored.stdout, "\n1 advisory affects pep.lock\n");
+    write_file(project.dir.join("pep.toml"), project.manifest() + "\n[audit]\nignore = [\"PEP-2026-0001\"]\n");
+    var clean = audit(project.dir, ["--ignore", "PEP-2026-0002"]);
+    expect_exit(clean, 0);
+    expect_contains(clean.stdout, "no advisory affects pep.lock (2 in ");
+    var empty = json.parse(audit(project.dir, ["--ignore", "PEP-2026-0002", "--json"]).stdout).value();
+    expect_true(empty["advisories"].as_array().value().is_empty);
+
+    # The cached copy serves until it is an hour old, then is fetched again.
+    add_version(
+        hosts.folder.path,
+        "advisories",
+        "2",
+        [
+            "PEP-2026-0003.toml",
+            "id = \"PEP-2026-0003\"\npackage = \"github:someone/geometry\"\n"
+                + "unaffected = [\"<1.1.0\"]\npatched = [\"^1.2\"]\n"
+        ]
+    );
+    expect_contains(audit(project.dir, ["--ignore", "PEP-2026-0002"]).stdout, "(2 in ");
+    age_advisories(hosts);
+    var refreshed = audit(project.dir, ["--ignore", "PEP-2026-0002"]);
+    expect_exit(refreshed, 1);
+    expect_contains(refreshed.stdout, "PEP-2026-0003: geometry 1.1.0 (github:someone/geometry)\n  patched: ^1.2\n");
+
+    # A malformed advisory is an error at its key.
+    add_version(hosts.folder.path, "advisories", "3", ["PEP-2026-0004.toml", "id = \"PEP-2026-0004\"\npackage = 4\n"]);
+    age_advisories(hosts);
+    var malformed = audit(project.dir, Array<String>());
+    expect_exit(malformed, 1);
+    expect_contains(malformed.stderr, "PEP-2026-0004.toml:2:1: error: 'package' must be a string");
 }

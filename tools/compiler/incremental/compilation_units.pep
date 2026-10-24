@@ -469,12 +469,20 @@ export merged_module(
 ): Result<sema.Module, String> {
     var slots = _record_slots(program);
     var module = sema.Module();
+    var anchors = sema.MergeAnchors();
     for (var d in reads) {
         var bytes = records.try_get(d);
         if (!bytes.is_value()) {
             return Result<sema.Module, String>.err($"no record of compilation unit {d}");
         }
-        var read = _read_record(slots, bytes.value(), Optional<sema.Module>.Value(module), true);
+        anchors.update(module);
+        var read = _read_record(
+            slots,
+            bytes.value(),
+            Optional<sema.Module>.Value(module),
+            true,
+            anchors = Optional<sema.LocAnchors>.Value(anchors.anchors)
+        );
         if (read.is_err()) {
             return Result<sema.Module, String>.err(read.error());
         }
@@ -937,12 +945,16 @@ _read_record(
     bytes: u8[],
     base: sema.Module?,
     merging: bool,
-    shift: sema.LocShift? = Optional<sema.LocShift>.Empty
+    shift: sema.LocShift? = Optional<sema.LocShift>.Empty,
+    anchors: sema.LocAnchors? = Optional<sema.LocAnchors>.Empty
 ): Result<sema.CheckedUnit, String> {
     var input = sema.RecordIn(bytes);
     input.shift = shift;
-    # Before the read changes the base.
-    if (base.is_value()) {
+    # Before the read changes the base (a merge keeps them up to date as it
+    # reads, `MergeAnchors`).
+    if (anchors.is_value()) {
+        input.anchors = anchors;
+    } else if (base.is_value()) {
         input.anchors = Optional<sema.LocAnchors>.Value(sema.anchors_of(base.value()));
     }
     # Most checked bodies are needed by neither the passes nor codegen:

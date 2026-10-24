@@ -102,6 +102,13 @@ struct _DigestBuffer {
         length = 0;
     }
 
+    # Takes `other`'s pending input and length.
+    _copy_from(other: _DigestBuffer) {
+        _digest_copy(block._data, other.block._data, other.size);
+        size = other.size;
+        length = other.length;
+    }
+
     # Adds `count` bytes at `data`, compressing each block it completes.
     feed<T: _DigestCompressor>(hasher: T, data: __ptr<u8>, count: ulong) {
         length += count;

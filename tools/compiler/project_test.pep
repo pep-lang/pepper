@@ -53,6 +53,15 @@ reads_a_manifest() {
             .to_string()
     );
     expect_equal(m.dependencies[3].directory(root, root).to_string(), root.join(Path("../local")).to_string());
+    # A vendored project's packages are in its vendor folder.
+    expect_equal(
+        m.dependencies[0].directory(root, root, "third_party").to_string(),
+        root.join(Path("third_party")).join(Path("github.com")).join(Path("someone")).join(Path("geometry")).to_string()
+    );
+    var vendored = link.parse_manifest(
+        Path("/p/pep.toml"), "[package]\nname = \"a\"\n[fetch]\nvendor = \"third_party\"\n"
+    );
+    expect_equal(vendored.value().vendor, "third_party");
     expect_equal(m.dependencies[0].locked_source().value(), "github:someone/geometry");
     expect_false(m.dependencies[3].locked_source().is_value());
 }
@@ -96,7 +105,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]' and '[fetch]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -107,6 +116,19 @@ reports_problems_at_the_key() {
         "entyr: unknown key 'entyr' in '[build]'; expected one of 'entry', 'output', 'include', 'link'"
     );
     expect_equal(errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n"), "");
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[fetch]\nvendor = [\"x\"]\n"), "[: 'vendor' must be a string, not an array"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[retract]\n\"1.0.1\" = \"bad\"\n[audit]\nignore = [\"PEP-1\"]\n"), ""
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[retract]\n\"1.0.1\" = 1\n"), "1: '1.0.1' must be a string, not an integer"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[audit]\nignores = []\n"),
+        "ignores: unknown key 'ignores' in '[audit]'; expected one of 'ignore'"
+    );
 }
 
 [Test]
@@ -199,6 +221,60 @@ reports_an_unfetched_dependency_of_a_path_dependency() {
 }
 
 [Test]
+overrides_put_a_folder_in_place_of_a_package() {
+    var folder = TempFolder("project_overrides");
+    var root = folder.path;
+    Directory.create_all(root.join(Path("geo")));
+    File.write_text(
+        root.join(Path("pep.toml")),
+        "[package]\nname = \"p\"\n[dependencies]\ngeo = { github = \"x/geo\" }\n"
+            + "[overrides]\n\"github:x/geo\" = { path = \"geo\" }\n"
+            + "\"github:x/net\" = { github = \"me/net\", branch = \"fix\" }\n"
+    );
+    File.write_text(
+        root.join(Path("geo")).join(Path("pep.toml")),
+        "[package]\nname = \"geo\"\n[dependencies]\nterm = { github = \"nobody/term\" }\n"
+    );
+    File.write_text(root.join(Path("geo")).join(Path("module.pep")), "export area(): int {\n    return 0;\n}\n");
+    File.write_text(root.join(Path("main.pep")), "import geo;\nmain(): int {\n    return geo.area();\n}\n");
+
+    # The folder's Git dependencies are fetched, not the package it replaces.
+    var manifest = link.load_manifest(root.join(Path("pep.toml")), Array<Path>());
+    expect_true(manifest.is_ok());
+    var names = Array<String>();
+    for (var d in manifest.value().git_dependencies()) {
+        names.append(d.name);
+    }
+    expect_equal(", ".join(names), "term");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    expect_false(program.value().check().is_value());
+
+    # The lock clones a fork's commit from the fork, and a folder has
+    # nothing to fetch.
+    File.write_text(
+        root.join(Path("pep.lock")),
+        "version = 1\n\n[[package]]\nname = \"geo\"\nsource = \"github:x/geo\"\noverride = \"path:geo\"\n"
+            + "\n[[package]]\nname = \"net\"\nsource = \"github:x/net\"\noverride = \"github:me/net\"\ncommit = \"abc\"\n"
+    );
+    var locked = link.read_lock(root.join(Path("pep.lock")));
+    expect_true(locked.is_ok());
+    expect_equal(locked.value().count, 1);
+    expect_equal(locked.value()[0].clone_url(), link.Host.GitHub.clone_url("me/net"));
+
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[overrides]\n\"x/geo\" = { path = \"geo\" }\n"),
+        "x/geo: override 'x/geo' does not name a package's source, such as 'github:owner/name'"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[overrides]\n\"github:x/geo\" = { path = \"geo\", optional = true }\n"),
+        "optional: an override takes a source and a revision, not 'optional'; set it on the dependency"
+    );
+}
+
+[Test]
 reads_dev_dependencies() {
     var parsed = link.parse_manifest(
         Path("/p/pep.toml"),
@@ -219,7 +295,7 @@ reads_dev_dependencies() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[dev-dependencies]\njson = { github = \"x/json\", tags = \"v1\" }\n"),
-        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features'"
+        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
     );
 }
 
@@ -342,7 +418,7 @@ reads_target_dependencies() {
         errors(
             "[package]\nname = \"a\"\n[target.'OS(Windows)'.dependencies]\nx = { github = \"a/x\", tags = \"v1\" }\n"
         ),
-        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features'"
+        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
     );
 }
 
@@ -601,4 +677,106 @@ load_with(file: Path, features: String[]): link.Program {
     var program = link.load_program(file, setup);
     expect_true(program.is_ok());
     return program.value();
+}
+
+[Test]
+reads_a_workspace() {
+    # A workspace's root needs no `[package]`.
+    expect_equal(errors("[workspace]\nmembers = [\"a\", \"libs/*\"]\n"), "");
+    expect_equal(
+        errors("[workspace]\nmember = [\"a\"]\n"),
+        "member: unknown key 'member' in '[workspace]'; expected one of 'members', 'dependencies'"
+    );
+    expect_equal(
+        errors("[workspace]\nmembers = []\n[workspace.dependencies]\nn = { github = \"o/n\", optional = true }\n"),
+        "optional: 'optional' is not for '[workspace.dependencies]', which gives a source and a revision; give it in the member's entry"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dependencies]\nn = { workspace = true, github = \"o/n\" }\n"),
+        "github: 'github' and 'workspace = true' both choose where 'n' comes from; keep one"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dependencies]\nn = { workspace = false }\n"),
+        "false: 'workspace' is true or absent; give dependency 'n' a source instead"
+    );
+    # A `path` takes a `version`, for `publish`, and nothing else.
+    expect_equal(errors("[package]\nname = \"a\"\n[dependencies]\nn = { path = \"../n\", version = \"1\" }\n"), "");
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dependencies]\nn = { path = \"../n\", tag = \"v1\" }\n"),
+        "tag: dependency 'n' is a 'path'; a folder has no branches, tags or commits, only a 'version' for 'publish'"
+    );
+}
+
+[Test]
+a_workspace_shares_its_root_and_unifies_features() {
+    var folder = TempFolder("workspace");
+    var root = folder.path;
+    var app = root.join(Path("app"));
+    var shapes = root.join(Path("libs")).join(Path("shapes"));
+    Directory.create_all(app);
+    Directory.create_all(shapes);
+    File.write_text(
+        root.join(Path("pep.toml")),
+        "[workspace]\nmembers = [\"app\", \"libs/*\"]\n[workspace.dependencies]\n"
+            + "net = { github = \"nobody/net\", version = \"1\" }\nshapes = { path = \"libs/shapes\" }\n"
+    );
+    File.write_text(shapes.join(Path("pep.toml")), "[package]\nname = \"shapes\"\n[features]\nround = []\n");
+    File.write_text(shapes.join(Path("module.pep")), "export sides(): int {\n    return 4;\n}\n");
+    File.write_text(
+        app.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[dependencies]\nshapes = { workspace = true }\nnet = { workspace = true }\n"
+    );
+    var main = app.join(Path("main.pep"));
+    File.write_text(main, "import shapes;\nmain(): int {\n    return shapes.sides() - 4;\n}\n");
+
+    # A member's Git dependencies live in the root's `.pep/deps`, and a
+    # `path` it inherits is relative to the root.
+    var member = link.load_manifest(app.join(Path("pep.toml")), Array<Path>());
+    expect_true(member.is_ok());
+    var deps_root = member.value().deps_root();
+    expect_equal(deps_root.to_string(), link.absolute(root).normalize().to_string());
+    expect_equal(
+        member.value().dependency("net").value().directory(deps_root, app).to_string(),
+        link.package_directory(deps_root, link.Host.GitHub, "nobody/net").to_string()
+    );
+    var whole = link.load_manifest(root.join(Path("pep.toml")), Array<Path>());
+    expect_true(whole.is_ok());
+    expect_equal(whole.value().member_manifests.count, 2);
+    expect_equal(whole.value().git_dependencies().count, 1);
+    expect_false(load_with(main, Array<String>()).check().is_value());
+
+    # The features of the members built together are unified: 'round' is
+    # shapes', so only a build with shapes as a member turns it on.
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.target.features = ["round"];
+    expect_true(link.load_program(main, setup).is_err());
+    setup.target.members = ["shapes"];
+    var unified = link.load_program(main, setup);
+    expect_true(unified.is_ok());
+    expect_true(unified.value().target.build_options.contains("shapes_round"));
+
+    # Problems at the member: listed twice, not a package, a workspace
+    # itself, inheriting what the root lacks.
+    Directory.create_all(root.join(Path("libs")).join(Path("inner")));
+    File.write_text(root.join(Path("libs")).join(Path("inner")).join(Path("pep.toml")), "[workspace]\nmembers = []\n");
+    File.write_text(root.join(Path("pep.toml")), "[workspace]\nmembers = [\"app\", \"app\", \"none\", \"libs/*\"]\n");
+    var bad = link.load_manifest(app.join(Path("pep.toml")), Array<Path>());
+    expect_true(bad.is_err());
+    expect_true(bad.error().contains("pep.toml:2:19: error: workspace member 'app' is listed twice"));
+    expect_true(bad.error().contains("pep.toml:2:26: error: workspace member 'none' is not a package: no "));
+    expect_true(bad.error().contains("error: workspace member 'libs/*' is a workspace itself; workspaces do not nest"));
+    expect_true(
+        bad.error().contains("error: dependency 'shapes' has 'workspace = true', and '[workspace.dependencies]' of ")
+    );
+
+    # Outside a workspace, `workspace = true` has nothing to inherit.
+    File.write_text(root.join(Path("pep.toml")), "[workspace]\nmembers = [\"libs/shapes\"]\n");
+    var outside = link.load_manifest(app.join(Path("pep.toml")), Array<Path>());
+    expect_true(outside.is_err());
+    expect_true(
+        outside.error().contains(
+            "error: dependency 'shapes' has 'workspace = true', and no workspace lists this package; give it a source"
+        )
+    );
 }

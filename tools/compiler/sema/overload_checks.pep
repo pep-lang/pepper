@@ -2,6 +2,7 @@
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
+import [unit_decls] from "checked";
 import [for_each_applied_site, SiteVisitor] from "closure_sites";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
@@ -38,16 +39,21 @@ struct _OverloadChecks {
         this.state = state;
         overloads = Overloads(module, state);
         table = StructTable(module, memo = state.trait_types_memo());
+        # The checked code was checked with its unit: the walk visits only
+        # the unit's own (`for_each_applied_site`).
         for (var g in module.globals) {
-            _note_untyped(g, overloads, untyped);
+            if (!module.checked.globals.contains(g.name)) {
+                _note_untyped(g, overloads, untyped);
+            }
         }
-        for (var f in module.functions) {
+        var own = unit_decls(module);
+        for (var f in own.functions) {
             _untyped_in(f.body, overloads, untyped);
             if (f.is_generic_func) {
                 generic_bases.insert(f.name);
             }
         }
-        for (var st in module.structs) {
+        for (var st in own.structs) {
             for (var m in st.method_members) {
                 _untyped_in(m.body, overloads, untyped);
             }

@@ -115,10 +115,12 @@ main(): int {
 | `optional` | `true`: a build uses it only when a [feature](#features) turns it on |
 | `features` | An array of the dependency's features to turn on |
 | `default-features` | `false` leaves the dependency's `default` feature off |
+| `workspace` | `true`: its source and revision are its [workspace's](#workspaces-workspace) |
 
 A dependency has exactly one source, and at most one of `version`, `branch`,
 `tag` and `commit`; with none, it follows the repository's default branch.
-A `path` dependency takes none of them.
+A `path` dependency takes only a `version`, which a build ignores and
+[`publish`](pep-package.md#publish) asks for.
 
 ### Imports
 
@@ -170,6 +172,10 @@ In CI, `pepper build --locked` and `pepper test --locked` fail when
 `PEPPER_LOCKED=1` and `PEPPER_OFFLINE=1` do the same). See
 [Reproducible builds](pep-package.md#reproducible-builds). They apply to
 dev-dependencies as to the rest.
+
+A project that sets `[fetch] vendor` (`pepper package vendor` does) keeps
+its dependencies in that folder of the repository instead, and builds with
+no network and no download cache; see [`[fetch]`](#fetch).
 
 ## `[dev-dependencies]`
 
@@ -338,16 +344,209 @@ full    = ["tls", "gzip"]                  # other features of this package
 write a dependency's `optional`, `features` and `default-features` (see
 [pep-package](pep-package.md#add-ownernamerange)).
 
+## Workspaces: `[workspace]`
+
+A repository holding several related packages, such as a library with its
+examples or a client and a server, makes them one workspace: a `pep.toml`
+at the root lists them, and they share one `pep.lock` and one
+`.pep/deps`, so every member builds with the same revision of each
+dependency.
+
+```text
+shapes/
+  pep.toml            [workspace]
+  pep.lock            one lock for every member
+  app/pep.toml        [package] name = "app"
+  libs/geo/pep.toml   [package] name = "geo"
+  libs/draw/pep.toml  [package] name = "draw"
+```
+
+```toml
+# shapes/pep.toml
+[workspace]
+members = ["app", "libs/*"]
+
+[workspace.dependencies]
+numbers = { github = "someone/numbers", version = "1.2" }
+geo     = { path = "libs/geo", version = "0.3" }
+```
+
+```toml
+# shapes/app/pep.toml
+[package]
+name = "app"
+
+[dependencies]
+numbers = { workspace = true }                   # someone/numbers 1.2
+geo     = { workspace = true, features = ["3d"] }
+draw    = { path = "../libs/draw", version = "0.1" }
+```
+
+- **`members`** lists the member folders, relative to the root: a folder
+  (`app`), or a glob of folders (`libs/*`, see
+  [`io.glob`](../reference/io-glob.md)). Each holds a package's `pep.toml`.
+  The root may be a package too, with a `[package]` of its own: it is
+  then a member without being listed. A root without one only holds the
+  workspace.
+- **One lock:** `pepper package` and `pepper build`, run in the root or
+  any member, resolve every member's dependencies together into the
+  root's `pep.lock`, and fetch into the root's `.pep/deps`. The members'
+  own dependencies count as the project's, so when two ask for one
+  package, both ranges must hold (see
+  [Resolving versions](pep-package.md#resolving-versions)).
+- **`[workspace.dependencies]`** gives a source and revision once, for
+  each member to inherit with `workspace = true`. A member's entry adds
+  `optional`, `features` and `default-features`, and nothing else; a
+  `path` there is relative to the root.
+- **Members depend on each other** with `path`. A `version` beside the
+  `path` is for [`publish`](pep-package.md#publish), which refuses a
+  `path` without one; a build uses the folder.
+- **Building:** `pepper build` in a member builds that member; in a root
+  with no `[package]`, every member. `--all` builds every member, and
+  `-p <name>` (repeated for more) the members by package name, from the
+  root or any member, each into its own output; a member with no entry
+  file, a library, is skipped. `pepper test --all` and `pepper test -p
+  <name>` test them the same way (see [pep-build](pep-build.md) and
+  [pep-test](pep-test.md)).
+- **Features are unified** across the members a build selects, as in
+  Cargo: each member's `default` and its dependencies' features are on
+  in every one of them, and `--features` turns a feature on in each
+  member that has it.
+- **[`[overrides]`](#overrides)** belong in the root, and apply to every
+  member; a member's own are ignored.
+- **One level:** a member cannot be a workspace itself, and a package is
+  in the workspace of the nearest `pep.toml` above it with
+  `[workspace]`, when that lists it. A package in `.pep/deps` is in none
+  of the project's.
+- **Needs toolchain 0.11.0,** as for
+  [`[dev-dependencies]`](#dev-dependencies): `[workspace]` and a
+  dependency's `workspace` are unknown to older toolchains.
+
+The problems of a workspace are errors at the member in the root's
+`members`, or at the dependency that inherits:
+
+```text
+pep.toml:2:19: error: workspace member 'app' is listed twice
+    2 | members = ["app", "app"]
+      |                   ^~~~~
+```
+
+- a member that is not a package (no `pep.toml`), one listed twice, or
+  one that is a workspace itself;
+- `workspace = true` with a source or revision of its own, in a package
+  no workspace lists, or naming what `[workspace.dependencies]` lacks;
+- `optional`, `features`, `default-features` or `workspace` in
+  `[workspace.dependencies]`.
+## `[overrides]`
+
+To try a fix in a package deep in the graph, or to use a fork until the
+fix is released, the project replaces the package wherever the graph
+reaches it, without editing the `pep.toml` of each package on the way:
+
+```toml
+[overrides]
+"github:other/numbers" = { github = "me/numbers", branch = "fix-overflow" }
+"github:someone/geometry" = { path = "../geometry" }
+```
+
+- **The key** is the source of the package it replaces, as
+  [`pep.lock`](pep-package.md#peplock) writes it: the host's key, `:`,
+  and the repository (`github:owner/name`). One table keyed by the source
+  is enough, since a source is what makes two dependencies the same
+  package in the graph; the name each dependent imports it by does not.
+- **The value** is the package that replaces it, written as a dependency
+  is: a repository (`github`, `gitlab`, `codeberg`) with at most one of
+  `version`, `branch`, `tag` and `commit`, or a `path`, relative to this
+  `pep.toml`. It takes no `optional`, `features` or `default-features`;
+  those stay on each dependency.
+- **Everywhere, whatever is asked:** every package that depends on the
+  source gets the replacement, the project included, whatever version
+  range or branch each asks for. A fork is checked out in the original's
+  folder, `.pep/deps/<host>/<owner>/<name>`, and a `path` override's
+  folder is read in its place, its own dependencies included. Imports do
+  not change.
+- **Locked:** `pep.lock` records the replacement in the package's
+  `override`, with the fork's commit (see
+  [pep.lock](pep-package.md#peplock)), so `--locked` and `--offline`
+  builds stay reproducible, and adding, changing or removing an override
+  changes the lock.
+- **Only the project's own:** a dependency's `[overrides]` do not apply
+  to the projects that use it, and `pepper package publish` refuses a
+  package with any (see [publish](pep-package.md#publish)). In a
+  [workspace](#workspaces-workspace), only the root's apply, to every
+  member; a member's are ignored, which `pepper package` warns about.
+- **Checked by `pepper package`:** an override that matches no package in
+  the graph is a warning at its key, and a replacement whose `[package]`
+  `name` differs from the name `pep.lock` records for the package it
+  replaces is an error there:
+
+  ```text
+  pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'
+      9 | "github:other/numbers" = { github = "someone/geometry", tag = "v1.0.0" }
+        | ^~~~~~~~~~~~~~~~~~~~~~
+  ```
+
+- **Needs toolchain 0.11.0:** an older toolchain rejects a `pep.toml`
+  with `[overrides]` as an unknown table.
+
 ## `[fetch]`
 
 ```toml
 [fetch]
 hosts = ["codeberg", "github"]
+vendor = "vendor"
 ```
 
 | Key | What it is | Default |
 | --- | --- | --- |
 | `hosts` | The hosts `pepper package add owner/name` looks a repository up on, in order, when the argument names none; it adds the first that has it | `["github", "gitlab", "codeberg"]` |
+| `vendor` | The folder, relative to the project, that [`pepper package vendor`](pep-package.md#vendor-dir) copied every locked package into, which sets it. Builds then read each dependency from `<vendor>/<host>/<owner>/<name>` instead of `.pep/deps`, fetch nothing, and fail when a package is missing, at another commit than `pep.lock`'s, or edited. A package that sets it needs `minimum_toolchain = "0.11.0"` or later | none: dependencies are fetched into `.pep/deps` |
+
+## `[retract]`
+
+A package withdraws its own broken releases, as Go's `retract` does: each
+key is a version, or a range as dependencies write it, and its value says
+why.
+
+```toml
+[retract]
+"1.1.0" = "loses data on Windows"
+">=1.2.0, <1.2.3" = "PEP-2026-0001"
+```
+
+A key that is a version names that version alone, not the `^` range a
+dependency's `version = "1.1.0"` means; keys are quoted, as TOML reads
+`1.1.0` unquoted as three nested keys. Release the table in a newer
+version: the `[retract]` of a package's newest release speaks for every
+version, so a range no longer picks a retracted one, `pepper package
+outdated` flags one `pep.lock` holds, and `update` moves off it (see
+[Retracted versions](pep-package.md#retracted-versions)). A key that is
+neither a version nor a range is an error at the key in the project's
+own `pep.toml` (a dependency's retracts nothing, so its dependents still
+resolve):
+
+```text
+pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range: ...
+```
+
+- **Needs toolchain 0.11.0:** an older toolchain rejects a `pep.toml` with
+  `[retract]` as an unknown table, so a package that has one sets
+  `minimum_toolchain = "0.11.0"` (or later), which `pepper package
+  publish` checks.
+
+## `[audit]`
+
+```toml
+[audit]
+ignore = ["PEP-2026-0001"]   # its code is never called here
+```
+
+| Key | What it is | Default |
+| --- | --- | --- |
+| `ignore` | The advisories, by id, that [`pepper package audit`](pep-package.md#audit) reports but does not fail on, with `--ignore` | `[]` |
+
+Only the project's own (in a workspace, its root's) `[audit]` applies.
+An older toolchain than 0.11.0 rejects the table.
 
 ## Errors
 
@@ -373,6 +572,8 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
   `import` uses.
 - A dependency with no source or two, a repository not written `owner/name`,
   or more than one of `version`, `branch`, `tag` and `commit`.
+- An `[overrides]` key that is not a source (`github:owner/name`), or an
+  override with `optional`, `features` or `default-features`.
 - A table or key `pep.toml` does not have, or a value of the wrong type.
 
 An import of a dependency that is not on disk says which folder is missing:

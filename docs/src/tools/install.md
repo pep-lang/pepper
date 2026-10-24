@@ -193,8 +193,10 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   newest published toolchain, that prerelease or a release with a higher
   version, whatever `VERSION` holds, instead of building the compiler. The newest release, the default, never picks a prerelease.
 - **a release**, on a `vX.Y.Z` tag, made by hand. Its stage 0, the
-  compiler that builds it, is the newest published toolchain too, so the release
-  may take any version, not only the one main was developing:
+  compiler that builds it, is the build of main that `.github/stage0` pins
+  (see [Stage 0](../contributing/tests.md#stage-0)), as for every build of
+  main, so the release may take any version, not only the one main was
+  developing:
   1. A pull request runs `scripts/set-version.sh 0.9.0`, which sets the
      version everywhere a tool reads it.
   2. Tag that merge `v0.9.0` and push the tag. The workflow checks that the

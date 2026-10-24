@@ -7,6 +7,7 @@
 # (libcrypto, or CNG on Windows).
 
 import digest;
+import random;
 
 # `size` bytes, each `index % 251`.
 pattern(size: ulong): u8[] {
@@ -338,6 +339,68 @@ pbkdf2_sha256_matches_rfc_7914() {
         "bbbba2a6dead65a0684a7fd433196aea23fbc9cf73496ad93a63ef2689feb8ef4f25eeaf527fd48d4290560dcbd3a3590408d088b8af98bb9f29c69a7d98ad6a351e2312b9f2"
     );
     expect_equal(digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 0).count, 0 as ulong);
+}
+
+# PBKDF2-HMAC-SHA256 from one-shot HMACs, as RFC 8018 states it, to check
+# the copied pad states of `digest.pbkdf2_sha256` against.
+pbkdf2_by_hmac(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
+    var key = Array<u8>(length);
+    uint index = 1;
+    while (key.count < length) {
+        var message = Array<u8>();
+        message.append_all(salt);
+        message.append((index >> 24) as u8);
+        message.append((index >> 16) as u8);
+        message.append((index >> 8) as u8);
+        message.append(index as u8);
+        var round = digest.hmac_sha256(password, message);
+        var block = Array<u8>();
+        block.append_all(round);
+        ulong done = 1;
+        while (done < rounds) {
+            round = digest.hmac_sha256(password, round);
+            ulong byte = 0;
+            while (byte < 32) {
+                block[byte] = block[byte] ^ round[byte];
+                byte += 1;
+            }
+            done += 1;
+        }
+        ulong take = 0;
+        while (take < 32 && key.count < length) {
+            key.append(block[take]);
+            take += 1;
+        }
+        index += 1;
+    }
+    return key;
+}
+
+[Test]
+pbkdf2_sha256_matches_per_round_hmac_for_random_inputs() {
+    var generator = random.Generator(148);
+    ulong trial = 0;
+    while (trial < 40) {
+        # Passwords and salts up to two blocks long: a password over a
+        # block is hashed first, and a salt may span blocks.
+        var password = Array<u8>();
+        var password_size = generator.next_ulong() % 140;
+        while (password.count < password_size) {
+            password.append(generator.next_ulong() as u8);
+        }
+        var salt = Array<u8>();
+        var salt_size = generator.next_ulong() % 140;
+        while (salt.count < salt_size) {
+            salt.append(generator.next_ulong() as u8);
+        }
+        var rounds = 1 + generator.next_ulong() % 20;
+        var length = 1 + generator.next_ulong() % 100;
+        expect_equal(
+            digest.to_hex(digest.pbkdf2_sha256(password, salt, rounds, length)),
+            digest.to_hex(pbkdf2_by_hmac(password, salt, rounds, length))
+        );
+        trial += 1;
+    }
 }
 
 [Test]

@@ -1370,6 +1370,25 @@ export struct File {
         return _io_sys_rename(from, to);
     }
 
+    ## Creates a hard link at `to` to the file `from` (`link` on POSIX,
+    ## `CreateHardLinkW` on Windows): a second name for the same file, which
+    ## keeps its contents when `from` is renamed or removed.
+    ##
+    ## Both names must be on one file system (volume); across two it fails
+    ## rather than copying, and so do directories.
+    ##
+    ## @param from the existing file
+    ## @param to the new name
+    ## @returns an Ok result once `to` names the file; an error with
+    ##   `is_not_found()` when `from` (or the parent of `to`) does not exist
+    ##   or a path is empty, `is_already_exists()` when something is already
+    ##   at `to`, `is_permission_denied()`, or another platform error
+    ## @example
+    ##     File.hard_link(Path("build/app.o"), Path("pinned/app.o"));
+    static hard_link(from: Path, to: Path): IoResult<void> {
+        return _io_sys_hard_link(from, to);
+    }
+
     ## Creates a symbolic link at `link` that points to the file `target`
     ## (`symlink` on POSIX, `CreateSymbolicLinkW` on Windows). Use
     ## `Directory.symlink` for a link to a directory: Windows makes the two

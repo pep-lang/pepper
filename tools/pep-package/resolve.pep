@@ -13,11 +13,16 @@
 # a package only they lead to is locked as `dev`. Every platform's
 # `[target.'<condition>'.dependencies]` are in the graph, so pep.lock is
 # the same on each; a package only they lead to is locked with the
-# condition under which a build needs it (`target`).
+# condition under which a build needs it (`target`). The project's
+# `[overrides]` replace a package wherever the graph reaches it, whatever
+# its dependents ask: a fork's revision is chosen as the override asks and
+# checked out where the original's would be, and a `path` override's
+# folder is read in its place; either is locked with `override`.
 
 import [Path] from io;
 import semver;
 import [Version, VersionRange, parse_range] from semver;
+import [check_vendored] from toolchain;
 import "archive";
 import "git";
 import "lock";
@@ -55,16 +60,21 @@ export struct Wanted {
 export struct Graph {
     var packages: Array<Locked> = __null;
     var notes: Array<String> = __null;
+    # Clang-style warnings on pep.toml: overrides that match no package.
+    var warnings: Array<String> = __null;
 
     construct() {
         packages = Array<Locked>();
         notes = Array<String>();
+        warnings = Array<String>();
     }
 }
 
-# Where a package from `host` lives in the project `project`.
-export package_dir(project: Path, host: String, repository: String): Path {
-    var dir = project.join(".pep").join("deps").join(host_domain(host));
+# Where a package from `host` lives in the project `project`: in its
+# `.pep/deps`, or in its folder `vendor` when that is not empty.
+export package_dir(project: Path, host: String, repository: String, vendor: String = ""): Path {
+    var deps = vendor.is_empty ? project.join(".pep").join("deps") : project.join(vendor);
+    var dir = deps.join(host_domain(host));
     for (var part in repository.split("/")) {
         dir = dir.join(part);
     }
@@ -93,6 +103,9 @@ export struct Resolver {
     # `--offline`: use only what `.pep/deps` and the download cache hold,
     # and fail on what needs the network.
     var offline: bool = false;
+    # The project's `[fetch] vendor` folder, when packages are read from
+    # it, which is only checked, never written; empty for `.pep/deps`.
+    var vendor: String = "";
     # The toolchain release resolving, which each package's
     # `minimum_toolchain` is checked against; empty checks none.
     var toolchain: String = "";
@@ -100,6 +113,8 @@ export struct Resolver {
     var _refs: HashMap<String, Array<RemoteRef>> = __null;
     # The `minimum_toolchain` each commit's pep.toml declares, read once.
     var _minimums: HashMap<String, String> = __null;
+    # The `[retract]` of each source's newest release, read once.
+    var _retractions: HashMap<String, Array<Retraction>> = __null;
 
     construct(project: Path, root: Manifest, previous: Array<Locked>) {
         this.project = project;
@@ -108,6 +123,42 @@ export struct Resolver {
         update = Array<String>();
         _refs = HashMap<String, Array<RemoteRef>>();
         _minimums = HashMap<String, String>();
+        _retractions = HashMap<String, Array<Retraction>>();
+    }
+
+    # The versions of `source` its author retracted: the `[retract]` of
+    # the pep.toml of its newest release, which speaks for every version,
+    # as Go's `retract` does. A pep.toml that does not parse retracts
+    # nothing.
+    retractions(source: String): Result<Array<Retraction>> {
+        var known = _retractions.try_get(source);
+        if (known.is_value()) {
+            return Result<Array<Retraction>>.Ok(known.value());
+        }
+        var refs = remote(source);
+        if (refs.is_err()) {
+            return Result<Array<Retraction>>.Err(refs.error().message);
+        }
+        var found = Array<Retraction>();
+        var newest = newest_release(refs.value());
+        if (newest.is_value()) {
+            var (version, commit) = newest.value();
+            var (host, repository) = split_source(_origin(source));
+            var text = file_at(host, repository, _clone(source), commit, "pep.toml", offline);
+            if (text.is_err()) {
+                return Result<Array<Retraction>>.Err(
+                    $"cannot read the pep.toml of {source} {version.to_string()}: {text.error().message}"
+                );
+            }
+            if (text.value().is_value()) {
+                var manifest = parse_manifest(Path("pep.toml"), text.value().value());
+                if (manifest.is_ok()) {
+                    found = manifest.value().retractions;
+                }
+            }
+        }
+        _retractions[source] = found;
+        return Result<Array<Retraction>>.Ok(found);
     }
 
     # Why this toolchain cannot build a package declaring `minimum`; empty
@@ -127,6 +178,59 @@ export struct Resolver {
         return $"needs toolchain {minimum}";
     }
 
+    # Where the code of `source` comes from: the fork that overrides it, or
+    # itself.
+    _origin(source: String): String {
+        var replacement = root.override_of(source);
+        if (replacement.is_value() and !replacement.value().is_path()) {
+            return replacement.value().source();
+        }
+        return source;
+    }
+
+    # What pep.lock records `[overrides]` replaces `source` with: the fork's
+    # source, or `path:` and the folder; empty when nothing does.
+    _replaced_by(source: String): String {
+        var replacement = root.override_of(source);
+        return replacement.is_value() ? replacement.value().source() : "";
+    }
+
+    # The folder holding `source`'s files: a `path` override's, else its
+    # checkout in `.pep/deps` (or the vendor folder).
+    _dir(source: String): Path {
+        var replacement = root.override_of(source);
+        if (replacement.is_value() and replacement.value().is_path()) {
+            return project.join(replacement.value().repository);
+        }
+        var (host, repository) = split_source(source);
+        return package_dir(project, host, repository, vendor);
+    }
+
+    # The git clone of `source` in `.pep/deps` that `file_at` reads other
+    # commits from: never a vendor folder, whose copies are not clones and
+    # which a clone would replace.
+    _clone(source: String): Path {
+        var (host, repository) = split_source(source);
+        return package_dir(project, host, repository);
+    }
+
+    # Fails, at the override's key, when the package `name` that overrides
+    # `source` is not the one pep.lock records for it.
+    _check_name(source: String, name: String): Result<void> {
+        for (var locked in previous) {
+            if (locked.source == source and !locked.name.is_empty and locked.name != name) {
+                return Result<void>.Err(
+                    root.at_key(
+                        "error",
+                        source,
+                        $"'{_replaced_by(source)}' is the package '{name}', not '{locked.name}', which it overrides; name a fork or copy of '{locked.name}'"
+                    )
+                );
+            }
+        }
+        return Result<void>.ok();
+    }
+
     # The `minimum_toolchain` the pep.toml at `commit` of `source` declares,
     # read from its clone in `.pep/deps` without checking it out.
     _minimum_at(source: String, commit: String): Result<String> {
@@ -134,8 +238,8 @@ export struct Resolver {
         if (known.is_value()) {
             return Result<String>.Ok(known.value());
         }
-        var (host, repository) = split_source(source);
-        var text = file_at(host, repository, package_dir(project, host, repository), commit, "pep.toml", offline);
+        var (host, repository) = split_source(_origin(source));
+        var text = file_at(host, repository, _clone(source), commit, "pep.toml", offline);
         if (text.is_err()) {
             return Result<String>.Err(
                 $"cannot read the pep.toml of {source} {commit.substr(0, 12)}: {text.error().message}"
@@ -170,7 +274,38 @@ export struct Resolver {
                 if (source.starts_with("path:")) {
                     continue;
                 }
-                var picked = choose(source, asks, notes);
+                var replacement = root.override_of(source);
+                if (replacement.is_value() and replacement.value().is_path()) {
+                    if (chosen.contains(source)) {
+                        continue;
+                    }
+                    var folder = _dir(source);
+                    if (!folder.join("pep.toml").is_file()) {
+                        return Result<Graph>.Err(
+                            root.at_key(
+                                "error",
+                                source,
+                                $"the folder {folder.to_string()} overriding '{source}' has no pep.toml"
+                            )
+                        );
+                    }
+                    var (folder_name, _) = _name_and_minimum(folder, source);
+                    var named = _check_name(source, folder_name);
+                    if (named.is_err()) {
+                        return Result<Graph>.Err(named.error().message);
+                    }
+                    var local = Locked(folder_name, source, "", "");
+                    local.replaced_by = _replaced_by(source);
+                    chosen[source] = local;
+                    changed = true;
+                    continue;
+                }
+                # An override replaces what every dependent asks.
+                var asking = asks;
+                if (replacement.is_value()) {
+                    asking = [Wanted(root.name, true, false, "", replacement.value())];
+                }
+                var picked = choose(source, asking, notes);
                 if (picked.is_err()) {
                     return Result<Graph>.Err(picked.error().message);
                 }
@@ -180,15 +315,22 @@ export struct Resolver {
                     continue;
                 }
                 var (host, repository) = split_source(source);
-                var dir = package_dir(project, host, repository);
-                var fetched = fetch(host, repository, dir, pick.commit);
+                var dir = package_dir(project, host, repository, vendor);
+                var fetched = fetch(host, repository, dir, pick.commit, _replaced_by(source));
                 if (fetched.is_err()) {
                     return Result<Graph>.Err($"cannot fetch {source}: {fetched.error().message}");
                 }
                 var (commit, sha256) = fetched.value();
                 pick.commit = commit;
                 pick.sha256 = sha256;
+                pick.replaced_by = _replaced_by(source);
                 var (name, minimum) = _name_and_minimum(dir, repository);
+                if (replacement.is_value()) {
+                    var named = _check_name(source, name);
+                    if (named.is_err()) {
+                        return Result<Graph>.Err(named.error().message);
+                    }
+                }
                 pick.name = name;
                 var shortfall = _shortfall(minimum);
                 if (!shortfall.is_empty) {
@@ -230,6 +372,29 @@ export struct Resolver {
                 graph.packages.append(locked);
             }
             graph.notes = notes;
+            for (var replacement in root.overrides) {
+                if (!wanted.contains(replacement.name)) {
+                    graph.warnings.append(
+                        root.at_key(
+                            "warning",
+                            replacement.name,
+                            $"override of '{replacement.name}' matches no package in the dependency graph"
+                        )
+                    );
+                }
+            }
+            # Only the workspace root's apply.
+            for (var member in root.member_manifests) {
+                for (var replacement in member.overrides) {
+                    graph.warnings.append(
+                        member.at_key(
+                            "warning",
+                            replacement.name,
+                            $"override of '{replacement.name}' in a workspace member is ignored; move it to the root's pep.toml"
+                        )
+                    );
+                }
+            }
             return Result<Graph>.Ok(graph);
         }
         return Result<Graph>.Err(
@@ -247,8 +412,19 @@ export struct Resolver {
         # Each manifest to read, who it is, whether it is the project's,
         # whether a dev-dependency leads to it, and its source.
         var queue = Array<(Manifest, String, bool, bool, String)>();
-        queue.append((root, name, true, false, ""));
+        # A workspace's members are the project's own too, read once each.
+        var roots = [(root, name)];
         var read = HashSet<String>();
+        for (var member in root.member_manifests) {
+            roots.append((member, member.name));
+            var folder = member.dir().canonicalize();
+            if (folder.is_ok()) {
+                read.insert("path:" + folder.value().to_string());
+            }
+        }
+        for (var (manifest, label) in roots) {
+            queue.append((manifest, label, true, false, ""));
+        }
         ulong next = 0;
         var dev_queued = false;
         while (true) {
@@ -257,7 +433,9 @@ export struct Resolver {
                     break;
                 }
                 dev_queued = true;
-                queue.append((root, name, true, true, ""));
+                for (var (manifest, label) in roots) {
+                    queue.append((manifest, label, true, true, ""));
+                }
             }
             var (manifest, requirer, from_root, dev, parent) = queue[next];
             next += 1;
@@ -295,7 +473,7 @@ export struct Resolver {
                     if (locked.is_empty()) {
                         continue;
                     }
-                    package = package_dir(project, requirement.host, requirement.repository);
+                    package = _dir(source);
                     label = locked.value().describe();
                 }
                 read.insert(source);
@@ -324,12 +502,22 @@ export struct Resolver {
     }
 
     # Puts `commit` of `repository` on `host` in `dir`: a git checkout when
-    # git is on the PATH, else the host's archive of it. Returns the full
-    # commit and the checksum of its files, which must match the one
-    # pep.lock records for that commit.
-    fetch(host: String, repository: String, dir: Path, commit: String): Result<(String, String)> {
+    # git is on the PATH, else the host's archive of it, from the fork
+    # `from` (`github:you/name`) when it is given. Returns the full commit
+    # and the checksum of its files, which must match the one pep.lock
+    # records for that commit. With `vendor`, `dir` must hold the vendored
+    # package at `commit` already (`check_vendored`).
+    fetch(host: String, repository: String, dir: Path, commit: String, from: String = ""): Result<(String, String)> {
         var source = host + ":" + repository;
+        var (from_host, from_repository) = split_source(from.is_empty ? source : from);
         var expected = _locked_sha256(source, commit);
+        if (!vendor.is_empty) {
+            var checked = check_vendored(dir, commit);
+            if (checked.is_err()) {
+                return Result<(String, String)>.Err(checked.error());
+            }
+            return Result<(String, String)>.Ok((commit, expected));
+        }
         var at = unpacked(dir);
         # Offline, an unpacked archive serves even once git is installed.
         if (at.is_value() and at.value() == commit and (offline or (!expected.is_empty and !has_git()))) {
@@ -341,13 +529,13 @@ export struct Resolver {
                     $"git is not on the PATH, and fetching the commit '{commit}' without it needs all 40 digits"
                 );
             }
-            var fetched = fetch_archive(host, repository, dir, commit, expected, offline);
+            var fetched = fetch_archive(from_host, from_repository, dir, commit, expected, offline);
             if (fetched.is_err()) {
                 return Result<(String, String)>.Err(fetched.error().message);
             }
             return Result<(String, String)>.Ok((commit, fetched.value()));
         }
-        var checked = check_out(host, repository, dir, commit, offline);
+        var checked = check_out(from_host, from_repository, dir, commit, offline);
         if (checked.is_err()) {
             return Result<(String, String)>.Err(checked.error().message);
         }
@@ -381,7 +569,7 @@ export struct Resolver {
                 $"git is not on the PATH: reading which revisions {source} offers needs it (fetching what pep.lock lists does not); install git"
             );
         }
-        var (host, repository) = split_source(source);
+        var (host, repository) = split_source(_origin(source));
         var refs = remote_refs(repository_url(host, repository));
         if (refs.is_err()) {
             return Result<Array<RemoteRef>>.Err($"cannot read {source}: {refs.error().message}");
@@ -390,13 +578,14 @@ export struct Resolver {
         return refs;
     }
 
-    # The locked revision of `source`, unless it is being updated.
+    # The locked revision of `source`, unless it is being updated or its
+    # override changed.
     _kept(source: String): Optional<Locked> {
         if (update_all or update.contains(source)) {
             return Optional<Locked>.Empty;
         }
         for (var locked in previous) {
-            if (locked.source == source) {
+            if (locked.source == source and locked.replaced_by == _replaced_by(source)) {
                 return Optional<Locked>.Value(locked);
             }
         }
@@ -452,7 +641,7 @@ export struct Resolver {
                 }
                 return Result<Locked>.Ok(Locked("", source, version, ref.commit));
             }
-            return Result<Locked>.Err($"{source} has no {first.describe()}");
+            return Result<Locked>.Err($"{_origin(source)} has no {first.describe()}");
         }
         var ranges = Array<VersionRange>();
         for (var ask in asks) {
@@ -503,12 +692,22 @@ export struct Resolver {
             var available = offered.is_empty ? "it has no version tags" : "it offers " + ", ".join(offered);
             return Result<Locked>.Err(_conflict(source, asks, available));
         }
-        # The newest accepted version this toolchain builds: only the
-        # pep.toml of each newer one is read.
+        # The newest accepted version that is not retracted and this
+        # toolchain builds: only the pep.toml of each newer one is read.
         accepted.sort((a: (Version, String), b: (Version, String)) => b.0.compare(a.0));
+        var retracted_ranges = retractions(source);
+        if (retracted_ranges.is_err()) {
+            return Result<Locked>.Err(retracted_ranges.error().message);
+        }
         var skipped = Array<String>();
+        var withdrawn = Array<String>();
         var best = Optional<(Version, String)>.Empty;
         for (var candidate in accepted) {
+            var reason = retracted(retracted_ranges.value(), candidate.0);
+            if (reason.is_value()) {
+                withdrawn.append($"{candidate.0.to_string()} (retracted: {reason.value()})");
+                continue;
+            }
             var minimum = toolchain.is_empty ? Result<String>.Ok("") : _minimum_at(source, candidate.1);
             if (minimum.is_err()) {
                 return Result<Locked>.Err(minimum.error().message);
@@ -521,12 +720,21 @@ export struct Resolver {
             skipped.append($"{candidate.0.to_string()} ({shortfall})");
         }
         if (best.is_empty()) {
+            if (skipped.is_empty) {
+                return Result<Locked>.Err(
+                    $"every version of {source} that every package accepts is retracted: " + ", ".join(withdrawn)
+                );
+            }
+            withdrawn.append_all(skipped);
             return Result<Locked>.Err(
                 $"no version of {source} that every package accepts builds with toolchain {toolchain}: "
-                    + ", ".join(skipped)
+                    + ", ".join(withdrawn)
             );
         }
         var (version, commit) = best.value();
+        if (!withdrawn.is_empty) {
+            notes.append($"{source} skipped {", ".join(withdrawn)}");
+        }
         if (!skipped.is_empty) {
             notes.append($"{source} skipped {", ".join(skipped)}; this is {toolchain}");
         }
@@ -565,6 +773,22 @@ export struct Resolver {
 export tag_version(tag: String): Optional<Version> {
     var parsed = semver.parse(tag.starts_with("v") ? tag.substr(1, tag.length) : tag);
     return parsed.is_ok() ? Optional<Version>.Value(parsed.value()) : Optional<Version>.Empty;
+}
+
+# The newest release `refs` tags, not a prerelease, and its commit.
+export newest_release(refs: Array<RemoteRef>): Optional<(Version, String)> {
+    var newest = Optional<(Version, String)>.Empty;
+    for (var ref in refs) {
+        if (ref.name.starts_with("refs/tags/")) {
+            var version = tag_version(ref.name.substr(10, ref.name.length));
+            if (version.is_value()
+                and version.value().prerelease.is_empty
+                and (newest.is_empty() or version.value().compare(newest.value().0) > 0)) {
+                newest = Optional<(Version, String)>.Value((version.value(), ref.commit));
+            }
+        }
+    }
+    return newest;
 }
 
 # The condition under which a build needs each source of `wanted`: the
