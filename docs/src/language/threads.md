@@ -580,6 +580,11 @@ two must never meet:
 - **Closures.** A closure written in the block cannot capture part of the
   locked value, since a function value could carry it out.
 - **Two locks.** Values locked by two nested blocks stay apart as well.
+  A variable declared in the outer block, before the inner one, is from
+  outside to the inner block: it outlives the inner lock, so it may hold the
+  outer block's value but no part of the inner one's, whether it would hold
+  it directly, in a field, through a closure, or from one pass of a loop to
+  the next.
 - **Numbers pass freely**, as do every thread-safe value and every new one.
 
 Which calls link which values comes from what the called function does: the

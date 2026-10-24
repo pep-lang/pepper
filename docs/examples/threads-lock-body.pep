@@ -3,6 +3,7 @@ import async;
 # A Mutex of values that are not thread-safe: a list of Strings that
 # several threads add to.
 const names = async.Mutex<Array<String>>(Array<String>());
+const tags = async.Mutex<Array<String>>(Array<String>());
 
 add_names(prefix: String) {
     var i = 0;
@@ -47,6 +48,18 @@ main(): int {
     # caller then owns outright.
     var old = names.replace(Array<String>());
     assert(old.count == 18, "the old list");
+
+    # A variable of an outer block outlives an inner lock, so it keeps only a
+    # copy of the inner value (`seen = tag_list` is an error).
+    with (var list = names.lock()) {
+        var seen = Array<String>();
+        with (var tag_list = tags.lock()) {
+            tag_list.append("new");
+            seen = copy(tag_list);
+        }
+        list.append(seen[0]);   # the outer block's own value may take it
+        assert(list.count == 1, "the copied tag");
+    }
 
     # A thread's own value that is not thread-safe is reached through `with`.
     var scratch = async.ThreadLocal<String>();
