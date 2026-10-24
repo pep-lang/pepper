@@ -148,6 +148,10 @@ export struct Manifest {
     var overrides: Array<Requirement> = __null;
     # `[retract]`: the versions of this package its author withdrew.
     var retractions: Array<Retraction> = __null;
+    # The error at the first `[retract]` key that names no version, which
+    # `read_project` reports for the project's own pep.toml: a
+    # dependency's retracts nothing there, rather than break resolution.
+    var retract_error: String = "";
     # `[audit]`'s `ignore`: the advisories `audit` does not fail on.
     var audit_ignore: Array<String> = __null;
 
@@ -322,14 +326,15 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
         for (var (versions, reason) in retract.value().as_table().value()) {
             var range = version_range(versions);
             if (range.is_err()) {
-                return Result<Manifest>.Err(
-                    manifest.at_key(
+                if (manifest.retract_error.is_empty) {
+                    manifest.retract_error = manifest.at_key(
                         "error",
                         versions,
                         $"'{versions}' in '[retract]' is not a version or range: {range.error().message}",
                         "retract"
-                    )
-                );
+                    );
+                }
+                continue;
             }
             manifest.retractions.append(Retraction(range.value(), reason.as_string().value_or("")));
         }
@@ -446,6 +451,9 @@ export read_project(path: Path): Result<Manifest> {
     if (manifest.is_err()) {
         return manifest;
     }
+    if (!manifest.value().retract_error.is_empty) {
+        return Result<Manifest>.Err(manifest.value().retract_error);
+    }
     var root_path = find_workspace(path);
     if (root_path.is_empty()) {
         for (var requirement in manifest.value().requirements) {
@@ -480,6 +488,9 @@ export read_project(path: Path): Result<Manifest> {
         var member = read_manifest(dir.join("pep.toml"));
         if (member.is_err()) {
             return member;
+        }
+        if (!member.value().retract_error.is_empty) {
+            return Result<Manifest>.Err(member.value().retract_error);
         }
         var problem = _inherit(member.value(), root);
         if (problem.is_value()) {

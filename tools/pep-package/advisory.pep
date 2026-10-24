@@ -21,7 +21,9 @@ import [Version, VersionRange] from semver;
 import toml;
 import toolchain;
 import "git";
+import "lock";
 import "manifest";
+import "resolve";
 import "tree";
 
 # The database `audit` reads when `PEPPER_ADVISORY_DB` names none.
@@ -130,6 +132,21 @@ export fetch_database(url: String, offline: bool): Result<Path> {
     return Result<Path>.Ok(base);
 }
 
+# Each of `advisories` with each package of `locked` it affects: one
+# locked at a version, from the advisory's source.
+export affected(advisories: Array<Advisory>, locked: Array<Locked>): Array<(Advisory, Locked)> {
+    var hits = Array<(Advisory, Locked)>();
+    for (var advisory in advisories) {
+        for (var package in locked) {
+            var version = tag_version(package.version);
+            if (package.source == advisory.package and version.is_value() and advisory.affects(version.value())) {
+                hits.append((advisory, package));
+            }
+        }
+    }
+    return hits;
+}
+
 # Every advisory in the database in `dir`, ordered by file.
 export read_advisories(dir: Path): Result<Array<Advisory>> {
     var files = glob(dir.to_string().replace("\\", "/") + "/**/*.toml");
@@ -169,20 +186,24 @@ export read_advisory(path: Path): Result<Advisory> {
                 return Result<Advisory>.Err(file.at_key("error", key, $"'{key}' must be an array of versions"));
             }
             for (var item in items.value()) {
-                var range = version_range(item.as_string().value_or(""));
+                if (item.as_string().is_empty()) {
+                    return Result<Advisory>.Err(file.at_key("error", key, $"'{key}' must be an array of versions"));
+                }
+                var written = item.as_string().value();
+                var range = version_range(written);
                 if (range.is_err()) {
                     return Result<Advisory>.Err(
                         file.at_key(
                             "error",
-                            item.as_string().value_or(""),
-                            $"'{key}' lists '{item.as_string().value_or("")}', which is not a version or range: {range.error().message}",
+                            written,
+                            $"'{key}' lists '{written}', which is not a version or range: {range.error().message}",
                             key
                         )
                     );
                 }
                 advisory._safe.append(range.value());
                 if (key == "patched") {
-                    advisory.patched.append(item.as_string().value());
+                    advisory.patched.append(written);
                 }
             }
         } else if (given.is_empty()) {

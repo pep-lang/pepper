@@ -1040,17 +1040,11 @@ struct Project {
         var ignored = ignore.copy();
         ignored.append_all(manifest.value().audit_ignore);
         var hits = Array<(Advisory, Locked)>();
-        for (var advisory in advisories.value()) {
-            for (var package in locked.value()) {
-                var version = tag_version(package.version);
-                if (package.source != advisory.package or version.is_empty() or !advisory.affects(version.value())) {
-                    continue;
-                }
-                if (ignored.contains(advisory.id)) {
-                    say($"ignored {advisory.id}, which affects {package.describe()} ({package.source})");
-                } else {
-                    hits.append((advisory, package));
-                }
+        for (var (advisory, package) in affected(advisories.value(), locked.value())) {
+            if (ignored.contains(advisory.id)) {
+                say($"ignored {advisory.id}, which affects {package.describe()} ({package.source})");
+            } else {
+                hits.append((advisory, package));
             }
         }
         if (hits.is_empty and !json) {

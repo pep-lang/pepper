@@ -380,7 +380,8 @@ anywhere in it: `https://github.com/pep-lang/advisories.git`, or the
 repository `PEPPER_ADVISORY_DB` names (a mirror, a private database, or a
 `file://` folder). `audit` clones it into the
 [download cache](#the-download-cache)'s home, `cache/advisories`, and
-fetches it again once the copy is an hour old; with `--offline` it uses
+fetches it again once the copy is an hour old; a fetch that fails fails
+`audit`, rather than check against an old copy. With `--offline` it uses
 the copy as it is, and fails when there is none. An advisory:
 
 ```toml

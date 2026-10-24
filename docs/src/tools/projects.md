@@ -521,7 +521,9 @@ version: the `[retract]` of a package's newest release speaks for every
 version, so a range no longer picks a retracted one, `pepper package
 outdated` flags one `pep.lock` holds, and `update` moves off it (see
 [Retracted versions](pep-package.md#retracted-versions)). A key that is
-neither a version nor a range is an error at the key:
+neither a version nor a range is an error at the key in the project's
+own `pep.toml` (a dependency's retracts nothing, so its dependents still
+resolve):
 
 ```text
 pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range: ...

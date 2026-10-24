@@ -1697,6 +1697,19 @@ resolution_skips_retracted_versions_and_outdated_flags_them() {
     var bad = hosts.package(locked.dir, ["fetch"]);
     expect_exit(bad, 1);
     expect_contains(bad.stderr, "pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range");
+
+    # A dependency's malformed [retract] retracts nothing, rather than
+    # break its dependents.
+    add_version(
+        hosts.folder.path,
+        "other/sloppy",
+        "1.0.0",
+        ["module.pep", "", "pep.toml", "[package]\nname = \"sloppy\"\n\n[retract]\n\"x.y\" = \"?\"\n"]
+    );
+    publish(hosts.folder.path, "other/sloppy");
+    var dependent = Project("retract_sloppy", "sloppy = { github = \"other/sloppy\", version = \"1\" }\n");
+    expect_exit(hosts.package(dependent.dir, ["fetch"]), 0);
+    expect_contains(dependent.lock(), "source = \"github:other/sloppy\"\nversion = \"1.0.0\"");
 }
 
 # Every copy of the advisory database in the cache of `hosts`, made a day

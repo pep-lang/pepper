@@ -144,7 +144,7 @@ export struct Resolver {
         if (newest.is_value()) {
             var (version, commit) = newest.value();
             var (host, repository) = split_source(_origin(source));
-            var text = file_at(host, repository, _dir(source), commit, "pep.toml", offline);
+            var text = file_at(host, repository, _clone(source), commit, "pep.toml", offline);
             if (text.is_err()) {
                 return Result<Array<Retraction>>.Err(
                     $"cannot read the pep.toml of {source} {version.to_string()}: {text.error().message}"
@@ -206,6 +206,14 @@ export struct Resolver {
         return package_dir(project, host, repository, vendor);
     }
 
+    # The git clone of `source` in `.pep/deps` that `file_at` reads other
+    # commits from: never a vendor folder, whose copies are not clones and
+    # which a clone would replace.
+    _clone(source: String): Path {
+        var (host, repository) = split_source(source);
+        return package_dir(project, host, repository);
+    }
+
     # Fails, at the override's key, when the package `name` that overrides
     # `source` is not the one pep.lock records for it.
     _check_name(source: String, name: String): Result<void> {
@@ -231,7 +239,7 @@ export struct Resolver {
             return Result<String>.Ok(known.value());
         }
         var (host, repository) = split_source(_origin(source));
-        var text = file_at(host, repository, _dir(source), commit, "pep.toml", offline);
+        var text = file_at(host, repository, _clone(source), commit, "pep.toml", offline);
         if (text.is_err()) {
             return Result<String>.Err(
                 $"cannot read the pep.toml of {source} {commit.substr(0, 12)}: {text.error().message}"
