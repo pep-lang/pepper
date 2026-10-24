@@ -139,13 +139,20 @@ export struct Manifest {
 
     # `message` as a clang-style `severity` diagnostic at the first place
     # `value` is written quoted: the key of the override of a source, or a
-    # dependency's `path` or `package`.
-    at_value(severity: String, value: String, message: String): String {
+    # dependency's `path` or `package`; else at the line starting with the
+    # key `key` (a dependency's, which inherits that value), when given.
+    at_value(severity: String, value: String, message: String, key: String = ""): String {
         var start = text.find("\"" + value + "\"");
         if (start < 0) {
             start = text.find("'" + value + "'");
         }
-        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + value.length + 2);
+        var length = value.length + 2;
+        if (start < 0 and !key.is_empty) {
+            var line = text.find("\n" + key + " ");
+            start = line < 0 ? line : line + 1;
+            length = key.length;
+        }
+        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + length);
         var diagnostic = severity == "error" ? Diagnostic.error(message) : Diagnostic.warning(message);
         return render_all([diagnostic.at(Location(0, at))], [SourceText(path.to_string(), text)]);
     }

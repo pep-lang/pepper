@@ -1329,14 +1329,15 @@ struct Project {
                 text += manifest.at_value(
                     "error",
                     requirement.repository,
-                    $"dependency '{requirement.name}' names the folder {requirement.repository}, which is no package of this workspace, so a dependent cannot fetch it; depend on it by its repository"
+                    $"dependency '{requirement.name}' names the folder {requirement.repository}, which is no package of this workspace, so a dependent cannot fetch it; depend on it by its repository",
+                    requirement.name
                 );
                 continue;
             }
             var (package, member) = sibling.value();
             var range = parse_range(requirement.value);
             if (range.is_err()) {
-                text += manifest.at_value("error", requirement.repository, range.error().message);
+                text += manifest.at_value("error", requirement.repository, range.error().message, requirement.name);
                 continue;
             }
             var published = false;
@@ -1351,7 +1352,8 @@ struct Project {
                 text += manifest.at_value(
                     "error",
                     requirement.repository,
-                    $"'{package}' is not published at a version '{requirement.value}' accepts: origin has no such tag {tag}, which a dependent resolves it by; publish {package} first"
+                    $"'{package}' is not published at a version '{requirement.value}' accepts: origin has no such tag {tag}, which a dependent resolves it by; publish {package} first",
+                    requirement.name
                 );
             }
         }

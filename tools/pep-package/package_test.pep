@@ -1664,7 +1664,7 @@ a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
     }
     var hosts = Hosts("member");
     var (home, passes) = publish_home(hosts.folder.path);
-    add_toolchain(home, "0.2.0", passes, passes);
+    add_toolchain(home, "0.11.0", passes, passes);
     # `me/kit`, a workspace: `geo` needs its sibling `numbers` 1 by path.
     var manifest = (name: String, version: String, rest: String) => {
         return $"[package]\nname = \"{name}\"\nversion = \"{version}\"\ndescription = \"d\"\nlicense = \"MIT\"\n"
@@ -1680,7 +1680,9 @@ a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
         "0.0.0",
         [
             "pep.toml",
-            "[workspace]\nmembers = [\"numbers\", \"geo\"]\n",
+            manifest(
+                "kit", "1.0.0", "minimum_toolchain = \"0.11.0\"\n\n[workspace]\nmembers = [\"numbers\", \"geo\"]\n"
+            ),
             "numbers/pep.toml",
             manifest("numbers", "1.0.0", ""),
             "numbers/module.pep",
@@ -1711,7 +1713,9 @@ a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
     git(clone, ["commit", "--quiet", "-am", "numbers 1.1.0"]);
     git(clone, ["push", "--quiet", "origin", "main"]);
     expect_exit(package_in_home(home, clone.join("numbers"), ["publish"]), 0);
-    expect_equal(tags_of(bare), "geo-v1.0.0\nnumbers-v1.0.0\nnumbers-v1.1.0\nv0.0.0\n");
+    # The root package keeps `v<version>`.
+    expect_exit(package_in_home(home, clone, ["publish"]), 0);
+    expect_equal(tags_of(bare), "geo-v1.0.0\nnumbers-v1.0.0\nnumbers-v1.1.0\nv0.0.0\nv1.0.0\n");
 
     # A project depends on geo by Git; geo's sibling is resolved by its own
     # tags, at 1.1.0, not as geo's commit holds it.

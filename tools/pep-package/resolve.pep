@@ -414,7 +414,7 @@ export struct Resolver {
             for (var manifest in own) {
                 for (var requirement in manifest.requirements) {
                     if (requirement === ask.requirement) {
-                        return manifest.at_value("error", requirement.member, message);
+                        return manifest.at_value("error", requirement.member, message, requirement.name);
                     }
                 }
             }
@@ -617,9 +617,12 @@ export struct Resolver {
         return Result<(String, String)>.Ok((full, sha256.value()));
     }
 
-    # What `url`'s repository offers, read once per source.
+    # What `source`'s repository offers, read once per repository: its
+    # workspace members share it.
     remote(source: String): Result<Array<RemoteRef>> {
-        var known = _refs.try_get(source);
+        var (host, repository) = split_source(_origin(source));
+        var url = repository_url(host, repository);
+        var known = _refs.try_get(url);
         if (known.is_value()) {
             return Result<Array<RemoteRef>>.Ok(known.value());
         }
@@ -633,12 +636,11 @@ export struct Resolver {
                 $"git is not on the PATH: reading which revisions {source} offers needs it (fetching what pep.lock lists does not); install git"
             );
         }
-        var (host, repository) = split_source(_origin(source));
-        var refs = remote_refs(repository_url(host, repository));
+        var refs = remote_refs(url);
         if (refs.is_err()) {
             return Result<Array<RemoteRef>>.Err($"cannot read {source}: {refs.error().message}");
         }
-        _refs[source] = refs.value();
+        _refs[url] = refs.value();
         return refs;
     }
 

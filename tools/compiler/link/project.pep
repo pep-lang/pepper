@@ -2044,8 +2044,9 @@ export struct Packages {
         }
         var checkout = manifest.workspace_dir.value();
         var project_dir = files.absolute(deps_root.value()).normalize();
-        # The project's own workspace, which `_vendor` reads.
-        if (checkout.to_string() == project_dir.to_string()) {
+        # Only a workspace inside the project, not its own, which `_vendor`
+        # reads (or, while `Packages` is made, one above a member).
+        if (!checkout.to_string().replace("\\", "/").starts_with(project_dir.to_string().replace("\\", "/") + "/")) {
             return;
         }
         var vendor = _vendor();
