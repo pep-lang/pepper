@@ -76,7 +76,7 @@ export struct LockedGraph {
         var locked = packages.try_get(edge.source);
         var renamed = locked.is_value() and locked.value().name != requirement.name;
         return (renamed ? requirement.name + ": " : "")
-            + _describe(edge.source, requirement.name)
+            + describe_source(edge.source, requirement.name)
             + _marks(requirement);
     }
 
@@ -84,7 +84,7 @@ export struct LockedGraph {
     # commit) and source, and whether it is dev- or platform-only or
     # overridden. The project ("") is its name; a package pep.lock does
     # not list is `name` and its source.
-    _describe(source: String, name: String): String {
+    describe_source(source: String, name: String): String {
         if (source.is_empty) {
             return this.name;
         }
@@ -175,7 +175,7 @@ export struct LockedGraph {
             var root = Wanted();
             var locked = packages.try_get(source);
             root.requirement.name = locked.is_value() ? locked.value().name : wanted[source][0].requirement.name;
-            lines.append(_describe(source, root.requirement.name));
+            lines.append(describe_source(source, root.requirement.name));
             shown.insert(source);
             var node = _json(Edge(source, root));
             node["dependents"] = _tree(source, "", 1, depth, true, lines, shown);
@@ -228,7 +228,7 @@ export struct LockedGraph {
             var last = index + 1 == listed.count;
             # Inverted, the line is the dependent, with its entry's marks.
             var text = invert ?
-                _describe(edge.source, edge.wanted.requirement.name) + _marks(edge.wanted.requirement) :
+                describe_source(edge.source, edge.wanted.requirement.name) + _marks(edge.wanted.requirement) :
                 label(edge);
             var line = prefix + (last ? "`-- " : "|-- ") + text;
             var below = !_below(edge.source, invert).is_empty;
@@ -276,24 +276,13 @@ export struct LockedGraph {
     # first `limit`, then how many more there are. With `json`, those
     # paths as `--json` writes them.
     why(targets: HashSet<String>, limit: ulong, json: bool): String {
+        if (json) {
+            return why_json(targets, limit).to_pretty_string() + "\n";
+        }
         var paths = Array<Array<Edge>>();
         _why("", Array<Edge>(), HashSet<String>(), targets, limit, paths);
         var (total, _) = _count("", HashSet<String>(), targets, HashMap<String, ulong>());
         var count = paths.count;
-        if (json) {
-            var list = JsonValue.array();
-            for (var index in 0..count) {
-                var steps = JsonValue.array();
-                for (var edge in paths[index]) {
-                    steps.append(_json(edge));
-                }
-                list.append(steps);
-            }
-            var result = JsonValue.object();
-            result["paths"] = list;
-            result["total"] = JsonValue.Integer(total as long);
-            return result.to_pretty_string() + "\n";
-        }
         var text = "";
         for (var index in 0..count) {
             var steps = [name];
@@ -307,6 +296,26 @@ export struct LockedGraph {
             text += $"and {more} more {more == 1 ? "path" : "paths"}; --all prints every one\n";
         }
         return text;
+    }
+
+    # The first `limit` paths `why` finds, as `--json` writes them: each
+    # path's steps under `paths`, and how many there are in all, `total`.
+    why_json(targets: HashSet<String>, limit: ulong): JsonValue {
+        var paths = Array<Array<Edge>>();
+        _why("", Array<Edge>(), HashSet<String>(), targets, limit, paths);
+        var (total, _) = _count("", HashSet<String>(), targets, HashMap<String, ulong>());
+        var list = JsonValue.array();
+        for (var path in paths) {
+            var steps = JsonValue.array();
+            for (var edge in path) {
+                steps.append(_json(edge));
+            }
+            list.append(steps);
+        }
+        var result = JsonValue.object();
+        result["paths"] = list;
+        result["total"] = JsonValue.Integer(total as long);
+        return result;
     }
 
     # Appends the paths below `parent` that reach one of `targets` to
@@ -435,9 +444,7 @@ export struct LockedGraph {
         var reasons = "";
         for (var row in rows) {
             var retraction = row[5];
-            cells.append(
-                [row[0], row[1] + (retraction.is_empty ? "" : " (retracted)"), row[2], row[3], row[4]]
-            );
+            cells.append([row[0], row[1] + (retraction.is_empty ? "" : " (retracted)"), row[2], row[3], row[4]]);
             if (!retraction.is_empty) {
                 reasons += $"{row[0]} {row[1]} is retracted: {retraction}\n";
             }

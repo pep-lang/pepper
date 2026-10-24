@@ -4,7 +4,9 @@
 # file, the conditions and `[features]` included, when it builds. Features
 # do not change what is locked: an optional dependency is resolved and
 # locked like any other. `[overrides]` replaces a package wherever the
-# graph reaches it; only the project's own apply.
+# graph reaches it; only the project's own apply. `[retract]` lists the
+# package's own withdrawn versions, and `[audit]` the advisories `audit`
+# ignores.
 
 import [Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
@@ -171,15 +173,24 @@ export struct Manifest {
     }
 
     # `message` as a clang-style `severity` diagnostic at `key`, written
-    # quoted (the source of an override, a version `[retract]` names),
-    # looked for after the first `table` (`[retract]`) when it is given.
+    # quoted (the source of an override, a version `[retract]` names) or
+    # bare at the start of a line, looked for after the first `table`
+    # (`[retract]`) when it is given; at the file's start when it is not
+    # there.
     at_key(severity: String, key: String, message: String, table: String = ""): String {
-        var from = table.is_empty ? 0 : text.find(table);
-        var start = text.find("\"" + key + "\"", from < 0 ? 0 : from as ulong);
+        var found = table.is_empty ? 0 : text.find(table);
+        var from = found < 0 ? 0 : found as ulong;
+        var start = text.find("\"" + key + "\"", from);
+        var length = key.length + 2;
         if (start < 0) {
-            start = text.find("'" + key + "'", from < 0 ? 0 : from as ulong);
+            start = text.find("'" + key + "'", from);
         }
-        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + key.length + 2);
+        if (start < 0) {
+            length = key.length;
+            start = text.starts_with(key + " ") ? 0 : text.find("\n" + key + " ", from);
+            start = start > 0 ? start + 1 : start;
+        }
+        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + length);
         var diagnostic = severity == "error" ? Diagnostic.error(message) : Diagnostic.warning(message);
         return render_all([diagnostic.at(Location(0, at))], [SourceText(path.to_string(), text)]);
     }

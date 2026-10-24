@@ -155,7 +155,12 @@ export cached_package(host: String, repository: String): Path {
 # holds until it is closed or destroyed, so processes fetching the same
 # package take turns.
 export lock_cache(host: String, repository: String): Result<File> {
-    var path = Path(cached_package(host, repository).to_string() + ".lock");
+    return lock_file(Path(cached_package(host, repository).to_string() + ".lock"));
+}
+
+# Takes the lock on the file `path`, made with its folder when missing,
+# which the returned file holds until it is closed or destroyed.
+export lock_file(path: Path): Result<File> {
     var parent = path.parent();
     if (parent.is_value()) {
         Directory.create_all(parent.value());
