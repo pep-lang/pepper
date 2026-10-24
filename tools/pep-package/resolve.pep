@@ -107,6 +107,8 @@ export struct Resolver {
     var _refs: HashMap<String, Array<RemoteRef>> = __null;
     # The `minimum_toolchain` each commit's pep.toml declares, read once.
     var _minimums: HashMap<String, String> = __null;
+    # The `[retract]` of each source's newest release, read once.
+    var _retractions: HashMap<String, Array<Retraction>> = __null;
 
     construct(project: Path, root: Manifest, previous: Array<Locked>) {
         this.project = project;
@@ -115,6 +117,42 @@ export struct Resolver {
         update = Array<String>();
         _refs = HashMap<String, Array<RemoteRef>>();
         _minimums = HashMap<String, String>();
+        _retractions = HashMap<String, Array<Retraction>>();
+    }
+
+    # The versions of `source` its author retracted: the `[retract]` of
+    # the pep.toml of its newest release, which speaks for every version,
+    # as Go's `retract` does. A pep.toml that does not parse retracts
+    # nothing.
+    retractions(source: String): Result<Array<Retraction>> {
+        var known = _retractions.try_get(source);
+        if (known.is_value()) {
+            return Result<Array<Retraction>>.Ok(known.value());
+        }
+        var refs = remote(source);
+        if (refs.is_err()) {
+            return Result<Array<Retraction>>.Err(refs.error().message);
+        }
+        var found = Array<Retraction>();
+        var newest = newest_release(refs.value());
+        if (newest.is_value()) {
+            var (version, commit) = newest.value();
+            var (host, repository) = split_source(_origin(source));
+            var text = file_at(host, repository, _dir(source), commit, "pep.toml", offline);
+            if (text.is_err()) {
+                return Result<Array<Retraction>>.Err(
+                    $"cannot read the pep.toml of {source} {version.to_string()}: {text.error().message}"
+                );
+            }
+            if (text.value().is_value()) {
+                var manifest = parse_manifest(Path("pep.toml"), text.value().value());
+                if (manifest.is_ok()) {
+                    found = manifest.value().retractions;
+                }
+            }
+        }
+        _retractions[source] = found;
+        return Result<Array<Retraction>>.Ok(found);
     }
 
     # Why this toolchain cannot build a package declaring `minimum`; empty
@@ -168,7 +206,7 @@ export struct Resolver {
         for (var locked in previous) {
             if (locked.source == source and !locked.name.is_empty and locked.name != name) {
                 return Result<void>.Err(
-                    root.at_override(
+                    root.at_key(
                         "error",
                         source,
                         $"'{_replaced_by(source)}' is the package '{name}', not '{locked.name}', which it overrides; name a fork or copy of '{locked.name}'"
@@ -230,7 +268,7 @@ export struct Resolver {
                     var folder = _dir(source);
                     if (!folder.join("pep.toml").is_file()) {
                         return Result<Graph>.Err(
-                            root.at_override(
+                            root.at_key(
                                 "error",
                                 source,
                                 $"the folder {folder.to_string()} overriding '{source}' has no pep.toml"
@@ -323,7 +361,7 @@ export struct Resolver {
             for (var replacement in root.overrides) {
                 if (!wanted.contains(replacement.name)) {
                     graph.warnings.append(
-                        root.at_override(
+                        root.at_key(
                             "warning",
                             replacement.name,
                             $"override of '{replacement.name}' matches no package in the dependency graph"
@@ -335,7 +373,7 @@ export struct Resolver {
             for (var member in root.member_manifests) {
                 for (var replacement in member.overrides) {
                     graph.warnings.append(
-                        member.at_override(
+                        member.at_key(
                             "warning",
                             replacement.name,
                             $"override of '{replacement.name}' in a workspace member is ignored; move it to the root's pep.toml"
@@ -632,12 +670,22 @@ export struct Resolver {
             var available = offered.is_empty ? "it has no version tags" : "it offers " + ", ".join(offered);
             return Result<Locked>.Err(_conflict(source, asks, available));
         }
-        # The newest accepted version this toolchain builds: only the
-        # pep.toml of each newer one is read.
+        # The newest accepted version that is not retracted and this
+        # toolchain builds: only the pep.toml of each newer one is read.
         accepted.sort((a: (Version, String), b: (Version, String)) => b.0.compare(a.0));
+        var retracted_ranges = retractions(source);
+        if (retracted_ranges.is_err()) {
+            return Result<Locked>.Err(retracted_ranges.error().message);
+        }
         var skipped = Array<String>();
+        var withdrawn = Array<String>();
         var best = Optional<(Version, String)>.Empty;
         for (var candidate in accepted) {
+            var reason = retracted(retracted_ranges.value(), candidate.0);
+            if (reason.is_value()) {
+                withdrawn.append($"{candidate.0.to_string()} (retracted: {reason.value()})");
+                continue;
+            }
             var minimum = toolchain.is_empty ? Result<String>.Ok("") : _minimum_at(source, candidate.1);
             if (minimum.is_err()) {
                 return Result<Locked>.Err(minimum.error().message);
@@ -650,12 +698,21 @@ export struct Resolver {
             skipped.append($"{candidate.0.to_string()} ({shortfall})");
         }
         if (best.is_empty()) {
+            if (skipped.is_empty) {
+                return Result<Locked>.Err(
+                    $"every version of {source} that every package accepts is retracted: " + ", ".join(withdrawn)
+                );
+            }
+            withdrawn.append_all(skipped);
             return Result<Locked>.Err(
                 $"no version of {source} that every package accepts builds with toolchain {toolchain}: "
-                    + ", ".join(skipped)
+                    + ", ".join(withdrawn)
             );
         }
         var (version, commit) = best.value();
+        if (!withdrawn.is_empty) {
+            notes.append($"{source} skipped {", ".join(withdrawn)}");
+        }
         if (!skipped.is_empty) {
             notes.append($"{source} skipped {", ".join(skipped)}; this is {toolchain}");
         }
@@ -694,6 +751,22 @@ export struct Resolver {
 export tag_version(tag: String): Optional<Version> {
     var parsed = semver.parse(tag.starts_with("v") ? tag.substr(1, tag.length) : tag);
     return parsed.is_ok() ? Optional<Version>.Value(parsed.value()) : Optional<Version>.Empty;
+}
+
+# The newest release `refs` tags, not a prerelease, and its commit.
+export newest_release(refs: Array<RemoteRef>): Optional<(Version, String)> {
+    var newest = Optional<(Version, String)>.Empty;
+    for (var ref in refs) {
+        if (ref.name.starts_with("refs/tags/")) {
+            var version = tag_version(ref.name.substr(10, ref.name.length));
+            if (version.is_value()
+                and version.value().prerelease.is_empty
+                and (newest.is_empty() or version.value().compare(newest.value().0) > 0)) {
+                newest = Optional<(Version, String)>.Value((version.value(), ref.commit));
+            }
+        }
+    }
+    return newest;
 }
 
 # The condition under which a build needs each source of `wanted`: the

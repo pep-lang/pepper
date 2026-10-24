@@ -394,22 +394,21 @@ export struct LockedGraph {
             if (refs.is_err()) {
                 return Result<Array<Array<String>>>.Err(refs.error().message);
             }
-            var newest = Optional<Version>.Empty;
-            for (var ref in refs.value()) {
-                if (ref.name.starts_with("refs/tags/")) {
-                    var version = tag_version(ref.name.substr(10, ref.name.length));
-                    if (version.is_value()
-                        and version.value().prerelease.is_empty
-                        and (newest.is_empty() or version.value().compare(newest.value()) > 0)) {
-                        newest = version;
-                    }
-                }
-            }
+            var newest = newest_release(refs.value());
             var locked_version = tag_version(package.version);
+            var reason = "";
+            if (locked_version.is_value()) {
+                var retracted_ranges = resolver.retractions(source);
+                if (retracted_ranges.is_err()) {
+                    return Result<Array<Array<String>>>.Err(retracted_ranges.error().message);
+                }
+                reason = retracted(retracted_ranges.value(), locked_version.value()).value_or("");
+            }
             var behind = chosen.value().commit != package.commit
+                or !reason.is_empty
                 or (locked_version.is_value()
                     and newest.is_value()
-                    and newest.value().compare(locked_version.value()) > 0);
+                    and newest.value().0.compare(locked_version.value()) > 0);
             if (behind) {
                 var wanted_text = chosen.value().version.is_empty ?
                     chosen.value().commit.substr(0, 12) :
@@ -419,13 +418,31 @@ export struct LockedGraph {
                         package.name,
                         _revision(package),
                         wanted_text,
-                        newest.is_value() ? newest.value().to_string() : "-",
-                        source
+                        newest.is_value() ? newest.value().0.to_string() : "-",
+                        source,
+                        reason
                     ]
                 );
             }
         }
         return Result<Array<Array<String>>>.Ok(rows);
+    }
+
+    # The rows of `outdated` as it prints them: a retracted version is
+    # marked, and why it was retracted follows the table.
+    outdated_text(rows: Array<Array<String>>): String {
+        var cells = Array<Array<String>>();
+        var reasons = "";
+        for (var row in rows) {
+            var retraction = row[5];
+            cells.append(
+                [row[0], row[1] + (retraction.is_empty ? "" : " (retracted)"), row[2], row[3], row[4]]
+            );
+            if (!retraction.is_empty) {
+                reasons += $"{row[0]} {row[1]} is retracted: {retraction}\n";
+            }
+        }
+        return table(["package", "locked", "wanted", "latest", "source"], cells) + reasons;
     }
 
     # The rows of `outdated` as `--json` writes them.
@@ -441,6 +458,7 @@ export struct LockedGraph {
             entry["source"] = JsonValue.String(row[4]);
             entry["dev"] = JsonValue.Bool(package.dev);
             entry["target"] = _text(package.target);
+            entry["retracted"] = _text(row[5]);
             list.append(entry);
         }
         var result = JsonValue.object();

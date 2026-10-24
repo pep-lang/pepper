@@ -96,7 +96,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]' and '[workspace]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -107,6 +107,14 @@ reports_problems_at_the_key() {
         "entyr: unknown key 'entyr' in '[build]'; expected one of 'entry', 'output', 'include', 'link'"
     );
     expect_equal(errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n"), "");
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[retract]\n\"1.0.1\" = \"bad\"\n[audit]\nignore = [\"PEP-1\"]\n"), ""
+    );
+    expect_equal(errors("[package]\nname = \"a\"\n[retract]\n\"1.0.1\" = 1\n"), "1: '1.0.1' must be a string, not an integer");
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[audit]\nignores = []\n"),
+        "ignores: unknown key 'ignores' in '[audit]'; expected one of 'ignore'"
+    );
 }
 
 [Test]

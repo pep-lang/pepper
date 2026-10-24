@@ -957,6 +957,22 @@ struct _Reader {
         }
     }
 
+    ## `[retract]`, each key a version or range and its value the reason,
+    ## or `[audit]`, whose `ignore` lists advisory ids: pep-package reads
+    ## both, and the build only checks their types.
+    package_manager_table(table: String, members: OrderedMap<String, TomlValue>) {
+        for (var (key, value) in members) {
+            var path = [table, key];
+            if (table == "retract") {
+                string(path, key, value);
+            } else if (key == "ignore") {
+                strings(path, key, value);
+            } else {
+                unknown_key([table], key, table, ["ignore"]);
+            }
+        }
+    }
+
     fetch(members: OrderedMap<String, TomlValue>) {
         for (var (key, value) in members) {
             var path = ["fetch", key];
@@ -1427,9 +1443,15 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.overrides(manifest, table.value());
             }
+        } else if (key == "retract" or key == "audit") {
+            # pep-package's: it checks the version ranges `[retract]` names.
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.package_manager_table(key, table.value());
+            }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]' and '[workspace]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'",
                 reader.key_span(at)
             );
         }
