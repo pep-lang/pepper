@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Regenerates tools/compiler/sema/model.pep, the sema model in Pepper, from
 # its own declarations: each struct's and enum's fields as model.pep
-# declares them, with a constructor, a deep `copy()`, a `fingerprint()` and
+# declares them, with a constructor, a deep `copy()` (which shares a
+# `TypeName`'s arguments), a `fingerprint()` and
 # a `to_json()` (what `pep-build --emit-model` prints, which passes_test
 # compares against). To change the model, change a type's
 # fields in model.pep, run this, then format the result:
@@ -370,12 +371,22 @@ def gen_struct(name, fields, doc, internal=()):
         lines.append(f'        this.{fname(f["name"])} = {fname(f["name"])};')
     lines.append('    }')
     lines.append('')
-    lines.append('    ## Returns a deep copy, which shares only locations and AST nodes.')
+    if name=='TypeName':
+        # A type's arguments are values no pass changes in place below the
+        # type it holds (`TypeName.replace` makes new nodes on the way to
+        # what it replaces), so a copy shares them: copying them whole made
+        # each level of `[[...[1]...]]` copy the levels below it (#210).
+        lines.append('    ## Returns a copy with arrays of its own that shares its type arguments,')
+        lines.append('    ## which no pass changes in place.')
+    else:
+        lines.append('    ## Returns a deep copy, which shares only locations and AST nodes.')
     lines.append(f'    copy(): {name} {{')
     vals=[]
     for f in fields:
         if f['skip']: continue
         setup,val=copy_of(f'this.{fname(f["name"])}',parse_type(f['type']))
+        if name=='TypeName' and f['name']=='sub_types':
+            setup,val=[],'this.sub_types.clone()'
         lines+=['        '+l for l in setup]
         vals.append(f'{fname(f["name"])} = {val}')
     if internal:

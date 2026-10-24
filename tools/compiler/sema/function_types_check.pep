@@ -134,8 +134,12 @@ export defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
 ## generic parameter's default. Type names nest only as deep as the
 ## program spells them.
 export fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
-    for (var arg in ty.sub_types) {
-        fill_defaults(arg, params);
+    ulong at = 0;
+    while (at < ty.sub_types.count) {
+        # Copied first: other types share their arguments (`TypeName.copy`).
+        ty.sub_types[at] = ty.sub_types[at].copy();
+        fill_defaults(ty.sub_types[at], params);
+        at += 1;
     }
     var generic = params.try_get(ty.name);
     if (!generic.is_value()) {

@@ -585,9 +585,44 @@ export extend TypeName {
             assign(type_arg.copy());
             return;
         }
-        for (var arg in sub_types) {
-            arg.replace(param_name, type_arg);
+        ulong i = 0;
+        while (i < sub_types.count) {
+            var replaced = sub_types[i]._replaced(param_name, type_arg);
+            if (replaced.is_value()) {
+                sub_types[i] = replaced.value();
+            }
+            i += 1;
         }
+    }
+
+    # `replace` below the node it is called on, which changes no node there,
+    # since types share their arguments (`copy`): a new node for each one on
+    # the way to a replaced parameter, sharing every subtree that names none,
+    # and `type_arg` itself in its place. Empty when this type does not name
+    # `param_name`. Copying the argument at each mention made each level of
+    # `[[...[1]...]]` spell the levels below it out again (#210).
+    _replaced(param_name: String, type_arg: TypeName): TypeName? {
+        if (name == param_name) {
+            return Optional<TypeName>.Value(type_arg);
+        }
+        Array<TypeName>? args = Optional<Array<TypeName>>.Empty;
+        ulong i = 0;
+        while (i < sub_types.count) {
+            var replaced = sub_types[i]._replaced(param_name, type_arg);
+            if (replaced.is_value()) {
+                if (!args.is_value()) {
+                    args = Optional<Array<TypeName>>.Value(sub_types.clone());
+                }
+                args.value()[i] = replaced.value();
+            }
+            i += 1;
+        }
+        if (!args.is_value()) {
+            return Optional<TypeName>.Empty;
+        }
+        return Optional<TypeName>.Value(
+            TypeName(name = name, sub_types = args.value(), flags = flags, labels = labels.clone())
+        );
     }
 }
 
