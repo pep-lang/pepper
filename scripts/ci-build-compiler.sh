@@ -64,7 +64,7 @@ PEPC_COMPILATION_UNIT_JOBS="$jobs" PEPC_COMPILER_IDENTITY="$identity" PEPPER_CAC
 grep '^time:' "$log" || true
 grep -oE '^cache: (hit|miss)' "$log" | sort | uniq -c || true
 # The largest worker's peak memory (each worker's `-T time` stages end with it).
-cat "$out/build"/compilation-units.*/*.stages 2>/dev/null | grep '^peak ' | sort -n -k2 | tail -1 | sed 's/^/workers: /' || true
+find "$out/build" -name '*.stages' -exec grep -h '^peak ' {} + | sort -n -k2 | tail -1 | sed 's/^/workers: /' || true
 # pepc loads LLVM-C.dll from its own folder.
 if [ -n "$exe" ]; then
   cp -f "$stage0/LLVM-C.dll" "$out/"
