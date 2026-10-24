@@ -885,6 +885,77 @@ an_unfetched_dependency_fails_under_offline() {
 }
 
 [Test]
+a_vendored_project_builds_with_no_host_or_cache() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("vendor");
+    var project = Project("vendor", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_contains(project.manifest(), "[fetch]\nvendor = \"vendor\"\n");
+    var vendor = project.dir.join("vendor");
+    var geometry = vendor.join("github.com").join("someone").join("geometry");
+    expect_true(geometry.join("module.pep").is_file());
+    expect_true(vendor.join("github.com").join("other").join("numbers").join("module.pep").is_file());
+    expect_false(geometry.join(".git").exists());
+    expect_equal(read_file(vendor.join(".gitattributes")), "* -text\n");
+
+    # A fresh clone: no .pep, no download cache, and no host.
+    remove_tree(project.dir.join(".pep"));
+    remove_tree(hosts.home());
+    var unreachable = (program: String, arguments: Array<String>) => {
+        return run(
+            hosts.command(
+                tool(program).to_string(), project.dir, arguments
+            ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+        );
+    };
+    expect_exit(unreachable("pep-package", ["fetch", "--locked", "--offline"]), 0);
+    expect_exit(unreachable("pep-build", ["--locked", "--offline"]), 0);
+    expect_equal(
+        run(process.Command(project.dir.join("app" + toolchain.executable_suffix()).to_string())).stdout,
+        "1.1.0 1.3.1\n"
+    );
+    expect_false(project.dir.join(".pep").join("deps").exists());
+    expect_false(hosts.home().exists());
+
+    # An edited vendored file fails the build and fetch; vendoring again
+    # restores it.
+    write_file(geometry.join("module.pep"), read_file(geometry.join("module.pep")) + "# edited\n");
+    var edited = unreachable("pep-build", Array<String>());
+    expect_exit(edited, 1);
+    expect_contains(edited.stderr, " were changed since they were vendored ");
+    expect_contains(edited.stderr, "; run 'pepper package vendor' to restore them");
+    expect_contains(unreachable("pep-package", ["fetch"]).stderr, " were changed since they were vendored ");
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_false(read_file(geometry.join("module.pep")).contains("# edited"));
+    expect_exit(unreachable("pep-build", Array<String>()), 0);
+
+    # A dependency pep.lock lacks needs vendoring first.
+    var manifest = project.manifest();
+    write_file(project.dir.join("pep.toml"), manifest + "\n[dev-dependencies]\nx = { github = \"nobody/x\" }\n");
+    var unlocked = unreachable("pep-build", Array<String>());
+    expect_exit(unlocked, 1);
+    expect_contains(unlocked.stderr, "names github:nobody/x, which pep.lock does not list");
+    # fetch checks that pep.lock matches pep.toml, and changes neither.
+    write_file(project.dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[fetch]\nvendor = \"vendor\"\n");
+    var stale = unreachable("pep-package", ["fetch"]);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "pep.lock does not match pep.toml, and the project is vendored");
+    write_file(project.dir.join("pep.toml"), manifest);
+    var verify = unreachable("pep-package", ["update", "--verify"]);
+    expect_exit(verify, 1);
+    expect_contains(verify.stderr, "the project is vendored ('[fetch] vendor'), so a build would not see an update");
+
+    # Vendoring again after a dependency is removed removes its packages.
+    expect_exit(hosts.package(project.dir, ["remove", "geometry"]), 0);
+    var removed = hosts.package(project.dir, ["vendor"]);
+    expect_exit(removed, 0);
+    expect_contains(removed.stderr, "which pep.lock no longer lists");
+    expect_false(vendor.join("github.com").exists());
+}
+
+[Test]
 tree_why_and_outdated_report_on_the_locked_graph() {
     if (!has_git()) {
         return;
@@ -1546,6 +1617,25 @@ a_workspace_shares_one_lock_and_builds_its_members() {
     expect_exit(tested, 0);
     expect_contains(tested.stdout, "1 passed, 0 failed");
 
+    # `vendor` from a member writes one folder at the root, for every
+    # member; another member then builds with no cache and no host.
+    var workspace_manifest = read_file(root.join("pep.toml"));
+    expect_exit(hosts.package(app, ["vendor"]), 0);
+    expect_contains(read_file(root.join("pep.toml")), "[fetch]\nvendor = \"vendor\"\n");
+    expect_true(root.join("vendor").join("github.com").join("someone").join("geometry").is_directory());
+    expect_false(app.join("vendor").exists());
+    remove_tree(root.join(".pep"));
+    remove_tree(hosts.home());
+    File.remove(geo.join("geo" + exe));
+    var offline = run(
+        hosts.command(
+            tool("pep-build").to_string(), geo, ["--offline"]
+        ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+    );
+    expect_exit(offline, 0);
+    expect_equal(run(process.Command(geo.join("geo" + exe).to_string())).stdout, "1.1.0 1.3.1\n");
+    write_file(root.join("pep.toml"), workspace_manifest);
+
     # Only the root's `[overrides]` apply, to every member; a member's are
     # ignored, with a warning.
     write_file(root.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
@@ -1638,12 +1728,17 @@ a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
         tree.stdout, "app\n`-- geometry: geo 1.0.0 (github:me/kit#geo)\n    `-- numbers 1.1.0 (github:me/kit#numbers)\n"
     );
 
+    # Vendored, each member is a folder of its own.
+    var dependencies = project.manifest();
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_true(project.dir.join("vendor").join("github.com").join("me").join("kit#numbers").is_directory());
+    expect_equal(hosts.build_and_run(project.dir), "geo 1.1.0\n");
+
     # An override replaces a member by its source.
     write_file(project.dir.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
     write_file(project.dir.join("local").join("module.pep"), numbers("local"));
     write_file(
-        project.dir.join("pep.toml"),
-        project.manifest() + "\n[overrides]\n\"github:me/kit#numbers\" = { path = \"local\" }\n"
+        project.dir.join("pep.toml"), dependencies + "\n[overrides]\n\"github:me/kit#numbers\" = { path = \"local\" }\n"
     );
     expect_equal(hosts.build_and_run(project.dir), "geo local\n");
 
@@ -1654,5 +1749,7 @@ a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
     );
     var missing = hosts.package(project.dir, ["fetch"]);
     expect_exit(missing, 1);
-    expect_contains(missing.stderr, ":5:43: error: me/kit has no workspace member 'gem'; its members are 'numbers', 'geo'\n");
+    expect_contains(
+        missing.stderr, ":5:43: error: me/kit has no workspace member 'gem'; its members are 'numbers', 'geo'\n"
+    );
 }

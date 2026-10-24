@@ -1,7 +1,7 @@
 # Fetching packages without git: the host's `.tar.gz` of a commit,
 # downloaded over HTTPS into the download cache and unpacked into
-# `.pep/deps`, and the checksum of a package's files that pep.lock records
-# for each package.
+# `.pep/deps`, the checksum of a package's files that pep.lock records
+# for each package, and the copy of a package `vendor` writes.
 #
 # The checksum covers the files, not the archive's bytes: hosts make their
 # archives on demand and have changed how they compress them, which changes
@@ -16,13 +16,14 @@ import http;
 import [Directory, File, Path] from io;
 import io;
 import os;
+import toolchain;
 import "git";
 import "tree";
 
 # The file in the unpacked package `directory` naming the commit it holds,
 # since an archive has no `.git` to say so.
 _commit_file(directory: Path): Path {
-    return directory.join(".pep-commit");
+    return directory.join(Path(toolchain.VENDOR_COMMIT_FILE));
 }
 
 # The address of the `.tar.gz` of `commit` of the repository `given`
@@ -122,6 +123,16 @@ _strip(path: String, strip: ulong): String {
 # the repository's own `.gitattributes` asks for, whatever this machine's
 # `core.autocrlf` or `core.eol` (Git for Windows sets `core.autocrlf`).
 export checkout_sha256(directory: Path, commit: String): Result<String> {
+    var tar = _checkout_tar(directory, commit);
+    if (tar.is_err()) {
+        return Result<String>.Err(tar.error().message);
+    }
+    return files_sha256(tar.value(), 0);
+}
+
+# The files of `commit` in the git checkout `directory` as an uncompressed
+# tar archive, as `checkout_sha256` describes.
+_checkout_tar(directory: Path, commit: String): Result<u8[]> {
     var file = directory.join(".git").join("pep-package-archive.tar");
     var written = git(
         [
@@ -137,14 +148,77 @@ export checkout_sha256(directory: Path, commit: String): Result<String> {
         directory.to_string()
     );
     if (written.is_err()) {
-        return Result<String>.Err(written.error().message);
+        return Result<u8[]>.Err(written.error().message);
     }
     var bytes = File.read_bytes(file);
     File.remove(file);
     if (bytes.is_err()) {
-        return Result<String>.Err($"cannot read {file.to_string()}: {bytes.error().message}");
+        return Result<u8[]>.Err($"cannot read {file.to_string()}: {bytes.error().message}");
     }
-    return files_sha256(bytes.value(), 0);
+    return Result<u8[]>.Ok(bytes.value());
+}
+
+# Writes `commit` of `repository` on `host`, which `checkout` in `.pep/deps`
+# holds, into `directory` in a vendor folder: its files without `.git`
+# (`git archive` of a checkout; the host's archive again, from the download
+# cache, for an unpacked one), `.pep-commit`, and `.pep-checksum`
+# (`toolchain.vendored_sha256`). Only a complete copy takes the place of
+# what `directory` held. `sha256` is the checksum pep.lock records.
+export vendor_package(
+    host: String, repository: String, checkout: Path, directory: Path, commit: String, sha256: String, offline: bool
+): Result<void> {
+    var partial = Path(directory.to_string() + ".partial");
+    if (partial.exists()) {
+        var cleared = remove_tree(partial);
+        if (cleared.is_err()) {
+            return Result<void>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
+        }
+    }
+    var parent = directory.parent();
+    if (parent.is_value()) {
+        Directory.create_all(parent.value());
+    }
+    if (checkout.join(".git").exists()) {
+        var tar = _checkout_tar(checkout, commit);
+        if (tar.is_err()) {
+            return Result<void>.Err(tar.error().message);
+        }
+        var extracted = archive.TarReader(io.ByteReader(tar.value())).extract(partial);
+        if (extracted.is_err()) {
+            remove_tree(partial);
+            return Result<void>.Err($"cannot write {partial.to_string()}: {extracted.error().message}");
+        }
+        var marked = File.write_text(_commit_file(partial), commit + "\n");
+        if (marked.is_err()) {
+            return Result<void>.Err($"cannot write {_commit_file(partial).to_string()}: {marked.error().message}");
+        }
+    } else {
+        var unpacked = fetch_archive(host, repository, partial, commit, sha256, offline);
+        if (unpacked.is_err()) {
+            return Result<void>.Err(unpacked.error().message);
+        }
+    }
+    var vendored = toolchain.vendored_sha256(partial);
+    if (vendored.is_err()) {
+        return Result<void>.Err(vendored.error());
+    }
+    var recorded = File.write_text(partial.join(Path(toolchain.VENDOR_CHECKSUM_FILE)), vendored.value() + "\n");
+    if (recorded.is_err()) {
+        return Result<void>.Err($"cannot write the checksum in {partial.to_string()}: {recorded.error().message}");
+    }
+    if (directory.exists()) {
+        var removed = remove_tree(directory);
+        if (removed.is_err()) {
+            return Result<void>.Err($"cannot remove {directory.to_string()}: {removed.error().message}");
+        }
+    }
+    var moved = File.rename(partial, directory);
+    if (moved.is_err()) {
+        return Result<void>.Err(
+            $"cannot move {partial.to_string()} to {directory.to_string()}: {moved.error().message}"
+        );
+    }
+    return Result<void>.ok();
 }
 
 # The commit the unpacked archive in `directory` holds, if it is one.

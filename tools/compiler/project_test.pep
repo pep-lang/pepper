@@ -53,6 +53,15 @@ reads_a_manifest() {
             .to_string()
     );
     expect_equal(m.dependencies[3].directory(root, root).to_string(), root.join(Path("../local")).to_string());
+    # A vendored project's packages are in its vendor folder.
+    expect_equal(
+        m.dependencies[0].directory(root, root, "third_party").to_string(),
+        root.join(Path("third_party")).join(Path("github.com")).join(Path("someone")).join(Path("geometry")).to_string()
+    );
+    var vendored = link.parse_manifest(
+        Path("/p/pep.toml"), "[package]\nname = \"a\"\n[fetch]\nvendor = \"third_party\"\n"
+    );
+    expect_equal(vendored.value().vendor, "third_party");
     expect_equal(m.dependencies[0].locked_source().value(), "github:someone/geometry");
     expect_false(m.dependencies[3].locked_source().is_value());
 }
@@ -117,10 +126,14 @@ reports_problems_at_the_key() {
         "\"geo-lib\": 'package' names a workspace member by its package name, and 'geo-lib' is not one"
     );
     var member = link.parse_manifest(
-        Path("/p/pep.toml"), "[package]\nname = \"a\"\n[dependencies]\ngeo = { github = \"x/kit\", package = \"geo\" }\n"
+        Path("/p/pep.toml"),
+        "[package]\nname = \"a\"\n[dependencies]\ngeo = { github = \"x/kit\", package = \"geo\" }\n"
     );
     expect_equal(member.value().dependencies[0].locked_source().value(), "github:x/kit#geo");
     expect_equal(link.Host.GitHub.clone_url("x/kit#geo"), "https://github.com/x/kit.git");
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[fetch]\nvendor = [\"x\"]\n"), "[: 'vendor' must be a string, not an array"
+    );
 }
 
 [Test]

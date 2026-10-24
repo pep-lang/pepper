@@ -708,33 +708,135 @@ keeps_string_literals_apart_across_units() {
     File.write_text(
         root.join(Path("main.pep")), "import \"a\";\nmain(): int {\n    return a_text() == \"alphabeta\" ? 0 : 1;\n}\n"
     );
-    var setup = link.Setup();
-    setup.import_dirs.append(root);
-    var build = () => {
-        var output = root.join(Path("main"));
-        var options = driver.BuildOptions(output, root.join(Path("build")));
-        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
-        options.in_process = true;
-        var program = link.load_program(root.join(Path("main.pep")), setup);
-        expect_true(program.is_ok());
-        var built = driver.build(program.value(), options);
-        if (built.is_err()) {
-            print(built.error());
-        }
-        expect_true(built.is_ok());
-        var ran = process.Command(output.to_string()).spawn();
-        expect_true(ran.is_ok() and ran.value().wait().value().success());
-        return built.value();
-    };
-    var first = build();
+    var first = _build_with_runtime(root, "main.pep");
     expect_true(first.hits.is_empty);
     File.write_text(
         root.join(Path("main.pep")),
         "import \"a\";\nmain(): int {\n    var first = \"one\" + \"two\" + \"three\";\n    return a_text() == \"alphabeta\" and first == \"onetwothree\" ? 0 : 1;\n}\n"
     );
     # `a.pep`'s object comes from the cache, with its own literals.
-    var second = build();
+    var second = _build_with_runtime(root, "main.pep");
     expect_false(second.hits.is_empty);
+}
+
+# Builds the program whose entry is `entry` in `root`, with the runtime and
+# the cache in `root`, and runs it.
+_build_with_runtime(root: Path, entry: String): driver.Built {
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    var program = link.load_program(root.join(Path(entry)), setup);
+    expect_true(program.is_ok());
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).spawn();
+    expect_true(ran.is_ok() and ran.value().wait().value().success());
+    return built.value();
+}
+
+# Writes `source.pep`, whose structs hold a `Source` trait value and whose
+# `call` releases a `() => int`; `archive.pep`, a conformer of `Source` that
+# holds one, in a file `source.pep` does not see, as `archive.TarReader` is
+# to `compress.DecompressReader`; `chain.pep`, a closure chain; and three
+# programs: `with.pep` and `with_too.pep`, which make `Archive` and the
+# chain's closures part of `source.pep`'s cycles, and `without.pep`, which
+# has neither.
+_write_steering(root: Path) {
+    File.write_text(
+        root.join(Path("source.pep")),
+        "export trait Source {\n    next(): int;\n}\n"
+            + "export struct Wrap {\n    var inner: Source;\n"
+            + "    construct(inner: Source) {\n        this.inner = inner;\n    }\n}\n"
+            + "extend Wrap with Source {\n    next(): int {\n        return inner.next() + 1;\n    }\n}\n"
+            + "export struct Zero {\n    construct() {}\n}\n"
+            + "extend Zero with Source {\n    next(): int {\n        return 0;\n    }\n}\n"
+            + "export wrap_twice(): int {\n    Source s = Wrap(Wrap(Zero()));\n    return s.next();\n}\n"
+            + "export call(f: () => int): int {\n    return f();\n}\n"
+    );
+    File.write_text(
+        root.join(Path("archive.pep")),
+        "import \"source\";\nexport struct Archive {\n    var source: Source;\n    var buffer: int[] = Array<int>();\n"
+            + "    construct(source: Source) {\n        this.source = source;\n    }\n}\n"
+            + "extend Archive with Source {\n    next(): int {\n        buffer.append(1);\n"
+            + "        return source.next();\n    }\n}\n"
+    );
+    # Closures capturing the one before, so `() => int` is in a cycle.
+    File.write_text(
+        root.join(Path("chain.pep")),
+        "import \"source\";\nexport chain(): int {\n"
+            + "    var f: () => int = () => 1;\n    for (var i in 0..3) {\n        var g = f;\n        f = () => g() + 1;\n    }\n"
+            + "    return call(f);\n}\n"
+    );
+    var imports = "import \"archive\";\nimport \"chain\";\nimport \"source\";\n";
+    File.write_text(
+        root.join(Path("with.pep")),
+        imports
+            + "main(): int {\n    Source s = Archive(Wrap(Archive(Zero())));\n"
+            + "    return s.next() + chain() + wrap_twice() - 7;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("with_too.pep")),
+        imports
+            + "main(): int {\n    Source s = Archive(Zero());\n    return s.next() + chain() + wrap_twice() - 6;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("without.pep")),
+        "import \"source\";\nmain(): int {\n    return wrap_twice() + call(() => 1) - 3;\n}\n"
+    );
+}
+
+# The name of the unit of `source.pep` in the program `entry` in `root`.
+_source_unit(root: Path, entry: String): String {
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var program = link.load_program(root.join(Path(entry)), setup);
+    expect_true(program.is_ok());
+    return _unit_of(program.value(), "source.pep");
+}
+
+# A file's last releases steer into the conformers of a trait it holds and
+# the closures of a function type it releases, which are the program's, so
+# the cache keeps its object apart for each set of those it steers into
+# (`Keys.steering`): a program without them never links an object that
+# names them, a program with more compiles the file again, and each
+# program gets its own back (#170).
+[Test]
+links_an_object_built_in_a_program_with_more_conformers() {
+    var folder = TempFolder("steering");
+    var root = folder.path;
+    _write_steering(root);
+    var source = _source_unit(root, "with.pep");
+    _build_with_runtime(root, "with.pep");
+    var without = _build_with_runtime(root, "without.pep");
+    expect_true(without.misses.contains(source));
+    var back = _build_with_runtime(root, "with.pep");
+    expect_true(back.hits.contains(source));
+
+    # Built first without them, the object steers into fewer than a program
+    # with them gives: that program compiles the file again.
+    var other = TempFolder("steering_fewer");
+    _write_steering(other.path);
+    _build_with_runtime(other.path, "without.pep");
+    var more = _build_with_runtime(other.path, "with.pep");
+    expect_true(more.misses.contains(source));
+}
+
+# A program whose cycles steer a file into the same structs as the program
+# that stored its object reuses that object.
+[Test]
+reuses_an_object_built_in_a_program_with_the_same_conformers() {
+    var folder = TempFolder("steering_same");
+    var root = folder.path;
+    _write_steering(root);
+    _build_with_runtime(root, "with.pep");
+    var again = _build_with_runtime(root, "with_too.pep");
+    expect_true(again.hits.contains(_source_unit(root, "with_too.pep")));
 }
 
 # Writes a program whose `a.pep` returns `a_body`, and whose `main.pep`

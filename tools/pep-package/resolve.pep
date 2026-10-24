@@ -28,6 +28,7 @@
 import [Path] from io;
 import semver;
 import [Version, VersionRange, parse_range] from semver;
+import [check_vendored] from toolchain;
 import "archive";
 import "git";
 import "lock";
@@ -75,9 +76,11 @@ export struct Graph {
     }
 }
 
-# Where a package from `host` lives in the project `project`.
-export package_dir(project: Path, host: String, repository: String): Path {
-    var dir = project.join(".pep").join("deps").join(host_domain(host));
+# Where a package from `host` lives in the project `project`: in its
+# `.pep/deps`, or in its folder `vendor` when that is not empty.
+export package_dir(project: Path, host: String, repository: String, vendor: String = ""): Path {
+    var deps = vendor.is_empty ? project.join(".pep").join("deps") : project.join(vendor);
+    var dir = deps.join(host_domain(host));
     for (var part in repository.split("/")) {
         dir = dir.join(part);
     }
@@ -106,6 +109,9 @@ export struct Resolver {
     # `--offline`: use only what `.pep/deps` and the download cache hold,
     # and fail on what needs the network.
     var offline: bool = false;
+    # The project's `[fetch] vendor` folder, when packages are read from
+    # it, which is only checked, never written; empty for `.pep/deps`.
+    var vendor: String = "";
     # The toolchain release resolving, which each package's
     # `minimum_toolchain` is checked against; empty checks none.
     var toolchain: String = "";
@@ -158,14 +164,14 @@ export struct Resolver {
     }
 
     # The folder holding `source`'s files: a `path` override's, else its
-    # checkout in `.pep/deps`.
+    # checkout in `.pep/deps` (or the vendor folder).
     _dir(source: String): Path {
         var replacement = root.override_of(source);
         if (replacement.is_value() and replacement.value().is_path()) {
             return project.join(replacement.value().repository);
         }
         var (host, repository) = split_source(source);
-        return package_dir(project, host, repository);
+        return package_dir(project, host, repository, vendor);
     }
 
     # Fails, at the override's key, when the package `name` that overrides
@@ -228,7 +234,8 @@ export struct Resolver {
             var checkout = _dir(source).canonicalize();
             if (folder.is_ok() and checkout.is_ok()) {
                 var path = folder.value().to_string();
-                file = path.substr(checkout.value().to_string().length + 1, path.length).replace("\\", "/") + "/pep.toml";
+                file = path.substr(checkout.value().to_string().length + 1, path.length).replace("\\", "/")
+                    + "/pep.toml";
             }
         }
         var text = file_at(host, repository, _dir(source), commit, file, offline);
@@ -307,7 +314,7 @@ export struct Resolver {
                     continue;
                 }
                 var (host, repository) = split_source(source);
-                var dir = package_dir(project, host, repository);
+                var dir = package_dir(project, host, repository, vendor);
                 var fetched = fetch(host, repository, dir, pick.commit, _replaced_by(source));
                 if (fetched.is_err()) {
                     return Result<Graph>.Err($"cannot fetch {source}: {fetched.error().message}");
@@ -520,7 +527,9 @@ export struct Resolver {
     # overrides one, and when the folder is no package of that workspace.
     _published_sibling(source: String, manifest: Manifest, requirement: Requirement) {
         var replacement = root.override_of(source);
-        if (source.is_empty or source.starts_with("path:") or (replacement.is_value() and replacement.value().is_path())) {
+        if (source.is_empty
+            or source.starts_with("path:")
+            or (replacement.is_value() and replacement.value().is_path())) {
             return;
         }
         var checkout = _dir(source).canonicalize();
@@ -560,11 +569,19 @@ export struct Resolver {
     # git is on the PATH, else the host's archive of it, from the fork
     # `from` (`github:you/name`) when it is given. Returns the full commit
     # and the checksum of its files, which must match the one pep.lock
-    # records for that commit.
+    # records for that commit. With `vendor`, `dir` must hold the vendored
+    # package at `commit` already (`check_vendored`).
     fetch(host: String, repository: String, dir: Path, commit: String, from: String = ""): Result<(String, String)> {
         var source = host + ":" + repository;
         var (from_host, from_repository) = split_source(from.is_empty ? source : from);
         var expected = _locked_sha256(source, commit);
+        if (!vendor.is_empty) {
+            var checked = check_vendored(dir, commit);
+            if (checked.is_err()) {
+                return Result<(String, String)>.Err(checked.error());
+            }
+            return Result<(String, String)>.Ok((commit, expected));
+        }
         var at = unpacked(dir);
         # Offline, an unpacked archive serves even once git is installed.
         if (at.is_value() and at.value() == commit and (offline or (!expected.is_empty and !has_git()))) {

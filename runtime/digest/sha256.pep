@@ -59,13 +59,6 @@ export struct Sha256 {
         return out;
     }
 
-    # Replaces the contents of `out` with the digest, then resets: `finish`
-    # without allocating, for PBKDF2's rounds.
-    _finish_into(out: u8[]) {
-        out.clear();
-        _engine.finish(out);
-    }
-
     ## Returns the digest as `finish` does, written as 64 lowercase
     ## hexadecimal digits.
     ##
@@ -121,6 +114,17 @@ struct _Sha256Engine {
             index += 1;
         }
         reset();
+    }
+
+    # Takes `other`'s state and pending input, as if this engine had been
+    # fed the same bytes: PBKDF2 saves HMAC's pad states with it.
+    _copy_from(other: _Sha256Engine) {
+        ulong index = 0;
+        while (index < 8) {
+            _state[index] = other._state[index];
+            index += 1;
+        }
+        _buffer._copy_from(other._buffer);
     }
 
     # Runs the compression function over the 64 bytes at `block`.

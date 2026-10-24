@@ -14,11 +14,12 @@ pepper package update                        # every dependency, as far as the r
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
-pepper package publish                       # ... then tag it v<version> and push the tag
+pepper package publish                       # ... then tag it v<version> (<member>-v<version>) and push the tag
 pepper package tree                          # the dependency graph pep.lock records
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
 pepper package cache clean
 ```
@@ -78,6 +79,7 @@ Every package is downloaded once per machine, into a
 | `outdated` | Lists the packages behind the newest version their ranges allow, or the newest overall (see [`outdated`](#outdated)) |
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
 | `outdated --json` | Prints the outdated packages as JSON |
+| `vendor [<dir>]` | Copies every locked package into `<dir>` in the project (default: `pep.toml`'s `[fetch] vendor`, else `vendor`), and sets `[fetch] vendor` so builds read it (see [`vendor`](#vendor-dir)) |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -202,11 +204,24 @@ First it checks, and lists every check that fails at once:
   sibling, needs a `version` beside it, and one inherited with
   `workspace = true` is checked as the workspace gives it. A
   dev-dependency may be anything, since a dependent ignores it;
+- every `path` dependency with a `version` is a package of this
+  workspace, its root or a member, published at a version the range
+  accepts: `origin` has its tag (`numbers-v1.2.0`, or `v1.2.0` for the
+  root), which a project outside the workspace resolves it by (see
+  [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)).
+  Each is an error at its `path`, printed before the list:
+
+  ```text
+  geo/pep.toml:9:20: error: 'numbers' is not published at a version '1' accepts: origin has no such tag numbers-v<version>, which a dependent resolves it by; publish numbers first
+      9 | numbers = { path = "../numbers", version = "1" }
+        |                    ^~~~~~~~~~~~
+  ```
+
 - `minimum_toolchain` is at least the release that reads each newer
   `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
   `[features]`, `[overrides]` and `[workspace]` tables, and a
-  dependency's `optional`, `features`, `default-features` and
-  `workspace`, need 0.11.0;
+  dependency's `optional`, `features`, `default-features`, `workspace`
+  and `package`, need 0.11.0;
 - `pep.toml` has no `[overrides]`: a dependent builds with the packages
   they replace, not the code the package was tested with, so a release
   waits until the fix it needs is released too.
@@ -220,7 +235,10 @@ pep-package: error: cannot publish shapes 1.2.0:
 ```
 
 Run from a workspace member, it checks and tests that member, in its
-folder.
+folder, and tags it `<name>-v<version>` (`geo-v0.3.1`): each member is
+released on its own, and its `version` need only be newer than its own
+tags. The workspace's root package, and a package that is no workspace's
+member, are tagged `v<version>`.
 
 Then it runs the package's tests with `pepper +<minimum_toolchain> test`
 and `pepper +latest test` (only the second without a `minimum_toolchain`),
@@ -228,7 +246,8 @@ with the Pepper home's own `pepper` (in the home `PEPPER_HOME` names,
 else the default one; see [Toolchains: pep-install](pep-install.md)), so
 both toolchains must be installed there; `latest` is the newest
 installed release, not a prerelease. A failing run stops it and shows
-what the tests printed. Last, it tags `HEAD` `v<version>` and pushes the
+what the tests printed. Last, it tags `HEAD` `v<version>` (a member's
+tag) and pushes the
 tag to `origin`; when the push fails, it deletes the tag again.
 
 `--dry-run` checks and tests, then says what it would tag, without
@@ -330,6 +349,57 @@ it prints `every package is at the newest version`. It reads what each
 package offers over the network, so with `--offline` it fails, saying it
 cannot check. The exit status is 0 whatever it finds, unless
 `--exit-code` asks for 1 when a package is outdated, for CI.
+
+### `vendor [<dir>]`
+
+Copies every package `pep.lock` lists into a folder of the project, so
+the repository carries its dependencies and builds with no network and no
+[download cache](#the-download-cache), as `cargo vendor` and
+`go mod vendor` do: for an air-gapped build, or a release archive. It
+first resolves and fetches as [`fetch`](#fetch) does, then writes each
+package at its locked commit to `<dir>/<host>/<owner>/<name>`
+(`vendor/github.com/someone/geometry`), its files as `git archive` gives
+them, without `.git`, and sets `[fetch] vendor = "<dir>"` in `pep.toml`
+(see [`[fetch]`](projects.md#fetch)):
+
+```text
+$ pepper package vendor
+pep-package: vendored geometry 1.1.0 (github:someone/geometry)
+pep-package: vendored numbers 1.3.1 (github:other/numbers)
+pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
+```
+
+Commit the folder with `pep.toml` and `pep.lock`. It holds every package
+in the lock: every platform's, and those only `[dev-dependencies]` lead
+to, since `pepper test` and the examples build from it too (Cargo vendors
+everything for the same reason). A fork an `[overrides]` entry names is vendored in
+the original's place; a `path` override is not, its folder being the
+project's already. `<dir>/.gitattributes` turns git's
+line-ending conversion off there, so a checkout keeps the files byte for
+byte.
+
+Each package's folder also holds `.pep-commit`, its commit, and
+`.pep-checksum`, the SHA-256 of its files' paths and contents. In a
+vendored project, `pepper build` and `pepper test` fetch nothing: they read
+the packages from the vendor folder and check that each one the build
+needs is there at its locked commit and unedited, and fail otherwise, with
+or without `--locked` and `--offline`:
+
+```text
+error: the files in vendor/github.com/someone/geometry were changed since they were vendored (sha256 1c0f..., recorded 7b3e...); run 'pepper package vendor' to restore them, or make the change in the package itself
+```
+
+`pepper package fetch` checks the same, and that `pep.lock` still matches
+`pep.toml`, reading only the vendor folder; it changes neither. To change
+a dependency, run `add`, `remove` or `update` (which fetch into `.pep/deps`
+as usual), then `vendor` again: that rewrites the packages that changed,
+restores edited ones, and removes those `pep.lock` no longer lists.
+`.pep/deps` is unchanged in a project that is not vendored.
+
+In a [workspace](projects.md#workspaces), run from the root or any member,
+`vendor` writes one folder at the workspace's root, holding every
+member's locked packages, and sets `[fetch] vendor` in the root's
+`pep.toml`; every member's build reads it.
 
 ### JSON output
 
@@ -439,6 +509,21 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 A package that only the project's `[dev-dependencies]` lead to has
 `dev = true`; one that a dependency leads to as well does not.
 
+A member of a repository's workspace (a dependency with
+[`package`](projects.md#a-member-as-a-git-dependency)) has `#` and the
+member after the repository in its `source`, and its own commit, the one
+its own tag names, checked out in `.pep/deps/<host>/<owner>/<name>#<member>`
+(or the vendor folder). Its siblings are entries of their own:
+
+```toml
+[[package]]
+name = "geo"
+source = "github:someone/shapes#geo"
+version = "0.3.1"
+commit = "..."
+sha256 = "..."
+```
+
 Features do not change the lock: an optional dependency is resolved,
 locked and fetched like any other, whether or not a build turns it on, so
 `pep.lock` is the same whichever `--features` a build gives (see
@@ -516,6 +601,10 @@ CI builds want to fail rather than quietly change what they build:
   `pep.toml` change `pep.lock` does not cover).
 - **`--frozen`**: both.
 
+A [vendored](#vendor-dir) project needs neither the network nor the
+download cache, so `fetch --frozen` and `pepper build --frozen` pass with
+only the repository.
+
 ```text
 $ pepper package fetch --locked
 pep-package: error: pep.lock would change, and --locked keeps it as it is:
@@ -539,7 +628,7 @@ module cache are: `cache/packages` in the home `PEPPER_HOME` names, else
 
 - `<host>/<owner>/<name>.git`: a bare git repository of every commit any
   project has fetched, fetched from the host only when it lacks the commit
-  a project needs;
+  a project needs, one for the repository and all its workspace members;
 - `<host>/<owner>/<name>/<commit>.tar.gz`: each archive fetched without
   git (see [Fetching without git](#fetching-without-git)).
 
@@ -596,7 +685,13 @@ name each imports it by.
 
 - A version range picks the newest version tag (`v1.2.3` or `1.2.3`) that
   every package's range accepts. When none does, resolution fails and names
-  each package's requirement and the versions the repository offers.
+  each package's requirement and the versions the repository offers. A
+  workspace member's range reads only its own tags (`geo-v1.2.3`), and a
+  repository's root package only the plain ones.
+- A `path` with a `version` in a fetched package's `pep.toml` is the
+  package of the same workspace it names, resolved by its own tags as a
+  dependency on that member of the same repository (see
+  [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)).
 - A branch, tag or commit must be the same in every package that names it.
 - The project's own `pep.toml` overrides its dependencies: a package it
   names gets the revision it asks for, even outside the range a dependency
