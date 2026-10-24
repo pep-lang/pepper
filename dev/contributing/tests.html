@@ -330,7 +330,8 @@ the next build. The <code>stage0</code> release keeps the newest 20 builds and t
 one main pins, so an older branch whose pin is gone (a patch release made
 from it, say) copies main's <code>.github/stage0</code> first.</p>
 <pre><code class="language-bash">gh workflow run stage0.yml                                  # pin the newest build of main now
-gh pr create --head stage0/bump --fill                      # then open its pull request
+git fetch origin stage0/bump:stage0/bump                    # then open its pull request
+gh pr create --base main --head stage0/bump --fill
 </code></pre>
 <p>So runtime code may only use what stage 0 accepts. A runtime change that
 needs a newer compiler than stage 0 dispatches the workflow and merges its
