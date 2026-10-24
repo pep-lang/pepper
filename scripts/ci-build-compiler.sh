@@ -62,6 +62,7 @@ PEPC_COMPILATION_UNIT_JOBS="$jobs" PEPC_COMPILER_IDENTITY="$identity" PEPPER_CAC
   -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}" 2> "$log" || { cat "$log" >&2; exit 1; }
 # The stages' times, and how many objects the cache supplied.
 grep '^time:' "$log" || true
+grep -E '^cache: [0-9]+ of [0-9]+ compilation units' "$log" || true
 grep -oE '^cache: (hit|miss)' "$log" | sort | uniq -c || true
 # The largest worker's peak memory (each worker's `-T time` stages end with it).
 find "$out/build" -name '*.stages' -exec grep -h '^peak ' {} + | sort -n -k2 | tail -1 | sed 's/^/workers: /' || true
