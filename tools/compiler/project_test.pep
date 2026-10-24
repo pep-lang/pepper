@@ -107,6 +107,20 @@ reports_problems_at_the_key() {
         "entyr: unknown key 'entyr' in '[build]'; expected one of 'entry', 'output', 'include', 'link'"
     );
     expect_equal(errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n"), "");
+    # `package` names a member of a repository's workspace.
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dependencies]\ngeo = { path = \"../geo\", package = \"geo\" }\n"),
+        "package: 'package' names a member of a Git repository's workspace; a 'path' names the member's folder itself"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[dependencies]\ngeo = { github = \"x/kit\", package = \"geo-lib\" }\n"),
+        "\"geo-lib\": 'package' names a workspace member by its package name, and 'geo-lib' is not one"
+    );
+    var member = link.parse_manifest(
+        Path("/p/pep.toml"), "[package]\nname = \"a\"\n[dependencies]\ngeo = { github = \"x/kit\", package = \"geo\" }\n"
+    );
+    expect_equal(member.value().dependencies[0].locked_source().value(), "github:x/kit#geo");
+    expect_equal(link.Host.GitHub.clone_url("x/kit#geo"), "https://github.com/x/kit.git");
 }
 
 [Test]
@@ -273,7 +287,7 @@ reads_dev_dependencies() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[dev-dependencies]\njson = { github = \"x/json\", tags = \"v1\" }\n"),
-        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
+        "tags: unknown key 'tags' in '[dev-dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'package', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
     );
 }
 
@@ -396,7 +410,7 @@ reads_target_dependencies() {
         errors(
             "[package]\nname = \"a\"\n[target.'OS(Windows)'.dependencies]\nx = { github = \"a/x\", tags = \"v1\" }\n"
         ),
-        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
+        "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'package', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
     );
 }
 

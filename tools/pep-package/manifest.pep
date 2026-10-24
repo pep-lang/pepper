@@ -25,6 +25,9 @@ export struct Requirement {
     var host: String = "";
     # `owner/name`, or for a `path` dependency its folder as written.
     var repository: String = "";
+    # `package`: the member of the repository's workspace it is, by its
+    # `[package]` name; empty for the repository's root package.
+    var member: String = "";
     # `version`, `branch`, `tag`, `commit`, or `default` when none is given.
     var kind: String = "default";
     # The range, branch, tag or commit.
@@ -35,8 +38,9 @@ export struct Requirement {
     # The `[target.'<condition>']` it is under (`OS(Windows)`): the
     # platforms that use it. Empty for every platform.
     var target: String = "";
-    # Which of `optional`, `features`, `default-features` and `workspace`
-    # it sets, as pep.toml writes them, which only newer toolchains read.
+    # Which of `optional`, `features`, `default-features`, `workspace` and
+    # `package` it sets, as pep.toml writes them, which only newer
+    # toolchains read.
     var feature_keys: Array<String> = __null;
     # `workspace = true`: its source and revision are those of the entry of
     # the same name in the workspace's `[workspace.dependencies]`.
@@ -52,9 +56,10 @@ export struct Requirement {
     }
 
     # Where the package comes from, which identifies it in the whole
-    # graph: `github:owner/name` (or `path:<folder>`).
+    # graph: `github:owner/name`, `github:owner/name#member` for a member
+    # of the repository's workspace (or `path:<folder>`).
     source(): String {
-        return host + ":" + repository;
+        return host + ":" + repository + (member.is_empty ? "" : "#" + member);
     }
 
     is_path(): bool {
@@ -129,14 +134,15 @@ export struct Manifest {
         return Optional<Requirement>.Empty;
     }
 
-    # `message` as a clang-style `severity` diagnostic at the key of the
-    # override of `source`.
-    at_override(severity: String, source: String, message: String): String {
-        var start = text.find("\"" + source + "\"");
+    # `message` as a clang-style `severity` diagnostic at the first place
+    # `value` is written quoted: the key of the override of a source, or a
+    # dependency's `path` or `package`.
+    at_value(severity: String, value: String, message: String): String {
+        var start = text.find("\"" + value + "\"");
         if (start < 0) {
-            start = text.find("'" + source + "'");
+            start = text.find("'" + value + "'");
         }
-        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + source.length + 2);
+        var at = start < 0 ? Span(0, 0) : Span(start as ulong, start as ulong + value.length + 2);
         var diagnostic = severity == "error" ? Diagnostic.error(message) : Diagnostic.warning(message);
         return render_all([diagnostic.at(Location(0, at))], [SourceText(path.to_string(), text)]);
     }
@@ -300,8 +306,9 @@ export newer_manifest_features(): Array<(String, String)> {
 }
 
 # The first release that reads a dependency's `optional`, `features`,
-# `default-features` and `workspace`, which `newer_manifest_features`
-# cannot name: they sit under each dependency's own key.
+# `default-features`, `workspace` and `package`, which
+# `newer_manifest_features` cannot name: they sit under each dependency's
+# own key.
 export const DEPENDENCY_FEATURES_RELEASE = "0.11.0";
 
 # One `[dependencies]` or `[dev-dependencies]` entry.
@@ -333,6 +340,9 @@ _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement
         if (is_host(field) or field == "path") {
             requirement.host = field;
             requirement.repository = text.value();
+        } else if (field == "package") {
+            requirement.member = text.value();
+            requirement.feature_keys.append(field);
         } else if (field == "version" or field == "branch" or field == "tag" or field == "commit") {
             requirement.kind = field;
             requirement.value = text.value();
@@ -470,6 +480,24 @@ _member_dirs(root: Manifest): Array<Path> {
     return dirs;
 }
 
+# Each member of the workspace whose root is `root_dir`, other than the
+# root: its canonical folder and its `[package]` name. None when `root_dir`
+# holds no workspace.
+export workspace_members(root_dir: Path): Array<(Path, String)> {
+    var members = Array<(Path, String)>();
+    var root = read_manifest(root_dir.join("pep.toml"));
+    if (root.is_err() or !root.value().is_workspace) {
+        return members;
+    }
+    for (var dir in _member_dirs(root.value())) {
+        var member = read_manifest(dir.join("pep.toml"));
+        if (member.is_ok()) {
+            members.append((dir, member.value().name));
+        }
+    }
+    return members;
+}
+
 # Fills in `manifest`'s `workspace = true` entries from `root`'s
 # `[workspace.dependencies]`; why one cannot be, if so.
 _inherit(manifest: Manifest, root: Manifest): Optional<String> {
@@ -490,6 +518,7 @@ _inherit(manifest: Manifest, root: Manifest): Optional<String> {
         }
         requirement.host = found.value().host;
         requirement.repository = found.value().repository;
+        requirement.member = found.value().member;
         requirement.kind = found.value().kind;
         requirement.value = found.value().value;
         if (requirement.is_path()) {

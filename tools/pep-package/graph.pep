@@ -397,7 +397,7 @@ export struct LockedGraph {
             var newest = Optional<Version>.Empty;
             for (var ref in refs.value()) {
                 if (ref.name.starts_with("refs/tags/")) {
-                    var version = tag_version(ref.name.substr(10, ref.name.length));
+                    var version = member_tag_version(source_member(source), ref.name.substr(10, ref.name.length));
                     if (version.is_value()
                         and version.value().prerelease.is_empty
                         and (newest.is_empty() or version.value().compare(newest.value()) > 0)) {

@@ -40,7 +40,15 @@ export host_domain(host: String): String {
 
 # The address git clones `repository` (`owner/name`) on `host` from.
 export repository_url(host: String, repository: String): String {
-    return host_url(host) + "/" + repository + ".git";
+    return host_url(host) + "/" + repository_of(repository) + ".git";
+}
+
+# The repository of `repository` as a source writes it: `owner/name`, also
+# for a member of its workspace (`owner/name#member`), which shares the
+# repository's clone in the cache and its address.
+export repository_of(repository: String): String {
+    var split = repository.split_once("#");
+    return split.is_value() ? split.value().0 : repository;
 }
 
 # Runs git with `arguments`, in `directory` when it is not empty, and
@@ -145,7 +153,7 @@ export cache_dir(): Path {
 # git) `<this>/<commit>.tar.gz`, and its lock this path with `.lock` added.
 export cached_package(host: String, repository: String): Path {
     var dir = cache_dir().join(host_domain(host));
-    for (var part in repository.split("/")) {
+    for (var part in repository_of(repository).split("/")) {
         dir = dir.join(part);
     }
     return dir;

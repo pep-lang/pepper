@@ -15,7 +15,7 @@
 #     pepper package fetch --locked             # fail rather than change pep.lock
 #     pepper package fetch --offline            # only what .pep/deps and the cache hold; --frozen is both
 #     pepper package fetch github:someone/geometry  # only that locked package, without resolving
-#     pepper package publish [--dry-run]        # check, test, tag v<version> and push the tag
+#     pepper package publish [--dry-run]        # check, test, tag v<version> (<member>-v<version>) and push it
 #     pepper package tree [--depth 1] [--json]  # the locked graph
 #     pepper package tree --invert numbers      # what depends on numbers
 #     pepper package why numbers [--all]        # the paths from the project to it
@@ -957,7 +957,8 @@ struct Project {
     # Checks that the package is ready to release at pep.toml's `version`
     # and runs its tests with its `minimum_toolchain` and the newest
     # toolchain installed; then, unless `dry_run`, tags the commit
-    # `v<version>` and pushes the tag to `origin`.
+    # `v<version>` (`<name>-v<version>` for a workspace member) and pushes
+    # the tag to `origin`.
     publish(dry_run: bool): int {
         if (offline) {
             return fail(
@@ -986,7 +987,7 @@ struct Project {
         for (var requirement in manifest.value().requirements) {
             # A dependent ignores dev-dependencies, so they may be anything;
             # a `path` (a workspace sibling) needs the `version` it is
-            # published with.
+            # published with, which is checked against its tags below.
             if (requirement.dev or requirement.kind == "version") {
                 continue;
             }
@@ -1039,6 +1040,9 @@ struct Project {
         if (refs.is_err()) {
             return fail(refs.error().message);
         }
+        var name = manifest.value().name;
+        # A workspace member's tags are its own: `<name>-v<version>`.
+        var member = root_path.to_string() == manifest_path.to_string() ? "" : name;
         var newest = Optional<semver.Version>.Empty;
         var has_head = false;
         for (var ref in refs.value()) {
@@ -1049,7 +1053,7 @@ struct Project {
                 );
             }
             if (ref.name.starts_with("refs/tags/")) {
-                var tagged = tag_version(ref.name.substr(10, ref.name.length));
+                var tagged = member_tag_version(member, ref.name.substr(10, ref.name.length));
                 if (tagged.is_value() and (newest.is_empty() or tagged.value().compare(newest.value()) > 0)) {
                     newest = tagged;
                 }
@@ -1063,9 +1067,12 @@ struct Project {
                 $"'version' {package_version} is not newer than the newest tag, {newest.value().to_string()}; raise it in pep.toml"
             );
         }
-        var name = manifest.value().name;
-        if (!problems.is_empty) {
-            return fail($"cannot publish {name} {package_version}:\n  " + "\n  ".join(problems));
+        var unpublished = _unpublished_siblings(manifest.value(), refs.value());
+        if (!problems.is_empty or !unpublished.is_empty) {
+            File.stderr().write_all(unpublished);
+            return fail(
+                $"cannot publish {name} {package_version}" + (problems.is_empty ? "" : ":\n  " + "\n  ".join(problems))
+            );
         }
         # The home's own `pepper`, by its path: only it picks toolchains with
         # `+`, and a search by name may find another (Windows looks beside
@@ -1085,7 +1092,7 @@ struct Project {
                 return fail($"'pepper +{release} test' failed, so {name} {package_version} is not published");
             }
         }
-        var tag = "v" + package_version;
+        var tag = (member.is_empty ? "" : member + "-") + "v" + package_version;
         if (dry_run) {
             say(
                 $"{name} {package_version} is ready: without --dry-run, publish tags {commit.substr(0, 12)} {tag} and pushes it"
@@ -1104,6 +1111,67 @@ struct Project {
         }
         say($"published {name} {package_version}: tagged {commit.substr(0, 12)} {tag} and pushed it to origin");
         return 0;
+    }
+
+    # Clang-style errors at each `path` dependency of `manifest` with a
+    # `version` that a dependent cannot fetch from the repository: one
+    # naming no package of this workspace, or one whose tags on origin
+    # (`refs`) have no version it accepts. A dependent resolves such a
+    # sibling by those tags.
+    _unpublished_siblings(manifest: Manifest, refs: Array<RemoteRef>): String {
+        var text = "";
+        var root_dir = dir.canonicalize();
+        for (var requirement in manifest.requirements) {
+            if (requirement.dev or !requirement.is_path() or requirement.kind != "version") {
+                continue;
+            }
+            var folder = manifest.dir().join(requirement.repository).canonicalize();
+            # The package there and the member its tags name ("" for the root).
+            var sibling = Optional<(String, String)>.Empty;
+            if (is_workspace and folder.is_ok() and root_dir.is_ok()) {
+                var root = read_manifest(root_path);
+                if (folder.value().to_string() == root_dir.value().to_string()
+                    and root.is_ok()
+                    and !root.value().name.is_empty) {
+                    sibling = Optional<(String, String)>.Value((root.value().name, ""));
+                }
+                for (var (member_dir, member) in workspace_members(dir)) {
+                    if (member_dir.to_string() == folder.value().to_string()) {
+                        sibling = Optional<(String, String)>.Value((member, member));
+                    }
+                }
+            }
+            if (sibling.is_empty()) {
+                text += manifest.at_value(
+                    "error",
+                    requirement.repository,
+                    $"dependency '{requirement.name}' names the folder {requirement.repository}, which is no package of this workspace, so a dependent cannot fetch it; depend on it by its repository"
+                );
+                continue;
+            }
+            var (package, member) = sibling.value();
+            var range = parse_range(requirement.value);
+            if (range.is_err()) {
+                text += manifest.at_value("error", requirement.repository, range.error().message);
+                continue;
+            }
+            var published = false;
+            for (var ref in refs) {
+                if (ref.name.starts_with("refs/tags/")) {
+                    var version = member_tag_version(member, ref.name.substr(10, ref.name.length));
+                    published = published or (version.is_value() and range.value().matches(version.value()));
+                }
+            }
+            if (!published) {
+                var tag = (member.is_empty ? "" : member + "-") + "v<version>";
+                text += manifest.at_value(
+                    "error",
+                    requirement.repository,
+                    $"'{package}' is not published at a version '{requirement.value}' accepts: origin has no such tag {tag}, which a dependent resolves it by; publish {package} first"
+                );
+            }
+        }
+        return text;
     }
 }
 

@@ -17,7 +17,13 @@
 # `[overrides]` replace a package wherever the graph reaches it, whatever
 # its dependents ask: a fork's revision is chosen as the override asks and
 # checked out where the original's would be, and a `path` override's
-# folder is read in its place; either is locked with `override`.
+# folder is read in its place; either is locked with `override`. A
+# dependency with `package` is a member of the repository's workspace
+# (`github:owner/name#member`): checked out on its own, at the version its
+# own `<member>-v<version>` tags name, and read from the member's folder.
+# A `path` with a `version` in a fetched package's pep.toml names a package
+# of the same workspace, so it is that member (or the root) of the same
+# repository, resolved by its own tags.
 
 import [Path] from io;
 import semver;
@@ -168,7 +174,7 @@ export struct Resolver {
         for (var locked in previous) {
             if (locked.source == source and !locked.name.is_empty and locked.name != name) {
                 return Result<void>.Err(
-                    root.at_override(
+                    root.at_value(
                         "error",
                         source,
                         $"'{_replaced_by(source)}' is the package '{name}', not '{locked.name}', which it overrides; name a fork or copy of '{locked.name}'"
@@ -179,15 +185,53 @@ export struct Resolver {
         return Result<void>.ok();
     }
 
+    # The folder of `source`'s package: `_dir`, or for a member of a
+    # repository's workspace the member's folder in that checkout.
+    _folder(source: String): Result<Path> {
+        var dir = _dir(source);
+        var member = source_member(source);
+        var replacement = root.override_of(source);
+        if (member.is_empty or (replacement.is_value() and replacement.value().is_path())) {
+            return Result<Path>.Ok(dir);
+        }
+        var names = Array<String>();
+        for (var (folder, name) in workspace_members(dir)) {
+            if (name == member) {
+                return Result<Path>.Ok(folder);
+            }
+            names.append($"'{name}'");
+        }
+        return Result<Path>.Err(
+            $"{repository_of(split_source(source).1)} has no workspace member '{member}'"
+                + (names.is_empty ? ", nor a workspace" : "; its members are " + ", ".join(names))
+        );
+    }
+
     # The `minimum_toolchain` the pep.toml at `commit` of `source` declares,
     # read from its clone in `.pep/deps` without checking it out.
     _minimum_at(source: String, commit: String): Result<String> {
-        var known = _minimums.try_get(commit);
+        var known = _minimums.try_get(source + "@" + commit);
         if (known.is_value()) {
             return Result<String>.Ok(known.value());
         }
         var (host, repository) = split_source(_origin(source));
-        var text = file_at(host, repository, _dir(source), commit, "pep.toml", offline);
+        var file = "pep.toml";
+        if (!source_member(source).is_empty) {
+            # The clone, made by reading its root's pep.toml.
+            var made = file_at(host, repository, _dir(source), commit, file, offline);
+            if (made.is_err()) {
+                return Result<String>.Err(made.error().message);
+            }
+            # shortcut: the member's folder in the clone's work tree, which a member that
+            # moves between releases does not match; read it at `commit` if members move.
+            var folder = _folder(source);
+            var checkout = _dir(source).canonicalize();
+            if (folder.is_ok() and checkout.is_ok()) {
+                var path = folder.value().to_string();
+                file = path.substr(checkout.value().to_string().length + 1, path.length).replace("\\", "/") + "/pep.toml";
+            }
+        }
+        var text = file_at(host, repository, _dir(source), commit, file, offline);
         if (text.is_err()) {
             return Result<String>.Err(
                 $"cannot read the pep.toml of {source} {commit.substr(0, 12)}: {text.error().message}"
@@ -201,7 +245,7 @@ export struct Resolver {
                 minimum = manifest.value().minimum_toolchain;
             }
         }
-        _minimums[commit] = minimum;
+        _minimums[source + "@" + commit] = minimum;
         return Result<String>.Ok(minimum);
     }
 
@@ -230,7 +274,7 @@ export struct Resolver {
                     var folder = _dir(source);
                     if (!folder.join("pep.toml").is_file()) {
                         return Result<Graph>.Err(
-                            root.at_override(
+                            root.at_value(
                                 "error",
                                 source,
                                 $"the folder {folder.to_string()} overriding '{source}' has no pep.toml"
@@ -272,7 +316,11 @@ export struct Resolver {
                 pick.commit = commit;
                 pick.sha256 = sha256;
                 pick.replaced_by = _replaced_by(source);
-                var (name, minimum) = _name_and_minimum(dir, repository);
+                var folder = _folder(source);
+                if (folder.is_err()) {
+                    return Result<Graph>.Err(_at_package(asking, folder.error().message));
+                }
+                var (name, minimum) = _name_and_minimum(folder.value(), repository);
                 if (replacement.is_value()) {
                     var named = _check_name(source, name);
                     if (named.is_err()) {
@@ -323,7 +371,7 @@ export struct Resolver {
             for (var replacement in root.overrides) {
                 if (!wanted.contains(replacement.name)) {
                     graph.warnings.append(
-                        root.at_override(
+                        root.at_value(
                             "warning",
                             replacement.name,
                             $"override of '{replacement.name}' matches no package in the dependency graph"
@@ -335,7 +383,7 @@ export struct Resolver {
             for (var member in root.member_manifests) {
                 for (var replacement in member.overrides) {
                     graph.warnings.append(
-                        member.at_override(
+                        member.at_value(
                             "warning",
                             replacement.name,
                             $"override of '{replacement.name}' in a workspace member is ignored; move it to the root's pep.toml"
@@ -348,6 +396,23 @@ export struct Resolver {
         return Result<Graph>.Err(
             "the dependency graph did not settle; check for packages that require each other in a cycle"
         );
+    }
+
+    # `message` as an error at the `package` of the first of `asks` the
+    # project's own pep.toml (or a member's) makes, else as it is.
+    _at_package(asks: Array<Wanted>, message: String): String {
+        var own = [root];
+        own.append_all(root.member_manifests);
+        for (var ask in asks) {
+            for (var manifest in own) {
+                for (var requirement in manifest.requirements) {
+                    if (requirement === ask.requirement) {
+                        return manifest.at_value("error", requirement.member, message);
+                    }
+                }
+            }
+        }
+        return message;
     }
 
     # Every requirement in the graph, by source: the project's, then those
@@ -393,6 +458,9 @@ export struct Resolver {
                 if (requirement.dev != (from_root and dev)) {
                     continue;
                 }
+                if (requirement.is_path() and requirement.kind == "version") {
+                    _published_sibling(parent, manifest, requirement);
+                }
                 var source = requirement.source();
                 var package = Path(".");
                 if (requirement.is_path()) {
@@ -421,7 +489,11 @@ export struct Resolver {
                     if (locked.is_empty()) {
                         continue;
                     }
-                    package = _dir(source);
+                    var folder = _folder(source);
+                    if (folder.is_err()) {
+                        return Result<OrderedMap<String, Array<Wanted>>>.Err(folder.error().message);
+                    }
+                    package = folder.value();
                     label = locked.value().describe();
                 }
                 read.insert(source);
@@ -429,7 +501,8 @@ export struct Resolver {
                 if (!file.is_file()) {
                     continue;
                 }
-                var dependency = read_manifest(file);
+                # In its workspace, for its `workspace = true` entries.
+                var dependency = read_project(file);
                 if (dependency.is_err()) {
                     return Result<OrderedMap<String, Array<Wanted>>>.Err(dependency.error().message);
                 }
@@ -437,6 +510,40 @@ export struct Resolver {
             }
         }
         return Result<OrderedMap<String, Array<Wanted>>>.Ok(wanted);
+    }
+
+    # Makes `requirement`, a `path` with a `version` in `manifest`, the
+    # pep.toml of the package fetched from `source`, the package of the same
+    # workspace it names, as a dependent outside the repository sees it:
+    # that member (or the root) of the same repository, by its own tags.
+    # Leaves it as it is in the project's own packages and in a folder that
+    # overrides one, and when the folder is no package of that workspace.
+    _published_sibling(source: String, manifest: Manifest, requirement: Requirement) {
+        var replacement = root.override_of(source);
+        if (source.is_empty or source.starts_with("path:") or (replacement.is_value() and replacement.value().is_path())) {
+            return;
+        }
+        var checkout = _dir(source).canonicalize();
+        var folder = manifest.dir().join(requirement.repository).canonicalize();
+        if (checkout.is_err() or folder.is_err()) {
+            return;
+        }
+        var member = Optional<String>.Empty;
+        if (folder.value().to_string() == checkout.value().to_string()) {
+            member = Optional<String>.Value("");
+        }
+        for (var (dir, name) in workspace_members(checkout.value())) {
+            if (dir.to_string() == folder.value().to_string()) {
+                member = Optional<String>.Value(name);
+            }
+        }
+        if (member.is_empty()) {
+            return;
+        }
+        var (host, repository) = split_source(source);
+        requirement.host = host;
+        requirement.repository = repository_of(repository);
+        requirement.member = member.value();
     }
 
     # The checksum pep.lock records for `commit` of `source`, if any.
@@ -576,7 +683,7 @@ export struct Resolver {
                 }
                 var version = "";
                 if (first.kind == "tag") {
-                    var parsed = tag_version(first.value);
+                    var parsed = member_tag_version(source_member(source), first.value);
                     version = parsed.is_value() ? parsed.value().to_string() : "";
                 }
                 return Result<Locked>.Ok(Locked("", source, version, ref.commit));
@@ -613,7 +720,7 @@ export struct Resolver {
             if (!ref.name.starts_with("refs/tags/")) {
                 continue;
             }
-            var parsed = tag_version(ref.name.substr(10, ref.name.length));
+            var parsed = member_tag_version(source_member(source), ref.name.substr(10, ref.name.length));
             if (parsed.is_empty()) {
                 continue;
             }
@@ -694,6 +801,25 @@ export struct Resolver {
 export tag_version(tag: String): Optional<Version> {
     var parsed = semver.parse(tag.starts_with("v") ? tag.substr(1, tag.length) : tag);
     return parsed.is_ok() ? Optional<Version>.Value(parsed.value()) : Optional<Version>.Empty;
+}
+
+# The version a tag names for the workspace member `member`: its
+# `<member>-` prefix, then what `tag_version` reads (`geo-v1.2.3`). For
+# no member, the repository's root package, `tag_version`: a member's tag
+# names none, since a package name has no `-`.
+export member_tag_version(member: String, tag: String): Optional<Version> {
+    if (member.is_empty) {
+        return tag_version(tag);
+    }
+    var prefix = member + "-";
+    return tag.starts_with(prefix) ? tag_version(tag.substr(prefix.length, tag.length)) : Optional<Version>.Empty;
+}
+
+# The workspace member a source names (`github:owner/name#geo`), or empty
+# for a repository's root package.
+export source_member(source: String): String {
+    var split = source.split_once("#");
+    return split.is_value() ? split.value().1 : "";
 }
 
 # The condition under which a build needs each source of `wanted`: the
