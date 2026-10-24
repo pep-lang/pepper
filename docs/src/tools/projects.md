@@ -173,6 +173,10 @@ In CI, `pepper build --locked` and `pepper test --locked` fail when
 [Reproducible builds](pep-package.md#reproducible-builds). They apply to
 dev-dependencies as to the rest.
 
+A project that sets `[fetch] vendor` (`pepper package vendor` does) keeps
+its dependencies in that folder of the repository instead, and builds with
+no network and no download cache; see [`[fetch]`](#fetch).
+
 ## `[dev-dependencies]`
 
 A package the project's tests and examples use but its code does not, such
@@ -490,11 +494,59 @@ reaches it, without editing the `pep.toml` of each package on the way:
 ```toml
 [fetch]
 hosts = ["codeberg", "github"]
+vendor = "vendor"
 ```
 
 | Key | What it is | Default |
 | --- | --- | --- |
 | `hosts` | The hosts `pepper package add owner/name` looks a repository up on, in order, when the argument names none; it adds the first that has it | `["github", "gitlab", "codeberg"]` |
+| `vendor` | The folder, relative to the project, that [`pepper package vendor`](pep-package.md#vendor-dir) copied every locked package into, which sets it. Builds then read each dependency from `<vendor>/<host>/<owner>/<name>` instead of `.pep/deps`, fetch nothing, and fail when a package is missing, at another commit than `pep.lock`'s, or edited. A package that sets it needs `minimum_toolchain = "0.11.0"` or later | none: dependencies are fetched into `.pep/deps` |
+
+## `[retract]`
+
+A package withdraws its own broken releases, as Go's `retract` does: each
+key is a version, or a range as dependencies write it, and its value says
+why.
+
+```toml
+[retract]
+"1.1.0" = "loses data on Windows"
+">=1.2.0, <1.2.3" = "PEP-2026-0001"
+```
+
+A key that is a version names that version alone, not the `^` range a
+dependency's `version = "1.1.0"` means; keys are quoted, as TOML reads
+`1.1.0` unquoted as three nested keys. Release the table in a newer
+version: the `[retract]` of a package's newest release speaks for every
+version, so a range no longer picks a retracted one, `pepper package
+outdated` flags one `pep.lock` holds, and `update` moves off it (see
+[Retracted versions](pep-package.md#retracted-versions)). A key that is
+neither a version nor a range is an error at the key in the project's
+own `pep.toml` (a dependency's retracts nothing, so its dependents still
+resolve):
+
+```text
+pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range: ...
+```
+
+- **Needs toolchain 0.11.0:** an older toolchain rejects a `pep.toml` with
+  `[retract]` as an unknown table, so a package that has one sets
+  `minimum_toolchain = "0.11.0"` (or later), which `pepper package
+  publish` checks.
+
+## `[audit]`
+
+```toml
+[audit]
+ignore = ["PEP-2026-0001"]   # its code is never called here
+```
+
+| Key | What it is | Default |
+| --- | --- | --- |
+| `ignore` | The advisories, by id, that [`pepper package audit`](pep-package.md#audit) reports but does not fail on, with `--ignore` | `[]` |
+
+Only the project's own (in a workspace, its root's) `[audit]` applies.
+An older toolchain than 0.11.0 rejects the table.
 
 ## Errors
 

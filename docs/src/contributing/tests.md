@@ -107,7 +107,20 @@ cache. A PR that changes the compiler (`tools/compiler/`) or stage 0's
 pin (`.github/stage0`) is tested with that compiler instead: CI builds it
 with stage 0 first (`scripts/ci-build-compiler.sh`, from a build cache CI
 keeps between runs, keyed on stage 0's contents) and runs the suite with
-it. Each job has
+it.
+
+On a pull request, the docs examples (`tools/pep-doc/examples_test.pep`)
+build and run in full only on Linux. The macOS and Windows jobs set
+`PEPPER_DOCS_EXAMPLES=platform`, which keeps only the examples that select
+code per platform: those with a line holding a `[Target(...)]` that names
+an `OS(...)` or an `Arch(...)`. On main, and on every other event, every
+OS runs every example. To run only those examples by hand:
+
+```bash
+PEPPER_DOCS_EXAMPLES=platform scripts/pepper-tests.sh target/compiler
+```
+
+Each job has
 a time limit a little above its slowest passing runs, and prints the
 runner's memory, swap, disk and biggest processes every minute beside the
 tests (`scripts/ci-monitor.sh`). A job that fails, is cancelled or runs out
@@ -166,7 +179,8 @@ from it, say) copies main's `.github/stage0` first.
 
 ```bash
 gh workflow run stage0.yml                                  # pin the newest build of main now
-gh pr create --head stage0/bump --fill                      # then open its pull request
+git fetch origin stage0/bump:stage0/bump                    # then open its pull request
+gh pr create --base main --head stage0/bump --fill
 ```
 
 So runtime code may only use what stage 0 accepts. A runtime change that

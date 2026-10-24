@@ -50,9 +50,9 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tools/pep-run` | `pep-run`: builds a program with `pep-build` into `<Pepper home>/run/<hash of folder and options>/` with the shared build cache, then execs it in the caller's folder. |
 | `tools/pep-profile` | `pep-profile`: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). |
 | `tools/pep-test` | `pep-test`: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). |
-| `tools/pep-package` | `pep-package`, the package manager, itself a `pep.toml` project that depends on `pep-lang/pepper-semver` for versions and ranges (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, and checkouts cloned from the download cache in the Pepper home, `cache/packages/<host>/<owner>/<name>.git`, a bare repository each fetches into under a per-package lock file), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, kept in the same cache, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides, and in a workspace (`read_project`) every member's counts as the project's; its `[overrides]` replace a package wherever the graph reaches it, a fork checked out in the original's `.pep/deps` folder and a `path` override read from its folder, either locked with `override`, and one that matches nothing is a warning at its key; only the project's own `[dev-dependencies]` are gathered, after its dependencies, and what only they reach is locked `dev = true`; every `[target.'<condition>'.dependencies]` is gathered whatever the platform, and what only they reach is locked with `target`, the conditions on each way to it joined with `&&` and the ways with `||`; a range skips versions whose `minimum_toolchain` is newer than pep-package's own release, reading each candidate's `pep.toml` with `git show` from its clone), `graph.pep` (`tree`, `why` and `outdated`: the edges `Resolver.gather` reads from the locked packages, and `Resolver.choose` for the revision `update` would pick), `install.pep` (`install`: `main.pep` picks the version with `Resolver.choose` alone, as `add` would but without the package's dependencies, which its own `pep.lock` gives, and fetches that commit into `<home>/cache/install-<pid>/package`, not under a `.pep`, where it would build as part of the project outside, and `install.pep` builds it with `pep-build -O` and puts the program in the home's `bin`, recorded in `<home>/installed-tools.toml`). The compiler's `driver/project.pep` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package the build's target needs (`pep-package fetch <source>...`, fetching only those, when `pep.lock` lists every dependency and holds packages for other targets), or checks the commits out with git itself when `pep-package` is not installed. |
+| `tools/pep-package` | `pep-package`, the package manager, itself a `pep.toml` project that depends on `pep-lang/pepper-semver` for versions and ranges (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, and checkouts cloned from the download cache in the Pepper home, `cache/packages/<host>/<owner>/<name>.git`, a bare repository each fetches into under a per-package lock file), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, kept in the same cache, the checksum of a package's files that `pep.lock` records, and `vendor_package`, the copy `pep-package vendor` writes into the `[fetch] vendor` folder), `resolve.pep` (one revision per package; the project's `pep.toml` overrides, and in a workspace (`read_project`) every member's counts as the project's; its `[overrides]` replace a package wherever the graph reaches it, a fork checked out in the original's `.pep/deps` folder and a `path` override read from its folder, either locked with `override`, and one that matches nothing is a warning at its key; only the project's own `[dev-dependencies]` are gathered, after its dependencies, and what only they reach is locked `dev = true`; every `[target.'<condition>'.dependencies]` is gathered whatever the platform, and what only they reach is locked with `target`, the conditions on each way to it joined with `&&` and the ways with `||`; a range skips the versions the `[retract]` of the newest release names (`Resolver.retractions`), and versions whose `minimum_toolchain` is newer than pep-package's own release, reading each candidate's `pep.toml` with `git show` from its clone), `graph.pep` (`tree`, `why` and `outdated`: the edges `Resolver.gather` reads from the locked packages, and `Resolver.choose` for the revision `update` would pick), `advisory.pep` (`audit`'s database: a Git repository of one TOML advisory per file, `PEPPER_ADVISORY_DB` or pep-lang/advisories, cloned into `cache/advisories` in the Pepper home and fetched again after an hour), `install.pep` (`install`: `main.pep` picks the version with `Resolver.choose` alone, as `add` would but without the package's dependencies, which its own `pep.lock` gives, and fetches that commit into `<home>/cache/install-<pid>/package`, not under a `.pep`, where it would build as part of the project outside, and `install.pep` builds it with `pep-build -O` and puts the program in the home's `bin`, recorded in `<home>/installed-tools.toml`). The compiler's `driver/project.pep` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package the build's target needs (`pep-package fetch <source>...`, fetching only those, when `pep.lock` lists every dependency and holds packages for other targets), or checks the commits out with git itself when `pep-package` is not installed. A vendored project (`[fetch] vendor`, `Manifest.vendor`, the workspace root's in a workspace) fetches nothing: `package_directory` points into the vendor folder, and the driver and `Resolver.fetch` only check each package there with `toolchain.check_vendored`. |
 | `tools/pep-install` | `pep-install`, run as `pepper install`: installs release toolchains side by side in the Pepper home and sets the default. `releases.pep` (GitHub's release list, streamed archive downloads checked against their `.sha256`), `zip.pep` (unpacks the Windows `.zip` releases), `commands.pep` (each command against a `toolchain.Home`), `setup.pep` (`setup` and `uninstall`: the PATH, prerequisites and the check program, which the install scripts bootstrap through). |
-| `tools/toolchain` | The module `pepper`, `pep-install` and `pep-package` share: toolchain versions and the versions a command names (`version.pep`), the Pepper home's layout and replacing a program in its `bin`, which may be running (`home.pep`), and which toolchain a folder uses (`choose.pep`: `+<version>`, `PEPPER_TOOLCHAIN`, `pep.toml`'s `toolchain`, the default). |
+| `tools/toolchain` | The module `pepper`, `pep-install` and `pep-package` share: toolchain versions and the versions a command names (`version.pep`), the Pepper home's layout and replacing a program in its `bin`, which may be running (`home.pep`), and which toolchain a folder uses (`choose.pep`: `+<version>`, `PEPPER_TOOLCHAIN`, `pep.toml`'s `toolchain`, the default); and `vendor.pep`, the checksum of a vendored package, which `pep-package vendor` writes and the compiler checks. |
 | `tools/pepper` | `pepper`, the entry point: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler); run from a Pepper home, it runs the tools of the toolchain `tools/toolchain` picks. |
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder, a subfolder of the module, so each test file sees the module's internal declarations (a test helper may not repeat one of their names), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
 | `tests/` | `.pep` corpus: `hello.pep` plus one `tests/<Feature.Case>/test.pep` per folder, which `compiler/corpus_test.pep` builds and runs. |
@@ -1292,7 +1292,11 @@ arguments, and `_TypeScopes.overload_call` checks that a call names a set
 (`Overloads.call_set_name`) before parsing its type arguments; and
 `traits.used_trait_types` prints and parses only types that spell a
 trait's name as a whole word (`ArrayIterator` does not mention
-`Iterator`). `specialize_methods` builds its `StructTable` only once a call
+`Iterator`). The walk rewrites a call before its arguments, so
+`_TypeScopes._call_type` types a generic call not rewritten yet as the
+specialization its arguments select (`inferred_type_arguments`, which
+`_infer_type_arguments` shares): calls nested in each other's arguments
+(`[[1]]`, `id(id(1))`) resolve in one walk, not one per run or round. `specialize_methods` builds its `StructTable` only once a call
 names a generic method. Between its runs it keeps, in
 `PassState.implicit` (`ImplicitMemo`), what each callable looked up and its
 fingerprint (`_Worklist`), so a run walks only the callables whose code or
@@ -1965,7 +1969,8 @@ changed.
   checked, and warns, again), and `parts`, the list of its parts' objects.
   Each part is cached on its own, `<cache>/v3/u/<unit>#<n>/<key>/0.o`,
   keyed like a C file's object (`Keys.part`): the part's files by their
-  text, and every other file the unit reads by its interface hash. So when
+  text, every other file the unit reads by its interface hash, and what the
+  unit's last releases steer into (below). So when
   a body edit misses a unit, only the edited file's part is optimized and
   emitted again; the others are linked from the cache. Each folder is
   written to the build folder and moved into place as one. The same key
@@ -2001,6 +2006,24 @@ changed.
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
   whole, objects a build was about to link among them.
+- **Steering.** A recursive struct's last release steers into the
+  conformers of a trait it holds and the closures of a function type
+  (`find_chains`), which are the whole program's, so a unit's code can name
+  structs of files it does not read, which another program may not have
+  (#170). `codegen.generate` hands out each cycle's structs with their
+  files (`Generator.cycles`), and `Keys.steering` lists, once per unit, the
+  structs of the cycles the unit's files see into that lie outside them,
+  each by name and its files' hashes. That list goes into each part's key,
+  and the unit's objects are stored beside its key's folder under the key
+  and the list's hash (`Cache.steered`, `<key>.<hash>/`, holding the list
+  as `steers`). Before sema, `reuse` takes the one that steers into the most
+  structs whose files are all in the program (`Cache.best_steered`). After
+  codegen, a hit whose list lacks a line this program's cycles give
+  (`steers_within`; closures of files whose bodies sema skipped are not
+  seen, so the program's list can only be shorter) ends the build, and
+  `build` runs it again with that unit compiled (`Built.again`), printing
+  its warnings once. The compilation units' own objects need none of this:
+  a unit is generated from the records of what it reads only.
 - **Short paths.** The cache sits in the project's folder, and Windows
   tools fail on a path over 260 characters, so its paths stay short:
   one-letter folders, a unit's folder cut to 20 characters, the last 9 a
@@ -2295,8 +2318,8 @@ check when `StructDesc.immortal` (a reference enum's bare cases, a plain
 function type's static objects), in place of `synthesize`'s body, so it
 reaches the same last release; every other struct keeps that body, and a
 struct no cycle runs through compiles exactly as before. The analysis sees
-the whole program, so a unit cached before another unit made a type
-recursive keeps its plain last release: still correct, only unbounded.
+the whole program, so the build cache keys a file's objects on the structs
+outside its files that its cycles hold (§ build cache, "Steering").
 So taking
 or dropping a reference costs no call even across units and at `-O0`, and
 the cache keys need nothing new: the step depends only on the head layout
@@ -3601,7 +3624,7 @@ the runtime's tests in `runtime/` and the tools' in `tools/` (at
 | Targets and test builds | `compiler/target_test.pep`, `test_main_test.pep` | `--target` triples, machines and link options; `--test`'s generated `main`. |
 | Corpus | `compiler/corpus_test.pep` | Builds every `tests/<Name>/test.pep` with `-I tests` and runs it from the repository's root (must exit 0); under wasmtime too, for `wasm32-wasip1`, when `WASI_SDK_PATH` names a wasi-sdk and wasmtime is found. |
 | Whole programs | `tools/compiler/programs_test.pep`, programs in `tools/compiler/testdata/` | Runtime modules where a program's arguments, environment or exit matter: `cli`'s `parse` output and the `add_options` field error, `os`'s environment and host name, `time`'s zones from TZif files, `TZ` and the system database, and `process`'s arguments, `exit`, `main(args)`, children that are copies of the program, and `exec`. |
-| Docs examples | `tools/pep-doc/examples_test.pep` | Builds and runs every `docs/examples/*.pep` (or `name/main.pep`). Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
+| Docs examples | `tools/pep-doc/examples_test.pep` | Builds and runs every `docs/examples/*.pep` (or `name/main.pep`). Filter with `PEPPER_DOCS_EXAMPLE=prefix`; `PEPPER_DOCS_EXAMPLES=platform` keeps those with a `[Target(...)]` naming an `OS(...)` or `Arch(...)` (CI's macOS and Windows jobs on a pull request). |
 | Runtime docs, tool docs | `pep-doc check` (`tools/pep-doc/checks.pep`), run by CI after the tests | `check_documented` over the runtime and `tools/syntax`; every option of every tool (their `--help`, `HELP` in `tools/pep-lsp/arguments.pep`, `setup-llvm.sh`'s usage) on its page, `pep-build`'s values, trace channels and environment variables, `pep-lsp`'s initialization options and VS Code settings; the reference current. |
 | Tools | `tools/<tool>/*_test.pep` | pep-doc's parts (`pep_doc_test.pep`), pep-fmt's style (`format_test.pep`), its command line (`cli_test.pep`) and the repository formatted (`repository_test.pep`), pep-lsp (`pep_lsp_test.pep`), pep-install against a loopback server (`install_test.pep`), and `pepper`, `pep-test`, `pep-package`, `pep-profile`, `pep-run`, `pep-new` and `pep-init` run end to end with the `tool_testing` helpers (`tools/tool_testing/`). |
 | pepc's options | `compiler/options_test.pep`, `library_test.pep`, `debug_info_test.pep`, `emit_static_test.pep` | The command line run on the compiler under test (`pep-build` beside the test or on the PATH: CI builds a changed compiler first, `scripts/ci-build-compiler.sh`); libraries for C called from C, archives' symbol indexes, the CPU in the cache key; `-g` (§4.4); `--emit-static` copies that build into the same program. |
