@@ -70,6 +70,9 @@ export struct Target {
     ## Whether the project's package's `default` feature is on: false
     ## with `--no-default-features`.
     var default_features: bool = true;
+    ## The names of the other workspace members built with the project's
+    ## package (`--all`, `-p`), whose features are unified with its.
+    var members: String[] = Array<String>();
 
     ## Creates the target the compiler runs on, with no build options.
     construct() {

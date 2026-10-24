@@ -13,7 +13,7 @@
 ## compilation unit's objects are kept the same way, as unit `+<name>`. Each is
 ## written to a folder of the build and moved into place as one, and never
 ## changed after, since the same key gives the same objects. So builds share the cache with no lock, and link
-## the objects where they are. Each unit keeps its newest few keys
+## hard links to the objects (`Cache.pin`). Each unit keeps its newest few keys
 ## (`_KEEP`), so switching between builds that differ (`-O` levels,
 ## programs with other overrides) does not rebuild every time; reusing a key
 ## makes it the newest, and a key stored or reused lately (`_GRACE`) is
@@ -86,6 +86,65 @@ export struct Cache {
         return objects($"{unit}#{n}", key);
     }
 
+    ## Returns the folder of the objects of `unit` under `key` whose last
+    ## releases steer into the structs `steering` lists (`Keys.steering`):
+    ## the key's own when it lists none, else one beside it named after
+    ## both, so objects of one key built in programs whose cycles differ
+    ## are kept side by side.
+    ##
+    ## @param unit the unit's name
+    ## @param key its key
+    ## @param steering what its objects steer into
+    ## @returns the folder, which need not exist
+    steered(unit: String, key: String, steering: String): Path {
+        var folder = objects(unit, key);
+        if (steering.is_empty) {
+            return folder;
+        }
+        var hash = digest.to_hex(digest.blake3(steering)).substr(0, 8);
+        return folder.parent().value().join(Path($"{_key_name(key)}.{hash}"));
+    }
+
+    ## Returns the folder of the objects of `unit` under `key` (`steered`)
+    ## that steer into the most structs, among those whose structs' files
+    ## are all in this program (`hashes`), and what they steer into: the
+    ## key's own folder, steering into none, when no other is.
+    ##
+    ## @param unit the unit's name
+    ## @param key its key
+    ## @param hashes the hash of each of the program's files (`Keys.file_hashes`)
+    ## @returns the folder, which need not exist, and its steering
+    best_steered(unit: String, key: String, hashes: HashSet<String>): (Path, String) {
+        var best = objects(unit, key);
+        String steering = "";
+        ulong most = 0;
+        var listing = Directory.open(best.parent().value());
+        if (listing.is_err()) {
+            return (best, steering);
+        }
+        var entries = listing.value().entries();
+        if (entries.is_err()) {
+            return (best, steering);
+        }
+        var variant = $"{_key_name(key)}.";
+        for (var entry in entries.value()) {
+            if (!entry.name.starts_with(variant)) {
+                continue;
+            }
+            var text = File.read_to_string(entry.path.join(Path(STEERS_FILE)));
+            if (text.is_err() or !_steers_present(text.value(), hashes)) {
+                continue;
+            }
+            var count = _lines(text.value()).count;
+            if (count > most) {
+                most = count;
+                best = entry.path;
+                steering = text.value();
+            }
+        }
+        return (best, steering);
+    }
+
     ## Marks the objects in `folder`, a key's, as just reused, so the
     ## unit's pruning counts them as its newest. Mark a key before checking
     ## its objects are there: a build pruning it then keeps it (`_prune`).
@@ -142,6 +201,42 @@ export struct Cache {
             );
         }
         return Result<Path[], String>.ok(found.value());
+    }
+
+    ## Returns `objects`, each one this cache holds replaced by a hard link
+    ## to it in `folder`, for the link. A build pruning a unit can move a
+    ## key's folder aside (`_prune`) after this build's last look at it, and
+    ## the linker opens the objects later; the link keeps the file wherever
+    ## the folder goes (#178). An object found missing is looked for again
+    ## (`look_again`). One that cannot be linked but is there (`folder` on
+    ## another volume) stays where it is: a copy of every object would slow
+    ## every build to close a rare race.
+    ##
+    ## @param objects the objects to link
+    ## @param folder a folder of this build's own, created here
+    ## @returns the objects to link, or why the cache no longer holds one
+    pin(objects: Path[], folder: Path): Result<Path[], String> {
+        Directory.create_all(folder);
+        var root = dir.to_string();
+        var pinned = Array<Path>();
+        for (var object in objects) {
+            if (!object.to_string().starts_with(root)) {
+                pinned.append(object);
+                continue;
+            }
+            var pin = folder.join(Path($"{pinned.count}.{object.file_name().value()}"));
+            var made = look_again(() => {
+                if (File.hard_link(object, pin).is_ok()) {
+                    return Optional<Path>.Value(pin);
+                }
+                return object.is_file() ? Optional<Path>.Value(object) : Optional<Path>.Empty;
+            });
+            if (!made.is_value()) {
+                return Result<Path[], String>.err($"the build cache no longer holds {object}; build again");
+            }
+            pinned.append(made.value());
+        }
+        return Result<Path[], String>.ok(pinned);
     }
 
     ## Returns the key the cache holds objects of compilation unit `unit`,
@@ -227,9 +322,13 @@ export struct Cache {
     ## @param built the folder of objects
     ## @param unit the unit's name
     ## @param key its key
+    ## @param steering what its objects steer into (`steered`)
     ## @returns the objects' folder in the cache, or why it could not be moved
-    store(built: Path, unit: String, key: String): Result<Path, String> {
-        var target = objects(unit, key);
+    store(built: Path, unit: String, key: String, steering: String = ""): Result<Path, String> {
+        if (!steering.is_empty and File.write_text(built.join(Path(STEERS_FILE)), steering).is_err()) {
+            return Result<Path, String>.err($"cannot write to {built}");
+        }
+        var target = steered(unit, key, steering);
         var placed = _place(built, target);
         if (placed.is_err()) {
             return Result<Path, String>.err(placed.error());
@@ -342,6 +441,58 @@ _key_name(key: String): String {
 ## they use of what the objects below them define: the stamp of those
 ## (`stamp_of`), then a name a line (`Cache.unit_objects`).
 export const NEEDS_FILE = "needs";
+
+## The name of the file beside a unit's objects listing the structs outside
+## the files it reads that its last releases steer into (`Keys.steering`);
+## objects that steer into none have none.
+export const STEERS_FILE = "steers";
+
+## Returns the lines of `text`, each a struct `Keys.steering` lists.
+_lines(text: String): HashSet<String> {
+    var out = HashSet<String>();
+    for (var line in text.split("\n")) {
+        if (!line.is_empty) {
+            out.insert(line);
+        }
+    }
+    return out;
+}
+
+## Whether every file of every struct `steering` lists (`Keys.steering`) is
+## in the program, whose files' hashes are `hashes`.
+_steers_present(steering: String, hashes: HashSet<String>): bool {
+    for (var line in _lines(steering)) {
+        var fields = line.split_once("\t");
+        if (!fields.is_value()) {
+            return false;
+        }
+        var (_, files) = fields.value();
+        for (var hash in files.split(" ")) {
+            if (!hashes.contains(hash)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+## Returns whether objects that steer into `recorded` (`Keys.steering`)
+## steer into every struct a program's cycles give, `current`: when not,
+## they were built in a program with fewer structs in those cycles, and
+## the unit is compiled again.
+##
+## @param current what this program's cycles steer the unit into
+## @param recorded what its cached objects steer into
+## @returns whether the objects steer into all of `current`
+export steers_within(current: String, recorded: String): bool {
+    var kept = _lines(recorded);
+    for (var line in _lines(current)) {
+        if (!kept.contains(line)) {
+            return false;
+        }
+    }
+    return true;
+}
 
 ## What the objects of one compilation unit define for those above: their
 ## `defines` file, a name a line.
@@ -461,13 +612,10 @@ export default_cache(work: Path): Cache {
 ## here is put back: that build checks its objects after marking it, so
 ## either it finds the key gone and compiles, or the key stays. It is
 ## missing meanwhile, so every later read of a key a build decided to
-## reuse looks again (`Cache.look_again`).
+## reuse looks again (`Cache.look_again`), and the link reads hard links to
+## the objects (`Cache.pin`), which a prune that stalled between its
+## check and its rename cannot move.
 _prune(folder: Path) {
-    # shortcut: the linker opens a reused key's objects after the last look,
-    # so a prune that read a key's time before a build marked it, then
-    # stalled past that build's last look, can move it aside while a link
-    # opens it; pin the objects (hard links into the build's folder) if that
-    # is ever seen.
     var entries = Directory.open(folder);
     if (entries.is_err()) {
         return;
@@ -627,6 +775,65 @@ export struct Keys {
         return Optional<String>.Value(hasher.finish_hex());
     }
 
+    ## Returns the hash of each of the program's files: its identity and
+    ## text, as keys name them.
+    ##
+    ## @returns the hashes
+    file_hashes(): HashSet<String> {
+        return HashSet<String>(_files);
+    }
+
+    ## Returns what the last releases in unit `u`'s objects can steer into
+    ## beyond the files it reads (`link.unit_inputs`), which its key leaves
+    ## out: each struct of a cycle of `cycles` (`codegen.generate`) that is
+    ## declared in or names a type of a file outside them, when another
+    ## struct of that cycle is wholly inside. One line each, its name, a tab
+    ## and its files' hashes, sorted; empty when there are none. A trait's
+    ## conformers and a function type's closures are the program's, so one
+    ## file's code can steer into structs another program does not have.
+    ##
+    ## @param u the unit's index
+    ## @param cycles the structs of each cycle, with their files
+    ## @returns the lines
+    steering(u: ulong, cycles: Array<Array<(String, ulong[])>>): String {
+        if (cycles.is_empty) {
+            return "";
+        }
+        var inputs = HashSet<ulong>();
+        for (var (file, _) in _inputs[u]) {
+            inputs.insert(file);
+        }
+        var lines = Array<String>();
+        for (var cycle in cycles) {
+            var outside = Array<String>();
+            bool touched = false;
+            for (var (name, files) in cycle) {
+                bool inside = true;
+                var hashes = Array<String>();
+                for (var file in files) {
+                    inside = inside and inputs.contains(file);
+                    hashes.append(file < _files.count ? _files[file] : "");
+                }
+                if (inside) {
+                    touched = true;
+                } else {
+                    hashes.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
+                    outside.append($"{name}\t{" ".join(hashes)}");
+                }
+            }
+            if (touched) {
+                lines.append_all(outside);
+            }
+        }
+        lines.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
+        var out = StringBuilder();
+        for (var line in lines) {
+            out.append(line);
+            out.append("\n");
+        }
+        return out.to_string();
+    }
+
     ## Returns the key of the part of unit `u` that compiles `files`, once
     ## sema has checked the program and every file's interface is known:
     ## the part's files by their text, and every other file the unit's code
@@ -642,14 +849,22 @@ export struct Keys {
     ## @param u the unit's index
     ## @param files the part's files
     ## @param interfaces each file's interface hash: those the unit reads set
+    ## @param steering what the unit's last releases steer into
+    ##   (`Keys.steering`)
     ## @returns the key, in hexadecimal
     part(
-        program: link.Program, units: link.TranslationUnit[], u: ulong, files: ulong[], interfaces: Array<String?>
+        program: link.Program,
+        units: link.TranslationUnit[],
+        u: ulong,
+        files: ulong[],
+        interfaces: Array<String?>,
+        steering: String = ""
     ): String {
         var own = HashSet<ulong>();
         var hasher = digest.Blake3();
         hasher.update(_base);
         hasher.update($"part of {units[u].name}\n");
+        hasher.update($"steers {steering}\n");
         for (var file in files) {
             own.insert(file);
             hasher.update($"own {_files[file]}\n");
@@ -758,6 +973,8 @@ export struct Reused {
     var files: bool[] = Array<bool>();
     ## Those units' recorded link summaries (`Module.recorded_summaries`).
     var summaries: HashMap<sema.Loc, String> = HashMap<sema.Loc, String>();
+    ## What each unit's objects from the cache steer into (`Keys.steering`).
+    var steering: String[] = Array<String>();
 
     construct() {}
 }
@@ -789,6 +1006,7 @@ export nothing_reused(program: link.Program, units: link.TranslationUnit[]): Reu
     for (var _ in units) {
         reused.keys.append(Optional<String>.Empty);
         reused.objects.append(Array<Path>());
+        reused.steering.append("");
     }
     return reused;
 }
@@ -805,10 +1023,16 @@ export nothing_reused(program: link.Program, units: link.TranslationUnit[]): Reu
 ## @param extension the objects' file extension
 ## @returns what the cache has
 export reuse(
-    program: link.Program, units: link.TranslationUnit[], keys: Keys, cache: Cache, extension: String
+    program: link.Program,
+    units: link.TranslationUnit[],
+    keys: Keys,
+    cache: Cache,
+    extension: String,
+    excluded: HashSet<ulong> = HashSet<ulong>()
 ): Reused {
     var reused = nothing_reused(program, units);
     var file_of = _files_by_namespace(program);
+    var hashes = keys.file_hashes();
     bool progress = true;
     while (progress) {
         progress = false;
@@ -822,10 +1046,14 @@ export reuse(
             }
             reused.keys[u] = key;
             progress = true;
-            var folder = cache.objects(units[u].name, key.value());
+            if (excluded.contains(u)) {
+                continue;
+            }
+            var (folder, steering) = cache.best_steered(units[u].name, key.value(), hashes);
             if (!cache.used(folder)) {
                 continue;
             }
+            reused.steering[u] = steering;
             var found = _objects_in(cache, folder, extension);
             var interfaces = File.read_to_string(folder.join(Path(_INTERFACES)));
             if (found.is_empty or interfaces.is_err()) {
@@ -875,6 +1103,7 @@ export reuse(
 ## @param extension the objects' file extension
 ## @param facts each checked function's return type and link summary, by
 ##     location (`sema.function_facts`)
+## @param excluded the units not to reuse (`reuse`)
 export reuse_after_sema(
     reused: Reused,
     program: link.Program,
@@ -882,8 +1111,10 @@ export reuse_after_sema(
     keys: Keys,
     cache: Cache,
     extension: String,
-    facts: HashMap<sema.Loc, String>
+    facts: HashMap<sema.Loc, String>,
+    excluded: HashSet<ulong> = HashSet<ulong>()
 ) {
+    var hashes = keys.file_hashes();
     for (var i in 0..program.files.count) {
         if (!reused.interfaces[i].is_value()) {
             reused.interfaces[i] = Optional<String>.Value(interface_hash(program.files[i], i as uint, facts));
@@ -895,9 +1126,13 @@ export reuse_after_sema(
         }
         var key = keys.unit(program, units, u, reused.interfaces);
         reused.keys[u] = key;
-        var folder = cache.objects(units[u].name, key.value());
+        if (excluded.contains(u)) {
+            continue;
+        }
+        var (folder, steering) = cache.best_steered(units[u].name, key.value(), hashes);
         if (cache.used(folder) and folder.join(Path(_INTERFACES)).is_file()) {
             reused.objects[u] = _objects_in(cache, folder, extension);
+            reused.steering[u] = steering;
         }
     }
 }

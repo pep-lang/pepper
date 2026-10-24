@@ -22,6 +22,7 @@
 import [Path] from io;
 import semver;
 import [Version, VersionRange, parse_range] from semver;
+import [check_vendored] from toolchain;
 import "archive";
 import "git";
 import "lock";
@@ -69,9 +70,11 @@ export struct Graph {
     }
 }
 
-# Where a package from `host` lives in the project `project`.
-export package_dir(project: Path, host: String, repository: String): Path {
-    var dir = project.join(".pep").join("deps").join(host_domain(host));
+# Where a package from `host` lives in the project `project`: in its
+# `.pep/deps`, or in its folder `vendor` when that is not empty.
+export package_dir(project: Path, host: String, repository: String, vendor: String = ""): Path {
+    var deps = vendor.is_empty ? project.join(".pep").join("deps") : project.join(vendor);
+    var dir = deps.join(host_domain(host));
     for (var part in repository.split("/")) {
         dir = dir.join(part);
     }
@@ -100,6 +103,9 @@ export struct Resolver {
     # `--offline`: use only what `.pep/deps` and the download cache hold,
     # and fail on what needs the network.
     var offline: bool = false;
+    # The project's `[fetch] vendor` folder, when packages are read from
+    # it, which is only checked, never written; empty for `.pep/deps`.
+    var vendor: String = "";
     # The toolchain release resolving, which each package's
     # `minimum_toolchain` is checked against; empty checks none.
     var toolchain: String = "";
@@ -152,14 +158,14 @@ export struct Resolver {
     }
 
     # The folder holding `source`'s files: a `path` override's, else its
-    # checkout in `.pep/deps`.
+    # checkout in `.pep/deps` (or the vendor folder).
     _dir(source: String): Path {
         var replacement = root.override_of(source);
         if (replacement.is_value() and replacement.value().is_path()) {
             return project.join(replacement.value().repository);
         }
         var (host, repository) = split_source(source);
-        return package_dir(project, host, repository);
+        return package_dir(project, host, repository, vendor);
     }
 
     # Fails, at the override's key, when the package `name` that overrides
@@ -263,7 +269,7 @@ export struct Resolver {
                     continue;
                 }
                 var (host, repository) = split_source(source);
-                var dir = package_dir(project, host, repository);
+                var dir = package_dir(project, host, repository, vendor);
                 var fetched = fetch(host, repository, dir, pick.commit, _replaced_by(source));
                 if (fetched.is_err()) {
                     return Result<Graph>.Err($"cannot fetch {source}: {fetched.error().message}");
@@ -331,6 +337,18 @@ export struct Resolver {
                     );
                 }
             }
+            # Only the workspace root's apply.
+            for (var member in root.member_manifests) {
+                for (var replacement in member.overrides) {
+                    graph.warnings.append(
+                        member.at_override(
+                            "warning",
+                            replacement.name,
+                            $"override of '{replacement.name}' in a workspace member is ignored; move it to the root's pep.toml"
+                        )
+                    );
+                }
+            }
             return Result<Graph>.Ok(graph);
         }
         return Result<Graph>.Err(
@@ -348,8 +366,19 @@ export struct Resolver {
         # Each manifest to read, who it is, whether it is the project's,
         # whether a dev-dependency leads to it, and its source.
         var queue = Array<(Manifest, String, bool, bool, String)>();
-        queue.append((root, name, true, false, ""));
+        # A workspace's members are the project's own too, read once each.
+        var roots = [(root, name)];
         var read = HashSet<String>();
+        for (var member in root.member_manifests) {
+            roots.append((member, member.name));
+            var folder = member.dir().canonicalize();
+            if (folder.is_ok()) {
+                read.insert("path:" + folder.value().to_string());
+            }
+        }
+        for (var (manifest, label) in roots) {
+            queue.append((manifest, label, true, false, ""));
+        }
         ulong next = 0;
         var dev_queued = false;
         while (true) {
@@ -358,7 +387,9 @@ export struct Resolver {
                     break;
                 }
                 dev_queued = true;
-                queue.append((root, name, true, true, ""));
+                for (var (manifest, label) in roots) {
+                    queue.append((manifest, label, true, true, ""));
+                }
             }
             var (manifest, requirer, from_root, dev, parent) = queue[next];
             next += 1;
@@ -428,11 +459,19 @@ export struct Resolver {
     # git is on the PATH, else the host's archive of it, from the fork
     # `from` (`github:you/name`) when it is given. Returns the full commit
     # and the checksum of its files, which must match the one pep.lock
-    # records for that commit.
+    # records for that commit. With `vendor`, `dir` must hold the vendored
+    # package at `commit` already (`check_vendored`).
     fetch(host: String, repository: String, dir: Path, commit: String, from: String = ""): Result<(String, String)> {
         var source = host + ":" + repository;
         var (from_host, from_repository) = split_source(from.is_empty ? source : from);
         var expected = _locked_sha256(source, commit);
+        if (!vendor.is_empty) {
+            var checked = check_vendored(dir, commit);
+            if (checked.is_err()) {
+                return Result<(String, String)>.Err(checked.error());
+            }
+            return Result<(String, String)>.Ok((commit, expected));
+        }
         var at = unpacked(dir);
         # Offline, an unpacked archive serves even once git is installed.
         if (at.is_value() and at.value() == commit and (offline or (!expected.is_empty and !has_git()))) {

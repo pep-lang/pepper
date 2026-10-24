@@ -96,19 +96,22 @@ runs:
       shell: bash
       run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
 
-    # The toolchain to test with: the published build of main, installed
-    # with the install scripts.
+    # The toolchain to test with, installed with the install scripts: the
+    # published build of main, or, to build the checkout's compiler with,
+    # stage 0, the build .github/stage0 pins.
     - name: Install the toolchain
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
         PEPPER_EXPECT_COMMIT: ${{ inputs.expect-commit }}
-      run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+        NEWEST: ${{ inputs.compiler != 'true' && '--newest' || '' }}
+      run: bash -euxo pipefail scripts/ci-install-toolchain.sh $NEWEST
 
     # The compiler's build cache is keyed on stage 0, the installed
     # pep-build, by its contents (scripts/ci-build-compiler.sh names it so):
     # the newest entry made with this stage 0. One made with another stage
-    # 0 has no key this build can use.
+    # 0 has no key this build can use. Stage 0 is pinned, so every run
+    # until the pin moves shares one key.
     - name: Name stage 0
       id: stage0
       if: inputs.compiler == 'true'

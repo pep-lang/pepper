@@ -24,6 +24,7 @@ import [
     reuse,
     reuse_after_sema,
     Reused,
+    steers_within,
     check_for_worker,
     check_in_workers,
     worker_file,
@@ -293,6 +294,10 @@ export struct Built {
     ## The compilation units checked again from an earlier record of them,
     ## only their changed bodies checked, by name.
     var rechecked: String[] = Array<String>();
+    ## The units whose cached objects steer into fewer structs than this
+    ## program's cycles give (`Keys.steering`), by index: `build` runs
+    ## again, compiling them.
+    var again: ulong[] = Array<ulong>();
 
     construct() {}
 }
@@ -844,10 +849,31 @@ _work_on(
 ## since, nothing is built. Warnings print on standard error whether or
 ## not the build succeeds.
 ##
+## The last releases in a unit's cached objects may steer into structs of
+## files the unit does not read (`Keys.steering`). A build that finds a
+## unit's objects steer into fewer than its own cycles give runs again,
+## compiling that unit, and prints its warnings once.
+##
 ## @param program the loaded and linked program
 ## @param options where the output goes, and how it is built
 ## @returns what the build did, or the error, rendered
 export build(program: link.Program, options: BuildOptions): Result<Built, String> {
+    var excluded = HashSet<ulong>();
+    while (true) {
+        var built = _build(program, options, excluded);
+        if (built.is_err() or built.value().again.is_empty) {
+            return built;
+        }
+        for (var u in built.value().again) {
+            excluded.insert(u);
+        }
+    }
+}
+
+# One try of `build`, reusing no cached objects of the units `excluded`
+# names, and printing no warnings when it names any (the try before did).
+_build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): Result<Built, String> {
+    bool quiet = !excluded.is_empty;
     var report = Built();
     var clock = Clock(options.trace_time);
     var triple = codegen.target_triple(program.target);
@@ -896,7 +922,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         reused = Optional<Reused>.Value(
             _in_workers(options, units) ?
                 nothing_reused(program, translation_units) :
-                reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension)
+                reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension, excluded)
         );
         clock.lap("reuse");
     }
@@ -957,22 +983,24 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         # The warnings of the compilation units loaded, as checking them gave
         # them.
         for (var warned in replayed) {
-            File.stderr().write_all(warned);
+            if (!quiet) {
+                File.stderr().write_all(warned);
+            }
         }
         if (checked.is_err()) {
-            report_warnings(warnings, sources);
+            report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
             return Result<Built, String>.err(_check_error(checked.error(), sources));
         }
         module = checked.value().module;
         state = checked.value().state;
         last_folder = checked.value().last;
         report.rechecked = checked.value().rechecked;
-        report_warnings(warnings, sources);
+        report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
     } else {
         _stop_early_worker(options);
         var built = sema.merge(program);
         if (built.is_err()) {
-            report_warnings(warnings, sources);
+            report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
             return Result<Built, String>.err(built.error());
         }
         module = built.value();
@@ -991,7 +1019,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         for (var note in state.notes) {
             warnings.append(note);
         }
-        report_warnings(warnings, sources);
+        report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
         if (ran.is_err()) {
             return Result<Built, String>.err(render_all([ran.error()], sources));
         }
@@ -1025,7 +1053,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             keys.value(),
             options.cache.value(),
             triple_extension,
-            sema.function_facts(module, state)
+            sema.function_facts(module, state),
+            excluded
         );
         clock.lap("interfaces");
     }
@@ -1179,12 +1208,32 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 }
             }
         }
-        var generated = codegen.generate(module, state, namespaces, stem, setup, owners, cached_files);
+        var cycles = Array<Array<(String, ulong[])>>();
+        var generated = codegen.generate(module, state, namespaces, stem, setup, owners, cached_files, cycles = cycles);
         if (generated.is_err()) {
             return Result<Built, String>.err(render_all([generated.error()], sources));
         }
         var ir = generated.value();
         clock.lap("codegen");
+        # What each unit's last releases steer into beyond the files it reads.
+        # A unit whose cached objects steer into fewer is compiled again, in
+        # a build of its own (`build`): sema skipped its bodies.
+        var steering = Array<String>();
+        for (var u in 0..translation_units.count) {
+            steering.append(keys.is_value() ? keys.value().steering(u, cycles) : "");
+            if (reused.is_value()
+                and reused.value().objects[u].count > 0
+                and !steers_within(steering[u], reused.value().steering[u])) {
+                if (options.trace_cache) {
+                    File.stderr().write_all($"cache: {translation_units[u].name} steers into more, compiling it\n");
+                }
+                report.again.append(u);
+            }
+        }
+        if (!report.again.is_empty) {
+            Directory.remove_all(work);
+            return Result<Built, String>.ok(report);
+        }
 
         # Each unit is one part or more; the program's entry points are the
         # last part.
@@ -1252,7 +1301,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                         files.append(file);
                     }
                 }
-                var part_key = keys.value().part(program, translation_units, u, files, reused.value().interfaces);
+                var part_key = keys.value().part(
+                    program, translation_units, u, files, reused.value().interfaces, steering[u]
+                );
                 var cached = options.cache.value().part(translation_units[u].name, i, part_key);
                 var object = cached.join(Path($"0.{extension}"));
                 parts.append(object);
@@ -1318,7 +1369,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                     parts,
                     options.cache.value()
                 );
-                var kept = options.cache.value().store(folder, translation_units[u].name, key);
+                var kept = options.cache.value().store(folder, translation_units[u].name, key, steering[u]);
                 if (kept.is_err()) {
                     Directory.remove_all(work);
                     return Result<Built, String>.err(kept.error());
@@ -1334,6 +1385,14 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         }
         objects.append(entry_object);
         clock.lap("objects");
+    }
+    if (options.cache.is_value()) {
+        var pinned = options.cache.value().pin(objects, work.join(Path("pinned")));
+        if (pinned.is_err()) {
+            Directory.remove_all(work);
+            return Result<Built, String>.err(pinned.error());
+        }
+        objects = pinned.value();
     }
     if (lto) {
         var optimized = optimize_whole(

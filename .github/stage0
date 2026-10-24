@@ -1,0 +1,14 @@
+# Stage 0: the build of main that CI, the release and
+# scripts/stage0-check.sh build the compiler with
+# (scripts/ci-install-toolchain.sh). Its archives are copies on the
+# `stage0` release, named <commit>-<asset>. The Stage 0 workflow
+# (.github/workflows/stage0.yml) moves this pin: it writes the version,
+# the commit, and the build's SHA256SUMS below these comments.
+version 0.11.0-dev
+commit 9f11e7bb8e00ac24edca0a0824b04756778bc2aa
+d4ca59d36cb6ed3cdd5e7dac237f89f3618b041ee80f2b960bc7cf477deb74e9  pepper-0.11.0-dev-linux-x64.tar.gz
+5f748b133852da2a9d44cd27ad976bd103ca18f65eec8f5569c46b5f2e258cf2  pepper-0.11.0-dev-macos-arm64.tar.gz
+96124ef38e95e63acccb3f00b3fcc3616c8e2a0214d9247d19bd3251aa67834c *pepper-0.11.0-dev-windows-x64.zip
+1d63ae6df04bb9d5b9463bfb5517f5eaa11d3202f40ba393721d7405f588c08a  pepper-install-0.11.0-dev-linux-x64.tar.gz
+b95eec8c1fb05c7c2812700c13e425a4091b277baa3dc97282378914d28da54f  pepper-install-0.11.0-dev-macos-arm64.tar.gz
+53587c4aea6402987cb73d045b10ff4c966fcf46820e47c79a9a9d582eeae324 *pepper-install-0.11.0-dev-windows-x64.zip

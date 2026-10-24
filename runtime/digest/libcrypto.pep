@@ -9,6 +9,9 @@
 # - `update(data, size)`: hashes `size` bytes at `data`
 # - `finish(out)`: appends the digest to `out`, then resets
 #
+# and `_digest_pbkdf2_sha256` at the end of this file has the platform's
+# PBKDF2-HMAC-SHA256 (hmac.pep has the portable one).
+#
 # Every declaration here carries `BuildOption(USE_LIBCRYPTO)`, so a build
 # without it links neither library.
 
@@ -37,6 +40,11 @@ extern int EVP_DigestUpdate(void* context, void* data, ulong size);
 [Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
 [Link("crypto")]
 extern int EVP_DigestFinal_ex(void* context, u8* digest, uint* size);
+[Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
+[Link("crypto")]
+extern int PKCS5_PBKDF2_HMAC(
+    void* password, int password_size, u8* salt, int salt_size, int rounds, void* digest, int key_size, u8* key
+);
 
 # A libcrypto digest context for one algorithm, freed with the struct.
 [Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
@@ -101,6 +109,19 @@ extern int BCryptFinishHash(void* hash, u8* output, uint size, uint flags);
 [Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
 [Link("bcrypt")]
 extern int BCryptDestroyHash(void* hash);
+[Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
+[Link("bcrypt")]
+extern int BCryptDeriveKeyPBKDF2(
+    void* prf,
+    u8* password,
+    uint password_size,
+    u8* salt,
+    uint salt_size,
+    ulong rounds,
+    u8* key,
+    uint key_size,
+    uint flags
+);
 
 # The pseudo-handles of the algorithms (Windows 10 and later), which need
 # no BCryptOpenAlgorithmProvider: `BCRYPT_SHA1_ALG_HANDLE` and
@@ -109,6 +130,9 @@ extern int BCryptDestroyHash(void* hash);
 const _DIGEST_CNG_SHA1: long = 0x31;
 [Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
 const _DIGEST_CNG_SHA256: long = 0x41;
+# `BCRYPT_HMAC_SHA256_ALG_HANDLE`, PBKDF2's pseudo-random function.
+[Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
+const _DIGEST_CNG_HMAC_SHA256: long = 0xb1;
 # BCRYPT_HASH_REUSABLE_FLAG: BCryptFinishHash leaves the hash ready for new
 # input.
 [Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
@@ -212,4 +236,70 @@ struct _Sha1Engine {
     finish(out: u8[]) {
         _native.finish(out);
     }
+}
+
+# ── PBKDF2 ───────────────────────────────────────────────────────────────────
+
+# The largest `int` PKCS5_PBKDF2_HMAC takes for each size and the rounds.
+[Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
+const _DIGEST_INT_MAX: ulong = 0x7fffffff;
+
+# PBKDF2-HMAC-SHA256 through libcrypto. The caller has checked `rounds` and
+# `length` against RFC 8018.
+[Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
+_digest_pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
+    var key = _digest_bytes(length);
+    if (length == 0) {
+        return key;
+    }
+    assert(
+        password.count <= _DIGEST_INT_MAX
+            && salt.count <= _DIGEST_INT_MAX
+            && rounds <= _DIGEST_INT_MAX
+            && length <= _DIGEST_INT_MAX,
+        "pbkdf2_sha256: libcrypto takes at most 2^31 - 1 bytes, rounds and output"
+    );
+    var status = PKCS5_PBKDF2_HMAC(
+        password._data as __ptr<void>,
+        password.count as int,
+        salt._data,
+        salt.count as int,
+        rounds as int,
+        EVP_sha256(),
+        length as int,
+        key._data
+    );
+    assert(status == 1, $"pbkdf2_sha256: PKCS5_PBKDF2_HMAC failed ({status})");
+    return key;
+}
+
+# The largest `ULONG` BCryptDeriveKeyPBKDF2 takes for each size.
+[Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
+const _DIGEST_ULONG_MAX: ulong = 0xffffffff;
+
+# PBKDF2-HMAC-SHA256 through CNG. The caller has checked `rounds` and
+# `length` against RFC 8018.
+[Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
+_digest_pbkdf2_sha256(password: u8[], salt: u8[], rounds: ulong, length: ulong): u8[] {
+    var key = _digest_bytes(length);
+    if (length == 0) {
+        return key;
+    }
+    assert(
+        password.count <= _DIGEST_ULONG_MAX && salt.count <= _DIGEST_ULONG_MAX && length <= _DIGEST_ULONG_MAX,
+        "pbkdf2_sha256: CNG takes at most 2^32 - 1 bytes of password, salt and output"
+    );
+    var status = BCryptDeriveKeyPBKDF2(
+        unsafe_cast<__ptr<void>>(_DIGEST_CNG_HMAC_SHA256),
+        password._data,
+        password.count as uint,
+        salt._data,
+        salt.count as uint,
+        rounds,
+        key._data,
+        length as uint,
+        0
+    );
+    assert(status == 0, $"pbkdf2_sha256: BCryptDeriveKeyPBKDF2 failed (NTSTATUS {status})");
+    return key;
 }

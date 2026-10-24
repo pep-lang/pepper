@@ -520,11 +520,28 @@ export extend TypeName {
         if (sub_types.count == 0) {
             return name;
         }
-        var arguments = Array<String>();
-        for (var t in sub_types) {
-            arguments.append(t.to_string());
+        var out = StringBuilder();
+        _spell(out);
+        return out.to_string();
+    }
+
+    # Appends `to_string()` to `out`: one buffer for the whole type, where
+    # joining each argument's own string copied a nested type once per level.
+    _spell(out: StringBuilder) {
+        out.append(name);
+        if (sub_types.count == 0) {
+            return;
         }
-        return $"{name}<{", ".join(arguments)}>";
+        out.append("<");
+        ulong i = 0;
+        while (i < sub_types.count) {
+            if (i > 0) {
+                out.append(", ");
+            }
+            sub_types[i]._spell(out);
+            i += 1;
+        }
+        out.append(">");
     }
 
     ## Returns whether `other` is the same type. Labels are not part of a
@@ -606,6 +623,11 @@ export replace_map(ty: TypeName, type_map: Array<(String, TypeName)>) {
 ## @param text the string
 ## @returns the type
 export parse_type_string(text: String): TypeName {
+    var cursor = _TypeCursor(text);
+    var plain = cursor.read();
+    if (plain.is_value() and cursor.at == text.size) {
+        return plain.value();
+    }
     var s = text;
     var set = set_name(text);
     if (set.ends_with(">")) {
@@ -645,6 +667,65 @@ export parse_type_string(text: String): TypeName {
         }
     }
     return TypeName.with_args(name, args);
+}
+
+# Reads a type spelled only with names and type arguments, as `to_string`
+# spells them (`Array<Array<i32>>`), in one pass: splitting the text at
+# each level copied a nested type once per level. Anything else (an
+# overload member's `$`, a function type, whitespace) is left to the general
+# parse, which reads it as before.
+struct _TypeCursor {
+    var text: String;
+    var at: ulong = 0;
+
+    construct(text: String) {
+        this.text = text;
+    }
+
+    # The type starting at `at`, which moves past it; none for text the
+    # general parse must read.
+    read(): TypeName? {
+        var none = Optional<TypeName>.Empty;
+        var start = at;
+        while (at < text.size) {
+            var b = text.byte_at(at);
+            if (b == '<' or b == '>' or b == ',') {
+                break;
+            }
+            if (b == '$' or b == '(' or b == ')' or b <= ' ') {
+                return none;
+            }
+            at += 1;
+        }
+        if (at == start) {
+            return none;
+        }
+        var name = text.substr_bytes(start, at - start);
+        if (at == text.size or text.byte_at(at) != '<') {
+            return Optional<TypeName>.Value(TypeName.named(name));
+        }
+        at += 1;
+        var args = Array<TypeName>();
+        while (true) {
+            var arg = read();
+            if (!arg.is_value() or at == text.size) {
+                return none;
+            }
+            args.append(arg.value());
+            var b = text.byte_at(at);
+            at += 1;
+            if (b == '>') {
+                return Optional<TypeName>.Value(TypeName.with_args(name, args));
+            }
+            if (b != ',') {
+                return none;
+            }
+            if (at < text.size and text.byte_at(at) == ' ') {
+                at += 1;
+            }
+        }
+        return none;
+    }
 }
 
 ## Returns whether `text`, a type as `TypeName.to_string` spells it, is a
