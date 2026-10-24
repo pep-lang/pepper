@@ -198,7 +198,7 @@ export struct Diagnostic {
         var out = StringBuilder();
         _render_into(sources, out);
         var text = out.to_string();
-        ulong size = text.size + 0;
+        ulong size = text.size - 0;
         while (size > 0 and text.byte_at(size - 1) == '\n') {
             size -= 1;
         }
