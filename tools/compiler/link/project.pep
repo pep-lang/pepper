@@ -734,6 +734,10 @@ struct _Reader {
             }
             key_at = found.value();
             at = found.value() + key.size;
+            # Past a quoted key's closing quote, so its value is found.
+            if (at < text.size and text.byte_at(at) == '"') {
+                at += 1;
+            }
             i += 1;
         }
         # The value starts after `=` and any spaces.
