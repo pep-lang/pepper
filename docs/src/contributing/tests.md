@@ -179,7 +179,8 @@ from it, say) copies main's `.github/stage0` first.
 
 ```bash
 gh workflow run stage0.yml                                  # pin the newest build of main now
-gh pr create --head stage0/bump --fill                      # then open its pull request
+git fetch origin stage0/bump:stage0/bump                    # then open its pull request
+gh pr create --base main --head stage0/bump --fill
 ```
 
 So runtime code may only use what stage 0 accepts. A runtime change that
