@@ -332,7 +332,8 @@ name for that stem (<code>libmain.a</code>). Building a project with no file, it
 <code>[build]</code> table's <code>output</code>, else the package's <code>name</code> in the project's
 folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
 Windows and the name has no extension. Windows runs only files ending in
-<code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>.</p>
+<code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>. The folders
+the path names are made when they do not exist.</p>
 <p>With <code>--emit-static</code>, it is the folder the expanded source goes into.</p>
 <h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
 <p>Builds a library for C code to link instead of an executable, with a C
