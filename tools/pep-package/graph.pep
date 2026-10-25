@@ -403,7 +403,7 @@ export struct LockedGraph {
             if (refs.is_err()) {
                 return Result<Array<Array<String>>>.Err(refs.error().message);
             }
-            var newest = newest_release(refs.value());
+            var newest = newest_release(refs.value(), source_member(source));
             var locked_version = tag_version(package.version);
             var reason = "";
             if (locked_version.is_value()) {

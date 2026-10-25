@@ -8,8 +8,10 @@
 ## regions of the operands its callee links, as its link summary says; linking
 ## the lock's region with the outer one (or another lock's) is an error at the
 ## value that would cross, as is returning part of the locked value from the
-## block. Summaries are a least fixed point over the call graph; a call through
-## a trait value joins the summaries of the methods implementing it. A summary a
+## block. A local declared inside a `with` block is new, but outlives every
+## lock opened after it, so it cannot hold part of one (`_Region.depth`).
+## Summaries are a least fixed point over the call graph; a call through a
+## trait value joins the summaries of the methods implementing it. A summary a
 ## checked compilation unit recorded keeps, for each trait call it reaches, the
 ## join it was made with rather than the structs it reached, and holds in a
 ## later compilation unit wherever those joins are the same (`_stale`). The pass
@@ -618,6 +620,9 @@ struct _Region {
     var parts: long[] = Array<long>();
     ## Reachable from outside the function.
     var shared: bool = false;
+    ## How many `with` blocks were open where its oldest local was declared
+    ## (-1 for none): it outlives every lock opened inside that many.
+    var depth: long = -1;
 
     construct(parent: ulong, part: _RegionPart) {
         this.parent = parent;
@@ -630,6 +635,8 @@ struct _Region {
 struct _Lock {
     var name: String;
     var loc: Loc;
+    ## How many `with` blocks were open around it.
+    var depth: ulong = 0;
 
     construct(name: String, loc: Loc) {
         this.name = name;
@@ -2244,6 +2251,20 @@ struct _RegionWalk {
             clash_moving = pb;
             return -1;
         }
+        long depth = ra.depth < 0 or (rb.depth >= 0 and rb.depth < ra.depth) ? rb.depth : ra.depth;
+        # A local cannot hold part of a value locked after it was declared:
+        # it outlives the lock.
+        var locked = _locked_index(part);
+        if (locked >= 0 and depth >= 0 and locks[locked as ulong].depth as long >= depth) {
+            if (_locked_index(pb) >= 0) {
+                clash_into = _RegionPart.Fresh;
+                clash_moving = pb;
+            } else {
+                clash_into = pa;
+                clash_moving = _RegionPart.Fresh;
+            }
+            return -1;
+        }
         rb.parent = a as ulong;
         ra.part = part;
         ra.tainted = ra.tainted or rb.tainted;
@@ -2253,6 +2274,7 @@ struct _RegionWalk {
         }
         rb.operands = Array<ulong>();
         ra.shared = ra.shared or rb.shared;
+        ra.depth = depth;
         return a;
     }
 
@@ -2407,9 +2429,17 @@ struct _RegionWalk {
 
     ## Where a local declared now belongs: new, except outside every
     ## `with` block in a check, where it is part of the rest of the
-    ## program.
+    ## program. In a check it outlives the locks opened from here on.
     new_local_region(): long {
-        return checking and open.count == 0 ? region(_RegionPart.Outer) : fresh();
+        if (!checking) {
+            return fresh();
+        }
+        if (open.count == 0) {
+            return region(_RegionPart.Outer);
+        }
+        var r = fresh();
+        regions[r as ulong].depth = open.count as long;
+        return r;
     }
 
     ## A local's region, shaped like its initializer.
@@ -2453,7 +2483,9 @@ struct _RegionWalk {
             } else if (locked_parameters and slot >= first_parameter) {
                 var parameter = f.parameters[slot - first_parameter];
                 var index = locks.count;
-                locks.append(_Lock(parameter.name, parameter.loc));
+                var lock = _Lock(parameter.name, parameter.loc);
+                lock.depth = open.count;
+                locks.append(lock);
                 open.append(index);
                 r = region(_RegionPart.Locked(index));
             } else if (takes) {
@@ -2537,6 +2569,7 @@ struct _RegionWalk {
             index = relock;
             relock += 1;
         } else {
+            lock.depth = open.count;
             locks.append(lock);
         }
         long r = -1;

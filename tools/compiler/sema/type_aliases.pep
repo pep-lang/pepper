@@ -82,9 +82,13 @@ struct _Resolver {
             state.report(Diagnostic.error($"type alias expansion too deep for '{ty.to_string()}'"));
             return;
         }
-        # Nested arguments first; each is expanded independently.
-        for (var arg in ty.sub_types) {
-            expand_node(arg, inflight, depth + 1);
+        # Nested arguments first; each is expanded independently, copied
+        # first since other types share their arguments (`TypeName.copy`).
+        ulong at = 0;
+        while (at < ty.sub_types.count) {
+            ty.sub_types[at] = ty.sub_types[at].copy();
+            expand_node(ty.sub_types[at], inflight, depth + 1);
+            at += 1;
         }
         var found = aliases.try_get(ty.name);
         if (!found.is_value()) {
