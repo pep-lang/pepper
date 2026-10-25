@@ -144,7 +144,7 @@ pep-package: error: cannot fetch github:someone/geometry: --offline, and neither
 Once the dependencies are fetched, the compiler runs the
 [build script](projects.md#build-scripts) of each package the build turns
 on (the project's first): it builds the script for the machine it runs on,
-with itself and `--skip-build-scripts`, into `.pep/build/<package>/`,
+with itself and `--skip-build-scripts`, into `.pep/build/<package>-<hash>/`,
 runs it in the package's folder, and links what it says to. A script whose
 inputs have not changed since its last run is not run again.
 

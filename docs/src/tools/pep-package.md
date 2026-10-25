@@ -6,6 +6,9 @@
 ```bash
 pepper package add someone/geometry          # the newest version, imported as 'geometry'
 pepper package add other/json@2.x --name fast_json
+pepper package add semver                    # the package the index lists as 'semver'
+pepper package search terminal               # the index's packages these words describe
+pepper package info semver                   # its description, versions, toolchain and license
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
 pepper package add --optional --features simd someone/zlib  # only a feature turns it on
@@ -62,6 +65,7 @@ Every package is downloaded once per machine, into a
 | `fetch` | Fetches what `pep.lock` lists, and resolves what `pep.toml` changed since `pep.lock` was written |
 | `fetch <source>...` | Fetches only those locked packages (`github:owner/name`), at their locked commits, resolving nothing |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
+| `add <name>[@<range>]` | Adds the package the [package index](#the-package-index) lists as `<name>`, imported by that name |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
 | `add ... --package <name>` | Depends on the member `<name>` of the repository's workspace, at a version of its own `<name>-v<version>` tags (see [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)) |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
@@ -96,6 +100,8 @@ Every package is downloaded once per machine, into a
 | `audit --ignore <id>` | Reports that advisory but does not fail on it; repeat it for more |
 | `audit --json` | Prints the affected packages as JSON |
 | `vendor [<dir>]` | Copies every locked package into `<dir>` in the project (default: `pep.toml`'s `[fetch] vendor`, else `vendor`), and sets `[fetch] vendor` so builds read it (see [`vendor`](#vendor-dir)) |
+| `search [<word>...]` | Lists the packages in the [package index](#the-package-index) whose name, description or keywords hold every word; every package when none is given (see [`search`](#search-word)) |
+| `info <package>` | Prints a package's description, versions, minimum toolchain, license and repository; the package is the name the index lists it by, or `[host:]owner/name` (see [`info`](#info-package)) |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -136,7 +142,7 @@ pep-package: native 1.0.0 (github:someone/native) has a build script, which ever
 `pepper build --no-build-scripts` then refuses to run a dependency's
 script (see [pep-build](pep-build.md#build-scripts-and---no-build-scripts)).
 
-### `add <owner/name>[@<range>]`
+### `add <owner/name>[@<range>]`, `add <name>[@<range>]`
 
 Adds a dependency to `pep.toml`'s `[dependencies]` and fetches it, keeping
 the file's comments and layout. An argument that starts with `github:`,
@@ -147,7 +153,7 @@ default; see [Projects: pep.toml](projects.md#fetch)) and uses the first
 that has it. When more than one does, it says so:
 
 ```text
-pep-package: other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)
+pep-package: other/numbers is on github and codeberg; using github:other/numbers (prefix it with 'codeberg:' for another)
 ```
 
 ```bash
@@ -164,6 +170,14 @@ branch. The name source code imports defaults to the repository's last part,
 with `-` and `.` turned into `_` (`other/json` adds `json`); `--name` gives
 another. A name already in `pep.toml`, or the name of a runtime module
 (`io`, `async`), is an error that suggests `--name`.
+
+A bare name, with no `/` (`semver`, `semver@1.x`), is the package the
+[package index](#the-package-index) lists by that name: `add` adds its
+source, and source code imports it by the index's name:
+
+```bash
+pepper package add semver   # semver = { github = "pep-lang/pepper-semver", version = "1.0.0" }
+```
 
 `--package <name>` adds a member of the repository's
 [workspace](projects.md#a-member-as-a-git-dependency) instead of its root
@@ -402,6 +416,72 @@ shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes
 shapes 1.1.0 is retracted: loses data
 ```
 
+### `search [<word>...]`
+
+Lists each package in the [package index](#the-package-index) whose name,
+description or keywords hold every word given, ignoring case, one a line;
+with no words, every package. A word matches part of a word
+(`term` matches `terminal`). Finding nothing prints nothing, says so on
+stderr, and exits with status 0.
+
+```text
+$ pepper package search terminal
+term (github:pep-lang/pepper-term): Interactive terminals: raw mode, key and mouse input, ...
+tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Ratatui: ...
+```
+
+### `info <package>`
+
+Prints what is known of a package: the index's description and keywords,
+its versions (its version tags, newest first, those its newest release
+[retracts](#retracted-versions) marked), and the `minimum_toolchain`,
+`license` and `repository` of its newest release's `pep.toml`, which is
+read from the [download cache](#the-download-cache) (fetched into it
+when missing). The package is the name the index lists it by, or a
+repository as `add` takes one (`[host:]owner/name`), which need not be
+in the index; then the description is its `pep.toml`'s. A line with
+nothing to say is left out. It reads the versions from the host, so it
+fails under `--offline`.
+
+```text
+$ pepper package info semver
+semver: Semantic Versioning 2.0.0: parse, compare and order versions, and match them against ranges
+source: github:pep-lang/pepper-semver
+versions: 1.0.0
+license: Apache-2.0
+repository: https://github.com/pep-lang/pepper-semver
+keywords: semver, version, range
+```
+
+### The package index
+
+The index that `search`, `info` and `add <name>` read is a Git
+repository with one TOML file per package in its `packages` folder:
+`https://github.com/pep-lang/index.git`, or the repository
+`PEPPER_PACKAGE_INDEX` names (a mirror, a private index, or a `file://`
+folder). The file's name is the package's name, the one `add <name>`
+takes and source code imports it by (`packages/semver.toml`):
+
+```toml
+source = "github:pep-lang/pepper-semver"   # required: host:owner/name
+description = "Semantic Versioning 2.0.0: parse, compare and order versions, and match them against ranges"
+keywords = ["semver", "version", "range"]
+```
+
+The index lists no versions: they are the source's version tags, which
+`info` reads from the host, so a release needs no change to the index.
+To list a package, open a pull request that adds its file; a maintainer
+reviews it, and the first pull request for a name claims it. A malformed
+file fails the command with an error at its key.
+
+Like the [advisory database](#audit), the index is cloned into the
+download cache's home, `cache/index`, and fetched again once the copy is
+an hour old. A fetch that fails falls back to the cached copy with a
+warning that gives its age, and fails only when there is no copy; with
+`--offline`, `search` uses the copy as it is, and fails when there is
+none. The packages are also listed on
+<https://pepper-lang.dev/packages.html>.
+
 ### `audit`
 
 Checks every package `pep.lock` records, for every platform and
@@ -434,9 +514,16 @@ anywhere in it: `https://github.com/pep-lang/advisories.git`, or the
 repository `PEPPER_ADVISORY_DB` names (a mirror, a private database, or a
 `file://` folder). `audit` clones it into the
 [download cache](#the-download-cache)'s home, `cache/advisories`, and
-fetches it again once the copy is an hour old; a fetch that fails fails
-`audit`, rather than check against an old copy. With `--offline` it uses
-the copy as it is, and fails when there is none. An advisory:
+fetches it again once the copy is an hour old. When that fetch fails (no
+network, or the host erroring), `audit` checks against the cached copy
+and warns on stderr, giving the copy's age:
+
+```text
+pep-package: warning: cannot fetch the advisory database https://github.com/pep-lang/advisories.git, so using the cached copy from 3 days ago: ...
+```
+
+With no cached copy, it fails. With `--offline` it uses the copy as it
+is, and fails when there is none. An advisory:
 
 ```toml
 id = "PEP-2026-0001"                      # required
@@ -498,6 +585,18 @@ a dependency, run `add`, `remove` or `update` (which fetch into `.pep/deps`
 as usual), then `vendor` again: that rewrites the packages that changed,
 restores edited ones, and removes those `pep.lock` no longer lists.
 `.pep/deps` is unchanged in a project that is not vendored.
+
+A vendored package holds no symbolic links. The checksum covers files
+only, and Windows makes links only in Developer Mode, so a link would
+vendor differently from host to host. `vendor` refuses a package whose
+commit holds one, naming the package and the link:
+
+```text
+pep-package: error: cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold
+```
+
+A link found in a package's folder later fails the build and `fetch` the
+same way an edited file does; `vendor` again removes it.
 
 In a [workspace](projects.md#workspaces), run from the root or any member,
 `vendor` writes one folder at the workspace's root, holding every
@@ -931,6 +1030,7 @@ as Go's `retract` does: the `[retract]` of a package's newest version
 | --- | --- |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Fetches that host's repositories from another address (a mirror, or a folder of repositories as a `file://` URL): `<address>/<owner>/<name>.git` |
 | `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
+| `PEPPER_PACKAGE_INDEX` | The Git repository of the [package index](#the-package-index) `search`, `info` and `add <name>` read, instead of `https://github.com/pep-lang/index.git` |
 | `PEPPER_ADVISORY_DB` | The Git repository of the advisory database [`audit`](#audit) reads, instead of `https://github.com/pep-lang/advisories.git` |
 | `PEPPER_LOCKED` | Set to anything but empty or `0`, the same as `--locked` |
 | `PEPPER_OFFLINE` | Set to anything but empty or `0`, the same as `--offline` |

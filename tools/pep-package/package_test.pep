@@ -956,6 +956,71 @@ a_vendored_project_builds_with_no_host_or_cache() {
 }
 
 [Test]
+vendoring_refuses_symbolic_links() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("vendor_links");
+    # `someone/linked` 1.0.0 holds `docs/current`, a symbolic link to its
+    # module, committed through the index so no host needs to make one.
+    var work = hosts.folder.path.join("work").join("someone/linked");
+    Directory.create_all(work);
+    git(work, ["init", "--quiet", "--initial-branch=main"]);
+    write_file(work.join("module.pep"), "export linked(): int {\n    return 1;\n}\n");
+    git(work, ["add", "module.pep"]);
+    var target = hosts.folder.path.join("link_target");
+    write_file(target, "../module.pep");
+    var blob = run(
+        process.Command("git").arguments(["hash-object", "-w", target.to_string()]).working_directory(work)
+    ).stdout.trim();
+    git(work, ["update-index", "--add", "--cacheinfo", $"120000,{blob},docs/current"]);
+    git(work, ["commit", "--quiet", "-m", "1.0.0"]);
+    git(work, ["tag", "v1.0.0"]);
+    publish(hosts.folder.path, "someone/linked");
+
+    var linked = Project("vendor_links", "linked = { github = \"someone/linked\", version = \"1.0\" }\n");
+    var refused = hosts.package(linked.dir, ["vendor"]);
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold"
+    );
+    expect_false(linked.dir.join("vendor").join("github.com").join("someone").exists());
+    # So is the host's archive, fetched with no git.
+    var archives = linked.dir.join("archives");
+    var commit = hosts.commit_of("someone/linked", "v1.0.0");
+    write_archive(hosts, archives, "someone/linked", commit, commit);
+    remove_tree(linked.dir.join(".pep"));
+    async.run(() => {
+        var served = serve_folder(archives);
+        var unpacked = package_without_git(hosts, linked.dir, ["vendor"], served.substr(0, served.length - 1));
+        expect_exit(unpacked, 1);
+        expect_contains(unpacked.stderr, "'docs/current' is a symbolic link, which a vendored package cannot hold");
+    });
+
+    # A link added to a vendored package fails the build's check, as an
+    # edited file does; vendoring again removes it.
+    var project = Project("vendor_links_added", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    var geometry = project.dir.join("vendor").join("github.com").join("someone").join("geometry");
+    var link = geometry.join("alias.pep");
+    var made = File.symlink(Path("module.pep"), link);
+    if (made.is_err()) {
+        print($"skipped the added link: cannot make a symbolic link here ({made.error().message})");
+        return;
+    }
+    var fetched = hosts.package(project.dir, ["fetch"]);
+    expect_exit(fetched, 1);
+    expect_contains(
+        fetched.stderr,
+        "alias.pep' is a symbolic link, which a vendored package cannot hold; run 'pepper package vendor'"
+    );
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_false(link.symlink_metadata().is_ok());
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+}
+
+[Test]
 tree_why_and_outdated_report_on_the_locked_graph() {
     if (!has_git()) {
         return;
@@ -1250,7 +1315,7 @@ add_looks_a_repository_up_on_each_host() {
     expect_exit(both, 0);
     expect_contains(
         both.stderr,
-        "other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)"
+        "other/numbers is on github and codeberg; using github:other/numbers (prefix it with 'codeberg:' for another)"
     );
 
     # pep.toml's [fetch] hosts changes the order.
@@ -2018,10 +2083,11 @@ resolution_skips_retracted_versions_and_outdated_flags_them() {
     expect_contains(dependent.lock(), "source = \"github:other/sloppy\"\nversion = \"1.0.0\"");
 }
 
-# Every copy of the advisory database in the cache of `hosts`, made a day
-# old, so the next audit fetches it again.
-age_advisories(hosts: Hosts) {
-    for (var stamp in glob(hosts.home().to_string().replace("\\", "/") + "/cache/advisories/*.fetched")) {
+# Every copy of a data repository in the cache of `hosts`, in its `folder`
+# (`advisories`, `index`), made a day old, so the next command fetches it
+# again.
+age_data(hosts: Hosts, folder: String) {
+    for (var stamp in glob(hosts.home().to_string().replace("\\", "/") + $"/cache/{folder}/*.fetched")) {
         stamp.set_modified(0);
     }
 }
@@ -2122,14 +2188,14 @@ audit_reports_the_locked_packages_advisories_affect() {
         ]
     );
     expect_contains(audit(project.dir, ["--ignore", "PEP-2026-0002"]).stdout, "(2 in ");
-    age_advisories(hosts);
+    age_data(hosts, "advisories");
     var refreshed = audit(project.dir, ["--ignore", "PEP-2026-0002"]);
     expect_exit(refreshed, 1);
     expect_contains(refreshed.stdout, "PEP-2026-0003: geometry 1.1.0 (github:someone/geometry)\n  patched: ^1.2\n");
 
     # A malformed advisory is an error at its key.
     add_version(hosts.folder.path, "advisories", "3", ["PEP-2026-0004.toml", "id = \"PEP-2026-0004\"\npackage = 4\n"]);
-    age_advisories(hosts);
+    age_data(hosts, "advisories");
     var malformed = audit(project.dir, Array<String>());
     expect_exit(malformed, 1);
     expect_contains(malformed.stderr, "PEP-2026-0004.toml:2:1: error: 'package' must be a string");
@@ -2166,7 +2232,15 @@ a_build_script_compiles_a_packages_c_file_once_until_it_changes() {
     var added = hosts.package(project.dir, ["add", "someone/native"]);
     expect_exit(added, 0);
     expect_contains(added.stderr + added.stdout, "native 1.0.0 (github:someone/native) has a build script");
-    var runs = project.dir.join(".pep").join("build").join("native").join("out").join("runs.txt");
+    expect_equal(hosts.build_and_run(project.dir), "5\n");
+    # The package's folder is its name and a hash of where it is.
+    var folders = glob(project.dir.to_string().replace("\\", "/") + "/.pep/build/native-*");
+    expect_true(folders.count == 1);
+    var out = folders[0].join("out");
+    var runs = out.join("runs.txt");
+    expect_equal(read_file(runs), "run\n");
+    # Its output folder emptied, it runs again rather than name a lost object.
+    Directory.remove_all(out);
     expect_equal(hosts.build_and_run(project.dir), "5\n");
     expect_equal(read_file(runs), "run\n");
     # Nothing it depends on changed: its last output serves.
@@ -2227,4 +2301,143 @@ a_projects_own_build_script_runs_and_what_it_prints_is_checked() {
     expect_exit(missing, 1);
     expect_contains(missing.stderr, "'[build]' 'script' names ");
     expect_contains(missing.stderr, "nope.pep, which does not exist");
+}
+
+[Test]
+search_info_and_add_read_the_package_index() {
+    if (!has_git()) {
+        return;
+    }
+    # `other/shapes` 1.1.0 retracts 1.0.0 and declares its license and
+    # toolchain. The index lists it as `shapes` and geometry as `geo`.
+    var hosts = Hosts("index");
+    for (var version in ["1.0.0", "1.1.0"]) {
+        var more = version == "1.1.0" ?
+            "license = \"MIT\"\nminimum_toolchain = \"0.1.0\"\n\n[retract]\n\"1.0.0\" = \"wrong areas\"\n" :
+            "";
+        add_version(
+            hosts.folder.path,
+            "other/shapes",
+            version,
+            ["module.pep", "# " + version + "\n", "pep.toml", "[package]\nname = \"shapes\"\n" + more]
+        );
+    }
+    # A second tag of 1.1.0, which `info` lists once.
+    git(hosts.folder.path.join("work").join("other/shapes"), ["tag", "1.1.0"]);
+    publish(hosts.folder.path, "other/shapes");
+    add_version(
+        hosts.folder.path,
+        "index",
+        "1",
+        [
+            "packages/shapes.toml",
+            "source = \"github:other/shapes\"\ndescription = \"Polygons and their Areas\"\n",
+            "packages/geo.toml",
+            "source = \"github:someone/geometry\"\ndescription = \"Geometry\"\nkeywords = [\"area\", \"shapes\"]\n"
+        ]
+    );
+    var index = "file://" + hosts.folder.path.join("work").join("index").to_string();
+    var package = (dir: Path, arguments: Array<String>) => {
+        return run(
+            hosts.command(tool("pep-package").to_string(), dir, arguments).environment("PEPPER_PACKAGE_INDEX", index)
+        );
+    };
+    var project = Project("index", "");
+
+    # Every word, ignoring case, in the name, description or keywords.
+    var all = package(project.dir, ["search"]);
+    expect_exit(all, 0);
+    expect_equal(
+        all.stdout, "geo (github:someone/geometry): Geometry\nshapes (github:other/shapes): Polygons and their Areas\n"
+    );
+    expect_equal(package(project.dir, ["search", "AREA", "shape"]).stdout, all.stdout);
+    expect_equal(
+        package(project.dir, ["search", "polygons"]).stdout, "shapes (github:other/shapes): Polygons and their Areas\n"
+    );
+    var none = package(project.dir, ["search", "matrix"]);
+    expect_exit(none, 0);
+    expect_equal(none.stdout, "");
+    expect_contains(none.stderr, "no package in the index");
+
+    # The newest release's pep.toml, read from the download cache.
+    var info = package(project.dir, ["info", "shapes"]);
+    expect_exit(info, 0);
+    expect_equal(
+        info.stdout,
+        "shapes: Polygons and their Areas\nsource: github:other/shapes\nversions: 1.1.0, 1.0.0 (retracted)\n"
+            + "minimum toolchain: 0.1.0\nlicense: MIT\n"
+    );
+    # Not in the index, by its repository.
+    expect_equal(
+        package(project.dir, ["info", "other/numbers"]).stdout,
+        "numbers\nsource: github:other/numbers\nversions: 3.0.0, 2.0.0, 1.3.1, 1.0.0\n"
+    );
+    var unknown = package(project.dir, ["info", "matrix"]);
+    expect_exit(unknown, 1);
+    expect_contains(unknown.stderr, "has no package 'matrix'; look with 'pepper package search'");
+
+    # `add` takes the index's name, and imports the package by it.
+    expect_exit(package(project.dir, ["add", "geo@1.0"]), 0);
+    expect_contains(project.manifest(), "geo = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(package(project.dir, ["add", "shapes"]), 0);
+    expect_contains(project.manifest(), "shapes = { github = \"other/shapes\", version = \"1.1.0\" }\n");
+
+    # The cached copy serves --offline; a malformed listing is an error at
+    # its key.
+    expect_equal(
+        package(project.dir, ["--offline", "search", "geometry"]).stdout, "geo (github:someone/geometry): Geometry\n"
+    );
+
+    # An index that cannot be reached: the cached copy serves, with a
+    # warning; with no copy, it is an error.
+    var work = hosts.folder.path.join("work");
+    expect_true(File.rename(work.join("index"), work.join("index_away")).is_ok());
+    age_data(hosts, "index");
+    var stale = package(project.dir, ["search", "geometry"]);
+    expect_exit(stale, 0);
+    expect_equal(stale.stdout, "geo (github:someone/geometry): Geometry\n");
+    expect_contains(
+        stale.stderr, "warning: cannot fetch the package index " + index + ", so using the cached copy from "
+    );
+    expect_contains(stale.stderr, " days ago");
+    var uncached = run(
+        hosts.command(
+            tool("pep-package").to_string(), project.dir, ["search"]
+        ).environment("PEPPER_PACKAGE_INDEX", index + "_never")
+    );
+    expect_exit(uncached, 1);
+    expect_contains(uncached.stderr, "error: cannot fetch the package index " + index + "_never: ");
+    expect_true(File.rename(work.join("index_away"), work.join("index")).is_ok());
+
+    add_version(hosts.folder.path, "index", "2", ["packages/bad.toml", "source = \"someone/geometry\"\n"]);
+    age_data(hosts, "index");
+    var malformed = package(project.dir, ["search"]);
+    expect_exit(malformed, 1);
+    expect_contains(
+        malformed.stderr,
+        "bad.toml:1:1: error: 'source' must be a repository as host:owner/name, not 'someone/geometry'"
+    );
+    var malformed_again = (version: String, files: Array<String>, expected: String) => {
+        add_version(hosts.folder.path, "index", version, files);
+        age_data(hosts, "index");
+        var listed = package(project.dir, ["search"]);
+        expect_exit(listed, 1);
+        expect_contains(listed.stderr, expected);
+    };
+    malformed_again(
+        "3",
+        ["packages/bad.toml", "source = \"github:someone/geometry\"\nkeyword = [\"x\"]\n"],
+        "bad.toml:2:1: error: unknown key 'keyword'"
+    );
+    # The file's name is the import name.
+    malformed_again(
+        "4",
+        [
+            "packages/bad.toml",
+            "source = \"github:someone/geometry\"\n",
+            "packages/bad-name.toml",
+            "source = \"github:a/b\"\n"
+        ],
+        "bad-name.toml:1:1: error: the file's name, 'bad-name', is the package's, and 'import' cannot use it"
+    );
 }

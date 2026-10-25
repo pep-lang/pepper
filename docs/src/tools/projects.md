@@ -135,7 +135,7 @@ The script runs in the package's folder, with these environment variables:
 | `PEP_OPT_LEVEL` | The optimization level, `0` to `3` |
 | `PEP_FEATURES` | The package's [features](#features) the build turns on, separated by commas |
 | `PEP_PACKAGE_NAME`, `PEP_PACKAGE_DIR` | The package's name and folder |
-| `PEP_OUT_DIR` | A folder of the package's own for what the script makes: `.pep/build/<package>/out` (below `--build`'s folder when given) |
+| `PEP_OUT_DIR` | A folder of the package's own for what the script makes: `.pep/build/<package>-<hash>/out`, `<hash>` naming where the package is (below `--build`'s folder when given) |
 | `PEP_CLANG` | The clang the build links with (see [What the compiler links](../language/linking.md#what-the-compiler-links)), empty when there is none; it compiles C for any target LLVM supports |
 | `PEP_SYSROOT` | The target's system root (`--sysroot`), empty when there is none |
 
@@ -157,7 +157,7 @@ other than 0, which shows what it printed. What the script printed on
 standard error is passed on.
 
 **When it runs again.** The build keeps the script's output in
-`.pep/build/<package>/stamp`, and uses it again until something the script
+`.pep/build/<package>-<hash>/stamp`, and uses it again until something the script
 depends on changes: its own file, the variables above, and what its
 `rerun-if-changed` and `rerun-if-env-changed` lines name. A script that
 reads other files, such as its C sources or Pepper files of its own it

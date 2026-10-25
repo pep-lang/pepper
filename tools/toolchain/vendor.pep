@@ -17,10 +17,12 @@ export const VENDOR_COMMIT_FILE = ".pep-commit";
 ## The checksum of the files under `dir`, a vendored package: the sha256 of
 ## each file's path (from `dir`, with `/`) and contents, in path order,
 ## leaving out `VENDOR_CHECKSUM_FILE`. File modes are not covered: Windows
-## has no executable bit to compare.
+## has no executable bit to compare. A vendored package holds no symbolic
+## link (`pep-package vendor` refuses one), so a link under `dir` fails.
 ##
 ## @param dir the package's folder
-## @returns the checksum in hex, or why a file could not be read
+## @returns the checksum in hex, or why a file could not be read or which
+##   symbolic link `dir` holds
 export vendored_sha256(dir: Path): Result<String, String> {
     var files = Array<(String, Path)>();
     var listed = _list_files(dir, "", files);
@@ -41,8 +43,7 @@ export vendored_sha256(dir: Path): Result<String, String> {
 }
 
 # Adds each file under `dir` to `files`, by its path below the package
-# (`prefix`). shortcut: a symlink is left out, since nothing reads its
-# target portably; cover it when a package ships one.
+# (`prefix`), failing at a symbolic link.
 _list_files(dir: Path, prefix: String, files: Array<(String, Path)>): Result<void, String> {
     var opened = Directory.open(dir);
     if (opened.is_err()) {
@@ -54,7 +55,12 @@ _list_files(dir: Path, prefix: String, files: Array<(String, Path)>): Result<voi
     }
     for (var entry in listed.value()) {
         var name = prefix + entry.path.file_name().value_or("");
-        if (entry.is_symlink or name == VENDOR_CHECKSUM_FILE) {
+        if (entry.is_symlink) {
+            return Result<void, String>.err(
+                $"'{entry.path.to_string()}' is a symbolic link, which a vendored package cannot hold"
+            );
+        }
+        if (name == VENDOR_CHECKSUM_FILE) {
             continue;
         }
         if (entry.is_directory) {
@@ -70,8 +76,8 @@ _list_files(dir: Path, prefix: String, files: Array<(String, Path)>): Result<voi
 }
 
 ## Checks that `dir` holds the vendored package at `commit`, unedited: its
-## `VENDOR_COMMIT_FILE` names `commit` and its files have the checksum its
-## `VENDOR_CHECKSUM_FILE` records.
+## `VENDOR_COMMIT_FILE` names `commit`, its files have the checksum its
+## `VENDOR_CHECKSUM_FILE` records, and it holds no symbolic link.
 ##
 ## @param dir the package's folder in the vendor folder
 ## @param commit the commit `pep.lock` records for it
@@ -95,7 +101,7 @@ export check_vendored(dir: Path, commit: String): Result<void, String> {
     }
     var sha256 = vendored_sha256(dir);
     if (sha256.is_err()) {
-        return Result<void, String>.err(sha256.error());
+        return Result<void, String>.err($"{sha256.error()}; {again}");
     }
     if (sha256.value() != recorded.value().trim()) {
         return Result<void, String>.err(

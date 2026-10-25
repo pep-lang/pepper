@@ -1,7 +1,7 @@
 ## Build scripts: a package's `build.pep` (or the file `[build]`'s
 ## `script` names), which a build compiles for the host and runs before it
 ## builds the program, and the `pep:` instructions the script prints to say
-## what to link. Each package's script runs in `<build>/<package>/`, and
+## what to link. Each package's script runs in `<build>/<package>-<hash>/`, and
 ## its result is kept there, in `stamp`, until what it depends on changes.
 
 import compiler.codegen;
@@ -89,7 +89,9 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
 # again. One build at a time runs a package's script, under the lock file
 # in its folder.
 _run(name: String, dir: Path, script: Path, features: String[], inputs: ScriptInputs): Result<String, String> {
-    var work = inputs.build_dir.join(Path(name));
+    # Two packages of one name (a fork, say) each get their own folder.
+    var folder_hash = digest.to_hex(digest.blake3(link.absolute(dir).normalize().to_string())).substr(0, 8);
+    var work = inputs.build_dir.join(Path($"{name}-{folder_hash}"));
     var out = work.join(Path("out"));
     var created = Directory.create_all(out);
     if (created.is_err()) {
@@ -118,7 +120,8 @@ _run_locked(name: String, dir: Path, script: Path, work: Path, environment: Stri
         var split = kept.value().split_once("\n");
         if (split.is_value()) {
             var (key, last) = split.value();
-            if (key == _key(dir, script, environment, last)) {
+            # An object it made since deleted (its `out` emptied) needs a run.
+            if (key == _key(dir, script, environment, last) and _objects_exist(dir, last)) {
                 return Result<String, String>.ok(last);
             }
         }
@@ -235,6 +238,16 @@ _hash(path: Path): String {
     }
     var bytes = File.read_bytes(path);
     return bytes.is_ok() ? digest.to_hex(digest.blake3(bytes.value())) : "missing";
+}
+
+# Whether every `pep:object=` file `output` names, relative to `dir`, exists.
+_objects_exist(dir: Path, output: String): bool {
+    for (var line in _instructions(output)) {
+        if (line.starts_with("object=") and !dir.join(Path(line.substr_bytes(7, line.size - 7))).is_file()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 # The `pep:` lines of `output`, without the prefix; it may print others.
