@@ -1848,7 +1848,12 @@ which runs this compiler once per iOS triple with `--lib static --target
 <triple>`, side by side, merges the two simulator archives with
 `universal_file` (a fat Mach-O header, as `lipo` writes), and writes the
 slices' headers, module maps, the `Info.plist` and, for a package,
-`Package.swift`.
+`Package.swift`. `--lib aar` (`driver/aar.pep`) runs it the same way
+(`build_for_targets`) once per `-android` triple with `--lib shared`, and
+writes the `.aar` with `zip_stored`, a zip of stored entries written by
+hand. An Android `--lib shared` build copies the runtime's
+`tls/android/LICENSE.txt` beside the `.so` when it links `ssl`
+(`place_openssl_license`), which the `.aar` then carries.
 
 **Link-time optimization** (`--lto=full|off`, off by default, since it
 reruns over the whole program on every build; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`

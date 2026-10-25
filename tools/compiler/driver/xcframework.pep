@@ -62,46 +62,13 @@ _slices(): _Slice[] {
 export build_xcframework(
     compiler: Path, arguments: String[], output: Path, name: String, build: Path, package: bool
 ): Result<void, String> {
-    var passed = Array<String>();
-    for (var i in 1..arguments.count) {
-        passed.append(arguments[i]);
-    }
-    var children = Array<process.Child>();
+    var triples = Array<String>();
     for (var slice in _slices()) {
-        for (var triple in slice.triples) {
-            var folder = build.join(Path(triple));
-            var started = process
-                .Command(compiler.to_string())
-                .arguments(passed)
-                .arguments(
-                    [
-                        "--lib",
-                        "static",
-                        "--target",
-                        triple,
-                        "-o",
-                        _archive(build, triple, name).to_string(),
-                        "--build",
-                        folder.to_string()
-                    ]
-                )
-                .stdout(process.Stream.Inherit)
-                .stderr(process.Stream.Inherit)
-                .spawn();
-            if (started.is_err()) {
-                return Result<void, String>.err($"cannot run {compiler}: {started.error().message}");
-            }
-            children.append(started.value());
-        }
+        triples.append_all(slice.triples);
     }
-    bool failed = false;
-    for (var child in children) {
-        var status = child.wait();
-        failed = failed or status.is_err() or !status.value().success();
-    }
-    if (failed) {
-        # Each child printed why.
-        return Result<void, String>.err("");
+    var built = build_for_targets(compiler, arguments, "static", triples, build, $"lib{name}.a");
+    if (built.is_err()) {
+        return built;
     }
     var framework = package ? output.join(Path($"{name}.xcframework")) : output;
     # Stale slices would otherwise stay listed beside the new ones.
@@ -151,6 +118,64 @@ export build_xcframework(
         return listed;
     }
     return _write_text(output.join(Path("Package.swift")), swift_package_manifest(name));
+}
+
+## Builds this build's program once for each of `triples`, side by side, by
+## running `compiler` with `arguments` and `--lib <kind> --target <triple>`,
+## each into `<build>/<triple>/<file>` with that folder as its build folder.
+## `--lib aar` (`aar.pep`) builds its shared libraries this way too.
+##
+## @param compiler the compiler to run for each target
+## @param arguments this build's command line, the program first
+## @param kind the `--lib` kind each target builds
+## @param triples the targets
+## @param build the build folder
+## @param file the library's file name in each target's folder
+## @returns nothing, or why one could not be built: empty when the
+##   compiler printed why itself
+export build_for_targets(
+    compiler: Path, arguments: String[], kind: String, triples: String[], build: Path, file: String
+): Result<void, String> {
+    var passed = Array<String>();
+    for (var i in 1..arguments.count) {
+        passed.append(arguments[i]);
+    }
+    var children = Array<process.Child>();
+    for (var triple in triples) {
+        var folder = build.join(Path(triple));
+        var started = process
+            .Command(compiler.to_string())
+            .arguments(passed)
+            .arguments(
+                [
+                    "--lib",
+                    kind,
+                    "--target",
+                    triple,
+                    "-o",
+                    folder.join(Path(file)).to_string(),
+                    "--build",
+                    folder.to_string()
+                ]
+            )
+            .stdout(process.Stream.Inherit)
+            .stderr(process.Stream.Inherit)
+            .spawn();
+        if (started.is_err()) {
+            return Result<void, String>.err($"cannot run {compiler}: {started.error().message}");
+        }
+        children.append(started.value());
+    }
+    bool failed = false;
+    for (var child in children) {
+        var status = child.wait();
+        failed = failed or status.is_err() or !status.value().success();
+    }
+    if (failed) {
+        # Each child printed why.
+        return Result<void, String>.err("");
+    }
+    return Result<void, String>.ok();
 }
 
 ## Whether `name` can name a Swift module and a C header: letters, digits

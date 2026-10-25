@@ -4,6 +4,7 @@
 # with, and run.
 
 import compiler.codegen;
+import compress;
 import compiler.driver;
 import compiler.incremental;
 import [Directory, File, Path] from io;
@@ -185,6 +186,47 @@ names_libraries_and_headers_as_each_platform_does() {
     expect_equal(driver.header_path(Path("libfoo.so"), linux).to_string(), "foo.h");
     expect_equal(driver.header_path(Path("bar.dll"), windows).to_string(), "bar.h");
     expect_equal(driver.header_path(Path("libbar.lib"), windows).to_string(), "libbar.h");
+    expect_equal(driver.library_file_name(driver.LibraryKind.Aar, "foo", linux), "foo.aar");
+    expect_equal(driver.android_abi("aarch64-linux-android"), "arm64-v8a");
+    expect_equal(driver.android_abi("x86_64-linux-android"), "x86_64");
+}
+
+# `--lib aar`'s zip: a local header and the data for each entry, then the
+# central directory the end record points to; and OpenSSL's license beside
+# an Android library only while it links `ssl`.
+[Test]
+writes_an_aar_zip_and_the_openssl_license() {
+    var zip = driver.zip_stored([("a.txt", "hi".bytes()), ("res/", Array<u8>())]);
+    expect_equal(_u32_at(zip, 0), 0x04034b50);
+    expect_equal(_u32_at(zip, 14), compress.Crc32.of("hi".bytes()) as ulong);
+    expect_equal(Utf8.decode_lossy(zip.slice(30, 35).to_array()), "a.txt");
+    var end = zip.count - 22;
+    expect_equal(_u32_at(zip, end), 0x06054b50);
+    expect_equal(_u32_at(zip, end + 8) & 0xffff, 2);
+    var central = _u32_at(zip, end + 16);
+    expect_equal(_u32_at(zip, central), 0x02014b50);
+    expect_equal(central + _u32_at(zip, end + 12), end);
+    expect_equal(driver.zip_stored(Array<(String, u8[])>()).count, 22);
+
+    var folder = TempFolder("aar_license");
+    var android = folder.path.join(Path("runtime")).join(Path("tls")).join(Path("android"));
+    Directory.create_all(android);
+    File.write_text(android.join(Path("LICENSE.txt")), "Apache");
+    var library = folder.path.join(Path("libx.so"));
+    var placed = folder.path.join(Path(driver.OPENSSL_LICENSE));
+    var runtime = Optional<Path>.Value(folder.path.join(Path("runtime")));
+    expect_true(driver.place_openssl_license(library, ["ssl", "crypto"], runtime).is_ok());
+    expect_equal(File.read_to_string(placed).value(), "Apache");
+    expect_true(driver.place_openssl_license(library, ["m"], runtime).is_ok());
+    expect_false(placed.exists());
+}
+
+# The little-endian 32-bit number at `at`.
+_u32_at(bytes: u8[], at: ulong): ulong {
+    return (bytes[at] as ulong)
+        | ((bytes[at + 1] as ulong) << 8)
+        | ((bytes[at + 2] as ulong) << 16)
+        | ((bytes[at + 3] as ulong) << 24);
 }
 
 const _NO_RUNTIME_LIBRARY = "[Export]\nadd(a: int, b: int): int {\n    return a + b;\n}\n[Export]\ntimes(a: int, b: int): int {\n    return a * b;\n}\n";

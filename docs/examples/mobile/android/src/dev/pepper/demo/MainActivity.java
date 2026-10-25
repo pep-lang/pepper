@@ -6,11 +6,13 @@ import android.util.Log;
 import android.widget.TextView;
 
 // An Android activity that calls the Pepper library in ../greeter.pep
-// through JNI: libgreeter.so holds the Pepper code and the JNI functions in
-// jni.c that convert Java's types to the C ones greeter.h declares.
+// through JNI: libgreeter_jni.so holds the JNI functions in jni.c that
+// convert Java's types to the C ones greeter.h declares, and the Pepper code
+// (`--lib static`), or links the .aar's libgreeter.so beside it (`--lib
+// aar`), which loading it loads first.
 public class MainActivity extends Activity {
     static {
-        System.loadLibrary("greeter");
+        System.loadLibrary("greeter_jni");
     }
 
     static native String greet(String name);

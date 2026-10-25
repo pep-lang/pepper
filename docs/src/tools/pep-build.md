@@ -27,6 +27,7 @@ short, and `pepper help build` runs it.
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--lib xcframework`, `--lib swift-package` | Build an iOS `.xcframework`, or a Swift package around one, for an app | an executable |
+| `--lib aar` | Build an Android library (`.aar`) holding a shared library for each ABI, for an app | an executable |
 | `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
 | `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
@@ -226,7 +227,9 @@ header beside it that declares the program's `[Export]`ed functions. No
   `soname` is its file name; on macOS and iOS its install name is
   `@rpath/<file name>`, so a program that links it finds it on its run
   path. Linking one for another platform needs its system root, as an
-  executable does (`--sysroot`).
+  executable does (`--sysroot`). For Android, when the program imports
+  `tls`, the `.so` holds the toolchain's static OpenSSL, and its license
+  goes beside it as `LICENSE-OpenSSL.txt`.
 
 The header goes beside the library, named for it without the `lib` prefix
 (`libname.a` has `name.h`). A library that exports nothing is built with a
@@ -257,6 +260,24 @@ output, which must be a Swift module name (letters, digits and `_`):
 
 They cannot be combined with `--target` or the `--emit` options. See
 [iOS and Android](../language/mobile.md#packaging-for-xcode-and-swiftpm).
+
+### `--lib aar`
+
+Builds the shared library of an Android app's Pepper code for every
+Android ABI at once (`arm64-v8a` and `x86_64`), packaged as an Android
+library a Gradle build adds: `name.aar` (`-o name.aar`), named for its
+output, which takes letters, digits and `_`. It holds
+`jni/<abi>/libname.so` for each ABI, the header as `include/name.h`, an
+`AndroidManifest.xml` for the package `pepper.name` and API level 30, the
+empty `classes.jar`, `R.txt` and `res/` an `.aar` must have, and, when the
+program imports `tls`, OpenSSL's license as `LICENSE-OpenSSL.txt`. The
+compiler builds each library by running itself with `--lib shared
+--target <triple>`, side by side, each in a folder of the build folder's
+`aar/`, and writes the zip itself, so this needs the Android NDK (found as
+for any Android link: `--sysroot`, `ANDROID_NDK_HOME` or `ANDROID_HOME`)
+but no Gradle or JDK. It cannot be combined with `--target` or the
+`--emit` options. See
+[iOS and Android](../language/mobile.md#packaging-for-gradle).
 
 ### `--test`
 

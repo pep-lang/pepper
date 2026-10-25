@@ -1513,6 +1513,12 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         );
     }
     Directory.remove_all(work);
+    if (made.is_ok()
+        and options.library.is_value()
+        and options.library.value() == LibraryKind.Shared
+        and program.target.os == "android") {
+        made = place_openssl_license(options.output, libraries, runtime);
+    }
     if (made.is_err()) {
         return Result<Built, String>.err(made.error());
     }

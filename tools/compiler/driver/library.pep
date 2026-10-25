@@ -27,11 +27,15 @@ export enum LibraryKind {
     Xcframework,
     ## A Swift package folder around an `.xcframework` (`--lib swift-package`).
     SwiftPackage,
+    ## An Android library (`.aar`) of a shared library for each Android ABI
+    ## (`--lib aar`, `aar.pep`).
+    Aar,
 }
 
 ## The library's file name for `name` on `target`: `libname.a`,
 ## `libname.so` or `libname.dylib`; `name.lib` or `name.dll` on Windows;
-## `name.xcframework`, or the folder `name` for a Swift package.
+## `name.xcframework`, or the folder `name` for a Swift package;
+## `name.aar`.
 ##
 ## @param kind the kind of library
 ## @param name its name: the package's, or the entry file's stem
@@ -43,6 +47,9 @@ export library_file_name(kind: LibraryKind, name: String, target: link.Target): 
     }
     if (kind == LibraryKind.SwiftPackage) {
         return name;
+    }
+    if (kind == LibraryKind.Aar) {
+        return $"{name}.aar";
     }
     if (target.os == "windows") {
         return kind == LibraryKind.Static ? $"{name}.lib" : $"{name}.dll";
@@ -69,6 +76,37 @@ export header_path(library: Path, target: link.Target): Path {
     var folder = library.parent();
     var file = Path($"{name}.h");
     return folder.is_value() ? folder.value().join(file) : file;
+}
+
+## The name of OpenSSL's license beside an Android shared library that
+## links it (`place_openssl_license`).
+export const OPENSSL_LICENSE = "LICENSE-OpenSSL.txt";
+
+## Beside the Android shared library `library`, copies OpenSSL's license
+## (`<runtime>/tls/android/LICENSE.txt`) as `OPENSSL_LICENSE` when the
+## library links the toolchain's static OpenSSL (it imports `tls`, so it
+## links `ssl`), since the app's users must get a copy; otherwise removes
+## one an earlier build left there.
+##
+## @param library the shared library's path
+## @param libraries the libraries the program links, by name
+## @param runtime the runtime's folder, if any
+## @returns nothing, or why the license cannot be copied
+export place_openssl_license(library: Path, libraries: String[], runtime: Path?): Result<void, String> {
+    var folder = library.parent();
+    var placed = folder.is_value() ? folder.value().join(Path(OPENSSL_LICENSE)) : Path(OPENSSL_LICENSE);
+    if (!libraries.contains("ssl") or !runtime.is_value()) {
+        if (placed.is_file()) {
+            File.remove(placed);
+        }
+        return Result<void, String>.ok();
+    }
+    var license = runtime.value().join(Path("tls")).join(Path("android")).join(Path("LICENSE.txt"));
+    var copied = File.copy(license, placed);
+    if (copied.is_err()) {
+        return Result<void, String>.err($"cannot copy OpenSSL's license {license}: {copied.error().message}");
+    }
+    return Result<void, String>.ok();
 }
 
 ## Writes the C header of a library to `path`: the declarations of

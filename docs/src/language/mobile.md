@@ -7,8 +7,8 @@ Android phone. An app calls the Pepper code through C, as any C library is
 called: mark the functions `[Export]`, build a library with `--lib static`
 (see [Calling Pepper from C](c-interop.md#calling-pepper-from-c)), or on iOS
 an `.xcframework` or a Swift package (`--lib xcframework`, `--lib
-swift-package`), and call it from Swift directly, or from Kotlin and Java
-through JNI.
+swift-package`) and on Android an `.aar` (`--lib aar`), and call it from
+Swift directly, or from Kotlin and Java through JNI.
 
 ## Targets
 
@@ -202,7 +202,48 @@ class MainActivity : Activity() {
 
 With Gradle, put each ABI's `.so` in `src/main/jniLibs/<abi>/`
 (`arm64-v8a`, `x86_64`), or build it from the module's `CMakeLists.txt`
-with the static library as an imported target.
+with the static library as an imported target, or add the `.aar` below.
+
+## Packaging for Gradle
+
+`--lib aar` builds the library as a shared library for every Android ABI
+at once, as one Android library (`.aar`) a Gradle build adds as a single
+dependency. It needs no Gradle and no JDK: the compiler builds each `.so`
+with the NDK (found as for any Android link, above) and writes the archive
+itself.
+
+```sh
+pepper build --lib aar greeter.pep -o greeter.aar
+```
+
+The name comes from the output (`greeter`, which takes letters, digits and
+`_`): the library `libgreeter.so`, which Java loads with
+`System.loadLibrary("greeter")`, its header `greeter.h`, and the manifest's
+package, `pepper.greeter`. It holds:
+
+```text
+greeter.aar
+  AndroidManifest.xml       minSdkVersion 30
+  classes.jar, R.txt, res/  empty: the library has no Java code or resources
+  include/greeter.h
+  jni/arm64-v8a/libgreeter.so
+  jni/x86_64/libgreeter.so
+  LICENSE-OpenSSL.txt       only when the library imports tls (see Shipping)
+```
+
+Add it to the app module, and Gradle puts each ABI's `.so` in the APK:
+
+```kotlin
+dependencies {
+    implementation(files("libs/greeter.aar"))
+}
+```
+
+The `.so` holds only the Pepper code and its C functions, so the JNI
+functions (`jni.c` above) go in a library of the app's own, built with the
+NDK against `include/greeter.h` and linked with the `.aar`'s
+`jni/<abi>/libgreeter.so` (`-L jni/<abi> -lgreeter`). Java loads that
+library, and Android loads `libgreeter.so` first as its dependency.
 
 ## Threads
 
@@ -288,7 +329,9 @@ differences:
 - **OpenSSL's license.** An Android program or app that imports `tls` (or
   `http`) contains OpenSSL, which is under the Apache License 2.0, so it
   must give its users a copy of that license: ship
-  `runtime/tls/android/LICENSE.txt` from the toolchain with it, as an app
+  `runtime/tls/android/LICENSE.txt` from the toolchain with it (a `--lib
+  shared` build for Android writes it beside the `.so` as
+  `LICENSE-OpenSSL.txt`, and `--lib aar` puts that in the `.aar`), as an app
   does in its open-source licenses screen (Google Play Services'
   `oss-licenses` plugin, or a page of the app's own), and say that the app
   includes OpenSSL. The iOS build bundles nothing.
@@ -313,13 +356,16 @@ same Pepper library, [`greeter.pep`](../../examples/mobile/greeter.pep):
 - `android/`: an activity in Java with the JNI functions in `jni.c`, and
   `build.sh`, which builds the APK with the Android SDK's own tools
   (`javac`, `d8`, `aapt2`, `apksigner`; Gradle is not needed), installs it
-  in the emulator, starts it and checks its log.
+  in the emulator, starts it and checks its log. With
+  `PEPPER_ANDROID_AAR=1` it builds the library with `--lib aar` instead,
+  checks the `.aar`'s layout, and links `jni.c` against its
+  `libgreeter.so`, which the APK carries beside it.
 
 `scripts/mobile-test.sh` runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
-(`adb shell`), then builds and runs the two apps and the Swift package's
-tests. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
+(`adb shell`), then builds and runs the two apps, the Swift package's
+tests, and the Android app again on the `.aar`. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to `localhost` and `127.0.0.1`, checks that ALPN chose
 `http/1.1`, sends `GET /`, checks that a connector without the authority is
@@ -354,8 +400,9 @@ whenever the version the script pins has not been published.
   SecIdentity and Network.framework).
 - **Generated bindings**: the JNI layer and the Swift wrappers are written
   by hand; a generator could write them from the header.
-- **Packaging**: an Android library (`.aar`), `pep.toml` keys for
-  `--lib xcframework`, and Mac Catalyst and macOS slices in the
-  `.xcframework`.
+- **Packaging**: `pep.toml` keys for `--lib xcframework` and `--lib aar`,
+  an `.aar` for an API level other than 30, Mac Catalyst and macOS slices
+  in the `.xcframework`, and `--lib jnilibs` (each ABI's `.so` laid out
+  for Gradle's `jniLibs`).
 - **Other targets**: 32-bit Android (`armeabi-v7a`, `x86`), Mac Catalyst,
   tvOS, watchOS and visionOS.
