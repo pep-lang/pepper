@@ -37,6 +37,8 @@ export const RELEASE_FUNCTION = "_pep_release_thread_locals";
 ## POSIX's `PTHREAD_DESTRUCTOR_ITERATIONS` allows for keys.
 const RELEASE_PASSES: ulong = 4;
 
+## LLVM's `LLVMGeneralDynamicTLSModel`.
+const GENERAL_DYNAMIC_TLS_MODEL: int = 1;
 ## LLVM's `LLVMInitialExecTLSModel`.
 const INITIAL_EXEC_TLS_MODEL: int = 3;
 
@@ -389,10 +391,17 @@ extend Generator {
 
     # Thread-locals
 
-    ## Makes `global`, just added for `variable`, a `thread_local` global in
-    ## the initial-exec model, with `variable`'s constant initializer.
+    ## Makes `global`, just added for `variable`, a `thread_local` global,
+    ## with `variable`'s constant initializer. They are initial-exec, except
+    ## in an Android library, where they are general-dynamic (LLVM makes a
+    ## local one local-dynamic): every Android app `dlopen`s its native
+    ## code, and bionic refuses initial-exec there. Elsewhere a library keeps
+    ## initial-exec, which costs a load where general-dynamic, and TLSDESC
+    ## more so, cost a call per access (pepper#246's benchmark); glibc
+    ## loads such a `.so` with `dlopen` only while its static TLS has room.
     declare_thread_local(variable: VariableDef, global: llvm.Value, llvm_ty: llvm.Type): Result<void> {
-        global.set_thread_local_mode(INITIAL_EXEC_TLS_MODEL);
+        var dynamic = library and machine.triple().contains("-android");
+        global.set_thread_local_mode(dynamic ? GENERAL_DYNAMIC_TLS_MODEL : INITIAL_EXEC_TLS_MODEL);
         if (!variable.default.is_value()) {
             return Result<void>.ok();
         }

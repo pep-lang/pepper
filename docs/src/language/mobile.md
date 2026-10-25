@@ -279,6 +279,12 @@ differences:
   `strip` of `jniLibs`). A Pepper library adds the runtime parts the
   program uses: the prototype app's library below is about 1 MB unstripped.
 - Each Android ABI needs its own `.so`; Google Play requires `arm64-v8a`.
+- An Android library's thread-locals (its own and the runtime's) use the
+  general-dynamic TLS model, since the app loads its `.so` with `dlopen`
+  and bionic refuses initial-exec there; each access costs a call. A
+  library for desktop Linux keeps initial-exec, which is faster but needs
+  static TLS, so a `dlopen` of its `.so` may fail (see
+  [Building the library](c-interop.md#building-the-library)).
 - **OpenSSL's license.** An Android program or app that imports `tls` (or
   `http`) contains OpenSSL, which is under the Apache License 2.0, so it
   must give its users a copy of that license: ship
@@ -322,10 +328,8 @@ access. Set `PEPPER_MOBILE_TLS_URL` to an `https://` URL to also fetch that
 public host through the system's roots. On Android the same check runs in
 the emulator against the same kind of server, which `adb reverse` makes the
 emulator's `localhost`, with the same opt-in public fetch. The Android run
-also works on Linux, for the host's ABI (x86_64 there, where the prototype
-app is skipped until
-[pepper#246](https://github.com/pep-lang/pepper/issues/246) is fixed), as CI
-runs it: `scripts/ci-provision-android.sh` sets up an emulator on a
+also works on Linux, for the host's ABI (x86_64 there), as CI runs it:
+`scripts/ci-provision-android.sh` sets up an emulator on a
 GitHub-hosted Linux runner, since Apple silicon runners cannot run one.
 
 ```sh

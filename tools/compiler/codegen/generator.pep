@@ -336,6 +336,8 @@ export struct Generator {
     ## Whether `__caller_location()` strings are defined apart from the
     ## code that uses them (`located_string`).
     var separate_locations: bool = false;
+    ## `Build.library`.
+    var library: bool = false;
     ## How many such strings each function has used so far, by name.
     var location_counts: HashMap<String, ulong> = HashMap<String, ulong>();
 
@@ -1002,6 +1004,10 @@ export struct Build {
     ## the lines (`Generator.located_string`), so code a line shift moves
     ## stays the same (`codegen.prepare` gives them a part of their own).
     var separate_locations: bool = false;
+    ## Whether the code is for a library (`--lib static` or `--lib shared`),
+    ## which may end up in a shared object, so on Android its thread-locals
+    ## use the general-dynamic TLS model (`Generator.declare_thread_local`).
+    var library: bool = false;
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -1051,6 +1057,7 @@ export generate(
     generator.static_locations = build.static_locations;
     generator.gdb_printers = build.gdb_printers;
     generator.separate_locations = build.separate_locations;
+    generator.library = build.library;
     var generated = generator.generate(module);
     if (generated.is_err()) {
         return Result<llvm.Module, Diagnostic>.err(generated.error());
@@ -1083,6 +1090,9 @@ export generate(
 ##   generated
 ## @param frame_pointers whether every function keeps its frame pointer
 ## @param runtime_checks the runtime checks the code keeps
+## @param gdb_printers the text of gdb's pretty-printers, which a Linux
+##   program carries with `-g`; empty for none
+## @param library whether the code is for a library (`--lib`)
 ## @returns the IR, or the first error
 export generate_ir(
     module: Module,
@@ -1094,7 +1104,8 @@ export generate_ir(
     opt_level: uint = 0,
     frame_pointers: bool = false,
     runtime_checks: RuntimeChecks = RuntimeChecks.all(),
-    gdb_printers: String = ""
+    gdb_printers: String = "",
+    library: bool = false
 ): Result<String, Diagnostic> {
     var triple = target_triple(state.target);
     var cpu = chosen.is_value() ? chosen.value() : Cpu.default_for(triple);
@@ -1110,6 +1121,7 @@ export generate_ir(
     setup.frame_pointers = frame_pointers;
     setup.runtime_checks = runtime_checks;
     setup.gdb_printers = gdb_printers;
+    setup.library = library;
     var generated = generate(module, state, namespaces, name, setup);
     if (generated.is_err()) {
         return Result<String, Diagnostic>.err(generated.error());
