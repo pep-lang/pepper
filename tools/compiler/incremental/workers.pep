@@ -271,7 +271,7 @@ export check_in_workers(
         # objects of the compilation units it reads uses no processor, but holds
         # the program in memory (at most half again as many workers, and two
         # more).
-        while (!ready.is_empty) {
+        while (!ready.is_empty and !failure.is_value()) {
             var idle = Optional<ulong>.Empty;
             ulong active = 0;
             for (var w in 0..workers.count) {

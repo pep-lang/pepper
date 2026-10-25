@@ -444,5 +444,20 @@ a_worker_record_that_cannot_be_written_stops_the_build() {
     );
     expect_true(parallel.is_err());
     expect_true(parallel.error().starts_with($"cannot write {incremental.worker_file(missing, 0, "rec")}: "));
+    # A worker's side: checking the first compilation unit (which reads none)
+    # and leaving its record, then its marks.
+    var worked = incremental.check_for_worker(
+        program,
+        units[0],
+        HashMap<ulong, u8[]>(),
+        cache,
+        Optional<incremental.Reused>.Empty,
+        program.sources(),
+        missing,
+        0,
+        StringBuilder()
+    );
+    expect_true(worked.is_err());
+    expect_true(worked.error().starts_with($"cannot write {incremental.worker_file(missing, 0, "rec")}: "));
     expect_true(incremental.mark(missing, 0, "done").is_value());
 }
