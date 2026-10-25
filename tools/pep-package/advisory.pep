@@ -12,26 +12,19 @@
 #
 # A version is affected unless a `patched` or `unaffected` range holds it,
 # as in RustSec. The database is cloned into the Pepper home's cache,
-# `cache/advisories`, and fetched again once the copy is an hour old.
+# `cache/advisories`, and fetched again once the copy is an hour old
+# (`fetch_data_repository`).
 
-import digest;
 import [File, glob, Path] from io;
 import os;
 import [Version, VersionRange] from semver;
 import toml;
-import toolchain;
-import "git";
 import "lock";
 import "manifest";
 import "resolve";
-import "tree";
 
 # The database `audit` reads when `PEPPER_ADVISORY_DB` names none.
 export const ADVISORY_DATABASE = "https://github.com/pep-lang/advisories.git";
-
-# How old, in seconds, the cached database may be before `audit` fetches it
-# again.
-const REFRESH_SECONDS = 3600;
 
 # The database's address: `PEPPER_ADVISORY_DB`, else `ADVISORY_DATABASE`.
 export advisory_database(): String {
@@ -66,70 +59,6 @@ export struct Advisory {
         }
         return true;
     }
-}
-
-# The folder of the copy of the database at `url` in the cache: cloned
-# when missing, and fetched again when it is older than `REFRESH_SECONDS`,
-# unless `offline`.
-export fetch_database(url: String, offline: bool): Result<Path> {
-    var base = toolchain
-        .find_home().root
-        .join("cache")
-        .join("advisories")
-        .join(digest.to_hex(digest.sha256(url)).substr(0, 16));
-    var dir = base.to_string();
-    var stamp = Path(dir + ".fetched");
-    var lock = lock_file(Path(dir + ".lock"));
-    if (lock.is_err()) {
-        return Result<Path>.Err(lock.error().message);
-    }
-    if (checked_out(base).is_value()) {
-        var fetched = stamp.metadata();
-        var now = os.SystemTime.now().unix_seconds();
-        if (offline or (fetched.is_ok() and now - fetched.value().modified / 1000000000 < REFRESH_SECONDS)) {
-            return Result<Path>.Ok(base);
-        }
-        var pulled = git(["fetch", "--quiet", url, "HEAD"], dir);
-        if (pulled.is_ok()) {
-            pulled = git(["reset", "--quiet", "--hard", "FETCH_HEAD"], dir);
-        }
-        if (pulled.is_err()) {
-            return Result<Path>.Err($"cannot fetch the advisory database {url}: {pulled.error().message}");
-        }
-    } else {
-        if (offline) {
-            return Result<Path>.Err(
-                $"--offline, and the cache has no copy of the advisory database {url}; run 'pepper package audit' without --offline (or PEPPER_OFFLINE) once"
-            );
-        }
-        # Cloned beside it and renamed, so an interrupted clone leaves none.
-        var partial = Path(dir + ".partial");
-        if (partial.exists()) {
-            var cleared = remove_tree(partial);
-            if (cleared.is_err()) {
-                return Result<Path>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
-            }
-        }
-        if (base.exists()) {
-            var cleared = remove_tree(base);
-            if (cleared.is_err()) {
-                return Result<Path>.Err($"cannot remove {dir}: {cleared.error().message}");
-            }
-        }
-        var cloned = git(["clone", "--quiet", url, partial.to_string()]);
-        if (cloned.is_err()) {
-            return Result<Path>.Err($"cannot fetch the advisory database {url}: {cloned.error().message}");
-        }
-        var moved = File.rename(partial, base);
-        if (moved.is_err()) {
-            return Result<Path>.Err($"cannot move {partial.to_string()} to {dir}: {moved.error().message}");
-        }
-    }
-    var written = File.write_text(stamp, "");
-    if (written.is_err()) {
-        return Result<Path>.Err($"cannot write {stamp.to_string()}: {written.error().message}");
-    }
-    return Result<Path>.Ok(base);
 }
 
 # Each of `advisories` with each package of `locked` it affects: one
