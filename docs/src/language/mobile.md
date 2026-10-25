@@ -89,37 +89,78 @@ runtime's macOS and Linux code serves them, with a few declarations
 narrowed where they differ. At run time, `os.system_os()` returns
 `OperatingSystem.IOS` or `OperatingSystem.Android`.
 
+## Bindings
+
+Swift, Kotlin and Java call the library's `[Export]`ed functions (see
+[Calling Pepper from C](c-interop.md)) through bindings the compiler
+generates beside the C header, so the app passes its own values and
+writes no glue: `--bindings swift` or `--bindings java` with `--lib`, and
+`--lib swift-package` and `--lib aar` (below) write them themselves.
+Names are camel case (`count_words` is `countWords`), and each export
+crosses as:
+
+| Pepper | Swift | Java and Kotlin |
+| --- | --- | --- |
+| `bool` | `Bool` | `boolean` |
+| `i8`, `u8`, `char` | `Int8`, `UInt8`, `CChar` | `byte` |
+| `short`, `ushort` | `Int16`, `UInt16` | `short` |
+| `int`, `uint` | `Int32`, `UInt32` | `int` |
+| `long`, `ulong` | `Int64`, `UInt64` | `long` |
+| `float`, `double` | `Float`, `Double` | `float`, `double` |
+| an enum | its stored integer | its stored integer |
+| `String` | `String` | `String` |
+| a struct | a class owning one reference | a class owning one reference, `AutoCloseable` |
+| `__ptr<T>` | `UnsafeMutablePointer<T>?` (`UnsafeMutableRawPointer?` for `void`) | `long` |
+| `extern (A) => R` | `@convention(c)` function | none: an error |
+
+Java has no unsigned types: `u8` through `ulong` keep their bits in the
+signed type of their size. A `String` crosses as UTF-8 both ways (a Java
+string's own bytes, not JNI's modified UTF-8), and a string Pepper returns
+ends at its first NUL. JNI cannot pass a C function pointer, so an export
+that takes or returns one is an error at its type when Java bindings are
+built, as are an export whose camel-case name is a Java keyword or
+another's, and a struct named as the library's own class.
+
+A struct handle is an object that owns one reference to the Pepper value:
+Swift's class releases it in `deinit`, and Java's in `close()`, which
+`try`-with-resources and Kotlin's `use` call (a handle never closed leaks
+its value; there is no finalizer, which would release it on another
+thread). Its reference count is a plain one unless the struct is
+`[Shared]`, so a handle stays on one thread, as the Pepper value would.
+
 ## Calling Pepper from Swift
 
-Swift calls C directly. Give `swiftc` the generated header as the bridging
-header, and link the library:
+`--bindings swift` writes, beside the header, `greeter.swift`: a Swift
+function for each export, over the C module `Cgreeter` that the
+`module.modulemap` it also writes declares. Compile it with the app's
+Swift code, find the module map with `-I`, and link the library:
 
 ```sh
+pepper build --target aarch64-apple-ios-simulator --lib static --bindings swift greeter.pep -o libgreeter.a
 xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios15.0-simulator -parse-as-library \
-  -import-objc-header greeter.h App.swift -L . -lgreeter -o App.app/App
+  -I . App.swift greeter.swift -L . -lgreeter -o App.app/App
 ```
-
-In an Xcode project, add the library to the target's *Link Binary With
-Libraries* phase and `#include "greeter.h"` in the target's bridging header.
-A `String` crosses as a pointer and a size, and a returned string is freed
-with `pepper_string_free`:
 
 ```swift
-func pepperGreeting(_ name: String) -> String {
-    let result = name.withCString { greet($0, strlen($0)) }!
-    defer { pepper_string_free(result) }
-    return String(cString: result)
-}
+print(greet("iOS"))         // String in, String out: the C copy is freed
+let tally = tallyNew()      // a Pepper struct, released when `tally` goes
+print(tallyAdd(tally, 3))
 ```
+
+Without the bindings, Swift calls the C functions directly through the
+header as a bridging header (`-import-objc-header greeter.h`): a `String`
+crosses as a pointer and a size, and a returned string is freed with
+`pepper_string_free`.
 
 ## Packaging for Xcode and SwiftPM
 
 `--lib xcframework` builds the library for every iOS target at once, as one
 `.xcframework` Xcode adds as a single dependency: a device slice and a
 simulator slice holding both simulator architectures, each with the header
-and a module map, so Swift imports it by name with no bridging header.
-`--lib swift-package` puts it in a Swift package. Neither needs Xcode or an
-SDK: the compiler builds each static library and writes the rest itself.
+and a module map, so Swift imports its C functions by name with no bridging
+header. `--lib swift-package` puts it in a Swift package with the Swift
+bindings. Neither needs Xcode or an SDK: the compiler builds each static
+library and writes the rest itself.
 
 ```sh
 pepper build --lib xcframework greeter.pep -o Greeter.xcframework
@@ -127,13 +168,15 @@ pepper build --lib swift-package greeter.pep -o Greeter
 ```
 
 The name comes from the output (`Greeter`): the module (`import Greeter`),
-the library (`libGreeter.a`) and its header (`Greeter.h`). The second
-writes:
+the library (`libGreeter.a`) and its header (`Greeter.h`). In the Swift
+package the module `Greeter` is the Swift bindings, over the C module
+`CGreeter`:
 
 ```text
 Greeter/
   Package.swift
-  Greeter.xcframework/
+  Sources/Greeter/Greeter.swift   the bindings
+  CGreeter.xcframework/
     Info.plist
     ios-arm64/                    libGreeter.a, Headers/Greeter.h, Headers/module.modulemap
     ios-arm64_x86_64-simulator/   the same, its libGreeter.a holding arm64 and x86_64
@@ -154,9 +197,7 @@ targets: [
 ```swift
 import Greeter
 
-let result = "iOS".withCString { greet($0, strlen($0)) }!
-defer { pepper_string_free(result) }
-print(String(cString: result))
+print(greet("iOS"))
 ```
 
 The slices are built for iOS 15 and later. A library that links others
@@ -165,73 +206,58 @@ links them itself.
 
 ## Calling Pepper from Kotlin or Java
 
-Kotlin and Java reach C through JNI: a shared library holds the Pepper code
-and a C function for each `native` method, named for its class, which
-converts Java's types to the C ones the header declares. Link both with the
-NDK's clang into the `.so` the app loads:
+`--bindings java` (with `--lib shared`) writes, beside the header,
+`greeter.jar`: the class `pepper.greeter.Greeter`, a `static native`
+method for each export, which loads `libgreeter.so` when first used, and a
+class for each struct. Their JNI functions, which convert Java's values,
+are compiled into the library from `greeter_jni.c`, also written there.
+The jar's class files are written by the compiler, so it needs no JDK.
 
 ```sh
-pepper build --target aarch64-linux-android --lib static greeter.pep -o pepper/libgreeter.a
-$NDK/toolchains/llvm/prebuilt/*/bin/clang --target=aarch64-linux-android30 -shared -fPIC \
-  -I pepper jni.c pepper/libgreeter.a -lm -o jniLibs/arm64-v8a/libgreeter.so
+pepper build --target aarch64-linux-android --lib shared --bindings java greeter.pep \
+  -o jniLibs/arm64-v8a/libgreeter.so
 ```
-
-```c
-JNIEXPORT jstring JNICALL
-Java_dev_pepper_demo_MainActivity_greet(JNIEnv* env, jclass cls, jstring name) {
-    const char* bytes = (*env)->GetStringUTFChars(env, name, NULL);
-    char* result = greet(bytes, strlen(bytes));
-    (*env)->ReleaseStringUTFChars(env, name, bytes);
-    jstring greeting = (*env)->NewStringUTF(env, result);
-    pepper_string_free(result);
-    return greeting;
-}
-```
-
-The Kotlin side declares the function `external` and loads the library
-once:
 
 ```kotlin
-class MainActivity : Activity() {
-    companion object {
-        init { System.loadLibrary("greeter") }
-        @JvmStatic external fun greet(name: String): String
-    }
-}
+import pepper.greeter.Greeter
+
+println(Greeter.greet("Android"))
+Greeter.tallyNew().use { tally -> println(Greeter.tallyAdd(tally, 3)) }
 ```
 
 With Gradle, put each ABI's `.so` in `src/main/jniLibs/<abi>/`
-(`arm64-v8a`, `x86_64`), or build it from the module's `CMakeLists.txt`
-with the static library as an imported target, or add the `.aar` below.
+(`arm64-v8a`, `x86_64`) and the jar in the module's dependencies, or add
+the `.aar` below, which holds both.
 
 ## Packaging for Gradle
 
 `--lib aar` builds the library as a shared library for every Android ABI
-at once, as one Android library (`.aar`) a Gradle build adds as a single
-dependency. It needs no Gradle and no JDK: the compiler builds each `.so`
-with the NDK (found as for any Android link, above) and writes the archive
-itself.
+at once, with the Java bindings, as one Android library (`.aar`) a Gradle
+build adds as a single dependency. It needs no Gradle and no JDK: the
+compiler builds each `.so` with the NDK (found as for any Android link,
+above) and writes the archive itself.
 
 ```sh
 pepper build --lib aar greeter.pep -o greeter.aar
 ```
 
 The name comes from the output (`greeter`, which takes letters, digits and
-`_`): the library `libgreeter.so`, which Java loads with
-`System.loadLibrary("greeter")`, its header `greeter.h`, and the manifest's
-package, `pepper.greeter`. It holds:
+`_`): the library `libgreeter.so`, its header `greeter.h`, and the Java
+package, `pepper.greeter`, also the manifest's. It holds:
 
 ```text
 greeter.aar
   AndroidManifest.xml       minSdkVersion 30
-  classes.jar, R.txt, res/  empty: the library has no Java code or resources
+  classes.jar               the Java bindings: pepper.greeter.Greeter, and a class per struct
+  R.txt, res/               empty: the library has no resources
   include/greeter.h
   jni/arm64-v8a/libgreeter.so
   jni/x86_64/libgreeter.so
   LICENSE-OpenSSL.txt       only when the library imports tls (see Shipping)
 ```
 
-Add it to the app module, and Gradle puts each ABI's `.so` in the APK:
+Add it to the app module, and Gradle puts each ABI's `.so` in the APK and
+the classes on the app's class path:
 
 ```kotlin
 dependencies {
@@ -239,11 +265,8 @@ dependencies {
 }
 ```
 
-The `.so` holds only the Pepper code and its C functions, so the JNI
-functions (`jni.c` above) go in a library of the app's own, built with the
-NDK against `include/greeter.h` and linked with the `.aar`'s
-`jni/<abi>/libgreeter.so` (`-L jni/<abi> -lgreeter`). Java loads that
-library, and Android loads `libgreeter.so` first as its dependency.
+Each `.so` holds the Pepper code and the JNI functions, so the app calls
+`Greeter.greet("x")` with no C of its own.
 
 ## Threads
 
@@ -348,24 +371,23 @@ breakpoints in the `.pep` files by path.
 same Pepper library, [`greeter.pep`](../../examples/mobile/greeter.pep):
 
 - `ios/`: a SwiftUI app (`PepperDemo.swift`), and `build.sh`, which builds
-  it with `swiftc` for the simulator and for devices, installs it in a
-  booted simulator, launches it and checks its output; and `package/`, a
-  Swift package whose tests `import Greeter` from the package `--lib
-  swift-package` writes, which `package.sh` builds and runs in the
-  simulator with `xcodebuild test`.
-- `android/`: an activity in Java with the JNI functions in `jni.c`, and
-  `build.sh`, which builds the APK with the Android SDK's own tools
-  (`javac`, `d8`, `aapt2`, `apksigner`; Gradle is not needed), installs it
-  in the emulator, starts it and checks its log. With
-  `PEPPER_ANDROID_AAR=1` it builds the library with `--lib aar` instead,
-  checks the `.aar`'s layout, and links `jni.c` against its
-  `libgreeter.so`, which the APK carries beside it.
+  it with `swiftc` and the library's `--bindings swift` for the simulator
+  and for devices, installs it in a booted simulator, launches it and
+  checks its output; and `package/`, a Swift package whose tests `import
+  Greeter` from the package `--lib swift-package` writes and call its
+  bindings, which `package.sh` builds and runs in the simulator with
+  `xcodebuild test`.
+- `android/`: an activity in Java that calls the bindings of the library's
+  `--lib aar` (`pepper.greeter.Greeter`), and `build.sh`, which builds the
+  `.aar`, checks its layout, and builds the APK with the Android SDK's own
+  tools (`javac`, `d8`, `aapt2`, `apksigner`; Gradle is not needed),
+  installs it in the emulator, starts it and checks its log.
 
 `scripts/mobile-test.sh` runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
-(`adb shell`), then builds and runs the two apps, the Swift package's
-tests, and the Android app again on the `.aar`. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
+(`adb shell`), then builds and runs the two apps and the Swift package's
+tests. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to `localhost` and `127.0.0.1`, checks that ALPN chose
 `http/1.1`, sends `GET /`, checks that a connector without the authority is
@@ -398,8 +420,9 @@ whenever the version the script pins has not been published.
 
 - **TLS on iOS**: servers, client certificates and TLS 1.3 (which need a
   SecIdentity and Network.framework).
-- **Generated bindings**: the JNI layer and the Swift wrappers are written
-  by hand; a generator could write them from the header.
+- **Bindings**: `[T]` and `Data` (an export takes no array), `Result` as
+  `throws` (an export returns no `Result`), callbacks (a C function
+  pointer is Swift-only), and a struct's exports as methods of its class.
 - **Packaging**: `pep.toml` keys for `--lib xcframework` and `--lib aar`,
   an `.aar` for an API level other than 30, Mac Catalyst and macOS slices
   in the `.xcframework`, and `--lib jnilibs` (each ABI's `.so` laid out

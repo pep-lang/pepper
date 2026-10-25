@@ -1,10 +1,10 @@
 # The Pepper half of the prototype iOS and Android apps: a library their
-# Swift and Java code calls through C. Each app builds it with `--lib
-# static` for its platform, the iOS package with `--lib swift-package` and
-# the Android app also with `--lib aar` (see docs/src/language/mobile.md).
+# Swift and Java code calls through the bindings the compiler generates.
+# The iOS app builds it with `--lib static --bindings swift`, the iOS
+# package with `--lib swift-package` and the Android app with `--lib aar`
+# (see docs/src/language/mobile.md).
 
-# A String arrives as UTF-8 bytes and leaves as a copy the caller frees
-# with `pepper_string_free`.
+# A String crosses as UTF-8, a Swift or Java String on the other side.
 [Export]
 greet(name: String): String {
     return $"Hello, {name}, from Pepper";

@@ -28,6 +28,7 @@ short, and `pepper help build` runs it.
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--lib xcframework`, `--lib swift-package` | Build an iOS `.xcframework`, or a Swift package around one, for an app | an executable |
 | `--lib aar` | Build an Android library (`.aar`) holding a shared library for each ABI, for an app | an executable |
+| `--bindings swift`, `--bindings java` | With `--lib static` or `--lib shared` (`java`: `--lib shared`), also write Swift or Java bindings of the `[Export]`ed functions beside the header | none |
 | `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
 | `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
@@ -236,6 +237,30 @@ The header goes beside the library, named for it without the `lib` prefix
 warning. See
 [Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
 
+### `--bindings swift`, `--bindings java`
+
+With `--lib static` or `--lib shared`, also writes bindings beside the
+header `name.h`, so Swift, Kotlin or Java code calls the `[Export]`ed
+functions with its own values (a `String` in and out, an object for each
+struct handle), named in camel case:
+
+- `--bindings swift` writes `name.swift`, a Swift function for each export
+  and a class for each struct handle, and the `module.modulemap` of the C
+  module they import, `Cname` (the header). Compile `name.swift` with the
+  app's Swift code and `-I` its folder.
+- `--bindings java` (only with `--lib shared`) writes `name.jar`, the class
+  `pepper.name.Name` (in Pascal case) of a `static native` method for each
+  export, which loads `libname.so`, and a class for each struct handle
+  (`AutoCloseable`); and `name_jni.c`, the JNI functions of those methods,
+  which the link compiles into the library. The class files are written
+  by the compiler, so this needs no JDK, but the link needs a clang that
+  finds `jni.h`, as the Android NDK's does. An export that passes a C
+  function pointer, or whose name Java cannot use, is an error.
+
+`--lib swift-package` and `--lib aar` write them themselves; with those,
+or without `--lib`, `--bindings` is a usage error. See
+[iOS and Android](../language/mobile.md#bindings).
+
 ### `--lib xcframework`, `--lib swift-package`
 
 Builds the static library of an iOS app's Pepper code for every iOS target
@@ -253,8 +278,10 @@ output, which must be a Swift module name (letters, digits and `_`):
   writes the simulator's two archives into one universal file itself, as
   `lipo` would, so this needs no Xcode and works on any system.
 - `--lib swift-package` writes the folder `Name` (`-o Name`) holding
-  `Name.xcframework` and a `Package.swift` whose library product `Name` is
-  that binary target, for iOS 15 and later. An app adds it as a local
+  `CName.xcframework` (as above, its module named `CName`), the Swift
+  bindings of `--bindings swift` as `Sources/Name/Name.swift`, and a
+  `Package.swift` whose library product `Name` is that Swift target over
+  the binary target, for iOS 15 and later. An app adds it as a local
   package (`.package(path: "Name")`), or from the repository it is
   committed to.
 
@@ -269,10 +296,11 @@ library a Gradle build adds: `name.aar` (`-o name.aar`), named for its
 output, which takes letters, digits and `_`. It holds
 `jni/<abi>/libname.so` for each ABI, the header as `include/name.h`, an
 `AndroidManifest.xml` for the package `pepper.name` and API level 30, the
-empty `classes.jar`, `R.txt` and `res/` an `.aar` must have, and, when the
-program imports `tls`, OpenSSL's license as `LICENSE-OpenSSL.txt`. The
-compiler builds each library by running itself with `--lib shared
---target <triple>`, side by side, each in a folder of the build folder's
+Java bindings of `--bindings java` as `classes.jar` (each `.so` holds their
+JNI functions), the empty `R.txt` and `res/` an `.aar` must have, and,
+when the program imports `tls`, OpenSSL's license as
+`LICENSE-OpenSSL.txt`. The compiler builds each library by running itself
+with `--lib shared --bindings java --target <triple>`, side by side, each in a folder of the build folder's
 `aar/`, and writes the zip itself, so this needs the Android NDK (found as
 for any Android link: `--sysroot`, `ANDROID_NDK_HOME` or `ANDROID_HOME`)
 but no Gradle or JDK. It cannot be combined with `--target` or the

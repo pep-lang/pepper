@@ -114,7 +114,8 @@ export build_xcframework(
                 return Result<void, String>.err($"cannot copy {header}: {copied.error().message}");
             }
             written = _write_text(
-                headers.join(Path("module.modulemap")), $"module {module} {{\n    header \"{name}.h\"\n    export *\n}}\n"
+                headers.join(Path("module.modulemap")),
+                $"module {module} {{\n    header \"{name}.h\"\n    export *\n}}\n"
             );
         }
         if (written.is_err()) {
@@ -167,16 +168,7 @@ export build_for_targets(
             .Command(compiler.to_string())
             .arguments(passed)
             .arguments(options)
-            .arguments(
-                [
-                    "--target",
-                    triple,
-                    "-o",
-                    folder.join(Path(file)).to_string(),
-                    "--build",
-                    folder.to_string()
-                ]
-            )
+            .arguments(["--target", triple, "-o", folder.join(Path(file)).to_string(), "--build", folder.to_string()])
             .stdout(process.Stream.Inherit)
             .stderr(process.Stream.Inherit)
             .spawn();

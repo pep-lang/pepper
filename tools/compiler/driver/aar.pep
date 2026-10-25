@@ -36,7 +36,9 @@ export build_aar(compiler: Path, arguments: String[], output: Path, name: String
         }
     }
     var library = $"lib{name}.so";
-    var built = build_for_targets(compiler, arguments, ["--lib", "shared", "--bindings", "java"], triples, build, library);
+    var built = build_for_targets(
+        compiler, arguments, ["--lib", "shared", "--bindings", "java"], triples, build, library
+    );
     if (built.is_err()) {
         return built;
     }
