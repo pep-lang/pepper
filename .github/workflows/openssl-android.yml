@@ -69,7 +69,7 @@ jobs:
           fi
           # A fork's pull request has a read-only token: it only builds.
           publish=true
-          if [ "$EVENT" = pull_request ]; then  # WIP: build only until the archive is checked
+          if [ "$EVENT" = pull_request ] && [ "$HEAD_REPO" != "$REPO" ]; then
             publish=false
           fi
           if [ "$published" = true ] && [ "$FORCE" != true ]; then

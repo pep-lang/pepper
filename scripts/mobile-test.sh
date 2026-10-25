@@ -204,6 +204,7 @@ run_android() {
   [ "$(uname -s)" = Darwin ] || sdk=$HOME/Android/Sdk
   [ "$(uname -m)" != x86_64 ] || triple=x86_64-linux-android
   export ANDROID_HOME=${ANDROID_HOME:-$sdk} PEPPER_ANDROID_TRIPLE=$triple
+  export ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-$HOME/.android/avd}
   local adb="$ANDROID_HOME/platform-tools/adb" emulator="$ANDROID_HOME/emulator/emulator"
   local avd=${PEPPER_ANDROID_AVD:-$("$emulator" -list-avds | head -1)}
   [ -n "$avd" ] || { echo "no Android virtual device" >&2; return 1; }

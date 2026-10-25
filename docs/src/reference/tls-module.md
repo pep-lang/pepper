@@ -11,7 +11,9 @@ like an `io.TcpStream`. In a task, a call that has to wait parks only the
 task.
 
 On Linux and macOS the module uses OpenSSL 3, loaded when the first
-connector or acceptor is made; on Windows it uses SChannel. On iOS it uses
+connector or acceptor is made; on Windows it uses SChannel. On Android
+the program links a static OpenSSL 3 that the toolchain carries, and a
+connector trusts the system's certificate store. On iOS it uses
 the system's Security.framework (Secure Transport, TLS 1.2), for clients
 only: there `TlsAcceptor.create` and `TlsConnector.set_identity` return
 an error.

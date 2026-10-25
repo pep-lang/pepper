@@ -146,7 +146,9 @@ header_declares_exports_and_handles() {
 link_folders_are_relative_to_their_file() {
     var folder = TempFolder("link_path");
     var file = folder.path.join(Path("main.pep"));
-    File.write_text(file, "[Link(\"probe\", path = \"vendor/lib\")]\nextern int probe();\nmain(): int {\n    return 0;\n}\n");
+    File.write_text(
+        file, "[Link(\"probe\", path = \"vendor/lib\")]\nextern int probe();\nmain(): int {\n    return 0;\n}\n"
+    );
     var named = file;
     if (os.system_os() == os.OperatingSystem.Windows) {
         named = Path("\\\\?\\" + file.to_string());

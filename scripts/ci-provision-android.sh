@@ -21,5 +21,10 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --name-match=kvm
 
 "$tools/sdkmanager" --install emulator platform-tools "$image"
+# Where the emulator looks by default (mobile-test.sh sets it too); the
+# runner's avdmanager otherwise writes somewhere else.
+export ANDROID_AVD_HOME=$HOME/.android/avd
+mkdir -p "$ANDROID_AVD_HOME"
 echo no | "$tools/avdmanager" create avd --name pepper --package "$image" --force
-"$ANDROID_HOME/emulator/emulator" -list-avds
+ls "$ANDROID_AVD_HOME"
+[ -n "$("$ANDROID_HOME/emulator/emulator" -list-avds)" ] || { echo "the emulator lists no AVD" >&2; exit 1; }

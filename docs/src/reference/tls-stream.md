@@ -62,10 +62,12 @@ Wraps a platform context. Use `TlsConnector.create`.
 static create(): io.IoResult<TlsConnector>
 ```
 
-Creates a connector that trusts the system's root certificates.
+Creates a connector that trusts the system's root certificates (on
+Android, the system's certificate store less those the user turned
+off, plus those the user installed where the process may read them).
 
 **Returns**
-- the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: `libssl.so.3`, or Homebrew's or MacPorts' `libssl.3.dylib`; on iOS, Security.framework)
+- the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: `libssl.so.3`, or Homebrew's or MacPorts' `libssl.3.dylib`; on iOS, Security.framework; on Android the program links its own OpenSSL)
 
 ### Methods
 
