@@ -484,6 +484,18 @@ as usual), then `vendor` again: that rewrites the packages that changed,
 restores edited ones, and removes those `pep.lock` no longer lists.
 `.pep/deps` is unchanged in a project that is not vendored.
 
+A vendored package holds no symbolic links. The checksum covers files
+only, and Windows makes links only in Developer Mode, so a link would
+vendor differently from host to host. `vendor` refuses a package whose
+commit holds one, naming the package and the link:
+
+```text
+pep-package: error: cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold
+```
+
+A link found in a package's folder later fails the build and `fetch` the
+same way an edited file does; `vendor` again removes it.
+
 In a [workspace](projects.md#workspaces), run from the root or any member,
 `vendor` writes one folder at the workspace's root, holding every
 member's locked packages, and sets `[fetch] vendor` in the root's

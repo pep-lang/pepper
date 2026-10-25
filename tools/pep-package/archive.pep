@@ -105,6 +105,29 @@ export files_sha256(tar: u8[], strip: ulong): Result<String> {
     return Result<String>.Ok(hasher.finish_hex());
 }
 
+# Fails naming the first symbolic link in `tar`, an uncompressed tar
+# archive (by its path with the first `strip` components dropped): a
+# vendored package holds none, since `toolchain.vendored_sha256` covers
+# files only and Windows does not make links.
+_refuse_symlinks(tar: u8[], strip: ulong): Result<void> {
+    var reader = archive.TarReader(io.ByteReader(tar));
+    while (true) {
+        var next = reader.next_entry();
+        if (next.is_err()) {
+            return Result<void>.Err($"cannot read the archive: {next.error().message}");
+        }
+        if (next.value().is_empty()) {
+            return Result<void>.ok();
+        }
+        var entry = next.value().value();
+        if (entry.kind == archive.EntryKind.Symlink) {
+            return Result<void>.Err(
+                $"'{_strip(entry.path, strip)}' is a symbolic link, which a vendored package cannot hold"
+            );
+        }
+    }
+}
+
 # `path` without its first `strip` components (and a trailing `/`).
 _strip(path: String, strip: ulong): String {
     var parts = path.split("/");
@@ -162,7 +185,8 @@ _checkout_tar(directory: Path, commit: String): Result<u8[]> {
 # holds, into `directory` in a vendor folder: its files without `.git`
 # (`git archive` of a checkout; the host's archive again, from the download
 # cache, for an unpacked one), `.pep-commit`, and `.pep-checksum`
-# (`toolchain.vendored_sha256`). Only a complete copy takes the place of
+# (`toolchain.vendored_sha256`). A package holding a symbolic link is
+# refused (`_refuse_symlinks`). Only a complete copy takes the place of
 # what `directory` held. `sha256` is the checksum pep.lock records.
 export vendor_package(
     host: String, repository: String, checkout: Path, directory: Path, commit: String, sha256: String, offline: bool
@@ -174,14 +198,14 @@ export vendor_package(
             return Result<void>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
         }
     }
-    var parent = directory.parent();
-    if (parent.is_value()) {
-        Directory.create_all(parent.value());
-    }
     if (checkout.join(".git").exists()) {
         var tar = _checkout_tar(checkout, commit);
         if (tar.is_err()) {
             return Result<void>.Err(tar.error().message);
+        }
+        var linkless = _refuse_symlinks(tar.value(), 0);
+        if (linkless.is_err()) {
+            return linkless;
         }
         var extracted = archive.TarReader(io.ByteReader(tar.value())).extract(partial);
         if (extracted.is_err()) {
@@ -193,7 +217,7 @@ export vendor_package(
             return Result<void>.Err($"cannot write {_commit_file(partial).to_string()}: {marked.error().message}");
         }
     } else {
-        var unpacked = fetch_archive(host, repository, partial, commit, sha256, offline);
+        var unpacked = fetch_archive(host, repository, partial, commit, sha256, offline, symlinks = false);
         if (unpacked.is_err()) {
             return Result<void>.Err(unpacked.error().message);
         }
@@ -302,9 +326,16 @@ _resolve_location(base: String, location: String): String {
 # archive of it, when it does not already. The archive comes from the
 # download cache, which downloads it first when it lacks it; `offline`
 # fails instead. When `expected` is not empty, the files must have that
-# checksum. Returns the checksum.
+# checksum, and without `symlinks` the archive must hold no symbolic link
+# (`_refuse_symlinks`). Returns the checksum.
 export fetch_archive(
-    host: String, repository: String, directory: Path, commit: String, expected: String, offline: bool = false
+    host: String,
+    repository: String,
+    directory: Path,
+    commit: String,
+    expected: String,
+    offline: bool = false,
+    symlinks: bool = true
 ): Result<String> {
     var url = archive_url(host, repository, commit);
     var cached = cached_package(host, repository).join(commit + ".tar.gz");
@@ -338,6 +369,12 @@ export fetch_archive(
         var stored = _store(cached, packed.value());
         if (stored.is_err()) {
             return Result<String>.Err(stored.error().message);
+        }
+    }
+    if (!symlinks) {
+        var linkless = _refuse_symlinks(tar.value(), 1);
+        if (linkless.is_err()) {
+            return Result<String>.Err(linkless.error().message);
         }
     }
     # Unpack beside the package's folder, and only a complete copy takes
