@@ -170,9 +170,9 @@ _tls_st_text(st: _SecureTransport, value: __ptr<void>): String {
         return "";
     }
     var bytes = st._string_bytes;
-    __ptr<char> buffer = _pep_malloc(1024);
+    __ptr<char> buffer = _pep_malloc(4096);
     var text = "";
-    if (bytes(value, buffer, 1024, _TLS_ST_UTF8) != 0) {
+    if (bytes(value, buffer, 4096, _TLS_ST_UTF8) != 0) {
         text = String(buffer);
     }
     _pep_free(buffer);
@@ -466,18 +466,28 @@ _tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String): io.IoR
     }
     var handshake = st._handshake;
     var status = handshake(connection);
+    var verified = false;
     if (status == _TLS_ST_PEER_AUTH_COMPLETED) {
         var checked = _tls_st_check_server(st, context, connection, host);
         if (checked.is_err()) {
             _tls_sys_session_free(session);
             return io.IoResult<__ptr<void>>.err(checked.error());
         }
+        verified = true;
         status = handshake(connection);
     }
     if (status != 0) {
         var e = _tls_st_failure(session, status, "TLS handshake failed");
         _tls_sys_session_free(session);
         return io.IoResult<__ptr<void>>.err(e);
+    }
+    # Secure Transport checks nothing itself here, so a handshake that never
+    # stopped for the server's certificate is refused, not trusted.
+    if (!verified) {
+        _tls_sys_session_free(session);
+        return io.IoResult<__ptr<void>>.err(
+            _tls_error("certificate verify failed: the server's certificate was not checked")
+        );
     }
     return io.IoResult<__ptr<void>>.ok(session);
 }

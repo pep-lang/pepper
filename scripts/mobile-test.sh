@@ -94,26 +94,24 @@ build_all() {
 # with the serverAuth usage iOS requires), and `openssl s_server -www`, which
 # answers `GET /` and chooses http/1.1 through ALPN. Sets tls_pid.
 TLS_PORT=18443
+# Under `if`, `set -e` is off, so each step returns on failure itself.
 start_tls_server() {
   local dir=$1 openssl
   openssl="$(brew --prefix openssl@3 2>/dev/null || true)/bin/openssl"
   [ -x "$openssl" ] || openssl=openssl
   mkdir -p "$dir"
-  printf 'basicConstraints=critical,CA:TRUE
-keyUsage=critical,keyCertSign,cRLSign
-' > "$dir/ca.ext"
-  printf 'basicConstraints=CA:FALSE
-keyUsage=critical,digitalSignature
-extendedKeyUsage=serverAuth
-subjectAltName=DNS:localhost,IP:127.0.0.1
-'     > "$dir/server.ext"
-  "$openssl" ecparam -name prime256v1 -genkey -noout -out "$dir/ca-key.pem"
-  "$openssl" req -new -key "$dir/ca-key.pem" -subj "/CN=Pepper test CA" -out "$dir/ca.csr"
-  "$openssl" x509 -req -in "$dir/ca.csr" -signkey "$dir/ca-key.pem" -days 30 -extfile "$dir/ca.ext" -out "$dir/ca.pem"
-  "$openssl" ecparam -name prime256v1 -genkey -noout -out "$dir/key.pem"
-  "$openssl" req -new -key "$dir/key.pem" -subj "/CN=localhost" -out "$dir/server.csr"
-  "$openssl" x509 -req -in "$dir/server.csr" -CA "$dir/ca.pem" -CAkey "$dir/ca-key.pem" -CAcreateserial -days 30     -extfile "$dir/server.ext" -out "$dir/server.pem"
-  "$openssl" s_server -4 -accept "$TLS_PORT" -cert "$dir/server.pem" -key "$dir/key.pem" -alpn http/1.1 -www     < /dev/null > "$dir/server.log" 2>&1 &
+  printf '%s\n' basicConstraints=critical,CA:TRUE keyUsage=critical,keyCertSign,cRLSign > "$dir/ca.ext"
+  printf '%s\n' basicConstraints=CA:FALSE keyUsage=critical,digitalSignature extendedKeyUsage=serverAuth \
+    subjectAltName=DNS:localhost,IP:127.0.0.1 > "$dir/server.ext"
+  "$openssl" ecparam -name prime256v1 -genkey -noout -out "$dir/ca-key.pem" || return 1
+  "$openssl" req -new -key "$dir/ca-key.pem" -subj "/CN=Pepper test CA" -out "$dir/ca.csr" || return 1
+  "$openssl" x509 -req -in "$dir/ca.csr" -signkey "$dir/ca-key.pem" -days 30 -extfile "$dir/ca.ext" -out "$dir/ca.pem" || return 1
+  "$openssl" ecparam -name prime256v1 -genkey -noout -out "$dir/key.pem" || return 1
+  "$openssl" req -new -key "$dir/key.pem" -subj "/CN=localhost" -out "$dir/server.csr" || return 1
+  "$openssl" x509 -req -in "$dir/server.csr" -CA "$dir/ca.pem" -CAkey "$dir/ca-key.pem" -CAcreateserial -days 30 \
+    -extfile "$dir/server.ext" -out "$dir/server.pem" || return 1
+  "$openssl" s_server -4 -accept "$TLS_PORT" -cert "$dir/server.pem" -key "$dir/key.pem" -alpn http/1.1 -www \
+    < /dev/null > "$dir/server.log" 2>&1 &
   tls_pid=$!
   local waited=0
   until nc -z 127.0.0.1 "$TLS_PORT" 2>/dev/null; do
@@ -167,7 +165,8 @@ run_ios() {
   if start_tls_server "$tls_dir"; then
     tls_args=("$tls_dir/ca.pem" localhost "$TLS_PORT")
     [ -z "${PEPPER_MOBILE_TLS_URL-https://example.com/}" ] || tls_args+=("${PEPPER_MOBILE_TLS_URL-https://example.com/}")
-    if ! "$compiler" --target aarch64-apple-ios-simulator "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check"       --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
+    if ! "$compiler" --target aarch64-apple-ios-simulator "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check" \
+      --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
       report "ios tls_check (build)"
       sed 's/^/    /' "$dir/tls_check.log" | head -20
     # Bounded (macOS has no `timeout`): a TLS read that waits forever would
@@ -175,10 +174,10 @@ run_ios() {
     elif ! perl -e 'alarm shift; exec @ARGV' 300 xcrun simctl spawn "$device" "$dir/tls_check" "${tls_args[@]}" < /dev/null; then
       report "ios tls_check (run)"
     fi
-    kill "$tls_pid" 2>/dev/null || true
   else
     report "ios tls server"
   fi
+  kill "${tls_pid:-}" 2>/dev/null || true
 
   # The device build links too (nothing runs it here).
   "$compiler" --target aarch64-apple-ios "$repo_root/docs/examples/hello.pep" -o "$dir/hello-device" \
