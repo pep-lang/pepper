@@ -3216,7 +3216,13 @@ again), so an error in a file a worker checks is not left to
 sema, then checks it as below and leaves its record, own interface, what its
 object defines, warnings or error in `<dir>` (`<k>.rec`, `<k>.own`,
 `<k>.defines`, `<k>.warn`, `<k>.err`), then `<k>.done`; the compilation units it reads
-come to it as their `<k>.rec` and `<k>.defines`. A rebuild (its build folder
+come to it as their `<k>.rec` and `<k>.defines`. A file the build or a worker
+cannot write there (most often on a full disk) stops the build with that error
+(`write_error`): the marks and `<k>.defines` appear by a rename (`mark`), and a
+record is read only after its `<k>.checked`, so one missing or cut short would
+otherwise surface later as a compilation unit with "no record", records that
+"do not merge", or a worker that "ended" (#223); a worker that cannot leave
+`<k>.err` or `<k>.done` prints why and ends. A rebuild (its build folder
 exists) starts its first worker before loading the program
 (`start_compilation_unit_worker`), so the worker loads the program while the build
 does, as Gradle and Bazel keep workers ready; a build that checks no compilation unit

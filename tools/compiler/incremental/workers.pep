@@ -9,7 +9,7 @@
 
 import async;
 import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
-import [File, Path] from io;
+import [File, IoResult, Path] from io;
 import compiler.link;
 import os;
 import process;
@@ -30,15 +30,40 @@ export worker_file(dir: Path, k: ulong, what: String): Path {
     return dir.join(Path($"{k}.{what}"));
 }
 
-## Leaves the empty file `<k>.<what>` in `dir`, whole, by a rename.
+## Leaves the file `<k>.<what>` in `dir`, holding `text`, whole, by a rename.
 ##
 ## @param dir the folder the build and its workers share
 ## @param k the compilation unit's number
-## @param what the mark: `checked`, `compiling`, `done`
-export mark(dir: Path, k: ulong, what: String) {
+## @param what the mark: `checked`, `compiling`, `done`, `defines`
+## @param text what the file holds: nothing, for a mark
+## @returns nothing, or why it could not be left (`write_error`)
+export mark(dir: Path, k: ulong, what: String, text: String = ""): String? {
     var partial = worker_file(dir, k, $"{what}.{process.id()}");
-    File.write_text(partial, "");
-    File.rename(partial, worker_file(dir, k, what));
+    var path = worker_file(dir, k, what);
+    var written = File.write_text(partial, text);
+    if (written.is_ok()) {
+        written = File.rename(partial, path);
+    }
+    if (written.is_err()) {
+        File.remove(partial);
+    }
+    return write_error(path, written);
+}
+
+## Returns why writing `path` failed, as `written` says, if it did. A file the
+## build and its workers pass a compilation unit through that is not written
+## whole (most often on a full disk) stops the build with this error: read
+## later, one missing or cut short is a compilation unit with no record, or
+## records that do not merge.
+##
+## @param path the file written
+## @param written how writing it went
+## @returns nothing, or the error, naming `path`
+export write_error(path: Path, written: IoResult<void>): String? {
+    if (written.is_err()) {
+        return Optional<String>.Value($"cannot write {path}: {written.error().message}");
+    }
+    return Optional<String>.Empty;
 }
 
 # The record, own interface and warnings a worker left for compilation unit `k`
@@ -200,8 +225,16 @@ export check_in_workers(
             var found = find_checked(cache, program, units[k]);
             if (found.is_value() and fields_still_match(cache, units[k], owns_read(units[k], owns))) {
                 var (bytes, own, warned) = found.value();
-                File.write_bytes(worker_file(dir, k, "rec"), bytes);
-                File.write_text(worker_file(dir, k, "own"), own);
+                var record = worker_file(dir, k, "rec");
+                var own_file = worker_file(dir, k, "own");
+                var unwritten = write_error(record, File.write_bytes(record, bytes));
+                if (!unwritten.is_value()) {
+                    unwritten = write_error(own_file, File.write_text(own_file, own));
+                }
+                if (unwritten.is_value()) {
+                    failure = unwritten;
+                    break;
+                }
                 owns[k] = own;
                 prechecked[k] = (bytes, own, warned);
                 checked[k] = true;
@@ -418,10 +451,21 @@ export serve_compilation_units(
         if (!error.is_value()) {
             error = work(k, records);
         }
+        # A worker that cannot leave what it did ends, which the build
+        # reports, with why on standard error.
         if (error.is_value()) {
-            File.write_text(worker_file(dir, k, "err"), error.value());
+            var error_file = worker_file(dir, k, "err");
+            var unwritten = write_error(error_file, File.write_text(error_file, error.value()));
+            if (unwritten.is_value()) {
+                File.stderr().write_all($"{error.value()}\n{unwritten.value()}\n");
+                return 1;
+            }
         }
-        mark(dir, k, "done");
+        var unmarked = mark(dir, k, "done");
+        if (unmarked.is_value()) {
+            File.stderr().write_all($"{unmarked.value()}\n");
+            return 1;
+        }
     }
     return 0;
 }
@@ -525,13 +569,24 @@ export check_for_worker(
     stages.append($"store {(t5 - t4).milliseconds()}\n");
     # A hit checked again for its object (`check_in_workers`) keeps the record
     # the build left, which the compilation units reading it may be reading.
-    if (!worker_file(dir, k, "rec").is_file()) {
-        File.write_bytes(worker_file(dir, k, "rec"), bytes);
-        File.write_text(worker_file(dir, k, "own"), own);
-        if (!warned.is_empty) {
-            File.write_text(worker_file(dir, k, "warn"), warned);
+    var record = worker_file(dir, k, "rec");
+    var unwritten = Optional<String>.Empty;
+    if (!record.is_file()) {
+        var own_file = worker_file(dir, k, "own");
+        var warn_file = worker_file(dir, k, "warn");
+        unwritten = write_error(record, File.write_bytes(record, bytes));
+        if (!unwritten.is_value()) {
+            unwritten = write_error(own_file, File.write_text(own_file, own));
+        }
+        if (!unwritten.is_value() and !warned.is_empty) {
+            unwritten = write_error(warn_file, File.write_text(warn_file, warned));
         }
     }
-    mark(dir, k, "checked");
+    if (!unwritten.is_value()) {
+        unwritten = mark(dir, k, "checked");
+    }
+    if (unwritten.is_value()) {
+        return Result<(sema.Module, sema.PassState), String>.err(unwritten.value());
+    }
     return Result<(sema.Module, sema.PassState), String>.ok((after, state));
 }
