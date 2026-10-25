@@ -2202,6 +2202,108 @@ audit_reports_the_locked_packages_advisories_affect() {
 }
 
 [Test]
+a_build_script_compiles_a_packages_c_file_once_until_it_changes() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("native");
+    add_version(
+        hosts.folder.path,
+        "someone/native",
+        "1.0.0",
+        [
+            "pep.toml",
+            "[package]\nname = \"native\"\n",
+            "module.pep",
+            "extern int native_add(int a, int b);\n\nexport add(a: int, b: int): int {\n    return native_add(a, b);\n}\n",
+            "build.pep",
+            read_file(Path("pep-package").join("testdata").join("native_build.pep.txt")),
+            "c/add.c",
+            "int native_add(int a, int b) { return a + b; }\n"
+        ]
+    );
+    publish(hosts.folder.path, "someone/native");
+    var project = Project("native", "");
+    write_file(
+        project.dir.join("main.pep"),
+        "import native;\n\nmain(): int {\n    print(native.add(2, 3));\n    return 0;\n}\n"
+    );
+    # Adding it names its build script.
+    var added = hosts.package(project.dir, ["add", "someone/native"]);
+    expect_exit(added, 0);
+    expect_contains(added.stderr + added.stdout, "native 1.0.0 (github:someone/native) has a build script");
+    expect_equal(hosts.build_and_run(project.dir), "5\n");
+    # The package's folder is its name and a hash of where it is.
+    var folders = glob(project.dir.to_string().replace("\\", "/") + "/.pep/build/native-*");
+    expect_true(folders.count == 1);
+    var out = folders[0].join("out");
+    var runs = out.join("runs.txt");
+    expect_equal(read_file(runs), "run\n");
+    # Its output folder emptied, it runs again rather than name a lost object.
+    Directory.remove_all(out);
+    expect_equal(hosts.build_and_run(project.dir), "5\n");
+    expect_equal(read_file(runs), "run\n");
+    # Nothing it depends on changed: its last output serves.
+    expect_equal(hosts.build_and_run(project.dir), "5\n");
+    expect_equal(read_file(runs), "run\n");
+    # A file `rerun-if-changed` names, and a variable, run it again.
+    var checkout = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("native");
+    write_file(checkout.join("c").join("add.c"), "int native_add(int a, int b) { return a * b; }\n");
+    expect_equal(hosts.build_and_run(project.dir), "6\n");
+    expect_equal(read_file(runs), "run\nrun\n");
+    var built = run(
+        hosts.command(tool("pep-build").to_string(), project.dir, Array<String>()).environment("NATIVE_TEST", "1")
+    );
+    expect_exit(built, 0);
+    expect_equal(read_file(runs), "run\nrun\nrun\n");
+
+    # --no-build-scripts refuses a dependency's.
+    var refused = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--no-build-scripts"]));
+    expect_exit(refused, 1);
+    # Paths are left out: on macOS the build's are below /private/var.
+    expect_contains(refused.stderr, "error: the dependency 'native' has a build script, ");
+    expect_contains(
+        refused.stderr, "build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run"
+    );
+}
+
+[Test]
+a_projects_own_build_script_runs_and_what_it_prints_is_checked() {
+    var folder = TempFolder("package_own_build_script");
+    var dir = folder.path;
+    var script = dir.join("tools").join("make.pep");
+    write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[build]\nscript = \"tools/make.pep\"\n");
+    write_file(dir.join("main.pep"), "main(): int {\n    print(\"built\");\n    return 0;\n}\n");
+    write_file(
+        script, "main(): int {\n    print(\"pep:warning=made it\");\n    print(\"pep:linky=m\");\n    return 0;\n}\n"
+    );
+    # --no-build-scripts refuses only a dependency's.
+    var built = run(
+        process.Command(tool("pep-build").to_string()).argument("--no-build-scripts").working_directory(dir)
+    );
+    expect_exit(built, 1);
+    expect_contains(built.stderr, "warning: app: made it\n");
+    expect_contains(
+        built.stderr,
+        "error: the build script of 'app' printed 'pep:linky=m'; expected 'pep:' followed by one of link, link-path, object, warning, rerun-if-changed, rerun-if-env-changed, '=' and a value"
+    );
+    write_file(script, "main(): int {\n    print(\"pep:link-path=lib\");\n    return 3;\n}\n");
+    var failed = run(process.Command(tool("pep-build").to_string()).working_directory(dir));
+    expect_exit(failed, 1);
+    expect_contains(failed.stderr, "error: the build script of 'app', ");
+    expect_contains(failed.stderr, "make.pep, failed (");
+    write_file(script, "main(): int {\n    print(\"pep:link-path=lib\");\n    return 0;\n}\n");
+    expect_exit(run(process.Command(tool("pep-build").to_string()).working_directory(dir)), 0);
+    expect_equal(run(process.Command(dir.join("app" + toolchain.executable_suffix()).to_string())).stdout, "built\n");
+    # A `script` that does not exist is an error.
+    write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[build]\nscript = \"nope.pep\"\n");
+    var missing = run(process.Command(tool("pep-build").to_string()).working_directory(dir));
+    expect_exit(missing, 1);
+    expect_contains(missing.stderr, "'[build]' 'script' names ");
+    expect_contains(missing.stderr, "nope.pep, which does not exist");
+}
+
+[Test]
 search_info_and_add_read_the_package_index() {
     if (!has_git()) {
         return;

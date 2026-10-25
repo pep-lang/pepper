@@ -127,6 +127,21 @@ lock lists every dependency and holds packages for other platforms:
 `pepper build` names the packages its target needs and `.pep/deps` lacks,
 so a build fetches no other platform's.
 
+### Packages with a build script
+
+A package can carry a [build script](projects.md#build-scripts) that every
+build of a project using it compiles and runs on the building machine,
+with the user's permissions. Whenever `fetch`, `add` or `update` brings in
+a package with one (new to `pep.lock`, or at another commit), it says so
+and names the script to read:
+
+```text
+pep-package: native 1.0.0 (github:someone/native) has a build script, which every build of the project compiles and runs on this machine: read app/.pep/deps/github.com/someone/native/build.pep, or build with '--no-build-scripts' to refuse it
+```
+
+`pepper build --no-build-scripts` then refuses to run a dependency's
+script (see [pep-build](pep-build.md#build-scripts-and---no-build-scripts)).
+
 ### `add <owner/name>[@<range>]`, `add <name>[@<range>]`
 
 Adds a dependency to `pep.toml`'s `[dependencies]` and fetches it, keeping

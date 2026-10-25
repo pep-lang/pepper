@@ -28,7 +28,7 @@
 import [glob_matches, Path] from io;
 import semver;
 import [Version, VersionRange, parse_range] from semver;
-import [check_vendored] from toolchain;
+import [build_script, check_vendored] from toolchain;
 import "archive";
 import "git";
 import "lock";
@@ -450,6 +450,24 @@ export struct Resolver {
                 graph.packages.append(locked);
             }
             graph.notes = notes;
+            # A build runs a dependency's build script with the user's
+            # rights: name each that arrives, new or at another commit.
+            for (var locked in graph.packages) {
+                var known = false;
+                for (var was in previous) {
+                    known = known or (was.source == locked.source and was.commit == locked.commit);
+                }
+                var folder = _folder(locked.source);
+                if (known or folder.is_err()) {
+                    continue;
+                }
+                var script = build_script(folder.value());
+                if (script.is_ok() and script.value().is_value()) {
+                    graph.notes.append(
+                        $"{locked.describe()} ({locked.source}) has a build script, which every build of the project compiles and runs on this machine: read {script.value().value().to_string()}, or build with '--no-build-scripts' to refuse it"
+                    );
+                }
+            }
             for (var replacement in root.overrides) {
                 if (!wanted.contains(replacement.name)) {
                     graph.warnings.append(

@@ -5,6 +5,7 @@ import compiler.ast;
 import async;
 import compiler.codegen;
 import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
+import digest;
 import [
     Cache,
     check_compilation_unit,
@@ -63,6 +64,9 @@ export struct BuildOptions {
     var libraries: String[] = Array<String>();
     ## More folders to search for them (`-L`).
     var library_dirs: Path[] = Array<Path>();
+    ## More object files and static libraries to link, after the
+    ## program's: those packages' build scripts made (`pep:object=`).
+    var objects: Path[] = Array<Path>();
     ## The build cache, unless the build has none (`--no-cache`).
     var cache: Cache? = Optional<Cache>.Empty;
     ## Whether to print how long each stage took (`-T time`).
@@ -1482,6 +1486,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             natvis.append(enums);
         }
     }
+    objects.append_all(options.objects);
     var made = Result<void, String>.ok();
     if (options.library.is_value() and options.library.value() == LibraryKind.Static) {
         made = write_archive(objects, options.output, program.target);
@@ -1728,6 +1733,11 @@ _link_text(options: BuildOptions): String {
     }
     for (var dir in options.library_dirs) {
         text.append($"-L {dir}\n");
+    }
+    # A script makes its object again in the same place.
+    for (var object in options.objects) {
+        var bytes = File.read_bytes(object);
+        text.append($"object {object} {bytes.is_ok() ? digest.to_hex(digest.blake3(bytes.value())) : "missing"}\n");
     }
     if (options.sysroot.is_value()) {
         text.append($"--sysroot {options.sysroot.value()}\n");

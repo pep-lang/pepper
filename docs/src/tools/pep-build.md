@@ -30,6 +30,7 @@ short, and `pepper help build` runs it.
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
 | `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
 | `--frozen` | Both `--locked` and `--offline` | off |
+| `--no-build-scripts` | Fail, rather than run it, when a dependency has a build script | off, or `PEPPER_NO_BUILD_SCRIPTS` |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
@@ -62,7 +63,7 @@ short, and `pepper help build` runs it.
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
 | `-v`, `--verbose` | Accepted; prints nothing more yet | off |
-| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
+| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members`, `--skip-build-scripts` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
 | `-h`, `--help` | Print the options | |
 | `-V`, `--version` | Print the version | |
 
@@ -136,6 +137,23 @@ These make the fetch reproducible, for CI (see
 $ pepper build --offline
 fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
 pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+```
+
+### Build scripts and `--no-build-scripts`
+
+Once the dependencies are fetched, the compiler runs the
+[build script](projects.md#build-scripts) of each package the build turns
+on (the project's first): it builds the script for the machine it runs on,
+with itself and `--skip-build-scripts`, into `.pep/build/<package>-<hash>/`,
+runs it in the package's folder, and links what it says to. A script whose
+inputs have not changed since its last run is not run again.
+
+`--no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`) fails instead of
+running a dependency's script, which runs that package's code on this
+machine; the project's own script still runs:
+
+```text
+error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
 ```
 
 ### `-I <dir>`
