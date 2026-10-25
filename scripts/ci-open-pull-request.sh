@@ -34,6 +34,6 @@ if gh pr create -R "$repo" --base "$base" --head "$branch" --title "$title" --bo
   fi
 else
   url="https://github.com/$repo/compare/$base...$branch?expand=1"
-  echo "::warning::GitHub Actions may not open pull requests in $repo; open $branch's: $url"
+  echo "::warning::could not open $branch's pull request (see gh's error above; Actions may not open pull requests in $repo): open it at $url"
   printf '### %s\n\nOpen the pull request for `%s`: %s\n' "$title" "$branch" "$url" >> "$GITHUB_STEP_SUMMARY"
 fi
