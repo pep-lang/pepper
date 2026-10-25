@@ -1379,7 +1379,10 @@ as one module, recording in `owners` the file that declares each symbol;
    `__pep_global_init`, registered in `llvm.global_ctors`, in the order of
    `module.globals` (see `initialization_order`, `sema/program.pep`). A `[ThreadLocal]`
    global (`is_thread_local`; `codegen/globals.pep`) is an LLVM
-   `thread_local` in the initial-exec model, with the constant initializer
+   `thread_local` in the initial-exec model (general-dynamic in an Android
+   library, `Build.library`, since bionic refuses initial-exec in a
+   `dlopen`ed shared object; other libraries keep the faster initial-exec),
+   with the constant initializer
    `shared_type_checks.thread_local_constant` folds and no debug info. The
    program module then defines `_pep_release_thread_locals` (a cached unit
    only sees the runtime's `extern` for it; `partition.prepare` leaves the

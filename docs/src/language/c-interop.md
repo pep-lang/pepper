@@ -618,6 +618,19 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
 - A C program links at most one Pepper static library: each holds its own
   copy of the runtime, and two would define it twice. Shared libraries
   keep their runtimes to themselves, so a program may load several.
+- A library's thread-locals (its own and the runtime's) use the
+  initial-exec TLS model, as a program's do, where reading one costs a
+  load, except on Android (see below). On Linux this makes a `.so` built
+  from either kind need static TLS (`readelf -d` shows `FLAGS
+  STATIC_TLS`): a program that links it always loads it, but a `dlopen`
+  of it works only while glibc's spare static
+  TLS (512 bytes by default, which the `glibc.rtld.optional_static_tls`
+  tunable raises) has room for its thread-locals. macOS and Windows have
+  no such limit.
+- On Android every app loads its native code with `dlopen`, and bionic
+  refuses initial-exec there, so an Android library's thread-locals use
+  the general-dynamic model, which costs a call (`__tls_get_addr` on
+  x86_64, a TLS descriptor's on arm64) per access.
 
 ### Initialization, panics and threads
 
