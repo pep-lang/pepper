@@ -265,7 +265,7 @@ so <a href="#audit"><code>audit</code></a> reports it.</li>
 <tr><td><code>--offline</code></td><td>Uses only what <code>.pep/deps</code> and the <a href="#the-download-cache">download cache</a> hold, and fails on anything that needs the network</td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td></tr>
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
-<tr><td><code>fetch &lt;source&gt;...</code></td><td>Fetches only those locked packages (<code>github:owner/name</code>), at their locked commits, resolving nothing</td></tr>
+<tr><td><code>fetch &lt;source&gt;...</code></td><td>Fetches only those locked packages (<code>github:owner/name</code>, every major of it pep.lock holds, or <code>github:owner/name@v&lt;major&gt;</code>, one), at their locked commits, resolving nothing</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
 <tr><td><code>add &lt;name&gt;[@&lt;range&gt;]</code></td><td>Adds the package the <a href="#the-package-index">package index</a> lists as <code>&lt;name&gt;</code>, imported by that name</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
@@ -919,6 +919,25 @@ override = "github:me/numbers"
 commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
 sha256 = "..."
 </code></pre>
+<p>When the graph holds <a href="#two-majors-of-one-package">two majors of one package</a>,
+each is an entry of its own, with <code>major</code>, the major it serves (<code>1</code>, or
+<code>0.4</code> for a 0.x version), checked out in <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;@v&lt;major&gt;</code>:</p>
+<pre><code class="language-toml">[[package]]
+name = "numbers"
+source = "github:other/numbers"
+version = "1.3.1"
+major = "1"
+commit = "..."
+sha256 = "..."
+
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+version = "2.0.0"
+major = "2"
+commit = "..."
+sha256 = "..."
+</code></pre>
 <p>A command that leaves the graph as it was leaves <code>pep.lock</code> untouched, so
 a checkout with Windows line endings stays as git wrote it.</p>
 <h2 id="reproducible-builds"><a class="header" href="#reproducible-builds">Reproducible builds</a></h2>
@@ -1003,23 +1022,27 @@ resolve a dependency <code>pep.lock</code> does not pin (or a tag, which may hav
 moved) fail without it, saying so. Private repositories need git too, as
 authentication is git's concern.</p>
 <h2 id="resolving-versions"><a class="header" href="#resolving-versions">Resolving versions</a></h2>
-<p>The whole project uses one version of each package: one checkout of
-<code>github:other/numbers</code> serves every package that depends on it, whatever
-name each imports it by.</p>
+<p>The whole project uses one version of each package, per major: one
+checkout of <code>github:other/numbers</code> 1.x serves every package whose range
+asks for 1.x, whatever name each imports it by (see
+<a href="#two-majors-of-one-package">Two majors of one package</a>).</p>
 <ul>
 <li>A version range picks the newest version tag (<code>v1.2.3</code> or <code>1.2.3</code>) that
-every package's range accepts. When none does, resolution fails and names
-each package's requirement and the versions the repository offers. A
-workspace member's range reads only its own tags (<code>geo-v1.2.3</code>), and a
-repository's root package only the plain ones.</li>
+every package's range in its major accepts. When none does, resolution
+fails and names each package's requirement and the versions the
+repository offers. A workspace member's range reads only its own tags
+(<code>geo-v1.2.3</code>), and a repository's root package only the plain ones.</li>
 <li>A <code>path</code> with a <code>version</code> in a fetched package's <code>pep.toml</code> is the
 package of the same workspace it names, resolved by its own tags as a
 dependency on that member of the same repository (see
 <a href="projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>).</li>
 <li>A branch, tag or commit must be the same in every package that names it.</li>
-<li>The project's own <code>pep.toml</code> overrides its dependencies: a package it
-names gets the revision it asks for, even outside the range a dependency
-declares, and <code>pep-package</code> says which requirement it overrode.</li>
+<li>The project's own <code>pep.toml</code> overrides its dependencies within a major:
+a package it names gets the revision it asks for, even outside the
+range a dependency of the same major declares, and <code>pep-package</code> says
+which requirement it overrode. A dependency's range in another major
+gets a copy of its own; to give every dependent one version whatever
+its major, use <a href="projects.html#overrides"><code>[overrides]</code></a>.</li>
 <li>A locked revision stays while it still satisfies every requirement;
 <code>update</code> is what moves it.</li>
 <li>The project's <a href="projects.html#overrides"><code>[overrides]</code></a> replace a package
@@ -1033,6 +1056,48 @@ dependencies, as requirements of the project; a dependency's
 <li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code>, the project's and its
 dependencies', is resolved with the rest, whatever the platform
 resolving, so one version of a package serves every platform.</li>
+</ul>
+<h3 id="two-majors-of-one-package"><a class="header" href="#two-majors-of-one-package">Two majors of one package</a></h3>
+<p>A new major version breaks its users on purpose, so a range in another
+major names another package, as in Cargo and Go: when one dependency needs
+<code>numbers</code> 1.x and another 2.x, the project gets both.</p>
+<ul>
+<li>
+<p><strong>The major a range starts in</strong> decides: the first number of its lower
+bound (<code>1</code> for <code>1.4</code>, <code>^1.2</code> and <code>&gt;=1.0, &lt;3</code>), or for a 0.x version the
+minor (<code>0.4</code> for <code>0.4.2</code>), since a 0.x release's minor is its major. A
+range that spans majors counts as the one it starts in: <code>&gt;=1.0, &lt;3</code>
+beside a <code>2</code> gets 1.x.</p>
+</li>
+<li>
+<p><strong>Only when the graph has two.</strong> A package whose ranges all start in one
+major is one package, checked out and locked as before. One that a
+branch, tag, commit, open range (<code>*</code>, <code>&lt;2</code>) or
+<a href="projects.html#overrides">override</a> names is never split.</p>
+</li>
+<li>
+<p><strong>Each its own checkout</strong>, <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;@v&lt;major&gt;</code>
+(<code>numbers@v1</code>, <code>numbers@v2</code>), and its own <code>pep.lock</code> entry, with
+<code>major</code> (see <a href="#peplock">pep.lock</a>). <code>tree</code>, <code>why</code> and the messages name
+each by its source, <code>@v</code> and its major: <code>github:other/numbers@v1</code>.</p>
+</li>
+<li>
+<p><strong>Imports do not change.</strong> Each package imports <code>numbers</code> by its own
+key, and the compiler resolves the import to the copy of the major its
+range starts in.</p>
+</li>
+<li>
+<p><strong>The types differ.</strong> A <code>numbers</code> 1.x <code>Num</code> is not a 2.x <code>Num</code>, so
+passing one where the other is wanted is an error, which names each with
+its copy's module:</p>
+<pre><code class="language-text">main.pep:5:24: error: cannot pass a value of type 'numbers_v1.Num' as argument 1 of 'show', which has type 'numbers_v2.Num'
+    5 |     print(numbers.show(legacy.make()));
+      |                        ^~~~~~~~~~
+</code></pre>
+<p>Convert between them in code, or give the whole project one major with
+<a href="projects.html#overrides"><code>[overrides]</code></a>
+(<code>"github:other/numbers" = { github = "other/numbers", version = "2" }</code>).</p>
+</li>
 </ul>
 <h3 id="the-toolchain-a-package-needs"><a class="header" href="#the-toolchain-a-package-needs">The toolchain a package needs</a></h3>
 <p>A package states the oldest toolchain release that builds it with

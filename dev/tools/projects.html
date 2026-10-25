@@ -399,7 +399,10 @@ fast_json = { github = "other/json" }
 <code>.pep/deps/github.com/someone/geometry</code>. One copy serves the whole project:
 each package's own <code>pep.toml</code> names the packages it needs under its own
 keys, and an import in one of its files resolves against those keys, to the
-same copies.</p>
+same copies. When packages need different majors of one package, each
+major is a copy of its own, <code>&lt;name&gt;@v&lt;major&gt;</code>, and an import resolves to
+the copy of the major its key's range asks for (see
+<a href="pep-package.html#two-majors-of-one-package">Two majors of one package</a>).</p>
 <p><code>pepper package</code> fetches them there and records the commit of each, the
 dependencies' dependencies included, in <code>pep.lock</code> beside <code>pep.toml</code>; commit
 <code>pep.lock</code> with <code>pep.toml</code>. <code>pepper build</code> fetches what <code>pep.lock</code> lists and
@@ -737,7 +740,9 @@ those stay on each dependency.</p>
 <li>
 <p><strong>Everywhere, whatever is asked:</strong> every package that depends on the
 source gets the replacement, the project included, whatever version
-range or branch each asks for. A fork is checked out in the original's
+range or branch each asks for, in whatever major, so an override also
+makes a graph that holds <a href="pep-package.html#two-majors-of-one-package">two majors</a>
+of the package hold one. A fork is checked out in the original's
 folder, <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>, and a <code>path</code> override's
 folder is read in its place, its own dependencies included. Imports do
 not change.</p>
