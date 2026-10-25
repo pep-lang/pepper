@@ -15,8 +15,9 @@
 #
 # On iOS, scripts/mobile/tls_check.pep also checks the tls module and HTTPS:
 # against `openssl s_server` on this Mac (Homebrew's openssl@3, else the
-# system's), with a test CA made for the run, and against a public host,
-# PEPPER_MOBILE_TLS_URL (default https://example.com/; empty skips it).
+# system's), with a test CA made for the run (its header lists the checks).
+# Setting PEPPER_MOBILE_TLS_URL also fetches that public URL through the
+# system's roots; by default nothing leaves the Mac.
 #
 # iOS: the simulator SDK comes from `xcrun`, and the programs run in a
 # booted iPhone simulator through `xcrun simctl spawn`. The first available
@@ -159,12 +160,12 @@ run_ios() {
   done < <(examples ios)
   echo "ios: ran $count examples"
 
-  # TLS through Security.framework, against a server on this Mac and a
-  # public host.
+  # TLS through Security.framework, against a server on this Mac (and a
+  # public host only when PEPPER_MOBILE_TLS_URL names one).
   local tls_dir="$out/ios-tls" tls_args
   if start_tls_server "$tls_dir"; then
     tls_args=("$tls_dir/ca.pem" localhost "$TLS_PORT")
-    [ -z "${PEPPER_MOBILE_TLS_URL-https://example.com/}" ] || tls_args+=("${PEPPER_MOBILE_TLS_URL-https://example.com/}")
+    [ -z "${PEPPER_MOBILE_TLS_URL-}" ] || tls_args+=("$PEPPER_MOBILE_TLS_URL")
     if ! "$compiler" --target aarch64-apple-ios-simulator "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check" \
       --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
       report "ios tls_check (build)"
