@@ -101,9 +101,7 @@ _ir(source: String, target: link.Target, library: bool = false): String {
     for (var f in program.value().files) {
         namespaces.append(f.namespace);
     }
-    var ir = codegen.generate_ir(
-        module.value(), state.value(), namespaces, "main", library = library
-    );
+    var ir = codegen.generate_ir(module.value(), state.value(), namespaces, "main", library = library);
     expect_true(ir.is_ok());
     return ir.value();
 }
