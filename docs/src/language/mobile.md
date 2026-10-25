@@ -258,17 +258,19 @@ it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
 (`adb shell`), then builds and runs the two apps. On iOS it also runs
 `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
-on the Mac, with a certificate authority made for the run, and against
-`PEPPER_MOBILE_TLS_URL` (`https://example.com/` by default; set it empty to
-skip the public host). On Android the same check runs in the emulator
-against the same kind of server, which `adb reverse` makes the emulator's
-`localhost`; there `PEPPER_MOBILE_TLS_URL`, when set, also fetches that URL
-through the system's roots. The Android run also works on Linux, for the
-host's ABI (x86_64 there, where the prototype app is skipped until
+on the Mac, with a certificate authority made for the run: it trusts that
+authority, connects to `localhost` and `127.0.0.1`, checks that ALPN chose
+`http/1.1`, sends `GET /`, checks that a connector without the authority is
+refused, and fetches the server through `http.Client`. It needs no internet
+access. Set `PEPPER_MOBILE_TLS_URL` to an `https://` URL to also fetch that
+public host through the system's roots. On Android the same check runs in
+the emulator against the same kind of server, which `adb reverse` makes the
+emulator's `localhost`, with the same opt-in public fetch. The Android run
+also works on Linux, for the host's ABI (x86_64 there, where the prototype
+app is skipped until
 [pepper#246](https://github.com/pep-lang/pepper/issues/246) is fixed), as CI
-runs it: `scripts/ci-provision-android.sh`
-sets up an emulator on a GitHub-hosted Linux runner, since Apple silicon
-runners cannot run one.
+runs it: `scripts/ci-provision-android.sh` sets up an emulator on a
+GitHub-hosted Linux runner, since Apple silicon runners cannot run one.
 
 ```sh
 bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
