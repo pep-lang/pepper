@@ -55,7 +55,7 @@ and pass its folder as the first argument.
 
 The script builds the Pepper tools (`pepper`, `pep-test`, `pep-doc` and the
 others) from the checkout with that `pep-build`, against the checkout's
-runtime, into `target/pepper-tests/bin` beside a link to the `pep-build`,
+runtime, into `target/pepper-tests/bin` beside a copy of the `pep-build`,
 and runs `pepper test`:
 
 - in `runtime/`, every runtime test;
