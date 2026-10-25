@@ -54,11 +54,14 @@ export struct TlsConnector {
         }
     }
 
-    ## Creates a connector that trusts the system's root certificates.
+    ## Creates a connector that trusts the system's root certificates (on
+    ## Android, the system's certificate store less those the user turned
+    ## off, plus those the user installed where the process may read them).
     ##
     ## @returns the connector; an error when no TLS library is available (on
     ##   Linux and macOS, OpenSSL 3: `libssl.so.3`, or Homebrew's or
-    ##   MacPorts' `libssl.3.dylib`; on iOS, Security.framework)
+    ##   MacPorts' `libssl.3.dylib`; on iOS, Security.framework; on Android
+    ##   the program links its own OpenSSL)
     static create(): io.IoResult<TlsConnector> {
         var context = _tls_sys_client_context();
         if (context.is_err()) {

@@ -205,12 +205,14 @@ _resolve_links(lines: String, program: link.Program): (String[], Path[]) {
             if (!index.is_value() or index.value() >= program.files.count) {
                 continue;
             }
-            var file = Path(program.files[index.value()].name);
-            var folder = file.parent();
-            # Windows reads no `/` after a `\\?\` prefix, which names the
-            # runtime's files.
-            var relative = os.system_os() == os.OperatingSystem.Windows ? fields[2].replace("/", "\\") : fields[2];
-            var dir = folder.is_value() ? folder.value().join(Path(relative)) : Path(relative);
+            # The runtime's files are named with Windows' `\\?\` prefix, which
+            # the linker's `-L` does not read.
+            var name = program.files[index.value()].name;
+            if (name.starts_with("\\\\?\\")) {
+                name = name.substr_bytes(4, name.size - 4);
+            }
+            var folder = Path(name).parent();
+            var dir = folder.is_value() ? folder.value().join(Path(fields[2])) : Path(fields[2]);
             var cwd = process.working_directory();
             if (dir.is_relative() and cwd.is_ok()) {
                 dir = cwd.value().join(dir);
