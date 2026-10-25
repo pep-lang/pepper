@@ -6,7 +6,7 @@
 # changes a diagnostic or what the language accepts, on purpose or not.
 
 import [Channel, Thread] from async;
-import [Diagnostic, render_all] from compiler.diagnostic;
+import [demangle, Diagnostic, render_all] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -1092,4 +1092,21 @@ rewritten_programs(): String[] {
         # and truth tests.
         "# expect: main.pep:25:5: error: module-scope variable 'origin' must be 'const'\nstruct V {\n    var x: int;\n    construct(x: int) { this.x = x; }\n    +(other: V): V { return V(x + other.x); }\n    +(other: int): V { return V(x + other); }\n    ==(other: V): bool { return x == other.x; }\n    -(): V { return V(0 - x); }\n    !!(): bool { return x != 0; }\n    +=(other: int) { x = x + other; }\n}\nstruct Grid {\n    var cells: __ptr<int>;\n    var values: V;\n    __index_get(i: int): int { return cells[i]; }\n    __index_set(i: int, value: int) { cells[i] = value; }\n    total(): int { return this[0] + values.x; }\n}\nenum Level {\n    Low,\n    High,\n    <(other: Level): bool { return false; }\n    __index_get(i: int): int { return i; }\n}\nvar origin = V(1) + V(2);\nmain(): int {\n    var a = V(1);\n    var b = a + V(2) + 3;\n    var c = -a;\n    a += 4;\n    if (a) { b = c; }\n    var t = !a;\n    var u = a and b;\n    var ne = a != b;\n    var g = Grid();\n    g[1] = 2;\n    g[1] += 3;\n    g[2] *= g[1];\n    var p: __ptr<int> = null;\n    var q = p[3];\n    var l = Level.Low < Level.High;\n    var w = Level.Low[2];\n    return g[0];\n}\n"
     ];
+}
+
+# A name two namespaces declare, such as a struct of two majors of one
+# package, is spelled with its module, so the two read apart.
+[Test]
+demangling_qualifies_a_name_two_namespaces_declare() {
+    expect_equal(
+        demangle(
+            "cannot pass a value of type 'Unit@units_v1/module' as argument 1 of 'show@units_v2/module', which has type 'Unit@units_v2/module'"
+        ),
+        "cannot pass a value of type 'units_v1.Unit' as argument 1 of 'show', which has type 'units_v2.Unit'"
+    );
+    expect_equal(
+        demangle("'Node@util/module' is not 'Box<Node@util/module#2>'"),
+        "'util.module.Node' is not 'Box<util.module#2.Node>'"
+    );
+    expect_equal(demangle("no member named 'x' in 'Box<Point@geo/shapes>'"), "no member named 'x' in 'Box<Point>'");
 }

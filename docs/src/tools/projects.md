@@ -253,7 +253,10 @@ A dependency from a Git host lives in the project's
 `.pep/deps/github.com/someone/geometry`. One copy serves the whole project:
 each package's own `pep.toml` names the packages it needs under its own
 keys, and an import in one of its files resolves against those keys, to the
-same copies.
+same copies. When packages need different majors of one package, each
+major is a copy of its own, `<name>@v<major>`, and an import resolves to
+the copy of the major its key's range asks for (see
+[Two majors of one package](pep-package.md#two-majors-of-one-package)).
 
 `pepper package` fetches them there and records the commit of each, the
 dependencies' dependencies included, in `pep.lock` beside `pep.toml`; commit
@@ -617,7 +620,9 @@ reaches it, without editing the `pep.toml` of each package on the way:
   those stay on each dependency.
 - **Everywhere, whatever is asked:** every package that depends on the
   source gets the replacement, the project included, whatever version
-  range or branch each asks for. A fork is checked out in the original's
+  range or branch each asks for, in whatever major, so an override also
+  makes a graph that holds [two majors](pep-package.md#two-majors-of-one-package)
+  of the package hold one. A fork is checked out in the original's
   folder, `.pep/deps/<host>/<owner>/<name>`, and a `path` override's
   folder is read in its place, its own dependencies included. Imports do
   not change.

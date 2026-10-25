@@ -334,7 +334,7 @@ _needs_fetch(project: Path, manifest: link.Manifest, target: link.Target): Resul
     }
     var missing = _Missing();
     for (var package in locked.value()) {
-        var dir = link.package_directory(project, package.host, package.repository, manifest.vendor);
+        var dir = link.package_directory(project, package.host, package.folder(), manifest.vendor);
         if (!package.matches(target)) {
             missing.skipped = true;
         } else if (!dir.is_directory() or _is_stale(dir, package)) {
@@ -381,7 +381,7 @@ _check_vendor(project: Path, manifest: link.Manifest, missing: _Missing, target:
     }
     for (var package in locked.value()) {
         if (package.matches(target)) {
-            var dir = link.package_directory(project, package.host, package.repository, manifest.vendor);
+            var dir = link.package_directory(project, package.host, package.folder(), manifest.vendor);
             var checked = toolchain.check_vendored(dir, package.commit);
             if (checked.is_err()) {
                 return checked;
@@ -406,7 +406,7 @@ _refuse(project: Path, missing: _Missing, locked: bool, offline: bool): Result<v
     }
     var absent = Array<String>();
     for (var package in missing.packages) {
-        if (!link.package_directory(project, package.host, package.repository).is_directory()) {
+        if (!link.package_directory(project, package.host, package.folder()).is_directory()) {
             var short = package.commit.size > 12 ? package.commit.substr_bytes(0, 12) : package.commit;
             absent.append($"{package.source()} {short}");
         }
@@ -468,7 +468,7 @@ _fetch_locked(
         # build needs, which resolving the graph would not leave out.
         if (!checks and needed.value().not_locked.is_empty and needed.value().skipped) {
             for (var package in missing) {
-                arguments.append(package.source());
+                arguments.append(package.key());
             }
         }
         var ran = process.Command(tool.value().to_string()).arguments(arguments).run();
@@ -492,7 +492,7 @@ _fetch_locked(
         );
     }
     for (var package in missing) {
-        var dir = link.package_directory(project, package.host, package.repository);
+        var dir = link.package_directory(project, package.host, package.folder());
         if (dir.is_directory()) {
             # A stale checkout may hold edits: pep-package moves it, never deletes it.
             return Result<void, String>.err(
@@ -510,7 +510,7 @@ _fetch_locked(
 ## Clones `package` at its locked commit into the project's `.pep/deps`,
 ## through a `.partial` folder so an interrupted fetch leaves no package.
 _check_out(project: Path, package: link.LockedPackage): Result<void, String> {
-    var dir = link.package_directory(project, package.host, package.repository);
+    var dir = link.package_directory(project, package.host, package.folder());
     var url = package.clone_url();
     var short = package.commit.size > 12 ? package.commit.substr_bytes(0, 12) : package.commit;
     io.File.stderr().write_all($"pepc: fetching {package.source()} {short}\n");

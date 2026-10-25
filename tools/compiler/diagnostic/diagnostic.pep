@@ -414,7 +414,10 @@ const _OVERLOAD_SEPARATOR = '$';
 ## Returns `text` (a message) with every mangled name inside single quotes
 ## spelled as the user wrote it: `no member named 'x' in
 ## 'Box<Point@geo/shapes>'` becomes `no member named 'x' in 'Box<Point>'`.
-## An apostrophe inside a word (`runtime's`) opens no quote.
+## An apostrophe inside a word (`runtime's`) opens no quote. A name the
+## message holds from two namespaces, such as a struct of two majors of one
+## package, is spelled with its module (`_qualifier`), so the two differ:
+## `'numbers_v1.Num'` and `'numbers_v2.Num'`.
 ##
 ## @param text the message
 ## @returns the message as the user reads it
@@ -422,6 +425,15 @@ export demangle(text: String): String {
     if (!text.contains("@") and !text.contains("$")) {
         return text;
     }
+    var namespaces = HashMap<String, HashSet<String>>();
+    _demangle(text, namespaces, false);
+    return _demangle(text, namespaces, true);
+}
+
+# `demangle`'s walk over `text`. Without `write`, it records the namespaces
+# each name has in `namespaces`; with it, it returns the text demangled,
+# each name of several namespaces qualified.
+_demangle(text: String, namespaces: HashMap<String, HashSet<String>>, write: bool): String {
     var out = StringBuilder();
     bool quoted = false;
     # The last byte written, as a name character or not.
@@ -440,6 +452,24 @@ export demangle(text: String): String {
                     _is_digit(text.byte_at(i + 1 + size)))) {
                 size += 1;
             }
+            if (size > 0 and b == _NAMESPACE_SEPARATOR) {
+                var start = i;
+                while (start > copied and _is_name_byte(text.byte_at(start - 1))) {
+                    start -= 1;
+                }
+                var name = text.substr_bytes(start, i - start);
+                var namespace = text.substr_bytes(i + 1, size);
+                if (!write) {
+                    if (!namespaces.contains(name)) {
+                        namespaces[name] = HashSet<String>();
+                    }
+                    namespaces[name].insert(namespace);
+                } else if (namespaces[name].count > 1) {
+                    out.append(text.substr_bytes(copied, start - copied));
+                    out.append(_qualifier(namespace, namespaces[name]) + ".");
+                    copied = start;
+                }
+            }
             if (size > 0) {
                 out.append(text.substr_bytes(copied, i - copied));
                 i += 1 + size;
@@ -454,6 +484,20 @@ export demangle(text: String): String {
     }
     out.append(text.substr_bytes(copied, text.size - copied));
     return out.to_string();
+}
+
+# How `demangle` qualifies a name declared in `namespace`, one of `all`:
+# by its module, the namespace's first part (`numbers_v1` for
+# `numbers_v1/module`), or the whole namespace, `/` spelled `.`, when
+# another of `all` is in the same module.
+_qualifier(namespace: String, all: HashSet<String>): String {
+    var module = namespace.split("/")[0];
+    for (var other in all) {
+        if (other != namespace and other.split("/")[0] == module) {
+            return namespace.replace("/", ".");
+        }
+    }
+    return module;
 }
 
 _is_digit(b: byte): bool {
