@@ -31,7 +31,9 @@
 # pinned one (llvm-package.yml uses it to package another release).
 #
 # It records the prefix it settles on in .pep/llvm-prefix (one line, read by
-# scripts/pepper-tests.sh, the release build and the workflows).
+# scripts/pepper-tests.sh, the release build and the workflows). On macOS it
+# also installs Homebrew's lld@<major> for iOS links, and in GitHub Actions
+# puts the LLVM and lld bin folders on $GITHUB_PATH.
 #
 # Idempotent: re-running with a usable toolchain only rewrites that.
 set -euo pipefail
@@ -587,7 +589,7 @@ fi
 # ld64.lld rather than using Apple's clang, which has no lld.
 if [[ "$(uname -s)" == "Darwin" && -n "${GITHUB_PATH:-}" ]]; then
     echo "$install_prefix/bin" >> "$GITHUB_PATH"
-    [[ -z "$lld_bin" ]] || echo "$lld_bin" >> "$GITHUB_PATH"
+    [[ -z "$lld_bin" || "$lld_bin" == "$install_prefix/bin" ]] || echo "$lld_bin" >> "$GITHUB_PATH"
 fi
 
 # Unlike Windows -- where lldb has to be pulled out of a separate installer --
