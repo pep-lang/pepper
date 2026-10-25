@@ -451,14 +451,19 @@ inlay_hints_name_literal_arguments() {
         + "    resize(width: int, height: int) {\n        this.width = width;\n        this.height = height;\n    }\n}\n\n"
         + "repeat(text: String, times: int): String { return text; }\n\n"
         + "main(): int {\n    var window = Window(640, 480);\n    window.resize(800, height = 600);\n"
-        + "    var size = 4;\n    var s = repeat(\"ab\", size);\n    return 0;\n}\n";
+        + "    var size = 4;\n    var s = repeat(\"ab\", size);\n"
+        + "    var pair = Pair<int>(1, 2);\n    pair.swap_in(3, 4);\n    return 0;\n}\n\n"
+        + "struct Pair<T> {\n    var left: T;\n    var right: T;\n\n"
+        + "    construct(left: T, right: T) {\n        this.left = left;\n        this.right = right;\n    }\n\n"
+        + "    swap_in(left: T, right: T) {\n        this.left = right;\n        this.right = left;\n    }\n}\n";
     var uri = temp_file("resized.pep", text);
     var ready = analyze(uri, text);
     expect_equal(ready.outcome, "passed");
-    # A named argument and a variable need no hint.
+    # A named argument and a variable need no hint; a generic struct's calls
+    # are found by its spelled type (`Pair<int>`).
     expect_equal(
         hint_list(lsp.TextDocument(uri, text), ready, false, true),
-        "15:24 width:, 15:29 height:, 16:18 width:, 18:19 text:"
+        "15:24 width:, 15:29 height:, 16:18 width:, 18:19 text:, 19:25 left:, 19:28 right:, 20:17 left:, 20:20 right:"
     );
 }
 

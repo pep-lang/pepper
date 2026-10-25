@@ -123,9 +123,8 @@ _same_signature(a: TypeName, b: TypeName): bool {
 
 ## A type some passes carry as a flat name (`__function<void>`), parsed.
 _parsed(ty: TypeName): TypeName {
-    var s = ty.to_string();
-    if (ty.sub_types.count == 0 and s.contains("<") and s.ends_with(">")) {
-        return parse_type_string(s);
+    if (ty.sub_types.count == 0 and ty.name.contains("<") and ty.name.ends_with(">")) {
+        return parse_type_string(ty.name);
     }
     return ty;
 }
