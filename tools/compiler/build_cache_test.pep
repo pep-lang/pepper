@@ -342,6 +342,15 @@ moves_objects_by_copying_where_a_rename_cannot() {
     expect_false(built.metadata().is_ok());
     # Only the key's folder is left beside it: no staging copy.
     expect_equal(Directory.open(target.parent().value()).value().entries().value().count, 1 as ulong);
+
+    # Another build's copy of the key in place first stays, and so does
+    # `built`, for `store` to drop (#227).
+    Directory.create_all(built);
+    File.write_text(built.join(Path("0.o")), "second");
+    expect_false(incremental._move_across_drives(built, target).is_ok());
+    expect_equal(File.read_to_string(target.join(Path("0.o"))).value(), "object");
+    expect_true(built.metadata().is_ok());
+    expect_equal(Directory.open(target.parent().value()).value().entries().value().count, 1 as ulong);
 }
 
 [Test]

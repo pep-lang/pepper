@@ -52,8 +52,9 @@ const _KEEP = 8;
 ## in nanoseconds, however many newer keys there are: a build running at
 ## the same time may be linking them.
 const _GRACE: long = 600000000000;
-## How many times `Cache.reused_objects` looks for a key's objects, and how
-## long it waits between looks, in milliseconds: about a second in all.
+## How many times `Cache.reused_objects` looks for a key's objects, or
+## `_move_across_drives` renames a key's folder into place, and how long it
+## waits between tries, in milliseconds: about a second in all.
 const _REUSE_TRIES: ulong = 20;
 const _REUSE_WAIT = 50;
 
@@ -1270,13 +1271,24 @@ export write_record(
 # Moves the folder `built` to `target` where a rename cannot: copies it to a
 # folder beside `target`, on the cache's own drive, and renames that, so a
 # key's folder still only ever appears whole. `built` goes once the copy is
-# in place.
+# in place. When another build's copy is in place first, it fails, leaving
+# that copy and `built`.
 export _move_across_drives(built: Path, target: Path): IoResult<void> {
     var staged = Path($"{target}.{digest.to_hex(digest.blake3(built.to_string())).substr(0, 12)}");
     Directory.remove_all(staged);
     var copied = _copy_folder(built, staged);
     if (copied.is_ok()) {
         copied = File.rename(staged, target);
+        # Windows fails the rename ("Access is denied") while anything has a
+        # file in the folder open, as a virus scan of the fresh copy does
+        # (#227): try again, for about a second, while the key is not there.
+        for (var _ in 1.._REUSE_TRIES) {
+            if (copied.is_ok() or target.metadata().is_ok()) {
+                break;
+            }
+            async.Thread.sleep(_REUSE_WAIT);
+            copied = File.rename(staged, target);
+        }
     }
     if (copied.is_err()) {
         Directory.remove_all(staged);
