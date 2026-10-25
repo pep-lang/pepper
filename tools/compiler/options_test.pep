@@ -1,7 +1,8 @@
 # The command line as `pep-build` reads it, run on the compiler under test
 # (`pep-build` beside the test or on the PATH, as `scripts/pepper-tests.sh`
 # puts the stage-1 build there): `--help` lists every option;
-# `--emit-steps`, `--emit-ast`, `--emit-llvm`, `-T passes`, `-m`, `--lib`,
+# `--emit-steps`, `--emit-ast`, `--emit-llvm`, `-T passes`, `-m`, `--lib`
+# (an iOS `.xcframework` and Swift package too),
 # `--lto`, `--verify-cache` and `--MSVC` do what they document; a cached
 # build of an entry file inside a module's folder links; `-o` makes the
 # output's missing folders.
@@ -321,7 +322,7 @@ lib_and_lto_are_checked_and_name_their_output() {
         code,
         says
     ) in [
-        (["--lib", "dynamic", "main.pep"], 2, "invalid value 'dynamic' for '--lib': expected 'static' or 'shared'"),
+        (["--lib", "dynamic", "main.pep"], 2, "invalid value 'dynamic' for '--lib': expected 'static', 'shared', "),
         (["--lib=static", "--test", "main.pep"], 2, "'--test' cannot be used with '--lib'"),
         (["--lto=thin", "main.pep"], 2, "invalid value 'thin' for '--lto': expected 'full' or 'off'"),
         (["--lto=full", "-O0", "main.pep"], 1, "'--lto=full' needs optimization: add '-O'")
@@ -340,6 +341,68 @@ lib_and_lto_are_checked_and_name_their_output() {
         var ran = process.Command(program.path.join(Path("main")).to_string()).run();
         expect_true(ran.is_ok() and ran.value().status.success());
     }
+}
+
+# `--lib swift-package`: a Swift package around an iOS `.xcframework`,
+# built on any system, whose simulator library is a universal file of two
+# archives; and the output names and options it refuses.
+[Test]
+lib_swift_package_writes_an_xcframework_for_ios() {
+    var folder = _program("options_xcframework", _LIBRARY);
+    _succeeds(folder.path, ["--lib", "swift-package", "main.pep", "-o", "Adder", "--build", "build"]);
+    var package = folder.path.join(Path("Adder"));
+    var framework = package.join(Path("Adder.xcframework"));
+    expect_contains(
+        File.read_to_string(package.join(Path("Package.swift"))).value(),
+        ".binaryTarget(name: \"Adder\", path: \"Adder.xcframework\")"
+    );
+    expect_contains(
+        File.read_to_string(framework.join(Path("Info.plist"))).value(), "<string>ios-arm64_x86_64-simulator</string>"
+    );
+    for (var slice in ["ios-arm64", "ios-arm64_x86_64-simulator"]) {
+        var headers = framework.join(Path(slice)).join(Path("Headers"));
+        expect_contains(File.read_to_string(headers.join(Path("Adder.h"))).value(), "add(int32_t a, int32_t b);");
+        expect_contains(File.read_to_string(headers.join(Path("module.modulemap"))).value(), "module Adder {");
+    }
+    var device = File.read_bytes(framework.join(Path("ios-arm64")).join(Path("libAdder.a"))).value();
+    expect_true(_starts_with(device, 0, "!<arch>\n".bytes()));
+    # FAT_MAGIC and two architectures, arm64 first, its archive 16 KiB in.
+    var simulator = File.read_bytes(
+        framework.join(Path("ios-arm64_x86_64-simulator")).join(Path("libAdder.a"))
+    ).value();
+    expect_true(
+        _starts_with(simulator, 0, [0xca as u8, 0xfe, 0xba, 0xbe, 0, 0, 0, 2, 1, 0, 0, 0x0c, 0, 0, 0, 0, 0, 0, 0x40, 0])
+    );
+    expect_true(_starts_with(simulator, 0x4000, "!<arch>\n".bytes()));
+    for (var (
+        arguments,
+        code,
+        says
+    ) in [
+        (
+            ["--lib", "xcframework", "--target", "aarch64-apple-ios", "main.pep"],
+            2,
+            "'--target' cannot be used with '--lib xcframework'"
+        ),
+        (["--lib", "xcframework", "main.pep", "-o", "my-adder.xcframework"], 1, "does not name a Swift module")
+    ]) {
+        var ran = _pep_build(folder.path, arguments);
+        expect_equal(_code(ran), code);
+        expect_contains(ran.stderr, says);
+    }
+}
+
+# Whether `bytes` holds `prefix` at `at`.
+_starts_with(bytes: u8[], at: ulong, prefix: u8[]): bool {
+    if (at + prefix.count > bytes.count) {
+        return false;
+    }
+    for (var i in 0..prefix.count) {
+        if (bytes[at + i] != prefix[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 # `--entry` starts the program in the function it names, with the program's

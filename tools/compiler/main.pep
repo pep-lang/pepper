@@ -13,7 +13,8 @@
 # out`, else the file's stem in the current directory, or the project of
 # the current directory with no file. `--lib static|shared` builds a
 # library for C instead, with the header of its `[Export]`ed functions
-# beside it (`driver/library.pep`), and `--lto=full` (above `-O0`, when
+# beside it (`driver/library.pep`), or `--lib xcframework|swift-package`
+# one for iOS apps (`driver/xcframework.pep`), and `--lto=full` (above `-O0`, when
 # asked for) optimizes the program as one module before the link
 # (`driver/lto.pep`). `--test` builds the test program of the file (or of
 # several files of one folder) instead (`driver/test_main.pep`). A build
@@ -335,7 +336,9 @@ _main(args: String[]): int {
     bool for_apps = library.is_set
         and (library.value() == driver.LibraryKind.Xcframework or library.value() == driver.LibraryKind.SwiftPackage);
     if (for_apps and triple.is_set) {
-        return parser.usage_error("'--target' cannot be used with '--lib xcframework' or '--lib swift-package', which build for every iOS target");
+        return parser.usage_error(
+            "'--target' cannot be used with '--lib xcframework' or '--lib swift-package', which build for every iOS target"
+        );
     }
     if (verify_cache.is_set and no_verify_cache.is_set) {
         return parser.usage_error("'--verify-cache' cannot be used with '--no-verify-cache'");
@@ -503,7 +506,9 @@ _main(args: String[]): int {
         }
         var named = out.file_stem();
         if (!named.is_value() or !driver.is_module_name(named.value())) {
-            _report($"'{out}' does not name a Swift module: a library for iOS apps is named for its output, which takes letters, digits and '_' (pass '-o Name.xcframework')");
+            _report(
+                $"'{out}' does not name a Swift module: a library for iOS apps is named for its output, which takes letters, digits and '_' (pass '-o Name.xcframework')"
+            );
             return 1;
         }
         var built = driver.build_xcframework(

@@ -5,8 +5,10 @@ it uses everywhere else: `--target` picks the platform, and the result is
 ordinary machine code for an iPhone, an iPad, the iOS simulator, or an
 Android phone. An app calls the Pepper code through C, as any C library is
 called: mark the functions `[Export]`, build a library with `--lib static`
-(see [Calling Pepper from C](c-interop.md#calling-pepper-from-c)), and call
-it from Swift directly, or from Kotlin and Java through JNI.
+(see [Calling Pepper from C](c-interop.md#calling-pepper-from-c)), or on iOS
+an `.xcframework` or a Swift package (`--lib xcframework`, `--lib
+swift-package`), and call it from Swift directly, or from Kotlin and Java
+through JNI.
 
 ## Targets
 
@@ -109,6 +111,57 @@ func pepperGreeting(_ name: String) -> String {
     return String(cString: result)
 }
 ```
+
+## Packaging for Xcode and SwiftPM
+
+`--lib xcframework` builds the library for every iOS target at once, as one
+`.xcframework` Xcode adds as a single dependency: a device slice and a
+simulator slice holding both simulator architectures, each with the header
+and a module map, so Swift imports it by name with no bridging header.
+`--lib swift-package` puts it in a Swift package. Neither needs Xcode or an
+SDK: the compiler builds each static library and writes the rest itself.
+
+```sh
+pepper build --lib xcframework greeter.pep -o Greeter.xcframework
+pepper build --lib swift-package greeter.pep -o Greeter
+```
+
+The name comes from the output (`Greeter`): the module (`import Greeter`),
+the library (`libGreeter.a`) and its header (`Greeter.h`). The second
+writes:
+
+```text
+Greeter/
+  Package.swift
+  Greeter.xcframework/
+    Info.plist
+    ios-arm64/                    libGreeter.a, Headers/Greeter.h, Headers/module.modulemap
+    ios-arm64_x86_64-simulator/   the same, its libGreeter.a holding arm64 and x86_64
+```
+
+In Xcode, drag `Greeter.xcframework` into the target's *Frameworks,
+Libraries, and Embedded Content* (*Do Not Embed*: it is static), or add the
+package with *Add Package Dependencies…* › *Add Local…*. A package depends
+on it by path:
+
+```swift
+dependencies: [.package(path: "../Greeter")],
+targets: [
+    .target(name: "App", dependencies: [.product(name: "Greeter", package: "Greeter")]),
+]
+```
+
+```swift
+import Greeter
+
+let result = "iOS".withCString { greet($0, strlen($0)) }!
+defer { pepper_string_free(result) }
+print(String(cString: result))
+```
+
+The slices are built for iOS 15 and later. A library that links others
+(`[Link]`, `-l`) names them in its header, as `--lib static` does; the app
+links them itself.
 
 ## Calling Pepper from Kotlin or Java
 
@@ -247,7 +300,10 @@ same Pepper library, [`greeter.pep`](../../examples/mobile/greeter.pep):
 
 - `ios/`: a SwiftUI app (`PepperDemo.swift`), and `build.sh`, which builds
   it with `swiftc` for the simulator and for devices, installs it in a
-  booted simulator, launches it and checks its output.
+  booted simulator, launches it and checks its output; and `package/`, a
+  Swift package whose tests `import Greeter` from the package `--lib
+  swift-package` writes, which `package.sh` builds and runs in the
+  simulator with `xcodebuild test`.
 - `android/`: an activity in Java with the JNI functions in `jni.c`, and
   `build.sh`, which builds the APK with the Android SDK's own tools
   (`javac`, `d8`, `aapt2`, `apksigner`; Gradle is not needed), installs it
@@ -256,8 +312,8 @@ same Pepper library, [`greeter.pep`](../../examples/mobile/greeter.pep):
 `scripts/mobile-test.sh` runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
-(`adb shell`), then builds and runs the two apps. On iOS it also runs
-`scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
+(`adb shell`), then builds and runs the two apps and the Swift package's
+tests. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to `localhost` and `127.0.0.1`, checks that ALPN chose
 `http/1.1`, sends `GET /`, checks that a connector without the authority is
@@ -294,7 +350,8 @@ whenever the version the script pins has not been published.
   SecIdentity and Network.framework).
 - **Generated bindings**: the JNI layer and the Swift wrappers are written
   by hand; a generator could write them from the header.
-- **Packaging**: an `.xcframework` holding the device and simulator
-  libraries, a Swift package, and an Android library (`.aar`).
+- **Packaging**: an Android library (`.aar`), `pep.toml` keys for
+  `--lib xcframework`, and Mac Catalyst and macOS slices in the
+  `.xcframework`.
 - **Other targets**: 32-bit Android (`armeabi-v7a`, `x86`), Mac Catalyst,
   tvOS, watchOS and visionOS.

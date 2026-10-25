@@ -60,12 +60,7 @@ _slices(): _Slice[] {
 ## @param package whether to write a Swift package around the `.xcframework`
 ## @returns nothing, or why it cannot be built
 export build_xcframework(
-    compiler: Path,
-    arguments: String[],
-    output: Path,
-    name: String,
-    build: Path,
-    package: bool
+    compiler: Path, arguments: String[], output: Path, name: String, build: Path, package: bool
 ): Result<void, String> {
     var passed = Array<String>();
     for (var i in 1..arguments.count) {
@@ -79,7 +74,16 @@ export build_xcframework(
                 .Command(compiler.to_string())
                 .arguments(passed)
                 .arguments(
-                    ["--lib", "static", "--target", triple, "-o", _archive(build, triple, name).to_string(), "--build", folder.to_string()]
+                    [
+                        "--lib",
+                        "static",
+                        "--target",
+                        triple,
+                        "-o",
+                        _archive(build, triple, name).to_string(),
+                        "--build",
+                        folder.to_string()
+                    ]
                 )
                 .stdout(process.Stream.Inherit)
                 .stderr(process.Stream.Inherit)
@@ -132,8 +136,7 @@ export build_xcframework(
                 return Result<void, String>.err($"cannot copy {header}: {copied.error().message}");
             }
             written = _write_text(
-                headers.join(Path("module.modulemap")),
-                $"module {name} {{
+                headers.join(Path("module.modulemap")), $"module {name} {{
     header \"{name}.h\"
     export *
 }}
@@ -265,4 +268,3 @@ _write_text(path: Path, content: String): Result<void, String> {
     }
     return Result<void, String>.ok();
 }
-
