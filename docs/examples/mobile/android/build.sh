@@ -74,7 +74,7 @@ until "$adb" -s "$serial" logcat -d -s PepperDemo:I > "$out/log.txt" && grep -q 
   waited=$((waited + 1))
   if [ "$waited" -ge 60 ]; then
     echo "the app did not log '$expected'; the log:"
-    "$adb" -s "$serial" logcat -d | tail -60
+    "$adb" -s "$serial" logcat -d | grep -iE "pepper|AndroidRuntime|FATAL|linker|UnsatisfiedLink|DEBUG" | tail -60 || true
     "$adb" -s "$serial" uninstall dev.pepper.demo || true
     exit 1
   fi

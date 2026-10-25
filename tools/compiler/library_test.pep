@@ -158,7 +158,8 @@ link_folders_are_relative_to_their_file() {
     var program = link.load_program(named, setup).value();
     var module = sema.merge(program).value();
     var (libraries, dirs) = driver.link_inputs(module, program);
-    expect_equal(libraries, ["probe"]);
+    expect_equal(libraries.count, 1 as ulong);
+    expect_equal(libraries[0], "probe");
     expect_equal(dirs.count, 1 as ulong);
     expect_equal(dirs[0].to_string(), folder.path.join(Path("vendor/lib")).to_string());
 }
