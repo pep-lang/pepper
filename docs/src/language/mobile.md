@@ -342,6 +342,22 @@ differences:
 the library with `-g` and the app in its debug configuration, and set
 breakpoints in the `.pep` files by path.
 
+## Testing
+
+`pepper test --target` builds a package's `[Test]` functions for the
+simulator or Android and runs them there, reporting as on the desktop (see
+[Testing on iOS and Android](../tools/pep-test.md#testing-on-ios-and-android)):
+
+```sh
+pepper test --target aarch64-apple-ios-simulator   # in the booted simulator
+pepper test --target x86_64-linux-android          # on the running emulator
+```
+
+An Android test runs as an `adb shell` program, which SELinux allows less
+than an app: it cannot make a Unix socket file or a hard link anywhere.
+Mark a test that needs them `[Target(!OS(Android))]`, or leave the part
+that does out, as the runtime's own tests do.
+
 ## The prototype apps
 
 `docs/examples/mobile/` holds a small app for each platform that calls the
@@ -362,7 +378,8 @@ same Pepper library, [`greeter.pep`](../../examples/mobile/greeter.pep):
   `libgreeter.so`, which the APK carries beside it.
 
 `scripts/mobile-test.sh` runs both on a Mac with Xcode and the Android SDK:
-it builds every documentation example for the iOS simulator and for Android,
+it runs the runtime's `[Test]`s in the simulator and in the emulator with
+`pep-test --target`, builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
 (`adb shell`), then builds and runs the two apps, the Swift package's
 tests, and the Android app again on the `.aar`. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
@@ -377,6 +394,9 @@ emulator's `localhost`, with the same opt-in public fetch. The Android run
 also works on Linux, for the host's ABI (x86_64 there), as CI runs it:
 `scripts/ci-provision-android.sh` sets up an emulator on a
 GitHub-hosted Linux runner, since Apple silicon runners cannot run one.
+CI's `mobile` workflow (`.github/workflows/mobile.yml`) runs the script on
+both, with the commit's own compiler (see
+[Testing the runtime and the compiler](../contributing/tests.md#on-ios-and-android)).
 
 ```sh
 bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all

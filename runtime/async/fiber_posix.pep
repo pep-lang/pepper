@@ -39,8 +39,11 @@ const _FIBER_READ_WRITE = 3;
 # MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, and _SC_PAGESIZE.
 [Target(OS(Linux))]
 const _FIBER_MAP_FLAGS = 16418;
-[Target(OS(Linux))]
+[Target(OS(Linux) && !OS(Android))]
 const _FIBER_PAGE_SIZE_NAME = 30;
+# Bionic numbers sysconf's names its own way.
+[Target(OS(Android))]
+const _FIBER_PAGE_SIZE_NAME = 39;
 
 # MAP_PRIVATE | MAP_ANON (macOS has no MAP_NORESERVE; it commits lazily
 # anyway), and _SC_PAGESIZE.

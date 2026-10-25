@@ -154,18 +154,19 @@ _io_posix_in_progress(code: ErrorCode): bool { return code == 36; }
 [Target(OS(Linux) || OS(Mac))]
 _io_sys_code_unexpected_end(): ErrorCode { return 5; }
 
-# getaddrinfo's EAI_NONAME and EAI_NODATA: the name has no address.
-[Target(OS(Linux))]
+# getaddrinfo's EAI_NONAME and EAI_NODATA: the name has no address. Bionic
+# numbers them as macOS does.
+[Target(OS(Linux) && !OS(Android))]
 _io_eai_no_address(code: int): bool { return code == -2 || code == -5; }
 
-[Target(OS(Mac))]
+[Target(OS(Mac) || OS(Android))]
 _io_eai_no_address(code: int): bool { return code == 8 || code == 7; }
 
 # EAI_SYSTEM: the reason is in errno.
-[Target(OS(Linux))]
+[Target(OS(Linux) && !OS(Android))]
 _io_eai_system(code: int): bool { return code == -11; }
 
-[Target(OS(Mac))]
+[Target(OS(Mac) || OS(Android))]
 _io_eai_system(code: int): bool { return code == 11; }
 
 # The socket call's result: -1 means failure with the reason in errno.

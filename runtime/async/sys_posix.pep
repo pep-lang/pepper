@@ -43,6 +43,15 @@ extern void free(void* pointer);
 extern int nanosleep(void* request, void* remaining);
 [Target(OS(Linux) || OS(Mac))]
 extern long sysconf(int name);
+# sysconf's names: glibc's, and bionic's, which numbers them its own way.
+[Target(OS(Linux) && !OS(Android))]
+const _SC_NPROCESSORS_CONF = 83;
+[Target(OS(Linux) && !OS(Android))]
+const _SC_NPROCESSORS_ONLN = 84;
+[Target(OS(Android))]
+const _SC_NPROCESSORS_CONF = 96;
+[Target(OS(Android))]
+const _SC_NPROCESSORS_ONLN = 97;
 [Target(OS(Mac))]
 extern int sysctlbyname(char* name, void* value, void* size, void* new_value, ulong new_size);
 [Target(OS(Linux) || OS(Mac))]
@@ -278,7 +287,7 @@ _async_monotonic_milliseconds(clock: int): ulong {
 # way Go and the JVM cap theirs: a quota of 1.5 processors counts as 2.
 [Target(OS(Linux))]
 _async_sys_logical_cpus(): ulong {
-    var count = sysconf(84);  # _SC_NPROCESSORS_ONLN
+    var count = sysconf(_SC_NPROCESSORS_ONLN);
     if (count < 1) {
         return 0;
     }
@@ -384,7 +393,7 @@ export _async_sys_cgroup_directories(controller: String): String[] {
 # topology of every configured CPU (offline CPUs have none).
 [Target(OS(Linux))]
 _async_sys_physical_cpus(): ulong {
-    var configured = sysconf(83);  # _SC_NPROCESSORS_CONF
+    var configured = sysconf(_SC_NPROCESSORS_CONF);
     var cores = HashSet<String>();
     var cpu: long = 0;
     while (cpu < configured) {

@@ -191,7 +191,7 @@ _os_sys_hostname(): String {
 # unlimited), as the JVM reads them.
 [Target(OS(Linux))]
 _os_sys_total_memory(): ulong {
-    var pages = sysconf(85);
+    var pages = sysconf(_SC_PHYS_PAGES);
     ulong bytes = pages < 1 ? 0 : (pages as ulong) * _os_sys_page_size();
     for (var directory in async._async_sys_cgroup_directories("memory")) {
         var limit = io.File.read_to_string(io.Path(directory + "/memory.max"));
@@ -242,10 +242,20 @@ _os_sys_max_rss(): ulong {
     return peak;
 }
 
-# _SC_PAGESIZE: 30 on Linux, 29 on macOS.
+# sysconf's names: glibc's, and bionic's, which numbers them its own way.
+[Target(OS(Linux) && !OS(Android))]
+const _SC_PAGESIZE = 30;
+[Target(OS(Linux) && !OS(Android))]
+const _SC_PHYS_PAGES = 85;
+[Target(OS(Android))]
+const _SC_PAGESIZE = 39;
+[Target(OS(Android))]
+const _SC_PHYS_PAGES = 98;
+
+# _SC_PAGESIZE: 30 on Linux (39 on Android), 29 on macOS.
 [Target(OS(Linux))]
 _os_sys_page_size(): ulong {
-    return sysconf(30) as ulong;
+    return sysconf(_SC_PAGESIZE) as ulong;
 }
 
 [Target(OS(Mac))]

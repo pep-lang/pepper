@@ -9,6 +9,11 @@ import process;
 
 [Test]
 run_reports_a_missing_program() {
+    # Android's posix_spawnp reports no failed exec (#251).
+    [Target(OS(Android))]
+    {
+        return;
+    }
     var missing = process.Command("no-such-program-for-pepper").run();
     expect_true(missing.is_err());
     expect_true(missing.error().is_not_found());

@@ -6,6 +6,7 @@
 #     pep-test -f parse src             # only tests whose name contains "parse"
 #     pep-test --list src               # list them without running them
 #     pep-test --shard 2/4 src          # the second of four parts of them
+#     pep-test --target x86_64-linux-android src   # on an Android emulator
 #
 # The files holding `[Test]` functions in one folder are built together
 # with `pep-build --test` into one test program, which lists their tests
@@ -15,6 +16,10 @@
 # does not build is reported with the compiler's errors, and the other
 # folders' tests still run. The exit status is 0 only when every program
 # builds and every test passes.
+#
+# With `--target`, the programs build for that target and run where it
+# runs: in a booted iOS simulator through `xcrun simctl spawn`, or on an
+# Android emulator or device through `adb push` and `adb shell`.
 #
 # Build it from the repository root, next to the compiler:
 #
@@ -56,6 +61,11 @@ main(args: String[]): int {
         "fail a test still running after this many seconds; 0 for no limit",
         value_name = "SECONDS",
         default_value = DEFAULT_TIMEOUT
+    );
+    var target = parser.option(
+        "target",
+        help = "build the tests for this target triple and run them there: in the booted iOS simulator, or on an Android emulator or device through adb",
+        value_name = "TRIPLE"
     );
     var shard = parser.option(
         "shard",
@@ -146,6 +156,12 @@ main(args: String[]): int {
     if (options.jobs == 0) {
         options.jobs = 1;
     }
+    if (target.value_or("") != "") {
+        var chosen = choose_runner(target.value(), options);
+        if (chosen.is_value()) {
+            return usage_error(parser, chosen.value());
+        }
+    }
     if (shard.value_or("") != "" and !parse_shard(shard.value(), options)) {
         return usage_error(parser, $"'--shard' must be I/N with 1 <= I <= N, such as 2/4, not '{shard.value()}'");
     }
@@ -192,7 +208,131 @@ main(args: String[]): int {
     }
     var status = build_and_run(options, list.is_set, files, compiler.value().to_string(), scratch);
     Directory.remove_all(scratch);
+    if (options.runner == Runner.Android) {
+        process.Command(options.tool).arguments(["shell", $"rm -rf {options.device}"]).run();
+    }
     return status;
+}
+
+# Where the test programs run.
+enum Runner {
+    # Here, as any program.
+    Host,
+    # In a booted iOS simulator, through `xcrun simctl spawn`, which runs
+    # the program from this Mac's file system.
+    IosSimulator,
+    # On an Android emulator or device, through adb: each program is
+    # pushed to a folder there first.
+    Android,
+}
+
+# Sets up `options` to build for `triple` and run the tests there,
+# returning why it cannot, if it cannot.
+choose_runner(triple: String, options: Options): String? {
+    options.build_flags.append_all(["--target", triple]);
+    if (triple.contains("-android")) {
+        # adb runs on the device ANDROID_SERIAL names, else the only one.
+        var adb = process.find_executable("adb");
+        var home = os.environment("ANDROID_HOME");
+        if (adb.is_empty() and home.is_value()) {
+            var beside = Path(home.value()).join("platform-tools").join($"adb{executable_suffix()}");
+            if (beside.is_file()) {
+                adb = Optional<Path>.Value(beside);
+            }
+        }
+        if (adb.is_empty()) {
+            return Optional<String>.Value(
+                "'--target' for Android runs the tests through adb, which is neither on the PATH nor in $ANDROID_HOME/platform-tools"
+            );
+        }
+        options.runner = Runner.Android;
+        options.tool = adb.value().to_string();
+        options.device = $"/data/local/tmp/pep-test-{process.id()}";
+    } else if (triple.contains("-apple-ios")) {
+        if (!triple.ends_with("-simulator") and !triple.starts_with("x86_64-")) {
+            return Optional<String>.Value(
+                $"'--target' runs iOS tests in the simulator, so it takes a simulator triple such as 'aarch64-apple-ios-simulator', not '{triple}'"
+            );
+        }
+        options.runner = Runner.IosSimulator;
+        options.tool = "xcrun";
+        options.device = os.environment("PEPPER_IOS_SIMULATOR").value_or("booted");
+    }
+    return Optional<String>.Empty;
+}
+
+# The command that runs `program` with `arguments` where the tests run,
+# with `PEPPER_BACKTRACE=0` (unless `PEPPER_BACKTRACE` is set) and, unless
+# `temp` is empty, the temporary folder `temp`. On Android `temp` is the
+# name of a folder that the command makes in the device's folder and
+# removes after.
+test_command(options: Options, program: String, arguments: Array<String>, temp: String): process.Command {
+    var folder = options.runner == Runner.Android and !temp.is_empty ? $"{options.device}/{temp}" : temp;
+    var environment = Array<(String, String)>();
+    if (!folder.is_empty) {
+        # `TMPDIR` on POSIX; Windows' GetTempPathW reads `TMP`, then `TEMP`.
+        for (var name in ["TMPDIR", "TMP", "TEMP"]) {
+            environment.append((name, folder));
+        }
+    }
+    # A failing test's panic message is the report; its backtrace is
+    # noise unless asked for. Passed on, since a device does not inherit
+    # this environment.
+    environment.append(("PEPPER_BACKTRACE", os.environment("PEPPER_BACKTRACE").value_or("0")));
+    if (options.runner == Runner.Android) {
+        # One shell command line, which ends with the program's status.
+        var line = $"cd {options.device} &&";
+        for (var (name, value) in environment) {
+            line += $" {name}={shell_quote(value)}";
+        }
+        line += $" ./{Path(program).file_name().value()}";
+        for (var argument in arguments) {
+            line += $" {shell_quote(argument)}";
+        }
+        if (!folder.is_empty) {
+            line = $"mkdir -p {folder} && {line}; status=$?; rm -rf {folder}; exit $status";
+        }
+        return process.Command(options.tool).arguments(["shell", line]);
+    }
+    var command = options.runner == Runner.IosSimulator ?
+        process.Command(options.tool).arguments(["simctl", "spawn", options.device, program]) :
+        process.Command(program);
+    command.arguments(arguments);
+    for (var (name, value) in environment) {
+        # simctl hands the program the variables named SIMCTL_CHILD_<NAME>.
+        command.environment(options.runner == Runner.IosSimulator ? $"SIMCTL_CHILD_{name}" : name, value);
+    }
+    return command;
+}
+
+# `text` as one word of a POSIX shell's command line.
+shell_quote(text: String): String {
+    return "'" + text.replace("'", "'\\''") + "'";
+}
+
+# Pushes `program` into the Android device's folder, and `folder`, its
+# test files' folder, to the same path below it, so a test finds the data
+# files beside it by the path it uses here. Returns why it could not, if
+# it could not. A folder that is not below the current one stays here.
+push_program(options: Options, program: String, folder: String): String? {
+    var pushes = [["shell", $"mkdir -p {options.device}"], ["push", program, $"{options.device}/"]];
+    var remote = folder.replace("\\", "/");
+    if (!remote.is_empty and !remote.starts_with("/") and !remote.contains(":") and !remote.split("/").contains("..")) {
+        var parent = Path(remote).parent();
+        var into = parent.is_value() ? $"{options.device}/{parent.value().to_string()}" : options.device;
+        pushes.append_all([["shell", $"mkdir -p {into}"], ["push", folder, $"{into}/"]]);
+    }
+    for (var arguments in pushes) {
+        var ran = process.Command(options.tool).arguments(arguments).run();
+        if (ran.is_err()) {
+            return Optional<String>.Value($"cannot run adb: {ran.error().message}");
+        }
+        if (!ran.value().status.success()) {
+            var said = (ran.value().stdout + ran.value().stderr).trim();
+            return Optional<String>.Value($"adb {arguments[0]} failed: {said}");
+        }
+    }
+    return Optional<String>.Empty;
 }
 
 # The name and folder of each workspace member `--all` (`all`) or `-p`
@@ -239,6 +379,12 @@ struct Options {
     # leaves `shard_index` (I - 1) when divided by `shard_count` (N).
     var shard_index: ulong = 0;
     var shard_count: ulong = 1;
+    # From `--target`: where the tests run, the program that runs them
+    # there (adb or xcrun), and the simulator, or the folder on the
+    # Android device, that they run in.
+    var runner: Runner = Runner.Host;
+    var tool: String = "";
+    var device: String = "";
 
     construct() {
         this.filters = Array<String>();
@@ -341,7 +487,7 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
             File.stderr().write_all($"error: cannot build the tests of {what}:\n{builds[index]}");
             broken += 1;
         } else {
-            var listed = list_tests(programs[index], tests);
+            var listed = list_tests(options, programs[index], folder_of(groups[index][0]), tests);
             if (listed.is_value()) {
                 File.stderr().write_all($"error: cannot list the tests of {what}: {listed.value()}\n");
                 broken += 1;
@@ -378,7 +524,7 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
     }
     in_parallel(selected.count, options.jobs, (i: ulong) => {
         var start = os.Instant.now();
-        var outcome = run_test(selected[i], options.timeout, scratch.join($"{i}"));
+        var outcome = run_test(options, selected[i], scratch.join($"{i}"));
         outcomes[i] = outcome;
         report_test(display_name(selected[i], qualify), outcome, start.elapsed(), options.timeout);
     });
@@ -532,8 +678,14 @@ build(compiler: String, files: Array<String>, program: String, options: Options)
 
 # Adds the tests `program` lists to `tests`, returning why it could not
 # list them, if it could not.
-list_tests(program: String, tests: Array<Test>): String? {
-    var ran = process.Command(program).argument("--list").run();
+list_tests(options: Options, program: String, folder: String, tests: Array<Test>): String? {
+    if (options.runner == Runner.Android) {
+        var pushed = push_program(options, program, folder);
+        if (pushed.is_value()) {
+            return pushed;
+        }
+    }
+    var ran = test_command(options, program, ["--list"], "").run();
     if (ran.is_err()) {
         return Optional<String>.Value(ran.error().message);
     }
@@ -568,36 +720,30 @@ list_tests(program: String, tests: Array<Test>): String? {
 # temporary folder is `temp`, removed when the test ends, so what a test
 # that panics or times out (or a child of its that outlives it) leaves
 # there is removed too, rather than leaked into the system's. Its
-# name is short: macOS caps a Unix socket's path at 103 bytes.
-run_test(test: Test, timeout: ulong, temp: Path): Outcome {
+# name is short: macOS caps a Unix socket's path at 103 bytes. On Android
+# the test's temporary folder is one of the same name on the device.
+run_test(options: Options, test: Test, temp: Path): Outcome {
     var outcome = Outcome();
     var made = Directory.create_all(temp);
     if (made.is_err()) {
         outcome.reason = $"cannot create '{temp.to_string()}': {made.error().message}";
         return outcome;
     }
-    outcome = run_test_in(test, timeout, temp);
+    outcome = run_test_in(options, test, temp);
     Directory.remove_all(temp);
     return outcome;
 }
 
 # `run_test`, once `temp` is made.
-run_test_in(test: Test, timeout: ulong, temp: Path): Outcome {
-    var command = process.Command(test.program).argument("--run").argument($"{test.file}::{test.name}");
-    # `TMPDIR` on POSIX; Windows' GetTempPathW reads `TMP`, then `TEMP`.
-    for (var name in ["TMPDIR", "TMP", "TEMP"]) {
-        command.environment(name, temp.to_string());
-    }
+run_test_in(options: Options, test: Test, temp: Path): Outcome {
+    var arguments = ["--run", $"{test.file}::{test.name}"];
+    var timeout = options.timeout;
     if (timeout > 0) {
-        command.argument("--timeout").argument($"{timeout}");
+        arguments.append_all(["--timeout", $"{timeout}"]);
     }
-    # A failing test's panic message is the report; its backtrace is
-    # noise unless asked for.
-    if (os.environment("PEPPER_BACKTRACE").is_empty()) {
-        command.environment("PEPPER_BACKTRACE", "0");
-    }
+    var folder = options.runner == Runner.Android ? temp.file_name().value() : temp.to_string();
     var outcome = Outcome();
-    var ran = command.run();
+    var ran = test_command(options, test.program, arguments, folder).run();
     if (ran.is_err()) {
         outcome.reason = $"cannot run the test program: {ran.error().message}";
         return outcome;

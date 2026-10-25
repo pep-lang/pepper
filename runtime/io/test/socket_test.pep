@@ -298,8 +298,14 @@ tcp_between_threads() {
     expect_equal(errors, 0);  # in order
 }
 
+# Android's SELinux refuses socket files to an `adb shell` program, which
+# is how pep-test runs the tests there; so do the unix tests below.
 [Test]
 unix_socket_listener_and_stream() {
+    [Target(OS(Android))]
+    {
+        return;
+    }
     # A short folder name: a socket path must fit sockaddr_un (104 bytes on
     # macOS, 108 elsewhere), and the temporary folder's own path is long on
     # macOS and Windows.
@@ -341,7 +347,7 @@ unix_socket_listener_and_stream() {
 
 [Test]
 unix_datagrams_by_path_pair_and_connect() {
-    [Target(OS(Linux) || OS(Mac))]
+    [Target((OS(Linux) || OS(Mac)) && !OS(Android))]
     {
         var folder = TempFolder("udgram");
         var path = folder.path.join("d.sock");
@@ -412,6 +418,10 @@ echo_socket(): io.Path {
 # An echo server accepting on every task worker, and 16 client tasks.
 [Test]
 unix_socket_echo_server_on_every_worker() {
+    [Target(OS(Android))]
+    {
+        return;
+    }
     io.File.remove(echo_socket());
     async.run(
         () => {
@@ -565,17 +575,20 @@ socket_timeouts_on_udp_unix_and_connect() {
     other.send_to("hi".bytes(), socket.local_address().value());
     expect_equal(socket.receive(buffer, 16).value(), 2);  # still open
 
-    var folder = TempFolder("timeouts");
-    var path = folder.path.join("t.sock");
-    var listener = io.UnixListener.bind(path).value();
-    var unix_client = io.UnixStream.connect(path).value();
-    var unix_server = listener.accept().value();
-    expect_true(unix_client.set_read_timeout(50).is_ok());
-    expect_true(unix_client.read(buffer, 16).error().is_timed_out());
-    unix_server.write_all("ok");
-    expect_equal(unix_client.read(buffer, 16).value(), 2);
-    expect_true(listener.close().is_ok());
-    io.File.remove(path);
+    [Target(!OS(Android))]
+    {
+        var folder = TempFolder("timeouts");
+        var path = folder.path.join("t.sock");
+        var listener = io.UnixListener.bind(path).value();
+        var unix_client = io.UnixStream.connect(path).value();
+        var unix_server = listener.accept().value();
+        expect_true(unix_client.set_read_timeout(50).is_ok());
+        expect_true(unix_client.read(buffer, 16).error().is_timed_out());
+        unix_server.write_all("ok");
+        expect_equal(unix_client.read(buffer, 16).value(), 2);
+        expect_true(listener.close().is_ok());
+        io.File.remove(path);
+    }
 
     # A connection that is accepted in time; the timeout does not stay.
     var tcp = io.TcpListener.bind(loopback(0)).value();

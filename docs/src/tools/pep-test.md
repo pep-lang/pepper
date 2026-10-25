@@ -41,6 +41,7 @@ pep-test [options] [path]...
 | `-f <text>`, `--filter <text>` | Run only the tests whose name contains the text; repeated, any of them | every test |
 | `-l`, `--list` | List the tests instead of running them | |
 | `-j <count>`, `--jobs <count>` | How many tests run at once | one per logical CPU |
+| `--target <triple>` | Builds the test programs for this target and runs the tests there: in the iOS simulator for an iOS simulator triple, on an Android emulator or device for an Android one (see [Testing on iOS and Android](#testing-on-ios-and-android)) | this machine |
 | `--shard <i>/<n>` | Run only the `i`th of `n` parts of the tests (`1` to `n`), so the `n` runs `1/n` to `n/n` run each test once | every test |
 | `-t <seconds>`, `--timeout <seconds>` | Fail a test still running after this long; `0` for no limit | 60 |
 | `-I <dir>`, `--import-path <dir>` | A folder `pep-build` searches for imports; repeatable | |
@@ -114,6 +115,42 @@ backtrace. Each test gets a temporary folder of its own (`TMPDIR`, and
 what a test that panics or times out leaves there, such as a
 [`TempFolder`](../reference/testing-temp_folder.md) whose destructor
 never ran, is removed too.
+
+## Testing on iOS and Android
+
+With `--target`, each test program builds for that target (`pep-build
+--target`, which needs the platform's SDK; see
+[iOS and Android](../language/mobile.md#building)), and every request to
+it, `--list` and each `--run`, goes to where that target runs. The report
+is the same as on this machine.
+
+```bash
+pepper test --target aarch64-apple-ios-simulator src   # on a Mac, in the booted simulator
+pepper test --target x86_64-linux-android src          # on the running emulator
+```
+
+- **iOS simulator** (`aarch64-apple-ios-simulator`, or
+  `x86_64-apple-ios-simulator` on an Intel Mac): each program runs in a
+  booted simulator with `xcrun simctl spawn`, from this Mac's file system,
+  so its temporary folder is the one `pep-test` makes here. The simulator
+  is the one whose UDID `PEPPER_IOS_SIMULATOR` holds, else the booted
+  one (`booted`). Boot it first (`xcrun simctl boot "iPhone 16"`).
+  A device triple (`aarch64-apple-ios`) is a usage error: nothing here can
+  start a program on an iPhone.
+- **Android** (`aarch64-linux-android`, `x86_64-linux-android`): `adb`,
+  from the `PATH` or `$ANDROID_HOME/platform-tools`, pushes each program
+  to a folder of its own under `/data/local/tmp` on the device that
+  `ANDROID_SERIAL` names, or the only one connected, and runs it there
+  with `adb shell`, from that folder. The folder of each program's test
+  files is pushed too, to the same path below it, so a test that reads a
+  data file beside it by a path from the current folder (such as
+  `tls/test/key.pem`, from `runtime/`) finds it. Each test gets a
+  temporary folder there, removed when it ends, and the whole folder is
+  removed at the end. Start the emulator first, and build for its ABI
+  (`x86_64` on an x64 host, `aarch64` on Apple silicon).
+
+A target that is neither runs its programs here, as any program (such as
+`x86_64-apple-darwin` on an Apple silicon Mac).
 
 ## The test program
 
