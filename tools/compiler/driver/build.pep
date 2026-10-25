@@ -357,20 +357,17 @@ _defines(partition: codegen.Partition, objects: Path[]): Result<String, String> 
 
 # Leaves the symbols compilation unit number `k`'s objects, in the cache's
 # `folder`, define in `dir` as `<k>.defines`, for the workers of the
-# compilation units that read it. Returns whether the cache still holds
-# them (`Cache.look_again`).
-_copy_defines(cache: Cache, folder: Path, dir: Path, k: ulong): bool {
+# compilation units that read it. Returns why it could not: the cache no
+# longer holds them (`Cache.look_again`), or the file could not be written.
+_copy_defines(cache: Cache, folder: Path, dir: Path, unit: CompilationUnit, k: ulong): String? {
     var text = cache.look_again(() => {
         var read = File.read_to_string(folder.join(Path("defines")));
         return read.is_ok() ? Optional<String>.Value(read.value()) : Optional<String>.Empty;
     });
     if (!text.is_value()) {
-        return false;
+        return Optional<String>.Value(_cache_lost(unit));
     }
-    var partial = worker_file(dir, k, $"defines.{process.id()}");
-    File.write_text(partial, text.value());
-    File.rename(partial, worker_file(dir, k, "defines"));
-    return true;
+    return mark(dir, k, "defines", text.value());
 }
 
 # The symbols the objects of compilation unit number `k` define (`_defines`),
@@ -713,7 +710,9 @@ _check_in_workers(
             if (!key.is_value()) {
                 return false;
             }
-            return _copy_defines(cache, cache.objects($"+{units[k].name}", key.value()), dir, k);
+            # One that cannot be copied is checked again, whose worker
+            # reports why.
+            return !_copy_defines(cache, cache.objects($"+{units[k].name}", key.value()), dir, units[k], k).is_value();
         }
     );
     if (checked.is_ok()) {
@@ -826,8 +825,9 @@ _work_on(
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
     }
-    if (!_copy_defines(cache, compiled.value(), dir, k)) {
-        return Optional<String>.Value(_cache_lost(unit));
+    var copied = _copy_defines(cache, compiled.value(), dir, unit, k);
+    if (copied.is_value()) {
+        return copied;
     }
     var t7 = os.Instant.now();
     stages.append(

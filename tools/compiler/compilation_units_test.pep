@@ -3,6 +3,7 @@
 # with the cache checks it) or whole (with no cache). Each is built both ways
 # and must run.
 
+import [Diagnostic] from compiler.diagnostic;
 import compiler.driver;
 import compiler.incremental;
 import [Directory, File, Path] from io;
@@ -390,4 +391,73 @@ keeps_a_number_extension_a_unit_below_lowered() {
             ("main.pep", "import \"ranks\";\nmain(): int {\n    return ('a' as char).doubled() - 194;\n}\n")
         ]
     );
+}
+
+# A record the build hands its compilation unit workers that cannot be
+# written (on a full disk) stops the build, naming the file: left out or cut
+# short, it read later as "no record of compilation unit" or records that "do
+# not merge" (#223). Here every compilation unit is a hit, so no worker starts,
+# and the workers' folder is missing, so no write succeeds.
+[Test]
+a_worker_record_that_cannot_be_written_stops_the_build() {
+    var folder = TempFolder("unwritable_worker_record");
+    var root = folder.path;
+    Directory.create_all(root.join(Path("lib")));
+    File.write_text(root.join(Path("lib")).join(Path("a.pep")), "export one(): int {\n    return 1;\n}\n");
+    File.write_text(
+        root.join(Path("lib")).join(Path("b.pep")), "import \"a\";\nexport two(): int {\n    return one() + 1;\n}\n"
+    );
+    File.write_text(root.join(Path("main.pep")), "import \"lib/b\";\nmain(): int {\n    return two() - 2;\n}\n");
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.import_dirs.append(root);
+    var program = link.load_program(root.join(Path("main.pep")), setup).value();
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var checked = incremental.check_compilation_units(
+        program,
+        incremental.compilation_units(program, "base"),
+        cache,
+        Optional<incremental.Reused>.Empty,
+        program.sources(),
+        Array<Diagnostic>(),
+        Array<String>(),
+        incremental.Clock(false),
+        false,
+        false
+    );
+    expect_true(checked.is_ok());
+    var units = incremental.compilation_units(program, "base");
+    expect_true(units.count == 3);
+    var missing = root.join(Path("missing"));
+    var parallel = incremental.check_in_workers(
+        program,
+        units,
+        units.count - 1,
+        cache,
+        2,
+        HashMap<ulong, (u8[], String, String)>(),
+        missing,
+        Array<String>(),
+        Optional<process.Child>.Empty,
+        false,
+        (k) => true
+    );
+    expect_true(parallel.is_err());
+    expect_true(parallel.error().starts_with($"cannot write {incremental.worker_file(missing, 0, "rec")}: "));
+    # A worker's side: checking the first compilation unit (which reads none)
+    # and leaving its record, then its marks.
+    var worked = incremental.check_for_worker(
+        program,
+        units[0],
+        HashMap<ulong, u8[]>(),
+        cache,
+        Optional<incremental.Reused>.Empty,
+        program.sources(),
+        missing,
+        0,
+        StringBuilder()
+    );
+    expect_true(worked.is_err());
+    expect_true(worked.error().starts_with($"cannot write {incremental.worker_file(missing, 0, "rec")}: "));
+    expect_true(incremental.mark(missing, 0, "done").is_value());
 }
