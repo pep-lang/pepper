@@ -75,7 +75,8 @@ the package's folder on the import path under that name, so they run with
 
 The files come from the template repository word for word, so a package
 started either way is the same; the template's CI checks that what
-`pepper new mypkg --lib --license Apache-2.0` writes matches it.
+`pepper new mypkg --lib --license Apache-2.0` writes matches it. To
+release and list it, see [Publishing a package](pep-package.md#publishing-a-package).
 
 ## Licenses
 
