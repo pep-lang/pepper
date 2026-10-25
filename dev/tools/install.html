@@ -347,20 +347,28 @@ compiler that builds it, is the build of main that <code>.github/stage0</code> p
 main, so the release may take any version, not only the one main was
 developing:
 <ol>
-<li>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
-version everywhere a tool reads it.</li>
-<li>Tag that merge <code>v0.9.0</code> and push the tag. The workflow checks that the
+<li>
+<p>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
+version everywhere a tool reads it.</p>
+</li>
+<li>
+<p>Tag that merge <code>v0.9.0</code> and push the tag. The workflow checks that the
 commit holds that version, builds it and publishes the release; the
 <code>Docs</code> workflow publishes the docs from the same tag. The VS Code
-extension is released from its own repository, pep-lang/vscode-pepper.</li>
-<li>Once it is published, the workflow opens a pull request that starts
-the next minor version on main (<code>0.10.0-dev</code>), unless main has already
-moved on, and dispatches CI on its branch; a major version is started
-by hand. Merge it once CI passes, as an admin
-(<code>gh pr merge &lt;branch&gt; --squash --admin</code>): a run dispatched by hand
-does not count toward the <code>test</code> check main requires. Until it merges,
-merges to main publish no prerelease, since main holds the released
-version.</li>
+extension is released from its own repository, pep-lang/vscode-pepper.</p>
+</li>
+<li>
+<p>Once it is published, the workflow pushes the branch
+<code>release/start-0.10.0-dev</code>, which starts the next minor version on
+main, unless main has already moved on; a major version is started by
+hand. GitHub Actions may not open pull requests in this repository, so
+the run's summary (and a warning) links to open its pull request; open
+it, and it merges once its CI passes, as any pull request does. Until
+it merges, merges to main publish no prerelease, since main holds the
+released version.</p>
+<pre><code class="language-bash">gh pr create --base main --head release/start-0.10.0-dev --fill
+</code></pre>
+</li>
 </ol>
 </li>
 </ul>
