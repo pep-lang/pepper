@@ -130,6 +130,8 @@ _tls_address(function: extern () => void): __ptr<void> {
 }
 
 # The address of the OpenSSL function `name`; `handle` is unused.
+#
+# @panics when `name` is not in the table
 [Target(OS(Android))]
 _tls_symbol(handle: __ptr<void>, name: String): __ptr<void> {
     return match (name) {
@@ -181,8 +183,16 @@ _tls_symbol(handle: __ptr<void>, name: String): __ptr<void> {
         "TLS_server_method" => _tls_address(TLS_server_method),
         "X509_VERIFY_PARAM_set1_ip_asc" => _tls_address(X509_VERIFY_PARAM_set1_ip_asc),
         "X509_verify_cert_error_string" => _tls_address(X509_verify_cert_error_string),
-        else => __null,
+        else => _tls_android_missing(name),
     };
+}
+
+# A function openssl.pep asks for that the table above lacks: a call
+# through the null it would get would crash far from the cause.
+[Target(OS(Android))]
+_tls_android_missing(name: String): __ptr<void> {
+    panic($"tls: openssl_android.pep does not link the OpenSSL function '{name}'");
+    return __null;
 }
 
 # The library openssl.pep opens to mark OpenSSL as there: any that loads.

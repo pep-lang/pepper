@@ -251,14 +251,20 @@ run_android() {
   if start_tls_server "$tls_dir"; then
     tls_args=("$remote/ca.pem" localhost "$TLS_PORT")
     [ -z "${PEPPER_MOBILE_TLS_URL-}" ] || tls_args+=("$PEPPER_MOBILE_TLS_URL")
-    if ! "$compiler" --target "$triple" "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check"       --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
+    if ! "$compiler" --target "$triple" "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check" \
+      --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
       report "android tls_check (build)"
       sed 's/^/    /' "$dir/tls_check.log" | head -20
     else
       "$adb" -s "$serial" reverse "tcp:$TLS_PORT" "tcp:$TLS_PORT" > /dev/null
       "$adb" -s "$serial" push "$tls_dir/ca.pem" "$dir/tls_check" "$remote/" < /dev/null > /dev/null
+      # adb shell runs one command line: each argument goes in single quotes
+      # (none holds one), so a URL's `&` or `?` reaches the program as is.
+      local quoted="" arg
+      for arg in "${tls_args[@]}"; do quoted="$quoted '$arg'"; done
       # Bounded, as on iOS.
-      perl -e 'alarm shift; exec @ARGV' 300 "$adb" -s "$serial" shell         "chmod 755 $remote/tls_check && $remote/tls_check ${tls_args[*]}" < /dev/null || report "android tls_check (run)"
+      perl -e 'alarm shift; exec @ARGV' 300 "$adb" -s "$serial" shell \
+        "chmod 755 $remote/tls_check && $remote/tls_check$quoted" < /dev/null || report "android tls_check (run)"
       "$adb" -s "$serial" reverse --remove "tcp:$TLS_PORT" > /dev/null 2>&1 || true
     fi
   else

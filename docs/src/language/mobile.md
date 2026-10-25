@@ -194,7 +194,7 @@ differences:
   (`/data/misc/user/0/cacerts-added`) where the process may read them, and
   any added with `add_root_certificate`. Unlike an app's Java networking,
   this ignores the app's network security configuration. OpenSSL adds
-  about 2 to 3 MB to a stripped binary. An app linking a Pepper static
+  about 4 MB to a stripped binary. An app linking a Pepper static
   library adds the libraries its header names (`-lssl -lcrypto`) from that
   folder: `-L <toolchain>/runtime/tls/android/aarch64-linux-android`.
 - **Files.** An app reads and writes inside its own container: pass the

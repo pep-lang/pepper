@@ -208,7 +208,9 @@ _resolve_links(lines: String, program: link.Program): (String[], Path[]) {
             # The runtime's files are named with Windows' `\\?\` prefix, which
             # the linker's `-L` does not read.
             var name = program.files[index.value()].name;
-            if (name.starts_with("\\\\?\\")) {
+            if (name.starts_with("\\\\?\\UNC\\")) {
+                name = "\\" + name.substr_bytes(7, name.size - 7);
+            } else if (name.starts_with("\\\\?\\")) {
                 name = name.substr_bytes(4, name.size - 4);
             }
             var folder = Path(name).parent();
