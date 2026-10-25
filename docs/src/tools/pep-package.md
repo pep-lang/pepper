@@ -54,6 +54,36 @@ lacks, so a fresh clone of a project builds with `pepper build` alone.
 Every package is downloaded once per machine, into a
 [download cache](#the-download-cache) that all projects share.
 
+## Publishing a package
+
+A package is a Git repository with a `pep.toml`, and its releases are its
+version tags, so publishing one needs no registry account:
+
+1. **Start from the template.**
+   [pep-lang/pepper-package-template](https://github.com/pep-lang/pepper-package-template)
+   is a GitHub template repository with tests, CI on Linux, macOS and
+   Windows, and a release job already set up: create a repository from it
+   on GitHub, or run `pepper new <name> --lib`, which writes the same files
+   (see [A package](pep-new.md#a-package)). A package that builds C code
+   carries a [build script](projects.md#build-scripts).
+2. **Release a version** with [`publish`](#publish): raise `version` in
+   `pep.toml`, merge it to the default branch, and run
+   `pepper package publish`. It checks and tests the package, then tags it
+   `v1.2.0` and pushes the tag; a [workspace](projects.md#workspaces-workspace)
+   member is tagged `<member>-v1.2.0` instead. On a `v` tag the template's
+   CI publishes a GitHub release for it.
+3. **List it in the [package index](#the-package-index)**, once, so
+   `pepper package add <name>` and `search` find it: open a pull request
+   on [pep-lang/index](https://github.com/pep-lang/index) that adds
+   `packages/<name>.toml`. Later releases need no change there. Without
+   it, a project still adds the package by its repository,
+   `pepper package add owner/name`.
+4. **Withdraw a broken release** by listing it in the
+   [`[retract]`](projects.md#retract) table of a newer one. A release with
+   a security hole also gets an advisory: release the fix, then open a
+   pull request on [pep-lang/advisories](https://github.com/pep-lang/advisories)
+   so [`audit`](#audit) reports it.
+
 ## Options and commands
 
 | Command or option | What it does |
