@@ -230,7 +230,7 @@ differences:
   general-dynamic TLS model, since the app loads its `.so` with `dlopen`
   and bionic refuses initial-exec there; each access costs a call. A
   library for desktop Linux keeps initial-exec, which is faster but needs
-  static TLS, so a late `dlopen` of its `.so` may fail (see
+  static TLS, so a `dlopen` of its `.so` may fail (see
   [Building the library](c-interop.md#building-the-library)).
 - **OpenSSL's license.** An Android program or app that imports `tls` (or
   `http`) contains OpenSSL, which is under the Apache License 2.0, so it

@@ -437,7 +437,7 @@ _store_unit(
 _build_text(options: BuildOptions, triple: String): String {
     var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
     bool lto = options.lto and options.opt_level > 0;
-    return $"{triple} {cpu.key()} -O{options.opt_level}{lto ? " -lto" : ""}{_codegen_options(options)}";
+    return $"{triple} {cpu.key()} -O{options.opt_level}{lto ? " -lto" : ""}{_codegen_options(options, triple)}";
 }
 
 # The extension of a unit's object for `triple`: with link-time
@@ -1554,9 +1554,9 @@ _runtime_dir(program: link.Program): Path? {
 }
 
 # What else changes the code generated, for the cache's keys.
-_codegen_options(options: BuildOptions): String {
+_codegen_options(options: BuildOptions, triple: String): String {
     var out = options.frame_pointers ? " --frame-pointers" : "";
-    if (options.library.is_value()) {
+    if (options.library.is_value() and triple.contains("-android")) {
         # An Android library's thread-locals use another TLS model.
         out = $"{out} --lib";
     }

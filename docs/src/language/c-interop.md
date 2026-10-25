@@ -622,8 +622,8 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
   initial-exec TLS model, as a program's do, where reading one costs a
   load, except on Android (see below). On Linux this makes a `.so` built
   from either kind need static TLS (`readelf -d` shows `FLAGS
-  STATIC_TLS`): a program that links it, or `dlopen`s it at startup,
-  loads it, but a later `dlopen` works only while glibc's spare static
+  STATIC_TLS`): a program that links it always loads it, but a `dlopen`
+  of it works only while glibc's spare static
   TLS (512 bytes by default, which the `glibc.rtld.optional_static_tls`
   tunable raises) has room for its thread-locals. macOS and Windows have
   no such limit.

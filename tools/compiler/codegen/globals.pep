@@ -396,8 +396,8 @@ extend Generator {
     ## in an Android library, where they are general-dynamic (LLVM makes a
     ## local one local-dynamic): every Android app `dlopen`s its native
     ## code, and bionic refuses initial-exec there. Elsewhere a library keeps
-    ## initial-exec, which costs a load where general-dynamic costs a call
-    ## (46% slower on Linux, and TLSDESC slower still: pepper#246); glibc
+    ## initial-exec, which costs a load where general-dynamic, and TLSDESC
+    ## more so, cost a call per access (pepper#246's benchmark); glibc
     ## loads such a `.so` with `dlopen` only while its static TLS has room.
     declare_thread_local(variable: VariableDef, global: llvm.Value, llvm_ty: llvm.Type): Result<void> {
         var dynamic = library and machine.triple().contains("-android");
