@@ -985,7 +985,7 @@ vendoring_refuses_symbolic_links() {
         refused.stderr,
         "cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold"
     );
-    expect_false(linked.dir.join("vendor").join("github.com").join("someone").join("linked").exists());
+    expect_false(linked.dir.join("vendor").join("github.com").join("someone").exists());
     # So is the host's archive, fetched with no git.
     var archives = linked.dir.join("archives");
     var commit = hosts.commit_of("someone/linked", "v1.0.0");
@@ -1013,7 +1013,7 @@ vendoring_refuses_symbolic_links() {
     expect_exit(fetched, 1);
     expect_contains(
         fetched.stderr,
-        "alias.pep is a symbolic link, which a vendored package cannot hold; run 'pepper package vendor'"
+        "alias.pep' is a symbolic link, which a vendored package cannot hold; run 'pepper package vendor'"
     );
     expect_exit(hosts.package(project.dir, ["vendor"]), 0);
     expect_false(link.symlink_metadata().is_ok());

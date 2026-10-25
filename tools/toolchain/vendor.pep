@@ -57,7 +57,7 @@ _list_files(dir: Path, prefix: String, files: Array<(String, Path)>): Result<voi
         var name = prefix + entry.path.file_name().value_or("");
         if (entry.is_symlink) {
             return Result<void, String>.err(
-                $"{entry.path.to_string()} is a symbolic link, which a vendored package cannot hold"
+                $"'{entry.path.to_string()}' is a symbolic link, which a vendored package cannot hold"
             );
         }
         if (name == VENDOR_CHECKSUM_FILE) {

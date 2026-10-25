@@ -198,10 +198,6 @@ export vendor_package(
             return Result<void>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
         }
     }
-    var parent = directory.parent();
-    if (parent.is_value()) {
-        Directory.create_all(parent.value());
-    }
     if (checkout.join(".git").exists()) {
         var tar = _checkout_tar(checkout, commit);
         if (tar.is_err()) {
@@ -369,16 +365,16 @@ export fetch_archive(
             $"the files of {host}:{repository} {commit.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {expected}"
         );
     }
-    if (!symlinks) {
-        var linkless = _refuse_symlinks(tar.value(), 1);
-        if (linkless.is_err()) {
-            return Result<String>.Err(linkless.error().message);
-        }
-    }
     if (!from_cache) {
         var stored = _store(cached, packed.value());
         if (stored.is_err()) {
             return Result<String>.Err(stored.error().message);
+        }
+    }
+    if (!symlinks) {
+        var linkless = _refuse_symlinks(tar.value(), 1);
+        if (linkless.is_err()) {
+            return Result<String>.Err(linkless.error().message);
         }
     }
     # Unpack beside the package's folder, and only a complete copy takes
