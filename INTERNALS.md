@@ -57,7 +57,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder, a subfolder of the module, so each test file sees the module's internal declarations (a test helper may not repeat one of their names), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
 | `tests/` | `.pep` corpus: `hello.pep` plus one `tests/<Feature.Case>/test.pep` per folder, which `compiler/corpus_test.pep` builds and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
-| `scripts/` | The version every tool reports (`set-version.sh`), the release build (`release-build.sh`, `release-smoke-test.sh`), CI's toolchain install (`ci-install-toolchain.sh`), LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, and `build-llvm-manylinux.sh` for the Linux release's LLVM), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the Pepper tests (`pepper-tests.sh`), the sema model's generators (`gen-sema-model.py`, `gen-sema-record.py`), and `install-vscode-extension.ps1`. |
+| `scripts/` | The version every tool reports (`set-version.sh`), the release build (`release-build.sh`, `release-smoke-test.sh`), CI's toolchain install (`ci-install-toolchain.sh`), the pull requests Release and Stage 0 push branches for (`ci-open-pull-request.sh`), LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, and `build-llvm-manylinux.sh` for the Linux release's LLVM), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the Pepper tests (`pepper-tests.sh`), the sema model's generators (`gen-sema-model.py`, `gen-sema-record.py`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `release.yml`, `docs.yml`, `llvm-package.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
@@ -3863,8 +3863,10 @@ the checkout (`PEPPER_TARGET_DIR`).
   `version()` by `scripts/set-version.sh`) on that prerelease, whose tag
   moves to the merge and whose assets are replaced; CI installs it.
   On a `vX.Y.Z` tag (which must hold that version), it publishes a release,
-  then its `bump` job opens a pull request setting main to the next minor's
-  `-dev` (when main still holds the released version). Either way it builds
+  then its `bump` job pushes a branch setting main to the next minor's
+  `-dev` (when main still holds the released version), and
+  `scripts/ci-open-pull-request.sh` links to open its pull request, as
+  for `stage0.yml`'s pin. Either way it builds
   the toolchain for linux-x64 (in a `manylinux_2_28` container on
   `ubuntu-24.04`, for glibc 2.28, with LLVM 20 from
   `scripts/build-llvm-manylinux.sh`: taken from the published manylinux

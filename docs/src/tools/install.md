@@ -203,14 +203,18 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
      commit holds that version, builds it and publishes the release; the
      `Docs` workflow publishes the docs from the same tag. The VS Code
      extension is released from its own repository, pep-lang/vscode-pepper.
-  3. Once it is published, the workflow opens a pull request that starts
-     the next minor version on main (`0.10.0-dev`), unless main has already
-     moved on, and dispatches CI on its branch; a major version is started
-     by hand. Merge it once CI passes, as an admin
-     (`gh pr merge <branch> --squash --admin`): a run dispatched by hand
-     does not count toward the `test` check main requires. Until it merges,
-     merges to main publish no prerelease, since main holds the released
-     version.
+  3. Once it is published, the workflow pushes the branch
+     `release/start-0.10.0-dev`, which starts the next minor version on
+     main, unless main has already moved on; a major version is started by
+     hand. GitHub Actions may not open pull requests in this repository, so
+     the run's summary (and a warning) links to open its pull request; open
+     it, and it merges once its CI passes, as any pull request does. Until
+     it merges, merges to main publish no prerelease, since main holds the
+     released version.
+
+     ```bash
+     gh pr create --base main --head release/start-0.10.0-dev --fill
+     ```
 
 For each platform, `scripts/release-build.sh` builds the
 tools, lays them out as above, archives them as

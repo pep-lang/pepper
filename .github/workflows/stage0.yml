@@ -16,16 +16,12 @@
 # change that needs a newer compiler than the pinned one: merge the pull
 # request before that change.
 #
-# The repository does not let GitHub Actions open pull requests, so the run
-# says, as a warning and in its summary, where to open it. One a person
-# opens runs CI as any pull request does, and may auto-merge once it
-# passes: that run builds the compiler with the new stage 0 and runs the
-# whole suite with it. Should Actions be allowed to open pull requests, the
-# workflow opens it itself and dispatches CI on the branch, since a pull
-# request opened with its token starts no workflows; that run does not
-# count toward the `test` check main's ruleset requires, so merge it as an
-# admin once the run passes (`gh pr merge stage0/bump --squash --admin`),
-# as Release's version bump says.
+# scripts/ci-open-pull-request.sh opens the pull request. The repository
+# does not let GitHub Actions open pull requests, so the run says, as a
+# warning and in its summary, where to open it. One a person opens runs CI
+# as any pull request does, and may auto-merge once it passes: that run
+# builds the compiler with the new stage 0 and runs the whole suite with
+# it.
 name: Stage 0
 
 on:
@@ -62,7 +58,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           BASE: ${{ github.ref_name }}
-          DEFAULT: ${{ github.event.repository.default_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euxo pipefail
           pin=.github/stage0
@@ -163,14 +159,4 @@ jobs:
           printf '%s\n' \
             "Moves CI's stage 0 (\`.github/stage0\`) to the build of $built, the published \`$tag\`, from ${pinned:-nothing} (.github/workflows/stage0.yml)." \
             > "$RUNNER_TEMP/body.md"
-          if gh pr create -R "$REPO" --base "$BASE" --head "$branch" --title "Pin stage 0 to the build of $prefix" --body-file "$RUNNER_TEMP/body.md"; then
-            # Only on the default branch: a test run on another branch dispatches nothing.
-            if [ "$BASE" = "$DEFAULT" ]; then
-              gh workflow run ci.yml -R "$REPO" --ref "$branch"
-              echo "::notice::$branch pins $built; merge it with 'gh pr merge $branch --squash --admin' once its CI passes"
-            fi
-          else
-            url="https://github.com/$REPO/compare/$BASE...$branch?expand=1"
-            echo "::warning::GitHub Actions may not open pull requests in $REPO; open $branch's: $url"
-            printf '### Stage 0\n\n%s pins %s. Open its pull request: %s\n' "$branch" "$built" "$url" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          bash scripts/ci-open-pull-request.sh "$BASE" "$branch" "Pin stage 0 to the build of $prefix" "$RUNNER_TEMP/body.md"
