@@ -13,7 +13,8 @@
 # out`, else the file's stem in the current directory, or the project of
 # the current directory with no file. `--lib static|shared` builds a
 # library for C instead, with the header of its `[Export]`ed functions
-# beside it (`driver/library.pep`), and `--lto=full` (above `-O0`, when
+# beside it (`driver/library.pep`), or `--lib xcframework|swift-package`
+# one for iOS apps (`driver/xcframework.pep`), and `--lto=full` (above `-O0`, when
 # asked for) optimizes the program as one module before the link
 # (`driver/lto.pep`). `--test` builds the test program of the file (or of
 # several files of one folder) instead (`driver/test_main.pep`). A build
@@ -106,7 +107,7 @@ _main(args: String[]): int {
     );
     var library = parser.option<driver.LibraryKind>(
         "lib",
-        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions. No `main` is needed",
+        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`), named for the output. No `main` is needed",
         value_name = "KIND"
     );
     var entry_function = parser.option(
@@ -332,6 +333,32 @@ _main(args: String[]): int {
     if (test.is_set and library.is_set) {
         return parser.usage_error("'--test' cannot be used with '--lib'");
     }
+    bool for_apps = library.is_set
+        and (library.value() == driver.LibraryKind.Xcframework or library.value() == driver.LibraryKind.SwiftPackage);
+    if (for_apps and triple.is_set) {
+        return parser.usage_error(
+            "'--target' cannot be used with '--lib xcframework' or '--lib swift-package', which build for every iOS target"
+        );
+    }
+    if (for_apps
+        and (emit_ast.is_set
+            or linked.is_set
+            or checked.is_set
+            or model.is_set
+            or steps.is_set
+            or ir.is_set
+            or emit_static.is_set)) {
+        return parser.usage_error(
+            "the --emit options cannot be used with '--lib xcframework' or '--lib swift-package'"
+        );
+    }
+    if (for_apps
+        and library.value() == driver.LibraryKind.Xcframework
+        and output.is_set
+        and !output.value().ends_with(".xcframework")) {
+        # The output is replaced whole, so it must be one.
+        return parser.usage_error("the output of '--lib xcframework' must end in '.xcframework'");
+    }
     if (verify_cache.is_set and no_verify_cache.is_set) {
         return parser.usage_error("'--verify-cache' cannot be used with '--no-verify-cache'");
     }
@@ -488,6 +515,37 @@ _main(args: String[]): int {
         out = project.value().output.value();
     }
     var build_folder = build_dir.is_set ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
+    if (for_apps) {
+        # Each iOS target's static library, built by this compiler, then
+        # laid out (`driver/xcframework.pep`).
+        var executable = process.executable_path();
+        if (executable.is_err()) {
+            _report($"cannot find this program to build each iOS target: {executable.error().message}");
+            return 1;
+        }
+        var named = out.file_stem();
+        if (!named.is_value() or !driver.is_module_name(named.value())) {
+            _report(
+                $"'{out}' does not name a Swift module: a library for iOS apps is named for its output, which takes letters, digits and '_' (pass '-o Name.xcframework')"
+            );
+            return 1;
+        }
+        var built = driver.build_xcframework(
+            executable.value(),
+            args,
+            out,
+            named.value(),
+            build_folder.join(Path("xcframework")),
+            library.value() == driver.LibraryKind.SwiftPackage
+        );
+        if (built.is_err()) {
+            if (!built.error().is_empty) {
+                _report(built.error());
+            }
+            return 1;
+        }
+        return 0;
+    }
     if (emit_ast.is_set) {
         var source = File.read_to_string(path.value());
         if (source.is_err()) {

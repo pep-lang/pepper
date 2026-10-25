@@ -1839,6 +1839,13 @@ offsets), Darwin (`#1/` names, `__.SYMDEF`, 8-byte aligned members) or
 COFF (both linker members), indexing the global definitions
 `defined_symbols` reads from each ELF, Mach-O 64 or COFF (`/bigobj` too)
 object, its members named `p<n>.o` since cached objects are all `0.o`.
+`--lib xcframework|swift-package` (`driver/xcframework.pep`) never builds
+in process: `main.pep` hands the command line to `build_xcframework`,
+which runs this compiler once per iOS triple with `--lib static --target
+<triple>`, side by side, merges the two simulator archives with
+`universal_file` (a fat Mach-O header, as `lipo` writes), and writes the
+slices' headers, module maps, the `Info.plist` and, for a package,
+`Package.swift`.
 
 **Link-time optimization** (`--lto=full|off`, off by default, since it
 reruns over the whole program on every build; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`

@@ -26,6 +26,7 @@ short, and `pepper help build` runs it.
 | `--no-runtime` | Compile without the standard library | the runtime is used |
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
+| `--lib xcframework`, `--lib swift-package` | Build an iOS `.xcframework`, or a Swift package around one, for an app | an executable |
 | `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
 | `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
@@ -231,6 +232,31 @@ The header goes beside the library, named for it without the `lib` prefix
 (`libname.a` has `name.h`). A library that exports nothing is built with a
 warning. See
 [Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
+
+### `--lib xcframework`, `--lib swift-package`
+
+Builds the static library of an iOS app's Pepper code for every iOS target
+at once, packaged as Xcode and SwiftPM take it. Each is named for its
+output, which must be a Swift module name (letters, digits and `_`):
+
+- `--lib xcframework` writes `Name.xcframework` (`-o Name.xcframework`;
+  the output must end in `.xcframework`, since it is replaced whole):
+  `ios-arm64/` for devices and `ios-arm64_x86_64-simulator/` for the
+  simulator on Apple silicon and Intel Macs, each with `libName.a`, the
+  header `Name.h` and a `module.modulemap`, so Swift can `import Name`, and
+  the `Info.plist` listing them. The compiler builds the three static
+  libraries by running itself with `--lib static --target <triple>`, side
+  by side, each in a folder of the build folder's `xcframework/`, and
+  writes the simulator's two archives into one universal file itself, as
+  `lipo` would, so this needs no Xcode and works on any system.
+- `--lib swift-package` writes the folder `Name` (`-o Name`) holding
+  `Name.xcframework` and a `Package.swift` whose library product `Name` is
+  that binary target, for iOS 15 and later. An app adds it as a local
+  package (`.package(path: "Name")`), or from the repository it is
+  committed to.
+
+They cannot be combined with `--target` or the `--emit` options. See
+[iOS and Android](../language/mobile.md#packaging-for-xcode-and-swiftpm).
 
 ### `--test`
 
