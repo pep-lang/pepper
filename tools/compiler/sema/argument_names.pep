@@ -153,10 +153,11 @@ struct _ArgumentNames {
             if (!by_type.contains(spelled)) {
                 by_type[spelled] = st;
             }
-            for (var key in [st.name, spelled]) {
-                if (!by_name.contains(key)) {
-                    by_name[key] = st;
-                }
+            if (!by_name.contains(st.name)) {
+                by_name[st.name] = st;
+            }
+            if (!by_name.contains(spelled)) {
+                by_name[spelled] = st;
             }
         }
     }

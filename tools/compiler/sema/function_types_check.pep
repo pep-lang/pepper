@@ -194,7 +194,7 @@ _is_arm_test(condition: Expression): bool {
 _parsed_if(ty: TypeName, prefix: String): TypeName {
     # `name<...>` starts with `prefix` only when it names the prefix's type:
     # spelling every type to find out cost a nested type's depth (#210).
-    if (ty.sub_types.count > 0 and ty.name + "<" != prefix) {
+    if (ty.sub_types.count > 0 and (prefix.size != ty.name.size + 1 or !prefix.starts_with(ty.name))) {
         return ty;
     }
     var s = ty.to_string();
