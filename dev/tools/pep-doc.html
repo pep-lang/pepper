@@ -189,8 +189,11 @@
 renders it with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>, which must be
 on the <code>PATH</code> (a binary from
 <a href="https://github.com/rust-lang/mdBook/releases">its releases</a>).</p>
+<p>It also builds a package's reference
+(<a href="#pep-doc-package"><code>pep-doc package</code></a>).</p>
 <p>It is a Pepper program (<code>tools/pep-doc</code>), and it works on the Pepper
-checkout that holds the folder it is run in. <code>scripts/pepper-tests.sh</code>
+checkout that holds the folder it is run in, except <code>pep-doc package</code>,
+which works on the package that holds it. <code>scripts/pepper-tests.sh</code>
 builds it beside <code>pep-build</code>, with the other Pepper tools, and <code>pepper doc</code>
 runs it. To build it alone, from the repository root:</p>
 <pre><code class="language-bash">pepper build -O tools/pep-doc/main.pep -o target/bin/pep-doc
@@ -247,12 +250,68 @@ default). Anything else is an error.</li>
 <h3 id="pep-doc-serve"><a class="header" href="#pep-doc-serve"><code>pep-doc serve</code></a></h3>
 <p>Regenerates the reference and serves the book locally with <code>mdbook serve</code>,
 opening it in the browser and rebuilding as chapters change.</p>
+<h3 id="pep-doc-package"><a class="header" href="#pep-doc-package"><code>pep-doc package</code></a></h3>
+<p>Builds the reference of the package that holds the current folder: the
+nearest <code>pep.toml</code> up from it, which must have a <code>[package]</code>. Unlike the
+other commands, it needs no Pepper checkout, so <code>pepper doc package</code> works
+in any package:</p>
+<pre><code class="language-bash">cd geometry
+pepper doc package           # writes .pep/doc/, renders it into .pep/doc/html/
+</code></pre>
+<ul>
+<li><strong>Pages:</strong> one per <code>.pep</code> file with a public declaration or a <code>##</code>
+introduction, made as the <a href="../reference/README.html">standard library reference's</a>
+are, from the <a href="../language/doc-comments.html">doc comments</a>. A
+<code>module.pep</code> page is titled by the module (<code>geometry</code>,
+<code>geometry.solids</code>), any other by the file's path. Tests (<code>test/</code> and
+<code>tests/</code> folders, <code>_test.pep</code> files), <code>examples/</code>, hidden folders such
+as <code>.pep/</code>, and folders with their own <code>pep.toml</code> (a workspace's members,
+vendored packages) are left out; run it in each member of a workspace.</li>
+<li><strong>Features:</strong> a declaration that a <a href="projects.html#features">feature</a> gates
+says so under its signature ("Available with the feature <code>tls</code>"),
+linking to the front page's list of features. It is gated when its
+attributes require the feature's build option (<code>&lt;package&gt;_&lt;feature&gt;</code>):
+<code>[BuildOption("http_tls")]</code>, or <code>BuildOption(http_tls)</code> in a
+<code>[Target(...)]</code>, alone or joined by <code>&amp;&amp;</code>. One under <code>!</code> or <code>||</code> is not
+marked.</li>
+<li><strong>Front page:</strong> the package's name, <code>version</code> and <code>description</code>, a line
+per page, its <code>[features]</code> with what each turns on, and its
+dependencies, each linked to its docs: for a GitHub repository, the
+GitHub Pages site the <a href="#hosting-a-packages-docs">package template</a>
+publishes (<code>https://&lt;owner&gt;.github.io/&lt;name&gt;/</code>), for another host its
+repository, and for a <code>path</code> dependency nothing.</li>
+<li><strong>Output:</strong> an mdBook in <code>.pep/doc/</code> (<code>book.toml</code>, and <code>src/</code> with the
+pages, <code>README.md</code> and <code>SUMMARY.md</code>, rewritten on each run), rendered
+with mdBook into <code>.pep/doc/html/</code>. When mdBook cannot run, the error
+says where the Markdown is.</li>
+</ul>
+<p>Options:</p>
+<ul>
+<li><code>--check</code>: changes nothing, and fails (exit status 1) when a public
+declaration has no doc comment, or one without a description or a tag
+the <a href="../contributing/docs.html">documentation standard</a> requires, as
+<code>pep-doc check</code> does for the runtime: a clang-style error at each.</li>
+<li><code>--site &lt;DIR&gt;</code>: renders into <code>&lt;DIR&gt;/&lt;version&gt;/</code> instead, the version
+being <code>pep.toml</code>'s (<code>dev</code> without one), and refreshes <code>&lt;DIR&gt;</code>'s
+<code>versions.json</code> and <code>index.html</code>, which opens the newest release, as
+<code>build</code> does for this book. Earlier versions stay.</li>
+</ul>
+<h4 id="hosting-a-packages-docs"><a class="header" href="#hosting-a-packages-docs">Hosting a package's docs</a></h4>
+<p>The package template (<code>pepper new --lib</code>, and
+<a href="https://github.com/pep-lang/pepper-package-template">pep-lang/pepper-package-template</a>)
+publishes each release's reference with GitHub Pages, with no server: on a
+<code>vX.Y.Z</code> tag its CI's <code>docs</code> job runs <code>pepper doc package --site</code> on the
+repository's <code>gh-pages</code> branch, which keeps a folder per version, and
+pushes it. Turn on GitHub Pages for the <code>gh-pages</code> branch once, in the
+repository's Settings, Pages. A toolchain whose pep-doc has no <code>package</code>
+skips the job.</p>
 <h3 id="pep-doc-help"><a class="header" href="#pep-doc-help"><code>pep-doc help</code></a></h3>
 <p>Prints the commands and options, as <code>-h</code> and <code>--help</code> do.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>--version &lt;VERSION&gt;</code></td><td>With <code>build</code>: the version to build</td></tr>
-<tr><td><code>--site &lt;DIR&gt;</code></td><td>With <code>build</code>: the site folder</td></tr>
+<tr><td><code>--site &lt;DIR&gt;</code></td><td>With <code>build</code>: the site folder; with <code>package</code>: the site to render into</td></tr>
+<tr><td><code>--check</code></td><td>With <code>package</code>: check the doc comments, changing nothing</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the commands and options</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>As the only argument: print <code>pep-doc</code> and its version</td></tr>
 </tbody></table>

@@ -205,6 +205,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
+<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script</td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
@@ -237,7 +238,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
-<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--skip-build-scripts</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
 </tbody></table>
@@ -298,6 +299,18 @@ package <code>.pep/deps</code> lacks is an error that names it.</li>
 <pre><code class="language-text">$ pepper build --offline
 fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
 pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+</code></pre>
+<h3 id="build-scripts-and---no-build-scripts"><a class="header" href="#build-scripts-and---no-build-scripts">Build scripts and <code>--no-build-scripts</code></a></h3>
+<p>Once the dependencies are fetched, the compiler runs the
+<a href="projects.html#build-scripts">build script</a> of each package the build turns
+on (the project's first): it builds the script for the machine it runs on,
+with itself and <code>--skip-build-scripts</code>, into <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/</code>,
+runs it in the package's folder, and links what it says to. A script whose
+inputs have not changed since its last run is not run again.</p>
+<p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
+running a dependency's script, which runs that package's code on this
+machine; the project's own script still runs:</p>
+<pre><code class="language-text">error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
 </code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>

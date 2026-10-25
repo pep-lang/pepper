@@ -229,6 +229,35 @@ in, and <code>publish</code> publishes that member.</p>
 lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.
 Every package is downloaded once per machine, into a
 <a href="#the-download-cache">download cache</a> that all projects share.</p>
+<h2 id="publishing-a-package"><a class="header" href="#publishing-a-package">Publishing a package</a></h2>
+<p>A package is a Git repository with a <code>pep.toml</code>, and its releases are its
+version tags, so publishing one needs no registry account:</p>
+<ol>
+<li><strong>Start from the template.</strong>
+<a href="https://github.com/pep-lang/pepper-package-template">pep-lang/pepper-package-template</a>
+is a GitHub template repository with tests, CI on Linux, macOS and
+Windows, and a release job already set up: create a repository from it
+on GitHub, or run <code>pepper new &lt;name&gt; --lib</code>, which writes the same files
+(see <a href="pep-new.html#a-package">A package</a>). A package that builds C code
+carries a <a href="projects.html#build-scripts">build script</a>.</li>
+<li><strong>Release a version</strong> with <a href="#publish"><code>publish</code></a>: raise <code>version</code> in
+<code>pep.toml</code>, merge it to the default branch, and run
+<code>pepper package publish</code>. It checks and tests the package, then tags it
+<code>v1.2.0</code> and pushes the tag; a <a href="projects.html#workspaces-workspace">workspace</a>
+member is tagged <code>&lt;member&gt;-v1.2.0</code> instead. On a <code>v</code> tag the template's
+CI publishes a GitHub release for it.</li>
+<li><strong>List it in the <a href="#the-package-index">package index</a></strong>, once, so
+<code>pepper package add &lt;name&gt;</code> and <code>search</code> find it: open a pull request
+on <a href="https://github.com/pep-lang/index">pep-lang/index</a> that adds
+<code>packages/&lt;name&gt;.toml</code>. Later releases need no change there. Without
+it, a project still adds the package by its repository,
+<code>pepper package add owner/name</code>.</li>
+<li><strong>Withdraw a broken release</strong> by listing it in the
+<a href="projects.html#retract"><code>[retract]</code></a> table of a newer one. A release with
+a security hole also gets an advisory: release the fix, then open a
+pull request on <a href="https://github.com/pep-lang/advisories">pep-lang/advisories</a>
+so <a href="#audit"><code>audit</code></a> reports it.</li>
+</ol>
 <h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>-C &lt;dir&gt;</code>, <code>--directory &lt;dir&gt;</code></td><td>Works on the project at or above <code>&lt;dir&gt;</code> instead of the current folder</td></tr>
@@ -297,6 +326,16 @@ fetches every platform's packages, those of
 lock lists every dependency and holds packages for other platforms:
 <code>pepper build</code> names the packages its target needs and <code>.pep/deps</code> lacks,
 so a build fetches no other platform's.</p>
+<h3 id="packages-with-a-build-script"><a class="header" href="#packages-with-a-build-script">Packages with a build script</a></h3>
+<p>A package can carry a <a href="projects.html#build-scripts">build script</a> that every
+build of a project using it compiles and runs on the building machine,
+with the user's permissions. Whenever <code>fetch</code>, <code>add</code> or <code>update</code> brings in
+a package with one (new to <code>pep.lock</code>, or at another commit), it says so
+and names the script to read:</p>
+<pre><code class="language-text">pep-package: native 1.0.0 (github:someone/native) has a build script, which every build of the project compiles and runs on this machine: read app/.pep/deps/github.com/someone/native/build.pep, or build with '--no-build-scripts' to refuse it
+</code></pre>
+<p><code>pepper build --no-build-scripts</code> then refuses to run a dependency's
+script (see <a href="pep-build.html#build-scripts-and---no-build-scripts">pep-build</a>).</p>
 <h3 id="add-ownernamerange-add-namerange"><a class="header" href="#add-ownernamerange-add-namerange"><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code>, <code>add &lt;name&gt;[@&lt;range&gt;]</code></a></h3>
 <p>Adds a dependency to <code>pep.toml</code>'s <code>[dependencies]</code> and fetches it, keeping
 the file's comments and layout. An argument that starts with <code>github:</code>,

@@ -260,6 +260,11 @@ symbol: <code>[Link(lib = "m", name = "cbrt")]</code> (see
 <p>Putting <code>[Link]</code> in the source keeps the knowledge of which library a function
 comes from next to its declaration, so nobody building your program has to
 remember a command-line flag.</p>
+<h2 id="linking-c-code-a-package-builds-build-scripts"><a class="header" href="#linking-c-code-a-package-builds-build-scripts">Linking C code a package builds: build scripts</a></h2>
+<p>A package can ship a C library's source instead of asking its users to
+install the library: its <a href="../tools/projects.html#build-scripts">build script</a>
+compiles the C code with clang for the build's target, and prints the
+objects and libraries to link (<code>pep:object=...</code>, <code>pep:link=...</code>).</p>
 <h2 id="linking-a-library-from-the-command-line--l"><a class="header" href="#linking-a-library-from-the-command-line--l">Linking a library from the command line: <code>-l</code></a></h2>
 <p>The <code>-l</code> option links a library for one build:</p>
 <pre><code class="language-sh">pepper build main.pep -l m -o main

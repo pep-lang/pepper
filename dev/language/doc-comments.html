@@ -323,6 +323,10 @@ in the runtime, one page per runtime file. A <code>##</code> block at the very t
 file, followed by a blank line, introduces that file's page.
 <a href="../contributing/docs.html">Building this documentation</a> explains how to
 regenerate them.</li>
+<li><strong>In a package's reference.</strong> <code>pepper doc package</code> builds the same pages
+for a package, from its own sources, and <code>pepper doc package --check</code>
+reports its undocumented declarations the way the runtime's check does
+(see <a href="../tools/pep-doc.html#pep-doc-package"><code>pep-doc package</code></a>).</li>
 </ul>
 <h2 id="the-standard-library-is-fully-documented"><a class="header" href="#the-standard-library-is-fully-documented">The standard library is fully documented</a></h2>
 <p>Every public declaration in the runtime must have a doc comment: every
@@ -336,7 +340,7 @@ or <code>@returns</code>, a tag with no description, a <code>@returns</code> on 
 returns nothing, or a <code>@param</code> naming a parameter that does not exist. If you
 contribute to the runtime, run the test suite before you send a change. The
 compiler does not check the doc comments in your own programs, but following
-the same format gets you the same editor support.</p>
+the same format gets you the same editor support, and <code>pepper doc package --check</code> checks a package's.</p>
 
                     </main>
 

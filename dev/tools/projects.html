@@ -249,6 +249,7 @@ that folder's <code>.pep</code>, wherever <code>pepper build</code> runs.</p>
 <tr><td><code>output</code></td><td>The executable; building for Windows adds <code>.exe</code> to a name with no extension</td><td>the package's <code>name</code></td></tr>
 <tr><td><code>include</code></td><td>An array of extra folders to search for modules, as <code>-I</code> adds</td><td>none</td></tr>
 <tr><td><code>link</code></td><td>An array of C libraries to link, as <code>-l</code> adds</td><td>none</td></tr>
+<tr><td><code>script</code></td><td>The package's <a href="#build-scripts">build script</a>, which builds its C code before its Pepper code is built</td><td><code>build.pep</code>, when there is one</td></tr>
 </tbody></table>
 </div>
 <p>Options on the command line still apply: <code>pepper build -O</code> builds the
@@ -256,6 +257,96 @@ project optimized, and <code>-o</code> names another output. A file argument bui
 file instead (<code>pepper build tools/gen.pep</code>); the project's dependencies,
 <code>include</code> folders and <code>link</code> libraries still apply to it, since it is in the
 project.</p>
+<h2 id="build-scripts"><a class="header" href="#build-scripts">Build scripts</a></h2>
+<p>A package that binds a C library can carry the library's C source and build
+it itself, so its users install nothing. Its build script, a Pepper program
+in <code>build.pep</code> at the package's root (or the file <code>[build]</code>'s <code>script</code>
+names), compiles the C code, and prints what the build must link. Every
+build of a program that uses the package (a dependency, or the project
+itself) compiles the script for the machine it runs on and runs it before
+it builds the program, even when it builds for another platform with
+<code>--target</code>. Cargo users know it as <code>build.rs</code>.</p>
+<pre><code class="language-text">native/
+├── pep.toml
+├── module.pep        # extern int native_add(int a, int b); and the API around it
+├── build.pep
+└── c/add.c
+</code></pre>
+<pre><code class="language-pepper"># build.pep: compiles c/add.c for the build's target and links it.
+import [Path] from io;
+import os;
+import process;
+
+main(): int {
+    var object = Path(os.environment("PEP_OUT_DIR").value()).join(Path("add.o"));
+    var compiled = process
+        .Command(os.environment("PEP_CLANG").value())
+        .arguments(["--target=" + os.environment("PEP_TARGET").value(), "-c", "c/add.c", "-o", object.to_string()])
+        .run();
+    if (compiled.is_err() or !compiled.value().status.success()) {
+        return 1;
+    }
+    print($"pep:object={object}");
+    print("pep:rerun-if-changed=c");
+    return 0;
+}
+</code></pre>
+<p>The script runs in the package's folder, with these environment variables:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>PEP_TARGET</code></td><td>The triple the program is built for (<code>x86_64-pc-windows-msvc</code>), as <code>--target</code> names it</td></tr>
+<tr><td><code>PEP_TARGET_OS</code>, <code>PEP_TARGET_ARCH</code></td><td>Its OS (<code>linux</code>, <code>macos</code>, <code>windows</code>, <code>wasi</code>, <code>ios</code>, <code>android</code>) and architecture (<code>x86_64</code>, <code>aarch64</code>)</td></tr>
+<tr><td><code>PEP_HOST</code></td><td>The triple of the machine the build runs on</td></tr>
+<tr><td><code>PEP_OPT_LEVEL</code></td><td>The optimization level, <code>0</code> to <code>3</code></td></tr>
+<tr><td><code>PEP_FEATURES</code></td><td>The package's <a href="#features">features</a> the build turns on, separated by commas</td></tr>
+<tr><td><code>PEP_PACKAGE_NAME</code>, <code>PEP_PACKAGE_DIR</code></td><td>The package's name and folder</td></tr>
+<tr><td><code>PEP_OUT_DIR</code></td><td>A folder of the package's own for what the script makes: <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/out</code>, <code>&lt;hash&gt;</code> naming where the package is (below <code>--build</code>'s folder when given)</td></tr>
+<tr><td><code>PEP_CLANG</code></td><td>The clang the build links with (see <a href="../language/linking.html#what-the-compiler-links">What the compiler links</a>), empty when there is none; it compiles C for any target LLVM supports</td></tr>
+<tr><td><code>PEP_SYSROOT</code></td><td>The target's system root (<code>--sysroot</code>), empty when there is none</td></tr>
+</tbody></table>
+</div>
+<p>What the script prints on standard output, a line each, tells the build
+what to do; other lines are its own and ignored:</p>
+<div class="table-wrapper"><table><thead><tr><th>Line</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>pep:object=&lt;file&gt;</code></td><td>Links an object file or a static library (<code>.a</code>, <code>.lib</code>)</td></tr>
+<tr><td><code>pep:link=&lt;name&gt;</code></td><td>Links a library by name, as <code>-l</code> does</td></tr>
+<tr><td><code>pep:link-path=&lt;dir&gt;</code></td><td>Adds a folder the linker searches, as <code>-L</code> does</td></tr>
+<tr><td><code>pep:warning=&lt;text&gt;</code></td><td>Shows <code>warning: &lt;package&gt;: &lt;text&gt;</code></td></tr>
+<tr><td><code>pep:rerun-if-changed=&lt;path&gt;</code></td><td>Runs the script again when the file, or any file in the folder, changes</td></tr>
+<tr><td><code>pep:rerun-if-env-changed=&lt;name&gt;</code></td><td>Runs the script again when the environment variable changes</td></tr>
+</tbody></table>
+</div>
+<p>A relative path is relative to the package's folder. A line starting <code>pep:</code>
+that is none of these is an error, as is a script that exits with a status
+other than 0, which shows what it printed. What the script printed on
+standard error is passed on.</p>
+<p><strong>When it runs again.</strong> The build keeps the script's output in
+<code>.pep/build/&lt;package&gt;-&lt;hash&gt;/stamp</code>, and uses it again until something the script
+depends on changes: its own file, the variables above, and what its
+<code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines name. A script that
+reads other files, such as its C sources or Pepper files of its own it
+imports, names them with <code>rerun-if-changed</code>; a change to a file it does not
+name leaves its last output in use. Builds that run side by side
+(<code>pepper test</code>) run one package's script one at a time.</p>
+<p><strong>What a build script can do.</strong> A build script is a program like any
+other: it runs with your permissions, can read and write any file you
+can, start programs and use the network. Building a project that depends
+on a package with a build script runs that package's code on your machine,
+before any of its code is in a program you chose to run. So:</p>
+<ul>
+<li><code>pepper package add</code>, <code>update</code> and <code>fetch</code> name each package that
+arrives (new, or at another commit) with a build script, and the file to
+read: <code>note: native 1.0.0 (github:someone/native) has a build script, which every build of the project compiles and runs on this machine: read ...</code>.</li>
+<li><code>pepper build --no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>, which
+<code>pepper test</code> and <code>pepper run</code> builds see too) fails instead of running a
+dependency's script, naming it. The project's own script still runs: it
+is your code.</li>
+</ul>
+<p>What is not supported yet: generating Pepper code (a <code>.pep</code> file a package
+imports from <code>PEP_OUT_DIR</code>), setting build options from a script, a
+<code>[build-dependencies]</code> table (a script imports the runtime and the
+packages the project depends on), a helper package for finding a library
+with <code>pkg-config</code> and compiling C with the target's flags, and a <code>[native]</code>
+table that compiles C sources without a script.</p>
 <h2 id="dependencies"><a class="header" href="#dependencies"><code>[dependencies]</code></a></h2>
 <p>Each key is the name source code imports, and its value says where the
 package comes from and which revision to use:</p>
@@ -750,6 +841,8 @@ with a <code>path</code>, or one that is not an identifier.</li>
 <li>An <code>[overrides]</code> key that is not a source (<code>github:owner/name</code>), or an
 override with <code>optional</code>, <code>features</code> or <code>default-features</code>.</li>
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
+<li>A <code>[build]</code> <code>script</code> that names a file that does not exist, which a
+build reports.</li>
 </ul>
 <p>An import of a dependency that is not on disk says which folder is missing:</p>
 <pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry; run 'pepper package fetch'
