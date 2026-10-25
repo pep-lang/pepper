@@ -111,6 +111,9 @@ c_programs_call_a_static_and_a_shared_library() {
     # Linked by its file name, which is its `soname`.
     var dynamic = _run(process.Command("readelf").argument("-d").argument(shared.to_string()));
     expect_true(dynamic.contains("Library soname: [libcounter.so]"));
+    # The runtime's thread-locals are general-dynamic, so a program may
+    # `dlopen` it (an initial-exec one needs static TLS: pepper#246).
+    expect_false(dynamic.contains("STATIC_TLS"));
     File.remove(archive);
     expect_equal(_run_program(root, [shared.to_string(), $"-Wl,-rpath,{root}"]), _EXPECTED);
 }

@@ -531,6 +531,7 @@ _compile_unit(
     setup.opt_level = options.opt_level;
     setup.frame_pointers = options.frame_pointers;
     setup.runtime_checks = options.runtime_checks;
+    setup.library = options.library.is_value();
     setup.separate_locations = true;
     var namespaces = Array<String>();
     for (var f in program.files) {
@@ -1091,6 +1092,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     setup.opt_level = options.opt_level;
     setup.frame_pointers = options.frame_pointers;
     setup.runtime_checks = options.runtime_checks;
+    setup.library = options.library.is_value();
     setup.debug_info = options.debug;
     setup.static_locations = static_locations;
     var runtime = _runtime_dir(program);
@@ -1554,6 +1556,10 @@ _runtime_dir(program: link.Program): Path? {
 # What else changes the code generated, for the cache's keys.
 _codegen_options(options: BuildOptions): String {
     var out = options.frame_pointers ? " --frame-pointers" : "";
+    if (options.library.is_value()) {
+        # A library's thread-locals use another TLS model.
+        out = $"{out} --lib";
+    }
     if (options.debug) {
         out = $"{out} -g";
     }

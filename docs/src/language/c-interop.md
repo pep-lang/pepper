@@ -618,6 +618,12 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
 - A C program links at most one Pepper static library: each holds its own
   copy of the runtime, and two would define it twice. Shared libraries
   keep their runtimes to themselves, so a program may load several.
+- Either kind may end up in a shared object that a program loads with
+  `dlopen`, as every Android app's native code is, so a library's
+  thread-locals (its own and the runtime's) use the general-dynamic TLS
+  model, which any shared object may. On Linux and Android, reading one
+  costs a call (`__tls_get_addr`, or a TLS descriptor's on arm64) where a
+  program's costs a load.
 
 ### Initialization, panics and threads
 

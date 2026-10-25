@@ -83,8 +83,8 @@ names_each_system_root_variable_without_the_os_version() {
 }
 
 # The LLVM IR of `source`, a program without the runtime, compiled for
-# `target`.
-_ir(source: String, target: link.Target): String {
+# `target`, as a library's with `library`.
+_ir(source: String, target: link.Target, library: bool = false): String {
     var folder = TempFolder("target_ir");
     var file = folder.path.join(Path("main.pep"));
     File.write_text(file, source);
@@ -101,7 +101,9 @@ _ir(source: String, target: link.Target): String {
     for (var f in program.value().files) {
         namespaces.append(f.namespace);
     }
-    var ir = codegen.generate_ir(module.value(), state.value(), namespaces, "main");
+    var ir = codegen.generate_ir(
+        module.value(), state.value(), namespaces, "main", library = library
+    );
     expect_true(ir.is_ok());
     return ir.value();
 }
@@ -123,6 +125,22 @@ selects_and_generates_the_targets_code() {
     expect_true(wasm.contains("target triple = \"wasm32-wasip1\""));
     expect_true(wasm.contains("target datalayout = \"e-m:e-p:32:32"));
     expect_true(wasm.contains("store i32 32, ptr %retval"));
+}
+
+const _THREAD_LOCAL = "[ThreadLocal]\nvar count: int = 0;\nmain(): int {\n    count += 1;\n    return count;\n}\n";
+
+# A program's thread-locals are initial-exec; a library's are
+# general-dynamic, since a `dlopen`ed shared object may not use
+# initial-exec (bionic refuses to load one: pepper#246).
+[Test]
+a_librarys_thread_locals_are_general_dynamic() {
+    for (var triple in ["x86_64-linux-android", "aarch64-linux-android", "x86_64-unknown-linux-gnu"]) {
+        var program = _ir(_THREAD_LOCAL, _parse(triple));
+        expect_true(program.contains("thread_local(initialexec) global i32 0"));
+        var library = _ir(_THREAD_LOCAL, _parse(triple), true);
+        expect_true(library.contains("thread_local global i32 0"));
+        expect_false(library.contains("initialexec"));
+    }
 }
 
 [Test]
