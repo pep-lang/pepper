@@ -21,6 +21,11 @@
 #     pepper package tree --invert numbers      # what depends on numbers
 #     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
+#     pepper package install someone/tool@1     # builds its program into the Pepper home's bin
+#     pepper package install someone/tools --package fmt  # the workspace member fmt
+#     pepper package install --path .           # the package in a folder
+#     pepper package install --list             # what is installed, and from where
+#     pepper package uninstall tool
 #     pepper package audit [--ignore ID] [--json]  # the locked packages an advisory affects
 #     pepper package vendor [vendor]            # every locked package into the repository
 #     pepper package cache info                 # the download cache every project shares
@@ -46,6 +51,7 @@ import "advisory";
 import "archive";
 import "git";
 import "graph";
+import "install";
 import "lock";
 import "manifest";
 import "resolve";
@@ -148,6 +154,38 @@ main(args: String[]): int {
     );
     var exit_code = outdated.flag("exit-code", help = "exit with status 1 when a package is outdated");
     var outdated_json = outdated.flag("json", help = "print the outdated packages as JSON");
+    var install = parser.command(
+        "install", "Builds a package's program optimized and puts it in the Pepper home's bin, which is on the PATH"
+    );
+    var install_package = install.positional(
+        "package",
+        "[host:]owner/name[@range]: the newest version the range allows (default: the newest release); install it again to upgrade",
+        required = false
+    );
+    var install_member = install.option(
+        "package",
+        "",
+        "the member of the repository's (or --path folder's) workspace to install, by its package name; a repository's comes at a version of its own NAME-v<version> tags",
+        value_name = "NAME"
+    );
+    var install_path = install.option("path", "", "install the package in this folder instead", value_name = "DIR");
+    var install_list = install.flag("list", help = "list what is installed, and from where, instead");
+    var install_force = install.flag(
+        "force",
+        "f",
+        "replace a program in bin that was installed from another source, or not by 'pepper package install'"
+    );
+    var install_features = install.multiple(
+        "features",
+        "F",
+        "the package's features to turn on: a comma-separated list, or repeat the option",
+        value_name = "NAMES"
+    );
+    var install_no_default_features = install.flag(
+        "no-default-features", help = "leave the package's default feature off"
+    );
+    var uninstall = parser.command("uninstall", "Removes a program 'install' put in the Pepper home's bin");
+    var uninstall_name = uninstall.positional("name", "the program's name, as 'install --list' shows it");
     var audit = parser.command(
         "audit",
         "Checks every package pep.lock records against the security advisory database; exits 1 when one is affected"
@@ -173,6 +211,42 @@ main(args: String[]): int {
     }
     if (cache.is_selected) {
         return cache_info.is_selected ? show_cache() : clean_cache();
+    }
+    if (install.is_selected) {
+        if (install_list.is_set) {
+            return list_installed();
+        }
+        var options = Array<String>();
+        for (var names in install_features.values()) {
+            options.append_all(["--features", names]);
+        }
+        if (install_no_default_features.is_set) {
+            options.append("--no-default-features");
+        }
+        # These are for the build, and its package's own pep.lock;
+        # `PEPPER_LOCKED` and `PEPPER_OFFLINE` reach it as they are.
+        if (locked.is_set or frozen.is_set) {
+            options.append("--locked");
+        }
+        if (offline.is_set or frozen.is_set) {
+            options.append("--offline");
+        }
+        return install_tool(
+            install_package.value_or(""),
+            install_member.value_or(""),
+            install_path.value_or(""),
+            install_force.is_set,
+            options,
+            offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE")
+        );
+    }
+    if (uninstall.is_selected) {
+        var removed = uninstall_program(uninstall_name.value());
+        if (removed.is_err()) {
+            return fail(removed.error().message);
+        }
+        say(removed.value());
+        return 0;
     }
     var start = directory.is_set ? Path(directory.value()) : Path(".");
     var found = find_manifest(start);
@@ -351,6 +425,131 @@ clean_cache(): int {
     return 0;
 }
 
+# `install`: builds the program of the package `spec` names, or of the
+# one in the folder `path` (their workspace member `member`, when that is
+# not empty), with `-O` and `options`, and puts it in the Pepper home's
+# `bin`.
+install_tool(spec: String, member: String, path: String, force: bool, options: Array<String>, offline: bool): int {
+    if (spec.is_empty == path.is_empty) {
+        return fail("give 'install' a package or --path, and not both");
+    }
+    var checked = check_member(member);
+    if (checked.is_err()) {
+        return fail(checked.error().message);
+    }
+    var record = InstalledTool();
+    record.toolchain_version = version();
+    if (!path.is_empty) {
+        var found = Path(path).canonicalize();
+        if (found.is_err()) {
+            return fail($"cannot find {path}: {found.error().message}");
+        }
+        var dir = member.is_empty ? Result<Path>.Ok(found.value()) : member_folder(found.value(), path, member);
+        if (dir.is_err()) {
+            return fail(dir.error().message);
+        }
+        record.source = "path:" + dir.value().to_string();
+        var text = File.read_to_string(dir.value().join("pep.toml"));
+        var parsed = toml.parse(text.is_ok() ? text.value() : "");
+        if (parsed.is_ok()) {
+            record.version = _package_string(parsed.value(), "version");
+        }
+        return _report(install_program(dir.value(), record, force, options));
+    }
+    if (offline) {
+        return fail(
+            "--offline, and installing a package looks its versions up over the network; run it without --offline (or PEPPER_OFFLINE), or install a folder with --path"
+        );
+    }
+    # A folder per process, so that two installs at once stay apart.
+    var staging = toolchain.find_home().root.join("cache").join($"install-{process.id()}");
+    if (staging.exists()) {
+        var cleared = remove_tree(staging);
+        if (cleared.is_err()) {
+            return fail($"cannot remove {staging.to_string()}: {cleared.error().message}");
+        }
+    }
+    var result = _install_through(staging, spec, member, record, force, options);
+    remove_tree(staging);
+    return result;
+}
+
+# Installs the package `spec` names (its workspace member `member`, when
+# that is not empty), at the newest version its range allows that this
+# toolchain builds, fetched through the download cache into `staging`.
+_install_through(
+    staging: Path, spec: String, member: String, record: InstalledTool, force: bool, options: Array<String>
+): int {
+    var parsed = parse_package(spec);
+    if (parsed.is_err()) {
+        return fail(parsed.error().message);
+    }
+    var (host, repository, range) = parsed.value();
+    var found = find_package(host, repository, member, range, Manifest().hosts);
+    if (found.is_err()) {
+        return fail(found.error().message);
+    }
+    var requirement = found.value().0;
+    requirement.name = member.is_empty ? default_name(requirement.repository) : member;
+    # Only the package's own revision: its dependencies are its pep.lock's.
+    var resolver = Resolver(staging, Manifest(), Array<Locked>());
+    resolver.toolchain = version();
+    var notes = Array<String>();
+    var chosen = resolver.choose(requirement.source(), [Wanted("install", true, false, "", requirement)], notes);
+    if (chosen.is_err()) {
+        return fail(chosen.error().message);
+    }
+    for (var note in notes) {
+        say(note);
+    }
+    record.source = requirement.source();
+    record.version = chosen.value().version;
+    record.commit = chosen.value().commit;
+    # Built in a folder of its own: under `.pep`, it would build as part
+    # of the project outside. Reading which toolchain a version needs
+    # checked it out in `.pep/deps`, which then only moves.
+    var package_folder = staging.join("package");
+    # A member's checkout is its own (`owner/name#member`).
+    var checkout = split_source(record.source).1;
+    var read = package_dir(staging, requirement.host, checkout);
+    if (read.is_directory()) {
+        File.rename(read, package_folder);
+    }
+    var fetched = resolver.fetch(requirement.host, checkout, package_folder, record.commit);
+    if (fetched.is_err()) {
+        return fail($"cannot fetch {record.source}: {fetched.error().message}");
+    }
+    var program_folder = member.is_empty ?
+        Result<Path>.Ok(package_folder) :
+        member_folder(package_folder, repository, member);
+    if (program_folder.is_err()) {
+        return fail(program_folder.error().message);
+    }
+    return _report(install_program(program_folder.value(), record, force, options));
+}
+
+# Says what `done` did, or fails with why it could not.
+_report(done: Result<String>): int {
+    if (done.is_err()) {
+        return fail(done.error().message);
+    }
+    say(done.value());
+    return 0;
+}
+
+# `install --list`: each program `install` put in the home's `bin`, with
+# its version and source.
+list_installed(): int {
+    var records = read_installed();
+    if (records.is_err()) {
+        return fail(records.error().message);
+    }
+    for (var (name, record) in records.value()) {
+        print($"{name} {record.describe()}");
+    }
+    return 0;
+}
+
 # Prints `message` as progress.
 say(message: String) {
     File.stderr().write_all($"pep-package: {message}\n");
@@ -391,6 +590,126 @@ default_name(repository: String): String {
         name = name.substr(0, name.length - 4);
     }
     return syntax.to_identifier(name);
+}
+
+# The host (or empty), `owner/name` and range (or empty) that `spec`,
+# `[host:]owner/name[@range]`, names.
+parse_package(spec: String): Result<(String, String, String)> {
+    var host = "";
+    var rest = spec;
+    var prefixed = spec.split_once(":");
+    if (prefixed.is_value() and is_host(prefixed.value().0)) {
+        host = prefixed.value().0;
+        rest = prefixed.value().1;
+    }
+    var range = "";
+    var at = rest.split_once("@");
+    if (at.is_value()) {
+        rest = at.value().0;
+        range = at.value().1;
+        var parsed = parse_range(range);
+        if (parsed.is_err()) {
+            return Result<(String, String, String)>.Err(parsed.error().message);
+        }
+    }
+    var parts = rest.split("/");
+    if (parts.count < 2 or (parts.count > 2 and host != "gitlab" and !host.is_empty) or parts.contains("")) {
+        return Result<(String, String, String)>.Err($"'{spec}' must name a repository as owner/name");
+    }
+    return Result<(String, String, String)>.Ok((host, rest, range));
+}
+
+# Fails when `member`, a `--package`, is not empty and not a package name.
+check_member(member: String): Result<void> {
+    if (!member.is_empty and !syntax.is_identifier(member)) {
+        return Result<void>.Err($"'--package' names a workspace member by its package name, and '{member}' is not one");
+    }
+    return Result<void>.ok();
+}
+
+# The requirement on `repository` (its workspace member `member`, when
+# that is not empty) at `range`, on `host` or, when that is empty, the
+# first of `hosts` that has it. With no range it asks for any release
+# (`*`, by the member's own tags), and says so with true, or the default
+# branch when there is no release.
+find_package(
+    host: String, repository: String, member: String, range: String, hosts: Array<String>
+): Result<(Requirement, bool)> {
+    var requirement = Requirement();
+    requirement.host = host;
+    requirement.repository = repository;
+    requirement.member = member;
+    var refs = Array<RemoteRef>();
+    if (host.is_empty) {
+        var found = look_up(repository, hosts);
+        if (found.is_err()) {
+            return Result<(Requirement, bool)>.Err(found.error().message);
+        }
+        var (found_host, found_refs) = found.value();
+        requirement.host = found_host;
+        refs = found_refs;
+    } else if (range.is_empty) {
+        var read = remote_refs(repository_url(host, repository));
+        if (read.is_err()) {
+            return Result<(Requirement, bool)>.Err($"cannot read {host}:{repository}: {read.error().message}");
+        }
+        refs = read.value();
+    }
+    var any = false;
+    if (range.is_empty) {
+        for (var ref in refs) {
+            if (ref.name.starts_with("refs/tags/")) {
+                var version = member_tag_version(member, ref.name.substr(10, ref.name.length));
+                any = any or (version.is_value() and version.value().prerelease.is_empty);
+            }
+        }
+    }
+    if (any or !range.is_empty) {
+        requirement.kind = "version";
+        requirement.value = any ? "*" : range;
+    }
+    return Result<(Requirement, bool)>.Ok((requirement, any));
+}
+
+# The first of `hosts` that has `repository`, and what it offers. Says so
+# when another host has it too.
+look_up(repository: String, hosts: Array<String>): Result<(String, Array<RemoteRef>)> {
+    if (!has_git()) {
+        return Result<(String, Array<RemoteRef>)>.Err(
+            $"git is not on the PATH: looking {repository} up needs it; install git"
+        );
+    }
+    var found = Array<String>();
+    var chosen = Array<RemoteRef>();
+    var failures = Array<String>();
+    for (var host in hosts) {
+        # Only GitLab has nested groups.
+        if (repository.split("/").count > 2 and host != "gitlab") {
+            continue;
+        }
+        var refs = remote_refs(repository_url(host, repository));
+        if (refs.is_err()) {
+            failures.append($"{host}: {refs.error().message}");
+            continue;
+        }
+        if (found.is_empty) {
+            chosen = refs.value();
+        }
+        found.append(host);
+    }
+    if (found.is_empty) {
+        var text = $"no host has {repository} (looked on {", ".join(hosts)})";
+        for (var failure in failures) {
+            text += "\n  " + failure;
+        }
+        return Result<(String, Array<RemoteRef>)>.Err(text);
+    }
+    if (found.count > 1) {
+        say(
+            $"{repository} is on {" and ".join(found)}; adding {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
+        );
+    }
+    return Result<(String, Array<RemoteRef>)>.Ok((found[0], chosen));
 }
 
 # A project: its pep.toml, pep.lock and `.pep/deps`. In a workspace, the
@@ -606,29 +925,14 @@ struct Project {
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
             );
         }
-        var host = "";
-        var rest = spec;
-        var prefixed = spec.split_once(":");
-        if (prefixed.is_value() and is_host(prefixed.value().0)) {
-            host = prefixed.value().0;
-            rest = prefixed.value().1;
+        var parsed = parse_package(spec);
+        if (parsed.is_err()) {
+            return fail(parsed.error().message);
         }
-        var range = "";
-        var at = rest.split_once("@");
-        if (at.is_value()) {
-            rest = at.value().0;
-            range = at.value().1;
-            var parsed = parse_range(range);
-            if (parsed.is_err()) {
-                return fail(parsed.error().message);
-            }
-        }
-        var parts = rest.split("/");
-        if (parts.count < 2 or (parts.count > 2 and host != "gitlab" and !host.is_empty) or parts.contains("")) {
-            return fail($"'{spec}' must name a repository as owner/name");
-        }
-        if (!member.is_empty and !syntax.is_identifier(member)) {
-            return fail($"'--package' names a workspace member by its package name, and '{member}' is not one");
+        var (given_host, rest, given_range) = parsed.value();
+        var checked = check_member(member);
+        if (checked.is_err()) {
+            return fail(checked.error().message);
         }
         var name = !given_name.is_empty ? given_name : member.is_empty ? default_name(rest) : member;
         if (!syntax.is_identifier(name)) {
@@ -647,39 +951,16 @@ struct Project {
         if (runtime_has_module(name)) {
             return fail($"'{name}' is the name of a runtime module; add the dependency with --name");
         }
-        var refs = Array<RemoteRef>();
-        if (host.is_empty) {
-            var found = _look_up(rest, manifest.value().hosts);
-            if (found.is_err()) {
-                return fail(found.error().message);
-            }
-            var (found_host, found_refs) = found.value();
-            host = found_host;
-            refs = found_refs;
-        } else if (range.is_empty) {
-            var read = remote_refs(repository_url(host, rest));
-            if (read.is_err()) {
-                return fail($"cannot read {host}:{rest}: {read.error().message}");
-            }
-            refs = read.value();
+        var found = find_package(given_host, rest, member, given_range, manifest.value().hosts);
+        if (found.is_err()) {
+            return fail(found.error().message);
         }
+        var (requirement, pin) = found.value();
+        var host = requirement.host;
+        var range = requirement.value;
         # With no range, any release resolves, and pep.toml then names the
         # one chosen (the newest this toolchain builds) as a caret range;
         # with no version tags, the default branch.
-        var pin = false;
-        if (range.is_empty) {
-            for (var ref in refs) {
-                if (ref.name.starts_with("refs/tags/")) {
-                    var version = member_tag_version(member, ref.name.substr(10, ref.name.length));
-                    if (version.is_value() and version.value().prerelease.is_empty) {
-                        pin = true;
-                    }
-                }
-            }
-            if (pin) {
-                range = "*";
-            }
-        }
         var entry = toml.TomlValue.table();
         entry[host] = toml.TomlValue.String(rest);
         if (!member.is_empty) {
@@ -709,7 +990,7 @@ struct Project {
         if (written.is_err()) {
             return fail($"cannot write {manifest_path.to_string()}: {written.error().message}");
         }
-        var source = host + ":" + rest + (member.is_empty ? "" : "#" + member);
+        var source = requirement.source();
         var graph = _resolve(false, [source]);
         if (graph.is_err()) {
             # Leave pep.toml as it was.
@@ -736,47 +1017,6 @@ struct Project {
         _notes(graph.value());
         say($"'import {name};' now imports {source}");
         return 0;
-    }
-
-    # The first of `hosts` that has `repository`, and what it offers. Says
-    # so when another host has it too.
-    _look_up(repository: String, hosts: Array<String>): Result<(String, Array<RemoteRef>)> {
-        if (!has_git()) {
-            return Result<(String, Array<RemoteRef>)>.Err(
-                $"git is not on the PATH: looking {repository} up needs it; install git"
-            );
-        }
-        var found = Array<String>();
-        var chosen = Array<RemoteRef>();
-        var failures = Array<String>();
-        for (var host in hosts) {
-            # Only GitLab has nested groups.
-            if (repository.split("/").count > 2 and host != "gitlab") {
-                continue;
-            }
-            var refs = remote_refs(repository_url(host, repository));
-            if (refs.is_err()) {
-                failures.append($"{host}: {refs.error().message}");
-                continue;
-            }
-            if (found.is_empty) {
-                chosen = refs.value();
-            }
-            found.append(host);
-        }
-        if (found.is_empty) {
-            var text = $"no host has {repository} (looked on {", ".join(hosts)})";
-            for (var failure in failures) {
-                text += "\n  " + failure;
-            }
-            return Result<(String, Array<RemoteRef>)>.Err(text);
-        }
-        if (found.count > 1) {
-            say(
-                $"{repository} is on {" and ".join(found)}; adding {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
-            );
-        }
-        return Result<(String, Array<RemoteRef>)>.Ok((found[0], chosen));
     }
 
     remove(spec: String): int {
@@ -934,16 +1174,7 @@ struct Project {
     # the PATH) run in the project's folder with no file, and `--all` in a
     # workspace.
     _builds(): bool {
-        var compiler = "pep-build";
-        var executable = process.executable_path();
-        if (executable.is_ok() and executable.value().parent().is_value()) {
-            var name = Path.separator() == "\\" ? "pep-build.exe" : "pep-build";
-            var beside = executable.value().parent().value().join(name);
-            if (beside.is_file()) {
-                compiler = beside.to_string();
-            }
-        }
-        var command = process.Command(compiler).working_directory(dir);
+        var command = process.Command(pep_build()).working_directory(dir);
         if (is_workspace) {
             command.argument("--all");
         }

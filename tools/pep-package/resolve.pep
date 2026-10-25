@@ -245,17 +245,7 @@ export struct Resolver {
         if (member.is_empty or (replacement.is_value() and replacement.value().is_path())) {
             return Result<Path>.Ok(dir);
         }
-        var names = Array<String>();
-        for (var (folder, name) in workspace_members(dir)) {
-            if (name == member) {
-                return Result<Path>.Ok(folder);
-            }
-            names.append($"'{name}'");
-        }
-        return Result<Path>.Err(
-            $"{repository_of(split_source(source).1)} has no workspace member '{member}'"
-                + (names.is_empty ? ", nor a workspace" : "; its members are " + ", ".join(names))
-        );
+        return member_folder(dir, repository_of(split_source(source).1), member);
     }
 
     # The `minimum_toolchain` the pep.toml at `commit` of `source` declares,
@@ -917,6 +907,22 @@ export struct Resolver {
         }
         return Result<Locked>.Ok(Locked("", source, version.to_string(), commit));
     }
+}
+
+# The folder of the workspace member `member` in `dir`, a checkout of
+# `repository`; fails, naming the members there, when it has none.
+export member_folder(dir: Path, repository: String, member: String): Result<Path> {
+    var names = Array<String>();
+    for (var (folder, name) in workspace_members(dir)) {
+        if (name == member) {
+            return Result<Path>.Ok(folder);
+        }
+        names.append($"'{name}'");
+    }
+    return Result<Path>.Err(
+        $"{repository} has no workspace member '{member}'"
+            + (names.is_empty ? ", nor a workspace" : "; its members are " + ", ".join(names))
+    );
 }
 
 # The version a tag names: `1.2.3` or `v1.2.3`, with an optional

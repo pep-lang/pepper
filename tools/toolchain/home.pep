@@ -6,7 +6,8 @@
 #     <home>/toolchains/0.3.0/runtime/  and its runtime
 #     <home>/default-toolchain          the default toolchain's version
 #
-# A program installed in a home's `bin` uses that home. Any other uses
+# A program installed in a home's `bin`, or in one of its toolchains, uses
+# that home. Any other uses
 # `PEPPER_HOME`, else `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper`
 # elsewhere. Toolchains are also found in the folders `PEPPER_TOOLCHAIN_PATH`
 # lists, each laid out as `<home>/toolchains` is.
@@ -144,14 +145,25 @@ export struct Home {
     }
 }
 
-## Returns the Pepper home: the one the running program is installed in,
-## else `PEPPER_HOME` when it is set, else `%LOCALAPPDATA%\pepper` on
+## Returns the Pepper home: the one the running program is installed in
+## (in its `bin`, or in a toolchain's), else `PEPPER_HOME` when it is set, else `%LOCALAPPDATA%\pepper` on
 ## Windows and `~/.pepper` elsewhere. Its `search` folders are those
 ## `PEPPER_TOOLCHAIN_PATH` lists.
 export find_home(): Home {
     var installed = home_of_executable();
     if (installed.is_value()) {
         return installed.value();
+    }
+    # A toolchain's tool, `<home>/toolchains/<version>/bin/<tool>`.
+    var executable = process.executable_path();
+    if (executable.is_ok()) {
+        var toolchains = executable.value().join("..").join("..").join("..").normalize();
+        var root = toolchains.parent();
+        if (toolchains.file_name().value_or("") == "toolchains" and root.is_value()) {
+            var found = Home(root.value());
+            found.search = toolchain_path();
+            return found;
+        }
     }
     var home = Home(_default_root());
     home.search = toolchain_path();
@@ -236,4 +248,61 @@ export is_windows(): bool {
 ## Returns the suffix of an executable's file name: `.exe` on Windows.
 export executable_suffix(): String {
     return is_windows() ? ".exe" : "";
+}
+
+## Puts `contents` at `path`, an executable: written beside it as
+## `<path>.new`, then renamed into place, the file there first moved aside
+## to `<path>.old`. Windows cannot remove or overwrite a running program's
+## file but can rename it, so there the `.old` file of one that still runs
+## stays, and the next call for `path` removes it.
+##
+## @param path the executable to write
+## @param contents its bytes
+## @returns nothing, or why it cannot be written or put in place
+export replace_executable(path: Path, contents: u8[]): Result<void> {
+    var old = Path(path.to_string() + ".old");
+    if (old.exists()) {
+        File.remove(old);
+    }
+    var fresh = Path(path.to_string() + ".new");
+    var written = File.write_bytes(fresh, contents);
+    if (written.is_err()) {
+        return Result<void>.Err($"cannot write {fresh.to_string()}: {written.error().message}");
+    }
+    fresh.set_executable(true);
+    if (path.exists()) {
+        var moved = File.rename(path, old);
+        if (moved.is_err()) {
+            File.remove(fresh);
+            return Result<void>.Err($"cannot move {path.to_string()} aside: {moved.error().message}");
+        }
+    }
+    var placed = File.rename(fresh, path);
+    if (placed.is_err()) {
+        return Result<void>.Err($"cannot replace {path.to_string()}: {placed.error().message}");
+    }
+    # Only Windows keeps it, while the old program still runs.
+    File.remove(old);
+    return Result<void>.ok();
+}
+
+## Removes the executable `path`. Where it cannot be removed because it
+## runs (on Windows), it is moved aside to `<path>.old` instead, which the
+## next `replace_executable` or `remove_executable` for `path` removes.
+##
+## @param path the executable to remove
+## @returns nothing, or why it can be neither removed nor moved aside
+export remove_executable(path: Path): Result<void> {
+    var old = Path(path.to_string() + ".old");
+    if (old.exists()) {
+        File.remove(old);
+    }
+    if (File.remove(path).is_ok()) {
+        return Result<void>.ok();
+    }
+    var moved = File.rename(path, old);
+    if (moved.is_err()) {
+        return Result<void>.Err($"cannot remove {path.to_string()}: {moved.error().message}");
+    }
+    return Result<void>.ok();
 }

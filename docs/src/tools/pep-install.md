@@ -28,6 +28,9 @@ uses: the one `pepper +<version>` names, else `PEPPER_TOOLCHAIN`'s, else the
 one the project's `pep.toml` pins with `toolchain = "0.3"`, else the default
 (see [Toolchains](pepper.md#toolchains)).
 
+To install a command-line tool built from a package, rather than a
+toolchain, use [`pepper package install`](pep-package.md#install).
+
 ## Options and commands
 
 | Command or option | What it does |
@@ -92,7 +95,8 @@ toolchain one of whose programs is running (a `pep-lsp` the editor
 started, say) cannot be moved, and the install fails, leaving it in place.
 
 The home is the folder above the running `pep-install` when that is a home
-(it has a `toolchains` folder), else `PEPPER_HOME`, else
+(it has a `toolchains` folder), or the one whose toolchain it is
+(`<home>/toolchains/<version>/bin`), else `PEPPER_HOME`, else
 `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere.
 
 ## Setting a machine up
