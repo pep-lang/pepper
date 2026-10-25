@@ -869,7 +869,14 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
 - **Types**: `TypeName { name, sub_types, flags, labels }` (`model.pep`,
   its methods in `type_name.pep`), with constants `AUTO` (`__auto`),
   `VOID`, and `FUNCTION` (`__function`), and `replace_map` (generic
-  substitution); `arithmetic.result_type` gives the type two numbers
+  substitution). Types share their arguments: `copy()` gives the type
+  arrays of its own but keeps its arguments, and `replace` makes new
+  nodes on the way to what it replaces and puts the type argument itself
+  there, so a pass may change the type it holds but never a type below
+  it (`fill_defaults` and alias expansion copy an argument before
+  changing it). Copying arguments whole made each level of a nested
+  literal hold the levels below it again: memory quadratic in its depth
+  (#210). `arithmetic.result_type` gives the type two numbers
   promote to. `static_type_of` gives a best-effort static type for
   operator resolution and print conversion. A method's result on a
   generic instance with no specialization yet comes from the base, its

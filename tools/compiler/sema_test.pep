@@ -221,6 +221,35 @@ labeled_through_substitutes_the_receivers_type_arguments() {
     expect_true(element.labeled_through(receiver, sema.parse_type_string("T"), ["T"]) === element);
 }
 
+# Types share their arguments (#210): `replace` puts the type argument itself
+# below the type it changes and leaves the types it walked through as they
+# were, and `copy` keeps the arguments, so a nested type is not copied at
+# each mention.
+[Test]
+replace_and_copy_share_type_arguments() {
+    var template = sema.parse_type_string("Box<__ptr<T>, int>");
+    var inner = template.sub_types[0];
+    var argument = sema.parse_type_string("Array<Array<int>>");
+    var ty = template.copy();
+    expect_true(ty.sub_types[1] === template.sub_types[1]);
+    sema.replace_map(ty, [("T", argument)]);
+    expect_equal(ty.to_string(), "Box<__ptr<Array<Array<int>>>, int>");
+    expect_true(ty.sub_types[0].sub_types[0] === argument);
+    expect_true(ty.sub_types[1] === template.sub_types[1]);
+    expect_equal(template.to_string(), "Box<__ptr<T>, int>");
+    expect_true(template.sub_types[0] === inner);
+    # Two parameters at once go through placeholders, and still share.
+    var pair = sema.parse_type_string("Pair<K, V>");
+    sema.replace_map(pair, [("K", sema.TypeName.named("V")), ("V", argument)]);
+    expect_equal(pair.to_string(), "Pair<V, Array<Array<int>>>");
+    expect_true(pair.sub_types[1] === argument);
+    # A whole type that is the parameter becomes a copy with arrays of its own.
+    var whole = sema.TypeName.named("T");
+    whole.replace("T", argument);
+    whole.sub_types.append(sema.TypeName.named("int"));
+    expect_equal(argument.to_string(), "Array<Array<int>>");
+}
+
 # `verify_injected` finds a construct whose type the compiler injects still
 # in its placeholder form: string literals in a parameter default before
 # `resolve_injected` (step 18), and nothing once every pass has run.

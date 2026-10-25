@@ -7224,13 +7224,12 @@ export struct TypeName {
         this.labels = labels;
     }
 
-    ## Returns a deep copy, which shares only locations and AST nodes.
+    ## Returns a copy with arrays of its own that shares its type arguments,
+    ## which no pass changes in place.
     copy(): TypeName {
-        var _c576 = Array<TypeName>();
-        for (var _item576 in this.sub_types) {
-            _c576.append(_item576.copy());
-        }
-        return TypeName(name = this.name, sub_types = _c576, flags = this.flags, labels = this.labels.copy());
+        return TypeName(
+            name = this.name, sub_types = this.sub_types.clone(), flags = this.flags, labels = this.labels.copy()
+        );
     }
 
     ## Adds this to `into`: equal values add the same.

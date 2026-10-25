@@ -566,8 +566,9 @@ const_string_types_alike_whole_and_in_units() {
 # Nested collection literals and generic calls are typed in one walk, not
 # one level per specialization round: 20 levels took 11 s and 120 more than
 # 10 minutes (#202), and generic calls past eight levels failed to infer.
-# 64 levels keep the test quick; 256 build too, in minutes and gigabytes,
-# since each level's specialization spells its types whole (#210).
+# 64 levels keep the test quick; 254 (the nesting limit) build too, in about
+# three minutes and 2.3 GB: types share their arguments (#210), but each
+# level's specialization still spells its element type whole in its names.
 [Test]
 nested_literals_build_in_time_and_run() {
     var folder = TempFolder("programs_nested_literals");
