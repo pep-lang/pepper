@@ -16761,7 +16761,9 @@ manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 which needs nothing installed; a private key (a server's or a client's)
 must be PKCS #8 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or
 Server 2022. On iOS it uses the system's Security.framework, which needs
-nothing bundled, for clients only and with TLS 1.2 (see
+nothing bundled, for clients only and with TLS 1.2. On Android it uses an
+OpenSSL 3 that the toolchain carries and links into the program, with the
+system's trusted certificates (see
 <a href="language/mobile.html#what-works-differently">iOS and Android</a>).</p>
 <h2 id="timeouts-1"><a class="header" href="#timeouts-1">Timeouts</a></h2>
 <p>A socket call waits as long as it takes unless a timeout limits it:</p>
@@ -20385,10 +20387,21 @@ there for now. iOS checks a server's certificate more strictly than
 OpenSSL: it must name the host in its subject alternative names, carry the
 <code>serverAuth</code> extended key usage and, when issued after June 2019, be valid
 for at most 825 days, even from a private certificate authority.</li>
-<li><strong>TLS on Android.</strong> The <code>tls</code> module (and HTTPS) loads OpenSSL at run
-time, which Android does not ship, so making a TLS context returns an
-<code>IoError</code> unless the app bundles <code>libssl.so.3</code>. Use the platform's own
-networking (OkHttp, <code>HttpURLConnection</code>) for HTTPS for now.</li>
+<li><strong>TLS on Android.</strong> Android ships no OpenSSL a program may load, so the
+toolchain carries a static OpenSSL 3 for each ABI
+(<code>runtime/tls/android/&lt;triple&gt;/libssl.a</code> and <code>libcrypto.a</code>), and a
+program that imports <code>tls</code> (or <code>http</code>) links it: <code>TlsConnector</code>,
+<code>TlsAcceptor</code> and <code>http.Client</code>'s <code>https://</code> URLs work as on Linux, TLS
+1.3 included. A connector trusts the system's certificate store (the
+Conscrypt module's, <code>/apex/com.android.conscrypt/cacerts</code>, on Android 14
+and later; <code>/system/etc/security/cacerts</code> before), less the certificates
+the user turned off in Settings, plus those the user installed
+(<code>/data/misc/user/0/cacerts-added</code>) where the process may read them, and
+any added with <code>add_root_certificate</code>. Unlike an app's Java networking,
+this ignores the app's network security configuration. OpenSSL adds
+about 4 MB to a stripped binary. An app linking a Pepper static
+library adds the libraries its header names (<code>-lssl -lcrypto</code>) from that
+folder: <code>-L &lt;toolchain&gt;/runtime/tls/android/aarch64-linux-android</code>.</li>
 <li><strong>Files.</strong> An app reads and writes inside its own container: pass the
 path the platform gives (<code>FileManager</code>'s documents directory,
 <code>Context.getFilesDir()</code>) to the Pepper code. <code>os.home_directory()</code> and
@@ -20418,6 +20431,13 @@ usual (Xcode's <em>Strip Linked Product</em>, the Android Gradle plugin's
 <code>strip</code> of <code>jniLibs</code>). A Pepper library adds the runtime parts the
 program uses: the prototype app's library below is about 1 MB unstripped.</li>
 <li>Each Android ABI needs its own <code>.so</code>; Google Play requires <code>arm64-v8a</code>.</li>
+<li><strong>OpenSSL's license.</strong> An Android program or app that imports <code>tls</code> (or
+<code>http</code>) contains OpenSSL, which is under the Apache License 2.0, so it
+must give its users a copy of that license: ship
+<code>runtime/tls/android/LICENSE.txt</code> from the toolchain with it, as an app
+does in its open-source licenses screen (Google Play Services'
+<code>oss-licenses</code> plugin, or a page of the app's own), and say that the app
+includes OpenSSL. The iOS build bundles nothing.</li>
 </ul>
 <h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
 <p><code>-g</code> writes DWARF, which LLDB reads in both Xcode and Android Studio. Build
@@ -20445,14 +20465,28 @@ authority, connects to <code>localhost</code> and <code>127.0.0.1</code>, checks
 <code>http/1.1</code>, sends <code>GET /</code>, checks that a connector without the authority is
 refused, and fetches the server through <code>http.Client</code>. It needs no internet
 access. Set <code>PEPPER_MOBILE_TLS_URL</code> to an <code>https://</code> URL to also fetch that
-public host through the system's roots.</p>
+public host through the system's roots. On Android the same check runs in
+the emulator against the same kind of server, which <code>adb reverse</code> makes the
+emulator's <code>localhost</code>, with the same opt-in public fetch. The Android run
+also works on Linux, for the host's ABI (x86_64 there, where the prototype
+app is skipped until
+<a href="https://github.com/pep-lang/pepper/issues/246">pepper#246</a> is fixed), as CI
+runs it: <code>scripts/ci-provision-android.sh</code> sets up an emulator on a
+GitHub-hosted Linux runner, since Apple silicon runners cannot run one.</p>
 <pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 </code></pre>
+<p>From a checkout, programs for Android that import <code>tls</code> need the static
+OpenSSL in the runtime first, which the toolchain already carries:</p>
+<pre><code class="language-sh">bash scripts/openssl-android.sh fetch runtime
+</code></pre>
+<p><code>scripts/openssl-android.sh build &lt;ndk&gt; &lt;output-dir&gt;</code> builds that archive
+(OpenSSL 3.5, for each ABI, with the NDK's clang), and the
+<code>openssl-android</code> workflow publishes it on the <code>openssl-&lt;version&gt;</code> release
+whenever the version the script pins has not been published.</p>
 <h2 id="not-supported-yet-1"><a class="header" href="#not-supported-yet-1">Not supported yet</a></h2>
 <ul>
-<li><strong>TLS on Android</strong>, through a bundled OpenSSL or BoringSSL, and on iOS
-TLS servers, client certificates and TLS 1.3 (which need a SecIdentity
-and Network.framework).</li>
+<li><strong>TLS on iOS</strong>: servers, client certificates and TLS 1.3 (which need a
+SecIdentity and Network.framework).</li>
 <li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
 by hand; a generator could write them from the header.</li>
 <li><strong>Packaging</strong>: an <code>.xcframework</code> holding the device and simulator
@@ -59669,7 +59703,9 @@ with a certificate and key from PEM files; a <code>TlsStream</code> reads and wr
 like an <code>io.TcpStream</code>. In a task, a call that has to wait parks only the
 task.</p>
 <p>On Linux and macOS the module uses OpenSSL 3, loaded when the first
-connector or acceptor is made; on Windows it uses SChannel. On iOS it uses
+connector or acceptor is made; on Windows it uses SChannel. On Android
+the program links a static OpenSSL 3 that the toolchain carries, and a
+connector trusts the system's certificate store. On iOS it uses
 the system's Security.framework (Secure Transport, TLS 1.2), for clients
 only: there <code>TlsAcceptor.create</code> and <code>TlsConnector.set_identity</code> return
 an error.</p>
@@ -59734,10 +59770,12 @@ stream.write_all("ping");
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
-<p>Creates a connector that trusts the system's root certificates.</p>
+<p>Creates a connector that trusts the system's root certificates (on
+Android, the system's certificate store less those the user turned
+off, plus those the user installed where the process may read them).</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework)</li>
+<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework; on Android the program links its own OpenSSL)</li>
 </ul>
 <h3 id="methods-183"><a class="header" href="#methods-183">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>

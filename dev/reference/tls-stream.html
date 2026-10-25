@@ -226,10 +226,12 @@ stream.write_all("ping");
 <h4 id="create"><a class="header" href="#create">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
-<p>Creates a connector that trusts the system's root certificates.</p>
+<p>Creates a connector that trusts the system's root certificates (on
+Android, the system's certificate store less those the user turned
+off, plus those the user installed where the process may read them).</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework)</li>
+<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework; on Android the program links its own OpenSSL)</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>

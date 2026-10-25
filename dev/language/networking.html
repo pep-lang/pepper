@@ -605,7 +605,9 @@ manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 which needs nothing installed; a private key (a server's or a client's)
 must be PKCS #8 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or
 Server 2022. On iOS it uses the system's Security.framework, which needs
-nothing bundled, for clients only and with TLS 1.2 (see
+nothing bundled, for clients only and with TLS 1.2. On Android it uses an
+OpenSSL 3 that the toolchain carries and links into the program, with the
+system's trusted certificates (see
 <a href="mobile.html#what-works-differently">iOS and Android</a>).</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p>A socket call waits as long as it takes unless a timeout limits it:</p>
