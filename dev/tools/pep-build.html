@@ -201,6 +201,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
@@ -373,6 +374,29 @@ executable does (<code>--sysroot</code>).</li>
 (<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
 warning. See
 <a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--lib-xcframework---lib-swift-package"><a class="header" href="#--lib-xcframework---lib-swift-package"><code>--lib xcframework</code>, <code>--lib swift-package</code></a></h3>
+<p>Builds the static library of an iOS app's Pepper code for every iOS target
+at once, packaged as Xcode and SwiftPM take it. Each is named for its
+output, which must be a Swift module name (letters, digits and <code>_</code>):</p>
+<ul>
+<li><code>--lib xcframework</code> writes <code>Name.xcframework</code> (<code>-o Name.xcframework</code>;
+the output must end in <code>.xcframework</code>, since it is replaced whole):
+<code>ios-arm64/</code> for devices and <code>ios-arm64_x86_64-simulator/</code> for the
+simulator on Apple silicon and Intel Macs, each with <code>libName.a</code>, the
+header <code>Name.h</code> and a <code>module.modulemap</code>, so Swift can <code>import Name</code>, and
+the <code>Info.plist</code> listing them. The compiler builds the three static
+libraries by running itself with <code>--lib static --target &lt;triple&gt;</code>, side
+by side, each in a folder of the build folder's <code>xcframework/</code>, and
+writes the simulator's two archives into one universal file itself, as
+<code>lipo</code> would, so this needs no Xcode and works on any system.</li>
+<li><code>--lib swift-package</code> writes the folder <code>Name</code> (<code>-o Name</code>) holding
+<code>Name.xcframework</code> and a <code>Package.swift</code> whose library product <code>Name</code> is
+that binary target, for iOS 15 and later. An app adds it as a local
+package (<code>.package(path: "Name")</code>), or from the repository it is
+committed to.</li>
+</ul>
+<p>They cannot be combined with <code>--target</code> or the <code>--emit</code> options. See
+<a href="../language/mobile.html#packaging-for-xcode-and-swiftpm">iOS and Android</a>.</p>
 <h3 id="--test"><a class="header" href="#--test"><code>--test</code></a></h3>
 <p>Builds the entry file's tests into a test program, which
 <a href="pep-test.html">pep-test</a> runs. A build without it leaves every <code>[Test]</code>

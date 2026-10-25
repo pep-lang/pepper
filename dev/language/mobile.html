@@ -188,8 +188,9 @@ it uses everywhere else: <code>--target</code> picks the platform, and the resul
 ordinary machine code for an iPhone, an iPad, the iOS simulator, or an
 Android phone. An app calls the Pepper code through C, as any C library is
 called: mark the functions <code>[Export]</code>, build a library with <code>--lib static</code>
-(see <a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>), and call
-it from Swift directly, or from Kotlin and Java through JNI.</p>
+(see <a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>), or on iOS
+an <code>.xcframework</code> or a Swift package (<code>--lib xcframework</code>, <code>--lib swift-package</code>), and call it from Swift directly, or from Kotlin and Java
+through JNI.</p>
 <h2 id="targets"><a class="header" href="#targets">Targets</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Triple</th><th>Runs on</th></tr></thead><tbody>
 <tr><td><code>aarch64-apple-ios</code></td><td>iPhone and iPad</td></tr>
@@ -278,6 +279,44 @@ with <code>pepper_string_free</code>:</p>
     return String(cString: result)
 }
 </code></pre>
+<h2 id="packaging-for-xcode-and-swiftpm"><a class="header" href="#packaging-for-xcode-and-swiftpm">Packaging for Xcode and SwiftPM</a></h2>
+<p><code>--lib xcframework</code> builds the library for every iOS target at once, as one
+<code>.xcframework</code> Xcode adds as a single dependency: a device slice and a
+simulator slice holding both simulator architectures, each with the header
+and a module map, so Swift imports it by name with no bridging header.
+<code>--lib swift-package</code> puts it in a Swift package. Neither needs Xcode or an
+SDK: the compiler builds each static library and writes the rest itself.</p>
+<pre><code class="language-sh">pepper build --lib xcframework greeter.pep -o Greeter.xcframework
+pepper build --lib swift-package greeter.pep -o Greeter
+</code></pre>
+<p>The name comes from the output (<code>Greeter</code>): the module (<code>import Greeter</code>),
+the library (<code>libGreeter.a</code>) and its header (<code>Greeter.h</code>). The second
+writes:</p>
+<pre><code class="language-text">Greeter/
+  Package.swift
+  Greeter.xcframework/
+    Info.plist
+    ios-arm64/                    libGreeter.a, Headers/Greeter.h, Headers/module.modulemap
+    ios-arm64_x86_64-simulator/   the same, its libGreeter.a holding arm64 and x86_64
+</code></pre>
+<p>In Xcode, drag <code>Greeter.xcframework</code> into the target's <em>Frameworks,
+Libraries, and Embedded Content</em> (<em>Do Not Embed</em>: it is static), or add the
+package with <em>Add Package Dependencies…</em> › <em>Add Local…</em>. A package depends
+on it by path:</p>
+<pre><code class="language-swift">dependencies: [.package(path: "../Greeter")],
+targets: [
+    .target(name: "App", dependencies: [.product(name: "Greeter", package: "Greeter")]),
+]
+</code></pre>
+<pre><code class="language-swift">import Greeter
+
+let result = "iOS".withCString { greet($0, strlen($0)) }!
+defer { pepper_string_free(result) }
+print(String(cString: result))
+</code></pre>
+<p>The slices are built for iOS 15 and later. A library that links others
+(<code>[Link]</code>, <code>-l</code>) names them in its header, as <code>--lib static</code> does; the app
+links them itself.</p>
 <h2 id="calling-pepper-from-kotlin-or-java"><a class="header" href="#calling-pepper-from-kotlin-or-java">Calling Pepper from Kotlin or Java</a></h2>
 <p>Kotlin and Java reach C through JNI: a shared library holds the Pepper code
 and a C function for each <code>native</code> method, named for its class, which
@@ -399,7 +438,9 @@ same Pepper library, <a href="../../examples/mobile/greeter.pep"><code>greeter.p
 <ul>
 <li><code>ios/</code>: a SwiftUI app (<code>PepperDemo.swift</code>), and <code>build.sh</code>, which builds
 it with <code>swiftc</code> for the simulator and for devices, installs it in a
-booted simulator, launches it and checks its output.</li>
+booted simulator, launches it and checks its output; and <code>package/</code>, a
+Swift package whose tests <code>import Greeter</code> from the package <code>--lib swift-package</code> writes, which <code>package.sh</code> builds and runs in the
+simulator with <code>xcodebuild test</code>.</li>
 <li><code>android/</code>: an activity in Java with the JNI functions in <code>jni.c</code>, and
 <code>build.sh</code>, which builds the APK with the Android SDK's own tools
 (<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed), installs it
@@ -408,8 +449,8 @@ in the emulator, starts it and checks its log.</li>
 <p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
-(<code>adb shell</code>), then builds and runs the two apps. On iOS it also runs
-<code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
+(<code>adb shell</code>), then builds and runs the two apps and the Swift package's
+tests. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to <code>localhost</code> and <code>127.0.0.1</code>, checks that ALPN chose
 <code>http/1.1</code>, sends <code>GET /</code>, checks that a connector without the authority is
@@ -439,8 +480,9 @@ whenever the version the script pins has not been published.</p>
 SecIdentity and Network.framework).</li>
 <li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
 by hand; a generator could write them from the header.</li>
-<li><strong>Packaging</strong>: an <code>.xcframework</code> holding the device and simulator
-libraries, a Swift package, and an Android library (<code>.aar</code>).</li>
+<li><strong>Packaging</strong>: an Android library (<code>.aar</code>), <code>pep.toml</code> keys for
+<code>--lib xcframework</code>, and Mac Catalyst and macOS slices in the
+<code>.xcframework</code>.</li>
 <li><strong>Other targets</strong>: 32-bit Android (<code>armeabi-v7a</code>, <code>x86</code>), Mac Catalyst,
 tvOS, watchOS and visionOS.</li>
 </ul>
