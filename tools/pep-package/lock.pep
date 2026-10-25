@@ -20,7 +20,9 @@
 # target's. A package pep.toml's `[overrides]` replaces has `override`, the
 # replacement's source: a fork (`override = "github:you/geometry"`), whose
 # commit `commit` is, or a folder (`override = "path:../geometry"`), which
-# has no commit.
+# has no commit. When the graph holds several majors of one package, each
+# is an entry of its own with `major` (`major = "1"`, or `"0.4"` for a
+# 0.x version), checked out in `<name>@v<major>`.
 
 import [File, Path] from io;
 import toml;
@@ -46,6 +48,9 @@ export struct Locked {
     # What `[overrides]` replaces it with: a fork's source, or `path:` and
     # the folder as pep.toml writes it. Empty when it is not overridden.
     var replaced_by: String = "";
+    # The major version this copy serves, when the graph holds several
+    # majors of the package (`range_major`); empty when it holds one.
+    var major: String = "";
 
     construct() {}
 
@@ -54,6 +59,13 @@ export struct Locked {
         this.source = source;
         this.version = version;
         this.commit = commit;
+    }
+
+    # The package's key in the graph: its source, with `@v` and the major
+    # for one of several majors (`github:other/numbers@v1`), which
+    # `split_source` turns into its folder.
+    key(): String {
+        return major.is_empty ? source : $"{source}@v{major}";
     }
 
     # For messages: `geometry 1.2.3`, else its short commit; only the name
@@ -104,6 +116,7 @@ export read_lock(path: Path): Result<Array<Locked>> {
         locked.dev = dev.is_value() and dev.value().as_bool().value_or(false);
         locked.target = _text(item, "target");
         locked.replaced_by = _text(item, "override");
+        locked.major = _text(item, "major");
         if (locked.source.is_empty or (locked.commit.is_empty and !locked.replaced_by.starts_with("path:"))) {
             return Result<Array<Locked>>.Err($"{path.to_string()}: every package needs a 'source' and a 'commit'");
         }
@@ -124,7 +137,7 @@ _text(table: toml.TomlValue, key: String): String {
 # where the graph does.
 export lock_text(packages: Array<Locked>): String {
     var sorted = packages.clone();
-    sorted.sort((a, b) => a.source.compare(b.source));
+    sorted.sort((a, b) => a.key().compare(b.key()));
     var text = "# Written by `pepper package`: the exact revision of every dependency.\n";
     text += "# Commit it with pep.toml; do not edit it by hand.\n";
     text += "version = 1\n";
@@ -134,6 +147,9 @@ export lock_text(packages: Array<Locked>): String {
         text += "source = " + toml.TomlValue.String(locked.source).to_string() + "\n";
         if (!locked.version.is_empty) {
             text += "version = " + toml.TomlValue.String(locked.version).to_string() + "\n";
+        }
+        if (!locked.major.is_empty) {
+            text += "major = " + toml.TomlValue.String(locked.major).to_string() + "\n";
         }
         if (!locked.replaced_by.is_empty) {
             text += "override = " + toml.TomlValue.String(locked.replaced_by).to_string() + "\n";

@@ -19,7 +19,10 @@
 ## its repository's workspace, in a checkout of its own
 ## (`<repository>#<member>`); in a fetched package, a `path` with a
 ## `version` names a package of the same workspace, which is fetched on
-## its own (`Packages._as_fetched`).
+## its own (`Packages._as_fetched`). When `pep.lock` holds several majors
+## of one package (`LockedPackage.major`), each is checked out in
+## `<repository>@v<major>`, and a dependent's version range picks its copy
+## by the major it starts in (`Packages._directory`).
 
 import [Attribute, Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
@@ -30,6 +33,7 @@ import compiler.parse;
 import process;
 import toml;
 import [TomlValue] from toml;
+import [range_major] from toolchain;
 import "files" as files;
 import [Target, TEST_BUILD_OPTION] from "platform";
 
@@ -137,6 +141,10 @@ export struct LockedPackage {
     ## The fork `[overrides]` replaces it with, `github:you/name`, which its
     ## commit is cloned from; empty when it is not overridden.
     var override_source: String = "";
+    ## The major version this copy serves when the graph holds several
+    ## majors of the package (`1`, or `0.4` for a 0.x version); empty when
+    ## it holds one.
+    var major: String = "";
 
     construct(host: Host, repository: String, commit: String) {
         this.host = host;
@@ -147,6 +155,18 @@ export struct LockedPackage {
     ## Its source as `pep.lock` writes it: `github:owner/name`.
     source(): String {
         return $"{host.key()}:{repository}";
+    }
+
+    ## The repository as its folder in `.pep/deps` names it: `owner/name`,
+    ## with `@v` and the major for one of several majors.
+    folder(): String {
+        return major.is_empty ? repository : $"{repository}@v{major}";
+    }
+
+    ## Its key in the graph, which `pepper package fetch` takes: its source,
+    ## with `@v` and the major for one of several majors.
+    key(): String {
+        return $"{host.key()}:{folder()}";
     }
 
     ## Whether a build for `build` needs it.
@@ -234,6 +254,12 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
         }
         var entry = LockedPackage(host.value(), repository, commit_string);
         entry.override_source = override_source;
+        var major = package.try_get("major");
+        if (major.is_value()) {
+            if (major.value() is String(m)) {
+                entry.major = m;
+            }
+        }
         var target = package.try_get("target");
         if (target.is_value()) {
             if (target.value() is String(t)) {
@@ -266,10 +292,10 @@ export struct Dependency {
     ## `package`: the member of the repository's workspace it is, by its
     ## `[package]` name; empty for the repository's root package.
     var member: String = "";
-    ## Whether it gives a `version`, which for a `path` in a fetched
-    ## package names a published package of the same workspace
-    ## (`Packages` reads it so).
-    var has_version: bool = false;
+    ## Its `version` range, empty when it gives none. For a `path` in a
+    ## fetched package one names a published package of the same
+    ## workspace (`Packages` reads it so).
+    var version: String = "";
     ## The condition of the `[target.'<condition>'.dependencies]` table it
     ## is in (`OS(Windows)`), or empty for every target.
     var target: String = "";
@@ -301,10 +327,12 @@ export struct Dependency {
     ## (vendored into its folder `vendor`, unless that is empty) whose
     ## manifest (the one naming the dependency) is in `manifest_dir`. For a
     ## workspace member, the checkout of its repository, in which
-    ## `Packages` finds the member's folder.
-    directory(project: Path, manifest_dir: Path, vendor: String = ""): Path {
+    ## `Packages` finds the member's folder. With `major`, the checkout of
+    ## that major of several (`<repository>@v<major>`).
+    directory(project: Path, manifest_dir: Path, vendor: String = "", major: String = ""): Path {
         if (host.is_value()) {
-            return package_directory(project, host.value(), repository(), vendor);
+            var folder = major.is_empty ? repository() : $"{repository()}@v{major}";
+            return package_directory(project, host.value(), folder, vendor);
         }
         return manifest_dir.join(Path(location));
     }
@@ -1076,6 +1104,7 @@ struct _Reader {
         Host? host = Optional<Host>.Empty;
         String? location;
         var revision = "";
+        var version = "";
         var optional = false;
         var features = Array<String>();
         var feature_spans = Array<Span>();
@@ -1140,7 +1169,8 @@ struct _Reader {
                 host = field_host;
                 location = given;
             } else if (field == "version" or field == "branch" or field == "tag" or field == "commit") {
-                if (!string(field_path, field, value).is_value()) {
+                var given = string(field_path, field, value);
+                if (!given.is_value()) {
                     continue;
                 }
                 if (!revision.is_empty) {
@@ -1151,6 +1181,9 @@ struct _Reader {
                     continue;
                 }
                 revision = field;
+                if (field == "version") {
+                    version = given.value();
+                }
             } else if (field == "package") {
                 var given = string(field_path, field, value);
                 if (given.is_value() and !is_identifier(given.value())) {
@@ -1255,7 +1288,7 @@ struct _Reader {
         }
         var dependency = Dependency(name, key_span(path), host, location.value());
         dependency.member = member;
-        dependency.has_version = revision == "version";
+        dependency.version = version;
         dependency.optional = optional;
         dependency.features = features;
         dependency.feature_spans = feature_spans;
@@ -1791,7 +1824,7 @@ _inherit(manifest: Manifest, root: Manifest): String {
         d.host = from.value().host;
         d.location = from.value().location;
         d.member = from.value().member;
-        d.has_version = from.value().has_version;
+        d.version = from.value().version;
         if (!d.host.is_value()) {
             d.location = files.absolute(root.dir()).join(Path(d.location)).normalize().to_string();
         }
@@ -1855,6 +1888,8 @@ export struct Packages {
     ## The packages `turn_on_features` turned on, each once, in the order
     ## it reached them: the project's first.
     var reached: Manifest[] = Array<Manifest>();
+    ## The sources `pep.lock` holds several majors of, read once.
+    var _split: HashSet<String>? = Optional<HashSet<String>>.Empty;
 
     ## The packages of a program rooted at the file `root`.
     ##
@@ -2065,10 +2100,10 @@ export struct Packages {
     _directory(manifest: Manifest, d: Dependency): Path {
         # In a workspace, only the root's `[overrides]` apply.
         var root = _manifest_at(deps_root.value());
-        if (root.is_value() and (d.member.is_empty or root.value().path_override(d).is_value())) {
+        if (root.is_value() and root.value().path_override(d).is_value()) {
             return root.value().directory_of(d, manifest.dir());
         }
-        var checkout = d.directory(deps_root.value(), manifest.dir(), _vendor());
+        var checkout = d.directory(deps_root.value(), manifest.dir(), _vendor(), _major_of(d));
         if (d.member.is_empty) {
             return checkout;
         }
@@ -2082,6 +2117,28 @@ export struct Packages {
         }
         # Not fetched, or no such member, which `pepper package` reports.
         return checkout.join(Path(d.member));
+    }
+
+    ## The major of several in `pep.lock` whose copy `d` uses: the one its
+    ## version range starts in (`range_major`); empty when `pep.lock` holds
+    ## one major of its package.
+    _major_of(d: Dependency): String {
+        if (!d.host.is_value() or d.version.is_empty) {
+            return "";
+        }
+        if (!_split.is_value()) {
+            var sources = HashSet<String>();
+            var locked = read_lock(deps_root.value().join(Path(LOCK_FILE)));
+            if (locked.is_ok()) {
+                for (var package in locked.value()) {
+                    if (!package.major.is_empty) {
+                        sources.insert(package.source());
+                    }
+                }
+            }
+            _split = Optional<HashSet<String>>.Value(sources);
+        }
+        return _split.value().contains(d.locked_source().value()) ? range_major(d.version) : "";
     }
 
     ## Reads `manifest`'s `path` dependencies with a `version` as a
@@ -2132,7 +2189,7 @@ export struct Packages {
             return;
         }
         for (var d in manifest.dependencies) {
-            if (d.host.is_value() or !d.has_version) {
+            if (d.host.is_value() or d.version.is_empty) {
                 continue;
             }
             var folder = files.absolute(manifest.dir()).join(Path(d.location)).normalize().to_string();

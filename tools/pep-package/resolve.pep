@@ -23,12 +23,18 @@
 # own `<member>-v<version>` tags name, and read from the member's folder.
 # A `path` with a `version` in a fetched package's pep.toml names a package
 # of the same workspace, so it is that member (or the root) of the same
-# repository, resolved by its own tags.
+# repository, resolved by its own tags. Version ranges that start in
+# different majors (`range_major`: `1` and `2`, or `0.3` and `0.4`) are
+# different packages, as in Cargo and Go: each major is resolved on its
+# own, keyed `<source>@v<major>`, checked out in `<name>@v<major>` and
+# locked with `major`. A source whose ranges all start in one major, or
+# that a branch, tag, commit, open range or override names, stays one
+# package, keyed by its source.
 
 import [glob_matches, Path] from io;
 import semver;
 import [Version, VersionRange, parse_range] from semver;
-import [build_script, check_vendored] from toolchain;
+import [build_script, check_vendored, range_major] from toolchain;
 import "archive";
 import "git";
 import "lock";
@@ -96,6 +102,28 @@ export split_source(source: String): (String, String) {
     return split.value();
 }
 
+# The source a graph key names: the key without `@v` and the major of one
+# of several majors (`github:other/numbers@v1`).
+export copy_source(key: String): String {
+    var split = key.split_once("@v");
+    return split.is_value() and !key.starts_with("path:") ? split.value().0 : key;
+}
+
+# The major a graph key names, or empty for a source in one major.
+export copy_major(key: String): String {
+    var source = copy_source(key);
+    return source.length == key.length ? "" : key.substr(source.length + 2, key.length);
+}
+
+# The key of the copy of `source` that `requirement` asks for in a graph
+# whose keys are `keys`: `<source>@v<major>` when the graph holds its
+# range's major on its own, else `source`.
+export copy_key(keys: OrderedMap<String, Locked>, source: String, requirement: Requirement): String {
+    var major = requirement.kind == "version" ? range_major(requirement.value) : "";
+    var key = $"{source}@v{major}";
+    return !major.is_empty and keys.contains(key) ? key : source;
+}
+
 export struct Resolver {
     # The project's root folder.
     var project: Path = Path(".");
@@ -146,7 +174,7 @@ export struct Resolver {
             return Result<Array<Retraction>>.Err(refs.error().message);
         }
         var found = Array<Retraction>();
-        var newest = newest_release(refs.value(), source_member(source));
+        var newest = newest_release(refs.value(), source_member(copy_source(source)));
         if (newest.is_value()) {
             var (version, commit) = newest.value();
             var text = _package_toml_at(source, commit);
@@ -185,7 +213,8 @@ export struct Resolver {
 
     # Where the code of `source` comes from: the fork that overrides it, or
     # itself.
-    _origin(source: String): String {
+    _origin(key: String): String {
+        var source = copy_source(key);
         var replacement = root.override_of(source);
         if (replacement.is_value() and !replacement.value().is_path()) {
             return replacement.value().source();
@@ -238,8 +267,9 @@ export struct Resolver {
 
     # The folder of `source`'s package: `_dir`, or for a member of a
     # repository's workspace the member's folder in that checkout.
-    _folder(source: String): Result<Path> {
-        var dir = _dir(source);
+    _folder(key: String): Result<Path> {
+        var dir = _dir(key);
+        var source = copy_source(key);
         var member = source_member(source);
         var replacement = root.override_of(source);
         if (member.is_empty or (replacement.is_value() and replacement.value().is_path())) {
@@ -280,7 +310,7 @@ export struct Resolver {
     _package_toml_at(source: String, commit: String): Result<Optional<String>> {
         var (host, repository) = split_source(_origin(source));
         var text = file_at(host, repository, _clone(source), commit, "pep.toml", offline);
-        var member = source_member(source);
+        var member = source_member(copy_source(source));
         if (text.is_err() or text.value().is_empty() or member.is_empty) {
             return text;
         }
@@ -348,6 +378,8 @@ export struct Resolver {
                 if (source.starts_with("path:")) {
                     continue;
                 }
+                # `source` is a graph key: `<source>@v<major>` for one of
+                # several majors.
                 var replacement = root.override_of(source);
                 if (replacement.is_value() and replacement.value().is_path()) {
                     if (chosen.contains(source)) {
@@ -388,9 +420,9 @@ export struct Resolver {
                 if (had.is_value() and had.value().commit == pick.commit) {
                     continue;
                 }
-                var (host, repository) = split_source(source);
-                var dir = package_dir(project, host, repository, vendor);
-                var fetched = fetch(host, repository, dir, pick.commit, _replaced_by(source));
+                pick.major = copy_major(source);
+                var (host, repository) = split_source(copy_source(source));
+                var fetched = fetch(host, repository, _dir(source), pick.commit, _replaced_by(source));
                 if (fetched.is_err()) {
                     return Result<Graph>.Err($"cannot fetch {source}: {fetched.error().message}");
                 }
@@ -441,12 +473,12 @@ export struct Resolver {
             }
             var graph = Graph();
             var targets = lock_targets(wanted);
-            for (var (source, locked) in chosen) {
+            for (var (key, locked) in chosen) {
                 locked.dev = true;
-                for (var ask in wanted[source]) {
+                for (var ask in wanted[key]) {
                     locked.dev = locked.dev and ask.dev;
                 }
-                locked.target = targets.try_get(source).value_or("");
+                locked.target = targets.try_get(key).value_or("");
                 graph.packages.append(locked);
             }
             graph.notes = notes;
@@ -455,9 +487,9 @@ export struct Resolver {
             for (var locked in graph.packages) {
                 var known = false;
                 for (var was in previous) {
-                    known = known or (was.source == locked.source and was.commit == locked.commit);
+                    known = known or (was.key() == locked.key() and was.commit == locked.commit);
                 }
-                var folder = _folder(locked.source);
+                var folder = _folder(locked.key());
                 if (known or folder.is_err()) {
                     continue;
                 }
@@ -515,10 +547,10 @@ export struct Resolver {
         return message;
     }
 
-    # Every requirement in the graph, by source: the project's, then those
-    # of each package chosen so far (and of folders `path` names). What the
-    # project's dependencies lead to is read first, then what only its
-    # dev-dependencies do, which is marked `dev`.
+    # Every requirement in the graph, by graph key (`_split`): the
+    # project's, then those of each package chosen so far (and of folders
+    # `path` names). What the project's dependencies lead to is read
+    # first, then what only its dev-dependencies do, which is marked `dev`.
     gather(chosen: OrderedMap<String, Locked>): Result<OrderedMap<String, Array<Wanted>>> {
         var wanted = OrderedMap<String, Array<Wanted>>();
         var name = root.name.is_empty ? "pep.toml" : root.name;
@@ -578,25 +610,27 @@ export struct Resolver {
                     wanted[source] = Array<Wanted>();
                 }
                 wanted[source].append(Wanted(requirer, from_root, dev, parent, requirement));
-                if (read.contains(source)) {
+                # The copy it reads, and the parent of what that asks for.
+                var key = requirement.is_path() ? source : copy_key(chosen, source, requirement);
+                if (read.contains(key)) {
                     continue;
                 }
                 var label = "";
                 if (requirement.is_path()) {
                     label = requirement.name;
                 } else {
-                    var locked = chosen.try_get(source);
+                    var locked = chosen.try_get(key);
                     if (locked.is_empty()) {
                         continue;
                     }
-                    var folder = _folder(source);
+                    var folder = _folder(key);
                     if (folder.is_err()) {
                         return Result<OrderedMap<String, Array<Wanted>>>.Err(folder.error().message);
                     }
                     package = folder.value();
                     label = locked.value().describe();
                 }
-                read.insert(source);
+                read.insert(key);
                 var file = package.join("pep.toml");
                 if (!file.is_file()) {
                     continue;
@@ -606,10 +640,38 @@ export struct Resolver {
                 if (dependency.is_err()) {
                     return Result<OrderedMap<String, Array<Wanted>>>.Err(dependency.error().message);
                 }
-                queue.append((dependency.value(), label, false, dev, source));
+                queue.append((dependency.value(), label, false, dev, key));
             }
         }
-        return Result<OrderedMap<String, Array<Wanted>>>.Ok(wanted);
+        return Result<OrderedMap<String, Array<Wanted>>>.Ok(_split(wanted));
+    }
+
+    # `wanted`, keyed by source, keyed by graph key instead: a source whose
+    # version ranges start in more than one major (`range_major`) is one
+    # key per major, `<source>@v<major>`; any other stays as it is.
+    _split(wanted: OrderedMap<String, Array<Wanted>>): OrderedMap<String, Array<Wanted>> {
+        var out = OrderedMap<String, Array<Wanted>>();
+        for (var (source, asks) in wanted) {
+            var majors = HashSet<String>();
+            var splits = !source.starts_with("path:") and root.override_of(source).is_empty();
+            for (var ask in asks) {
+                var major = ask.requirement.kind == "version" ? range_major(ask.requirement.value) : "";
+                splits = splits and !major.is_empty;
+                majors.insert(major);
+            }
+            if (!splits or majors.count < 2) {
+                out[source] = asks;
+                continue;
+            }
+            for (var ask in asks) {
+                var key = $"{source}@v{range_major(ask.requirement.value)}";
+                if (!out.contains(key)) {
+                    out[key] = Array<Wanted>();
+                }
+                out[key].append(ask);
+            }
+        }
+        return out;
     }
 
     # Makes `requirement`, a `path` with a `version` in `manifest`, the
@@ -642,7 +704,7 @@ export struct Resolver {
         if (member.is_empty()) {
             return;
         }
-        var (host, repository) = split_source(source);
+        var (host, repository) = split_source(copy_source(source));
         requirement.host = host;
         requirement.repository = repository_of(repository);
         requirement.member = member.value();
@@ -737,22 +799,32 @@ export struct Resolver {
         return refs;
     }
 
-    # The locked revision of `source`, unless it is being updated or its
-    # override changed.
-    _kept(source: String): Optional<Locked> {
+    # The locked revision of the graph key `key`, unless it is being
+    # updated or its override changed: the entry of that key, else one of
+    # another major of its source, which `choose` keeps only if its
+    # ranges accept it.
+    _kept(key: String): Optional<Locked> {
+        var source = copy_source(key);
         if (update_all or update.contains(source)) {
             return Optional<Locked>.Empty;
         }
+        var found = Optional<Locked>.Empty;
         for (var locked in previous) {
             if (locked.source == source and locked.replaced_by == _replaced_by(source)) {
-                return Optional<Locked>.Value(locked);
+                if (locked.key() == key) {
+                    return Optional<Locked>.Value(locked);
+                }
+                found = Optional<Locked>.Value(locked);
             }
         }
-        return Optional<Locked>.Empty;
+        return found;
     }
 
-    # The revision of `source` every requirement in `asks` accepts.
-    choose(source: String, all_asks: Array<Wanted>, notes: Array<String>): Result<Locked> {
+    # The revision of the graph key `key` every requirement in `asks`
+    # accepts: for one of several majors, a version of that major.
+    choose(key: String, all_asks: Array<Wanted>, notes: Array<String>): Result<Locked> {
+        var source = copy_source(key);
+        var major = copy_major(key);
         # The project's own pep.toml overrides its dependencies.
         var asks = Array<Wanted>();
         for (var ask in all_asks) {
@@ -764,7 +836,7 @@ export struct Resolver {
             asks = all_asks;
         }
         var first = asks[0].requirement;
-        var kept = _kept(source);
+        var kept = _kept(key);
         if (first.kind != "version") {
             for (var ask in asks) {
                 if (ask.requirement.kind != first.kind or ask.requirement.value != first.value) {
@@ -817,7 +889,9 @@ export struct Resolver {
         }
         if (kept.is_value()) {
             var locked_version = tag_version(kept.value().version);
-            if (locked_version.is_value() and _accepted(ranges, locked_version.value())) {
+            if (locked_version.is_value()
+                and _accepted(ranges, locked_version.value())
+                and (major.is_empty or range_major(locked_version.value().to_string()) == major)) {
                 return Result<Locked>.Ok(kept.value());
             }
         }
@@ -837,13 +911,15 @@ export struct Resolver {
                 continue;
             }
             var version = parsed.value();
+            # One of several majors picks only from its own.
+            var in_major = major.is_empty or range_major(version.to_string()) == major;
             if (version.prerelease.is_empty) {
                 offered.append(version.to_string());
-                if (newest.is_empty() or version.compare(newest.value()) > 0) {
+                if (in_major and (newest.is_empty() or version.compare(newest.value()) > 0)) {
                     newest = Optional<Version>.Value(version);
                 }
             }
-            if (_accepted(ranges, version)) {
+            if (in_major and _accepted(ranges, version)) {
                 accepted.append((version, ref.commit));
             }
         }
@@ -854,7 +930,7 @@ export struct Resolver {
         # The newest accepted version that is not retracted and this
         # toolchain builds: only the pep.toml of each newer one is read.
         accepted.sort((a: (Version, String), b: (Version, String)) => b.0.compare(a.0));
-        var retracted_ranges = retractions(source);
+        var retracted_ranges = retractions(key);
         if (retracted_ranges.is_err()) {
             return Result<Locked>.Err(retracted_ranges.error().message);
         }
@@ -867,7 +943,7 @@ export struct Resolver {
                 withdrawn.append($"{candidate.0.to_string()} (retracted: {reason.value()})");
                 continue;
             }
-            var minimum = toolchain.is_empty ? Result<String>.Ok("") : _minimum_at(source, candidate.1);
+            var minimum = toolchain.is_empty ? Result<String>.Ok("") : _minimum_at(key, candidate.1);
             if (minimum.is_err()) {
                 return Result<Locked>.Err(minimum.error().message);
             }

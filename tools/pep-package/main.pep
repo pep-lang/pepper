@@ -957,27 +957,27 @@ struct Project {
         for (var locked in after) {
             var old = Optional<Locked>.Empty;
             for (var candidate in before) {
-                if (candidate.source == locked.source) {
+                if (candidate.key() == locked.key()) {
                     old = Optional<Locked>.Value(candidate);
                 }
             }
             if (old.is_empty()) {
-                lines.append($"added {locked.describe()} ({locked.source})");
+                lines.append($"added {locked.describe()} ({locked.key()})");
             } else if (old.value().commit != locked.commit) {
                 lines.append($"updated {locked.name}: {old.value().describe()} -> {locked.describe()}");
             } else if (lock_text([old.value()]) != lock_text([locked])) {
-                lines.append($"rewrote the entry of {locked.describe()} ({locked.source})");
+                lines.append($"rewrote the entry of {locked.describe()} ({locked.key()})");
             }
         }
         for (var locked in before) {
             var kept = false;
             for (var candidate in after) {
-                if (candidate.source == locked.source) {
+                if (candidate.key() == locked.key()) {
                     kept = true;
                 }
             }
             if (!kept) {
-                lines.append($"removed {locked.describe()} ({locked.source})");
+                lines.append($"removed {locked.describe()} ({locked.key()})");
             }
         }
         return lines;
@@ -1001,8 +1001,8 @@ struct Project {
         var locked = read_lock(lock_path(dir));
         if (locked.is_ok()) {
             for (var package in locked.value()) {
-                var (host, repository) = split_source(package.source);
-                if (!package.commit.is_empty and !package_dir(dir, host, repository).is_directory()) {
+                var (host, folder) = split_source(package.key());
+                if (!package.commit.is_empty and !package_dir(dir, host, folder).is_directory()) {
                     missing.append(package);
                 }
             }
@@ -1013,8 +1013,8 @@ struct Project {
         }
         for (var package in graph.value().packages) {
             for (var was in missing) {
-                if (was.source == package.source and was.commit == package.commit) {
-                    say($"fetched {package.describe()} ({package.source})");
+                if (was.key() == package.key() and was.commit == package.commit) {
+                    say($"fetched {package.describe()} ({package.key()})");
                 }
             }
         }
@@ -1022,7 +1022,7 @@ struct Project {
         return 0;
     }
 
-    # Fetches the locked packages `sources` names at their locked commits,
+    # Fetches the locked packages `sources` names (by `Locked.key`) at their locked commits,
     # resolving nothing: a build that needs only them (its target's) and
     # whose pep.lock lists every dependency.
     fetch_locked(sources: Array<String>): int {
@@ -1042,7 +1042,7 @@ struct Project {
         for (var source in sources) {
             var found = Optional<Locked>.Empty;
             for (var package in locked.value()) {
-                if (package.source == source) {
+                if (package.key() == source) {
                     found = Optional<Locked>.Value(package);
                 }
             }
@@ -1053,8 +1053,9 @@ struct Project {
             if (found.value().commit.is_empty) {
                 continue;
             }
-            var (host, repository) = split_source(source);
-            var package = package_dir(dir, host, repository, vendor);
+            var (host, repository) = split_source(found.value().source);
+            var (_, folder) = split_source(source);
+            var package = package_dir(dir, host, folder, vendor);
             var was_there = package.is_directory();
             var fetched = resolver.fetch(host, repository, package, found.value().commit, found.value().replaced_by);
             if (fetched.is_err()) {
@@ -1165,7 +1166,8 @@ struct Project {
         }
         if (pin) {
             for (var package in graph.value().packages) {
-                if (package.source == source) {
+                if (package.source == source
+                    and (package.major.is_empty or package.major == toolchain.range_major(requirement.value))) {
                     entry["version"] = toml.TomlValue.String(package.version);
                 }
             }
@@ -1298,7 +1300,9 @@ struct Project {
                 return fail(locked.error().message);
             }
             for (var package in locked.value()) {
-                chosen.append(package.source);
+                if (!chosen.contains(package.source)) {
+                    chosen.append(package.source);
+                }
             }
         }
         var rolled_back = Array<String>();
@@ -1478,7 +1482,7 @@ struct Project {
         var text = "";
         for (var (advisory, package) in hits) {
             var targets = HashSet<String>();
-            targets.insert(package.source);
+            targets.insert(package.key());
             var patched = JsonValue.array();
             for (var range in advisory.patched) {
                 patched.append(JsonValue.String(range));
@@ -1496,7 +1500,7 @@ struct Project {
             entry["target"] = package.target.is_empty ? JsonValue.Null : JsonValue.String(package.target);
             list.append(entry);
             var severity = advisory.severity.is_empty ? "" : $" ({advisory.severity})";
-            text += $"{advisory.id}{severity}: {graph.value().describe_source(package.source, package.name)}\n";
+            text += $"{advisory.id}{severity}: {graph.value().describe_source(package.key(), package.name)}\n";
             for (var line in [
                 advisory.title,
                 advisory.patched.is_empty ? "no patched version" : "patched: " + ", ".join(advisory.patched),
@@ -1556,8 +1560,8 @@ struct Project {
             if (package.replaced_by.starts_with("path:")) {
                 continue;
             }
-            var (host, repository) = split_source(package.source);
-            var target = package_dir(dir, host, repository, folder);
+            var (host, checkout) = split_source(package.key());
+            var target = package_dir(dir, host, checkout, folder);
             kept.insert(target.normalize().to_string());
             if (toolchain.check_vendored(target, package.commit).is_ok()) {
                 continue;
@@ -1570,7 +1574,7 @@ struct Project {
             var written = vendor_package(
                 from_host,
                 from_repository,
-                package_dir(dir, host, repository),
+                package_dir(dir, host, checkout),
                 target,
                 package.commit,
                 package.sha256,

@@ -28,7 +28,7 @@ export struct Edge {
 export struct LockedGraph {
     # The project's name, which the reports start from.
     var name: String = "";
-    # Each locked package, by source.
+    # Each locked package, by graph key (`Locked.key`).
     var packages: OrderedMap<String, Locked> = __null;
     # What asks for each source (`Resolver.gather`).
     var wanted: OrderedMap<String, Array<Wanted>> = __null;
@@ -258,7 +258,10 @@ export struct LockedGraph {
     find(spec: String): HashSet<String> {
         var found = HashSet<String>();
         for (var (source, package) in packages) {
-            if (package.name == spec or source == spec or source.ends_with(":" + spec)) {
+            if (package.name == spec
+                or source == spec
+                or package.source == spec
+                or package.source.ends_with(":" + spec)) {
                 found.insert(source);
             }
         }
@@ -403,7 +406,7 @@ export struct LockedGraph {
             if (refs.is_err()) {
                 return Result<Array<Array<String>>>.Err(refs.error().message);
             }
-            var newest = newest_release(refs.value(), source_member(source));
+            var newest = newest_release(refs.value(), source_member(copy_source(source)));
             var locked_version = tag_version(package.version);
             var reason = "";
             if (locked_version.is_value()) {
@@ -500,18 +503,19 @@ export read_graph(dir: Path, manifest: Manifest, offline: bool): Result<LockedGr
     var packages = OrderedMap<String, Locked>();
     for (var package in locked.value()) {
         var (host, repository) = split_source(package.source);
-        var at = package_dir(dir, host, repository, manifest.vendor);
+        var (_, folder) = split_source(package.key());
+        var at = package_dir(dir, host, folder, manifest.vendor);
         # A checkout at the commit already is used as it is, without
         # hashing its files again.
         if (checked_out(at).value_or("") == package.commit) {
-            packages[package.source] = package;
+            packages[package.key()] = package;
             continue;
         }
         var fetched = resolver.fetch(host, repository, at, package.commit);
         if (fetched.is_err()) {
-            return Result<LockedGraph>.Err($"cannot fetch {package.source}: {fetched.error().message}");
+            return Result<LockedGraph>.Err($"cannot fetch {package.key()}: {fetched.error().message}");
         }
-        packages[package.source] = package;
+        packages[package.key()] = package;
     }
     var wanted = resolver.gather(packages);
     if (wanted.is_err()) {

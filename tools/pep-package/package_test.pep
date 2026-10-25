@@ -631,7 +631,7 @@ fetches_start_no_fsmonitor_daemon() {
 }
 
 [Test]
-the_project_overrides_a_dependency_and_update_says_what_holds_one_back() {
+update_says_what_holds_one_back_and_add_what_nothing_satisfies() {
     if (!has_git()) {
         return;
     }
@@ -641,24 +641,109 @@ the_project_overrides_a_dependency_and_update_says_what_holds_one_back() {
     var updated = hosts.package(project.dir, ["update", "numbers"]);
     expect_exit(updated, 0);
     expect_contains(updated.stderr, "github:other/numbers stays at 1.3.1, not 3.0.0: geometry 1.1.0 wants 1");
-    # Naming numbers in pep.toml overrides geometry's range.
-    write_file(
-        project.dir.join("pep.toml"), project.manifest() + "numbers = { github = \"other/numbers\", version = \"2\" }\n"
-    );
-    var fetched = hosts.package(project.dir, ["fetch"]);
-    expect_exit(fetched, 0);
-    expect_contains(fetched.stderr, "github:other/numbers 2.0.0 overrides what geometry 1.1.0 asks (1)");
-    expect_equal(hosts.build_and_run(project.dir), "1.1.0 2.0.0\n");
     # A range nothing satisfies names the requirement and what is offered.
-    var failed = hosts.package(project.dir, ["add", "other/numbers@4", "--name", "more"]);
+    var failed = hosts.package(project.dir, ["add", "other/numbers@1.4", "--name", "more"]);
     expect_exit(failed, 1);
     expect_contains(
         failed.stderr,
-        "no revision of github:other/numbers satisfies every package that needs it:\n  app wants 2\n  app wants 4\n"
+        "no revision of github:other/numbers satisfies every package that needs it:\n  app wants 1.4\n"
             + "  it offers 1.0.0, 1.3.1, 2.0.0, 3.0.0"
     );
     # A failed add leaves pep.toml as it was.
     expect_false(project.manifest().contains("more"));
+}
+
+[Test]
+range_major_reads_the_major_a_range_starts_in() {
+    expect_equal(toolchain.range_major("1"), "1");
+    expect_equal(toolchain.range_major("^1.2"), "1");
+    expect_equal(toolchain.range_major(">=1.0, <3"), "1");
+    expect_equal(toolchain.range_major("<3, >= 2.1"), "2");
+    expect_equal(toolchain.range_major("~0.4.2"), "0.4");
+    expect_equal(toolchain.range_major("=2.0.0-rc.1"), "2");
+    expect_equal(toolchain.range_major("0"), "0.0");
+    expect_equal(toolchain.range_major("*"), "");
+    expect_equal(toolchain.range_major("<2"), "");
+    expect_equal(toolchain.range_major("0.x"), "");
+}
+
+[Test]
+two_majors_of_a_package_build_side_by_side() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("two_majors");
+    # `other/units` 1.0.0, 1.2.0 and 2.0.0, each a `Unit` that `show` names
+    # its version in, and `someone/legacy`, which needs units 1.2.
+    for (var version in ["1.0.0", "1.2.0", "2.0.0"]) {
+        add_version(
+            hosts.folder.path,
+            "other/units",
+            version,
+            [
+                "module.pep",
+                "export struct Unit {\n    var value: int = 0;\n\n    construct(value: int) {\n        this.value = value;\n    }\n}\n\n"
+                    + "export show(unit: Unit): String {\n    return $\""
+                    + version
+                    + " {unit.value}\";\n}\n"
+            ]
+        );
+    }
+    add_version(
+        hosts.folder.path,
+        "someone/legacy",
+        "1.0.0",
+        [
+            "module.pep",
+            "import units;\n\nexport make(): units.Unit {\n    return units.Unit(1);\n}\n\n"
+                + "export describe(): String {\n    return units.show(make());\n}\n",
+            "pep.toml",
+            "[package]\nname = \"legacy\"\n\n[dependencies]\nunits = { github = \"other/units\", version = \"1.2\" }\n"
+        ]
+    );
+    publish(hosts.folder.path, "other/units");
+    publish(hosts.folder.path, "someone/legacy");
+    var project = Project(
+        "two_majors",
+        "legacy = { github = \"someone/legacy\", version = \"1\" }\nunits = { github = \"other/units\", version = \"2\" }\n"
+    );
+    write_file(
+        project.dir.join("main.pep"),
+        "import legacy;\nimport units;\n\nmain(): int {\n    print(legacy.describe());\n"
+            + "    print(units.show(units.Unit(2)));\n    return 0;\n}\n"
+    );
+    # Each major is a package of its own, locked and checked out on its own.
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    var lock = project.lock();
+    expect_contains(lock, "source = \"github:other/units\"\nversion = \"1.2.0\"\nmajor = \"1\"\n");
+    expect_contains(lock, "source = \"github:other/units\"\nversion = \"2.0.0\"\nmajor = \"2\"\n");
+    var deps = project.dir.join(".pep").join("deps").join("github.com").join("other");
+    expect_true(deps.join("units@v1").join("module.pep").is_file());
+    expect_true(deps.join("units@v2").join("module.pep").is_file());
+    expect_equal(hosts.build_and_run(project.dir), "1.2.0 1\n2.0.0 2\n");
+    # A fresh clone builds from pep.lock alone.
+    Directory.remove_all(project.dir.join(".pep"));
+    expect_equal(hosts.build_and_run(project.dir), "1.2.0 1\n2.0.0 2\n");
+    var tree = hosts.package(project.dir, ["tree"]);
+    expect_contains(tree.stdout, "units 1.2.0 (github:other/units@v1)");
+    expect_contains(tree.stdout, "units 2.0.0 (github:other/units@v2)");
+    # A v1 `Unit` is not a v2 one, and the error says which is which.
+    write_file(
+        project.dir.join("main.pep"),
+        "import legacy;\nimport units;\n\nmain(): int {\n    print(units.show(legacy.make()));\n    return 0;\n}\n"
+    );
+    expect_contains(
+        hosts.build_and_run(project.dir),
+        "main.pep:5:22: error: cannot pass a value of type 'units_v1.Unit' as argument 1 of 'show', which has type 'units_v2.Unit'"
+    );
+    # Within one major, the project's own range still overrides a
+    # dependency's, and one copy serves both again.
+    write_file(project.dir.join("pep.toml"), project.manifest().replace("version = \"2\"", "version = \"=1.0.0\""));
+    var fetched = hosts.package(project.dir, ["fetch"]);
+    expect_exit(fetched, 0);
+    expect_contains(fetched.stderr, "github:other/units 1.0.0 overrides what legacy 1.0.0 asks (1.2)");
+    expect_false(project.lock().contains("major"));
+    expect_equal(hosts.build_and_run(project.dir), "1.0.0 1\n");
 }
 
 [Test]
@@ -804,15 +889,16 @@ a_stale_lock_fails_under_locked() {
     # An up-to-date lock passes.
     expect_exit(hosts.package(project.dir, ["fetch", "--locked"]), 0);
 
-    # pep.toml now asks for numbers 2, which pep.lock does not have.
+    # pep.toml now asks for numbers 1.0.0, which pep.lock does not have.
     write_file(
-        project.dir.join("pep.toml"), project.manifest() + "numbers = { github = \"other/numbers\", version = \"2\" }\n"
+        project.dir.join("pep.toml"),
+        project.manifest() + "numbers = { github = \"other/numbers\", version = \"=1.0.0\" }\n"
     );
     var refused = hosts.package(project.dir, ["fetch", "--locked"]);
     expect_exit(refused, 1);
     expect_contains(
         refused.stderr,
-        "pep.lock would change, and --locked keeps it as it is:\n  updated numbers: numbers 1.3.1 -> numbers 2.0.0\n"
+        "pep.lock would change, and --locked keeps it as it is:\n  updated numbers: numbers 1.3.1 -> numbers 1.0.0\n"
             + "run the command without --locked (or PEPPER_LOCKED), then commit pep.lock"
     );
     expect_equal(project.lock(), lock);
@@ -828,7 +914,7 @@ a_stale_lock_fails_under_locked() {
     expect_equal(project.lock(), lock);
     # Without --locked, fetch updates it.
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
-    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"2.0.0\"");
+    expect_contains(project.lock(), "source = \"github:other/numbers\"\nversion = \"1.0.0\"");
 }
 
 [Test]

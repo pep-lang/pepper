@@ -846,6 +846,28 @@ commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
 sha256 = "..."
 ```
 
+When the graph holds [two majors of one package](#two-majors-of-one-package),
+each is an entry of its own, with `major`, the major it serves (`1`, or
+`0.4` for a 0.x version), checked out in `.pep/deps/<host>/<owner>/<name>@v<major>`:
+
+```toml
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+version = "1.3.1"
+major = "1"
+commit = "..."
+sha256 = "..."
+
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+version = "2.0.0"
+major = "2"
+commit = "..."
+sha256 = "..."
+```
+
 A command that leaves the graph as it was leaves `pep.lock` untouched, so
 a checkout with Windows line endings stays as git wrote it.
 
@@ -945,23 +967,27 @@ authentication is git's concern.
 
 ## Resolving versions
 
-The whole project uses one version of each package: one checkout of
-`github:other/numbers` serves every package that depends on it, whatever
-name each imports it by.
+The whole project uses one version of each package, per major: one
+checkout of `github:other/numbers` 1.x serves every package whose range
+asks for 1.x, whatever name each imports it by (see
+[Two majors of one package](#two-majors-of-one-package)).
 
 - A version range picks the newest version tag (`v1.2.3` or `1.2.3`) that
-  every package's range accepts. When none does, resolution fails and names
-  each package's requirement and the versions the repository offers. A
-  workspace member's range reads only its own tags (`geo-v1.2.3`), and a
-  repository's root package only the plain ones.
+  every package's range in its major accepts. When none does, resolution
+  fails and names each package's requirement and the versions the
+  repository offers. A workspace member's range reads only its own tags
+  (`geo-v1.2.3`), and a repository's root package only the plain ones.
 - A `path` with a `version` in a fetched package's `pep.toml` is the
   package of the same workspace it names, resolved by its own tags as a
   dependency on that member of the same repository (see
   [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)).
 - A branch, tag or commit must be the same in every package that names it.
-- The project's own `pep.toml` overrides its dependencies: a package it
-  names gets the revision it asks for, even outside the range a dependency
-  declares, and `pep-package` says which requirement it overrode.
+- The project's own `pep.toml` overrides its dependencies within a major:
+  a package it names gets the revision it asks for, even outside the
+  range a dependency of the same major declares, and `pep-package` says
+  which requirement it overrode. A dependency's range in another major
+  gets a copy of its own; to give every dependent one version whatever
+  its major, use [`[overrides]`](projects.md#overrides).
 - A locked revision stays while it still satisfies every requirement;
   `update` is what moves it.
 - The project's [`[overrides]`](projects.md#overrides) replace a package
@@ -975,6 +1001,42 @@ name each imports it by.
 - Every `[target.'<condition>'.dependencies]`, the project's and its
   dependencies', is resolved with the rest, whatever the platform
   resolving, so one version of a package serves every platform.
+
+### Two majors of one package
+
+A new major version breaks its users on purpose, so a range in another
+major names another package, as in Cargo and Go: when one dependency needs
+`numbers` 1.x and another 2.x, the project gets both.
+
+- **The major a range starts in** decides: the first number of its lower
+  bound (`1` for `1.4`, `^1.2` and `>=1.0, <3`), or for a 0.x version the
+  minor (`0.4` for `0.4.2`), since a 0.x release's minor is its major. A
+  range that spans majors counts as the one it starts in: `>=1.0, <3`
+  beside a `2` gets 1.x.
+- **Only when the graph has two.** A package whose ranges all start in one
+  major is one package, checked out and locked as before. One that a
+  branch, tag, commit, open range (`*`, `<2`) or
+  [override](projects.md#overrides) names is never split.
+- **Each its own checkout**, `.pep/deps/<host>/<owner>/<name>@v<major>`
+  (`numbers@v1`, `numbers@v2`), and its own `pep.lock` entry, with
+  `major` (see [pep.lock](#peplock)). `tree`, `why` and the messages name
+  each by its source, `@v` and its major: `github:other/numbers@v1`.
+- **Imports do not change.** Each package imports `numbers` by its own
+  key, and the compiler resolves the import to the copy of the major its
+  range starts in.
+- **The types differ.** A `numbers` 1.x `Num` is not a 2.x `Num`, so
+  passing one where the other is wanted is an error, which names each with
+  its copy's module:
+
+  ```text
+  main.pep:5:24: error: cannot pass a value of type 'numbers_v1.Num' as argument 1 of 'show', which has type 'numbers_v2.Num'
+      5 |     print(numbers.show(legacy.make()));
+        |                        ^~~~~~~~~~
+  ```
+
+  Convert between them in code, or give the whole project one major with
+  [`[overrides]`](projects.md#overrides)
+  (`"github:other/numbers" = { github = "other/numbers", version = "2" }`).
 
 ### The toolchain a package needs
 
