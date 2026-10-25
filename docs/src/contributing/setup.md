@@ -26,6 +26,12 @@ pwsh -File scripts/setup-llvm.ps1 [-DevTools] [-Force]
   manager (apt `llvm-20-dev` or Homebrew `llvm@20`), else the LLVM release
   archive (cached, so a second run is free). Windows always uses the archive:
   no Windows package ships `llvm-config` and the component libraries;
+- on macOS, installs Homebrew `lld@20` when LLVM's `ld64.lld` is not in the
+  prefix: iOS links need it, and Homebrew's `llvm@20` no longer ships it.
+  Homebrew keeps both off the PATH, so to link for iOS, put them first:
+  `export PATH="$(brew --prefix lld@20)/bin:$(brew --prefix llvm@20)/bin:$PATH"`.
+  In GitHub Actions the script does that itself, through `$GITHUB_PATH`, for
+  the job's later steps;
 - writes the prefix, one line, to `.pep/llvm-prefix` in the checkout;
 - does nothing more when a valid install is already there.
 

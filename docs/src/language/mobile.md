@@ -59,7 +59,10 @@ an emulator, needs the platform's SDK:
   for the simulator). Elsewhere name it with `--sysroot`, or set
   `PEPPER_SYSROOT_AARCH64_APPLE_IOS` (and
   `PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR`, and so on): the variable is
-  named for the triple without its version.
+  named for the triple without its version. Homebrew's `llvm@20` does not
+  ship `ld64.lld`: `brew install lld@20` (or `scripts/setup-llvm.sh`)
+  installs it, and the link needs that `bin` folder and `llvm@20`'s on the
+  PATH (see [Setting up LLVM](../contributing/setup.md)).
 - **Android** links with the NDK's own clang, which brings the NDK's
   linker, compiler-rt and unwinder. Name the NDK with `--sysroot <ndk>` or
   `PEPPER_SYSROOT_AARCH64_LINUX_ANDROID`, or set `ANDROID_NDK_HOME` or
