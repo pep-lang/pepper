@@ -207,7 +207,10 @@ _resolve_links(lines: String, program: link.Program): (String[], Path[]) {
             }
             var file = Path(program.files[index.value()].name);
             var folder = file.parent();
-            var dir = folder.is_value() ? folder.value().join(Path(fields[2])) : Path(fields[2]);
+            # Windows reads no `/` after a `\\?\` prefix, which names the
+            # runtime's files.
+            var relative = os.system_os() == os.OperatingSystem.Windows ? fields[2].replace("/", "\\") : fields[2];
+            var dir = folder.is_value() ? folder.value().join(Path(relative)) : Path(relative);
             var cwd = process.working_directory();
             if (dir.is_relative() and cwd.is_ok()) {
                 dir = cwd.value().join(dir);

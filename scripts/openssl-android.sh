@@ -59,13 +59,15 @@ build() {
     rm -rf "$work/build"
     mkdir "$work/build"
     tar -xzf "$work/openssl.tar.gz" -C "$work/build" --strip-components 1
-    # A section per function, so a program's --gc-sections link keeps only
-    # what tls reaches. No config file is read (Android has none at
-    # OPENSSLDIR), and the trusted roots are loaded by openssl_android.pep.
+    # Optimized for size, with a section per function, so a program's
+    # --gc-sections link keeps only what tls reaches, and without what tls
+    # never uses (QUIC, DTLS, SRP). No config file is read (Android has
+    # none at OPENSSLDIR), and the trusted roots are loaded by
+    # openssl_android.pep.
     (cd "$work/build" \
       && PATH="$prebuilt:$PATH" ANDROID_NDK_ROOT="$ndk" ./Configure "$target" "-D__ANDROID_API__=$ANDROID_API" \
-        no-shared no-module no-engine no-tests no-autoload-config \
-        -ffunction-sections -fdata-sections \
+        no-shared no-module no-engine no-tests no-autoload-config no-quic no-dtls no-srp \
+        -Os -ffunction-sections -fdata-sections \
       && PATH="$prebuilt:$PATH" ANDROID_NDK_ROOT="$ndk" make -j"$(getconf _NPROCESSORS_ONLN)" build_libs)
     mkdir -p "$work/out/$triple"
     cp "$work/build/libssl.a" "$work/build/libcrypto.a" "$work/out/$triple/"

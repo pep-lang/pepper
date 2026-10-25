@@ -388,3 +388,6 @@ strings-plan.md
 
 # pep-package, built in its own folder by `pepper build`
 tools/pep-package/pep-package
+
+# The static OpenSSL for Android (scripts/openssl-android.sh fetch runtime)
+/runtime/tls/android/

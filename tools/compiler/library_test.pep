@@ -138,6 +138,24 @@ header_declares_exports_and_handles() {
     expect_true(text.ends_with("#endif /* COUNTER_H */\n"));
 }
 
+# A `[Link(path = ...)]` folder is relative to the file declaring the
+# extern, in the platform's separators: on Windows a file named with `\\?\`
+# (as the runtime's are) reads no `/`.
+[Test]
+link_folders_are_relative_to_their_file() {
+    var folder = TempFolder("link_path");
+    var file = folder.path.join(Path("main.pep"));
+    File.write_text(file, "[Link(\"probe\", path = \"vendor/lib\")]\nextern int probe();\nmain(): int {\n    return 0;\n}\n");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(file, setup).value();
+    var module = sema.merge(program).value();
+    var (libraries, dirs) = driver.link_inputs(module, program);
+    expect_equal(libraries, ["probe"]);
+    expect_equal(dirs.count, 1 as ulong);
+    expect_equal(dirs[0].to_string(), folder.path.join(Path("vendor")).join(Path("lib")).to_string());
+}
+
 # A library's file and header names on each platform.
 [Test]
 names_libraries_and_headers_as_each_platform_does() {

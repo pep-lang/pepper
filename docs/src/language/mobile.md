@@ -182,10 +182,21 @@ differences:
   OpenSSL: it must name the host in its subject alternative names, carry the
   `serverAuth` extended key usage and, when issued after June 2019, be valid
   for at most 825 days, even from a private certificate authority.
-- **TLS on Android.** The `tls` module (and HTTPS) loads OpenSSL at run
-  time, which Android does not ship, so making a TLS context returns an
-  `IoError` unless the app bundles `libssl.so.3`. Use the platform's own
-  networking (OkHttp, `HttpURLConnection`) for HTTPS for now.
+- **TLS on Android.** Android ships no OpenSSL a program may load, so the
+  toolchain carries a static OpenSSL 3 for each ABI
+  (`runtime/tls/android/<triple>/libssl.a` and `libcrypto.a`), and a
+  program that imports `tls` (or `http`) links it: `TlsConnector`,
+  `TlsAcceptor` and `http.Client`'s `https://` URLs work as on Linux, TLS
+  1.3 included. A connector trusts the system's certificate store (the
+  Conscrypt module's, `/apex/com.android.conscrypt/cacerts`, on Android 14
+  and later; `/system/etc/security/cacerts` before), less the certificates
+  the user turned off in Settings, plus those the user installed
+  (`/data/misc/user/0/cacerts-added`) where the process may read them, and
+  any added with `add_root_certificate`. Unlike an app's Java networking,
+  this ignores the app's network security configuration. OpenSSL adds
+  about 2 to 3 MB to a stripped binary. An app linking a Pepper static
+  library adds the libraries its header names (`-lssl -lcrypto`) from that
+  folder: `-L <toolchain>/runtime/tls/android/aarch64-linux-android`.
 - **Files.** An app reads and writes inside its own container: pass the
   path the platform gives (`FileManager`'s documents directory,
   `Context.getFilesDir()`) to the Pepper code. `os.home_directory()` and
@@ -215,6 +226,13 @@ differences:
   `strip` of `jniLibs`). A Pepper library adds the runtime parts the
   program uses: the prototype app's library below is about 1 MB unstripped.
 - Each Android ABI needs its own `.so`; Google Play requires `arm64-v8a`.
+- **OpenSSL's license.** An Android program or app that imports `tls` (or
+  `http`) contains OpenSSL, which is under the Apache License 2.0, so it
+  must give its users a copy of that license: ship
+  `runtime/tls/android/LICENSE.txt` from the toolchain with it, as an app
+  does in its open-source licenses screen (Google Play Services'
+  `oss-licenses` plugin, or a page of the app's own), and say that the app
+  includes OpenSSL. The iOS build bundles nothing.
 
 ## Debugging
 
@@ -242,17 +260,34 @@ runs each in the simulator (`xcrun simctl spawn`) and in the emulator
 `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
 on the Mac, with a certificate authority made for the run, and against
 `PEPPER_MOBILE_TLS_URL` (`https://example.com/` by default; set it empty to
-skip the public host).
+skip the public host). On Android the same check runs in the emulator
+against the same kind of server, which `adb reverse` makes the emulator's
+`localhost`; there `PEPPER_MOBILE_TLS_URL`, when set, also fetches that URL
+through the system's roots. The Android run also works on Linux, for the
+host's ABI (x86_64 there), as CI runs it: `scripts/ci-provision-android.sh`
+sets up an emulator on a GitHub-hosted Linux runner, since Apple silicon
+runners cannot run one.
 
 ```sh
 bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 ```
 
+From a checkout, programs for Android that import `tls` need the static
+OpenSSL in the runtime first, which the toolchain already carries:
+
+```sh
+bash scripts/openssl-android.sh fetch runtime
+```
+
+`scripts/openssl-android.sh build <ndk> <output-dir>` builds that archive
+(OpenSSL 3.5, for each ABI, with the NDK's clang), and the
+`openssl-android` workflow publishes it on the `openssl-<version>` release
+whenever the version the script pins has not been published.
+
 ## Not supported yet
 
-- **TLS on Android**, through a bundled OpenSSL or BoringSSL, and on iOS
-  TLS servers, client certificates and TLS 1.3 (which need a SecIdentity
-  and Network.framework).
+- **TLS on iOS**: servers, client certificates and TLS 1.3 (which need a
+  SecIdentity and Network.framework).
 - **Generated bindings**: the JNI layer and the Swift wrappers are written
   by hand; a generator could write them from the header.
 - **Packaging**: an `.xcframework` holding the device and simulator
