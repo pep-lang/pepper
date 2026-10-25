@@ -108,6 +108,7 @@ main(): int {
 | --- | --- |
 | `github`, `gitlab`, `codeberg` | The repository, `owner/name` (on GitLab, `group/subgroup/name` too) |
 | `path` | A folder on disk, relative to this `pep.toml`, instead of a repository |
+| `package` | With a repository: the member of the repository's [workspace](#workspaces-workspace) it is, by its `[package]` `name` (see [A member as a Git dependency](#a-member-as-a-git-dependency)) |
 | `version` | A semver range of the repository's version tags: `1.2`, `0.4.x`, `>=1.0, <2` |
 | `branch` | A branch |
 | `tag` | A tag |
@@ -400,7 +401,10 @@ draw    = { path = "../libs/draw", version = "0.1" }
   `path` there is relative to the root.
 - **Members depend on each other** with `path`. A `version` beside the
   `path` is for [`publish`](pep-package.md#publish), which refuses a
-  `path` without one; a build uses the folder.
+  `path` without one, and checks the sibling is published at a version
+  it accepts; a build in the workspace uses the folder. A project outside
+  the workspace that fetches the member reads it as the sibling of the
+  same repository at that version (see below).
 - **Building:** `pepper build` in a member builds that member; in a root
   with no `[package]`, every member. `--all` builds every member, and
   `-p <name>` (repeated for more) the members by package name, from the
@@ -420,7 +424,53 @@ draw    = { path = "../libs/draw", version = "0.1" }
   of the project's.
 - **Needs toolchain 0.11.0,** as for
   [`[dev-dependencies]`](#dev-dependencies): `[workspace]` and a
-  dependency's `workspace` are unknown to older toolchains.
+  dependency's `workspace` and `package` are unknown to older toolchains.
+
+### A member as a Git dependency
+
+A project outside the workspace depends on one of its members by the
+repository and `package`, the member's `[package]` `name`, as Cargo does
+with a package inside a Git repository's workspace:
+
+```toml
+[dependencies]
+geo = { github = "someone/shapes", package = "geo", version = "0.3" }
+```
+
+`pepper package add someone/shapes --package geo` writes that entry (see
+[pep-package](pep-package.md#add-ownernamerange)).
+
+- **Found through the root's `members`:** the member is the package of
+  that name among the folders the root's `[workspace]` `members` lists, so
+  it may move between folders without its dependents changing. Without
+  `package`, a dependency is the repository's root package.
+- **Tagged on its own:** [`publish`](pep-package.md#publish) in a member
+  tags `<name>-v<version>` (`geo-v0.3.1`), and a member's `version` range
+  reads only its own tags, so each member is released at its own pace. The
+  root package keeps `v<version>`, as a single-package repository does.
+  A package name is an identifier, with no `-`, so the tags cannot clash.
+- **Its own checkout and lock entry:** it is locked as
+  `github:someone/shapes#geo` (see [pep.lock](pep-package.md#peplock)),
+  and checked out at its own commit in
+  `.pep/deps/github.com/someone/shapes#geo`, from the same repository in
+  the [download cache](pep-package.md#the-download-cache) as every other
+  member. [`[overrides]`](#overrides) name it by that source too.
+- **Its siblings:** a `path` with a `version` in the member's `pep.toml`
+  names another package of its workspace, so the project depends on that
+  member (or the root) of the same repository, at the newest of its own
+  tags the version accepts, not at the commit the member was fetched at.
+
+A `package` with a `path`, which names a member's folder itself, or one
+that is not an identifier, is an error at the key. A `package` the
+workspace lacks is an error at its value when `pepper package` fetches it:
+
+```text
+pep.toml:5:43: error: someone/shapes has no workspace member 'gem'; its members are 'geo', 'draw'
+    5 | geo = { github = "someone/shapes", package = "gem" }
+      |                                              ^~~~~
+```
+
+### Workspace errors
 
 The problems of a workspace are errors at the member in the root's
 `members`, or at the dependency that inherits:
@@ -437,6 +487,7 @@ pep.toml:2:19: error: workspace member 'app' is listed twice
   no workspace lists, or naming what `[workspace.dependencies]` lacks;
 - `optional`, `features`, `default-features` or `workspace` in
   `[workspace.dependencies]`.
+
 ## `[overrides]`
 
 To try a fix in a package deep in the graph, or to use a fork until the
@@ -451,7 +502,8 @@ reaches it, without editing the `pep.toml` of each package on the way:
 
 - **The key** is the source of the package it replaces, as
   [`pep.lock`](pep-package.md#peplock) writes it: the host's key, `:`,
-  and the repository (`github:owner/name`). One table keyed by the source
+  and the repository (`github:owner/name`, and `#` and the member for a
+  [workspace member](#a-member-as-a-git-dependency)). One table keyed by the source
   is enough, since a source is what makes two dependencies the same
   package in the graph; the name each dependent imports it by does not.
 - **The value** is the package that replaces it, written as a dependency
@@ -517,8 +569,9 @@ why.
 A key that is a version names that version alone, not the `^` range a
 dependency's `version = "1.1.0"` means; keys are quoted, as TOML reads
 `1.1.0` unquoted as three nested keys. Release the table in a newer
-version: the `[retract]` of a package's newest release speaks for every
-version, so a range no longer picks a retracted one, `pepper package
+version (a workspace member's newest release by its own tags, read from
+the member's `pep.toml`): the `[retract]` of a package's newest release
+speaks for every version, so a range no longer picks a retracted one, `pepper package
 outdated` flags one `pep.lock` holds, and `update` moves off it (see
 [Retracted versions](pep-package.md#retracted-versions)). A key that is
 neither a version nor a range is an error at the key in the project's
@@ -571,7 +624,8 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
 - A dependency name that is not an identifier (`fast-json`): it is the name
   `import` uses.
 - A dependency with no source or two, a repository not written `owner/name`,
-  or more than one of `version`, `branch`, `tag` and `commit`.
+  or more than one of `version`, `branch`, `tag` and `commit`; a `package`
+  with a `path`, or one that is not an identifier.
 - An `[overrides]` key that is not a source (`github:owner/name`), or an
   override with `optional`, `features` or `default-features`.
 - A table or key `pep.toml` does not have, or a value of the wrong type.

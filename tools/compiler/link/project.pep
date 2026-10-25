@@ -15,7 +15,11 @@
 ## dependency lives in the
 ## project's `.pep/deps/<host>/<repository>`, and `Packages` resolves the
 ## imports of every file of a program against the dependencies of the
-## package that file belongs to.
+## package that file belongs to. A dependency with `package` is a member of
+## its repository's workspace, in a checkout of its own
+## (`<repository>#<member>`); in a fetched package, a `path` with a
+## `version` names a package of the same workspace, which is fetched on
+## its own (`Packages._as_fetched`).
 
 import [Attribute, Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
@@ -82,7 +86,9 @@ export enum Host {
         while (base.ends_with("/")) {
             base = base.substr_bytes(0, base.size - 1);
         }
-        return $"{base}/{repository}.git";
+        # A workspace member's (`owner/name#member`) is its repository's.
+        var member = repository.split_once("#");
+        return $"{base}/{member.is_value() ? member.value().0 : repository}.git";
     }
 }
 
@@ -103,7 +109,9 @@ export host_named(key: String): Host? {
 
 ## Where a package's files live in the project `project`:
 ## `<project>/.pep/deps/<host domain>/<owner>/<name>`, or under the
-## project's `[fetch] vendor` folder when it has one.
+## project's `[fetch] vendor` folder when it has one. A member of the
+## repository's workspace (`owner/name#member`) has its own checkout of
+## the repository, `<owner>/<name>#<member>`.
 ##
 ## @param vendor the project's `[fetch] vendor` folder, relative to it;
 ##   empty when it is not vendored
@@ -255,6 +263,13 @@ export struct Dependency {
     var host: Host?;
     ## `owner/name` on the host, or the folder relative to the `pep.toml`.
     var location: String;
+    ## `package`: the member of the repository's workspace it is, by its
+    ## `[package]` name; empty for the repository's root package.
+    var member: String = "";
+    ## Whether it gives a `version`, which for a `path` in a fetched
+    ## package names a published package of the same workspace
+    ## (`Packages` reads it so).
+    var has_version: bool = false;
     ## The condition of the `[target.'<condition>'.dependencies]` table it
     ## is in (`OS(Windows)`), or empty for every target.
     var target: String = "";
@@ -284,12 +299,20 @@ export struct Dependency {
 
     ## Where the dependency's files are, for a project rooted at `project`
     ## (vendored into its folder `vendor`, unless that is empty) whose
-    ## manifest (the one naming the dependency) is in `manifest_dir`.
+    ## manifest (the one naming the dependency) is in `manifest_dir`. For a
+    ## workspace member, the checkout of its repository, in which
+    ## `Packages` finds the member's folder.
     directory(project: Path, manifest_dir: Path, vendor: String = ""): Path {
         if (host.is_value()) {
-            return package_directory(project, host.value(), location, vendor);
+            return package_directory(project, host.value(), repository(), vendor);
         }
         return manifest_dir.join(Path(location));
+    }
+
+    ## `location`, with `#` and the member for a workspace member:
+    ## `owner/name#member`.
+    repository(): String {
+        return member.is_empty ? location : $"{location}#{member}";
     }
 
     ## Whether a build for `build` sees it: always, unless it is in a
@@ -305,11 +328,11 @@ export struct Dependency {
         return target.is_empty ? "dependencies" : $"target.'{target}'.dependencies";
     }
 
-    ## Its source as `pep.lock` writes it (`github:owner/name`), for a Git
-    ## dependency.
+    ## Its source as `pep.lock` writes it (`github:owner/name`, or
+    ## `github:owner/name#member`), for a Git dependency.
     locked_source(): String? {
         if (host.is_value()) {
-            return Optional<String>.Value($"{host.value().key()}:{location}");
+            return Optional<String>.Value($"{host.value().key()}:{repository()}");
         }
         return Optional<String>.Empty;
     }
@@ -449,7 +472,7 @@ export struct Manifest {
     ## @param manifest_dir the folder of the `pep.toml` naming it
     ## @returns its folder
     directory_of(d: Dependency, manifest_dir: Path): Path {
-        var replacement = _path_override(d);
+        var replacement = path_override(d);
         if (replacement.is_value()) {
             return dir().join(Path(replacement.value().location));
         }
@@ -457,7 +480,7 @@ export struct Manifest {
     }
 
     ## The `path` override of `d`'s source, if any.
-    _path_override(d: Dependency): Dependency? {
+    path_override(d: Dependency): Dependency? {
         var source = d.locked_source();
         if (source.is_value()) {
             var replacement = _named(overrides, source.value());
@@ -509,7 +532,7 @@ export struct Manifest {
                 if (build.is_value() and !d.matches(build.value())) {
                     continue;
                 }
-                if (d.host.is_value() and !_path_override(d).is_value()) {
+                if (d.host.is_value() and !path_override(d).is_value()) {
                     out.append(d);
                     continue;
                 }
@@ -1055,6 +1078,7 @@ struct _Reader {
         var feature_spans = Array<Span>();
         var default_features = true;
         var inherits = false;
+        var member = "";
         var in_workspace = path[0] == "workspace";
         for (var (field, value) in fields) {
             var field_path = _at(path, field);
@@ -1124,6 +1148,16 @@ struct _Reader {
                     continue;
                 }
                 revision = field;
+            } else if (field == "package") {
+                var given = string(field_path, field, value);
+                if (given.is_value() and !is_identifier(given.value())) {
+                    error(
+                        $"'package' names a workspace member by its package name, and '{given.value()}' is not one",
+                        value_span(field_path)
+                    );
+                    continue;
+                }
+                member = given.value_or("");
             } else if (field == "optional") {
                 var given = boolean(field_path, field, value);
                 if (given.is_value() and given.value() and path[0] == "dev-dependencies") {
@@ -1155,6 +1189,7 @@ struct _Reader {
                         "gitlab",
                         "codeberg",
                         "path",
+                        "package",
                         "version",
                         "branch",
                         "tag",
@@ -1167,8 +1202,17 @@ struct _Reader {
                 );
             }
         }
+        if (!member.is_empty and location.is_value() and !host.is_value()) {
+            error(
+                "'package' names a member of a Git repository's workspace; a 'path' names the member's folder itself",
+                key_span(_at(path, "package"))
+            );
+            return;
+        }
         if (inherits) {
-            var given = location.is_value() ? (host.is_value() ? host.value().key() : "path") : revision;
+            var given = location.is_value() ?
+                (host.is_value() ? host.value().key() : "path") :
+                (member.is_empty ? revision : "package");
             if (!given.is_empty) {
                 error(
                     $"'{given}' and 'workspace = true' both choose where '{name}' comes from; keep one",
@@ -1207,6 +1251,8 @@ struct _Reader {
             return;
         }
         var dependency = Dependency(name, key_span(path), host, location.value());
+        dependency.member = member;
+        dependency.has_version = revision == "version";
         dependency.optional = optional;
         dependency.features = features;
         dependency.feature_spans = feature_spans;
@@ -1741,6 +1787,8 @@ _inherit(manifest: Manifest, root: Manifest): String {
         }
         d.host = from.value().host;
         d.location = from.value().location;
+        d.member = from.value().member;
+        d.has_version = from.value().has_version;
         if (!d.host.is_value()) {
             d.location = files.absolute(root.dir()).join(Path(d.location)).normalize().to_string();
         }
@@ -1987,13 +2035,94 @@ export struct Packages {
 
     ## Where `d`, a dependency of `manifest`, is: as the project's own
     ## `[overrides]` place it (`Manifest.directory_of`).
+    ## A workspace member's folder is the one its repository's checkout
+    ## lists with its name.
     _directory(manifest: Manifest, d: Dependency): Path {
         # In a workspace, only the root's `[overrides]` apply.
         var root = _manifest_at(deps_root.value());
-        if (root.is_value()) {
+        if (root.is_value() and (d.member.is_empty or root.value().path_override(d).is_value())) {
             return root.value().directory_of(d, manifest.dir());
         }
-        return d.directory(deps_root.value(), manifest.dir());
+        var checkout = d.directory(deps_root.value(), manifest.dir(), _vendor());
+        if (d.member.is_empty) {
+            return checkout;
+        }
+        var workspace = _manifest_at(checkout);
+        if (workspace.is_value()) {
+            for (var member in workspace.value().member_manifests) {
+                if (member.name == d.member) {
+                    return member.dir();
+                }
+            }
+        }
+        # Not fetched, or no such member, which `pepper package` reports.
+        return checkout.join(Path(d.member));
+    }
+
+    ## Reads `manifest`'s `path` dependencies with a `version` as a
+    ## dependent sees them when it is a fetched (or vendored) package of a workspace, in
+    ## `.pep/deps`: each names a package of that workspace, published by
+    ## its own tags, so it becomes the dependency on that member (or the
+    ## root) of the same repository, which `pep.lock` locks on its own.
+    _as_fetched(manifest: Manifest) {
+        if (!manifest.workspace_dir.is_value() or !deps_root.is_value()) {
+            return;
+        }
+        var checkout = manifest.workspace_dir.value();
+        var project_dir = files.absolute(deps_root.value()).normalize();
+        # Only a workspace inside the project, not its own, which `_vendor`
+        # reads (or, while `Packages` is made, one above a member).
+        if (!checkout.to_string().replace("\\", "/").starts_with(project_dir.to_string().replace("\\", "/") + "/")) {
+            return;
+        }
+        var vendor = _vendor();
+        var deps = (vendor.is_empty ?
+            project_dir.join(Path(".pep")).join(Path(DEPS_DIR)) :
+            project_dir.join(Path(vendor))).normalize();
+        var prefix = deps.to_string().replace("\\", "/") + "/";
+        var inside = checkout.to_string().replace("\\", "/");
+        if (!inside.starts_with(prefix)) {
+            return;
+        }
+        # `<host domain>/<owner>/<name>[#<member>]`.
+        var split = inside.substr_bytes(prefix.size, inside.size - prefix.size).split_once("/");
+        if (!split.is_value()) {
+            return;
+        }
+        var (domain, repository) = split.value();
+        Host? host = Optional<Host>.Empty;
+        for (var candidate in all_hosts()) {
+            if (candidate.domain() == domain) {
+                host = Optional<Host>.Value(candidate);
+            }
+        }
+        var own = repository.split_once("#");
+        if (own.is_value()) {
+            repository = own.value().0;
+        }
+        var root = files.absolute(manifest.dir()).normalize().to_string() == checkout.to_string() ?
+            Optional<Manifest>.Value(manifest) :
+            _manifest_at(checkout);
+        if (!host.is_value() or !root.is_value()) {
+            return;
+        }
+        for (var d in manifest.dependencies) {
+            if (d.host.is_value() or !d.has_version) {
+                continue;
+            }
+            var folder = files.absolute(manifest.dir()).join(Path(d.location)).normalize().to_string();
+            String? member = folder == checkout.to_string() ? Optional<String>.Value("") : Optional<String>.Empty;
+            for (var m in root.value().member_manifests) {
+                if (files.absolute(m.dir()).normalize().to_string() == folder) {
+                    member = Optional<String>.Value(m.name);
+                }
+            }
+            if (member.is_value()) {
+                d.host = host;
+                d.location = repository;
+                d.member = member.value();
+            }
+        }
     }
 
     ## A package's key in the feature sets: its normalized folder.
@@ -2026,6 +2155,9 @@ export struct Packages {
                     # shortcut: each member reads its workspace's root again; cache the root when
                     # workspaces grow large.
                     var joined = join_workspace(parsed.value());
+                    if (joined.is_ok()) {
+                        _as_fetched(parsed.value());
+                    }
                     found = Optional<Result<Manifest, String>>.Value(
                         joined.is_err() ?
                             Result<Manifest, String>.err(joined.error()) :

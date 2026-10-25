@@ -1351,18 +1351,11 @@ tags_of(bare: Path): String {
     return run(process.Command("git").arguments(["tag", "-l"]).working_directory(bare)).stdout;
 }
 
-[Test]
-publish_checks_tests_tags_and_pushes_the_version() {
-    if (!has_git()) {
-        return;
-    }
-    var folder = TempFolder("package_publish");
-    var root = folder.path;
+# A Pepper home in `root` with its own `pepper`, which `publish` tests
+# with, and a stand-in tool that passes (it prints its arguments), built in
+# `root`.
+publish_home(root: Path): (Path, Path) {
     var suffix = toolchain.executable_suffix();
-    # A Pepper home with toolchains 0.1.0 and 0.2.0, whose `pep-test`
-    # passes (a stand-in that prints its arguments), and 0.3.0 once a step
-    # below adds it, whose `pep-test` fails (a copy of `pepper`, which
-    # wants a command).
     var home = root.join("home");
     Directory.create_all(home.join("bin"));
     copy_executable(tool("pepper"), home.join("bin").join("pepper" + suffix));
@@ -1371,14 +1364,45 @@ publish_checks_tests_tags_and_pushes_the_version() {
     if (error.is_value()) {
         panic($"cannot build the stand-in pep-test:\n{error.value()}");
     }
-    var add_toolchain = (release: String, test: Path) => {
-        var bin = home.join("toolchains").join(release).join("bin");
-        Directory.create_all(bin);
-        copy_executable(passes, bin.join("pep-build" + suffix));
-        copy_executable(test, bin.join("pep-test" + suffix));
-    };
-    add_toolchain("0.1.0", passes);
-    add_toolchain("0.2.0", passes);
+    return (home, passes);
+}
+
+# Adds the toolchain `release` to the Pepper home `home`: its `pep-build`
+# is `passes`, and its `pep-test` is `test`.
+add_toolchain(home: Path, release: String, passes: Path, test: Path) {
+    var suffix = toolchain.executable_suffix();
+    var bin = home.join("toolchains").join(release).join("bin");
+    Directory.create_all(bin);
+    copy_executable(passes, bin.join("pep-build" + suffix));
+    copy_executable(test, bin.join("pep-test" + suffix));
+}
+
+# Runs pep-package with `arguments` in `dir` with the Pepper home `home`,
+# whatever `pepper` the PATH has: publish runs the home's.
+package_in_home(home: Path, dir: Path, arguments: Array<String>): process.Output {
+    return run(
+        process
+            .Command(tool("pep-package").to_string())
+            .arguments(arguments)
+            .working_directory(dir)
+            .environment("PEPPER_HOME", home.to_string())
+            .environment("PEPPER_TOOLCHAIN_PATH", "")
+    );
+}
+
+[Test]
+publish_checks_tests_tags_and_pushes_the_version() {
+    if (!has_git()) {
+        return;
+    }
+    var folder = TempFolder("package_publish");
+    var root = folder.path;
+    # A Pepper home with toolchains 0.1.0 and 0.2.0, whose `pep-test`
+    # passes, and 0.3.0 once a step below adds it, whose `pep-test` fails
+    # (a copy of `pepper`, which wants a command).
+    var (home, passes) = publish_home(root);
+    add_toolchain(home, "0.1.0", passes, passes);
+    add_toolchain(home, "0.2.0", passes, passes);
 
     # `me/shapes`, released at 1.0.0, and a clone to publish from.
     var manifest = (version: String, rest: String) => {
@@ -1399,16 +1423,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
     var bare = root.join("me").join("shapes.git");
     var clone = root.join("clone");
     git(root, ["clone", "--quiet", bare.to_string(), clone.to_string()]);
-    # publish runs the home's `pepper`, whatever `pepper` the PATH has.
     var package = (arguments: Array<String>) => {
-        return run(
-            process
-                .Command(tool("pep-package").to_string())
-                .arguments(arguments)
-                .working_directory(clone)
-                .environment("PEPPER_HOME", home.to_string())
-                .environment("PEPPER_TOOLCHAIN_PATH", "")
-        );
+        return package_in_home(home, clone, arguments);
     };
     var release = (text: String) => {
         write_file(clone.join("pep.toml"), text);
@@ -1417,8 +1433,8 @@ publish_checks_tests_tags_and_pushes_the_version() {
 
     # Every problem at once: the version is already tagged, a field is
     # missing, a dependency follows a branch, `[dev-dependencies]` needs a
-    # newer toolchain than the minimum, the change is not committed, and a
-    # dependency is a path. A dev-dependency may be one.
+    # newer toolchain than the minimum, the change is not committed, and
+    # dependencies are paths. A dev-dependency may be one.
     write_file(
         clone.join("pep.toml"),
         manifest("1.0.0", "")
@@ -1467,7 +1483,11 @@ publish_checks_tests_tags_and_pushes_the_version() {
         refused.stderr, "\n  'version' 1.0.0 is not newer than the newest tag, 1.0.0; raise it in pep.toml\n"
     );
     expect_false(refused.stderr.contains("fixtures"));
-    expect_false(refused.stderr.contains("sibling"));
+    # Only a package of its workspace may be a path with a version.
+    expect_contains(
+        refused.stderr,
+        ": error: dependency 'sibling' names the folder ../sibling, which is no package of this workspace, so a dependent cannot fetch it; depend on it by its repository\n"
+    );
 
     # A commit origin does not have yet.
     release(manifest("1.1.0", licensed));
@@ -1502,7 +1522,7 @@ publish_checks_tests_tags_and_pushes_the_version() {
     expect_equal(tags_of(bare), "v1.0.0\nv1.1.0\n");
 
     # A newest toolchain whose tests fail stops it before the tag.
-    add_toolchain("0.3.0", tool("pepper"));
+    add_toolchain(home, "0.3.0", passes, tool("pepper"));
     release(manifest("1.2.0", licensed));
     git(clone, ["push", "--quiet", "origin", "main"]);
     var failed = package(["publish"]);
@@ -1716,8 +1736,203 @@ install_puts_a_packages_program_in_the_homes_bin() {
     var copy = bin.join("pep-package" + toolchain.executable_suffix());
     copy_executable(tool("pep-package"), copy);
     var info = run(hosts.command(copy.to_string(), root, ["cache", "info"]));
+    # The home as the executable's path names it: on macOS, /var is
+    # /private/var.
+    var shown = Path(info.stdout.trim()).normalize();
+    var home = shown.parent().value().parent().value();
+    expect_equal(home.canonicalize().value().to_string(), other.canonicalize().value().to_string());
+    expect_equal(shown.to_string(), home.join("cache").join("packages").to_string());
+}
+
+[Test]
+install_puts_a_workspace_members_program_in_the_homes_bin() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("install_member");
+    var root = hosts.folder.path;
+    var work = root.join("work").join("me").join("tools");
+    add_version(
+        root,
+        "me/tools",
+        "1.0.0",
+        [
+            "pep.toml",
+            "[workspace]\nmembers = [\"hi\"]\n",
+            "hi/pep.toml",
+            "[package]\nname = \"hi\"\nversion = \"1.0.0\"\n",
+            "hi/main.pep",
+            "main(): int {\n    print(\"hi 1.0.0\");\n    return 0;\n}\n",
+            ".gitignore",
+            ".pep/\n"
+        ]
+    );
+    git(work, ["tag", "hi-v1.0.0"]);
+    publish(root, "me/tools");
+    var program = hosts.home().join("bin").join("hi" + toolchain.executable_suffix());
+
+    expect_exit(hosts.package(root, ["install", "me/tools", "--package", "hi"]), 0);
+    expect_equal(run(process.Command(program.to_string())).stdout, "hi 1.0.0\n");
+    expect_equal(hosts.package(root, ["install", "--list"]).stdout, "hi 1.0.0 (github:me/tools#hi)\n");
+
+    var missing = hosts.package(root, ["install", "me/tools", "--package", "nope"]);
+    expect_exit(missing, 1);
+}
+
+[Test]
+a_members_toolchain_is_read_where_its_tag_has_it() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("moved");
+    var root = hosts.folder.path;
+    var work = root.join("work").join("me").join("moved");
+    var member = (version: String, minimum: String, rest: String) => {
+        return [
+            "pep.toml",
+            "[package]\nname = \"geo\"\nversion = \""
+                + version
+                + "\"\nminimum_toolchain = \""
+                + minimum
+                + "\"\n"
+                + rest,
+            "module.pep",
+            "export geo_version(): String {\n    return \"" + version + "\";\n}\n"
+        ];
+    };
+    # 1.0.0 and 1.0.1 build here, 1.1.0 needs a newer toolchain, and 1.2.0,
+    # which does too and retracts 1.0.1, moved `geo` from `geo` to
+    # `libs/geo`: each is read where its commit has it.
+    var at = (folder: String, files: Array<String>) => {
+        return [folder + "/" + files[0], files[1], folder + "/" + files[2], files[3]];
+    };
+    var first = at("geo", member("1.0.0", "0.1.0", ""));
+    first.append_all(["pep.toml", "[workspace]\nmembers = [\"geo\"]\n"]);
+    add_version(root, "me/moved", "1.0.0", first);
+    git(work, ["tag", "geo-v1.0.0"]);
+    add_version(root, "me/moved", "1.0.1", at("geo", member("1.0.1", "0.1.0", "")));
+    git(work, ["tag", "geo-v1.0.1"]);
+    add_version(root, "me/moved", "1.1.0", at("geo", member("1.1.0", "99.0.0", "")));
+    git(work, ["tag", "geo-v1.1.0"]);
+    git(work, ["rm", "-rq", "geo"]);
+    var moved = at("libs/geo", member("1.2.0", "99.0.0", "\n[retract]\n\"1.0.1\" = \"loses data\"\n"));
+    moved.append_all(["pep.toml", "[workspace]\nmembers = [\"libs/*\"]\n"]);
+    add_version(root, "me/moved", "1.2.0", moved);
+    git(work, ["tag", "geo-v1.2.0"]);
+    publish(root, "me/moved");
+
+    var project = Project("moved", "geo = { github = \"me/moved\", package = \"geo\", version = \"1\" }\n");
+    var fetched = hosts.package(project.dir, ["fetch"]);
+    expect_exit(fetched, 0);
+    expect_contains(project.lock(), "source = \"github:me/moved#geo\"\nversion = \"1.0.0\"\n");
+    expect_contains(
+        fetched.stderr,
+        "github:me/moved#geo skipped 1.2.0 (needs toolchain 99.0.0), 1.1.0 (needs toolchain 99.0.0); this is "
+    );
+    expect_contains(fetched.stderr, "github:me/moved#geo skipped 1.0.1 (retracted: loses data)\n");
+}
+
+[Test]
+a_workspace_member_is_a_git_dependency_tagged_on_its_own() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("member");
+    var (home, passes) = publish_home(hosts.folder.path);
+    add_toolchain(home, "0.11.0", passes, passes);
+    # `me/kit`, a workspace: `geo` needs its sibling `numbers` 1 by path.
+    var manifest = (name: String, version: String, rest: String) => {
+        return $"[package]\nname = \"{name}\"\nversion = \"{version}\"\ndescription = \"d\"\nlicense = \"MIT\"\n"
+            + "repository = \"https://example.com/me/kit\"\n"
+            + rest;
+    };
+    var numbers = (version: String) => {
+        return "export numbers_version(): String {\n    return \"" + version + "\";\n}\n";
+    };
+    add_version(
+        hosts.folder.path,
+        "me/kit",
+        "0.0.0",
+        [
+            "pep.toml",
+            manifest(
+                "kit", "1.0.0", "minimum_toolchain = \"0.11.0\"\n\n[workspace]\nmembers = [\"numbers\", \"geo\"]\n"
+            ),
+            "numbers/pep.toml",
+            manifest("numbers", "1.0.0", ""),
+            "numbers/module.pep",
+            numbers("1.0.0"),
+            "geo/pep.toml",
+            manifest("geo", "1.0.0", "\n[dependencies]\nnumbers = { path = \"../numbers\", version = \"1\" }\n"),
+            "geo/module.pep",
+            "import numbers;\n\nexport geometry_version(): String {\n    return \"geo \" + numbers.numbers_version();\n}\n"
+        ]
+    );
+    publish(hosts.folder.path, "me/kit");
+    var bare = hosts.bare("me/kit");
+    var clone = hosts.folder.path.join("clone");
+    git(hosts.folder.path, ["clone", "--quiet", bare.to_string(), clone.to_string()]);
+
+    # geo's sibling is not published yet: an error at its path.
+    var early = package_in_home(home, clone.join("geo"), ["publish", "--dry-run"]);
+    expect_exit(early, 1);
+    expect_contains(
+        early.stderr,
+        ":9:20: error: 'numbers' is not published at a version '1' accepts: origin has no such tag numbers-v<version>, which a dependent resolves it by; publish numbers first\n"
+    );
+    # Each member is tagged `<name>-v<version>`.
+    expect_exit(package_in_home(home, clone.join("numbers"), ["publish"]), 0);
+    expect_exit(package_in_home(home, clone.join("geo"), ["publish"]), 0);
+    write_file(clone.join("numbers").join("pep.toml"), manifest("numbers", "1.1.0", ""));
+    write_file(clone.join("numbers").join("module.pep"), numbers("1.1.0"));
+    git(clone, ["commit", "--quiet", "-am", "numbers 1.1.0"]);
+    git(clone, ["push", "--quiet", "origin", "main"]);
+    expect_exit(package_in_home(home, clone.join("numbers"), ["publish"]), 0);
+    # The root package keeps `v<version>`.
+    expect_exit(package_in_home(home, clone, ["publish"]), 0);
+    expect_equal(tags_of(bare), "geo-v1.0.0\nnumbers-v1.0.0\nnumbers-v1.1.0\nv0.0.0\nv1.0.0\n");
+
+    # A project depends on geo by Git; geo's sibling is resolved by its own
+    # tags, at 1.1.0, not as geo's commit holds it.
+    var project = Project("member", "");
+    var added = hosts.package(project.dir, ["add", "me/kit", "--package", "geo", "--name", "geometry"]);
+    expect_exit(added, 0);
+    expect_contains(project.manifest(), "geometry = { github = \"me/kit\", package = \"geo\", version = \"1.0.0\" }\n");
+    expect_equal(hosts.build_and_run(project.dir), "geo 1.1.0\n");
+    expect_contains(project.lock(), "name = \"geo\"\nsource = \"github:me/kit#geo\"\nversion = \"1.0.0\"\n");
+    expect_contains(project.lock(), "name = \"numbers\"\nsource = \"github:me/kit#numbers\"\nversion = \"1.1.0\"\n");
+    # One repository in the download cache serves both.
+    var cached = hosts.cache().join("github.com").join("me");
+    expect_true(cached.join("kit.git").is_directory());
+    expect_false(cached.join("kit#geo.git").exists());
+    var tree = hosts.package(project.dir, ["tree", "--offline"]);
     expect_equal(
-        Path(info.stdout.trim()).normalize().to_string(), other.join("cache").join("packages").normalize().to_string()
+        tree.stdout, "app\n`-- geometry: geo 1.0.0 (github:me/kit#geo)\n    `-- numbers 1.1.0 (github:me/kit#numbers)\n"
+    );
+
+    # Vendored, each member is a folder of its own.
+    var dependencies = project.manifest();
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_true(project.dir.join("vendor").join("github.com").join("me").join("kit#numbers").is_directory());
+    expect_equal(hosts.build_and_run(project.dir), "geo 1.1.0\n");
+
+    # An override replaces a member by its source.
+    write_file(project.dir.join("local").join("pep.toml"), "[package]\nname = \"numbers\"\n");
+    write_file(project.dir.join("local").join("module.pep"), numbers("local"));
+    write_file(
+        project.dir.join("pep.toml"), dependencies + "\n[overrides]\n\"github:me/kit#numbers\" = { path = \"local\" }\n"
+    );
+    expect_equal(hosts.build_and_run(project.dir), "geo local\n");
+
+    # A member the workspace lacks, at its `package`.
+    write_file(
+        project.dir.join("pep.toml"),
+        "[package]\nname = \"app\"\n\n[dependencies]\ngeometry = { github = \"me/kit\", package = \"gem\" }\n"
+    );
+    var missing = hosts.package(project.dir, ["fetch"]);
+    expect_exit(missing, 1);
+    expect_contains(
+        missing.stderr, ":5:43: error: me/kit has no workspace member 'gem'; its members are 'numbers', 'geo'\n"
     );
 }
 
