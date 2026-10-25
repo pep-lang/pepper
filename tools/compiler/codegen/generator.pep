@@ -1005,8 +1005,8 @@ export struct Build {
     ## stays the same (`codegen.prepare` gives them a part of their own).
     var separate_locations: bool = false;
     ## Whether the code is for a library (`--lib static` or `--lib shared`),
-    ## which may end up in a shared object, so its thread-locals use the
-    ## general-dynamic TLS model.
+    ## which may end up in a shared object, so on Android its thread-locals
+    ## use the general-dynamic TLS model (`Generator.declare_thread_local`).
     var library: bool = false;
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {

@@ -111,9 +111,10 @@ c_programs_call_a_static_and_a_shared_library() {
     # Linked by its file name, which is its `soname`.
     var dynamic = _run(process.Command("readelf").argument("-d").argument(shared.to_string()));
     expect_true(dynamic.contains("Library soname: [libcounter.so]"));
-    # Its thread-locals (`adds`, the runtime's) are general-dynamic, so a
-    # program may `dlopen` it (initial-exec needs static TLS: pepper#246).
-    expect_false(dynamic.contains("STATIC_TLS"));
+    # Its thread-locals (`adds`, the runtime's) stay initial-exec on Linux,
+    # which is faster, so it uses static TLS (only Android's libraries are
+    # general-dynamic: pepper#246).
+    expect_true(dynamic.contains("STATIC_TLS"));
     File.remove(archive);
     expect_equal(_run_program(root, [shared.to_string(), $"-Wl,-rpath,{root}"]), _EXPECTED);
 }

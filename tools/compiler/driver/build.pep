@@ -1557,7 +1557,7 @@ _runtime_dir(program: link.Program): Path? {
 _codegen_options(options: BuildOptions): String {
     var out = options.frame_pointers ? " --frame-pointers" : "";
     if (options.library.is_value()) {
-        # A library's thread-locals use another TLS model.
+        # An Android library's thread-locals use another TLS model.
         out = $"{out} --lib";
     }
     if (options.debug) {

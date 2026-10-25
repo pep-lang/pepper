@@ -127,17 +127,24 @@ selects_and_generates_the_targets_code() {
 
 const _THREAD_LOCAL = "[ThreadLocal]\nvar count: int = 0;\nmain(): int {\n    count += 1;\n    return count;\n}\n";
 
-# A program's thread-locals are initial-exec; a library's are
-# general-dynamic, since a `dlopen`ed shared object may not use
-# initial-exec (bionic refuses to load one: pepper#246).
+# An Android library's thread-locals are general-dynamic, since bionic
+# refuses initial-exec in a `dlopen`ed shared object (pepper#246). Every
+# other library's code is a program's: initial-exec, which is faster.
 [Test]
-a_librarys_thread_locals_are_general_dynamic() {
-    for (var triple in ["x86_64-linux-android", "aarch64-linux-android", "x86_64-unknown-linux-gnu"]) {
+only_an_android_librarys_thread_locals_are_general_dynamic() {
+    for (var triple in ["x86_64-linux-android", "aarch64-linux-android"]) {
         var program = _ir(_THREAD_LOCAL, _parse(triple));
         expect_true(program.contains("thread_local(initialexec) global i32 0"));
         var library = _ir(_THREAD_LOCAL, _parse(triple), true);
         expect_true(library.contains("thread_local global i32 0"));
         expect_false(library.contains("initialexec"));
+    }
+    for (var triple in [
+        "x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "arm64-apple-macosx14.0", "x86_64-pc-windows-msvc"
+    ]) {
+        var program = _ir(_THREAD_LOCAL, _parse(triple));
+        expect_true(program.contains("thread_local(initialexec) global i32 0"));
+        expect_equal(_ir(_THREAD_LOCAL, _parse(triple), true), program);
     }
 }
 

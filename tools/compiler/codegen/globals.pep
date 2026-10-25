@@ -392,13 +392,16 @@ extend Generator {
     # Thread-locals
 
     ## Makes `global`, just added for `variable`, a `thread_local` global,
-    ## with `variable`'s constant initializer. A program's are initial-exec;
-    ## a library's are general-dynamic (LLVM makes a local one
-    ## local-dynamic), since a shared object a program `dlopen`s, as every
-    ## Android app's native code is, may not use initial-exec: bionic
-    ## refuses to load it, and glibc only while its static TLS has room.
+    ## with `variable`'s constant initializer. They are initial-exec, except
+    ## in an Android library, where they are general-dynamic (LLVM makes a
+    ## local one local-dynamic): every Android app `dlopen`s its native
+    ## code, and bionic refuses initial-exec there. Elsewhere a library keeps
+    ## initial-exec, which costs a load where general-dynamic costs a call
+    ## (46% slower on Linux, and TLSDESC slower still: pepper#246); glibc
+    ## loads such a `.so` with `dlopen` only while its static TLS has room.
     declare_thread_local(variable: VariableDef, global: llvm.Value, llvm_ty: llvm.Type): Result<void> {
-        global.set_thread_local_mode(library ? GENERAL_DYNAMIC_TLS_MODEL : INITIAL_EXEC_TLS_MODEL);
+        var dynamic = library and machine.triple().contains("-android");
+        global.set_thread_local_mode(dynamic ? GENERAL_DYNAMIC_TLS_MODEL : INITIAL_EXEC_TLS_MODEL);
         if (!variable.default.is_value()) {
             return Result<void>.ok();
         }
