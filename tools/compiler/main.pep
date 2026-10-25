@@ -14,7 +14,8 @@
 # the current directory with no file. `--lib static|shared` builds a
 # library for C instead, with the header of its `[Export]`ed functions
 # beside it (`driver/library.pep`), or `--lib xcframework|swift-package`
-# one for iOS apps (`driver/xcframework.pep`), and `--lto=full` (above `-O0`, when
+# one for iOS apps (`driver/xcframework.pep`), or `--lib aar` one for
+# Android apps (`driver/aar.pep`), and `--lto=full` (above `-O0`, when
 # asked for) optimizes the program as one module before the link
 # (`driver/lto.pep`). `--test` builds the test program of the file (or of
 # several files of one folder) instead (`driver/test_main.pep`). A build
@@ -107,7 +108,7 @@ _main(args: String[]): int {
     );
     var library = parser.option<driver.LibraryKind>(
         "lib",
-        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`), named for the output. No `main` is needed",
+        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`); or for Android apps, `aar` (`name.aar`: a shared library for each Android ABI, with the header); each named for the output. No `main` is needed",
         value_name = "KIND"
     );
     var entry_function = parser.option(
@@ -333,11 +334,15 @@ _main(args: String[]): int {
     if (test.is_set and library.is_set) {
         return parser.usage_error("'--test' cannot be used with '--lib'");
     }
-    bool for_apps = library.is_set
-        and (library.value() == driver.LibraryKind.Xcframework or library.value() == driver.LibraryKind.SwiftPackage);
+    bool for_android = library.is_set and library.value() == driver.LibraryKind.Aar;
+    bool for_apps = for_android
+        or (library.is_set
+            and (library.value() == driver.LibraryKind.Xcframework
+                or library.value() == driver.LibraryKind.SwiftPackage));
+    var app_kinds = "'--lib xcframework', '--lib swift-package' or '--lib aar'";
     if (for_apps and triple.is_set) {
         return parser.usage_error(
-            "'--target' cannot be used with '--lib xcframework' or '--lib swift-package', which build for every iOS target"
+            $"'--target' cannot be used with {app_kinds}, which build for every iOS or Android target"
         );
     }
     if (for_apps
@@ -348,9 +353,7 @@ _main(args: String[]): int {
             or steps.is_set
             or ir.is_set
             or emit_static.is_set)) {
-        return parser.usage_error(
-            "the --emit options cannot be used with '--lib xcframework' or '--lib swift-package'"
-        );
+        return parser.usage_error($"the --emit options cannot be used with {app_kinds}");
     }
     if (for_apps
         and library.value() == driver.LibraryKind.Xcframework
@@ -516,14 +519,31 @@ _main(args: String[]): int {
     }
     var build_folder = build_dir.is_set ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
     if (for_apps) {
-        # Each iOS target's static library, built by this compiler, then
-        # laid out (`driver/xcframework.pep`).
+        # Each iOS target's static library, or each Android ABI's shared
+        # one, built by this compiler, then packaged (`driver/xcframework.pep`,
+        # `driver/aar.pep`).
         var executable = process.executable_path();
         if (executable.is_err()) {
-            _report($"cannot find this program to build each iOS target: {executable.error().message}");
+            _report($"cannot find this program to build each target: {executable.error().message}");
             return 1;
         }
         var named = out.file_stem();
+        if (for_android and (!named.is_value() or !driver.is_module_name(named.value()))) {
+            _report(
+                $"'{out}' does not name an Android library: it is named for its output, which takes letters, digits and '_' (pass '-o name.aar')"
+            );
+            return 1;
+        }
+        if (for_android) {
+            var made = driver.build_aar(executable.value(), args, out, named.value(), build_folder.join(Path("aar")));
+            if (made.is_err()) {
+                if (!made.error().is_empty) {
+                    _report(made.error());
+                }
+                return 1;
+            }
+            return 0;
+        }
         if (!named.is_value() or !driver.is_module_name(named.value())) {
             _report(
                 $"'{out}' does not name a Swift module: a library for iOS apps is named for its output, which takes letters, digits and '_' (pass '-o Name.xcframework')"

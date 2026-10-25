@@ -2,6 +2,7 @@
 ## program to an executable or a library for C (generate, optimize, emit
 ## objects, optimize them as one with LTO, link or archive).
 
+export * from "aar";
 export * from "build";
 export * from "build_scripts";
 export * from "library";
