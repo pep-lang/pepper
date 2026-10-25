@@ -20440,9 +20440,12 @@ it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
 (<code>adb shell</code>), then builds and runs the two apps. On iOS it also runs
 <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
-on the Mac, with a certificate authority made for the run, and against
-<code>PEPPER_MOBILE_TLS_URL</code> (<code>https://example.com/</code> by default; set it empty to
-skip the public host).</p>
+on the Mac, with a certificate authority made for the run: it trusts that
+authority, connects to <code>localhost</code> and <code>127.0.0.1</code>, checks that ALPN chose
+<code>http/1.1</code>, sends <code>GET /</code>, checks that a connector without the authority is
+refused, and fetches the server through <code>http.Client</code>. It needs no internet
+access. Set <code>PEPPER_MOBILE_TLS_URL</code> to an <code>https://</code> URL to also fetch that
+public host through the system's roots.</p>
 <pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 </code></pre>
 <h2 id="not-supported-yet-1"><a class="header" href="#not-supported-yet-1">Not supported yet</a></h2>
