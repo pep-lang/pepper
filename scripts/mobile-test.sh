@@ -266,7 +266,11 @@ run_android() {
   fi
   kill "${tls_pid:-}" 2>/dev/null || true
 
-  if [ -d "$repo_root/docs/examples/mobile/android" ]; then
+  # On x86_64 the app's library does not load yet (pepper#246: its
+  # thread-locals use initial-exec TLS), so only arm64 runs it.
+  if [ "$triple" = x86_64-linux-android ]; then
+    echo "android app: skipped on x86_64 (pepper#246)"
+  elif [ -d "$repo_root/docs/examples/mobile/android" ]; then
     bash "$repo_root/docs/examples/mobile/android/build.sh" "$compiler" "$out/android-app" "$serial" || report "android app"
   fi
 

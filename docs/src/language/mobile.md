@@ -264,7 +264,9 @@ skip the public host). On Android the same check runs in the emulator
 against the same kind of server, which `adb reverse` makes the emulator's
 `localhost`; there `PEPPER_MOBILE_TLS_URL`, when set, also fetches that URL
 through the system's roots. The Android run also works on Linux, for the
-host's ABI (x86_64 there), as CI runs it: `scripts/ci-provision-android.sh`
+host's ABI (x86_64 there, where the prototype app is skipped until
+[pepper#246](https://github.com/pep-lang/pepper/issues/246) is fixed), as CI
+runs it: `scripts/ci-provision-android.sh`
 sets up an emulator on a GitHub-hosted Linux runner, since Apple silicon
 runners cannot run one.
 
