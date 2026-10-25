@@ -11,7 +11,10 @@ like an `io.TcpStream`. In a task, a call that has to wait parks only the
 task.
 
 On Linux and macOS the module uses OpenSSL 3, loaded when the first
-connector or acceptor is made; on Windows it uses SChannel.
+connector or acceptor is made; on Windows it uses SChannel. On iOS it uses
+the system's Security.framework (Secure Transport, TLS 1.2), for clients
+only: there `TlsAcceptor.create` and `TlsConnector.set_identity` return
+an error.
 
 - [Streams](tls-stream.md): `TlsConnector`, `TlsAcceptor`, and `TlsStream`
 

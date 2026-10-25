@@ -2,13 +2,14 @@
 ## accepts server connections, and `TlsStream` is one encrypted connection
 ## over a `TcpStream`.
 
-# The public types call the `_tls_sys_*` layer (openssl.pep, schannel.pep),
-# which works on raw pointers: a context and a session are the platform's
-# objects.
+# The public types call the `_tls_sys_*` layer (openssl.pep, schannel.pep,
+# securetransport.pep), which works on raw pointers: a context and a session
+# are the platform's objects.
 
 import io;
 import "openssl";
 import "schannel";
+import "securetransport";
 import "wasi";
 
 ## Opens TLS client connections, checking each server's certificate.
@@ -17,7 +18,7 @@ import "wasi";
 ## trusts more, such as a test certificate authority. Each `connect` runs
 ## the TLS handshake over a connected `TcpStream` and checks that the
 ## server's certificate is valid and issued for the host name given. Only
-## TLS 1.2 and 1.3 are offered.
+## TLS 1.2 and 1.3 are offered (on iOS, only TLS 1.2).
 ##
 ## A server that asks for a client certificate (mutual TLS) gets the one
 ## set with `set_identity`; without one, the connector presents none.
@@ -57,7 +58,7 @@ export struct TlsConnector {
     ##
     ## @returns the connector; an error when no TLS library is available (on
     ##   Linux and macOS, OpenSSL 3: `libssl.so.3`, or Homebrew's or
-    ##   MacPorts' `libssl.3.dylib`)
+    ##   MacPorts' `libssl.3.dylib`; on iOS, Security.framework)
     static create(): io.IoResult<TlsConnector> {
         var context = _tls_sys_client_context();
         if (context.is_err()) {
@@ -87,7 +88,8 @@ export struct TlsConnector {
     ## @param private_key a PEM file with the certificate's private key (on
     ##   Windows, PKCS #8: `BEGIN PRIVATE KEY`)
     ## @returns an Ok result; an error when a file cannot be read or the key
-    ##   does not match the certificate
+    ##   does not match the certificate, and always on iOS, which does not
+    ##   support client certificates yet
     ## @example
     ##     var connector = tls.TlsConnector.create().value();
     ##     connector.set_identity(io.Path("client.pem"), io.Path("client-key.pem")).value();
@@ -207,7 +209,8 @@ export struct TlsAcceptor {
     ##   Windows, PKCS #8: `BEGIN PRIVATE KEY`)
     ## @returns the acceptor; an error when a file cannot be read, the key
     ##   does not match the certificate, or no TLS library is available (see
-    ##   `TlsConnector.create`)
+    ##   `TlsConnector.create`), and always on iOS, which does not support
+    ##   TLS servers yet
     static create(certificate_chain: io.Path, private_key: io.Path): io.IoResult<TlsAcceptor> {
         var context = _tls_sys_server_context(certificate_chain, private_key);
         if (context.is_err()) {

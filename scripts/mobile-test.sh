@@ -13,6 +13,11 @@
 # app calling a Pepper library from Swift in the simulator, and an Android app
 # calling it through JNI in the emulator.
 #
+# On iOS, scripts/mobile/tls_check.pep also checks the tls module and HTTPS:
+# against `openssl s_server` on this Mac (Homebrew's openssl@3, else the
+# system's), with a test CA made for the run, and against a public host,
+# PEPPER_MOBILE_TLS_URL (default https://example.com/; empty skips it).
+#
 # iOS: the simulator SDK comes from `xcrun`, and the programs run in a
 # booted iPhone simulator through `xcrun simctl spawn`. The first available
 # iPhone is booted for the run and shut down after, unless it was already
@@ -84,6 +89,40 @@ build_all() {
   ' "$compiler" "$triple" "$dir" 2>/dev/null || true
 }
 
+# A TLS server on this Mac for the phone's checks, in `$1`: a test CA, a
+# certificate for localhost and 127.0.0.1 that it issued (valid for 30 days,
+# with the serverAuth usage iOS requires), and `openssl s_server -www`, which
+# answers `GET /` and chooses http/1.1 through ALPN. Sets tls_pid.
+TLS_PORT=18443
+start_tls_server() {
+  local dir=$1 openssl
+  openssl="$(brew --prefix openssl@3 2>/dev/null || true)/bin/openssl"
+  [ -x "$openssl" ] || openssl=openssl
+  mkdir -p "$dir"
+  printf 'basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign,cRLSign
+' > "$dir/ca.ext"
+  printf 'basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=serverAuth
+subjectAltName=DNS:localhost,IP:127.0.0.1
+'     > "$dir/server.ext"
+  "$openssl" ecparam -name prime256v1 -genkey -noout -out "$dir/ca-key.pem"
+  "$openssl" req -new -key "$dir/ca-key.pem" -subj "/CN=Pepper test CA" -out "$dir/ca.csr"
+  "$openssl" x509 -req -in "$dir/ca.csr" -signkey "$dir/ca-key.pem" -days 30 -extfile "$dir/ca.ext" -out "$dir/ca.pem"
+  "$openssl" ecparam -name prime256v1 -genkey -noout -out "$dir/key.pem"
+  "$openssl" req -new -key "$dir/key.pem" -subj "/CN=localhost" -out "$dir/server.csr"
+  "$openssl" x509 -req -in "$dir/server.csr" -CA "$dir/ca.pem" -CAkey "$dir/ca-key.pem" -CAcreateserial -days 30     -extfile "$dir/server.ext" -out "$dir/server.pem"
+  "$openssl" s_server -4 -accept "$TLS_PORT" -cert "$dir/server.pem" -key "$dir/key.pem" -alpn http/1.1 -www     < /dev/null > "$dir/server.log" 2>&1 &
+  tls_pid=$!
+  local waited=0
+  until nc -z 127.0.0.1 "$TLS_PORT" 2>/dev/null; do
+    sleep 1
+    waited=$((waited + 1))
+    [ "$waited" -lt 30 ] || { echo "the TLS server did not start"; cat "$dir/server.log"; return 1; }
+  done
+}
+
 failures=0
 report() {
   echo "FAIL $1"
@@ -121,6 +160,25 @@ run_ios() {
     fi
   done < <(examples ios)
   echo "ios: ran $count examples"
+
+  # TLS through Security.framework, against a server on this Mac and a
+  # public host.
+  local tls_dir="$out/ios-tls" tls_args
+  if start_tls_server "$tls_dir"; then
+    tls_args=("$tls_dir/ca.pem" localhost "$TLS_PORT")
+    [ -z "${PEPPER_MOBILE_TLS_URL-https://example.com/}" ] || tls_args+=("${PEPPER_MOBILE_TLS_URL-https://example.com/}")
+    if ! "$compiler" --target aarch64-apple-ios-simulator "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check"       --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
+      report "ios tls_check (build)"
+      sed 's/^/    /' "$dir/tls_check.log" | head -20
+    # Bounded (macOS has no `timeout`): a TLS read that waits forever would
+    # otherwise hold the job until its own limit.
+    elif ! perl -e 'alarm shift; exec @ARGV' 300 xcrun simctl spawn "$device" "$dir/tls_check" "${tls_args[@]}" < /dev/null; then
+      report "ios tls_check (run)"
+    fi
+    kill "$tls_pid" 2>/dev/null || true
+  else
+    report "ios tls server"
+  fi
 
   # The device build links too (nothing runs it here).
   "$compiler" --target aarch64-apple-ios "$repo_root/docs/examples/hello.pep" -o "$dir/hello-device" \

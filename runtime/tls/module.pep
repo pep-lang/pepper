@@ -7,7 +7,10 @@
 ## task.
 ##
 ## On Linux and macOS the module uses OpenSSL 3, loaded when the first
-## connector or acceptor is made; on Windows it uses SChannel.
+## connector or acceptor is made; on Windows it uses SChannel. On iOS it uses
+## the system's Security.framework (Secure Transport, TLS 1.2), for clients
+## only: there `TlsAcceptor.create` and `TlsConnector.set_identity` return
+## an error.
 ##
 ## - [Streams](tls-stream.md): `TlsConnector`, `TlsAcceptor`, and `TlsStream`
 ##
@@ -25,7 +28,8 @@
 ##     }
 
 # This file only gathers the module's public API from its other files. The
-# platform layer (`_tls_sys_*` in openssl.pep / schannel.pep) is exported
+# platform layer (`_tls_sys_*` in openssl.pep, schannel.pep and
+# securetransport.pep) is exported
 # between the tls files but not from the module.
 
 import "stream";
