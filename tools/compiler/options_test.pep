@@ -358,7 +358,7 @@ lib_swift_package_writes_an_xcframework_for_ios() {
     expect_contains(manifest, ".target(name: \"Adder\", dependencies: [\"CAdder\"])");
     expect_contains(
         File.read_to_string(package.join(Path("Sources")).join(Path("Adder")).join(Path("Adder.swift"))).value(),
-        "public func `add`(_ `a`: Int32, _ `b`: Int32) -> Int32 {\n    return CAdder.add(`a`, `b`)\n}\n"
+        "@discardableResult\npublic func `add`(_ `a`: Int32, _ `b`: Int32) -> Int32 {\n    return CAdder.add(`a`, `b`)\n}\n"
     );
     expect_contains(
         File.read_to_string(framework.join(Path("Info.plist"))).value(), "<string>ios-arm64_x86_64-simulator</string>"

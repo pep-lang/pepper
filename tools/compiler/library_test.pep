@@ -172,17 +172,17 @@ swift_bindings_wrap_each_export_over_the_c_module() {
     );
     expect_true(
         text.contains(
-            "public func `counterNew`(_ `start`: Int32) -> Counter {\n    return Counter(owning: Ccounter.counter_new(`start`)!)\n}\n"
+            "@discardableResult\npublic func `counterNew`(_ `start`: Int32) -> Counter {\n    return Counter(owning: Ccounter.counter_new(`start`)!)\n}\n"
         )
     );
     expect_true(
         text.contains(
-            "public func `counterIncrement`(_ `counter`: Counter) -> Int32 {\n    return Ccounter.counter_increment(`counter`.handle)\n}\n"
+            "@discardableResult\npublic func `counterIncrement`(_ `counter`: Counter) -> Int32 {\n    return Ccounter.counter_increment(`counter`.handle)\n}\n"
         )
     );
     expect_true(
         text.contains(
-            "public func `shout`(_ `text`: String, _ `times`: Int32) -> String {\n    let s0 = `text`.utf8CString\n    let result = s0.withUnsafeBufferPointer { b0 in Ccounter.shout(b0.baseAddress, b0.count - 1, `times`) }!\n    defer { Ccounter.pepper_string_free(result) }\n    return String(cString: result)\n}\n"
+            "@discardableResult\npublic func `shout`(_ `text`: String, _ `times`: Int32) -> String {\n    let s0 = `text`.utf8CString\n    let result = s0.withUnsafeBufferPointer { b0 in Ccounter.shout(b0.baseAddress, b0.count - 1, `times`) }!\n    defer { Ccounter.pepper_string_free(result) }\n    return String(cString: result)\n}\n"
         )
     );
     expect_true(
@@ -236,9 +236,49 @@ java_bindings_write_jni_functions_and_classes() {
     # The library `counter`'s class would be `Counter`, as the struct's is.
     var named = driver.java_bindings("counter", state.exports, state.enum_representations);
     expect_true(named.error().message.starts_with("cannot bind 'counter_increment' to Java: its struct 'Counter'"));
+    _check_with_jdk(state, jar, glue);
     expect_equal(driver.camel_case("count_words"), "countWords");
     expect_equal(driver.camel_case("_next"), "next");
     expect_equal(driver.camel_case("_"), "_");
+}
+
+# With a JDK (`JAVA_HOME`, which CI's runners set), the JNI functions of
+# `glue` compile against its `jni.h`, and `javac` compiles a class calling
+# `jar`'s classes; without one there is nothing to check them with.
+_check_with_jdk(state: sema.PassState, jar: u8[], glue: String) {
+    var home = os.environment("JAVA_HOME");
+    if (!home.is_value()) {
+        return;
+    }
+    var folder = TempFolder("jni");
+    var declarations = sema.header_declarations(state.exports, state.enum_representations);
+    File.write_text(folder.path.join(Path("demo.h")), sema.header("demo.h", declarations, Array<String>()));
+    var source = folder.path.join(Path("demo_jni.c"));
+    File.write_text(source, glue);
+    var system = os.system_os() == os.OperatingSystem.Windows ?
+        "win32" :
+        (os.system_os() == os.OperatingSystem.Mac ? "darwin" : "linux");
+    var include = Path(home.value()).join(Path("include"));
+    _run(
+        process.Command(
+            driver.find_link_driver().value().to_string()
+        ).arguments(
+            ["-fsyntax-only", "-Wall", "-Werror", $"-I{include}", $"-I{include.join(Path(system))}", source.to_string()]
+        )
+    );
+    var classes = folder.path.join(Path("demo.jar"));
+    File.write_bytes(classes, jar);
+    var user = folder.path.join(Path("Use.java"));
+    File.write_text(
+        user,
+        "import pepper.demo.Counter;\nimport pepper.demo.Demo;\n\nclass Use {\n    static String call() {\n        try (Counter counter = Demo.counterNew(1)) {\n            return Demo.shout(\"x\", Demo.counterIncrement(counter)) + Demo.isEven(2L);\n        }\n    }\n}\n"
+    );
+    var javac = Path(home.value()).join(Path("bin")).join(Path("javac"));
+    _run(
+        process.Command(
+            javac.to_string()
+        ).arguments(["-classpath", classes.to_string(), "-d", folder.path.to_string(), user.to_string()])
+    );
 }
 
 # What Java cannot call is an error at the export: a C function pointer, a

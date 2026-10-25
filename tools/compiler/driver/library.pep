@@ -448,10 +448,12 @@ _put_u32(out: u8[], value: ulong, big: bool) {
     }
 }
 
-# Appends `value` as 2 little-endian bytes.
-_put_u16(out: u8[], value: ulong) {
-    out.append((value & 0xff) as u8);
-    out.append(((value >> 8) & 0xff) as u8);
+# Appends `value` as 2 bytes, little-endian, or with `big` big-endian.
+_put_u16(out: u8[], value: ulong, big: bool = false) {
+    var low = (value & 0xff) as u8;
+    var high = ((value >> 8) & 0xff) as u8;
+    out.append(big ? high : low);
+    out.append(big ? low : high);
 }
 
 # Appends `pad` until `out` is a multiple of `align` long.

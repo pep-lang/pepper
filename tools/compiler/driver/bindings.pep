@@ -139,8 +139,10 @@ export swift_bindings(
             result = $" -> {_swift_type(e.result, exports, representations)}";
             body.append($"    return {call}\n");
         }
+        # Swift imports a C function as `@discardableResult`; so do its wrappers.
+        var discardable = result.is_empty ? "" : "@discardableResult\n";
         out.append(
-            $"\n/// Calls Pepper's `{e.symbol}`.\npublic func `{named.value()[i]}`({", ".join(parameters)}){result} {{\n{body.to_string()}}}\n"
+            $"\n/// Calls Pepper's `{e.symbol}`.\n{discardable}public func `{named.value()[i]}`({", ".join(parameters)}){result} {{\n{body.to_string()}}}\n"
         );
     }
     return Result<String, Diagnostic>.Ok(out.to_string());
@@ -528,53 +530,53 @@ _class_file(name: String, interfaces: String[], instance: bool, methods: (String
     var this_class = pool.class_of(name);
     var super_class = pool.class_of("java/lang/Object");
     var body = Array<u8>();
-    _put_be16(body, 0x0031);
-    _put_be16(body, this_class);
-    _put_be16(body, super_class);
-    _put_be16(body, interfaces.count);
+    _put_u16(body, 0x0031, true);
+    _put_u16(body, this_class, true);
+    _put_u16(body, super_class, true);
+    _put_u16(body, interfaces.count, true);
     for (var i in interfaces) {
-        _put_be16(body, pool.class_of(i));
+        _put_u16(body, pool.class_of(i), true);
     }
-    _put_be16(body, instance ? 1 : 0);
+    _put_u16(body, instance ? 1 : 0, true);
     if (instance) {
         # private long handle;
-        _put_be16(body, 0x0002);
-        _put_be16(body, pool.utf8("handle"));
-        _put_be16(body, pool.utf8("J"));
-        _put_be16(body, 0);
+        _put_u16(body, 0x0002, true);
+        _put_u16(body, pool.utf8("handle"), true);
+        _put_u16(body, pool.utf8("J"), true);
+        _put_u16(body, 0, true);
     }
-    _put_be16(body, methods.count + (library.is_value() ? 1 : 0));
+    _put_u16(body, methods.count + (library.is_value() ? 1 : 0), true);
     for (var (method, descriptor) in methods) {
-        _put_be16(body, instance ? 0x0101 : 0x0109);
-        _put_be16(body, pool.utf8(method));
-        _put_be16(body, pool.utf8(descriptor));
-        _put_be16(body, 0);
+        _put_u16(body, instance ? 0x0101 : 0x0109, true);
+        _put_u16(body, pool.utf8(method), true);
+        _put_u16(body, pool.utf8(descriptor), true);
+        _put_u16(body, 0, true);
     }
     if (library.is_value()) {
         # static { System.loadLibrary(library); }: ldc, invokestatic, return.
-        _put_be16(body, 0x0008);
-        _put_be16(body, pool.utf8("<clinit>"));
-        _put_be16(body, pool.utf8("()V"));
-        _put_be16(body, 1);
-        _put_be16(body, pool.utf8("Code"));
+        _put_u16(body, 0x0008, true);
+        _put_u16(body, pool.utf8("<clinit>"), true);
+        _put_u16(body, pool.utf8("()V"), true);
+        _put_u16(body, 1, true);
+        _put_u16(body, pool.utf8("Code"), true);
         _put_u32(body, 18, true);
-        _put_be16(body, 1);
-        _put_be16(body, 0);
+        _put_u16(body, 1, true);
+        _put_u16(body, 0, true);
         _put_u32(body, 6, true);
         body.append(0x12);
         body.append(library_name as u8);
         body.append(0xb8);
-        _put_be16(body, load);
+        _put_u16(body, load, true);
         body.append(0xb1);
-        _put_be16(body, 0);
-        _put_be16(body, 0);
+        _put_u16(body, 0, true);
+        _put_u16(body, 0, true);
     }
-    _put_be16(body, 0);
+    _put_u16(body, 0, true);
     var out = Array<u8>();
     _put_u32(out, 0xcafebabe, true);
-    _put_be16(out, 0);
-    _put_be16(out, 52);
-    _put_be16(out, pool.count);
+    _put_u16(out, 0, true);
+    _put_u16(out, 52, true);
+    _put_u16(out, pool.count, true);
     out.append_all(pool.bytes);
     out.append_all(body);
     return out;
@@ -591,7 +593,7 @@ struct _Pool {
     # A `CONSTANT_Utf8` (ASCII here, which modified UTF-8 spells as is).
     utf8(text: String): ulong {
         bytes.append(1);
-        _put_be16(bytes, text.size);
+        _put_u16(bytes, text.size, true);
         bytes.append_all(text.bytes());
         return _next();
     }
@@ -600,7 +602,7 @@ struct _Pool {
     class_of(name: String): ulong {
         var named = utf8(name);
         bytes.append(7);
-        _put_be16(bytes, named);
+        _put_u16(bytes, named, true);
         return _next();
     }
 
@@ -608,7 +610,7 @@ struct _Pool {
     string(text: String): ulong {
         var named = utf8(text);
         bytes.append(8);
-        _put_be16(bytes, named);
+        _put_u16(bytes, named, true);
         return _next();
     }
 
@@ -618,12 +620,12 @@ struct _Pool {
         var named = utf8(name);
         var typed = utf8(descriptor);
         bytes.append(12);
-        _put_be16(bytes, named);
-        _put_be16(bytes, typed);
+        _put_u16(bytes, named, true);
+        _put_u16(bytes, typed, true);
         var both = _next();
         bytes.append(10);
-        _put_be16(bytes, class_index);
-        _put_be16(bytes, both);
+        _put_u16(bytes, class_index, true);
+        _put_u16(bytes, both, true);
         return _next();
     }
 
@@ -631,10 +633,4 @@ struct _Pool {
         count += 1;
         return count - 1;
     }
-}
-
-# Appends `value` as 2 big-endian bytes.
-_put_be16(out: u8[], value: ulong) {
-    out.append(((value >> 8) & 0xff) as u8);
-    out.append((value & 0xff) as u8);
 }

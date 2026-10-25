@@ -170,7 +170,8 @@ pepper build --lib swift-package greeter.pep -o Greeter
 The name comes from the output (`Greeter`): the module (`import Greeter`),
 the library (`libGreeter.a`) and its header (`Greeter.h`). In the Swift
 package the module `Greeter` is the Swift bindings, over the C module
-`CGreeter`:
+`CGreeter`, which code that calls the C functions directly imports
+instead:
 
 ```text
 Greeter/

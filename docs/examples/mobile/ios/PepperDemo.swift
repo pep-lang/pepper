@@ -7,7 +7,7 @@ import SwiftUI
 /// Adds 3 and 4 to a Pepper `Tally`, which Swift releases when `tally` goes.
 func tallied() -> Int64 {
     let tally = tallyNew()
-    _ = tallyAdd(tally, 3)
+    tallyAdd(tally, 3)
     return tallyAdd(tally, 4)
 }
 
