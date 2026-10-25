@@ -205,6 +205,8 @@ that <code>pep-install</code> sits beside runs the tools of the toolchain a fold
 uses: the one <code>pepper +&lt;version&gt;</code> names, else <code>PEPPER_TOOLCHAIN</code>'s, else the
 one the project's <code>pep.toml</code> pins with <code>toolchain = "0.3"</code>, else the default
 (see <a href="pepper.html#toolchains">Toolchains</a>).</p>
+<p>To install a command-line tool built from a package, rather than a
+toolchain, use <a href="pep-package.html#install"><code>pepper package install</code></a>.</p>
 <h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>list</code></td><td>Lists the installed toolchains, newest first, marking the default and the one the current folder uses, with why</td></tr>
@@ -259,7 +261,8 @@ download or unpack leaves the old toolchain as it was. On Windows a
 toolchain one of whose programs is running (a <code>pep-lsp</code> the editor
 started, say) cannot be moved, and the install fails, leaving it in place.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
-(it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
+(it has a <code>toolchains</code> folder), or the one whose toolchain it is
+(<code>&lt;home&gt;/toolchains/&lt;version&gt;/bin</code>), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
 <h2 id="setting-a-machine-up"><a class="header" href="#setting-a-machine-up">Setting a machine up</a></h2>
 <p><code>setup</code> is what the <a href="install.html">install scripts</a> run, from the installer

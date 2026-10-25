@@ -225,7 +225,8 @@ that exits with status 2.</li>
 build the program into a folder of its own:
 <code>&lt;Pepper home&gt;/run/&lt;key&gt;/&lt;entry stem&gt;</code> (<code>main</code> for a project), where the
 key is a hash of the current folder, the build options and the entry
-file, and the Pepper home is <code>PEPPER_HOME</code>, else <code>~/.pepper</code>
+file, and the Pepper home is the one whose toolchain <code>pep-run</code> is, else
+<code>PEPPER_HOME</code>, else <code>~/.pepper</code>
 (<code>%LOCALAPPDATA%\pepper</code> on Windows; see
 <a href="pep-install.html">Toolchains: pep-install</a>).</li>
 <li>The build cache is <code>PEPPER_CACHE_DIR</code> when it is set, else

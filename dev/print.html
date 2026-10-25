@@ -21817,6 +21817,8 @@ that <code>pep-install</code> sits beside runs the tools of the toolchain a fold
 uses: the one <code>pepper +&lt;version&gt;</code> names, else <code>PEPPER_TOOLCHAIN</code>'s, else the
 one the project's <code>pep.toml</code> pins with <code>toolchain = "0.3"</code>, else the default
 (see <a href="tools/pepper.html#toolchains">Toolchains</a>).</p>
+<p>To install a command-line tool built from a package, rather than a
+toolchain, use <a href="tools/pep-package.html#install"><code>pepper package install</code></a>.</p>
 <h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>list</code></td><td>Lists the installed toolchains, newest first, marking the default and the one the current folder uses, with why</td></tr>
@@ -21871,7 +21873,8 @@ download or unpack leaves the old toolchain as it was. On Windows a
 toolchain one of whose programs is running (a <code>pep-lsp</code> the editor
 started, say) cannot be moved, and the install fails, leaving it in place.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
-(it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
+(it has a <code>toolchains</code> folder), or the one whose toolchain it is
+(<code>&lt;home&gt;/toolchains/&lt;version&gt;/bin</code>), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
 <h2 id="setting-a-machine-up"><a class="header" href="#setting-a-machine-up">Setting a machine up</a></h2>
 <p><code>setup</code> is what the <a href="tools/install.html">install scripts</a> run, from the installer
@@ -23264,7 +23267,8 @@ that exits with status 2.</li>
 build the program into a folder of its own:
 <code>&lt;Pepper home&gt;/run/&lt;key&gt;/&lt;entry stem&gt;</code> (<code>main</code> for a project), where the
 key is a hash of the current folder, the build options and the entry
-file, and the Pepper home is <code>PEPPER_HOME</code>, else <code>~/.pepper</code>
+file, and the Pepper home is the one whose toolchain <code>pep-run</code> is, else
+<code>PEPPER_HOME</code>, else <code>~/.pepper</code>
 (<code>%LOCALAPPDATA%\pepper</code> on Windows; see
 <a href="tools/pep-install.html">Toolchains: pep-install</a>).</li>
 <li>The build cache is <code>PEPPER_CACHE_DIR</code> when it is set, else
@@ -23304,6 +23308,9 @@ pepper package tree                          # the dependency graph pep.lock rec
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
 pepper package outdated                      # packages behind their ranges or the newest version
+pepper package install someone/tool          # builds its program into the Pepper home's bin
+pepper package install --list                # what is installed there, and from where
+pepper package uninstall tool
 pepper package audit                         # locked packages a security advisory affects
 pepper package vendor                        # every locked package into vendor/, for builds with no network
 pepper package cache info                    # the download cache every project shares
@@ -23358,6 +23365,14 @@ Every package is downloaded once per machine, into a
 <tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="tools/pep-package.html#outdated"><code>outdated</code></a>)</td></tr>
 <tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
 <tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
+<tr><td><code>install &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Builds a package's program optimized and puts it in the Pepper home's <code>bin</code>; installing it again upgrades it (see <a href="tools/pep-package.html#install"><code>install</code></a>)</td></tr>
+<tr><td><code>install ... --package &lt;name&gt;</code></td><td>Installs the member <code>&lt;name&gt;</code> of the repository's (or <code>--path</code> folder's) workspace; from a repository, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags</td></tr>
+<tr><td><code>install --path &lt;dir&gt;</code></td><td>Installs the package in <code>&lt;dir&gt;</code> instead</td></tr>
+<tr><td><code>install --list</code></td><td>Lists the programs <code>install</code> put in <code>bin</code>, with their versions and sources</td></tr>
+<tr><td><code>install ... --force</code>, <code>-f</code></td><td>Replaces a program in <code>bin</code> that was installed from another source, or not by <code>install</code></td></tr>
+<tr><td><code>install ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The package's features to turn on: a comma-separated list, or repeat the option</td></tr>
+<tr><td><code>install ... --no-default-features</code></td><td>Leaves the package's <code>default</code> feature off</td></tr>
+<tr><td><code>uninstall &lt;name&gt;</code></td><td>Removes a program <code>install</code> put in <code>bin</code></td></tr>
 <tr><td><code>audit</code></td><td>Checks every package <code>pep.lock</code> records against the security advisory database, and exits with status 1 when one is affected (see <a href="tools/pep-package.html#audit"><code>audit</code></a>)</td></tr>
 <tr><td><code>audit --ignore &lt;id&gt;</code></td><td>Reports that advisory but does not fail on it; repeat it for more</td></tr>
 <tr><td><code>audit --json</code></td><td>Prints the affected packages as JSON</td></tr>
@@ -23512,8 +23527,8 @@ tags. The workspace's root package, and a package that is no workspace's
 member, are tagged <code>v&lt;version&gt;</code>.</p>
 <p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
 and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
-with the Pepper home's own <code>pepper</code> (in the home <code>PEPPER_HOME</code> names,
-else the default one; see <a href="tools/pep-install.html">Toolchains: pep-install</a>), so
+with the Pepper home's own <code>pepper</code> (in the home whose toolchain
+<code>pep-package</code> is, else the one <code>PEPPER_HOME</code> names, else the default one; see <a href="tools/pep-install.html">Toolchains: pep-install</a>), so
 both toolchains must be installed there; <code>latest</code> is the newest
 installed release, not a prerelease. A failing run stops it and shows
 what the tests printed. Last, it tags <code>HEAD</code> <code>v&lt;version&gt;</code> (a member's
@@ -23690,6 +23705,52 @@ restores edited ones, and removes those <code>pep.lock</code> no longer lists.
 <code>vendor</code> writes one folder at the workspace's root, holding every
 member's locked packages, and sets <code>[fetch] vendor</code> in the root's
 <code>pep.toml</code>; every member's build reads it.</p>
+<h3 id="install"><a class="header" href="#install"><code>install</code></a></h3>
+<p>Installs a command-line tool from a package, as <code>cargo install</code> and
+<code>go install</code> do: it builds the package's program, the one <code>pepper build</code>
+builds in its folder, with <code>-O</code>, and puts it in the Pepper home's <code>bin</code>,
+which <a href="tools/pep-install.html#setting-a-machine-up"><code>pep-install setup</code></a> puts on
+the <code>PATH</code>. It needs no project.</p>
+<pre><code class="language-bash">pepper package install someone/tool          # the newest release
+pepper package install github:someone/tool@1.2
+pepper package install someone/tools --package fmt  # the workspace member fmt
+pepper package install --path .              # the package in this folder
+pepper package install --list
+pepper package uninstall tool
+</code></pre>
+<ul>
+<li><strong>Which version:</strong> the newest release the range allows (any, without
+one) that this toolchain builds, as <a href="tools/pep-package.html#add-ownernamerange"><code>add</code></a> picks
+it; a package with no version tags is installed from its default
+branch. Installing it again upgrades it, or moves it to another range.
+With <code>--package &lt;name&gt;</code>, it is the workspace member <code>&lt;name&gt;</code>, by its
+own <code>&lt;name&gt;-v&lt;version&gt;</code> tags, as <code>add --package</code> reads them; with
+<code>--path</code>, the member <code>&lt;name&gt;</code> of that folder's workspace.</li>
+<li><strong>Its dependencies</strong> are those its own <code>pep.lock</code> records, when it has
+one, fetched through the <a href="tools/pep-package.html#the-download-cache">download cache</a>;
+<code>--locked</code> fails rather than build with a <code>pep.lock</code> that is out of
+date, and <code>--offline</code> works only with <code>--path</code>, since choosing a version
+reads the network. <code>--features</code> and <code>--no-default-features</code> choose the
+package's features, as for <code>pepper build</code>.</li>
+<li><strong>The program's name</strong> is its <code>[build]</code> table's <code>output</code>, else its
+package's <code>name</code> (with <code>.exe</code> on Windows).</li>
+<li><strong>What it installed</strong> is recorded in <code>installed-tools.toml</code> in the home:
+each program's source, version, commit and the toolchain that built it,
+which <code>install --list</code> prints and <code>uninstall</code> reads.</li>
+<li><strong>Overwriting:</strong> a program already in <code>bin</code> is replaced only when
+<code>install</code> put it there from the same source; one from another package,
+or one it did not install (<code>pepper</code> and <code>pep-install</code> are the home's
+own), needs <code>--force</code>.</li>
+<li><strong>Replacing a running program:</strong> the new program is written beside the
+old one and renamed into place, the old one first moved aside to
+<code>&lt;name&gt;.old</code>. On Windows a running program cannot be removed, so its
+<code>.old</code> file stays until the next <code>install</code> or <code>uninstall</code> of that
+program removes it.</li>
+</ul>
+<p>The home is the one whose toolchain <code>pep-package</code> is, else <code>PEPPER_HOME</code>,
+else <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere, as for
+<a href="tools/pep-install.html#where-toolchains-go"><code>pep-install</code></a>.
+<code>pepper install</code> is a different command: it installs toolchains.</p>
 <h3 id="json-output"><a class="header" href="#json-output">JSON output</a></h3>
 <p><code>--json</code> makes <code>tree</code>, <code>why</code> and <code>outdated</code> print one JSON object instead,
 for scripts. Its form is stable: a later release may add members, but
@@ -23886,7 +23947,8 @@ fetch they do on their own (see <a href="tools/pep-build.html">The compiler: pep
 <h2 id="the-download-cache"><a class="header" href="#the-download-cache">The download cache</a></h2>
 <p>Each package is downloaded once per machine, into a cache in the Pepper
 home that every project shares, as Cargo's <code>~/.cargo/registry</code> and Go's
-module cache are: <code>cache/packages</code> in the home <code>PEPPER_HOME</code> names, else
+module cache are: <code>cache/packages</code> in the home whose toolchain
+<code>pep-package</code> is, else the one <code>PEPPER_HOME</code> names, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere (see
 <a href="tools/pep-install.html">Toolchains: pep-install</a>). It holds, for each package,</p>
 <ul>
@@ -24020,7 +24082,7 @@ it.</p>
 <tr><td><code>PEPPER_ADVISORY_DB</code></td><td>The Git repository of the advisory database <a href="tools/pep-package.html#audit"><code>audit</code></a> reads, instead of <code>https://github.com/pep-lang/advisories.git</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
-<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home that holds the <a href="tools/pep-package.html#the-download-cache">download cache</a>, and whose <code>pepper</code> <a href="tools/pep-package.html#publish"><code>publish</code></a> runs the tests with, as for <code>pep-install</code></td></tr>
+<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home that holds the <a href="tools/pep-package.html#the-download-cache">download cache</a>, whose <code>pepper</code> <a href="tools/pep-package.html#publish"><code>publish</code></a> runs the tests with, and whose <code>bin</code> <a href="tools/pep-package.html#install"><code>install</code></a> puts programs in, as for <code>pep-install</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody></table>
 </div>
