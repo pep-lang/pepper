@@ -7,7 +7,7 @@ import "test_certificate";
 main(): int {
     var connector = tls.TlsConnector.create();
     if (connector.is_err()) {
-        # On Windows, or where OpenSSL 3 is not installed.
+        # On Linux or macOS without OpenSSL 3.
         print(connector.error().message);
         return 0;
     }
@@ -16,10 +16,18 @@ main(): int {
     var key = io.Directory.temp().join("pepper-example-key.pem");
     io.File.write_text(certificate, test_certificate());
     io.File.write_text(key, test_private_key());
+    var created = tls.TlsAcceptor.create(certificate, key);
+    if (created.is_err()) {
+        # On iOS, which has no TLS servers yet.
+        print(created.error().message);
+        io.File.remove(certificate);
+        io.File.remove(key);
+        return 0;
+    }
 
     async.run(
         () => {
-            var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            var acceptor = created.value();
             # Mutual TLS: only clients with a certificate the test
             # certificate issued (here, the test certificate itself) get in.
             assert(acceptor.require_client_certificate(certificate).is_ok(), "ask clients for certificates");

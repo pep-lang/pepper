@@ -168,10 +168,21 @@ differences:
   it works, but an app has few programs to start, and below API level 34
   `Command.working_directory` makes `spawn` return an `IoError` (bionic
   lacks `posix_spawn_file_actions_addchdir_np` there).
-- **TLS.** The `tls` module (and HTTPS) loads OpenSSL at run time, which
-  neither platform ships, so making a TLS context returns an `IoError`
-  unless the app bundles `libssl`. Use the platform's own networking
-  (`URLSession`, OkHttp) for HTTPS for now.
+- **TLS on iOS.** The `tls` module uses the system's Security.framework
+  (Secure Transport), so `TlsConnector` and `http.Client`'s `https://` URLs
+  work with nothing bundled: the server's certificate is checked against
+  the system's roots and any added with `add_root_certificate`, and ALPN
+  works. Secure Transport speaks TLS 1.2 at most, so a server that accepts
+  only TLS 1.3 fails the handshake. A TLS server (`TlsAcceptor.create`) and
+  a client certificate (`TlsConnector.set_identity`) return an `IoError`
+  there for now. iOS checks a server's certificate more strictly than
+  OpenSSL: it must name the host in its subject alternative names, carry the
+  `serverAuth` extended key usage and, when issued after June 2019, be valid
+  for at most 825 days, even from a private certificate authority.
+- **TLS on Android.** The `tls` module (and HTTPS) loads OpenSSL at run
+  time, which Android does not ship, so making a TLS context returns an
+  `IoError` unless the app bundles `libssl.so.3`. Use the platform's own
+  networking (OkHttp, `HttpURLConnection`) for HTTPS for now.
 - **Files.** An app reads and writes inside its own container: pass the
   path the platform gives (`FileManager`'s documents directory,
   `Context.getFilesDir()`) to the Pepper code. `os.home_directory()` and
@@ -224,7 +235,11 @@ same Pepper library, [`greeter.pep`](../../examples/mobile/greeter.pep):
 `scripts/mobile-test.sh` runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
-(`adb shell`), then builds and runs the two apps.
+(`adb shell`), then builds and runs the two apps. On iOS it also runs
+`scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
+on the Mac, with a certificate authority made for the run, and against
+`PEPPER_MOBILE_TLS_URL` (`https://example.com/` by default; set it empty to
+skip the public host).
 
 ```sh
 bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
@@ -232,8 +247,9 @@ bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 
 ## Not supported yet
 
-- **TLS through the platform**: Security.framework on iOS, and on Android
-  the system's BoringSSL through Conscrypt or a bundled OpenSSL.
+- **TLS on Android**, through a bundled OpenSSL or BoringSSL, and on iOS
+  TLS servers, client certificates and TLS 1.3 (which need a SecIdentity
+  and Network.framework).
 - **Generated bindings**: the JNI layer and the Swift wrappers are written
   by hand; a generator could write them from the header.
 - **Packaging**: an `.xcframework` holding the device and simulator

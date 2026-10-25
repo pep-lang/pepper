@@ -354,8 +354,9 @@ _tls_buffer_at(desc: __ptr<u8>, index: ulong): __ptr<u8> {
 
 # ── Certificates and keys ────────────────────────────────────────────────────
 
-# The DER bytes of every PEM block labeled `label` in `text`.
-[Target(OS(Windows))]
+# The DER bytes of every PEM block labeled `label` in `text`. securetransport.pep
+# uses it on iOS too.
+[Target(OS(Windows) || OS(IOS))]
 _tls_pem_blocks(text: String, label: String): Array<u8[]> {
     var blocks = Array<u8[]>();
     var begin = $"-----BEGIN {label}-----";

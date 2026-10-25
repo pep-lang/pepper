@@ -20,7 +20,7 @@ A connector trusts the system's root certificates; `add_root_certificate`
 trusts more, such as a test certificate authority. Each `connect` runs
 the TLS handshake over a connected `TcpStream` and checks that the
 server's certificate is valid and issued for the host name given. Only
-TLS 1.2 and 1.3 are offered.
+TLS 1.2 and 1.3 are offered (on iOS, only TLS 1.2).
 
 A server that asks for a client certificate (mutual TLS) gets the one
 set with `set_identity`; without one, the connector presents none.
@@ -65,7 +65,7 @@ static create(): io.IoResult<TlsConnector>
 Creates a connector that trusts the system's root certificates.
 
 **Returns**
-- the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: `libssl.so.3`, or Homebrew's or MacPorts' `libssl.3.dylib`)
+- the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: `libssl.so.3`, or Homebrew's or MacPorts' `libssl.3.dylib`; on iOS, Security.framework)
 
 ### Methods
 
@@ -101,7 +101,7 @@ certificate (mutual TLS, as a `TlsAcceptor` does after
 - `private_key` — a PEM file with the certificate's private key (on Windows, PKCS #8: `BEGIN PRIVATE KEY`)
 
 **Returns**
-- an Ok result; an error when a file cannot be read or the key does not match the certificate
+- an Ok result; an error when a file cannot be read or the key does not match the certificate, and always on iOS, which does not support client certificates yet
 
 **Example**
 ```pepper
@@ -231,7 +231,7 @@ Creates an acceptor that presents the certificate chain in
 - `private_key` — a PEM file with the certificate's private key (on Windows, PKCS #8: `BEGIN PRIVATE KEY`)
 
 **Returns**
-- the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see `TlsConnector.create`)
+- the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see `TlsConnector.create`), and always on iOS, which does not support TLS servers yet
 
 ### Methods
 

@@ -217,7 +217,9 @@ manager, or `brew install openssl@3` on macOS. If it is missing,
 `create()` returns an error. On Windows it uses the system's SChannel,
 which needs nothing installed; a private key (a server's or a client's)
 must be PKCS #8 (`BEGIN PRIVATE KEY`), and TLS 1.3 needs Windows 11 or
-Server 2022.
+Server 2022. On iOS it uses the system's Security.framework, which needs
+nothing bundled, for clients only and with TLS 1.2 (see
+[iOS and Android](mobile.md#what-works-differently)).
 
 ## Timeouts
 
