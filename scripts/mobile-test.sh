@@ -25,10 +25,16 @@
 # running.
 #
 # Android: the NDK, `adb` and the emulator come from the Android SDK
-# (`ANDROID_HOME`, default ~/Library/Android/sdk). The emulator starts
-# headless and read-only from the first AVD (or `PEPPER_ANDROID_AVD`), so the
-# AVD is left as it was, and stops after the run. Programs are pushed to
-# /data/local/tmp and run with `adb shell`.
+# (`ANDROID_HOME`, default ~/Library/Android/sdk on a Mac, ~/Android/Sdk on
+# Linux). The emulator starts headless and read-only from the first AVD (or
+# `PEPPER_ANDROID_AVD`), so the AVD is left as it was, and stops after the
+# run. Programs are pushed to /data/local/tmp and run with `adb shell`, built
+# for the host's ABI: arm64 on an Apple silicon Mac, x86_64 on an x64 host.
+# The Android run also works on Linux (CI provisions an emulator there with
+# scripts/ci-provision-android.sh). Its tls_check runs against the same kind
+# of server, reached through `adb reverse`; programs that import tls link
+# the static OpenSSL in the runtime's tls/android folder
+# (`scripts/openssl-android.sh fetch runtime` in a checkout).
 set -euo pipefail
 
 compiler=${1:?usage: mobile-test.sh <compiler> <output-dir> [ios|android|all] [prefix...]}
@@ -37,7 +43,7 @@ platforms=${3:-all}
 shift 3 2>/dev/null || shift $#
 prefixes=("$@")
 
-[ "$(uname -s)" = Darwin ] || { echo "mobile-test.sh runs on a Mac" >&2; exit 1; }
+[ "$(uname -s)" = Darwin ] || [ "$platforms" = android ] || { echo "mobile-test.sh runs iOS on a Mac" >&2; exit 1; }
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 compiler=$(cd "$(dirname "$compiler")" && pwd)/$(basename "$compiler")
 mkdir -p "$out"
@@ -195,7 +201,11 @@ run_ios() {
 
 run_android() {
   echo "=== Android emulator"
-  export ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
+  local sdk=$HOME/Library/Android/sdk triple=aarch64-linux-android
+  [ "$(uname -s)" = Darwin ] || sdk=$HOME/Android/Sdk
+  [ "$(uname -m)" != x86_64 ] || triple=x86_64-linux-android
+  export ANDROID_HOME=${ANDROID_HOME:-$sdk} PEPPER_ANDROID_TRIPLE=$triple
+  export ANDROID_AVD_HOME=${ANDROID_AVD_HOME:-$HOME/.android/avd}
   local adb="$ANDROID_HOME/platform-tools/adb" emulator="$ANDROID_HOME/emulator/emulator"
   local avd=${PEPPER_ANDROID_AVD:-$("$emulator" -list-avds | head -1)}
   [ -n "$avd" ] || { echo "no Android virtual device" >&2; return 1; }
@@ -208,7 +218,7 @@ run_android() {
   trap 'kill "$emulator_pid" 2>/dev/null || true' EXIT
 
   local dir="$out/android"
-  build_all aarch64-linux-android "$dir" android
+  build_all "$triple" "$dir" android
 
   "$adb" -s "$serial" wait-for-device
   local waited=0
@@ -236,7 +246,38 @@ run_android() {
   done < <(examples android)
   echo "android: ran $count examples"
 
-  if [ -d "$repo_root/docs/examples/mobile/android" ]; then
+  # TLS through the static OpenSSL, against a server on this host that
+  # `adb reverse` makes the emulator's localhost:$TLS_PORT.
+  local tls_dir="$out/android-tls" tls_args remote=/data/local/tmp/pepper
+  if start_tls_server "$tls_dir"; then
+    tls_args=("$remote/ca.pem" localhost "$TLS_PORT")
+    [ -z "${PEPPER_MOBILE_TLS_URL-}" ] || tls_args+=("$PEPPER_MOBILE_TLS_URL")
+    if ! "$compiler" --target "$triple" "$repo_root/scripts/mobile/tls_check.pep" -o "$dir/tls_check" \
+      --build "$dir/build-tls_check" > "$dir/tls_check.log" 2>&1; then
+      report "android tls_check (build)"
+      sed 's/^/    /' "$dir/tls_check.log" | head -20
+    else
+      "$adb" -s "$serial" reverse "tcp:$TLS_PORT" "tcp:$TLS_PORT" > /dev/null
+      "$adb" -s "$serial" push "$tls_dir/ca.pem" "$dir/tls_check" "$remote/" < /dev/null > /dev/null
+      # adb shell runs one command line: each argument goes in single quotes
+      # (none holds one), so a URL's `&` or `?` reaches the program as is.
+      local quoted="" arg
+      for arg in "${tls_args[@]}"; do quoted="$quoted '$arg'"; done
+      # Bounded, as on iOS.
+      perl -e 'alarm shift; exec @ARGV' 300 "$adb" -s "$serial" shell \
+        "chmod 755 $remote/tls_check && $remote/tls_check$quoted" < /dev/null || report "android tls_check (run)"
+      "$adb" -s "$serial" reverse --remove "tcp:$TLS_PORT" > /dev/null 2>&1 || true
+    fi
+  else
+    report "android tls server"
+  fi
+  kill "${tls_pid:-}" 2>/dev/null || true
+
+  # On x86_64 the app's library does not load yet (pepper#246: its
+  # thread-locals use initial-exec TLS), so only arm64 runs it.
+  if [ "$triple" = x86_64-linux-android ]; then
+    echo "android app: skipped on x86_64 (pepper#246)"
+  elif [ -d "$repo_root/docs/examples/mobile/android" ]; then
     bash "$repo_root/docs/examples/mobile/android/build.sh" "$compiler" "$out/android-app" "$serial" || report "android app"
   fi
 

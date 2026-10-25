@@ -1,13 +1,15 @@
-# The OpenSSL 3 layer for tls on Linux and macOS. Every declaration carries
-# [Target(OS(Linux) || (OS(Mac) && !OS(IOS)))] or a narrower target, except
-# the few helpers securetransport.pep shares on iOS ([Target(OS(Linux) ||
-# OS(Mac))]); schannel.pep, securetransport.pep and wasi.pep declare the
+# The OpenSSL 3 layer for tls on Linux, Android and macOS. Every declaration
+# carries [Target(OS(Linux) || (OS(Mac) && !OS(IOS)))] or a narrower target,
+# except the few helpers securetransport.pep shares on iOS ([Target(OS(Linux)
+# || OS(Mac))]); schannel.pep, securetransport.pep and wasi.pep declare the
 # same `_tls_sys_*` functions for Windows, iOS and WASI.
 #
 # libssl is opened at run time (dlopen) the first time a context is made, so
 # a program that imports tls links against nothing extra and needs no
 # library search path for Homebrew's OpenSSL. `_OpenSsl` holds the functions
-# it uses as C function pointers.
+# it uses as C function pointers. Android has no libssl to open: a program
+# links a static OpenSSL there, and openssl_android.pep's `_tls_symbol` and
+# `_tls_openssl_paths` stand in for the ones here.
 #
 # The connection's bytes go through a custom BIO whose read and write call
 # the io socket layer (`_io_sys_socket_receive` / `_send`). Those wait when
@@ -18,6 +20,7 @@
 
 import async;
 import io;
+import "openssl_android";
 import "schannel";
 import "securetransport";
 import "wasi";
@@ -29,7 +32,7 @@ extern void* dlopen(char* path, int flags);
 extern void* dlsym(void* handle, char* name);
 
 # The libssl names to try, in order.
-[Target(OS(Linux))]
+[Target(OS(Linux) && !OS(Android))]
 _tls_openssl_paths(): String[] {
     return ["libssl.so.3"];
 }
@@ -211,7 +214,7 @@ struct _OpenSsl {
 }
 
 # The address of `name` in the opened library and its dependencies.
-[Target(OS(Linux) || OS(Mac))]
+[Target((OS(Linux) && !OS(Android)) || OS(Mac))]
 _tls_symbol(handle: __ptr<void>, name: String): __ptr<void> {
     return dlsym(handle, name.c_str());
 }

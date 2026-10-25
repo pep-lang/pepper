@@ -24,7 +24,9 @@
 #                     (Windows: LLVM-C.dll beside it)
 #   bin/pep-fmt, pep-test, pep-package, pep-profile, pep-run, pep-new, pep-init,
 #       pep-install, pep-lsp, pep-doc
-#   runtime/          the runtime, which the compiler finds from bin/..
+#   runtime/          the runtime, which the compiler finds from bin/..,
+#                     with the static OpenSSL tls links on Android in
+#                     runtime/tls/android (scripts/openssl-android.sh)
 #   LICENSE.md
 #
 # Beside it lands `<archive>.sha256`, in `sha256sum`'s format, and the
@@ -170,6 +172,9 @@ stage="$output/$stage_name"
 rm -rf "$stage"
 mkdir -p "$stage/bin"
 cp -R runtime "$stage/runtime"
+# The static OpenSSL that tls links on Android, published by the
+# openssl-android workflow.
+bash scripts/openssl-android.sh fetch "$stage/runtime"
 cp LICENSE.md "$stage/"
 
 echo "=== build pepc"

@@ -3,9 +3,10 @@
 #
 #   bash build.sh <pep-build> <output-dir> [<adb-serial>]
 #
-# Builds ../greeter.pep as a static library for arm64 Android, links it with
-# jni.c into libgreeter.so using the NDK's clang, compiles MainActivity.java
-# and packages an APK with the SDK's own tools (javac, d8, aapt2, zipalign,
+# Builds ../greeter.pep as a static library for arm64 Android (or the triple
+# in PEPPER_ANDROID_TRIPLE, such as x86_64-linux-android for an x64
+# emulator), links it with jni.c into libgreeter.so using the NDK's clang,
+# compiles MainActivity.java and packages an APK with the SDK's own tools (javac, d8, aapt2, zipalign,
 # apksigner; no Gradle), signed with a throwaway key. With an emulator's adb
 # serial, installs it, starts the activity, and checks its log.
 #
@@ -28,17 +29,20 @@ if [ -z "${JAVA_HOME:-}" ]; then
   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 fi
 export PATH="$JAVA_HOME/bin:$PATH"
+triple=${PEPPER_ANDROID_TRIPLE:-aarch64-linux-android}
+abi=arm64-v8a
+[ "$triple" = aarch64-linux-android ] || abi=${triple%%-*}
 
 rm -rf "$out"
-mkdir -p "$out/pepper" "$out/apk/lib/arm64-v8a" "$out/classes" "$out/dex"
+mkdir -p "$out/pepper" "$out/apk/lib/$abi" "$out/classes" "$out/dex"
 
 # The native library: Pepper's code plus the JNI functions. The header's
 # first lines name the C libraries the static library needs (-lm).
-"$compiler" --target aarch64-linux-android --sysroot "$ndk" --lib static "$here/../greeter.pep" \
+"$compiler" --target "$triple" --sysroot "$ndk" --lib static "$here/../greeter.pep" \
   -o "$out/pepper/libgreeter.a" --build "$out/pepper/build"
 libraries=$(sed -nE 's|^/\* Link the static library with: (.*) \*/$|\1|p' "$out/pepper/greeter.h")
-"$clang" --target=aarch64-linux-android30 -shared -fPIC -O2 -I "$out/pepper" "$here/jni.c" \
-  "$out/pepper/libgreeter.a" $libraries -o "$out/apk/lib/arm64-v8a/libgreeter.so"
+"$clang" --target="${triple}30" -shared -fPIC -O2 -I "$out/pepper" "$here/jni.c" \
+  "$out/pepper/libgreeter.a" $libraries -o "$out/apk/lib/$abi/libgreeter.so"
 
 # The Java code, as dex.
 javac --release 11 -classpath "$platform/android.jar" -d "$out/classes" \
@@ -70,7 +74,7 @@ until "$adb" -s "$serial" logcat -d -s PepperDemo:I > "$out/log.txt" && grep -q 
   waited=$((waited + 1))
   if [ "$waited" -ge 60 ]; then
     echo "the app did not log '$expected'; the log:"
-    "$adb" -s "$serial" logcat -d | tail -60
+    "$adb" -s "$serial" logcat -d | grep -iE "pepper|AndroidRuntime|FATAL|linker|UnsatisfiedLink|DEBUG" | tail -60 || true
     "$adb" -s "$serial" uninstall dev.pepper.demo || true
     exit 1
   fi

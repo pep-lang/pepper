@@ -9,6 +9,7 @@ import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import llvm;
+import os;
 import process;
 import compiler.sema;
 import [TempFolder] from testing;
@@ -136,6 +137,31 @@ header_declares_exports_and_handles() {
         )
     );
     expect_true(text.ends_with("#endif /* COUNTER_H */\n"));
+}
+
+# A `[Link(path = ...)]` folder is relative to the file declaring the
+# extern, and on Windows loses the `\\?\` prefix the runtime's files are
+# named with, which the linker's `-L` does not read.
+[Test]
+link_folders_are_relative_to_their_file() {
+    var folder = TempFolder("link_path");
+    var file = folder.path.join(Path("main.pep"));
+    File.write_text(
+        file, "[Link(\"probe\", path = \"vendor/lib\")]\nextern int probe();\nmain(): int {\n    return 0;\n}\n"
+    );
+    var named = file;
+    if (os.system_os() == os.OperatingSystem.Windows) {
+        named = Path("\\\\?\\" + file.to_string());
+    }
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(named, setup).value();
+    var module = sema.merge(program).value();
+    var (libraries, dirs) = driver.link_inputs(module, program);
+    expect_equal(libraries.count, 1 as ulong);
+    expect_equal(libraries[0], "probe");
+    expect_equal(dirs.count, 1 as ulong);
+    expect_equal(dirs[0].to_string(), folder.path.join(Path("vendor/lib")).to_string());
 }
 
 # A library's file and header names on each platform.
