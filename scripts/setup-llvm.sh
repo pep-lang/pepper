@@ -564,6 +564,32 @@ else
     echo "Installed LLVM $WANT_MAJOR to $install_prefix"
 fi
 
+# iOS links with LLVM's ld64.lld, which Homebrew's llvm@<major> no longer
+# ships: it is the separate lld@<major> formula (#240). A macOS build links
+# with the system's ld64 and needs neither.
+lld_bin=""
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    if [[ -x "$install_prefix/bin/ld64.lld" ]]; then
+        lld_bin="$install_prefix/bin"
+    elif [[ "$USE_PACKAGES" == "1" ]] && command -v brew >/dev/null 2>&1 \
+         && brew install "lld@$install_major"; then
+        lld_bin="$(brew --prefix "lld@$install_major")/bin"
+    fi
+    if [[ -n "$lld_bin" ]]; then
+        echo "Linker for iOS: $lld_bin/ld64.lld"
+    else
+        echo "warning: no ld64.lld for iOS links; 'brew install lld@$install_major' installs it" >&2
+    fi
+fi
+
+# In GitHub Actions, put Homebrew's keg-only LLVM and lld first on the PATH
+# of the job's later steps, so the compiler links with that clang and finds
+# ld64.lld rather than using Apple's clang, which has no lld.
+if [[ "$(uname -s)" == "Darwin" && -n "${GITHUB_PATH:-}" ]]; then
+    echo "$install_prefix/bin" >> "$GITHUB_PATH"
+    [[ -z "$lld_bin" ]] || echo "$lld_bin" >> "$GITHUB_PATH"
+fi
+
 # Unlike Windows -- where lldb has to be pulled out of a separate installer --
 # Unix LLVM distributions normally carry lldb in the same prefix, and a distro
 # lldb debugs these binaries fine. So this only reports what is available and
