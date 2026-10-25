@@ -47,24 +47,24 @@ echo "=== building tools/compiler with $("$stage0/pep-build$exe" --version)"
 # size and time: each job installs stage 0 afresh, with a new time, which
 # would miss every key.
 #
-# shortcut: the whole of pepc is one compilation unit
-# (PEPC_NO_COMPILATION_UNITS), so the cache only helps a build of the same
-# sources (a rerun, or a pull request that leaves the compiler and runtime
-# alone); any other change rebuilds it all, about 8 minutes. In compilation
-# units a change would rebuild only its units, but a cold build of pepc
-# that way does not fit a hosted runner: two workers took down Linux
-# runners (16 GB) and failed on Windows, macOS timed out, and checking in
-# the build's process (PEPC_COMPILATION_UNIT_JOBS=1) grew past 50 GB.
-# Build in units once #167 is fixed.
+# In compilation units, so a compiler change rebuilds only the units it
+# reaches. Since #183 a worker peaks at about 1.6 GB, so one per processor
+# fits a 4-core, 16 GB runner, and two fit macOS's 7 GB.
+jobs=4
+[ "$(uname -s)" != Darwin ] || jobs=2
 identity="stage0 $(git hash-object "$stage0/pep-build$exe")"
 echo "=== stage 0 identity: $identity"
 log="$out/build.log"
-PEPC_NO_COMPILATION_UNITS=1 PEPC_COMPILER_IDENTITY="$identity" PEPPER_CACHE_DIR="$out/cache" \
+# The workers' timings from earlier runs, which the cache would carry.
+rm -rf "$out/build"/compilation-units.*
+PEPC_COMPILATION_UNIT_JOBS="$jobs" PEPC_COMPILER_IDENTITY="$identity" PEPPER_CACHE_DIR="$out/cache" \
   "$stage0/pep-build$exe" -O tools/compiler/main.pep -T time -T cache \
   -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}" 2> "$log" || { cat "$log" >&2; exit 1; }
-# The stages' times, and how many objects the cache supplied.
+# The stages' times, and how many compilation units the cache supplied.
 grep '^time:' "$log" || true
-grep -oE '^cache: (hit|miss)' "$log" | sort | uniq -c || true
+grep -E '^cache: [0-9]+ of [0-9]+ compilation units' "$log" || true
+# The largest worker's peak memory (each worker's `-T time` stages end with it).
+find "$out/build" -name '*.stages' -exec grep -h '^peak ' {} + | sort -n -k2 | tail -1 | sed 's/^/workers: /' || true
 # pepc loads LLVM-C.dll from its own folder.
 if [ -n "$exe" ]; then
   cp -f "$stage0/LLVM-C.dll" "$out/"
