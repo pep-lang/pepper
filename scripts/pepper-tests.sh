@@ -114,21 +114,22 @@ fi
 # A Windows path (`D:/x`) would split the PATH entry below at its colon.
 [ -z "$exe" ] || target="$(cygpath -u "$target")"
 
-# The tools get a folder of their own, with a link to the compiler (a copy
-# on Windows, with the LLVM-C.dll it loads), so a toolchain's folder is
-# never written to. The copy keeps the compiler's time: the build cache
-# keys on the compiler's path, size and time (`compiler_identity`), so a
-# fresh time would rebuild everything on every pass.
+# The tools get a folder of their own, with a copy of the compiler (and on
+# Windows the LLVM-C.dll it loads), so a toolchain's folder is never
+# written to. A copy, not a symlink: pep-build runs the pep-package beside
+# its resolved path, so through a link into an installed toolchain it would
+# run the toolchain's pep-package, which keeps its cache in that home and
+# ignores the tests' PEPPER_HOME. The copy keeps the compiler's time: the
+# build cache keys on the compiler's path, size and time
+# (`compiler_identity`), so a fresh time would rebuild everything on every
+# pass.
 bin="$target/pepper-tests/bin"
 mkdir -p "$bin"
 if [ "$compiler" != "$bin" ]; then
-  if [ -n "$exe" ]; then
-    cp -fp "$compiler/pep-build$exe" "$bin/"
-    if [ -f "$compiler/LLVM-C.dll" ]; then
-      cp -fp "$compiler/LLVM-C.dll" "$bin/"
-    fi
-  else
-    ln -sf "$compiler/pep-build" "$bin/pep-build"
+  rm -f "$bin/pep-build$exe"  # an older run's symlink, which cp would write through
+  cp -fp "$compiler/pep-build$exe" "$bin/"
+  if [ -f "$compiler/LLVM-C.dll" ]; then
+    cp -fp "$compiler/LLVM-C.dll" "$bin/"
   fi
 fi
 

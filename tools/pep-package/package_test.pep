@@ -988,6 +988,25 @@ an_unfetched_dependency_fails_under_offline() {
     );
 }
 
+# The pep-package that pep-build runs is the one under test, not an installed
+# toolchain's (which keeps its cache in its own home, ignoring PEPPER_HOME):
+# scripts/pepper-tests.sh copies pep-build beside the tools it builds.
+[Test]
+pep_build_runs_the_pep_package_under_test() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("companion");
+    var project = Project("companion", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    var built = run(
+        hosts.command(
+            tool("pep-build").to_string(), project.dir, Array<String>()
+        ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+    );
+    expect_exit(built, 1);
+    expect_contains(built.stderr, $"failed ({tool("pep-package").to_string()} -C ");
+}
+
 [Test]
 a_vendored_project_builds_with_no_host_or_cache() {
     if (!has_git()) {
