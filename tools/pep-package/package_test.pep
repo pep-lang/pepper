@@ -1250,7 +1250,7 @@ add_looks_a_repository_up_on_each_host() {
     expect_exit(both, 0);
     expect_contains(
         both.stderr,
-        "other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)"
+        "other/numbers is on github and codeberg; using github:other/numbers (prefix it with 'codeberg:' for another)"
     );
 
     # pep.toml's [fetch] hosts changes the order.
@@ -2155,6 +2155,8 @@ search_info_and_add_read_the_package_index() {
             ["module.pep", "# " + version + "\n", "pep.toml", "[package]\nname = \"shapes\"\n" + more]
         );
     }
+    # A second tag of 1.1.0, which `info` lists once.
+    git(hosts.folder.path.join("work").join("other/shapes"), ["tag", "1.1.0"]);
     publish(hosts.folder.path, "other/shapes");
     add_version(
         hosts.folder.path,
@@ -2225,5 +2227,28 @@ search_info_and_add_read_the_package_index() {
     expect_contains(
         malformed.stderr,
         "bad.toml:1:1: error: 'source' must be a repository as host:owner/name, not 'someone/geometry'"
+    );
+    var malformed_again = (version: String, files: Array<String>, expected: String) => {
+        add_version(hosts.folder.path, "index", version, files);
+        age_data(hosts, "index");
+        var listed = package(project.dir, ["search"]);
+        expect_exit(listed, 1);
+        expect_contains(listed.stderr, expected);
+    };
+    malformed_again(
+        "3",
+        ["packages/bad.toml", "source = \"github:someone/geometry\"\nkeyword = [\"x\"]\n"],
+        "bad.toml:2:1: error: unknown key 'keyword'"
+    );
+    # The file's name is the import name.
+    malformed_again(
+        "4",
+        [
+            "packages/bad.toml",
+            "source = \"github:someone/geometry\"\n",
+            "packages/bad-name.toml",
+            "source = \"github:a/b\"\n"
+        ],
+        "bad-name.toml:1:1: error: the file's name, 'bad-name', is the package's, and 'import' cannot use it"
     );
 }

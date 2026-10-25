@@ -158,6 +158,10 @@ export read_listing(path: Path): Result<Listing> {
                 );
             }
             listing.source = given.value();
+        } else {
+            return Result<Listing>.Err(
+                file.at_key("error", key, $"unknown key '{key}': a package has 'source', 'description' and 'keywords'")
+            );
         }
     }
     if (listing.source.is_empty) {

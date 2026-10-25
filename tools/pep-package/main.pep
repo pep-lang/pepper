@@ -672,7 +672,12 @@ show_info(spec: String, offline: bool): int {
     }
     versions.sort((a, b) => b.compare(a));
     var listed = Array<String>();
-    for (var version in versions) {
+    for (var index in 0..versions.count) {
+        var version = versions[index];
+        # Tagged both `v1.0.0` and `1.0.0`, it is one version.
+        if (index > 0 and version.compare(versions[index - 1]) == 0) {
+            continue;
+        }
         var withdrawn = retracted(manifest.retractions, version).is_value();
         listed.append(version.to_string() + (withdrawn ? " (retracted)" : ""));
     }
@@ -852,7 +857,7 @@ look_up(repository: String, hosts: Array<String>): Result<(String, Array<RemoteR
     }
     if (found.count > 1) {
         say(
-            $"{repository} is on {" and ".join(found)}; adding {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
+            $"{repository} is on {" and ".join(found)}; using {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
         );
     }
     return Result<(String, Array<RemoteRef>)>.Ok((found[0], chosen));

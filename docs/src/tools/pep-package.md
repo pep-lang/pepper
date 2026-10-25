@@ -138,7 +138,7 @@ default; see [Projects: pep.toml](projects.md#fetch)) and uses the first
 that has it. When more than one does, it says so:
 
 ```text
-pep-package: other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)
+pep-package: other/numbers is on github and codeberg; using github:other/numbers (prefix it with 'codeberg:' for another)
 ```
 
 ```bash
