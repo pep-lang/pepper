@@ -12,6 +12,7 @@ import [check_documented, file_doc] from compiler.doc;
 import [Directory, File, Path] from io;
 import [Dependency, Manifest, find_manifest, load_manifest] from compiler.link;
 import toml;
+import [package_string] from toolchain;
 import "reference";
 
 # The command whose pages these are, named in each page's header.
@@ -41,16 +42,9 @@ export current_package(): Result<Manifest> {
 }
 
 # `[package]`'s text `key` (`version`), or empty.
-export package_string(manifest: Manifest, key: String): String {
+export manifest_string(manifest: Manifest, key: String): String {
     var root = toml.parse(manifest.text);
-    if (root.is_err()) {
-        return "";
-    }
-    var value = root.value().lookup("package." + key);
-    if (value.is_empty() or value.value().as_string().is_empty()) {
-        return "";
-    }
-    return value.value().as_string().value();
+    return root.is_ok() ? package_string(root.value(), key) : "";
 }
 
 # Each feature of the package, with the build option that turning it on
@@ -106,7 +100,7 @@ export package_pages(manifest: Manifest): Result<Page[]> {
         }
         var source = read.value();
         var module = parse_file(file, source)?;
-        var body = "".join([reexports(module, file), page_body(module, source, features)]);
+        var body = "".join([reexports(module, file, manifest.name), page_body(module, source, features)]);
         var intro = file_doc(source);
         if (body.is_empty and intro.is_empty()) {
             continue;
@@ -137,11 +131,11 @@ export dependency_docs(dependency: Dependency): String? {
 # The front page: the package's name, version and description, then its
 # pages, features and dependencies.
 export package_index(manifest: Manifest, pages: Page[]): String {
-    var version = package_string(manifest, "version");
+    var version = manifest_string(manifest, "version");
     var out = StringBuilder();
     out.append($"<!-- Generated from pep.toml by `{COMMAND}`. Do not edit. -->\n\n");
     out.append(version.is_empty ? $"# {manifest.name}\n" : $"# {manifest.name} {version}\n");
-    var description = package_string(manifest, "description");
+    var description = manifest_string(manifest, "description");
     if (!description.is_empty) {
         out.append($"\n{description}\n");
     }
@@ -199,6 +193,11 @@ export write_book(dir: Path, manifest: Manifest, pages: Page[]): Result<void> {
     var summary = StringBuilder();
     summary.append($"# Summary\n\n[{manifest.name}](README.md)\n\n");
     for (var page in pages) {
+        if (page.file.lower() == "readme.md") {
+            return Result<void>.Err(
+                $"{page.title} would be the page README.md, which is the front page's; rename the file"
+            );
+        }
         summary.append($"- [{page.title}]({page.file})\n");
         _write_file(src.join(page.file), page.markdown)?;
     }

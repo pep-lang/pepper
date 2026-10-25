@@ -18,7 +18,10 @@ write_package(root: Path) {
         root.join("pep.toml"),
         "[package]\nname = \"shapes\"\nversion = \"1.2.0\"\ndescription = \"Areas and volumes\"\n\n[dependencies]\nsemver = { github = \"Pep-Lang/pepper-semver\", version = \"1\", optional = true }\nlocal = { path = \"../local\" }\n\n[target.'OS(Windows)'.dependencies]\nwin = { codeberg = \"someone/win\", version = \"1\" }\n\n[features]\ndefault = [\"fast\"]\nfast = []\ntls = [\"dep:semver\"]\n"
     );
-    write_file(root.join("module.pep"), "## Shapes: areas and volumes.\n\nexport * from \"area\";\n");
+    write_file(
+        root.join("module.pep"),
+        "## Shapes: areas and volumes.\n\nexport * from \"area\";\nexport * from shapes.solids;\nexport [JsonValue] from json;\n"
+    );
     write_file(
         root.join("area.pep"),
         "## Areas.\n\n## Returns the area of a square.\n##\n## @param side the side\n## @returns the area\nexport square(side: int): int {\n    return side * side;\n}\n\n## Returns one, fast.\n##\n## @returns one\n[BuildOption(\"shapes_fast\")]\nexport quick(): int {\n    return 1;\n}\n\n## A secure thing.\n[Target(BuildOption(shapes_tls) && OS(Linux))]\nexport struct Secure {\n    ## Makes one.\n    [Target(BuildOption(shapes_fast))]\n    construct() {}\n}\n\n## Only without the feature.\n[Target(!BuildOption(shapes_fast) || BuildOption(shapes_tls))]\nexport slow() {}\n\nexport undocumented() {}\n"
@@ -68,6 +71,11 @@ documents_a_package_with_its_features_and_dependencies() {
     );
     expect_contains(index, "- [`semver`](https://pep-lang.github.io/pepper-semver/) (optional)\n");
     expect_contains(index, "- `local`\n");
+
+    # Re-exports link to this package's pages, and not to another module's.
+    expect_contains(pages[0].markdown, "- Everything [`area.pep`](area.md) exports.\n");
+    expect_contains(pages[0].markdown, "- Everything [the `shapes.solids` module](solids-module.md) exports.\n");
+    expect_contains(pages[0].markdown, "- `JsonValue` from the `json` module.\n");
     expect_contains(index, "- [`win`](https://codeberg.org/someone/win) (only for `OS(Windows)`)\n");
 
     var book = folder.path.join(".pep").join("doc");
@@ -80,6 +88,8 @@ documents_a_package_with_its_features_and_dependencies() {
     expect_equal(read_file(book.join("src").join("area.md")), area);
     expect_equal(read_file(book.join("src").join("README.md")), index);
     expect_false(book.join("src").join("gone.md").is_file());
+    # A root `README.pep` would take the front page's file.
+    expect_true(write_book(book, manifest, [Page("README.md", "README.pep", "")]).is_err());
     expect_equal(read_file(book.join("book.toml")), "[book]\ntitle = \"shapes\"\n");
 }
 

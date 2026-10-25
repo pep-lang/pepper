@@ -149,7 +149,7 @@ re_exports_link_to_their_sources() {
     var source = "export * from \"types\";\nexport [Path, join as combine] from \"path\";\nexport * from async;\n";
     var module = parse_file("runtime/io/module.pep", source).value();
     expect_equal(
-        reexports(module, "io/module.pep"),
+        reexports(module, "io/module.pep", ""),
         "\n## Re-exports\n\n- Everything [`types.pep`](io-types.md) exports.\n- `Path` from [`path.pep`](io-path.md).\n- `join` (as `combine`) from [`path.pep`](io-path.md).\n- Everything [the `async` module](async-module.md) exports.\n"
     );
 }

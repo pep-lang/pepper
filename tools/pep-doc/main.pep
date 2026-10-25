@@ -258,10 +258,14 @@ _package(args: String[]): Result<void> {
     var site_option = _option(args, "--site");
     var out = book.join("html");
     if (site_option.is_value()) {
-        var version = package_string(manifest, "version");
+        var version = manifest_string(manifest, "version");
         String name = DEV;
         if (!version.is_empty) {
-            name = parse_version(version)?.to_string();
+            var parsed = parse_version(version);
+            if (parsed.is_err()) {
+                return Result<void>.Err($"{manifest.path.to_string()}: version {parsed.error().message}");
+            }
+            name = parsed.value().to_string();
         }
         var site = Path(site_option.value());
         var created = Directory.create_all(site);

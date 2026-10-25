@@ -266,7 +266,7 @@ export generate(runtime_dir: Path): Result<Page[]> {
         }
         var source = read.value();
         var module = parse_file($"runtime/{file}", source)?;
-        var body = "".join([reexports(module, file), page_body(module, source, Array<(String, String)>())]);
+        var body = "".join([reexports(module, file, ""), page_body(module, source, Array<(String, String)>())]);
         var intro = file_doc(source);
         if (body.is_empty and intro.is_empty()) {
             continue;
@@ -634,11 +634,24 @@ _members(
 }
 
 # The page of the file or module an `export ... from` names, relative to
-# the runtime file `file`: `io-types.md` for `"types"` in `io/module.pep`,
-# `async-module.md` for the module `async`.
-export source_page(file: String, imported: Import): String {
+# the file `file`: `io-types.md` for `"types"` in `io/module.pep`,
+# `async-module.md` for the module `async`. In the reference of the
+# package `package` (empty for the runtime's), a module of the package
+# (`shapes.solids`) has the page of its `module.pep`, and any other module
+# none (empty).
+export source_page(file: String, imported: Import, package: String): String {
     if (!imported.is_local) {
-        return $"{imported.name}-module.md";
+        if (package.is_empty) {
+            return $"{imported.name}-module.md";
+        }
+        if (imported.name == package) {
+            return page_file("module.pep");
+        }
+        if (imported.name.starts_with(package + ".")) {
+            var path = slice_from(imported.name, package.size + 1).replace(".", "/");
+            return page_file($"{path}/module.pep");
+        }
+        return "";
     }
     var slash = file.rfind("/");
     var dir = slash < 0 ? "" : slice(file, 0, slash as ulong + 1);
@@ -647,8 +660,8 @@ export source_page(file: String, imported: Import): String {
 
 # A "Re-exports" section listing the file's `export * from` and `export
 # [...] from` lines, each linking to the page of the file or module that
-# declares the names. Empty without any.
-export reexports(module: Module, file: String): String {
+# declares the names (see `source_page` for `package`). Empty without any.
+export reexports(module: Module, file: String, package: String): String {
     var out = StringBuilder();
     bool any = false;
     for (var imported in module.imports) {
@@ -657,7 +670,8 @@ export reexports(module: Module, file: String): String {
         }
         any = true;
         var source = imported.is_local ? $"`{imported.stem()}.pep`" : $"the `{imported.name}` module";
-        var link = $"[{source}]({source_page(file, imported)})";
+        var page = source_page(file, imported, package);
+        var link = page.is_empty ? source : $"[{source}]({page})";
         if (imported.symbols.is_empty()) {
             out.append($"- Everything {link} exports.\n");
             continue;

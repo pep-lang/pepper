@@ -132,3 +132,16 @@ export find_manifest(directory: Path): Path? {
     }
     return Optional<Path>.Empty;
 }
+
+## Returns the text `[package]` gives `key` in a parsed pep.toml.
+##
+## @param root the parsed pep.toml
+## @param key the key in `[package]`, such as `version`
+## @returns its text, or empty when it has none or it is not a string
+export package_string(root: toml.TomlValue, key: String): String {
+    var value = root.lookup("package." + key);
+    if (value.is_empty() or value.value().as_string().is_empty()) {
+        return "";
+    }
+    return value.value().as_string().value();
+}
