@@ -85,7 +85,7 @@ Every package is downloaded once per machine, into a
 | `outdated --exit-code` | Exits with status 1 when a package is outdated |
 | `outdated --json` | Prints the outdated packages as JSON |
 | `install <owner/name>[@<range>]` | Builds a package's program optimized and puts it in the Pepper home's `bin`; installing it again upgrades it (see [`install`](#install)) |
-| `install ... --package <name>` | Installs the member `<name>` of the repository's workspace, at a version of its own `<name>-v<version>` tags |
+| `install ... --package <name>` | Installs the member `<name>` of the repository's (or `--path` folder's) workspace; from a repository, at a version of its own `<name>-v<version>` tags |
 | `install --path <dir>` | Installs the package in `<dir>` instead |
 | `install --list` | Lists the programs `install` put in `bin`, with their versions and sources |
 | `install ... --force`, `-f` | Replaces a program in `bin` that was installed from another source, or not by `install` |
@@ -511,7 +511,8 @@ pepper package uninstall tool
   it; a package with no version tags is installed from its default
   branch. Installing it again upgrades it, or moves it to another range.
   With `--package <name>`, it is the workspace member `<name>`, by its
-  own `<name>-v<version>` tags, as `add --package` reads them.
+  own `<name>-v<version>` tags, as `add --package` reads them; with
+  `--path`, the member `<name>` of that folder's workspace.
 - **Its dependencies** are those its own `pep.lock` records, when it has
   one, fetched through the [download cache](#the-download-cache);
   `--locked` fails rather than build with a `pep.lock` that is out of

@@ -1777,6 +1777,13 @@ install_puts_a_workspace_members_program_in_the_homes_bin() {
 
     var missing = hosts.package(root, ["install", "me/tools", "--package", "nope"]);
     expect_exit(missing, 1);
+    expect_contains(missing.stderr, "me/tools has no workspace member 'nope'; its members are 'hi'");
+
+    # --path takes --package too.
+    write_file(work.join("hi").join("main.pep"), "main(): int {\n    print(\"hi local\");\n    return 0;\n}\n");
+    expect_exit(hosts.package(root, ["install", "--force", "--path", work.to_string(), "--package", "hi"]), 0);
+    expect_equal(run(process.Command(program.to_string())).stdout, "hi local\n");
+    expect_contains(hosts.package(root, ["install", "--list"]).stdout, "hi 1.0.0 (path:");
 }
 
 [Test]

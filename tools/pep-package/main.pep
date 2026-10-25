@@ -22,6 +22,7 @@
 #     pepper package why numbers [--all]        # the paths from the project to it
 #     pepper package outdated [--exit-code]     # what is behind its range, or the newest version
 #     pepper package install someone/tool@1     # builds its program into the Pepper home's bin
+#     pepper package install someone/tools --package fmt  # the workspace member fmt
 #     pepper package install --path .           # the package in a folder
 #     pepper package install --list             # what is installed, and from where
 #     pepper package uninstall tool
@@ -164,7 +165,7 @@ main(args: String[]): int {
     var install_member = install.option(
         "package",
         "",
-        "the member of the repository's workspace to install, by its package name; its version comes from its own NAME-v<version> tags",
+        "the member of the repository's (or --path folder's) workspace to install, by its package name; a repository's comes at a version of its own NAME-v<version> tags",
         value_name = "NAME"
     );
     var install_path = install.option("path", "", "install the package in this folder instead", value_name = "DIR");
@@ -424,23 +425,28 @@ clean_cache(): int {
     return 0;
 }
 
-# `install`: builds the program of the package `spec` names (its
-# workspace member `member`, when that is not empty), or of the one in the
-# folder `path`, with `-O` and `options`, and puts it in the Pepper home's
+# `install`: builds the program of the package `spec` names, or of the
+# one in the folder `path` (their workspace member `member`, when that is
+# not empty), with `-O` and `options`, and puts it in the Pepper home's
 # `bin`.
 install_tool(spec: String, member: String, path: String, force: bool, options: Array<String>, offline: bool): int {
     if (spec.is_empty == path.is_empty) {
         return fail("give 'install' a package or --path, and not both");
     }
-    if (!member.is_empty and !syntax.is_identifier(member)) {
-        return fail($"'--package' names a workspace member by its package name, and '{member}' is not one");
+    var checked = check_member(member);
+    if (checked.is_err()) {
+        return fail(checked.error().message);
     }
     var record = InstalledTool();
     record.toolchain_version = version();
     if (!path.is_empty) {
-        var dir = Path(path).canonicalize();
+        var found = Path(path).canonicalize();
+        if (found.is_err()) {
+            return fail($"cannot find {path}: {found.error().message}");
+        }
+        var dir = member.is_empty ? Result<Path>.Ok(found.value()) : member_folder(found.value(), path, member);
         if (dir.is_err()) {
-            return fail($"cannot find {path}: {dir.error().message}");
+            return fail(dir.error().message);
         }
         record.source = "path:" + dir.value().to_string();
         var text = File.read_to_string(dir.value().join("pep.toml"));
@@ -611,6 +617,14 @@ parse_package(spec: String): Result<(String, String, String)> {
         return Result<(String, String, String)>.Err($"'{spec}' must name a repository as owner/name");
     }
     return Result<(String, String, String)>.Ok((host, rest, range));
+}
+
+# Fails when `member`, a `--package`, is not empty and not a package name.
+check_member(member: String): Result<void> {
+    if (!member.is_empty and !syntax.is_identifier(member)) {
+        return Result<void>.Err($"'--package' names a workspace member by its package name, and '{member}' is not one");
+    }
+    return Result<void>.ok();
 }
 
 # The requirement on `repository` (its workspace member `member`, when
@@ -916,8 +930,9 @@ struct Project {
             return fail(parsed.error().message);
         }
         var (given_host, rest, given_range) = parsed.value();
-        if (!member.is_empty and !syntax.is_identifier(member)) {
-            return fail($"'--package' names a workspace member by its package name, and '{member}' is not one");
+        var checked = check_member(member);
+        if (checked.is_err()) {
+            return fail(checked.error().message);
         }
         var name = !given_name.is_empty ? given_name : member.is_empty ? default_name(rest) : member;
         if (!syntax.is_identifier(name)) {
@@ -975,7 +990,7 @@ struct Project {
         if (written.is_err()) {
             return fail($"cannot write {manifest_path.to_string()}: {written.error().message}");
         }
-        var source = host + ":" + rest + (member.is_empty ? "" : "#" + member);
+        var source = requirement.source();
         var graph = _resolve(false, [source]);
         if (graph.is_err()) {
             # Leave pep.toml as it was.
