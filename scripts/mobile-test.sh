@@ -15,10 +15,9 @@
 #
 # On iOS, scripts/mobile/tls_check.pep also checks the tls module and HTTPS:
 # against `openssl s_server` on this Mac (Homebrew's openssl@3, else the
-# system's), with a test CA made for the run: the trusted CA, localhost and
-# 127.0.0.1, ALPN, GET, refusal without the CA, and http.Client. Setting
-# PEPPER_MOBILE_TLS_URL also fetches that public URL through the system's
-# roots; by default nothing leaves the Mac.
+# system's), with a test CA made for the run (its header lists the checks).
+# Setting PEPPER_MOBILE_TLS_URL also fetches that public URL through the
+# system's roots; by default nothing leaves the Mac.
 #
 # iOS: the simulator SDK comes from `xcrun`, and the programs run in a
 # booted iPhone simulator through `xcrun simctl spawn`. The first available
