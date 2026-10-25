@@ -187,6 +187,9 @@
 <code>pep.lock</code>. <code>pepper package</code> runs it with the same arguments:</p>
 <pre><code class="language-bash">pepper package add someone/geometry          # the newest version, imported as 'geometry'
 pepper package add other/json@2.x --name fast_json
+pepper package add semver                    # the package the index lists as 'semver'
+pepper package search terminal               # the index's packages these words describe
+pepper package info semver                   # its description, versions, toolchain and license
 pepper package add --dev someone/fixtures    # only the project's tests and examples import it
 pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
 pepper package add --optional --features simd someone/zlib  # only a feature turns it on
@@ -235,6 +238,7 @@ Every package is downloaded once per machine, into a
 <tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
 <tr><td><code>fetch &lt;source&gt;...</code></td><td>Fetches only those locked packages (<code>github:owner/name</code>), at their locked commits, resolving nothing</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
+<tr><td><code>add &lt;name&gt;[@&lt;range&gt;]</code></td><td>Adds the package the <a href="#the-package-index">package index</a> lists as <code>&lt;name&gt;</code>, imported by that name</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
 <tr><td><code>add ... --package &lt;name&gt;</code></td><td>Depends on the member <code>&lt;name&gt;</code> of the repository's workspace, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags (see <a href="projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
 <tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
@@ -269,6 +273,8 @@ Every package is downloaded once per machine, into a
 <tr><td><code>audit --ignore &lt;id&gt;</code></td><td>Reports that advisory but does not fail on it; repeat it for more</td></tr>
 <tr><td><code>audit --json</code></td><td>Prints the affected packages as JSON</td></tr>
 <tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="#vendor-dir"><code>vendor</code></a>)</td></tr>
+<tr><td><code>search [&lt;word&gt;...]</code></td><td>Lists the packages in the <a href="#the-package-index">package index</a> whose name, description or keywords hold every word; every package when none is given (see <a href="#search-word"><code>search</code></a>)</td></tr>
+<tr><td><code>info &lt;package&gt;</code></td><td>Prints a package's description, versions, minimum toolchain, license and repository; the package is the name the index lists it by, or <code>[host:]owner/name</code> (see <a href="#info-package"><code>info</code></a>)</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -291,7 +297,7 @@ fetches every platform's packages, those of
 lock lists every dependency and holds packages for other platforms:
 <code>pepper build</code> names the packages its target needs and <code>.pep/deps</code> lacks,
 so a build fetches no other platform's.</p>
-<h3 id="add-ownernamerange"><a class="header" href="#add-ownernamerange"><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></a></h3>
+<h3 id="add-ownernamerange-add-namerange"><a class="header" href="#add-ownernamerange-add-namerange"><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code>, <code>add &lt;name&gt;[@&lt;range&gt;]</code></a></h3>
 <p>Adds a dependency to <code>pep.toml</code>'s <code>[dependencies]</code> and fetches it, keeping
 the file's comments and layout. An argument that starts with <code>github:</code>,
 <code>gitlab:</code> or <code>codeberg:</code> (<code>gitlab:group/pepper-json</code>) names its host.
@@ -299,7 +305,7 @@ Without one, <code>add</code> looks the repository up on each host in the order
 <code>pep.toml</code>'s <code>[fetch]</code> <code>hosts</code> lists (GitHub, GitLab, then Codeberg by
 default; see <a href="projects.html#fetch">Projects: pep.toml</a>) and uses the first
 that has it. When more than one does, it says so:</p>
-<pre><code class="language-text">pep-package: other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)
+<pre><code class="language-text">pep-package: other/numbers is on github and codeberg; using github:other/numbers (prefix it with 'codeberg:' for another)
 </code></pre>
 <pre><code class="language-bash">pepper package add someone/geometry        # geometry = { github = "someone/geometry", version = "1.4.2" }
 pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
@@ -313,6 +319,11 @@ branch. The name source code imports defaults to the repository's last part,
 with <code>-</code> and <code>.</code> turned into <code>_</code> (<code>other/json</code> adds <code>json</code>); <code>--name</code> gives
 another. A name already in <code>pep.toml</code>, or the name of a runtime module
 (<code>io</code>, <code>async</code>), is an error that suggests <code>--name</code>.</p>
+<p>A bare name, with no <code>/</code> (<code>semver</code>, <code>semver@1.x</code>), is the package the
+<a href="#the-package-index">package index</a> lists by that name: <code>add</code> adds its
+source, and source code imports it by the index's name:</p>
+<pre><code class="language-bash">pepper package add semver   # semver = { github = "pep-lang/pepper-semver", version = "1.0.0" }
+</code></pre>
 <p><code>--package &lt;name&gt;</code> adds a member of the repository's
 <a href="projects.html#a-member-as-a-git-dependency">workspace</a> instead of its root
 package: the entry gets <code>package = "&lt;name&gt;"</code>, its version comes from the
@@ -514,6 +525,58 @@ package  locked             wanted  latest  source
 shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes
 shapes 1.1.0 is retracted: loses data
 </code></pre>
+<h3 id="search-word"><a class="header" href="#search-word"><code>search [&lt;word&gt;...]</code></a></h3>
+<p>Lists each package in the <a href="#the-package-index">package index</a> whose name,
+description or keywords hold every word given, ignoring case, one a line;
+with no words, every package. A word matches part of a word
+(<code>term</code> matches <code>terminal</code>). Finding nothing prints nothing, says so on
+stderr, and exits with status 0.</p>
+<pre><code class="language-text">$ pepper package search terminal
+term (github:pep-lang/pepper-term): Interactive terminals: raw mode, key and mouse input, ...
+tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Ratatui: ...
+</code></pre>
+<h3 id="info-package"><a class="header" href="#info-package"><code>info &lt;package&gt;</code></a></h3>
+<p>Prints what is known of a package: the index's description and keywords,
+its versions (its version tags, newest first, those its newest release
+<a href="#retracted-versions">retracts</a> marked), and the <code>minimum_toolchain</code>,
+<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, which is
+read from the <a href="#the-download-cache">download cache</a> (fetched into it
+when missing). The package is the name the index lists it by, or a
+repository as <code>add</code> takes one (<code>[host:]owner/name</code>), which need not be
+in the index; then the description is its <code>pep.toml</code>'s. A line with
+nothing to say is left out. It reads the versions from the host, so it
+fails under <code>--offline</code>.</p>
+<pre><code class="language-text">$ pepper package info semver
+semver: Semantic Versioning 2.0.0: parse, compare and order versions, and match them against ranges
+source: github:pep-lang/pepper-semver
+versions: 1.0.0
+license: Apache-2.0
+repository: https://github.com/pep-lang/pepper-semver
+keywords: semver, version, range
+</code></pre>
+<h3 id="the-package-index"><a class="header" href="#the-package-index">The package index</a></h3>
+<p>The index that <code>search</code>, <code>info</code> and <code>add &lt;name&gt;</code> read is a Git
+repository with one TOML file per package in its <code>packages</code> folder:
+<code>https://github.com/pep-lang/index.git</code>, or the repository
+<code>PEPPER_PACKAGE_INDEX</code> names (a mirror, a private index, or a <code>file://</code>
+folder). The file's name is the package's name, the one <code>add &lt;name&gt;</code>
+takes and source code imports it by (<code>packages/semver.toml</code>):</p>
+<pre><code class="language-toml">source = "github:pep-lang/pepper-semver"   # required: host:owner/name
+description = "Semantic Versioning 2.0.0: parse, compare and order versions, and match them against ranges"
+keywords = ["semver", "version", "range"]
+</code></pre>
+<p>The index lists no versions: they are the source's version tags, which
+<code>info</code> reads from the host, so a release needs no change to the index.
+To list a package, open a pull request that adds its file; a maintainer
+reviews it, and the first pull request for a name claims it. A malformed
+file fails the command with an error at its key.</p>
+<p>Like the <a href="#audit">advisory database</a>, the index is cloned into the
+download cache's home, <code>cache/index</code>, and fetched again once the copy is
+an hour old. A fetch that fails falls back to the cached copy with a
+warning that gives its age, and fails only when there is no copy; with
+<code>--offline</code>, <code>search</code> uses the copy as it is, and fails when there is
+none. The packages are also listed on
+<a href="https://pepper-lang.dev/packages.html">https://pepper-lang.dev/packages.html</a>.</p>
 <h3 id="audit"><a class="header" href="#audit"><code>audit</code></a></h3>
 <p>Checks every package <code>pep.lock</code> records, for every platform and
 dev-dependencies included, against a database of security advisories, as
@@ -541,9 +604,13 @@ anywhere in it: <code>https://github.com/pep-lang/advisories.git</code>, or the
 repository <code>PEPPER_ADVISORY_DB</code> names (a mirror, a private database, or a
 <code>file://</code> folder). <code>audit</code> clones it into the
 <a href="#the-download-cache">download cache</a>'s home, <code>cache/advisories</code>, and
-fetches it again once the copy is an hour old; a fetch that fails fails
-<code>audit</code>, rather than check against an old copy. With <code>--offline</code> it uses
-the copy as it is, and fails when there is none. An advisory:</p>
+fetches it again once the copy is an hour old. When that fetch fails (no
+network, or the host erroring), <code>audit</code> checks against the cached copy
+and warns on stderr, giving the copy's age:</p>
+<pre><code class="language-text">pep-package: warning: cannot fetch the advisory database https://github.com/pep-lang/advisories.git, so using the cached copy from 3 days ago: ...
+</code></pre>
+<p>With no cached copy, it fails. With <code>--offline</code> it uses the copy as it
+is, and fails when there is none. An advisory:</p>
 <pre><code class="language-toml">id = "PEP-2026-0001"                      # required
 package = "github:other/numbers"          # required: the source pep.lock records (a member's: github:owner/name#member)
 title = "numbers_version() lies"
@@ -593,6 +660,14 @@ a dependency, run <code>add</code>, <code>remove</code> or <code>update</code> (
 as usual), then <code>vendor</code> again: that rewrites the packages that changed,
 restores edited ones, and removes those <code>pep.lock</code> no longer lists.
 <code>.pep/deps</code> is unchanged in a project that is not vendored.</p>
+<p>A vendored package holds no symbolic links. The checksum covers files
+only, and Windows makes links only in Developer Mode, so a link would
+vendor differently from host to host. <code>vendor</code> refuses a package whose
+commit holds one, naming the package and the link:</p>
+<pre><code class="language-text">pep-package: error: cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold
+</code></pre>
+<p>A link found in a package's folder later fails the build and <code>fetch</code> the
+same way an edited file does; <code>vendor</code> again removes it.</p>
 <p>In a <a href="projects.html#workspaces">workspace</a>, run from the root or any member,
 <code>vendor</code> writes one folder at the workspace's root, holding every
 member's locked packages, and sets <code>[fetch] vendor</code> in the root's
@@ -971,6 +1046,7 @@ it.</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host's repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td><code>PEPPER_PACKAGE_INDEX</code></td><td>The Git repository of the <a href="#the-package-index">package index</a> <code>search</code>, <code>info</code> and <code>add &lt;name&gt;</code> read, instead of <code>https://github.com/pep-lang/index.git</code></td></tr>
 <tr><td><code>PEPPER_ADVISORY_DB</code></td><td>The Git repository of the advisory database <a href="#audit"><code>audit</code></a> reads, instead of <code>https://github.com/pep-lang/advisories.git</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
