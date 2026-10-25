@@ -11,7 +11,9 @@
 # desktop.
 # Then the prototype apps in docs/examples/mobile/ are built and run: an iOS
 # app calling a Pepper library from Swift in the simulator, and an Android app
-# calling it through JNI in the emulator.
+# calling it through JNI in the emulator; and on iOS the same library as a
+# Swift package (`--lib swift-package`), tested through SwiftPM with
+# `xcodebuild test` in the simulator.
 #
 # On iOS, scripts/mobile/tls_check.pep also checks the tls module and HTTPS:
 # against `openssl s_server` on this Mac (Homebrew's openssl@3, else the
@@ -192,6 +194,9 @@ run_ios() {
 
   if [ -d "$repo_root/docs/examples/mobile/ios" ]; then
     bash "$repo_root/docs/examples/mobile/ios/build.sh" "$compiler" "$out/ios-app" "$device" || report "ios app"
+    # The same library through SwiftPM: `--lib swift-package`'s
+    # .xcframework, called from Swift tests in the simulator.
+    bash "$repo_root/docs/examples/mobile/ios/package.sh" "$compiler" "$out/ios-package" "$device" || report "ios swift package"
   fi
 
   if [ "$booted_here" = 1 ]; then

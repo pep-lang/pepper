@@ -22,16 +22,28 @@ export enum LibraryKind {
     Static,
     ## A shared library (`--lib shared`).
     Shared,
+    ## An iOS `.xcframework` of static libraries for devices and the
+    ## simulator (`--lib xcframework`, `xcframework.pep`).
+    Xcframework,
+    ## A Swift package folder around an `.xcframework` (`--lib swift-package`).
+    SwiftPackage,
 }
 
 ## The library's file name for `name` on `target`: `libname.a`,
-## `libname.so` or `libname.dylib`; `name.lib` or `name.dll` on Windows.
+## `libname.so` or `libname.dylib`; `name.lib` or `name.dll` on Windows;
+## `name.xcframework`, or the folder `name` for a Swift package.
 ##
 ## @param kind the kind of library
 ## @param name its name: the package's, or the entry file's stem
 ## @param target the compile target
 ## @returns the file name
 export library_file_name(kind: LibraryKind, name: String, target: link.Target): String {
+    if (kind == LibraryKind.Xcframework) {
+        return $"{name}.xcframework";
+    }
+    if (kind == LibraryKind.SwiftPackage) {
+        return name;
+    }
     if (target.os == "windows") {
         return kind == LibraryKind.Static ? $"{name}.lib" : $"{name}.dll";
     }

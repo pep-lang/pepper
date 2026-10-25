@@ -12,4 +12,5 @@ export * from "parts";
 export * from "project";
 export * from "test_main";
 export * from "verify";
+export * from "xcframework";
 export * from "emit_static";
