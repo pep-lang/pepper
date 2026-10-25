@@ -10,11 +10,11 @@
 # there, and must exit 0, as tools/pep-doc/examples_test.pep requires on the
 # desktop.
 # Then the prototype apps in docs/examples/mobile/ are built and run: an iOS
-# app calling a Pepper library from Swift in the simulator, and an Android app
-# calling it through JNI in the emulator; and the same library as a Swift
-# package (`--lib swift-package`), tested through SwiftPM with `xcodebuild
-# test` in the simulator, and as an Android library (`--lib aar`) the app
-# runs on again.
+# app calling a Pepper library from Swift in the simulator through the
+# wrappers `--bindings swift` writes, and an Android app calling it in the
+# emulator through the Java class of its `--lib aar`; and the same library
+# as a Swift package (`--lib swift-package`), tested through SwiftPM with
+# `xcodebuild test` in the simulator.
 #
 # On iOS, scripts/mobile/tls_check.pep also checks the tls module and HTTPS:
 # against `openssl s_server` on this Mac (Homebrew's openssl@3, else the
@@ -281,9 +281,6 @@ run_android() {
 
   if [ -d "$repo_root/docs/examples/mobile/android" ]; then
     bash "$repo_root/docs/examples/mobile/android/build.sh" "$compiler" "$out/android-app" "$serial" || report "android app"
-    # The same app on the library `--lib aar` writes, through JNI.
-    PEPPER_ANDROID_AAR=1 bash "$repo_root/docs/examples/mobile/android/build.sh" "$compiler" "$out/android-aar-app" "$serial" \
-      || report "android aar app"
   fi
 
   "$adb" -s "$serial" emu kill > /dev/null 2>&1 || true

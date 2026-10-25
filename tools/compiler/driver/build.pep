@@ -45,6 +45,7 @@ import llvm;
 import os;
 import process;
 import compiler.sema;
+import "bindings";
 import "emit_static";
 import "library";
 import "linker";
@@ -107,6 +108,8 @@ export struct BuildOptions {
     var lto: bool = false;
     ## The library to build for C instead of an executable (`--lib`).
     var library: LibraryKind? = Optional<LibraryKind>.Empty;
+    ## The bindings to write beside the library's header (`--bindings`).
+    var bindings: BindingsKind? = Optional<BindingsKind>.Empty;
     ## With `-T passes`, where every sema pass's time adds up: the
     ## program's, and each compilation unit's, in a worker too.
     var pass_times: sema.PassTimes? = Optional<sema.PassTimes>.Empty;
@@ -917,7 +920,8 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         keys.value().exact_positions = options.debug;
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)
-            and (!header.is_value() or header.value().is_file())) {
+            and (!header.is_value() or header.value().is_file())
+            and _bindings_written(options, header)) {
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: {options.output} is up to date\n");
             }
@@ -1480,6 +1484,30 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             return Result<Built, String>.err(written.error());
         }
     }
+    if (options.bindings.is_value()) {
+        var kind = options.bindings.value();
+        var stem = header.value().file_stem();
+        var name = stem.is_value() ? stem.value() : "";
+        var files = binding_files(kind, name, state.exports, state.enum_representations);
+        if (files.is_err()) {
+            Directory.remove_all(work);
+            return Result<Built, String>.err(render_all([files.error()], sources));
+        }
+        var names = binding_file_names(kind, name);
+        for (var i in 0..names.count) {
+            var path = _beside(header.value(), names[i]);
+            if (File.write_bytes(path, files.value()[i]).is_err()) {
+                Directory.remove_all(work);
+                return Result<Built, String>.err($"cannot write {path}");
+            }
+            # The JNI functions' C, which clang compiles as it links.
+            if (path.extension().is_value()
+                and path.extension().value() == "c"
+                and options.library.value() == LibraryKind.Shared) {
+                objects.append(path);
+            }
+        }
+    }
     # Windows debuggers read the visualizers from the `.pdb`: the runtime's,
     # and the program's enums with payloads' (`enum_natvis`).
     var natvis = Array<Path>();
@@ -1739,6 +1767,26 @@ _files_size(files: ulong[], sizes: ulong[]): ulong {
 ## output and the library kind, the `-l` libraries, the `-L` folders, the
 ## system root, and the current folder (`[Link(path = ...)]` folders are
 ## relative to it).
+# Whether every file `--bindings` writes beside `header` is there.
+_bindings_written(options: BuildOptions, header: Path?): bool {
+    if (!options.bindings.is_value() or !header.is_value()) {
+        return true;
+    }
+    var stem = header.value().file_stem();
+    for (var name in binding_file_names(options.bindings.value(), stem.is_value() ? stem.value() : "")) {
+        if (!_beside(header.value(), name).is_file()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+# The file `name` in the folder of `path`.
+_beside(path: Path, name: String): Path {
+    var folder = path.parent();
+    return folder.is_value() ? folder.value().join(Path(name)) : Path(name);
+}
+
 _link_text(options: BuildOptions): String {
     var cwd = process.working_directory();
     var here = cwd.is_ok() ? cwd.value().to_string() : "";
@@ -1746,6 +1794,9 @@ _link_text(options: BuildOptions): String {
     text.append($"output {options.output}\ncwd {here}\n");
     if (options.library.is_value()) {
         text.append(options.library.value() == LibraryKind.Static ? "--lib static\n" : "--lib shared\n");
+    }
+    if (options.bindings.is_value()) {
+        text.append(options.bindings.value() == BindingsKind.Swift ? "--bindings swift\n" : "--bindings java\n");
     }
     for (var library in options.libraries) {
         text.append($"-l {library}\n");

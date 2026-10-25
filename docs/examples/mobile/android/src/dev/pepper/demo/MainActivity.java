@@ -4,29 +4,27 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.TextView;
+import pepper.greeter.Greeter;
+import pepper.greeter.Tally;
 
 // An Android activity that calls the Pepper library in ../greeter.pep
-// through JNI: libgreeter_jni.so holds the JNI functions in jni.c that
-// convert Java's types to the C ones greeter.h declares, and the Pepper code
-// (`--lib static`), or links the .aar's libgreeter.so beside it (`--lib
-// aar`), which loading it loads first.
+// through the Java class `--lib aar` generates, pepper.greeter.Greeter,
+// whose JNI functions are in the .aar's libgreeter.so.
 public class MainActivity extends Activity {
-    static {
-        System.loadLibrary("greeter_jni");
-    }
-
-    static native String greet(String name);
-
-    static native long fibonacci(int n);
-
-    static native int countWords(String text);
-
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        String text = greet("Android")
-            + "\nfibonacci(50) = " + fibonacci(50)
-            + "\nwords: " + countWords("Pepper runs on Android");
+        long total;
+        try (Tally tally = Greeter.tallyNew()) {
+            Greeter.tallyAdd(tally, 3);
+            total = Greeter.tallyAdd(tally, 4);
+        }
+        String text = Greeter.greet("Android")
+            + "\nfibonacci(50) = " + Greeter.fibonacci(50)
+            + "\nwords: " + Greeter.countWords("Pepper runs on Android")
+            + "\neven: " + Greeter.isEven(10) + ", half: " + Greeter.half(2.5) + ", tally: " + total
+            // A string crosses as UTF-8, not JNI's modified UTF-8.
+            + "\nutf8: " + Greeter.greet("caf\u00e9 \uD83C\uDF36").equals("Hello, caf\u00e9 \uD83C\uDF36, from Pepper");
         // What build.sh checks: the app reached Pepper at launch.
         for (String line : text.split("\n")) {
             Log.i("PepperDemo", line);

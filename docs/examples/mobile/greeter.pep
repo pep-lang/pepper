@@ -32,3 +32,32 @@ count_words(text: String): int {
     }
     return count;
 }
+
+[Export]
+is_even(n: long): bool {
+    return n % 2 == 0;
+}
+
+[Export]
+half(x: double): double {
+    return x / 2;
+}
+
+# A struct crosses as a handle: Swift and Java hold it as an object that
+# owns one reference, released by Swift's `deinit` or Java's `close()`.
+struct Tally {
+    var total: long = 0;
+
+    construct() {}
+}
+
+[Export]
+tally_new(): Tally {
+    return Tally();
+}
+
+[Export]
+tally_add(tally: Tally, n: int): long {
+    tally.total += n;
+    return tally.total;
+}

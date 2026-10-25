@@ -111,6 +111,11 @@ _main(args: String[]): int {
         help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`); or for Android apps, `aar` (`name.aar`: a shared library for each Android ABI, with the header); each named for the output. No `main` is needed",
         value_name = "KIND"
     );
+    var bindings = parser.option<driver.BindingsKind>(
+        "bindings",
+        help = "With `--lib`, also write bindings beside the C header, so an app calls the `[Export]`ed functions with its own language's values: `swift` (`name.swift`, wrappers taking and returning `String` and a class for each struct handle, over the C module `Cname` that the `module.modulemap` it writes declares) or, with `--lib shared`, `java` (`name.jar`, the class `pepper.name.Name` of `static native` methods that Java and Kotlin call, and the JNI functions in `name_jni.c`, compiled into the library). `--lib swift-package` and `--lib aar` write them themselves",
+        value_name = "LANGUAGE"
+    );
     var entry_function = parser.option(
         "entry",
         help = "The function the program starts in, instead of `main`. It takes no parameters or one `String[]`, as `main` does, and every `main` is left out of the program",
@@ -361,6 +366,15 @@ _main(args: String[]): int {
         and !output.value().ends_with(".xcframework")) {
         # The output is replaced whole, so it must be one.
         return parser.usage_error("the output of '--lib xcframework' must end in '.xcframework'");
+    }
+    if (bindings.is_set and (!library.is_set or for_apps)) {
+        return parser.usage_error("'--bindings' needs '--lib static' or '--lib shared'");
+    }
+    if (bindings.is_set
+        and bindings.value() == driver.BindingsKind.Java
+        and library.value() != driver.LibraryKind.Shared) {
+        # The JNI functions are compiled into the library Java loads.
+        return parser.usage_error("'--bindings java' needs '--lib shared'");
     }
     if (verify_cache.is_set and no_verify_cache.is_set) {
         return parser.usage_error("'--verify-cache' cannot be used with '--no-verify-cache'");
@@ -730,6 +744,9 @@ _main(args: String[]): int {
         options.cpu = Optional<codegen.Cpu>.Value(cpu.value());
         options.lto = whole;
         options.library = kind;
+        if (bindings.is_set) {
+            options.bindings = Optional<driver.BindingsKind>.Value(bindings.value());
+        }
         options.debug = debug.is_set;
         options.entry = Optional<Path>.Value(entry);
         options.debug_static_expanded = debug_static.is_set and debug_static.value() == _DebugStatic.Expanded;

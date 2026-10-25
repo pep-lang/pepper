@@ -1,28 +1,24 @@
-// A SwiftUI app that calls the Pepper library in ../greeter.pep through its
-// generated C header (greeter.h, passed to swiftc as the bridging header).
+// A SwiftUI app that calls the Pepper library in ../greeter.pep through the
+// Swift wrappers `--bindings swift` writes (greeter.swift, compiled with
+// this file), which take and return Swift values.
 import Foundation
 import SwiftUI
 
-/// Calls Pepper's `greet`: a Swift String goes in as UTF-8 bytes and their
-/// count, and the C string that comes back is copied, then freed with
-/// `pepper_string_free`.
-func pepperGreeting(_ name: String) -> String {
-    let result = name.withCString { greet($0, strlen($0)) }!
-    defer { pepper_string_free(result) }
-    return String(cString: result)
-}
-
-func pepperWordCount(_ text: String) -> Int {
-    Int(text.withCString { count_words($0, strlen($0)) })
+/// Adds 3 and 4 to a Pepper `Tally`, which Swift releases when `tally` goes.
+func tallied() -> Int64 {
+    let tally = tallyNew()
+    _ = tallyAdd(tally, 3)
+    return tallyAdd(tally, 4)
 }
 
 @main
 struct PepperDemoApp: App {
     init() {
         // What build.sh checks: the app reached Pepper at launch.
-        print(pepperGreeting("iOS"))
+        print(greet("iOS"))
         print("fibonacci(50) = \(fibonacci(50))")
-        print("words: \(pepperWordCount("Pepper runs on iOS"))")
+        print("words: \(countWords("Pepper runs on iOS"))")
+        print("even: \(isEven(10)), half: \(half(2.5)), tally: \(tallied())")
         fflush(stdout)
     }
 
@@ -40,10 +36,10 @@ struct ContentView: View {
         VStack(spacing: 16) {
             TextField("Name", text: $name)
                 .textFieldStyle(.roundedBorder)
-            Text(pepperGreeting(name))
+            Text(greet(name))
                 .font(.title2)
             Text("fibonacci(50) = \(fibonacci(50))")
-            Text("\(pepperWordCount(name)) words")
+            Text("\(countWords(name)) words")
         }
         .padding()
     }
