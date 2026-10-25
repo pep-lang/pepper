@@ -246,7 +246,7 @@ the_index_keeps_every_version_and_opens_the_newest_release() {
         Directory.create_all(folder.path.join(v));
         File.write_text(folder.path.join(v).join("index.html"), "");
     }
-    expect_true(write_index(folder.path).is_ok());
+    expect_true(write_index(folder.path, "Pepper documentation").is_ok());
     expect_equal(
         File.read_to_string(folder.path.join("versions.json")).value(),
         "{\n  \"latest\": \"0.2.0\",\n  \"versions\": [\n    \"0.3.0-beta.1\",\n    \"0.2.0\",\n    \"0.1.0\",\n    \"dev\"\n  ]\n}\n"
