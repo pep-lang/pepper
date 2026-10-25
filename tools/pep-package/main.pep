@@ -5,6 +5,9 @@
 #
 #     pepper package fetch                      # what pep.lock lists, resolving pep.toml's changes
 #     pepper package add someone/geometry       # the newest version, as 'geometry'
+#     pepper package add semver                 # the package the index lists as 'semver'
+#     pepper package search terminal            # the index's packages these words describe
+#     pepper package info semver                # its description, versions, toolchain and license
 #     pepper package add other/json@2.x --name fast_json
 #     pepper package add --dev someone/fixtures  # only for tests and examples
 #     pepper package add --target 'OS(Windows)' someone/winapi  # only on Windows
@@ -51,6 +54,7 @@ import "advisory";
 import "archive";
 import "git";
 import "graph";
+import "index";
 import "install";
 import "lock";
 import "manifest";
@@ -91,7 +95,8 @@ main(args: String[]): int {
     );
     var add = parser.command("add", "Adds a dependency at its newest version, or at a range given after @");
     var add_package = add.positional(
-        "package", "[host:]owner/name[@range]; without a host, the first of pep.toml's [fetch] hosts that has it"
+        "package",
+        "[host:]owner/name[@range]; without a host, the first of pep.toml's [fetch] hosts that has it; or name[@range], the package the index lists as name"
     );
     var add_name = add.option(
         "name", "n", "the name source code imports it by (default: the repository's name)", value_name = "NAME"
@@ -203,14 +208,31 @@ main(args: String[]): int {
         "the folder, relative to the project (default: pep.toml's '[fetch] vendor', else 'vendor')",
         required = false
     );
+    var search = parser.command(
+        "search", "Lists the packages in the package index whose name, description or keywords hold every word"
+    );
+    var search_words = search.positionals(
+        "words", "the words to look for, ignoring case (default: list every package)"
+    );
+    var info = parser.command(
+        "info", "Prints a package's description, versions, minimum toolchain, license and repository"
+    );
+    var info_package = info.positional("package", "the name the package index lists it by, or [host:]owner/name");
     var cache = parser.command("cache", "Shows or empties the download cache every project shares");
     var cache_info = cache.command("info", "Prints the cache's folder and the packages it holds");
     cache.command("clean", "Removes what the cache holds, except packages a fetch is using; projects keep .pep/deps");
     if (!parser.parse(args)) {
         return 2;
     }
+    var is_offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE");
     if (cache.is_selected) {
         return cache_info.is_selected ? show_cache() : clean_cache();
+    }
+    if (search.is_selected) {
+        return search_index(search_words.values(), is_offline);
+    }
+    if (info.is_selected) {
+        return show_info(info_package.value(), is_offline);
     }
     if (install.is_selected) {
         if (install_list.is_set) {
@@ -237,7 +259,7 @@ main(args: String[]): int {
             install_path.value_or(""),
             install_force.is_set,
             options,
-            offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE")
+            is_offline
         );
     }
     if (uninstall.is_selected) {
@@ -255,7 +277,7 @@ main(args: String[]): int {
     }
     var project = Project(found.value());
     project.locked = locked.is_set or frozen.is_set or os.environment_flag("PEPPER_LOCKED");
-    project.offline = offline.is_set or frozen.is_set or os.environment_flag("PEPPER_OFFLINE");
+    project.offline = is_offline;
     if (fetch.is_selected) {
         return fetch_packages.values().is_empty ? project.fetch() : project.fetch_locked(fetch_packages.values());
     }
@@ -547,6 +569,130 @@ list_installed(): int {
     for (var (name, record) in records.value()) {
         print($"{name} {record.describe()}");
     }
+    return 0;
+}
+
+# `search`: each package of the index whose name, description or keywords
+# hold every one of `words`, one a line.
+search_index(words: Array<String>, offline: bool): int {
+    var index = fetch_index(offline);
+    if (index.is_err()) {
+        return fail(index.error().message);
+    }
+    var found = 0;
+    for (var listing in index.value()) {
+        if (listing.matches(words)) {
+            var description = listing.description.is_empty ? "" : ": " + listing.description;
+            print($"{listing.name} ({listing.source}){description}");
+            found += 1;
+        }
+    }
+    if (found == 0) {
+        say($"no package in the index {package_index()} matches");
+    }
+    return 0;
+}
+
+# `info`: the package `spec` names, by the name the index lists it by or
+# as `[host:]owner/name`: what the index says of it, its versions, newest
+# first, and what the pep.toml of its newest release declares.
+show_info(spec: String, offline: bool): int {
+    if (offline) {
+        return fail(
+            "--offline, and 'info' reads which versions a package offers over the network; run it without --offline (or PEPPER_OFFLINE)"
+        );
+    }
+    var listing = Listing();
+    var host = "";
+    var repository = "";
+    if (!spec.contains("/") and !spec.contains(":")) {
+        var listed = look_up_name(spec, false);
+        if (listed.is_err()) {
+            return fail(listed.error().message);
+        }
+        listing = listed.value();
+        var split = split_source(listing.source);
+        host = split.0;
+        repository = split.1;
+    } else {
+        var parsed = parse_package(spec);
+        if (parsed.is_err()) {
+            return fail(parsed.error().message);
+        }
+        var (given_host, given_repository, range) = parsed.value();
+        if (!range.is_empty) {
+            return fail($"'info' takes a package without a range, not '{spec}'");
+        }
+        host = given_host;
+        repository = given_repository;
+    }
+    var refs = Array<RemoteRef>();
+    if (host.is_empty) {
+        var found = look_up(repository, Manifest().hosts);
+        if (found.is_err()) {
+            return fail(found.error().message);
+        }
+        host = found.value().0;
+        refs = found.value().1;
+    } else {
+        var read = remote_refs(repository_url(host, repository));
+        if (read.is_err()) {
+            return fail($"cannot read {host}:{repository}: {read.error().message}");
+        }
+        refs = read.value();
+    }
+    listing.source = $"{host}:{repository}";
+    # What the pep.toml of the newest release declares.
+    var root = toml.TomlValue.table();
+    var manifest = Manifest();
+    var newest = newest_release(refs);
+    if (newest.is_value()) {
+        var (version, commit) = newest.value();
+        var text = cached_file_at(host, repository, commit, "pep.toml");
+        if (text.is_err()) {
+            return fail($"cannot read the pep.toml of {listing.source} {version.to_string()}: {text.error().message}");
+        }
+        if (text.value().is_value()) {
+            var parsed = toml.parse(text.value().value());
+            var read = parse_manifest(Path("pep.toml"), text.value().value());
+            if (parsed.is_ok() and read.is_ok()) {
+                root = parsed.value();
+                manifest = read.value();
+            }
+        }
+    }
+    var versions = Array<semver.Version>();
+    for (var ref in refs) {
+        var version = ref.name.starts_with("refs/tags/") ?
+            tag_version(ref.name.substr(10, ref.name.length)) :
+            Optional<semver.Version>.Empty;
+        if (version.is_value()) {
+            versions.append(version.value());
+        }
+    }
+    versions.sort((a, b) => b.compare(a));
+    var listed = Array<String>();
+    for (var version in versions) {
+        var withdrawn = retracted(manifest.retractions, version).is_value();
+        listed.append(version.to_string() + (withdrawn ? " (retracted)" : ""));
+    }
+    var description = listing.description.is_empty ? _package_string(root, "description") : listing.description;
+    # Not in the index, it goes by its package name.
+    var name = !listing.name.is_empty ?
+        listing.name :
+        !manifest.name.is_empty ? manifest.name : default_name(repository);
+    var text = name + (description.is_empty ? "" : ": " + description) + "\n";
+    for (var (label, value) in [
+        ("source", listing.source),
+        ("versions", listed.is_empty ? "none; 'add' takes its default branch" : ", ".join(listed)),
+        ("minimum toolchain", manifest.minimum_toolchain),
+        ("license", _package_string(root, "license")),
+        ("repository", _package_string(root, "repository")),
+        ("keywords", ", ".join(listing.keywords))
+    ]) {
+        text += value.is_empty ? "" : $"{label}: {value}\n";
+    }
+    File.stdout().write_all(text);
     return 0;
 }
 
@@ -925,7 +1071,20 @@ struct Project {
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
             );
         }
-        var parsed = parse_package(spec);
+        # A bare name (`semver@1`) is the package the index lists by it.
+        var listed_name = "";
+        var named = spec;
+        var at = spec.split_once("@");
+        var bare = at.is_value() ? at.value().0 : spec;
+        if (!bare.contains("/") and !bare.contains(":")) {
+            var listing = look_up_name(bare, false);
+            if (listing.is_err()) {
+                return fail(listing.error().message);
+            }
+            listed_name = bare;
+            named = listing.value().source + (at.is_value() ? "@" + at.value().1 : "");
+        }
+        var parsed = parse_package(named);
         if (parsed.is_err()) {
             return fail(parsed.error().message);
         }
@@ -934,7 +1093,9 @@ struct Project {
         if (checked.is_err()) {
             return fail(checked.error().message);
         }
-        var name = !given_name.is_empty ? given_name : member.is_empty ? default_name(rest) : member;
+        var name = !given_name.is_empty ?
+            given_name :
+            !member.is_empty ? member : !listed_name.is_empty ? listed_name : default_name(rest);
         if (!syntax.is_identifier(name)) {
             return fail($"'{name}' is not a name 'import' can use; give one with --name");
         }
@@ -1281,7 +1442,7 @@ struct Project {
         if (locked.is_err()) {
             return fail(locked.error().message);
         }
-        var database = fetch_database(advisory_database(), offline);
+        var database = fetch_data_repository(advisory_database(), "advisories", "advisory database", offline);
         if (database.is_err()) {
             return fail(database.error().message);
         }

@@ -3,6 +3,7 @@
 # project shares, a bare repository per package in the Pepper home.
 # Authentication is git's concern (credential helpers, SSH keys).
 
+import digest;
 import [Directory, File, Path] from io;
 import io;
 import os;
@@ -334,4 +335,93 @@ export file_at(
     # The commit is there, so a failure means it has no such file.
     var text = git(["show", commit + ":" + file], dir);
     return Result<Optional<String>>.Ok(text.is_ok() ? Optional<String>.Value(text.value()) : Optional<String>.Empty);
+}
+
+# The text of `file` at `commit` of `repository` on `host`, read from the
+# download cache's bare repository, which fetches the commit when it
+# lacks it; none when the commit has no such file.
+export cached_file_at(host: String, repository: String, commit: String, file: String): Result<Optional<String>> {
+    var lock = lock_cache(host, repository);
+    if (lock.is_err()) {
+        return Result<Optional<String>>.Err(lock.error().message);
+    }
+    var cached = _cache_commit(
+        host, repository, repository_url(host, repository), cached_package(host, repository), commit, false
+    );
+    if (cached.is_err()) {
+        return Result<Optional<String>>.Err(cached.error().message);
+    }
+    var (bare, full) = cached.value();
+    # The commit is there, so a failure means it has no such file.
+    var text = git(["show", full + ":" + file], bare.to_string());
+    return Result<Optional<String>>.Ok(text.is_ok() ? Optional<String>.Value(text.value()) : Optional<String>.Empty);
+}
+
+# How old, in seconds, the cached copy of a data repository may be before
+# `fetch_data_repository` fetches it again.
+const DATA_REFRESH_SECONDS = 3600;
+
+# The folder of the copy of the data repository at `url` (the advisory
+# database, the package index) in the Pepper home's `cache/<folder>`:
+# cloned when missing, and fetched again when it is older than
+# `DATA_REFRESH_SECONDS`, unless `offline`. `what` names it in errors.
+export fetch_data_repository(url: String, folder: String, what: String, offline: bool): Result<Path> {
+    var base = toolchain
+        .find_home().root
+        .join("cache")
+        .join(folder)
+        .join(digest.to_hex(digest.sha256(url)).substr(0, 16));
+    var dir = base.to_string();
+    var stamp = Path(dir + ".fetched");
+    var lock = lock_file(Path(dir + ".lock"));
+    if (lock.is_err()) {
+        return Result<Path>.Err(lock.error().message);
+    }
+    if (checked_out(base).is_value()) {
+        var fetched = stamp.metadata();
+        var now = os.SystemTime.now().unix_seconds();
+        if (offline or (fetched.is_ok() and now - fetched.value().modified / 1000000000 < DATA_REFRESH_SECONDS)) {
+            return Result<Path>.Ok(base);
+        }
+        var pulled = git(["fetch", "--quiet", url, "HEAD"], dir);
+        if (pulled.is_ok()) {
+            pulled = git(["reset", "--quiet", "--hard", "FETCH_HEAD"], dir);
+        }
+        if (pulled.is_err()) {
+            return Result<Path>.Err($"cannot fetch the {what} {url}: {pulled.error().message}");
+        }
+    } else {
+        if (offline) {
+            return Result<Path>.Err(
+                $"--offline, and the cache has no copy of the {what} {url}; run the command without --offline (or PEPPER_OFFLINE) once"
+            );
+        }
+        # Cloned beside it and renamed, so an interrupted clone leaves none.
+        var partial = Path(dir + ".partial");
+        if (partial.exists()) {
+            var cleared = remove_tree(partial);
+            if (cleared.is_err()) {
+                return Result<Path>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
+            }
+        }
+        if (base.exists()) {
+            var cleared = remove_tree(base);
+            if (cleared.is_err()) {
+                return Result<Path>.Err($"cannot remove {dir}: {cleared.error().message}");
+            }
+        }
+        var cloned = git(["clone", "--quiet", url, partial.to_string()]);
+        if (cloned.is_err()) {
+            return Result<Path>.Err($"cannot fetch the {what} {url}: {cloned.error().message}");
+        }
+        var moved = File.rename(partial, base);
+        if (moved.is_err()) {
+            return Result<Path>.Err($"cannot move {partial.to_string()} to {dir}: {moved.error().message}");
+        }
+    }
+    var written = File.write_text(stamp, "");
+    if (written.is_err()) {
+        return Result<Path>.Err($"cannot write {stamp.to_string()}: {written.error().message}");
+    }
+    return Result<Path>.Ok(base);
 }
