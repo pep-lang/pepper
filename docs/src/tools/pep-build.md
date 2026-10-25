@@ -239,7 +239,8 @@ Builds the static library of an iOS app's Pepper code for every iOS target
 at once, packaged as Xcode and SwiftPM take it. Each is named for its
 output, which must be a Swift module name (letters, digits and `_`):
 
-- `--lib xcframework` writes `Name.xcframework` (`-o Name.xcframework`):
+- `--lib xcframework` writes `Name.xcframework` (`-o Name.xcframework`;
+  the output must end in `.xcframework`, since it is replaced whole):
   `ios-arm64/` for devices and `ios-arm64_x86_64-simulator/` for the
   simulator on Apple silicon and Intel Macs, each with `libName.a`, the
   header `Name.h` and a `module.modulemap`, so Swift can `import Name`, and
@@ -254,7 +255,7 @@ output, which must be a Swift module name (letters, digits and `_`):
   package (`.package(path: "Name")`), or from the repository it is
   committed to.
 
-They cannot be combined with `--target`. See
+They cannot be combined with `--target` or the `--emit` options. See
 [iOS and Android](../language/mobile.md#packaging-for-xcode-and-swiftpm).
 
 ### `--test`

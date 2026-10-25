@@ -340,6 +340,25 @@ _main(args: String[]): int {
             "'--target' cannot be used with '--lib xcframework' or '--lib swift-package', which build for every iOS target"
         );
     }
+    if (for_apps
+        and (emit_ast.is_set
+            or linked.is_set
+            or checked.is_set
+            or model.is_set
+            or steps.is_set
+            or ir.is_set
+            or emit_static.is_set)) {
+        return parser.usage_error(
+            "the --emit options cannot be used with '--lib xcframework' or '--lib swift-package'"
+        );
+    }
+    if (for_apps
+        and library.value() == driver.LibraryKind.Xcframework
+        and output.is_set
+        and !output.value().ends_with(".xcframework")) {
+        # The output is replaced whole, so it must be one.
+        return parser.usage_error("the output of '--lib xcframework' must end in '.xcframework'");
+    }
     if (verify_cache.is_set and no_verify_cache.is_set) {
         return parser.usage_error("'--verify-cache' cannot be used with '--no-verify-cache'");
     }

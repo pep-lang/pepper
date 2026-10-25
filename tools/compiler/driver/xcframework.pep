@@ -127,8 +127,11 @@ export build_xcframework(
         }
         var library = archives.count == 1 ? archives[0] : universal_file(archives, slice.architectures);
         var slice_folder = framework.join(Path(slice.identifier));
-        var written = _write(slice_folder.join(Path($"lib{name}.a")), library);
-        if (written.is_ok()) {
+        var archive = slice_folder.join(Path($"lib{name}.a"));
+        var written = Result<void, String>.ok();
+        if (File.write_bytes(archive, library).is_err()) {
+            written = Result<void, String>.err($"cannot write {archive}");
+        } else {
             # The header `--lib static` wrote beside the archive.
             var header = build.join(Path(slice.triples[0])).join(Path($"{name}.h"));
             var copied = File.copy(header, headers.join(Path($"{name}.h")));
@@ -136,11 +139,7 @@ export build_xcframework(
                 return Result<void, String>.err($"cannot copy {header}: {copied.error().message}");
             }
             written = _write_text(
-                headers.join(Path("module.modulemap")), $"module {name} {{
-    header \"{name}.h\"
-    export *
-}}
-"
+                headers.join(Path("module.modulemap")), $"module {name} {{\n    header \"{name}.h\"\n    export *\n}}\n"
             );
         }
         if (written.is_err()) {
@@ -249,15 +248,6 @@ _aligned(offset: ulong): ulong {
 # Where the static library for `triple` is built.
 _archive(build: Path, triple: String, name: String): Path {
     return build.join(Path(triple)).join(Path($"lib{name}.a"));
-}
-
-# Writes `bytes` to `path`.
-_write(path: Path, bytes: u8[]): Result<void, String> {
-    var written = File.write_bytes(path, bytes);
-    if (written.is_err()) {
-        return Result<void, String>.err($"cannot write {path}: {written.error().message}");
-    }
-    return Result<void, String>.ok();
 }
 
 # Writes `content` to `path`.

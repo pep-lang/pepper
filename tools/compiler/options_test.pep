@@ -117,7 +117,7 @@ help_lists_every_option_of_the_rust_compiler() {
         expect_true(help.contains(option));
     }
     for (var values in [
-        "[possible values: static, shared]",
+        "[possible values: static, shared, xcframework, swift-package]",
         "[possible values: full, off]",
         "[possible values: expand, keep]",
         "[possible values: source, expanded]",
@@ -384,7 +384,9 @@ lib_swift_package_writes_an_xcframework_for_ios() {
             2,
             "'--target' cannot be used with '--lib xcframework'"
         ),
-        (["--lib", "xcframework", "main.pep", "-o", "my-adder.xcframework"], 1, "does not name a Swift module")
+        (["--lib", "xcframework", "main.pep", "-o", "my-adder.xcframework"], 1, "does not name a Swift module"),
+        (["--lib", "xcframework", "main.pep", "-o", "Adder"], 2, "must end in '.xcframework'"),
+        (["--lib", "swift-package", "--emit-llvm", "main.pep"], 2, "the --emit options cannot be used")
     ]) {
         var ran = _pep_build(folder.path, arguments);
         expect_equal(_code(ran), code);
