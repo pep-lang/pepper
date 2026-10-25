@@ -203,6 +203,12 @@ first: an LLVM 20 that is already installed, else the platform's package
 manager (apt <code>llvm-20-dev</code> or Homebrew <code>llvm@20</code>), else the LLVM release
 archive (cached, so a second run is free). Windows always uses the archive:
 no Windows package ships <code>llvm-config</code> and the component libraries;</li>
+<li>on macOS, installs Homebrew <code>lld@20</code> when LLVM's <code>ld64.lld</code> is not in the
+prefix: iOS links need it, and Homebrew's <code>llvm@20</code> no longer ships it.
+Homebrew keeps both off the PATH, so to link for iOS, put them first:
+<code>export PATH="$(brew --prefix lld@20)/bin:$(brew --prefix llvm@20)/bin:$PATH"</code>.
+In GitHub Actions the script does that itself, through <code>$GITHUB_PATH</code>, for
+the job's later steps;</li>
 <li>writes the prefix, one line, to <code>.pep/llvm-prefix</code> in the checkout;</li>
 <li>does nothing more when a valid install is already there.</li>
 </ul>

@@ -16671,7 +16671,7 @@ import "test_certificate";
 main(): int {
     var connector = tls.TlsConnector.create();
     if (connector.is_err()) {
-        # On Windows, or where OpenSSL 3 is not installed.
+        # On Linux or macOS without OpenSSL 3.
         print(connector.error().message);
         return 0;
     }
@@ -16680,10 +16680,18 @@ main(): int {
     var key = io.Directory.temp().join("pepper-example-key.pem");
     io.File.write_text(certificate, test_certificate());
     io.File.write_text(key, test_private_key());
+    var created = tls.TlsAcceptor.create(certificate, key);
+    if (created.is_err()) {
+        # On iOS, which has no TLS servers yet.
+        print(created.error().message);
+        io.File.remove(certificate);
+        io.File.remove(key);
+        return 0;
+    }
 
     async.run(
         () =&gt; {
-            var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            var acceptor = created.value();
             # Mutual TLS: only clients with a certificate the test
             # certificate issued (here, the test certificate itself) get in.
             assert(acceptor.require_client_certificate(certificate).is_ok(), "ask clients for certificates");
@@ -16752,7 +16760,9 @@ manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 <code>create()</code> returns an error. On Windows it uses the system's SChannel,
 which needs nothing installed; a private key (a server's or a client's)
 must be PKCS #8 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or
-Server 2022.</p>
+Server 2022. On iOS it uses the system's Security.framework, which needs
+nothing bundled, for clients only and with TLS 1.2 (see
+<a href="language/mobile.html#what-works-differently">iOS and Android</a>).</p>
 <h2 id="timeouts-1"><a class="header" href="#timeouts-1">Timeouts</a></h2>
 <p>A socket call waits as long as it takes unless a timeout limits it:</p>
 <pre><code class="language-pepper">import io;
@@ -20277,7 +20287,10 @@ Xcode the compiler asks <code>xcrun</code> for it (<code>iphoneos</code>, or <co
 for the simulator). Elsewhere name it with <code>--sysroot</code>, or set
 <code>PEPPER_SYSROOT_AARCH64_APPLE_IOS</code> (and
 <code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code>, and so on): the variable is
-named for the triple without its version.</li>
+named for the triple without its version. Homebrew's <code>llvm@20</code> does not
+ship <code>ld64.lld</code>: <code>brew install lld@20</code> (or <code>scripts/setup-llvm.sh</code>)
+installs it, and the link needs that <code>bin</code> folder and <code>llvm@20</code>'s on the
+PATH (see <a href="language/../contributing/setup.html">Setting up LLVM</a>).</li>
 <li><strong>Android</strong> links with the NDK's own clang, which brings the NDK's
 linker, compiler-rt and unwinder. Name the NDK with <code>--sysroot &lt;ndk&gt;</code> or
 <code>PEPPER_SYSROOT_AARCH64_LINUX_ANDROID</code>, or set <code>ANDROID_NDK_HOME</code> or
@@ -20361,10 +20374,21 @@ differences:</p>
 it works, but an app has few programs to start, and below API level 34
 <code>Command.working_directory</code> makes <code>spawn</code> return an <code>IoError</code> (bionic
 lacks <code>posix_spawn_file_actions_addchdir_np</code> there).</li>
-<li><strong>TLS.</strong> The <code>tls</code> module (and HTTPS) loads OpenSSL at run time, which
-neither platform ships, so making a TLS context returns an <code>IoError</code>
-unless the app bundles <code>libssl</code>. Use the platform's own networking
-(<code>URLSession</code>, OkHttp) for HTTPS for now.</li>
+<li><strong>TLS on iOS.</strong> The <code>tls</code> module uses the system's Security.framework
+(Secure Transport), so <code>TlsConnector</code> and <code>http.Client</code>'s <code>https://</code> URLs
+work with nothing bundled: the server's certificate is checked against
+the system's roots and any added with <code>add_root_certificate</code>, and ALPN
+works. Secure Transport speaks TLS 1.2 at most, so a server that accepts
+only TLS 1.3 fails the handshake. A TLS server (<code>TlsAcceptor.create</code>) and
+a client certificate (<code>TlsConnector.set_identity</code>) return an <code>IoError</code>
+there for now. iOS checks a server's certificate more strictly than
+OpenSSL: it must name the host in its subject alternative names, carry the
+<code>serverAuth</code> extended key usage and, when issued after June 2019, be valid
+for at most 825 days, even from a private certificate authority.</li>
+<li><strong>TLS on Android.</strong> The <code>tls</code> module (and HTTPS) loads OpenSSL at run
+time, which Android does not ship, so making a TLS context returns an
+<code>IoError</code> unless the app bundles <code>libssl.so.3</code>. Use the platform's own
+networking (OkHttp, <code>HttpURLConnection</code>) for HTTPS for now.</li>
 <li><strong>Files.</strong> An app reads and writes inside its own container: pass the
 path the platform gives (<code>FileManager</code>'s documents directory,
 <code>Context.getFilesDir()</code>) to the Pepper code. <code>os.home_directory()</code> and
@@ -20414,13 +20438,18 @@ in the emulator, starts it and checks its log.</li>
 <p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
-(<code>adb shell</code>), then builds and runs the two apps.</p>
+(<code>adb shell</code>), then builds and runs the two apps. On iOS it also runs
+<code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
+on the Mac, with a certificate authority made for the run, and against
+<code>PEPPER_MOBILE_TLS_URL</code> (<code>https://example.com/</code> by default; set it empty to
+skip the public host).</p>
 <pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 </code></pre>
 <h2 id="not-supported-yet-1"><a class="header" href="#not-supported-yet-1">Not supported yet</a></h2>
 <ul>
-<li><strong>TLS through the platform</strong>: Security.framework on iOS, and on Android
-the system's BoringSSL through Conscrypt or a bundled OpenSSL.</li>
+<li><strong>TLS on Android</strong>, through a bundled OpenSSL or BoringSSL, and on iOS
+TLS servers, client certificates and TLS 1.3 (which need a SecIdentity
+and Network.framework).</li>
 <li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
 by hand; a generator could write them from the header.</li>
 <li><strong>Packaging</strong>: an <code>.xcframework</code> holding the device and simulator
@@ -59637,7 +59666,10 @@ with a certificate and key from PEM files; a <code>TlsStream</code> reads and wr
 like an <code>io.TcpStream</code>. In a task, a call that has to wait parks only the
 task.</p>
 <p>On Linux and macOS the module uses OpenSSL 3, loaded when the first
-connector or acceptor is made; on Windows it uses SChannel.</p>
+connector or acceptor is made; on Windows it uses SChannel. On iOS it uses
+the system's Security.framework (Secure Transport, TLS 1.2), for clients
+only: there <code>TlsAcceptor.create</code> and <code>TlsConnector.set_identity</code> return
+an error.</p>
 <ul>
 <li><a href="reference/tls-stream.html">Streams</a>: <code>TlsConnector</code>, <code>TlsAcceptor</code>, and <code>TlsStream</code></li>
 </ul>
@@ -59669,7 +59701,7 @@ over a <code>TcpStream</code>.</p>
 trusts more, such as a test certificate authority. Each <code>connect</code> runs
 the TLS handshake over a connected <code>TcpStream</code> and checks that the
 server's certificate is valid and issued for the host name given. Only
-TLS 1.2 and 1.3 are offered.</p>
+TLS 1.2 and 1.3 are offered (on iOS, only TLS 1.2).</p>
 <p>A server that asks for a client certificate (mutual TLS) gets the one
 set with <code>set_identity</code>; without one, the connector presents none.</p>
 <p>A connector is <code>[Shared]</code>: make one and use it from every thread and
@@ -59702,7 +59734,7 @@ stream.write_all("ping");
 <p>Creates a connector that trusts the system's root certificates.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>)</li>
+<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework)</li>
 </ul>
 <h3 id="methods-183"><a class="header" href="#methods-183">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
@@ -59733,7 +59765,7 @@ certificate (mutual TLS, as a <code>TlsAcceptor</code> does after
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>an Ok result; an error when a file cannot be read or the key does not match the certificate</li>
+<li>an Ok result; an error when a file cannot be read or the key does not match the certificate, and always on iOS, which does not support client certificates yet</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var connector = tls.TlsConnector.create().value();
@@ -59839,7 +59871,7 @@ while (true) {
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
+<li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>), and always on iOS, which does not support TLS servers yet</li>
 </ul>
 <h3 id="methods-184"><a class="header" href="#methods-184">Methods</a></h3>
 <h4 id="require_client_certificate"><a class="header" href="#require_client_certificate">require_client_certificate</a></h4>
@@ -60429,6 +60461,12 @@ first: an LLVM 20 that is already installed, else the platform's package
 manager (apt <code>llvm-20-dev</code> or Homebrew <code>llvm@20</code>), else the LLVM release
 archive (cached, so a second run is free). Windows always uses the archive:
 no Windows package ships <code>llvm-config</code> and the component libraries;</li>
+<li>on macOS, installs Homebrew <code>lld@20</code> when LLVM's <code>ld64.lld</code> is not in the
+prefix: iOS links need it, and Homebrew's <code>llvm@20</code> no longer ships it.
+Homebrew keeps both off the PATH, so to link for iOS, put them first:
+<code>export PATH="$(brew --prefix lld@20)/bin:$(brew --prefix llvm@20)/bin:$PATH"</code>.
+In GitHub Actions the script does that itself, through <code>$GITHUB_PATH</code>, for
+the job's later steps;</li>
 <li>writes the prefix, one line, to <code>.pep/llvm-prefix</code> in the checkout;</li>
 <li>does nothing more when a valid install is already there.</li>
 </ul>

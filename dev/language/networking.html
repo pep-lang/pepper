@@ -515,7 +515,7 @@ import "test_certificate";
 main(): int {
     var connector = tls.TlsConnector.create();
     if (connector.is_err()) {
-        # On Windows, or where OpenSSL 3 is not installed.
+        # On Linux or macOS without OpenSSL 3.
         print(connector.error().message);
         return 0;
     }
@@ -524,10 +524,18 @@ main(): int {
     var key = io.Directory.temp().join("pepper-example-key.pem");
     io.File.write_text(certificate, test_certificate());
     io.File.write_text(key, test_private_key());
+    var created = tls.TlsAcceptor.create(certificate, key);
+    if (created.is_err()) {
+        # On iOS, which has no TLS servers yet.
+        print(created.error().message);
+        io.File.remove(certificate);
+        io.File.remove(key);
+        return 0;
+    }
 
     async.run(
         () =&gt; {
-            var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            var acceptor = created.value();
             # Mutual TLS: only clients with a certificate the test
             # certificate issued (here, the test certificate itself) get in.
             assert(acceptor.require_client_certificate(certificate).is_ok(), "ask clients for certificates");
@@ -596,7 +604,9 @@ manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 <code>create()</code> returns an error. On Windows it uses the system's SChannel,
 which needs nothing installed; a private key (a server's or a client's)
 must be PKCS #8 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or
-Server 2022.</p>
+Server 2022. On iOS it uses the system's Security.framework, which needs
+nothing bundled, for clients only and with TLS 1.2 (see
+<a href="mobile.html#what-works-differently">iOS and Android</a>).</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p>A socket call waits as long as it takes unless a timeout limits it:</p>
 <pre><code class="language-pepper">import io;
