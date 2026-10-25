@@ -181,8 +181,10 @@ export struct Page {
 }
 
 # Every `.pep` file under `dir`, as paths relative to it with `/`
-# separators. Tests (`test/` folders, which are not part of any module)
-# and hidden folders such as `.pep/` are left out.
+# separators. Tests (`test/` and `tests/` folders, which are not part of
+# any module, and `_test.pep` files), `examples/`, hidden folders such as
+# `.pep/`, and folders with a `pep.toml` (other packages, such as a
+# workspace's members or vendored dependencies) are left out.
 export pep_files(dir: Path, prefix: String, out: String[]): Result<void> {
     var listing = Directory.open(dir);
     if (listing.is_err()) {
@@ -194,11 +196,12 @@ export pep_files(dir: Path, prefix: String, out: String[]): Result<void> {
     }
     for (var entry in entries.value()) {
         if (entry.is_directory) {
-            if (entry.name == "test" or entry.name.starts_with(".")) {
+            bool skipped = entry.name == "test" or entry.name == "tests" or entry.name == "examples";
+            if (skipped or entry.name.starts_with(".") or entry.path.join("pep.toml").is_file()) {
                 continue;
             }
             pep_files(entry.path, $"{prefix}{entry.name}/", out)?;
-        } else if (entry.name.ends_with(".pep")) {
+        } else if (entry.name.ends_with(".pep") and !entry.name.ends_with("_test.pep")) {
             out.append(prefix + entry.name);
         }
     }
@@ -263,7 +266,7 @@ export generate(runtime_dir: Path): Result<Page[]> {
         }
         var source = read.value();
         var module = parse_file($"runtime/{file}", source)?;
-        var body = "".join([reexports(module, file), page_body(module, source)]);
+        var body = "".join([reexports(module, file, ""), page_body(module, source, Array<(String, String)>())]);
         var intro = file_doc(source);
         if (body.is_empty and intro.is_empty()) {
             continue;
@@ -274,21 +277,31 @@ export generate(runtime_dir: Path): Result<Page[]> {
                 $"runtime/{file} has public declarations but no reference page; give it a title and a place in pages() in tools/pep-doc/reference.pep"
             );
         }
-        var markdown = StringBuilder();
-        markdown.append(
-            $"<!-- Generated from runtime/{file} by `{REGENERATE}`. Do not edit. -->\n\n# {title.value()}\n\n"
-        );
-        if (intro.is_value()) {
-            markdown.append(intro.value().to_markdown());
-            markdown.append("\n\n");
-        }
-        markdown.append($"Source: `runtime/{file}`\n");
-        markdown.append(body);
-        var page_file = file.substr_bytes(0, file.size - 4).replace("/", "-") + ".md";
-        out.append(Page(page_file, title.value(), markdown.to_string()));
+        var markdown = page_markdown($"runtime/{file}", REGENERATE, title.value(), intro, body);
+        out.append(Page(page_file(file), title.value(), markdown));
     }
     out.insert(0, _prelude_page(out));
     return Result<Page[]>.ok(out);
+}
+
+# A page's Markdown: a header naming the source file `origin` and the
+# `command` that generates it, the title, the file's introduction, and
+# `body`.
+export page_markdown(origin: String, command: String, title: String, intro: DocComment?, body: String): String {
+    var markdown = StringBuilder();
+    markdown.append($"<!-- Generated from {origin} by `{command}`. Do not edit. -->\n\n# {title}\n\n");
+    if (intro.is_value()) {
+        markdown.append(intro.value().to_markdown());
+        markdown.append("\n\n");
+    }
+    markdown.append($"Source: `{origin}`\n");
+    markdown.append(body);
+    return markdown.to_string();
+}
+
+# The page of the source file `file` (`io/path.pep`): `io-path.md`.
+export page_file(file: String): String {
+    return file.substr_bytes(0, file.size - 4).replace("/", "-") + ".md";
 }
 
 # The page every prelude page nests under: the runtime files outside any
@@ -434,8 +447,85 @@ export member_title(name: String): String {
     return $"operator {name}";
 }
 
-_entry(out: StringBuilder, level: ulong, title: String, signature: String, doc: DocComment?) {
+# The features of a package that a declaration with `attributes` needs:
+# each `(option, feature)` of `features` whose build option `option`
+# (`http_tls`) the attributes require, through `[BuildOption("...")]` or a
+# `BuildOption(...)` that `&&` joins in a `[Target(...)]`.
+export needed_features(attributes: ast.Attribute[], features: (String, String)[]): String[] {
+    var options = Array<String>();
+    for (var attribute in attributes) {
+        _required_options(attribute.body, options);
+    }
+    var out = Array<String>();
+    for (var (option, feature) in features) {
+        if (options.contains(option)) {
+            out.append(feature);
+        }
+    }
+    return out;
+}
+
+# Adds to `out` the build options the attribute expression `e` requires:
+# `BuildOption(X)` or `BuildOption("X")`, alone, inside `Target(...)`, or
+# on either side of `&&`. One under `!` or `||`, or compared with a value,
+# is not required.
+_required_options(e: ast.Expression, out: String[]) {
+    match (e) {
+        FunctionCall(function, arguments, _) => {
+            var name = "";
+            if (function is SymbolRef(id, _)) {
+                name = id;
+            }
+            if (arguments.count != 1) {
+                return;
+            }
+            if (name == "Target") {
+                _required_options(arguments[0], out);
+                return;
+            }
+            if (name != "BuildOption") {
+                return;
+            }
+            match (arguments[0]) {
+                SymbolRef(option, _) => {
+                    out.append(option);
+                }
+                Literal(value, _) => {
+                    if (value is String(option)) {
+                        out.append(option);
+                    }
+                }
+                else => {}
+            }
+        }
+        Binary(lhs, op, rhs, _) => {
+            if (op == "&&") {
+                _required_options(lhs, out);
+                _required_options(rhs, out);
+            }
+        }
+        else => {}
+    }
+}
+
+# The line under an entry naming the features it needs, linking to the
+# package's list of them; empty when it needs none.
+_feature_note(attributes: ast.Attribute[], features: (String, String)[]): String {
+    var needed = needed_features(attributes, features);
+    if (needed.is_empty) {
+        return "";
+    }
+    var names = Array<String>();
+    for (var feature in needed) {
+        names.append($"`{feature}`");
+    }
+    var noun = needed.count == 1 ? "feature" : "features";
+    return $"\nAvailable with the [{noun}](README.md#features) {", ".join(names)}.\n";
+}
+
+_entry(out: StringBuilder, level: ulong, title: String, signature: String, doc: DocComment?, note: String) {
     out.append($"\n{"#".repeat(level)} {title}\n\n```pepper\n{signature}\n```\n");
+    out.append(note);
     if (doc.is_empty()) {
         return;
     }
@@ -447,19 +537,20 @@ _entry(out: StringBuilder, level: ulong, title: String, signature: String, doc: 
     }
 }
 
-_field(out: StringBuilder, source: String, v: VariableDecl) {
-    _entry(out, 4, v.name, signature(source, v.span.start, v.span.end), doc_comment_before(source, v.span.start));
+_field(out: StringBuilder, source: String, v: VariableDecl, features: (String, String)[]) {
+    var doc = doc_comment_before(source, v.span.start);
+    _entry(out, 4, v.name, signature(source, v.span.start, v.span.end), doc, _feature_note(v.attributes, features));
 }
 
-_method(out: StringBuilder, source: String, owner: String, f: FunctionDecl) {
+_method(out: StringBuilder, source: String, owner: String, f: FunctionDecl, features: (String, String)[]) {
     var doc = doc_comment_before(source, first_attribute(f.attributes, f.span.start));
     var title = f.name == "new" or f.name == "construct" ? $"{owner}()" : member_title(member_name(f));
-    _entry(out, 4, title, function_signature(source, f), doc);
+    _entry(out, 4, title, function_signature(source, f), doc, _feature_note(f.attributes, features));
 }
 
 # A property's entry: its declaration with the accessors' bodies left out
 # (`var count: ulong { get; }`).
-_property(out: StringBuilder, source: String, p: PropertyDecl) {
+_property(out: StringBuilder, source: String, p: PropertyDecl, features: (String, String)[]) {
     var doc = doc_comment_before(source, p.span.start);
     var accessors = Array<String>();
     if (p.getter.is_value()) {
@@ -472,7 +563,8 @@ _property(out: StringBuilder, source: String, p: PropertyDecl) {
     var type_text = span.start <= span.end and span.end <= source.size ?
         slice(source, span.start, span.end) :
         p.type_name.to_string();
-    _entry(out, 4, p.name, $"var {p.name}: {type_text} {{ {" ".join(accessors)} }}", doc);
+    var shown = $"var {p.name}: {type_text} {{ {" ".join(accessors)} }}";
+    _entry(out, 4, p.name, shown, doc, _feature_note(p.attributes, features));
 }
 
 _members(
@@ -482,7 +574,8 @@ _members(
     fields: VariableDecl[],
     properties: PropertyDecl[],
     constructors: FunctionDecl[],
-    methods: FunctionDecl[]
+    methods: FunctionDecl[],
+    features: (String, String)[]
 ) {
     var public_fields = Array<VariableDecl>();
     for (var f in fields) {
@@ -493,7 +586,7 @@ _members(
     if (!public_fields.is_empty) {
         out.append("\n### Fields\n");
         for (var f in public_fields) {
-            _field(out, source, f);
+            _field(out, source, f, features);
         }
     }
     var public_properties = Array<PropertyDecl>();
@@ -505,13 +598,13 @@ _members(
     if (!public_properties.is_empty) {
         out.append("\n### Properties\n");
         for (var p in public_properties) {
-            _property(out, source, p);
+            _property(out, source, p, features);
         }
     }
     if (!constructors.is_empty) {
         out.append(constructors.count == 1 ? "\n### Constructor\n" : "\n### Constructors\n");
         for (var c in constructors) {
-            _method(out, source, owner, c);
+            _method(out, source, owner, c, features);
         }
     }
     var statics = Array<FunctionDecl>();
@@ -529,23 +622,36 @@ _members(
     if (!statics.is_empty) {
         out.append("\n### Static methods\n");
         for (var m in statics) {
-            _method(out, source, owner, m);
+            _method(out, source, owner, m, features);
         }
     }
     if (!instance.is_empty) {
         out.append("\n### Methods\n");
         for (var m in instance) {
-            _method(out, source, owner, m);
+            _method(out, source, owner, m, features);
         }
     }
 }
 
 # The page of the file or module an `export ... from` names, relative to
-# the runtime file `file`: `io-types.md` for `"types"` in `io/module.pep`,
-# `async-module.md` for the module `async`.
-export source_page(file: String, imported: Import): String {
+# the file `file`: `io-types.md` for `"types"` in `io/module.pep`,
+# `async-module.md` for the module `async`. In the reference of the
+# package `package` (empty for the runtime's), a module of the package
+# (`shapes.solids`) has the page of its `module.pep`, and any other module
+# none (empty).
+export source_page(file: String, imported: Import, package: String): String {
     if (!imported.is_local) {
-        return $"{imported.name}-module.md";
+        if (package.is_empty) {
+            return $"{imported.name}-module.md";
+        }
+        if (imported.name == package) {
+            return page_file("module.pep");
+        }
+        if (imported.name.starts_with(package + ".")) {
+            var path = slice_from(imported.name, package.size + 1).replace(".", "/");
+            return page_file($"{path}/module.pep");
+        }
+        return "";
     }
     var slash = file.rfind("/");
     var dir = slash < 0 ? "" : slice(file, 0, slash as ulong + 1);
@@ -554,8 +660,8 @@ export source_page(file: String, imported: Import): String {
 
 # A "Re-exports" section listing the file's `export * from` and `export
 # [...] from` lines, each linking to the page of the file or module that
-# declares the names. Empty without any.
-export reexports(module: Module, file: String): String {
+# declares the names (see `source_page` for `package`). Empty without any.
+export reexports(module: Module, file: String, package: String): String {
     var out = StringBuilder();
     bool any = false;
     for (var imported in module.imports) {
@@ -564,7 +670,8 @@ export reexports(module: Module, file: String): String {
         }
         any = true;
         var source = imported.is_local ? $"`{imported.stem()}.pep`" : $"the `{imported.name}` module";
-        var link = $"[{source}]({source_page(file, imported)})";
+        var page = source_page(file, imported, package);
+        var link = page.is_empty ? source : $"[{source}]({page})";
         if (imported.symbols.is_empty()) {
             out.append($"- Everything {link} exports.\n");
             continue;
@@ -616,8 +723,10 @@ _is_word_char(b: byte): bool {
     return is_word_byte(b) or b >= 128;
 }
 
-# The entries of every public declaration of `module`.
-export page_body(module: Module, source: String): String {
+# The entries of every public declaration of `module`, each marked with
+# the package features of `features` (`(option, feature)`, as
+# `needed_features` takes them) it needs.
+export page_body(module: Module, source: String, features: (String, String)[]): String {
     var out = StringBuilder();
     for (var decl in module.declarations) {
         if (!decl.is_exported()) {
@@ -629,16 +738,17 @@ export page_body(module: Module, source: String): String {
         # and reads as the built-in it declares.
         var built_in = built_in_name(decl.attributes(), decl.declared_name());
         var title = built_in.is_value() ? built_in.value() : decl.declared_name();
+        var note = _feature_note(decl.attributes(), features);
         if (!built_in.is_value() and !is_public(decl.declared_name()) and !_is_extension(decl)) {
             continue;
         }
         match (decl) {
             Function(f) => {
-                _entry(out, 2, title, _shown(built_in, function_signature(source, f), f.name), doc);
+                _entry(out, 2, title, _shown(built_in, function_signature(source, f), f.name), doc, note);
             }
             Struct(s) => {
                 var end = _brace_after(source, s.name_span.end, s.span.end);
-                _entry(out, 2, title, _shown(built_in, signature(source, start, end), s.name), doc);
+                _entry(out, 2, title, _shown(built_in, signature(source, start, end), s.name), doc, note);
                 if (s.enumeration.is_value() and !s.enumeration.value().cases.is_empty) {
                     out.append("\n### Cases\n");
                     for (var c in s.enumeration.value().cases) {
@@ -648,29 +758,39 @@ export page_body(module: Module, source: String): String {
                             4,
                             c.name,
                             signature(source, case_start, c.span.end),
-                            doc_comment_before(source, case_start)
+                            doc_comment_before(source, case_start),
+                            _feature_note(c.attributes, features)
                         );
                     }
                 }
-                _members(out, source, s.name, s.fields, s.properties, s.constructors, s.methods);
+                _members(out, source, s.name, s.fields, s.properties, s.constructors, s.methods, features);
             }
             Trait(t) => {
                 var end = _brace_after(source, t.name_span.end, t.span.end);
-                _entry(out, 2, title, _shown(built_in, signature(source, start, end), t.name), doc);
-                _members(out, source, t.name, Array<VariableDecl>(), t.properties, Array<FunctionDecl>(), t.methods);
+                _entry(out, 2, title, _shown(built_in, signature(source, start, end), t.name), doc, note);
+                _members(
+                    out, source, t.name, Array<VariableDecl>(), t.properties, Array<FunctionDecl>(), t.methods, features
+                );
             }
             Extend(e) => {
                 var end = _brace_after(source, e.target.span.end, e.span.end);
-                _entry(out, 2, $"extend {e.target.to_string()}", signature(source, start, end), doc);
+                _entry(out, 2, $"extend {e.target.to_string()}", signature(source, start, end), doc, note);
                 _members(
-                    out, source, e.target.name, Array<VariableDecl>(), e.properties, Array<FunctionDecl>(), e.methods
+                    out,
+                    source,
+                    e.target.name,
+                    Array<VariableDecl>(),
+                    e.properties,
+                    Array<FunctionDecl>(),
+                    e.methods,
+                    features
                 );
             }
             TypeAlias(t) => {
-                _entry(out, 2, title, _shown(built_in, signature(source, start, t.span.end), t.name), doc);
+                _entry(out, 2, title, _shown(built_in, signature(source, start, t.span.end), t.name), doc, note);
             }
             Variable(v) => {
-                _entry(out, 2, title, _shown(built_in, signature(source, start, v.span.end), v.name), doc);
+                _entry(out, 2, title, _shown(built_in, signature(source, start, v.span.end), v.name), doc, note);
             }
             else => {}
         }

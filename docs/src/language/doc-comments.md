@@ -95,6 +95,10 @@ Here is a small documented library:
   file, followed by a blank line, introduces that file's page.
   [Building this documentation](../contributing/docs.md) explains how to
   regenerate them.
+- **In a package's reference.** `pepper doc package` builds the same pages
+  for a package, from its own sources, and `pepper doc package --check`
+  reports its undocumented declarations the way the runtime's check does
+  (see [`pep-doc package`](../tools/pep-doc.md#pep-doc-package)).
 
 ## The standard library is fully documented
 
@@ -110,4 +114,5 @@ or `@returns`, a tag with no description, a `@returns` on a function that
 returns nothing, or a `@param` naming a parameter that does not exist. If you
 contribute to the runtime, run the test suite before you send a change. The
 compiler does not check the doc comments in your own programs, but following
-the same format gets you the same editor support.
+the same format gets you the same editor support, and `pepper doc package
+--check` checks a package's.

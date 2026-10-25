@@ -149,7 +149,7 @@ re_exports_link_to_their_sources() {
     var source = "export * from \"types\";\nexport [Path, join as combine] from \"path\";\nexport * from async;\n";
     var module = parse_file("runtime/io/module.pep", source).value();
     expect_equal(
-        reexports(module, "io/module.pep"),
+        reexports(module, "io/module.pep", ""),
         "\n## Re-exports\n\n- Everything [`types.pep`](io-types.md) exports.\n- `Path` from [`path.pep`](io-path.md).\n- `join` (as `combine`) from [`path.pep`](io-path.md).\n- Everything [the `async` module](async-module.md) exports.\n"
     );
 }
@@ -246,7 +246,7 @@ the_index_keeps_every_version_and_opens_the_newest_release() {
         Directory.create_all(folder.path.join(v));
         File.write_text(folder.path.join(v).join("index.html"), "");
     }
-    expect_true(write_index(folder.path).is_ok());
+    expect_true(write_index(folder.path, "Pepper documentation").is_ok());
     expect_equal(
         File.read_to_string(folder.path.join("versions.json")).value(),
         "{\n  \"latest\": \"0.2.0\",\n  \"versions\": [\n    \"0.3.0-beta.1\",\n    \"0.2.0\",\n    \"0.1.0\",\n    \"dev\"\n  ]\n}\n"

@@ -50,6 +50,7 @@ import [parse_range] from semver;
 import syntax;
 import toml;
 import toolchain;
+import [package_string] from toolchain;
 import "advisory";
 import "archive";
 import "git";
@@ -474,7 +475,7 @@ install_tool(spec: String, member: String, path: String, force: bool, options: A
         var text = File.read_to_string(dir.value().join("pep.toml"));
         var parsed = toml.parse(text.is_ok() ? text.value() : "");
         if (parsed.is_ok()) {
-            record.version = _package_string(parsed.value(), "version");
+            record.version = package_string(parsed.value(), "version");
         }
         return _report(install_program(dir.value(), record, force, options));
     }
@@ -681,7 +682,7 @@ show_info(spec: String, offline: bool): int {
         var withdrawn = retracted(manifest.retractions, version).is_value();
         listed.append(version.to_string() + (withdrawn ? " (retracted)" : ""));
     }
-    var description = listing.description.is_empty ? _package_string(root, "description") : listing.description;
+    var description = listing.description.is_empty ? package_string(root, "description") : listing.description;
     # Not in the index, it goes by its package name.
     var name = !listing.name.is_empty ?
         listing.name :
@@ -691,8 +692,8 @@ show_info(spec: String, offline: bool): int {
         ("source", listing.source),
         ("versions", listed.is_empty ? "none; 'add' takes its default branch" : ", ".join(listed)),
         ("minimum toolchain", manifest.minimum_toolchain),
-        ("license", _package_string(root, "license")),
-        ("repository", _package_string(root, "repository")),
+        ("license", package_string(root, "license")),
+        ("repository", package_string(root, "repository")),
         ("keywords", ", ".join(listing.keywords))
     ]) {
         text += value.is_empty ? "" : $"{label}: {value}\n";
@@ -1673,7 +1674,7 @@ struct Project {
         # read_project parsed it already.
         var root = toml.parse(manifest.value().text).value();
         var problems = Array<String>();
-        var package_version = _package_string(root, "version");
+        var package_version = package_string(root, "version");
         var parsed = semver.parse(package_version);
         if (package_version.is_empty) {
             problems.append("'[package]' has no 'version'");
@@ -1681,7 +1682,7 @@ struct Project {
             problems.append($"'version' '{package_version}' is not a version such as 1.2.0");
         }
         for (var key in ["description", "license", "repository"]) {
-            if (_package_string(root, key).is_empty) {
+            if (package_string(root, key).is_empty) {
                 problems.append($"'[package]' has no '{key}'");
             }
         }
@@ -1876,15 +1877,6 @@ struct Project {
         }
         return text;
     }
-}
-
-# The string `[package]` gives `key`, or empty.
-_package_string(root: toml.TomlValue, key: String): String {
-    var value = root.lookup("package." + key);
-    if (value.is_empty() or value.value().as_string().is_empty()) {
-        return "";
-    }
-    return value.value().as_string().value();
 }
 
 # Whether `minimum`, a `minimum_toolchain`, is `release` or later; an empty

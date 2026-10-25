@@ -56,6 +56,8 @@ a_new_package_passes_its_tests() {
     var tested = in_folder(project, "pepper", ["test", "-I", packages.to_string(), "tests"]);
     expect_exit(tested, 0);
     expect_contains(tested.stdout, "1 passed, 0 failed");
+    # Its CI publishes its reference, which needs every public declaration documented.
+    expect_exit(in_folder(project, "pep-doc", ["package", "--check"]), 0);
 }
 
 # `pep-init` names the project after the current folder, and without

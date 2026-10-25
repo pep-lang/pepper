@@ -59,7 +59,7 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | `pepper profile` | `pep-profile` | Profiles a program and draws a flame graph ([Profiling with pep-profile](pep-profile.md)) |
 | `pepper test` | `pep-test` | Builds and runs the `[Test]` functions ([Testing with pep-test](pep-test.md)) |
 | `pepper lsp` | `pep-lsp` | Runs the language server, which editors start ([The language server: pep-lsp](pep-lsp.md)) |
-| `pepper doc` | `pep-doc` | Generates the library reference and builds this book ([The documentation builder: pep-doc](pep-doc.md)) |
+| `pepper doc` | `pep-doc` | Generates the library reference and builds this book, or a package's reference ([The documentation builder: pep-doc](pep-doc.md)) |
 
 Every one of them, `pep-build` included, is a Pepper program under `tools/`,
 built with `pep-build`.

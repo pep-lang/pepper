@@ -3,8 +3,10 @@
 # the book's tools/pep-doc.md documents them, and `pep-doc check` checks
 # that it does (`checks.pep`).
 #
-# It works on the Pepper checkout that holds the current folder. mdBook
-# must be on PATH (a binary from github.com/rust-lang/mdBook/releases).
+# It works on the Pepper checkout that holds the current folder, except
+# `pep-doc package`, which documents the package holding it
+# (`package.pep`). mdBook must be on PATH (a binary from
+# github.com/rust-lang/mdBook/releases).
 #
 # Build it from the repository root, next to the compiler:
 #
@@ -15,6 +17,7 @@ import compiler.parse;
 import process;
 import "book";
 import "checks";
+import "package";
 import "reference";
 import "site";
 
@@ -33,11 +36,16 @@ Commands:
   check       fail if the reference is stale, a chapter is broken, an API or tool option is undocumented, or a tool's version differs from VERSION
   build       regenerate the reference and render the book (the default)
   serve       regenerate the reference and serve the book locally
+  package     build the reference of the package holding the current folder into its .pep/doc/
   help        show this help
 
 Options:
   --version <VERSION>  with build: the version to build, X.Y.Z or dev (default: dev)
-  --site <DIR>         with build: the site folder (default: target/docs-site)
+  --site <DIR>         with build: the site folder (default: target/docs-site);
+                       with package: render into <DIR>/<version>/ and refresh
+                       the site's index (default: .pep/doc/html)
+  --check              with package: change nothing, and fail if a public
+                       declaration has no doc comment
   --tools <DIR>        with check: the folder of the built tools (default:
                        target/pepper-tests/bin, else the release build's, else
                        the debug build's)
@@ -73,6 +81,9 @@ _run(args: String[]): Result<void> {
         File.stdout().write_all($"pep-doc {version()}\n");
         return Result<void>.ok();
     }
+    if (command == "package") {
+        return _package(args);
+    }
     var root = _repository_root()?;
     if (command == "reference") {
         for (var path in _regenerate(root)?) {
@@ -90,7 +101,7 @@ _run(args: String[]): Result<void> {
         _regenerate(root)?;
         return _mdbook(["serve", "docs", "--open"], root);
     }
-    return Result<void>.Err($"unknown command '{command}': expected reference, check, build, serve, or help");
+    return Result<void>.Err($"unknown command '{command}': expected reference, check, build, serve, package, or help");
 }
 
 # The value after option `name` in `args`.
@@ -223,8 +234,60 @@ _build(root: Path, requested: String?, site_option: String?): Result<void> {
     var out = site.join(name);
     Directory.remove_all(out);
     _mdbook(["build", "docs", "--dest-dir", out.to_string()], root)?;
-    write_index(site)?;
+    write_index(site, "Pepper documentation")?;
     File.stdout().write_all($"built docs {name} into {out.to_string()}\n");
+    return Result<void>.ok();
+}
+
+# `pep-doc package`: the package's reference, written as an mdBook into its
+# `.pep/doc/` and rendered with mdBook; with `--check`, its undocumented
+# declarations.
+_package(args: String[]): Result<void> {
+    var manifest = current_package()?;
+    var root = manifest.dir();
+    if (args.contains("--check")) {
+        var undocumented = package_undocumented(root)?;
+        _report(undocumented);
+        if (!undocumented.is_empty) {
+            return Result<void>.Err($"{undocumented.count} public declaration(s) without a doc comment");
+        }
+        return Result<void>.ok();
+    }
+    var book = root.join(".pep").join("doc");
+    write_book(book, manifest, package_pages(manifest)?)?;
+    var site_option = _option(args, "--site");
+    var out = book.join("html");
+    if (site_option.is_value()) {
+        var version = manifest_string(manifest, "version");
+        String name = DEV;
+        if (!version.is_empty) {
+            var parsed = parse_version(version);
+            if (parsed.is_err()) {
+                return Result<void>.Err($"{manifest.path.to_string()}: version {parsed.error().message}");
+            }
+            name = parsed.value().to_string();
+        }
+        var site = Path(site_option.value());
+        var created = Directory.create_all(site);
+        if (created.is_err()) {
+            return Result<void>.Err($"cannot create {site.to_string()}: {created.error().message}");
+        }
+        # mdBook reads a relative `--dest-dir` from the book's folder.
+        var absolute = site.canonicalize();
+        if (absolute.is_err()) {
+            return Result<void>.Err($"cannot find {site.to_string()}: {absolute.error().message}");
+        }
+        out = absolute.value().join(name);
+    }
+    Directory.remove_all(out);
+    var rendered = _mdbook(["build", book.to_string(), "--dest-dir", out.to_string()], root);
+    if (rendered.is_err()) {
+        return Result<void>.Err($"{rendered.error().message}\nthe Markdown is in {book.join("src").to_string()}");
+    }
+    if (site_option.is_value()) {
+        write_index(out.parent().value(), $"{manifest.name} documentation")?;
+    }
+    File.stdout().write_all($"documented {manifest.name} into {out.to_string()}\n");
     return Result<void>.ok();
 }
 

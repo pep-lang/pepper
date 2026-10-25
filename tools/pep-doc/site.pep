@@ -170,8 +170,9 @@ _write(site: Path, name: String, text: String): Result<void> {
     return Result<void>.ok();
 }
 
-# Rewrites `versions.json` and `index.html` in `site` from its folders.
-export write_index(site: Path): Result<void> {
+# Rewrites `versions.json` and `index.html` in `site` from its folders;
+# `index.html` is titled `title`.
+export write_index(site: Path, title: String): Result<void> {
     var versions = versions_in(site);
     var latest = default_version(versions);
     var list = JsonValue.array();
@@ -186,7 +187,7 @@ export write_index(site: Path): Result<void> {
     _write(
         site,
         "index.html",
-        $"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Pepper documentation</title>\n<meta http-equiv=\"refresh\" content=\"0; url={target}/\">\n<link rel=\"canonical\" href=\"{target}/\">\n</head>\n<body><p><a href=\"{target}/\">Pepper documentation {target}</a></p></body>\n</html>\n"
+        $"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>{title}</title>\n<meta http-equiv=\"refresh\" content=\"0; url={target}/\">\n<link rel=\"canonical\" href=\"{target}/\">\n</head>\n<body><p><a href=\"{target}/\">{title} {target}</a></p></body>\n</html>\n"
     )?;
     # GitHub Pages would otherwise run Jekyll, which drops mdBook's
     # underscore-prefixed files.
