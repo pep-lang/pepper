@@ -10,6 +10,7 @@ import [Directory, File, Path] from io;
 import os;
 import process;
 import [TempFolder] from testing;
+import [expect_contains, expect_exit] from tool_testing;
 import toolchain;
 
 const _PROGRAM = "square(x: int): int {\n    return x * x;\n}\n\nmain(): int {\n    var total = 0;\n    for (var i in 0..4) {\n        total += square(i);\n    }\n    return total - 14;\n}\n";
@@ -659,9 +660,6 @@ output_into_a_missing_folder_makes_the_folder() {
     File.write_text(folder.path.join(Path("blocker")), "");
     var blocked = Path("blocker").join(Path("sub"));
     var failed = _pep_build(folder.path, ["main.pep", "-o", blocked.join(Path("main")).to_string(), "--no-cache"]);
-    expect_equal(_code(failed), 1);
-    if (!failed.stderr.contains($"cannot create output folder {blocked}")) {
-        print(failed.stderr);
-    }
-    expect_true(failed.stderr.contains($"cannot create output folder {blocked}"));
+    expect_exit(failed, 1);
+    expect_contains(failed.stderr, $"cannot create output folder {blocked}");
 }
