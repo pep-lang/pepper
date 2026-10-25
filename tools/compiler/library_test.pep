@@ -219,6 +219,10 @@ writes_an_aar_zip_and_the_openssl_license() {
     expect_equal(File.read_to_string(placed).value(), "Apache");
     expect_true(driver.place_openssl_license(library, ["m"], runtime).is_ok());
     expect_false(placed.exists());
+    # An OpenSSL of the program's own, with no toolchain license: no error.
+    var bare = Optional<Path>.Value(folder.path.join(Path("bare")));
+    expect_true(driver.place_openssl_license(library, ["ssl"], bare).is_ok());
+    expect_false(placed.exists());
 }
 
 # The little-endian 32-bit number at `at`.

@@ -75,12 +75,15 @@ export build_aar(compiler: Path, arguments: String[], output: Path, name: String
 }
 
 ## The Android ABI name of the `-android` triple `triple`: `arm64-v8a` for
-## `aarch64`, else its architecture (`x86_64`).
+## `aarch64`, `x86_64` for `x86_64`.
 ##
 ## @param triple the target
 ## @returns the ABI, as `jni/` and `lib/` folders are named
+## @panics if the triple's architecture is another, whose ABI name must be
+##   added here (`armeabi-v7a`, `x86`)
 export android_abi(triple: String): String {
     var arch = triple.split("-")[0];
+    assert(arch == "aarch64" or arch == "x86_64", $"no Android ABI name for '{arch}': add it to android_abi");
     return arch == "aarch64" ? "arm64-v8a" : arch;
 }
 
@@ -101,6 +104,8 @@ export aar_manifest(name: String): String {
 ## @param entries the archive's files and folders, in order
 ## @returns the archive's bytes
 export zip_stored(entries: (String, u8[])[]): u8[] {
+    # shortcut: no zip64, so under 4 GiB and 65535 entries (an `.aar` is a
+    # few MB); write zip64 records if a library ever nears that.
     var out = Array<u8>();
     var central = Array<u8>();
     for (var (name, data) in entries) {

@@ -85,8 +85,8 @@ export const OPENSSL_LICENSE = "LICENSE-OpenSSL.txt";
 ## Beside the Android shared library `library`, copies OpenSSL's license
 ## (`<runtime>/tls/android/LICENSE.txt`) as `OPENSSL_LICENSE` when the
 ## library links the toolchain's static OpenSSL (it imports `tls`, so it
-## links `ssl`), since the app's users must get a copy; otherwise removes
-## one an earlier build left there.
+## links `ssl` and the runtime holds that license), since the app's users
+## must get a copy; otherwise removes one an earlier build left there.
 ##
 ## @param library the shared library's path
 ## @param libraries the libraries the program links, by name
@@ -95,13 +95,17 @@ export const OPENSSL_LICENSE = "LICENSE-OpenSSL.txt";
 export place_openssl_license(library: Path, libraries: String[], runtime: Path?): Result<void, String> {
     var folder = library.parent();
     var placed = folder.is_value() ? folder.value().join(Path(OPENSSL_LICENSE)) : Path(OPENSSL_LICENSE);
-    if (!libraries.contains("ssl") or !runtime.is_value()) {
+    # A program may link an OpenSSL of its own (`-l ssl`), whose license is
+    # its own business: only the toolchain's is copied.
+    var license = runtime.is_value() ?
+        runtime.value().join(Path("tls")).join(Path("android")).join(Path("LICENSE.txt")) :
+        Path("");
+    if (!libraries.contains("ssl") or !runtime.is_value() or !license.is_file()) {
         if (placed.is_file()) {
             File.remove(placed);
         }
         return Result<void, String>.ok();
     }
-    var license = runtime.value().join(Path("tls")).join(Path("android")).join(Path("LICENSE.txt"));
     var copied = File.copy(license, placed);
     if (copied.is_err()) {
         return Result<void, String>.err($"cannot copy OpenSSL's license {license}: {copied.error().message}");
