@@ -956,6 +956,71 @@ a_vendored_project_builds_with_no_host_or_cache() {
 }
 
 [Test]
+vendoring_refuses_symbolic_links() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("vendor_links");
+    # `someone/linked` 1.0.0 holds `docs/current`, a symbolic link to its
+    # module, committed through the index so no host needs to make one.
+    var work = hosts.folder.path.join("work").join("someone/linked");
+    Directory.create_all(work);
+    git(work, ["init", "--quiet", "--initial-branch=main"]);
+    write_file(work.join("module.pep"), "export linked(): int {\n    return 1;\n}\n");
+    git(work, ["add", "module.pep"]);
+    var target = hosts.folder.path.join("link_target");
+    write_file(target, "../module.pep");
+    var blob = run(
+        process.Command("git").arguments(["hash-object", "-w", target.to_string()]).working_directory(work)
+    ).stdout.trim();
+    git(work, ["update-index", "--add", "--cacheinfo", $"120000,{blob},docs/current"]);
+    git(work, ["commit", "--quiet", "-m", "1.0.0"]);
+    git(work, ["tag", "v1.0.0"]);
+    publish(hosts.folder.path, "someone/linked");
+
+    var linked = Project("vendor_links", "linked = { github = \"someone/linked\", version = \"1.0\" }\n");
+    var refused = hosts.package(linked.dir, ["vendor"]);
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold"
+    );
+    expect_false(linked.dir.join("vendor").join("github.com").join("someone").join("linked").exists());
+    # So is the host's archive, fetched with no git.
+    var archives = linked.dir.join("archives");
+    var commit = hosts.commit_of("someone/linked", "v1.0.0");
+    write_archive(hosts, archives, "someone/linked", commit, commit);
+    remove_tree(linked.dir.join(".pep"));
+    async.run(() => {
+        var served = serve_folder(archives);
+        var unpacked = package_without_git(hosts, linked.dir, ["vendor"], served.substr(0, served.length - 1));
+        expect_exit(unpacked, 1);
+        expect_contains(unpacked.stderr, "'docs/current' is a symbolic link, which a vendored package cannot hold");
+    });
+
+    # A link added to a vendored package fails the build's check, as an
+    # edited file does; vendoring again removes it.
+    var project = Project("vendor_links_added", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    var geometry = project.dir.join("vendor").join("github.com").join("someone").join("geometry");
+    var link = geometry.join("alias.pep");
+    var made = File.symlink(Path("module.pep"), link);
+    if (made.is_err()) {
+        print($"skipped the added link: cannot make a symbolic link here ({made.error().message})");
+        return;
+    }
+    var fetched = hosts.package(project.dir, ["fetch"]);
+    expect_exit(fetched, 1);
+    expect_contains(
+        fetched.stderr,
+        "alias.pep is a symbolic link, which a vendored package cannot hold; run 'pepper package vendor'"
+    );
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_false(link.symlink_metadata().is_ok());
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+}
+
+[Test]
 tree_why_and_outdated_report_on_the_locked_graph() {
     if (!has_git()) {
         return;
