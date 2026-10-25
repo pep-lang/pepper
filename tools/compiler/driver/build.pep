@@ -846,8 +846,9 @@ _work_on(
 ## whole program (`lto.pep`), then the link. With `options.library`, a
 ## library for C instead, with its header beside it (`library.pep`). When
 ## the cache records that the output is this very program, unchanged
-## since, nothing is built. Warnings print on standard error whether or
-## not the build succeeds.
+## since, nothing is built. The output's folder is made first when it does
+## not exist. Warnings print on standard error whether or not the build
+## succeeds.
 ##
 ## The last releases in a unit's cached objects may steer into structs of
 ## files the unit does not read (`Keys.steering`). A build that finds a
@@ -858,6 +859,16 @@ _work_on(
 ## @param options where the output goes, and how it is built
 ## @returns what the build did, or the error, rendered
 export build(program: link.Program, options: BuildOptions): Result<Built, String> {
+    # `-o` may name a folder that does not exist yet (pepper#230).
+    var folder = options.output.parent();
+    if (folder.is_value()) {
+        var created = Directory.create_all(folder.value());
+        if (created.is_err()) {
+            return Result<Built, String>.err(
+                $"cannot create output folder {folder.value()}: {created.error().message}"
+            );
+        }
+    }
     var excluded = HashSet<ulong>();
     while (true) {
         var built = _build(program, options, excluded);

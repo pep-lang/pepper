@@ -182,7 +182,8 @@ name for that stem (`libmain.a`). Building a project with no file, it is the
 `[build]` table's `output`, else the package's `name` in the project's
 folder (`libname.a` with `--lib`), with `.exe` added when building for
 Windows and the name has no extension. Windows runs only files ending in
-`.exe`, so otherwise name the output there: `-o main.exe`.
+`.exe`, so otherwise name the output there: `-o main.exe`. The folders
+the path names are made when they do not exist.
 
 With `--emit-static`, it is the folder the expanded source goes into.
 

@@ -3,7 +3,8 @@
 # puts the stage-1 build there): `--help` lists every option;
 # `--emit-steps`, `--emit-ast`, `--emit-llvm`, `-T passes`, `-m`, `--lib`,
 # `--lto`, `--verify-cache` and `--MSVC` do what they document; a cached
-# build of an entry file inside a module's folder links.
+# build of an entry file inside a module's folder links; `-o` makes the
+# output's missing folders.
 
 import [Directory, File, Path] from io;
 import os;
@@ -642,4 +643,25 @@ an_unused_string_constant_is_left_out_of_the_program() {
     # Less than the 100,000 bytes on macOS, whose segments round to 16 KB
     # pages: the text segment's slack can hold part of them.
     expect_true(used > without + 80000);
+}
+
+# pepper#230: `-o` into folders that do not exist yet makes them, and a
+# folder it cannot make is an error naming it.
+[Test]
+output_into_a_missing_folder_makes_the_folder() {
+    var folder = _program("options_missing_output_folder", _PROGRAM);
+    var program = Path("out").join(Path("missing")).join(Path("main" + toolchain.executable_suffix()));
+    _succeeds(folder.path, ["main.pep", "-o", program.to_string(), "--no-cache"]);
+    var ran = process.Command(folder.path.join(program).to_string()).run();
+    expect_true(ran.is_ok() and ran.value().status.success());
+
+    # A file where a folder must go.
+    File.write_text(folder.path.join(Path("blocker")), "");
+    var blocked = Path("blocker").join(Path("sub"));
+    var failed = _pep_build(folder.path, ["main.pep", "-o", blocked.join(Path("main")).to_string(), "--no-cache"]);
+    expect_equal(_code(failed), 1);
+    if (!failed.stderr.contains($"cannot create output folder {blocked}")) {
+        print(failed.stderr);
+    }
+    expect_true(failed.stderr.contains($"cannot create output folder {blocked}"));
 }
