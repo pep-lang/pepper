@@ -273,6 +273,7 @@ main(): int {
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th></tr></thead><tbody>
 <tr><td><code>github</code>, <code>gitlab</code>, <code>codeberg</code></td><td>The repository, <code>owner/name</code> (on GitLab, <code>group/subgroup/name</code> too)</td></tr>
 <tr><td><code>path</code></td><td>A folder on disk, relative to this <code>pep.toml</code>, instead of a repository</td></tr>
+<tr><td><code>package</code></td><td>With a repository: the member of the repository's <a href="#workspaces-workspace">workspace</a> it is, by its <code>[package]</code> <code>name</code> (see <a href="#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
 <tr><td><code>version</code></td><td>A semver range of the repository's version tags: <code>1.2</code>, <code>0.4.x</code>, <code>&gt;=1.0, &lt;2</code></td></tr>
 <tr><td><code>branch</code></td><td>A branch</td></tr>
 <tr><td><code>tag</code></td><td>A tag</td></tr>
@@ -542,7 +543,10 @@ each member to inherit with <code>workspace = true</code>. A member's entry adds
 <code>path</code> there is relative to the root.</li>
 <li><strong>Members depend on each other</strong> with <code>path</code>. A <code>version</code> beside the
 <code>path</code> is for <a href="pep-package.html#publish"><code>publish</code></a>, which refuses a
-<code>path</code> without one; a build uses the folder.</li>
+<code>path</code> without one, and checks the sibling is published at a version
+it accepts; a build in the workspace uses the folder. A project outside
+the workspace that fetches the member reads it as the sibling of the
+same repository at that version (see below).</li>
 <li><strong>Building:</strong> <code>pepper build</code> in a member builds that member; in a root
 with no <code>[package]</code>, every member. <code>--all</code> builds every member, and
 <code>-p &lt;name&gt;</code> (repeated for more) the members by package name, from the
@@ -561,8 +565,46 @@ in the workspace of the nearest <code>pep.toml</code> above it with
 of the project's.</li>
 <li><strong>Needs toolchain 0.11.0,</strong> as for
 <a href="#dev-dependencies"><code>[dev-dependencies]</code></a>: <code>[workspace]</code> and a
-dependency's <code>workspace</code> are unknown to older toolchains.</li>
+dependency's <code>workspace</code> and <code>package</code> are unknown to older toolchains.</li>
 </ul>
+<h3 id="a-member-as-a-git-dependency"><a class="header" href="#a-member-as-a-git-dependency">A member as a Git dependency</a></h3>
+<p>A project outside the workspace depends on one of its members by the
+repository and <code>package</code>, the member's <code>[package]</code> <code>name</code>, as Cargo does
+with a package inside a Git repository's workspace:</p>
+<pre><code class="language-toml">[dependencies]
+geo = { github = "someone/shapes", package = "geo", version = "0.3" }
+</code></pre>
+<p><code>pepper package add someone/shapes --package geo</code> writes that entry (see
+<a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<ul>
+<li><strong>Found through the root's <code>members</code>:</strong> the member is the package of
+that name among the folders the root's <code>[workspace]</code> <code>members</code> lists, so
+it may move between folders without its dependents changing. Without
+<code>package</code>, a dependency is the repository's root package.</li>
+<li><strong>Tagged on its own:</strong> <a href="pep-package.html#publish"><code>publish</code></a> in a member
+tags <code>&lt;name&gt;-v&lt;version&gt;</code> (<code>geo-v0.3.1</code>), and a member's <code>version</code> range
+reads only its own tags, so each member is released at its own pace. The
+root package keeps <code>v&lt;version&gt;</code>, as a single-package repository does.
+A package name is an identifier, with no <code>-</code>, so the tags cannot clash.</li>
+<li><strong>Its own checkout and lock entry:</strong> it is locked as
+<code>github:someone/shapes#geo</code> (see <a href="pep-package.html#peplock">pep.lock</a>),
+and checked out at its own commit in
+<code>.pep/deps/github.com/someone/shapes#geo</code>, from the same repository in
+the <a href="pep-package.html#the-download-cache">download cache</a> as every other
+member. <a href="#overrides"><code>[overrides]</code></a> name it by that source too.</li>
+<li><strong>Its siblings:</strong> a <code>path</code> with a <code>version</code> in the member's <code>pep.toml</code>
+names another package of its workspace, so the project depends on that
+member (or the root) of the same repository, at the newest of its own
+tags the version accepts, not at the commit the member was fetched at.</li>
+</ul>
+<p>A <code>package</code> with a <code>path</code>, which names a member's folder itself, or one
+that is not an identifier, is an error at the key. A <code>package</code> the
+workspace lacks is an error at its value when <code>pepper package</code> fetches it:</p>
+<pre><code class="language-text">pep.toml:5:43: error: someone/shapes has no workspace member 'gem'; its members are 'geo', 'draw'
+    5 | geo = { github = "someone/shapes", package = "gem" }
+      |                                              ^~~~~
+</code></pre>
+<h3 id="workspace-errors"><a class="header" href="#workspace-errors">Workspace errors</a></h3>
 <p>The problems of a workspace are errors at the member in the root's
 <code>members</code>, or at the dependency that inherits:</p>
 <pre><code class="language-text">pep.toml:2:19: error: workspace member 'app' is listed twice
@@ -589,7 +631,8 @@ reaches it, without editing the <code>pep.toml</code> of each package on the way
 <li>
 <p><strong>The key</strong> is the source of the package it replaces, as
 <a href="pep-package.html#peplock"><code>pep.lock</code></a> writes it: the host's key, <code>:</code>,
-and the repository (<code>github:owner/name</code>). One table keyed by the source
+and the repository (<code>github:owner/name</code>, and <code>#</code> and the member for a
+<a href="#a-member-as-a-git-dependency">workspace member</a>). One table keyed by the source
 is enough, since a source is what makes two dependencies the same
 package in the graph; the name each dependent imports it by does not.</p>
 </li>
@@ -658,8 +701,9 @@ why.</p>
 <p>A key that is a version names that version alone, not the <code>^</code> range a
 dependency's <code>version = "1.1.0"</code> means; keys are quoted, as TOML reads
 <code>1.1.0</code> unquoted as three nested keys. Release the table in a newer
-version: the <code>[retract]</code> of a package's newest release speaks for every
-version, so a range no longer picks a retracted one, <code>pepper package outdated</code> flags one <code>pep.lock</code> holds, and <code>update</code> moves off it (see
+version (a workspace member's newest release by its own tags, read from
+the member's <code>pep.toml</code>): the <code>[retract]</code> of a package's newest release
+speaks for every version, so a range no longer picks a retracted one, <code>pepper package outdated</code> flags one <code>pep.lock</code> holds, and <code>update</code> moves off it (see
 <a href="pep-package.html#retracted-versions">Retracted versions</a>). A key that is
 neither a version nor a range is an error at the key in the project's
 own <code>pep.toml</code> (a dependency's retracts nothing, so its dependents still
@@ -701,7 +745,8 @@ the package is fetched.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
-or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>.</li>
+or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>; a <code>package</code>
+with a <code>path</code>, or one that is not an identifier.</li>
 <li>An <code>[overrides]</code> key that is not a source (<code>github:owner/name</code>), or an
 override with <code>optional</code>, <code>features</code> or <code>default-features</code>.</li>
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>

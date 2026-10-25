@@ -14943,6 +14943,7 @@ compiler checks each <code>with</code> block over a lock so that none can:</p>
 # A Mutex of values that are not thread-safe: a list of Strings that
 # several threads add to.
 const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
+const tags = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 
 add_names(prefix: String) {
     var i = 0;
@@ -14987,6 +14988,18 @@ main(): int {
     # caller then owns outright.
     var old = names.replace(Array&lt;String&gt;());
     assert(old.count == 18, "the old list");
+
+    # A variable of an outer block outlives an inner lock, so it keeps only a
+    # copy of the inner value (`seen = tag_list` is an error).
+    with (var list = names.lock()) {
+        var seen = Array&lt;String&gt;();
+        with (var tag_list = tags.lock()) {
+            tag_list.append("new");
+            seen = copy(tag_list);
+        }
+        list.append(seen[0]);   # the outer block's own value may take it
+        assert(list.count == 1, "the copied tag");
+    }
 
     # A thread's own value that is not thread-safe is reached through `with`.
     var scratch = async.ThreadLocal&lt;String&gt;();
@@ -15035,7 +15048,12 @@ returning it from the block, is an error; take a copy
 locked value, since a function value could carry it out.</p>
 </li>
 <li>
-<p><strong>Two locks.</strong> Values locked by two nested blocks stay apart as well.</p>
+<p><strong>Two locks.</strong> Values locked by two nested blocks stay apart as well.
+A variable declared in the outer block, before the inner one, is from
+outside to the inner block: it outlives the inner lock, so it may hold the
+outer block's value but no part of the inner one's, whether it would hold
+it directly, in a field, through a closure, or from one pass of a loop to
+the next.</p>
 </li>
 <li>
 <p><strong>Numbers pass freely</strong>, as do every thread-safe value and every new one.</p>
@@ -22619,6 +22637,7 @@ main(): int {
 <div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th></tr></thead><tbody>
 <tr><td><code>github</code>, <code>gitlab</code>, <code>codeberg</code></td><td>The repository, <code>owner/name</code> (on GitLab, <code>group/subgroup/name</code> too)</td></tr>
 <tr><td><code>path</code></td><td>A folder on disk, relative to this <code>pep.toml</code>, instead of a repository</td></tr>
+<tr><td><code>package</code></td><td>With a repository: the member of the repository's <a href="tools/projects.html#workspaces-workspace">workspace</a> it is, by its <code>[package]</code> <code>name</code> (see <a href="tools/projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
 <tr><td><code>version</code></td><td>A semver range of the repository's version tags: <code>1.2</code>, <code>0.4.x</code>, <code>&gt;=1.0, &lt;2</code></td></tr>
 <tr><td><code>branch</code></td><td>A branch</td></tr>
 <tr><td><code>tag</code></td><td>A tag</td></tr>
@@ -22888,7 +22907,10 @@ each member to inherit with <code>workspace = true</code>. A member's entry adds
 <code>path</code> there is relative to the root.</li>
 <li><strong>Members depend on each other</strong> with <code>path</code>. A <code>version</code> beside the
 <code>path</code> is for <a href="tools/pep-package.html#publish"><code>publish</code></a>, which refuses a
-<code>path</code> without one; a build uses the folder.</li>
+<code>path</code> without one, and checks the sibling is published at a version
+it accepts; a build in the workspace uses the folder. A project outside
+the workspace that fetches the member reads it as the sibling of the
+same repository at that version (see below).</li>
 <li><strong>Building:</strong> <code>pepper build</code> in a member builds that member; in a root
 with no <code>[package]</code>, every member. <code>--all</code> builds every member, and
 <code>-p &lt;name&gt;</code> (repeated for more) the members by package name, from the
@@ -22907,8 +22929,46 @@ in the workspace of the nearest <code>pep.toml</code> above it with
 of the project's.</li>
 <li><strong>Needs toolchain 0.11.0,</strong> as for
 <a href="tools/projects.html#dev-dependencies"><code>[dev-dependencies]</code></a>: <code>[workspace]</code> and a
-dependency's <code>workspace</code> are unknown to older toolchains.</li>
+dependency's <code>workspace</code> and <code>package</code> are unknown to older toolchains.</li>
 </ul>
+<h3 id="a-member-as-a-git-dependency"><a class="header" href="#a-member-as-a-git-dependency">A member as a Git dependency</a></h3>
+<p>A project outside the workspace depends on one of its members by the
+repository and <code>package</code>, the member's <code>[package]</code> <code>name</code>, as Cargo does
+with a package inside a Git repository's workspace:</p>
+<pre><code class="language-toml">[dependencies]
+geo = { github = "someone/shapes", package = "geo", version = "0.3" }
+</code></pre>
+<p><code>pepper package add someone/shapes --package geo</code> writes that entry (see
+<a href="tools/pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<ul>
+<li><strong>Found through the root's <code>members</code>:</strong> the member is the package of
+that name among the folders the root's <code>[workspace]</code> <code>members</code> lists, so
+it may move between folders without its dependents changing. Without
+<code>package</code>, a dependency is the repository's root package.</li>
+<li><strong>Tagged on its own:</strong> <a href="tools/pep-package.html#publish"><code>publish</code></a> in a member
+tags <code>&lt;name&gt;-v&lt;version&gt;</code> (<code>geo-v0.3.1</code>), and a member's <code>version</code> range
+reads only its own tags, so each member is released at its own pace. The
+root package keeps <code>v&lt;version&gt;</code>, as a single-package repository does.
+A package name is an identifier, with no <code>-</code>, so the tags cannot clash.</li>
+<li><strong>Its own checkout and lock entry:</strong> it is locked as
+<code>github:someone/shapes#geo</code> (see <a href="tools/pep-package.html#peplock">pep.lock</a>),
+and checked out at its own commit in
+<code>.pep/deps/github.com/someone/shapes#geo</code>, from the same repository in
+the <a href="tools/pep-package.html#the-download-cache">download cache</a> as every other
+member. <a href="tools/projects.html#overrides"><code>[overrides]</code></a> name it by that source too.</li>
+<li><strong>Its siblings:</strong> a <code>path</code> with a <code>version</code> in the member's <code>pep.toml</code>
+names another package of its workspace, so the project depends on that
+member (or the root) of the same repository, at the newest of its own
+tags the version accepts, not at the commit the member was fetched at.</li>
+</ul>
+<p>A <code>package</code> with a <code>path</code>, which names a member's folder itself, or one
+that is not an identifier, is an error at the key. A <code>package</code> the
+workspace lacks is an error at its value when <code>pepper package</code> fetches it:</p>
+<pre><code class="language-text">pep.toml:5:43: error: someone/shapes has no workspace member 'gem'; its members are 'geo', 'draw'
+    5 | geo = { github = "someone/shapes", package = "gem" }
+      |                                              ^~~~~
+</code></pre>
+<h3 id="workspace-errors"><a class="header" href="#workspace-errors">Workspace errors</a></h3>
 <p>The problems of a workspace are errors at the member in the root's
 <code>members</code>, or at the dependency that inherits:</p>
 <pre><code class="language-text">pep.toml:2:19: error: workspace member 'app' is listed twice
@@ -22935,7 +22995,8 @@ reaches it, without editing the <code>pep.toml</code> of each package on the way
 <li>
 <p><strong>The key</strong> is the source of the package it replaces, as
 <a href="tools/pep-package.html#peplock"><code>pep.lock</code></a> writes it: the host's key, <code>:</code>,
-and the repository (<code>github:owner/name</code>). One table keyed by the source
+and the repository (<code>github:owner/name</code>, and <code>#</code> and the member for a
+<a href="tools/projects.html#a-member-as-a-git-dependency">workspace member</a>). One table keyed by the source
 is enough, since a source is what makes two dependencies the same
 package in the graph; the name each dependent imports it by does not.</p>
 </li>
@@ -23004,8 +23065,9 @@ why.</p>
 <p>A key that is a version names that version alone, not the <code>^</code> range a
 dependency's <code>version = "1.1.0"</code> means; keys are quoted, as TOML reads
 <code>1.1.0</code> unquoted as three nested keys. Release the table in a newer
-version: the <code>[retract]</code> of a package's newest release speaks for every
-version, so a range no longer picks a retracted one, <code>pepper package outdated</code> flags one <code>pep.lock</code> holds, and <code>update</code> moves off it (see
+version (a workspace member's newest release by its own tags, read from
+the member's <code>pep.toml</code>): the <code>[retract]</code> of a package's newest release
+speaks for every version, so a range no longer picks a retracted one, <code>pepper package outdated</code> flags one <code>pep.lock</code> holds, and <code>update</code> moves off it (see
 <a href="tools/pep-package.html#retracted-versions">Retracted versions</a>). A key that is
 neither a version nor a range is an error at the key in the project's
 own <code>pep.toml</code> (a dependency's retracts nothing, so its dependents still
@@ -23047,7 +23109,8 @@ the package is fetched.</li>
 <li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
 <code>import</code> uses.</li>
 <li>A dependency with no source or two, a repository not written <code>owner/name</code>,
-or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>.</li>
+or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>; a <code>package</code>
+with a <code>path</code>, or one that is not an identifier.</li>
 <li>An <code>[overrides]</code> key that is not a source (<code>github:owner/name</code>), or an
 override with <code>optional</code>, <code>features</code> or <code>default-features</code>.</li>
 <li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
@@ -23228,7 +23291,7 @@ pepper package update                        # every dependency, as far as the r
 pepper package update --verify               # one at a time, keeping the updates that build
 pepper package fetch                         # what pep.lock lists
 pepper package publish --dry-run             # check and test the release pep.toml's version names
-pepper package publish                       # ... then tag it v&lt;version&gt; and push the tag
+pepper package publish                       # ... then tag it v&lt;version&gt; (&lt;member&gt;-v&lt;version&gt;) and push the tag
 pepper package tree                          # the dependency graph pep.lock records
 pepper package tree --invert numbers         # what depends on numbers
 pepper package why numbers                   # the paths from the project to numbers
@@ -23266,6 +23329,7 @@ Every package is downloaded once per machine, into a
 <tr><td><code>fetch &lt;source&gt;...</code></td><td>Fetches only those locked packages (<code>github:owner/name</code>), at their locked commits, resolving nothing</td></tr>
 <tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
+<tr><td><code>add ... --package &lt;name&gt;</code></td><td>Depends on the member <code>&lt;name&gt;</code> of the repository's workspace, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags (see <a href="tools/projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
 <tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
 <tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use</td></tr>
 <tr><td><code>add ... --optional</code></td><td>Marks it <code>optional = true</code>: a build uses it only when a feature turns it on</td></tr>
@@ -23334,6 +23398,13 @@ branch. The name source code imports defaults to the repository's last part,
 with <code>-</code> and <code>.</code> turned into <code>_</code> (<code>other/json</code> adds <code>json</code>); <code>--name</code> gives
 another. A name already in <code>pep.toml</code>, or the name of a runtime module
 (<code>io</code>, <code>async</code>), is an error that suggests <code>--name</code>.</p>
+<p><code>--package &lt;name&gt;</code> adds a member of the repository's
+<a href="tools/projects.html#a-member-as-a-git-dependency">workspace</a> instead of its root
+package: the entry gets <code>package = "&lt;name&gt;"</code>, its version comes from the
+member's own <code>&lt;name&gt;-v&lt;version&gt;</code> tags, and the name source code imports
+defaults to the member's:</p>
+<pre><code class="language-bash">pepper package add someone/shapes --package geo   # geo = { github = "someone/shapes", package = "geo", version = "0.3.1" }
+</code></pre>
 <p><code>--dev</code> adds it to <code>[dev-dependencies]</code> instead: only the project's tests
 and examples import it, and projects that depend on this one ignore it
 (see <a href="tools/projects.html#dev-dependencies">Projects: pep.toml</a>).</p>
@@ -23375,26 +23446,50 @@ pep-package: published shapes 1.2.0: tagged 3f9c2e01a7b4 v1.2.0 and pushed it to
 </code></pre>
 <p>First it checks, and lists every check that fails at once:</p>
 <ul>
-<li>the work tree has no changes <code>git status</code> shows, and <code>HEAD</code> is the tip
+<li>
+<p>the work tree has no changes <code>git status</code> shows, and <code>HEAD</code> is the tip
 of the default branch of <code>origin</code>, so the commit it tags is the one
-that branch holds;</li>
-<li><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
-<code>origin</code> has;</li>
-<li><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</li>
-<li>every dependency asks for a version range, not a branch, tag, commit
+that branch holds;</p>
+</li>
+<li>
+<p><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
+<code>origin</code> has;</p>
+</li>
+<li>
+<p><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</p>
+</li>
+<li>
+<p>every dependency asks for a version range, not a branch, tag, commit
 or the default branch, so a project depending on this one can resolve
 it with its other packages; a <code>path</code> dependency, such as a workspace
 sibling, needs a <code>version</code> beside it, and one inherited with
 <code>workspace = true</code> is checked as the workspace gives it. A
-dev-dependency may be anything, since a dependent ignores it;</li>
-<li><code>minimum_toolchain</code> is at least the release that reads each newer
+dev-dependency may be anything, since a dependent ignores it;</p>
+</li>
+<li>
+<p>every <code>path</code> dependency with a <code>version</code> is a package of this
+workspace, its root or a member, published at a version the range
+accepts: <code>origin</code> has its tag (<code>numbers-v1.2.0</code>, or <code>v1.2.0</code> for the
+root), which a project outside the workspace resolves it by (see
+<a href="tools/projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>).
+Each is an error at its <code>path</code>, printed before the list:</p>
+<pre><code class="language-text">geo/pep.toml:9:20: error: 'numbers' is not published at a version '1' accepts: origin has no such tag numbers-v&lt;version&gt;, which a dependent resolves it by; publish numbers first
+    9 | numbers = { path = "../numbers", version = "1" }
+      |                    ^~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><code>minimum_toolchain</code> is at least the release that reads each newer
 <code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>,
 <code>[features]</code>, <code>[overrides]</code> and <code>[workspace]</code> tables, and a
-dependency's <code>optional</code>, <code>features</code>, <code>default-features</code> and
-<code>workspace</code>, need 0.11.0;</li>
-<li><code>pep.toml</code> has no <code>[overrides]</code>: a dependent builds with the packages
+dependency's <code>optional</code>, <code>features</code>, <code>default-features</code>, <code>workspace</code>
+and <code>package</code>, need 0.11.0;</p>
+</li>
+<li>
+<p><code>pep.toml</code> has no <code>[overrides]</code>: a dependent builds with the packages
 they replace, not the code the package was tested with, so a release
-waits until the fix it needs is released too.</li>
+waits until the fix it needs is released too.</p>
+</li>
 </ul>
 <pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
   '[package]' has no 'license'
@@ -23403,14 +23498,18 @@ waits until the fix it needs is released too.</li>
   'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
 </code></pre>
 <p>Run from a workspace member, it checks and tests that member, in its
-folder.</p>
+folder, and tags it <code>&lt;name&gt;-v&lt;version&gt;</code> (<code>geo-v0.3.1</code>): each member is
+released on its own, and its <code>version</code> need only be newer than its own
+tags. The workspace's root package, and a package that is no workspace's
+member, are tagged <code>v&lt;version&gt;</code>.</p>
 <p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
 and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
 with the Pepper home's own <code>pepper</code> (in the home <code>PEPPER_HOME</code> names,
 else the default one; see <a href="tools/pep-install.html">Toolchains: pep-install</a>), so
 both toolchains must be installed there; <code>latest</code> is the newest
 installed release, not a prerelease. A failing run stops it and shows
-what the tests printed. Last, it tags <code>HEAD</code> <code>v&lt;version&gt;</code> and pushes the
+what the tests printed. Last, it tags <code>HEAD</code> <code>v&lt;version&gt;</code> (a member's
+tag) and pushes the
 tag to <code>origin</code>; when the push fails, it deletes the tag again.</p>
 <p><code>--dry-run</code> checks and tests, then says what it would tag, without
 tagging or pushing anything. <code>publish</code> neither creates a release page on
@@ -23531,7 +23630,7 @@ fetches it again once the copy is an hour old; a fetch that fails fails
 <code>audit</code>, rather than check against an old copy. With <code>--offline</code> it uses
 the copy as it is, and fails when there is none. An advisory:</p>
 <pre><code class="language-toml">id = "PEP-2026-0001"                      # required
-package = "github:other/numbers"          # required: the source pep.lock records
+package = "github:other/numbers"          # required: the source pep.lock records (a member's: github:owner/name#member)
 title = "numbers_version() lies"
 severity = "high"                          # as written: low, medium, high, critical
 url = "https://example.com/PEP-2026-0001"
@@ -23687,6 +23786,18 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
 <p>A package that only the project's <code>[dev-dependencies]</code> lead to has
 <code>dev = true</code>; one that a dependency leads to as well does not.</p>
+<p>A member of a repository's workspace (a dependency with
+<a href="tools/projects.html#a-member-as-a-git-dependency"><code>package</code></a>) has <code>#</code> and the
+member after the repository in its <code>source</code>, and its own commit, the one
+its own tag names, checked out in <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;#&lt;member&gt;</code>
+(or the vendor folder). Its siblings are entries of their own:</p>
+<pre><code class="language-toml">[[package]]
+name = "geo"
+source = "github:someone/shapes#geo"
+version = "0.3.1"
+commit = "..."
+sha256 = "..."
+</code></pre>
 <p>Features do not change the lock: an optional dependency is resolved,
 locked and fetched like any other, whether or not a build turns it on, so
 <code>pep.lock</code> is the same whichever <code>--features</code> a build gives (see
@@ -23773,7 +23884,7 @@ module cache are: <code>cache/packages</code> in the home <code>PEPPER_HOME</cod
 <ul>
 <li><code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;.git</code>: a bare git repository of every commit any
 project has fetched, fetched from the host only when it lacks the commit
-a project needs;</li>
+a project needs, one for the repository and all its workspace members;</li>
 <li><code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code>: each archive fetched without
 git (see <a href="tools/pep-package.html#fetching-without-git">Fetching without git</a>).</li>
 </ul>
@@ -23822,7 +23933,13 @@ name each imports it by.</p>
 <ul>
 <li>A version range picks the newest version tag (<code>v1.2.3</code> or <code>1.2.3</code>) that
 every package's range accepts. When none does, resolution fails and names
-each package's requirement and the versions the repository offers.</li>
+each package's requirement and the versions the repository offers. A
+workspace member's range reads only its own tags (<code>geo-v1.2.3</code>), and a
+repository's root package only the plain ones.</li>
+<li>A <code>path</code> with a <code>version</code> in a fetched package's <code>pep.toml</code> is the
+package of the same workspace it names, resolved by its own tags as a
+dependency on that member of the same repository (see
+<a href="tools/projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>).</li>
 <li>A branch, tag or commit must be the same in every package that names it.</li>
 <li>The project's own <code>pep.toml</code> overrides its dependencies: a package it
 names gets the revision it asks for, even outside the range a dependency
@@ -23864,7 +23981,10 @@ this toolchain builds. So is a branch, tag or commit that needs one.</p>
 </ul>
 <p>Only the <code>pep.toml</code> of the version picked, and of the newer ones the ranges
 accept, are read: from the package's clone in <code>.pep/deps</code>, without checking
-them out, each once per run.</p>
+them out, each once per run. A workspace member's is the <code>pep.toml</code> of the
+package with its name among the folders its root's <code>[workspace] members</code>
+lists at that version's commit, so a member that moved between releases is
+read where each release has it.</p>
 <h3 id="retracted-versions"><a class="header" href="#retracted-versions">Retracted versions</a></h3>
 <p>A package's author withdraws a broken release in the
 <a href="tools/projects.html#retract"><code>[retract]</code></a> table of a newer release's <code>pep.toml</code>,
