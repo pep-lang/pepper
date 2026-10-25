@@ -137,12 +137,28 @@ struct _ArgumentNames {
     var table: StructTable;
     var current: TypeName? = Optional<TypeName>.Empty;
     var found: Array<(Loc, String)> = Array<(Loc, String)>();
+    ## The first struct of each spelled type, found once: a scan spelling
+    ## every struct's type at each call cost each nested type's depth (#210).
+    var by_type: HashMap<String, StructDef> = HashMap<String, StructDef>();
+    ## The first struct of each name or spelled type.
+    var by_name: HashMap<String, StructDef> = HashMap<String, StructDef>();
 
     construct(module: Module, state: PassState, literals: HashMap<Loc, Array<(ulong, Loc)>>) {
         this.module = module;
         this.state = state;
         this.literals = literals;
         table = StructTable(module, memo = state.trait_types_memo());
+        for (var st in module.structs) {
+            var spelled = st.ty.to_string();
+            if (!by_type.contains(spelled)) {
+                by_type[spelled] = st;
+            }
+            for (var key in [st.name, spelled]) {
+                if (!by_name.contains(key)) {
+                    by_name[key] = st;
+                }
+            }
+        }
     }
 
     visit(function: FunctionDef, current: TypeName?) {
@@ -165,19 +181,15 @@ struct _ArgumentNames {
             MethodCall(node) => {
                 if (literals.contains(node.loc)) {
                     var receiver = static_type_of(node.this_value, table, current, state);
-                    if (receiver.is_value()) {
-                        var spelled = receiver.value().to_string();
-                        for (var st in module.structs) {
-                            if (st.ty.to_string() != spelled) {
-                                continue;
+                    var st = receiver.is_value() ?
+                        by_type.try_get(receiver.value().to_string()) :
+                        Optional<StructDef>.Empty;
+                    if (st.is_value()) {
+                        for (var m in st.value().method_members) {
+                            if (m.name == node.method) {
+                                record(_parameter_names(m), node.loc);
+                                break;
                             }
-                            for (var m in st.method_members) {
-                                if (m.name == node.method) {
-                                    record(_parameter_names(m), node.loc);
-                                    break;
-                                }
-                            }
-                            break;
                         }
                     }
                 }
@@ -194,7 +206,7 @@ struct _ArgumentNames {
                 return Optional<String[]>.Value(_parameter_names(f));
             }
         }
-        var constructor = _constructor_of(module, name);
+        var constructor = _constructor_of(by_name, name);
         if (constructor.is_value()) {
             return Optional<String[]>.Value(_parameter_names(constructor.value()));
         }
@@ -235,21 +247,18 @@ _parameter_names(function: FunctionDef): String[] {
 
 ## The constructor a call of `function` names: the one of that name of the
 ## struct its set name spells, else the struct's only constructor.
-_constructor_of(module: Module, function: String): FunctionDef? {
-    var ty = set_name(function);
-    for (var st in module.structs) {
-        if (st.name != ty and st.ty.to_string() != ty) {
-            continue;
-        }
-        for (var c in st.constructors) {
-            if (c.name == function) {
-                return Optional<FunctionDef>.Value(c);
-            }
-        }
-        if (st.constructors.count == 1) {
-            return Optional<FunctionDef>.Value(st.constructors[0]);
-        }
+_constructor_of(by_name: HashMap<String, StructDef>, function: String): FunctionDef? {
+    var st = by_name.try_get(set_name(function));
+    if (!st.is_value()) {
         return Optional<FunctionDef>.Empty;
+    }
+    for (var c in st.value().constructors) {
+        if (c.name == function) {
+            return Optional<FunctionDef>.Value(c);
+        }
+    }
+    if (st.value().constructors.count == 1) {
+        return Optional<FunctionDef>.Value(st.value().constructors[0]);
     }
     return Optional<FunctionDef>.Empty;
 }

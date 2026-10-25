@@ -192,6 +192,11 @@ _is_arm_test(condition: Expression): bool {
 ## Re-parses a type some passes carry as a flat name, when it starts with
 ## `prefix`.
 _parsed_if(ty: TypeName, prefix: String): TypeName {
+    # `name<...>` starts with `prefix` only when it names the prefix's type:
+    # spelling every type to find out cost a nested type's depth (#210).
+    if (ty.sub_types.count > 0 and ty.name + "<" != prefix) {
+        return ty;
+    }
     var s = ty.to_string();
     if (s.starts_with(prefix) and s.ends_with(">")) {
         return parse_type_string(s);
