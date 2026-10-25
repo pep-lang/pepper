@@ -461,8 +461,10 @@ file fails the command with an error at its key.
 
 Like the [advisory database](#audit), the index is cloned into the
 download cache's home, `cache/index`, and fetched again once the copy is
-an hour old; with `--offline`, `search` uses the copy as it is, and fails
-when there is none. The packages are also listed on
+an hour old. A fetch that fails falls back to the cached copy with a
+warning that gives its age, and fails only when there is no copy; with
+`--offline`, `search` uses the copy as it is, and fails when there is
+none. The packages are also listed on
 <https://pepper-lang.dev/packages.html>.
 
 ### `audit`
@@ -497,9 +499,16 @@ anywhere in it: `https://github.com/pep-lang/advisories.git`, or the
 repository `PEPPER_ADVISORY_DB` names (a mirror, a private database, or a
 `file://` folder). `audit` clones it into the
 [download cache](#the-download-cache)'s home, `cache/advisories`, and
-fetches it again once the copy is an hour old; a fetch that fails fails
-`audit`, rather than check against an old copy. With `--offline` it uses
-the copy as it is, and fails when there is none. An advisory:
+fetches it again once the copy is an hour old. When that fetch fails (no
+network, or the host erroring), `audit` checks against the cached copy
+and warns on stderr, giving the copy's age:
+
+```text
+pep-package: warning: cannot fetch the advisory database https://github.com/pep-lang/advisories.git, so using the cached copy from 3 days ago: ...
+```
+
+With no cached copy, it fails. With `--offline` it uses the copy as it
+is, and fails when there is none. An advisory:
 
 ```toml
 id = "PEP-2026-0001"                      # required

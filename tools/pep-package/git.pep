@@ -361,10 +361,20 @@ export cached_file_at(host: String, repository: String, commit: String, file: St
 # `fetch_data_repository` fetches it again.
 const DATA_REFRESH_SECONDS = 3600;
 
+# `seconds` as the largest whole unit: `5 minutes`, `2 hours`, `3 days`.
+_age(seconds: long): String {
+    var (count, unit) = seconds >= 86400 ?
+        (seconds / 86400, "day") :
+        seconds >= 3600 ? (seconds / 3600, "hour") : (seconds / 60, "minute");
+    return $"{count} {unit}{count == 1 ? "" : "s"}";
+}
+
 # The folder of the copy of the data repository at `url` (the advisory
 # database, the package index) in the Pepper home's `cache/<folder>`:
 # cloned when missing, and fetched again when it is older than
-# `DATA_REFRESH_SECONDS`, unless `offline`. `what` names it in errors.
+# `DATA_REFRESH_SECONDS`, unless `offline`. When fetching it again fails,
+# the cached copy serves, with a warning that gives its age; with no copy,
+# it fails. `what` names it in messages.
 export fetch_data_repository(url: String, folder: String, what: String, offline: bool): Result<Path> {
     var base = toolchain
         .find_home().root
@@ -388,7 +398,13 @@ export fetch_data_repository(url: String, folder: String, what: String, offline:
             pulled = git(["reset", "--quiet", "--hard", "FETCH_HEAD"], dir);
         }
         if (pulled.is_err()) {
-            return Result<Path>.Err($"cannot fetch the {what} {url}: {pulled.error().message}");
+            # The copy is better than nothing; the stamp stays old, so the
+            # next command tries again.
+            var age = fetched.is_ok() ? _age(now - fetched.value().modified / 1000000000) : "an unknown time";
+            File.stderr().write_all(
+                $"pep-package: warning: cannot fetch the {what} {url}, so using the cached copy from {age} ago: {pulled.error().message.trim()}\n"
+            );
+            return Result<Path>.Ok(base);
         }
     } else {
         if (offline) {

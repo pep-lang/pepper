@@ -2220,6 +2220,28 @@ search_info_and_add_read_the_package_index() {
     expect_equal(
         package(project.dir, ["--offline", "search", "geometry"]).stdout, "geo (github:someone/geometry): Geometry\n"
     );
+
+    # An index that cannot be reached: the cached copy serves, with a
+    # warning; with no copy, it is an error.
+    var work = hosts.folder.path.join("work");
+    expect_true(File.rename(work.join("index"), work.join("index_away")).is_ok());
+    age_data(hosts, "index");
+    var stale = package(project.dir, ["search", "geometry"]);
+    expect_exit(stale, 0);
+    expect_equal(stale.stdout, "geo (github:someone/geometry): Geometry\n");
+    expect_contains(
+        stale.stderr, "warning: cannot fetch the package index " + index + ", so using the cached copy from "
+    );
+    expect_contains(stale.stderr, " days ago");
+    var uncached = run(
+        hosts.command(
+            tool("pep-package").to_string(), project.dir, ["search"]
+        ).environment("PEPPER_PACKAGE_INDEX", index + "_never")
+    );
+    expect_exit(uncached, 1);
+    expect_contains(uncached.stderr, "error: cannot fetch the package index " + index + "_never: ");
+    expect_true(File.rename(work.join("index_away"), work.join("index")).is_ok());
+
     add_version(hosts.folder.path, "index", "2", ["packages/bad.toml", "source = \"someone/geometry\"\n"]);
     age_data(hosts, "index");
     var malformed = package(project.dir, ["search"]);
