@@ -336,8 +336,7 @@ export struct Generator {
     ## Whether `__caller_location()` strings are defined apart from the
     ## code that uses them (`located_string`).
     var separate_locations: bool = false;
-    ## Whether the code is for a library (`--lib`), which may end up in a
-    ## shared object (`declare_thread_local`).
+    ## `Build.library`.
     var library: bool = false;
     ## How many such strings each function has used so far, by name.
     var location_counts: HashMap<String, ulong> = HashMap<String, ulong>();

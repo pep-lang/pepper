@@ -266,7 +266,8 @@ access. Set `PEPPER_MOBILE_TLS_URL` to an `https://` URL to also fetch that
 public host through the system's roots. On Android the same check runs in
 the emulator against the same kind of server, which `adb reverse` makes the
 emulator's `localhost`, with the same opt-in public fetch. The Android run
-also works on Linux, for the host's ABI (x86_64 there), as CI runs it: `scripts/ci-provision-android.sh` sets up an emulator on a
+also works on Linux, for the host's ABI (x86_64 there), as CI runs it:
+`scripts/ci-provision-android.sh` sets up an emulator on a
 GitHub-hosted Linux runner, since Apple silicon runners cannot run one.
 
 ```sh
