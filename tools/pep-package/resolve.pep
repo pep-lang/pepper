@@ -149,6 +149,9 @@ export struct Resolver {
     var _minimums: HashMap<String, String> = __null;
     # The `[retract]` of each source's newest release, read once.
     var _retractions: HashMap<String, Array<Retraction>> = __null;
+    # The sources pep.lock holds several majors of that the settled graph
+    # holds one of, so they are one package again (`_split`).
+    var _merged: HashSet<String> = __null;
 
     construct(project: Path, root: Manifest, previous: Array<Locked>) {
         this.project = project;
@@ -158,6 +161,7 @@ export struct Resolver {
         _refs = HashMap<String, Array<RemoteRef>>();
         _minimums = HashMap<String, String>();
         _retractions = HashMap<String, Array<Retraction>>();
+        _merged = HashSet<String>();
     }
 
     # The versions of `source` its author retracted: the `[retract]` of
@@ -468,6 +472,19 @@ export struct Resolver {
                 chosen.remove(source);
                 changed = true;
             }
+            # A source split by pep.lock alone, now of one major, is one
+            # package again, in its own folder.
+            var majors = HashMap<String, ulong>();
+            for (var (key, _) in chosen) {
+                if (!copy_major(key).is_empty) {
+                    majors[copy_source(key)] = majors.try_get(copy_source(key)).value_or(0) + 1;
+                }
+            }
+            for (var (source, count) in majors) {
+                if (count == 1 and _merged.insert(source)) {
+                    changed = true;
+                }
+            }
             if (changed) {
                 continue;
             }
@@ -648,7 +665,11 @@ export struct Resolver {
 
     # `wanted`, keyed by source, keyed by graph key instead: a source whose
     # version ranges start in more than one major (`range_major`) is one
-    # key per major, `<source>@v<major>`; any other stays as it is.
+    # key per major, `<source>@v<major>`; any other stays as it is. One
+    # pep.lock holds several majors of stays split while the graph is read,
+    # before the dependents that ask for the other majors are, so its
+    # locked copies are used where they are (offline, or vendored), until
+    # the settled graph holds one major (`_merged`).
     _split(wanted: OrderedMap<String, Array<Wanted>>): OrderedMap<String, Array<Wanted>> {
         var out = OrderedMap<String, Array<Wanted>>();
         for (var (source, asks) in wanted) {
@@ -659,7 +680,7 @@ export struct Resolver {
                 splits = splits and !major.is_empty;
                 majors.insert(major);
             }
-            if (!splits or majors.count < 2) {
+            if (!splits or (majors.count < 2 and (_merged.contains(source) or !_was_split(source)))) {
                 out[source] = asks;
                 continue;
             }
@@ -672,6 +693,16 @@ export struct Resolver {
             }
         }
         return out;
+    }
+
+    # Whether pep.lock holds several majors of `source`.
+    _was_split(source: String): bool {
+        for (var locked in previous) {
+            if (locked.source == source and !locked.major.is_empty) {
+                return true;
+            }
+        }
+        return false;
     }
 
     # Makes `requirement`, a `path` with a `version` in `manifest`, the

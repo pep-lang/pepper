@@ -91,7 +91,7 @@ main(args: String[]): int {
     var fetch = parser.command("fetch", "Fetches what pep.lock lists, resolving what pep.toml changed since");
     var fetch_packages = fetch.positionals(
         "packages",
-        "only these locked packages (their sources, github:owner/name), at the commits pep.lock records, without resolving: what a build fetches for its target"
+        "only these locked packages (their sources, github:owner/name, or github:owner/name@v<major> for one major of several), at the commits pep.lock records, without resolving: what a build fetches for its target"
     );
     var add = parser.command("add", "Adds a dependency at its newest version, or at a range given after @");
     var add_package = add.positional(
@@ -1022,9 +1022,10 @@ struct Project {
         return 0;
     }
 
-    # Fetches the locked packages `sources` names (by `Locked.key`) at their locked commits,
+    # Fetches the locked packages `sources` names at their locked commits,
     # resolving nothing: a build that needs only them (its target's) and
-    # whose pep.lock lists every dependency.
+    # whose pep.lock lists every dependency. A source names every major of
+    # it pep.lock holds, and `<source>@v<major>` one (`Locked.key`).
     fetch_locked(sources: Array<String>): int {
         var locked = read_lock(lock_path(dir));
         if (locked.is_err()) {
@@ -1040,29 +1041,31 @@ struct Project {
         # Vendored, each package is only checked.
         resolver.vendor = vendor;
         for (var source in sources) {
-            var found = Optional<Locked>.Empty;
+            var found = Array<Locked>();
             for (var package in locked.value()) {
-                if (package.key() == source) {
-                    found = Optional<Locked>.Value(package);
+                if (package.key() == source or package.source == source) {
+                    found.append(package);
                 }
             }
-            if (found.is_empty()) {
+            if (found.is_empty) {
                 return fail($"pep.lock does not list '{source}'");
             }
-            # A folder overrides it: nothing to fetch.
-            if (found.value().commit.is_empty) {
-                continue;
-            }
-            var (host, repository) = split_source(found.value().source);
-            var (_, folder) = split_source(source);
-            var package = package_dir(dir, host, folder, vendor);
-            var was_there = package.is_directory();
-            var fetched = resolver.fetch(host, repository, package, found.value().commit, found.value().replaced_by);
-            if (fetched.is_err()) {
-                return fail($"cannot fetch {source}: {fetched.error().message}");
-            }
-            if (!was_there) {
-                say($"fetched {found.value().describe()} ({source})");
+            for (var entry in found) {
+                # A folder overrides it: nothing to fetch.
+                if (entry.commit.is_empty) {
+                    continue;
+                }
+                var (host, repository) = split_source(entry.source);
+                var (_, folder) = split_source(entry.key());
+                var package = package_dir(dir, host, folder, vendor);
+                var was_there = package.is_directory();
+                var fetched = resolver.fetch(host, repository, package, entry.commit, entry.replaced_by);
+                if (fetched.is_err()) {
+                    return fail($"cannot fetch {entry.key()}: {fetched.error().message}");
+                }
+                if (!was_there) {
+                    say($"fetched {entry.describe()} ({entry.key()})");
+                }
             }
         }
         return 0;

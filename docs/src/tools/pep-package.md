@@ -63,7 +63,7 @@ Every package is downloaded once per machine, into a
 | `--offline` | Uses only what `.pep/deps` and the [download cache](#the-download-cache) hold, and fails on anything that needs the network |
 | `--frozen` | Both `--locked` and `--offline` |
 | `fetch` | Fetches what `pep.lock` lists, and resolves what `pep.toml` changed since `pep.lock` was written |
-| `fetch <source>...` | Fetches only those locked packages (`github:owner/name`), at their locked commits, resolving nothing |
+| `fetch <source>...` | Fetches only those locked packages (`github:owner/name`, every major of it pep.lock holds, or `github:owner/name@v<major>`, one), at their locked commits, resolving nothing |
 | `add <owner/name>[@<range>]` | Adds a dependency at its newest version, or at a range |
 | `add <name>[@<range>]` | Adds the package the [package index](#the-package-index) lists as `<name>`, imported by that name |
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |

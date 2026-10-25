@@ -744,6 +744,24 @@ two_majors_of_a_package_build_side_by_side() {
     expect_contains(fetched.stderr, "github:other/units 1.0.0 overrides what legacy 1.0.0 asks (1.2)");
     expect_false(project.lock().contains("major"));
     expect_equal(hosts.build_and_run(project.dir), "1.0.0 1\n");
+
+    # Vendored, both majors are copied, and a fetch only checks them.
+    var vendored = Project(
+        "two_majors_vendored",
+        "legacy = { github = \"someone/legacy\", version = \"1\" }\nunits = { github = \"other/units\", version = \"2\" }\n"
+    );
+    write_file(
+        vendored.dir.join("main.pep"), read_file(project.dir.join("main.pep")).replace("legacy.make()", "units.Unit(3)")
+    );
+    expect_exit(hosts.package(vendored.dir, ["vendor"]), 0);
+    var copies = vendored.dir.join("vendor").join("github.com").join("other");
+    expect_true(copies.join("units@v1").join("module.pep").is_file());
+    expect_true(copies.join("units@v2").join("module.pep").is_file());
+    var vendored_lock = vendored.lock();
+    remove_tree(vendored.dir.join(".pep"));
+    expect_exit(hosts.package(vendored.dir, ["fetch", "--offline"]), 0);
+    expect_equal(vendored.lock(), vendored_lock);
+    expect_equal(hosts.build_and_run(vendored.dir, ["--offline"]), "2.0.0 3\n");
 }
 
 [Test]
