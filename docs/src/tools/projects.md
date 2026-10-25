@@ -77,12 +77,116 @@ that folder's `.pep`, wherever `pepper build` runs.
 | `output` | The executable; building for Windows adds `.exe` to a name with no extension | the package's `name` |
 | `include` | An array of extra folders to search for modules, as `-I` adds | none |
 | `link` | An array of C libraries to link, as `-l` adds | none |
+| `script` | The package's [build script](#build-scripts), which builds its C code before its Pepper code is built | `build.pep`, when there is one |
 
 Options on the command line still apply: `pepper build -O` builds the
 project optimized, and `-o` names another output. A file argument builds that
 file instead (`pepper build tools/gen.pep`); the project's dependencies,
 `include` folders and `link` libraries still apply to it, since it is in the
 project.
+
+## Build scripts
+
+A package that binds a C library can carry the library's C source and build
+it itself, so its users install nothing. Its build script, a Pepper program
+in `build.pep` at the package's root (or the file `[build]`'s `script`
+names), compiles the C code, and prints what the build must link. Every
+build of a program that uses the package (a dependency, or the project
+itself) compiles the script for the machine it runs on and runs it before
+it builds the program, even when it builds for another platform with
+`--target`. Cargo users know it as `build.rs`.
+
+```text
+native/
+├── pep.toml
+├── module.pep        # extern int native_add(int a, int b); and the API around it
+├── build.pep
+└── c/add.c
+```
+
+```pepper
+# build.pep: compiles c/add.c for the build's target and links it.
+import [Path] from io;
+import os;
+import process;
+
+main(): int {
+    var object = Path(os.environment("PEP_OUT_DIR").value()).join(Path("add.o"));
+    var compiled = process
+        .Command(os.environment("PEP_CLANG").value())
+        .arguments(["--target=" + os.environment("PEP_TARGET").value(), "-c", "c/add.c", "-o", object.to_string()])
+        .run();
+    if (compiled.is_err() or !compiled.value().status.success()) {
+        return 1;
+    }
+    print($"pep:object={object}");
+    print("pep:rerun-if-changed=c");
+    return 0;
+}
+```
+
+The script runs in the package's folder, with these environment variables:
+
+| Variable | What it holds |
+| --- | --- |
+| `PEP_TARGET` | The triple the program is built for (`x86_64-pc-windows-msvc`), as `--target` names it |
+| `PEP_TARGET_OS`, `PEP_TARGET_ARCH` | Its OS (`linux`, `macos`, `windows`, `wasi`, `ios`, `android`) and architecture (`x86_64`, `aarch64`) |
+| `PEP_HOST` | The triple of the machine the build runs on |
+| `PEP_OPT_LEVEL` | The optimization level, `0` to `3` |
+| `PEP_FEATURES` | The package's [features](#features) the build turns on, separated by commas |
+| `PEP_PACKAGE_NAME`, `PEP_PACKAGE_DIR` | The package's name and folder |
+| `PEP_OUT_DIR` | A folder of the package's own for what the script makes: `.pep/build/<package>/out` (below `--build`'s folder when given) |
+| `PEP_CLANG` | The clang the build links with (see [What the compiler links](../language/linking.md#what-the-compiler-links)), empty when there is none; it compiles C for any target LLVM supports |
+| `PEP_SYSROOT` | The target's system root (`--sysroot`), empty when there is none |
+
+What the script prints on standard output, a line each, tells the build
+what to do; other lines are its own and ignored:
+
+| Line | What it does |
+| --- | --- |
+| `pep:object=<file>` | Links an object file or a static library (`.a`, `.lib`) |
+| `pep:link=<name>` | Links a library by name, as `-l` does |
+| `pep:link-path=<dir>` | Adds a folder the linker searches, as `-L` does |
+| `pep:warning=<text>` | Shows `warning: <package>: <text>` |
+| `pep:rerun-if-changed=<path>` | Runs the script again when the file, or any file in the folder, changes |
+| `pep:rerun-if-env-changed=<name>` | Runs the script again when the environment variable changes |
+
+A relative path is relative to the package's folder. A line starting `pep:`
+that is none of these is an error, as is a script that exits with a status
+other than 0, which shows what it printed. What the script printed on
+standard error is passed on.
+
+**When it runs again.** The build keeps the script's output in
+`.pep/build/<package>/stamp`, and uses it again until something the script
+depends on changes: its own file, the variables above, and what its
+`rerun-if-changed` and `rerun-if-env-changed` lines name. A script that
+reads other files, such as its C sources or Pepper files of its own it
+imports, names them with `rerun-if-changed`; a change to a file it does not
+name leaves its last output in use. Builds that run side by side
+(`pepper test`) run one package's script one at a time.
+
+**What a build script can do.** A build script is a program like any
+other: it runs with your permissions, can read and write any file you
+can, start programs and use the network. Building a project that depends
+on a package with a build script runs that package's code on your machine,
+before any of its code is in a program you chose to run. So:
+
+- `pepper package add`, `update` and `fetch` name each package that
+  arrives (new, or at another commit) with a build script, and the file to
+  read: `note: native 1.0.0 (github:someone/native) has a build script,
+  which every build of the project compiles and runs on this machine: read
+  ...`.
+- `pepper build --no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`, which
+  `pepper test` and `pepper run` builds see too) fails instead of running a
+  dependency's script, naming it. The project's own script still runs: it
+  is your code.
+
+What is not supported yet: generating Pepper code (a `.pep` file a package
+imports from `PEP_OUT_DIR`), setting build options from a script, a
+`[build-dependencies]` table (a script imports the runtime and the
+packages the project depends on), a helper package for finding a library
+with `pkg-config` and compiling C with the target's flags, and a `[native]`
+table that compiles C sources without a script.
 
 ## `[dependencies]`
 
@@ -629,6 +733,8 @@ pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; gi
 - An `[overrides]` key that is not a source (`github:owner/name`), or an
   override with `optional`, `features` or `default-features`.
 - A table or key `pep.toml` does not have, or a value of the wrong type.
+- A `[build]` `script` that names a file that does not exist, which a
+  build reports.
 
 An import of a dependency that is not on disk says which folder is missing:
 

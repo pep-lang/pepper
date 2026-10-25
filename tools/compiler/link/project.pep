@@ -989,8 +989,11 @@ struct _Reader {
                 manifest.include = strings(path, key, value);
             } else if (key == "link") {
                 manifest.link = strings(path, key, value);
+            } else if (key == "script") {
+                # The build reads it with `toolchain.build_script`.
+                string(path, key, value);
             } else {
-                unknown_key(["build"], key, "build", ["entry", "output", "include", "link"]);
+                unknown_key(["build"], key, "build", ["entry", "output", "include", "link", "script"]);
             }
         }
     }
@@ -1849,6 +1852,9 @@ export struct Packages {
     var _visited: HashSet<String> = HashSet<String>();
     ## The first feature a dependency asks for that its package lacks.
     var _feature_error: String? = Optional<String>.Empty;
+    ## The packages `turn_on_features` turned on, each once, in the order
+    ## it reached them: the project's first.
+    var reached: Manifest[] = Array<Manifest>();
 
     ## The packages of a program rooted at the file `root`.
     ##
@@ -1938,6 +1944,24 @@ export struct Packages {
         return Result<void, String>.ok();
     }
 
+    ## Returns the features `turn_on_features` turned on in `manifest`'s
+    ## package, sorted.
+    ##
+    ## @param manifest one of `reached`
+    ## @returns the features' names
+    features_on(manifest: Manifest): String[] {
+        var prefix = _key(manifest) + "
+";
+        var names = Array<String>();
+        for (var enabled in _enabled) {
+            if (enabled.starts_with(prefix)) {
+                names.append(enabled.substr_bytes(prefix.size, enabled.size - prefix.size));
+            }
+        }
+        names.sort((a, b) => a.compare(b));
+        return names;
+    }
+
     ## The manifest in `dir` itself, when it has one that parses.
     _manifest_at(dir: Path): Manifest? {
         if (!dir.join(Path(files.MANIFEST_FILE)).is_file()) {
@@ -1964,6 +1988,7 @@ export struct Packages {
         if (!_visited.insert(key)) {
             return;
         }
+        reached.append(manifest);
         var named = manifest.dependencies.copy();
         if (dev and key == project.value().normalize().to_string()) {
             named.append_all(manifest.dev_dependencies);

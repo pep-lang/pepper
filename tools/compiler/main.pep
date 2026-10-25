@@ -162,6 +162,14 @@ _main(args: String[]): int {
         help = "Fetch nothing over the network: build with what the project's `.pep/deps` and pep-package's download cache hold, and fail on a locked dependency missing from both (also `PEPPER_OFFLINE=1`)"
     );
     var frozen = parser.flag("frozen", help = "Both `--locked` and `--offline`");
+    var no_build_scripts = parser.flag(
+        "no-build-scripts",
+        help = "Fail, rather than run it, when a dependency the build turns on has a build script (`build.pep`), which runs the dependency's code on this machine; the project's own still runs (also `PEPPER_NO_BUILD_SCRIPTS=1`)"
+    );
+    var skip_build_scripts = parser.flag(
+        "skip-build-scripts",
+        help = "Internal: run no build scripts. A build gives it to the build of each package's build script, which is in the project too"
+    );
     var ir = parser.flag("emit-llvm", help = "Emit LLVM IR (optimized at the `-O` level)");
     var emit_static = parser.option<_StaticMode>(
         "emit-static",
@@ -682,6 +690,26 @@ _main(args: String[]): int {
             options.worker_args.append(args[k]);
         }
         options.early_worker = early_worker;
+        if (!skip_build_scripts.is_set) {
+            var inputs = driver.ScriptInputs();
+            inputs.target = setup.target;
+            inputs.build_dir = build_folder;
+            inputs.opt_level = opt_level.value();
+            inputs.sysroot = options.sysroot;
+            inputs.refuse = no_build_scripts.is_set or os.environment_flag("PEPPER_NO_BUILD_SCRIPTS");
+            var scripts = driver.run_build_scripts(entry, inputs);
+            if (scripts.is_err()) {
+                _report(scripts.error());
+                return 1;
+            }
+            for (var library in scripts.value().libraries) {
+                if (!options.libraries.contains(library)) {
+                    options.libraries.append(library);
+                }
+            }
+            options.library_dirs.append_all(scripts.value().library_dirs);
+            options.objects = scripts.value().objects;
+        }
         var made = driver.build(program.value(), options);
         if (made.is_err()) {
             # Empty: printed already (a syntax error read late).

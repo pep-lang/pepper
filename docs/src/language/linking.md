@@ -63,6 +63,13 @@ Putting `[Link]` in the source keeps the knowledge of which library a function
 comes from next to its declaration, so nobody building your program has to
 remember a command-line flag.
 
+## Linking C code a package builds: build scripts
+
+A package can ship a C library's source instead of asking its users to
+install the library: its [build script](../tools/projects.md#build-scripts)
+compiles the C code with clang for the build's target, and prints the
+objects and libraries to link (`pep:object=...`, `pep:link=...`).
+
 ## Linking a library from the command line: `-l`
 
 The `-l` option links a library for one build:

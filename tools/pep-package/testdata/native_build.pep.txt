@@ -1,0 +1,26 @@
+# The build script of the test package `someone/native`: compiles its
+# `c/add.c` with the clang the build hands it, for the build's target, and
+# says to link the object. It counts its runs in `runs.txt` in its output
+# folder.
+
+import [File, Path] from io;
+import os;
+import process;
+
+main(): int {
+    var out = Path(os.environment("PEP_OUT_DIR").value());
+    var runs = out.join(Path("runs.txt"));
+    File.write_text(runs, File.read_to_string(runs).ok_or("") + "run\n");
+    var object = out.join(Path("add.o"));
+    var compiled = process
+        .Command(os.environment("PEP_CLANG").value())
+        .arguments(["--target=" + os.environment("PEP_TARGET").value(), "-c", "c/add.c", "-o", object.to_string()])
+        .run();
+    if (compiled.is_err() or !compiled.value().status.success()) {
+        return 1;
+    }
+    print($"pep:object={object}");
+    print("pep:rerun-if-changed=c");
+    print("pep:rerun-if-env-changed=NATIVE_TEST");
+    return 0;
+}

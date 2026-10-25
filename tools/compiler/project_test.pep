@@ -113,7 +113,19 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[build]\nentyr = \"x\"\n"),
-        "entyr: unknown key 'entyr' in '[build]'; expected one of 'entry', 'output', 'include', 'link'"
+        "entyr: unknown key 'entyr' in '[build]'; expected one of 'entry', 'output', 'include', 'link', 'script'"
+    );
+    expect_equal(errors("[package]
+name = \"a\"
+[build]
+script = \"tools/build.pep\"
+"), "");
+    expect_equal(
+        errors("[package]
+name = \"a\"
+[build]
+script = true
+"), "true: 'script' must be a string, not a boolean"
     );
     expect_equal(errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n"), "");
     # `package` names a member of a repository's workspace.

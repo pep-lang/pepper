@@ -36,6 +36,7 @@ export verify_cache(program: link.Program, options: BuildOptions): Result<void, 
     again.opt_level = options.opt_level;
     again.libraries = options.libraries;
     again.library_dirs = options.library_dirs;
+    again.objects = options.objects;
     again.cache = Optional<Cache>.Value(fresh);
     again.in_process = options.in_process;
     again.part_size = options.part_size;
