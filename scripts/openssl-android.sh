@@ -37,10 +37,11 @@ sha256() {
 }
 
 build() {
-  local ndk output work prebuilt
+  local ndk output prebuilt
   ndk=$(cd "${1:?}" && pwd)
   mkdir -p "${2:?}"
   output=$(cd "$2" && pwd)
+  # Global: the EXIT trap runs after this function returns.
   work=$(mktemp -d)
   trap 'rm -rf "$work"' EXIT
   prebuilt=$(ls -d "$ndk"/toolchains/llvm/prebuilt/*/bin | head -1)
@@ -76,8 +77,9 @@ build() {
 }
 
 fetch() {
-  local dir work
+  local dir
   dir="${1:?}/tls/android"
+  # Global: the EXIT trap runs after this function returns.
   work=$(mktemp -d)
   trap 'rm -rf "$work"' EXIT
   curl --fail --location --silent --show-error --retry 3 -o "$work/$ARCHIVE" "$RELEASE_URL/$ARCHIVE"
