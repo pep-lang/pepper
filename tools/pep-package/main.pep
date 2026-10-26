@@ -1501,6 +1501,7 @@ struct Project {
             entry["version"] = JsonValue.String(package.version);
             entry["source"] = JsonValue.String(package.source);
             entry["dev"] = JsonValue.Bool(package.dev);
+            entry["build"] = JsonValue.Bool(package.build);
             entry["target"] = package.target.is_empty ? JsonValue.Null : JsonValue.String(package.target);
             list.append(entry);
             var severity = advisory.severity.is_empty ? "" : $" ({advisory.severity})";
