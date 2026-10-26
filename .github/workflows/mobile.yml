@@ -14,23 +14,26 @@
 #   gh workflow run mobile.yml --ref <branch>
 #
 # It runs on each push to main, nightly (catching a change to the runner
-# images or the SDKs), on pull requests, and by hand. It is not a required
-# check.
+# images or the SDKs), and by hand. It is not a required check, and it
+# does not run on pull requests: measured on #252, the iOS job takes about
+# 40 minutes on a 3-core macOS runner (the runtime's test programs and the
+# examples build there), and it holds one of the org's few macOS runners,
+# so CI's own test-macos jobs queued behind it; the Android job takes about
+# 15. Before merging a change to the runtime's platform code, dispatch it
+# on the branch (or run scripts/mobile-test.sh by hand).
 name: mobile
 
 on:
   push:
     branches: [main]
-  pull_request:
   schedule:
     - cron: "23 6 * * *"
   workflow_dispatch:
 
-# A pull request's newer push replaces its run in progress; other runs
-# queue.
+# Runs queue, so each one finishes with a result.
 concurrency:
   group: mobile-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -48,7 +51,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     # The step caps below sum to less, so a stall trips a step (naming the
     # phase and running the diagnostics) rather than cancelling the job.
-    timeout-minutes: 70
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v7
 
@@ -67,8 +70,9 @@ jobs:
           bash -euxo pipefail scripts/ci-provision-android.sh
           bash -euxo pipefail scripts/openssl-android.sh fetch runtime
 
+      # About 40 minutes on iOS and 15 on Android (see the top).
       - name: Run the tests and the examples
-        timeout-minutes: 25
+        timeout-minutes: 55
         shell: bash
         env:
           PLATFORM: ${{ matrix.platform }}
@@ -93,8 +97,10 @@ jobs:
             echo "::group::emulator.log"
             cat "$RUNNER_TEMP/mobile/emulator.log"
             echo "::endgroup::"
+            # Bounded: once mobile-test.sh has stopped the emulator, adb
+            # would wait for a device forever.
             echo "::group::logcat crashes"
-            "$adb" logcat -d -b crash
+            timeout 30 "$adb" logcat -d -b crash
             echo "::endgroup::"
           fi
           df -m .

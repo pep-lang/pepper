@@ -170,7 +170,9 @@ pepper test --target x86_64-linux-android
 CI's `mobile` workflow (`.github/workflows/mobile.yml`) runs the script on
 GitHub-hosted runners, iOS on macOS and Android on Linux (where
 `scripts/ci-provision-android.sh` sets up the emulator, with KVM), on
-every push to main and nightly. Each job builds the commit's compiler with
+every push to main and nightly, but not on pull requests: the iOS job
+takes about 40 minutes on a 3-core macOS runner and holds one of the
+few macOS runners CI's own test jobs wait for. Each job builds the commit's compiler with
 stage 0, from the build cache the test jobs keep, and the Android job
 fetches the OpenSSL itself, so `gh workflow run mobile.yml --ref <branch>`
 checks a branch with nothing else to set up. A test that cannot run there

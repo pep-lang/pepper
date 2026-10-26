@@ -132,7 +132,12 @@ pepper test --target x86_64-linux-android src          # on the running emulator
 - **iOS simulator** (`aarch64-apple-ios-simulator`, or
   `x86_64-apple-ios-simulator` on an Intel Mac): each program runs in a
   booted simulator with `xcrun simctl spawn`, from this Mac's file system,
-  so its temporary folder is the one `pep-test` makes here. The simulator
+  so its temporary folder is the one `pep-test` makes here. `simctl` starts
+  it in another folder, so `pep-test` names the current one in
+  `PEPPER_TEST_DIRECTORY` and the program goes back there first: data
+  files beside a test are found as on the Mac. `simctl` passes no `USER`,
+  and the simulator's user database lacks the Mac's user, so
+  `os.user_name()` finds none. The simulator
   is the one whose UDID `PEPPER_IOS_SIMULATOR` holds, else the booted
   one (`booted`). Boot it first (`xcrun simctl boot "iPhone 16"`).
   A device triple (`aarch64-apple-ios`) is a usage error: nothing here can
@@ -170,6 +175,8 @@ which `pep-test` runs with one of two requests:
   panics, crashes or times out), every process the test started ends with
   it (a job object on Windows, a process group elsewhere): one left running
   would hold the pipes to its output open, and `pep-test` would wait on it.
+  With `PEPPER_TEST_DIRECTORY` set and not empty, the program first makes
+  that folder its current one (and exits with 2 when it cannot enter it).
 
 On Windows, a test program turns off Windows Error Reporting for its
 crashes and `abort()`, so a test that panics or crashes ends at once,

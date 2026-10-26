@@ -84,7 +84,12 @@ machine_and_user() {
     expect_true(page >= 4096);
     expect_equal(page & (page - 1), 0);
     expect_false(os.system_version().is_empty);
-    expect_false(os.user_name().is_empty());
+    # The simulator's user database lacks the Mac's user, and `simctl spawn`
+    # passes no `USER`.
+    [Target(!OS(IOS))]
+    {
+        expect_false(os.user_name().is_empty());
+    }
     expect_false(os.home_directory().is_empty());
     expect_equal(os.temp_directory().to_string(), io.Directory.temp().to_string());
 }
@@ -98,11 +103,15 @@ set_and_remove_environment_variables() {
     os.set_environment(name, "");
     expect_equal(os.environment(name).value(), "");
     os.set_environment(name, "inherited");
-    var child = os.system_name() == "windows" ?
-        process.Command("cmd").arguments(["/c", $"echo %{name}%"]).run() :
-        process.Command("sh").arguments(["-c", $"echo ${name}"]).run();
-    expect_true(child.is_ok());
-    expect_equal(child.value().stdout.trim(), "inherited");
+    # iOS starts no child processes.
+    [Target(!OS(IOS))]
+    {
+        var child = os.system_name() == "windows" ?
+            process.Command("cmd").arguments(["/c", $"echo %{name}%"]).run() :
+            process.Command("sh").arguments(["-c", $"echo ${name}"]).run();
+        expect_true(child.is_ok());
+        expect_equal(child.value().stdout.trim(), "inherited");
+    }
     os.remove_environment(name);
     expect_false(os.environment(name).is_value());
     expect_false(os.environment_variables().contains(name));

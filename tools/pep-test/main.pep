@@ -279,6 +279,12 @@ test_command(options: Options, program: String, arguments: Array<String>, temp: 
     # noise unless asked for. Passed on, since a device does not inherit
     # this environment.
     environment.append(("PEPPER_BACKTRACE", os.environment("PEPPER_BACKTRACE").value_or("0")));
+    # simctl starts the program in another folder; the test program goes
+    # back to this one (testing.TestRunner).
+    var here = process.working_directory();
+    if (options.runner == Runner.IosSimulator and here.is_ok()) {
+        environment.append(("PEPPER_TEST_DIRECTORY", here.value().to_string()));
+    }
     if (options.runner == Runner.Android) {
         # One shell command line, which ends with the program's status.
         var line = $"cd {options.device} &&";
@@ -316,7 +322,13 @@ shell_quote(text: String): String {
 # files beside it by the path it uses here. Returns why it could not, if
 # it could not. A folder that is not below the current one stays here.
 push_program(options: Options, program: String, folder: String): String? {
-    var pushes = [["shell", $"mkdir -p {options.device}"], ["push", program, $"{options.device}/"]];
+    # chmod: a file pushed from Windows may arrive without its execute bit.
+    var name = Path(program).file_name().value();
+    var pushes = [
+        ["shell", $"mkdir -p {options.device}"],
+        ["push", program, $"{options.device}/"],
+        ["shell", $"chmod 755 {options.device}/{shell_quote(name)}"]
+    ];
     var remote = folder.replace("\\", "/");
     # Once each: a folder that does not build is built again a file at a
     # time, and each of those programs needs the same data.

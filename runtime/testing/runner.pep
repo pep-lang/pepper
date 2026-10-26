@@ -2,7 +2,8 @@
 ## it was built from and answers `pep-test`'s `--list` and `--run NAME`.
 
 import async;
-import [File] from io;
+import [Directory, File, Path] from io;
+import os;
 
 extern void memcpy(void* destination, void* source, ulong size);
 extern void memset(void* destination, int value, ulong size);
@@ -78,6 +79,10 @@ struct _TestCase {
 ##   (the test returns, panics, crashes or times out), every process the
 ##   test started ends with it (a job object on Windows, a process group
 ##   elsewhere), so none holds `pep-test`'s pipes to its output open.
+##
+## With `PEPPER_TEST_DIRECTORY` set and not empty, the program first makes
+## that folder its current one: `pep-test` sets it where a program cannot
+## start in the folder the tests run from (the iOS simulator).
 export struct TestRunner {
     var _file: String;
     var _adding: String;
@@ -128,6 +133,16 @@ export struct TestRunner {
     ## @returns the program's exit status: 0 when the request succeeded, 2
     ##   for a request it does not understand or a test it does not have
     run(args: String[]): int {
+        var directory = os.environment("PEPPER_TEST_DIRECTORY");
+        if (directory.is_value() and !directory.value().is_empty) {
+            var entered = Directory.set_current(Path(directory.value()));
+            if (entered.is_err()) {
+                File.stderr().write_all(
+                    $"error: cannot enter PEPPER_TEST_DIRECTORY '{directory.value()}': {entered.error().message}\n"
+                );
+                return 2;
+            }
+        }
         if (args.count == 2 and args[1] == "--list") {
             for (var test in _tests) {
                 var kind = test.should_panic ? "panics" : "returns";
