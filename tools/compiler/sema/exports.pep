@@ -85,6 +85,7 @@ export collect_exports(module: Module, state: PassState) {
             continue;
         }
         var parameters = Array<(String, TypeName)>();
+        var parameter_locs = Array<Loc>();
         for (var parameter in function.parameters) {
             var loc = parameter.type_loc.is_none() ? parameter.loc : parameter.type_loc;
             var checked = _check_type(module, state, parameter.ty, symbol.value(), loc, handles);
@@ -93,6 +94,7 @@ export collect_exports(module: Module, state: PassState) {
                 return;
             }
             parameters.append((parameter.name, parameter.ty));
+            parameter_locs.append(loc);
         }
         var checked = _check_type(module, state, function.ty, symbol.value(), function.loc, handles);
         if (checked.is_value()) {
@@ -112,7 +114,9 @@ export collect_exports(module: Module, state: PassState) {
             );
             return;
         }
-        exports.functions.append(Export(symbol.value(), function.name, parameters, function.ty, function.loc));
+        var exported = Export(symbol.value(), function.name, parameters, function.ty, function.loc);
+        exported.parameter_locs = parameter_locs;
+        exports.functions.append(exported);
     }
     for (var e in exports.functions) {
         if (is_export_string(e.result)) {

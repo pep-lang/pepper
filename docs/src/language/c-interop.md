@@ -632,6 +632,10 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
   the general-dynamic model, which costs a call (`__tls_get_addr` on
   x86_64, a TLS descriptor's on arm64) per access.
 
+Swift, Kotlin and Java code can call the exports with its own values
+instead: `--bindings swift` and `--bindings java` write bindings beside the
+header (see [iOS and Android](mobile.md#bindings)).
+
 ### Initialization, panics and threads
 
 - Module-scope variables are initialized when the library is loaded, before

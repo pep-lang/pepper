@@ -3,9 +3,10 @@
 #
 #   bash build.sh <pep-build> <output-dir> [<simulator-udid>]
 #
-# Builds ../greeter.pep as a static library for the simulator, compiles
-# PepperDemo.swift against it with greeter.h as the bridging header, and
-# bundles PepperDemo.app. With a booted simulator's UDID, installs the app,
+# Builds ../greeter.pep as a static library for the simulator with the Swift
+# wrappers `--bindings swift` writes beside it (greeter.swift, over the C
+# module Cgreeter its module.modulemap declares), compiles PepperDemo.swift
+# with them, and bundles PepperDemo.app. With a booted simulator's UDID, installs the app,
 # launches it, and checks what it printed. It also links the app for a
 # device (arm64-apple-ios), unsigned, to show the device build links.
 set -euo pipefail
@@ -21,10 +22,10 @@ build() {
   sdk=$(xcrun --sdk "$platform" --show-sdk-path)
   rm -rf "$dir"
   mkdir -p "$dir/PepperDemo.app"
-  "$compiler" --target "$pepper_triple" --sysroot "$sdk" --lib static "$here/../greeter.pep" \
+  "$compiler" --target "$pepper_triple" --sysroot "$sdk" --lib static --bindings swift "$here/../greeter.pep" \
     -o "$dir/libgreeter.a" --build "$dir/build"
   xcrun --sdk "$platform" swiftc -target "$swift_triple" -sdk "$sdk" -parse-as-library -O \
-    -import-objc-header "$dir/greeter.h" "$here/PepperDemo.swift" \
+    -I "$dir" "$here/PepperDemo.swift" "$dir/greeter.swift" \
     -L "$dir" -lgreeter -o "$dir/PepperDemo.app/PepperDemo"
   cp "$here/Info.plist" "$dir/PepperDemo.app/Info.plist"
 }
@@ -54,6 +55,7 @@ done
 cat "$out/stdout.txt"
 grep -q "fibonacci(50) = 12586269025" "$out/stdout.txt"
 grep -q "words: 4" "$out/stdout.txt"
+grep -q "even: true, half: 1.25, tally: 7" "$out/stdout.txt"
 xcrun simctl io "$device" screenshot "$out/screenshot.png" || true
 xcrun simctl terminate "$device" dev.pepper.demo || true
 xcrun simctl uninstall "$device" dev.pepper.demo

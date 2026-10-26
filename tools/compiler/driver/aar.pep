@@ -36,19 +36,24 @@ export build_aar(compiler: Path, arguments: String[], output: Path, name: String
         }
     }
     var library = $"lib{name}.so";
-    var built = build_for_targets(compiler, arguments, "shared", triples, build, library);
+    var built = build_for_targets(
+        compiler, arguments, ["--lib", "shared", "--bindings", "java"], triples, build, library
+    );
     if (built.is_err()) {
         return built;
     }
     var empty = Array<u8>();
     var entries = Array<(String, u8[])>();
     entries.append(("AndroidManifest.xml", aar_manifest(name).bytes()));
-    entries.append(("classes.jar", zip_stored(Array<(String, u8[])>())));
     entries.append(("R.txt", empty));
     entries.append(("res/", empty));
     # Every target's header and license are the same: take the first's.
     var first = build.join(Path(triples[0]));
-    var files = [(Path($"{name}.h"), $"include/{name}.h"), (Path(OPENSSL_LICENSE), OPENSSL_LICENSE)];
+    var files = [
+        (Path($"{name}.jar"), "classes.jar"),
+        (Path($"{name}.h"), $"include/{name}.h"),
+        (Path(OPENSSL_LICENSE), OPENSSL_LICENSE)
+    ];
     for (var (file, entry) in files) {
         var path = first.join(file);
         if (path.is_file()) {

@@ -343,18 +343,22 @@ lib_and_lto_are_checked_and_name_their_output() {
     }
 }
 
-# `--lib swift-package`: a Swift package around an iOS `.xcframework`,
-# built on any system, whose simulator library is a universal file of two
-# archives; and the output names and options it refuses.
+# `--lib swift-package`: a Swift package of the Swift wrappers over an iOS
+# `.xcframework`, built on any system, whose simulator library is a
+# universal file of two archives; and the output names and options it and
+# `--bindings` refuse.
 [Test]
 lib_swift_package_writes_an_xcframework_for_ios() {
     var folder = _program("options_xcframework", _LIBRARY);
     _succeeds(folder.path, ["--lib", "swift-package", "main.pep", "-o", "Adder", "--build", "build"]);
     var package = folder.path.join(Path("Adder"));
-    var framework = package.join(Path("Adder.xcframework"));
+    var framework = package.join(Path("CAdder.xcframework"));
+    var manifest = File.read_to_string(package.join(Path("Package.swift"))).value();
+    expect_contains(manifest, ".binaryTarget(name: \"CAdder\", path: \"CAdder.xcframework\")");
+    expect_contains(manifest, ".target(name: \"Adder\", dependencies: [\"CAdder\"])");
     expect_contains(
-        File.read_to_string(package.join(Path("Package.swift"))).value(),
-        ".binaryTarget(name: \"Adder\", path: \"Adder.xcframework\")"
+        File.read_to_string(package.join(Path("Sources")).join(Path("Adder")).join(Path("Adder.swift"))).value(),
+        "@discardableResult\npublic func `add`(_ `a`: Int32, _ `b`: Int32) -> Int32 {\n    return CAdder.add(`a`, `b`)\n}\n"
     );
     expect_contains(
         File.read_to_string(framework.join(Path("Info.plist"))).value(), "<string>ios-arm64_x86_64-simulator</string>"
@@ -362,7 +366,7 @@ lib_swift_package_writes_an_xcframework_for_ios() {
     for (var slice in ["ios-arm64", "ios-arm64_x86_64-simulator"]) {
         var headers = framework.join(Path(slice)).join(Path("Headers"));
         expect_contains(File.read_to_string(headers.join(Path("Adder.h"))).value(), "add(int32_t a, int32_t b);");
-        expect_contains(File.read_to_string(headers.join(Path("module.modulemap"))).value(), "module Adder {");
+        expect_contains(File.read_to_string(headers.join(Path("module.modulemap"))).value(), "module CAdder {");
     }
     var device = File.read_bytes(framework.join(Path("ios-arm64")).join(Path("libAdder.a"))).value();
     expect_true(_starts_with(device, 0, "!<arch>\n".bytes()));
@@ -392,7 +396,10 @@ lib_swift_package_writes_an_xcframework_for_ios() {
             "which build for every iOS or Android target"
         ),
         (["--lib", "xcframework", "main.pep", "-o", "Adder"], 2, "must end in '.xcframework'"),
-        (["--lib", "swift-package", "--emit-llvm", "main.pep"], 2, "the --emit options cannot be used")
+        (["--lib", "swift-package", "--emit-llvm", "main.pep"], 2, "the --emit options cannot be used"),
+        (["--bindings", "swift", "main.pep"], 2, "'--bindings' needs '--lib static' or '--lib shared'"),
+        (["--lib", "aar", "--bindings", "java", "main.pep"], 2, "'--bindings' needs '--lib static' or '--lib shared'"),
+        (["--lib", "static", "--bindings", "java", "main.pep"], 2, "'--bindings java' needs '--lib shared'")
     ]) {
         var ran = _pep_build(folder.path, arguments);
         expect_equal(_code(ran), code);

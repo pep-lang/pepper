@@ -47,10 +47,13 @@ _slices(): _Slice[] {
 }
 
 ## Builds the library of this build's program as an `.xcframework` named
-## `name` at `output`, or with `package` a Swift package folder at `output`
-## holding `Package.swift` and `<name>.xcframework`. Each target's static
-## library is built by `compiler`, side by side, with this build's
-## `arguments` and `--lib static --target <triple>`, into `build`.
+## `name` at `output`, whose module Swift imports is `name`; or with
+## `package` a Swift package folder at `output` holding `Package.swift`,
+## `C<name>.xcframework`, whose module is `C<name>`, and the Swift module
+## `name`, the wrappers `--bindings swift` writes, in `Sources/<name>`.
+## Each target's static library is built by `compiler`, side by side, with
+## this build's `arguments` and `--lib static --target <triple>`, into
+## `build`.
 ##
 ## @param compiler the compiler to run for each target
 ## @param arguments this build's command line, the program first
@@ -66,11 +69,16 @@ export build_xcframework(
     for (var slice in _slices()) {
         triples.append_all(slice.triples);
     }
-    var built = build_for_targets(compiler, arguments, "static", triples, build, $"lib{name}.a");
+    var options = ["--lib", "static"];
+    if (package) {
+        options.append_all(["--bindings", "swift"]);
+    }
+    var built = build_for_targets(compiler, arguments, options, triples, build, $"lib{name}.a");
     if (built.is_err()) {
         return built;
     }
-    var framework = package ? output.join(Path($"{name}.xcframework")) : output;
+    var module = package ? swift_c_module(name) : name;
+    var framework = package ? output.join(Path($"{module}.xcframework")) : output;
     # Stale slices would otherwise stay listed beside the new ones.
     if (framework.exists()) {
         var removed = Directory.remove_all(framework);
@@ -106,7 +114,8 @@ export build_xcframework(
                 return Result<void, String>.err($"cannot copy {header}: {copied.error().message}");
             }
             written = _write_text(
-                headers.join(Path("module.modulemap")), $"module {name} {{\n    header \"{name}.h\"\n    export *\n}}\n"
+                headers.join(Path("module.modulemap")),
+                $"module {module} {{\n    header \"{name}.h\"\n    export *\n}}\n"
             );
         }
         if (written.is_err()) {
@@ -117,24 +126,36 @@ export build_xcframework(
     if (listed.is_err() or !package) {
         return listed;
     }
+    var sources = output.join(Path("Sources")).join(Path(name));
+    var made = Directory.create_all(sources);
+    if (made.is_err()) {
+        return Result<void, String>.err($"cannot create {sources}: {made.error().message}");
+    }
+    # The wrappers every target wrote are the same: take the first's.
+    var swift = build.join(Path(triples[0])).join(Path($"{name}.swift"));
+    var copied = File.copy(swift, sources.join(Path($"{name}.swift")));
+    if (copied.is_err()) {
+        return Result<void, String>.err($"cannot copy {swift}: {copied.error().message}");
+    }
     return _write_text(output.join(Path("Package.swift")), swift_package_manifest(name));
 }
 
 ## Builds this build's program once for each of `triples`, side by side, by
-## running `compiler` with `arguments` and `--lib <kind> --target <triple>`,
-## each into `<build>/<triple>/<file>` with that folder as its build folder.
+## running `compiler` with `arguments`, `options` (`--lib <kind>`, and any
+## `--bindings`) and `--target <triple>`, each into `<build>/<triple>/<file>`
+## with that folder as its build folder.
 ## `--lib aar` (`aar.pep`) builds its shared libraries this way too.
 ##
 ## @param compiler the compiler to run for each target
 ## @param arguments this build's command line, the program first
-## @param kind the `--lib` kind each target builds
+## @param options the options that choose what each target builds
 ## @param triples the targets
 ## @param build the build folder
 ## @param file the library's file name in each target's folder
 ## @returns nothing, or why one could not be built: empty when the
 ##   compiler printed why itself
 export build_for_targets(
-    compiler: Path, arguments: String[], kind: String, triples: String[], build: Path, file: String
+    compiler: Path, arguments: String[], options: String[], triples: String[], build: Path, file: String
 ): Result<void, String> {
     var passed = Array<String>();
     for (var i in 1..arguments.count) {
@@ -146,18 +167,8 @@ export build_for_targets(
         var started = process
             .Command(compiler.to_string())
             .arguments(passed)
-            .arguments(
-                [
-                    "--lib",
-                    kind,
-                    "--target",
-                    triple,
-                    "-o",
-                    folder.join(Path(file)).to_string(),
-                    "--build",
-                    folder.to_string()
-                ]
-            )
+            .arguments(options)
+            .arguments(["--target", triple, "-o", folder.join(Path(file)).to_string(), "--build", folder.to_string()])
             .stdout(process.Stream.Inherit)
             .stderr(process.Stream.Inherit)
             .spawn();
@@ -176,6 +187,15 @@ export build_for_targets(
         return Result<void, String>.err("");
     }
     return Result<void, String>.ok();
+}
+
+## The name of the C module Swift bindings import: `C<name>`, so the Swift
+## module can be `<name>`.
+##
+## @param name the library's name
+## @returns the C module's name
+export swift_c_module(name: String): String {
+    return "C" + name;
 }
 
 ## Whether `name` can name a Swift module and a C header: letters, digits
@@ -217,13 +237,15 @@ export xcframework_info_plist(name: String): String {
 }
 
 ## The `Package.swift` of a Swift package whose library product `name` is
-## the binary target `<name>.xcframework` beside it, for iOS 15 and later
-## (Pepper's oldest iOS).
+## the Swift target `name` (the wrappers in `Sources/<name>`), over the
+## binary target `C<name>`, the `C<name>.xcframework` beside it, for iOS 15
+## and later (Pepper's oldest iOS).
 ##
 ## @param name the library's name
 ## @returns the manifest's source
 export swift_package_manifest(name: String): String {
-    return $"// swift-tools-version:5.5\nimport PackageDescription\n\nlet package = Package(\n    name: \"{name}\",\n    platforms: [.iOS(.v15)],\n    products: [.library(name: \"{name}\", targets: [\"{name}\"])],\n    targets: [.binaryTarget(name: \"{name}\", path: \"{name}.xcframework\")]\n)\n";
+    var module = swift_c_module(name);
+    return $"// swift-tools-version:5.5\nimport PackageDescription\n\nlet package = Package(\n    name: \"{name}\",\n    platforms: [.iOS(.v15)],\n    products: [.library(name: \"{name}\", targets: [\"{name}\"])],\n    targets: [\n        .binaryTarget(name: \"{module}\", path: \"{module}.xcframework\"),\n        .target(name: \"{name}\", dependencies: [\"{module}\"]),\n    ]\n)\n";
 }
 
 ## A universal (fat) Mach-O file holding `files`, one for each of

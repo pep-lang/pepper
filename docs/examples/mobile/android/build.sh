@@ -3,14 +3,13 @@
 #
 #   bash build.sh <pep-build> <output-dir> [<adb-serial>]
 #
-# Builds ../greeter.pep as a static library for arm64 Android (or the triple
-# in PEPPER_ANDROID_TRIPLE, such as x86_64-linux-android for an x64
-# emulator) and links it with jni.c into libgreeter_jni.so using the NDK's
-# clang. With PEPPER_ANDROID_AAR=1 it builds greeter.aar (`--lib aar`)
-# instead, checks its layout, and links jni.c against the .aar's
-# libgreeter.so for that ABI, which the APK carries beside it. Then compiles
-# MainActivity.java and packages an APK with the SDK's own tools (javac, d8, aapt2, zipalign,
-# apksigner; no Gradle), signed with a throwaway key. With an emulator's adb
+# Builds ../greeter.pep as greeter.aar (`--lib aar`), checks its layout,
+# and takes its libgreeter.so for arm64 Android (or for the ABI of the
+# triple in PEPPER_ANDROID_TRIPLE, such as x86_64-linux-android for an x64
+# emulator). Then compiles MainActivity.java against the .aar's classes.jar,
+# whose generated class pepper.greeter.Greeter it calls, and packages an
+# APK with the SDK's own tools (javac, d8, aapt2, zipalign, apksigner; no
+# Gradle), signed with a throwaway key. With an emulator's adb
 # serial, installs it, starts the activity, and checks its log.
 #
 # Needs ANDROID_HOME (the Android SDK, with an NDK, a platform and
@@ -27,7 +26,6 @@ newest() { ls "$1" | sort -V | tail -1; }
 ndk="$ANDROID_HOME/ndk/$(newest "$ANDROID_HOME/ndk")"
 tools="$ANDROID_HOME/build-tools/$(newest "$ANDROID_HOME/build-tools")"
 platform="$ANDROID_HOME/platforms/$(newest "$ANDROID_HOME/platforms")"
-clang=$(ls -d "$ndk"/toolchains/llvm/prebuilt/*/bin/clang | head -1)
 if [ -z "${JAVA_HOME:-}" ]; then
   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 fi
@@ -39,34 +37,22 @@ abi=arm64-v8a
 rm -rf "$out"
 mkdir -p "$out/pepper" "$out/apk/lib/$abi" "$out/classes" "$out/dex"
 
-if [ "${PEPPER_ANDROID_AAR:-}" = 1 ]; then
-  # The .aar: a shared library for each ABI, and the header. The JNI
-  # functions link against this ABI's, as an app's own CMake target would.
-  "$compiler" --sysroot "$ndk" --lib aar "$here/../greeter.pep" \
-    -o "$out/pepper/greeter.aar" --build "$out/pepper/build"
-  unzip -q "$out/pepper/greeter.aar" -d "$out/pepper/aar"
-  for entry in AndroidManifest.xml classes.jar R.txt res include/greeter.h \
-    jni/arm64-v8a/libgreeter.so jni/x86_64/libgreeter.so; do
-    [ -e "$out/pepper/aar/$entry" ] || { echo "greeter.aar lacks $entry"; exit 1; }
-  done
-  cp "$out/pepper/aar/jni/$abi/libgreeter.so" "$out/apk/lib/$abi/"
-  "$clang" --target="${triple}30" -shared -fPIC -O2 -I "$out/pepper/aar/include" "$here/jni.c" \
-    -L "$out/apk/lib/$abi" -lgreeter -o "$out/apk/lib/$abi/libgreeter_jni.so"
-else
-  # The native library: Pepper's code plus the JNI functions. The header's
-  # first lines name the C libraries the static library needs (-lm).
-  "$compiler" --target "$triple" --sysroot "$ndk" --lib static "$here/../greeter.pep" \
-    -o "$out/pepper/libgreeter.a" --build "$out/pepper/build"
-  libraries=$(sed -nE 's|^/\* Link the static library with: (.*) \*/$|\1|p' "$out/pepper/greeter.h")
-  "$clang" --target="${triple}30" -shared -fPIC -O2 -I "$out/pepper" "$here/jni.c" \
-    "$out/pepper/libgreeter.a" $libraries -o "$out/apk/lib/$abi/libgreeter_jni.so"
-fi
+# The .aar: a shared library for each ABI, each holding the JNI functions
+# of the Java class in classes.jar (pepper.greeter.Greeter), and the header.
+"$compiler" --sysroot "$ndk" --lib aar "$here/../greeter.pep" \
+  -o "$out/pepper/greeter.aar" --build "$out/pepper/build"
+unzip -q "$out/pepper/greeter.aar" -d "$out/pepper/aar"
+for entry in AndroidManifest.xml classes.jar R.txt res include/greeter.h \
+  jni/arm64-v8a/libgreeter.so jni/x86_64/libgreeter.so; do
+  [ -e "$out/pepper/aar/$entry" ] || { echo "greeter.aar lacks $entry"; exit 1; }
+done
+cp "$out/pepper/aar/jni/$abi/libgreeter.so" "$out/apk/lib/$abi/"
 
-# The Java code, as dex.
-javac --release 11 -classpath "$platform/android.jar" -d "$out/classes" \
+# The Java code, and the .aar's classes, as dex.
+javac --release 11 -classpath "$platform/android.jar:$out/pepper/aar/classes.jar" -d "$out/classes" \
   "$here/src/dev/pepper/demo/MainActivity.java"
 "$tools/d8" --release --min-api 30 --lib "$platform/android.jar" --output "$out/dex" \
-  $(find "$out/classes" -name '*.class')
+  $(find "$out/classes" -name '*.class') "$out/pepper/aar/classes.jar"
 cp "$out/dex/classes.dex" "$out/apk/"
 
 # The APK: the manifest, then the dex and the native library.
@@ -100,6 +86,8 @@ done
 cat "$out/log.txt"
 grep -q "fibonacci(50) = 12586269025" "$out/log.txt"
 grep -q "words: 4" "$out/log.txt"
+grep -q "even: true, half: 1.25, tally: 7" "$out/log.txt"
+grep -q "utf8: true" "$out/log.txt"
 "$adb" -s "$serial" exec-out screencap -p > "$out/screenshot.png" || true
 "$adb" -s "$serial" uninstall dev.pepper.demo
 echo "android app: ok"

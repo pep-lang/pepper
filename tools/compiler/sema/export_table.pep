@@ -25,6 +25,8 @@ export struct Export {
     var function: String;
     ## Each parameter's name and type.
     var parameters: Array<(String, TypeName)>;
+    ## Where each parameter's type is written, in the order of `parameters`.
+    var parameter_locs: Loc[] = Array<Loc>();
     ## The result type (`void` for none).
     var result: TypeName;
     ## Where the function is declared.

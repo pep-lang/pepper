@@ -1847,13 +1847,24 @@ in process: `main.pep` hands the command line to `build_xcframework`,
 which runs this compiler once per iOS triple with `--lib static --target
 <triple>`, side by side, merges the two simulator archives with
 `universal_file` (a fat Mach-O header, as `lipo` writes), and writes the
-slices' headers, module maps, the `Info.plist` and, for a package,
-`Package.swift`. `--lib aar` (`driver/aar.pep`) runs it the same way
-(`build_for_targets`) once per `-android` triple with `--lib shared`, and
-writes the `.aar` with `zip_stored`, a zip of stored entries written by
-hand. An Android `--lib shared` build copies the runtime's
-`tls/android/LICENSE.txt` beside the `.so` when it links `ssl`
-(`place_openssl_license`), which the `.aar` then carries.
+slices' headers, module maps, the `Info.plist` and, for a package
+(whose children also get `--bindings swift`), `Package.swift` and the
+Swift bindings in `Sources/`, the C module renamed `C<name>`. `--lib aar`
+(`driver/aar.pep`) runs it the same way (`build_for_targets`) once per
+`-android` triple with `--lib shared --bindings java`, and writes the
+`.aar` with `zip_stored`, a zip of stored entries written by hand, the
+first child's jar as `classes.jar`. An Android `--lib shared` build copies
+the runtime's `tls/android/LICENSE.txt` beside the `.so` when it links
+`ssl` (`place_openssl_license`), which the `.aar` then carries.
+`--bindings swift|java` (`driver/bindings.pep`) writes, after the header,
+the files `binding_files` makes from `state.exports` (each `Export` keeps
+its parameters' `Loc`s for the errors): Swift wrappers over the C module
+and its module map, or a jar of class files written byte by byte
+(`_class_file`: `static native` methods and a `<clinit>` that loads the
+library, or a handle class with a `long handle` field and a native
+`close()`) and the C of their JNI functions, which `_build` adds to the
+link's inputs so clang compiles it into the `.so`. An up-to-date build
+needs those files to exist too (`_bindings_written`).
 
 **Link-time optimization** (`--lto=full|off`, off by default, since it
 reruns over the whole program on every build; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`
