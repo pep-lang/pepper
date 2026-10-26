@@ -390,29 +390,55 @@ export struct Cache {
         return built.is_ok() and digest.to_hex(digest.blake3(built.value())) == lines[1];
     }
 
-    ## Records that `output` is the program keyed `key`, built with no
-    ## warnings; a build that warned forgets it instead, so it is checked,
-    ## and warns, again.
+    ## Returns the files the program that writes `output` was last built
+    ## from, as `record` listed them.
+    ##
+    ## @param output the executable
+    ## @returns the files' paths, or `Empty` when there is no record
+    program_files(output: Path): String[]? {
+        var record = File.read_to_string(_record(output));
+        if (record.is_err()) {
+            return Optional<String[]>.Empty;
+        }
+        var lines = record.value().split("\n");
+        if (lines.count < 2) {
+            return Optional<String[]>.Empty;
+        }
+        var files = Array<String>();
+        for (var i in 2..lines.count) {
+            if (!lines[i].is_empty) {
+                files.append(lines[i]);
+            }
+        }
+        return Optional<String[]>.Value(files);
+    }
+
+    ## Records that `output` is the program keyed `key`, built from `files`.
+    ## A build that warned is recorded with no key, so `is_built` is false
+    ## and the next build is checked, and warns, again; `program_files`
+    ## still lists its files.
     ##
     ## @param output the executable
     ## @param key the program's key
     ## @param warned whether the build printed warnings
-    record(output: Path, key: String, warned: bool) {
+    ## @param files the paths of the files it was built from, which
+    ##   `program_files` returns
+    record(output: Path, key: String, warned: bool, files: String[]) {
         var path = _record(output);
-        if (warned) {
+        var built = File.read_bytes(output);
+        if (built.is_err()) {
             File.remove(path);
             return;
         }
-        var built = File.read_bytes(output);
-        if (built.is_err()) {
-            return;
-        }
+        var recorded = warned ? "" : key;
         var created = Directory.create_all(path.parent().value());
         if (created.is_err()) {
             return;
         }
         var partial = Path($"{path}.{process.id()}");
-        var written = File.write_text(partial, $"{key}\n{digest.to_hex(digest.blake3(built.value()))}\n");
+        var written = File.write_text(
+            partial, $"{recorded}\n{digest.to_hex(digest.blake3(built.value()))}\n" + "\n".join(files) + "\n"
+        );
         if (written.is_err() or File.rename(partial, path).is_err()) {
             File.remove(partial);
         }

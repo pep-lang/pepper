@@ -2539,6 +2539,73 @@ a_projects_own_build_script_runs_and_what_it_prints_is_checked() {
 }
 
 [Test]
+a_build_script_runs_again_when_a_module_it_imports_changes() {
+    var folder = TempFolder("package_script_imports");
+    var dir = folder.path;
+    write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n");
+    write_file(dir.join("main.pep"), "main(): int {\n    return 0;\n}\n");
+    write_file(dir.join("helper.pep"), "export word(): String {\n    return \"one\";\n}\n");
+    # It counts its runs in its output folder. Its build warns (a deprecated
+    # call), which still leaves the files it imports recorded.
+    write_file(
+        dir.join("build.pep"),
+        "import [File, Path] from io;\nimport os;\nimport \"helper\";\n\nmain(): int {\n    arguments();\n"
+            + "    var runs = Path(os.environment(\"PEP_OUT_DIR\").value()).join(Path(\"runs.txt\"));\n"
+            + "    File.write_text(runs, File.read_to_string(runs).ok_or(\"\") + word() +\"\\n\");\n"
+            + "    return 0;\n}\n"
+    );
+    var build = () => run(process.Command(tool("pep-build").to_string()).working_directory(dir));
+    expect_exit(build(), 0);
+    expect_exit(build(), 0);
+    var folders = glob(dir.to_string().replace("\\", "/") + "/.pep/build/app-*");
+    expect_true(folders.count == 1);
+    var runs = folders[0].join("out").join("runs.txt");
+    expect_equal(read_file(runs), "one\n");
+    write_file(dir.join("helper.pep"), "export word(): String {\n    return \"two\";\n}\n");
+    expect_exit(build(), 0);
+    expect_equal(read_file(runs), "one\ntwo\n");
+}
+
+[Test]
+a_build_script_runs_on_the_host_and_compiles_c_for_the_target() {
+    # Another system's triple: its object is checked whether or not this
+    # host has the system root to link it (CI's cross-link jobs do).
+    bool on_linux = system_name() == "linux";
+    var triple = on_linux ? "x86_64-pc-windows-msvc" : "x86_64-unknown-linux-gnu";
+    var folder = TempFolder("package_script_cross");
+    var dir = folder.path;
+    write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n");
+    write_file(
+        dir.join("main.pep"), "extern int native_add(int a, int b);\n\nmain(): int {\n    return native_add(2, 3);\n}\n"
+    );
+    write_file(dir.join("build.pep"), read_file(Path("pep-package").join("testdata").join("native_build.pep.txt")));
+    write_file(dir.join("c").join("add.c"), "int native_add(int a, int b) { return a + b; }\n");
+    var built = run(
+        process.Command(tool("pep-build").to_string()).arguments(["--target", triple]).working_directory(dir)
+    );
+    var folders = glob(dir.to_string().replace("\\", "/") + "/.pep/build/app-*");
+    expect_true(folders.count == 1);
+    # The script ran, so it was built for this host, and compiled for the
+    # target: a COFF x86-64 object (machine 0x8664) or an ELF one (62).
+    var object = File.read_bytes(folders[0].join("out").join("add.o")).value();
+    expect_true(object.count > 20);
+    if (on_linux) {
+        expect_equal(object[0] as int, 0x64);
+        expect_equal(object[1] as int, 0x86);
+    } else {
+        expect_equal(object[0] as int, 0x7f);
+        expect_equal(object[18] as int, 62);
+    }
+    if (built.status.success()) {
+        var program = File.read_bytes(dir.join(on_linux ? "app.exe" : "app")).value();
+        expect_equal(program[0] as int, on_linux ? 0x4d : 0x7f);
+    } else {
+        # The object linked would need the target's system root.
+        expect_contains(built.stderr, $"note: linking for '{triple}'");
+    }
+}
+
+[Test]
 search_info_and_add_read_the_package_index() {
     if (!has_git()) {
         return;

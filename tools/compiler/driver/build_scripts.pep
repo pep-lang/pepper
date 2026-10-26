@@ -8,6 +8,7 @@
 
 import compiler.codegen;
 import digest;
+import [Cache, default_cache] from compiler.incremental;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -43,6 +44,9 @@ export struct ScriptInputs {
     ## Whether a dependency with a build script is an error instead
     ## (`--no-build-scripts`); the project's own script still runs.
     var refuse: bool = false;
+    ## The build cache the scripts build in; its record of each script's
+    ## program names the files the script's stamp covers.
+    var cache: Cache = default_cache(Path("."));
 }
 
 ## Runs the build script of each package a build of `entry` turns on, the
@@ -125,14 +129,16 @@ _run(
     # build-dependencies' revisions.
     var sources = [script, manifest.path, packages.deps_root.value().join(Path(link.LOCK_FILE))];
     var environment = _environment(name, dir, out, packages.features_on(manifest), inputs);
-    var ran = _run_locked(name, dir, sources, work, environment, packages.deps_root.value(), lost, inputs.refuse);
+    var ran = _run_locked(name, dir, sources, work, environment, packages.deps_root.value(), lost, inputs);
     lock.close();
     return ran;
 }
 
 # `_run`, holding the lock: `stamp` holds the key, then the output. The
 # script is `sources[0]`, built for the host with the packages `deps_root`
-# serves; `lost`, its `out` folder was gone, so it runs again.
+# serves; `lost`, its `out` folder was gone, so it runs again. The key also
+# covers the files the build cache recorded the script's program was built
+# from (its modules, its build-dependencies'); with no record, it runs.
 _run_locked(
     name: String,
     dir: Path,
@@ -141,22 +147,23 @@ _run_locked(
     environment: String[][],
     deps_root: Path,
     lost: bool,
-    refuse: bool
+    inputs: ScriptInputs
 ): Result<String, String> {
     var script = sources[0];
     var stamp = work.join(Path("stamp"));
+    var executable = work.join(Path("build-script" + toolchain.executable_suffix()));
+    var imported = inputs.cache.program_files(executable);
     var kept = File.read_to_string(stamp);
-    if (kept.is_ok() and !lost) {
+    if (kept.is_ok() and !lost and imported.is_value()) {
         var split = kept.value().split_once("\n");
         if (split.is_value()) {
             var (key, last) = split.value();
             # An object it made since deleted needs a run.
-            if (key == _key(dir, sources, environment, last) and _objects_exist(dir, last)) {
+            if (key == _key(dir, _with(sources, imported.value()), environment, last) and _objects_exist(dir, last)) {
                 return Result<String, String>.ok(last);
             }
         }
     }
-    var executable = work.join(Path("build-script" + toolchain.executable_suffix()));
     var compiler = process.executable_path();
     if (compiler.is_err()) {
         return Result<String, String>.err($"cannot find this compiler to build {script}: {compiler.error().message}");
@@ -170,9 +177,11 @@ _run_locked(
         "--build",
         work.join(Path("build")).to_string(),
         "--build-script",
-        link.absolute(deps_root).to_string()
+        link.absolute(deps_root).to_string(),
+        "--cache",
+        inputs.cache.dir.parent().value().to_string()
     ];
-    if (refuse) {
+    if (inputs.refuse) {
         arguments.append("--no-build-scripts");
     }
     var built = process
@@ -215,11 +224,25 @@ _run_locked(
             File.stderr().write_all($"warning: {name}: {line.substr_bytes(8, line.size - 8)}\n");
         }
     }
-    var written = File.write_text(stamp, _key(dir, sources, environment, printed) + "\n" + printed);
+    var files = inputs.cache.program_files(executable);
+    var key = _key(dir, _with(sources, files.is_value() ? files.value() : Array<String>()), environment, printed);
+    var written = File.write_text(stamp, key + "\n" + printed);
     if (written.is_err()) {
         return Result<String, String>.err($"cannot write {stamp}: {written.error().message}");
     }
     return Result<String, String>.ok(printed);
+}
+
+# `sources`, then the files `paths` names.
+_with(sources: Path[], paths: String[]): Path[] {
+    var all = Array<Path>();
+    for (var source in sources) {
+        all.append(source);
+    }
+    for (var path in paths) {
+        all.append(Path(path));
+    }
+    return all;
 }
 
 # The variables a script runs with, each a name and its value.

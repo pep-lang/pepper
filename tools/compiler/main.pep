@@ -645,6 +645,9 @@ _main(args: String[]): int {
     inputs.opt_level = opt_level.value();
     inputs.sysroot = sysroot_dir;
     inputs.refuse = no_build_scripts.is_set or os.environment_flag("PEPPER_NO_BUILD_SCRIPTS");
+    # The program's cache, even with `--no-cache`: a script's stamp needs its
+    # program's record.
+    inputs.cache = cache_dir.is_set ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work);
     var scripts = driver.run_build_scripts(entry, inputs);
     if (scripts.is_err()) {
         _report(scripts.error());
@@ -792,9 +795,7 @@ _main(args: String[]): int {
         # A cached unit's sema is skipped, so its expansions would not be
         # written for `--debug-static=expanded`.
         if (!no_cache.is_set and !options.debug_static_expanded) {
-            options.cache = Optional<incremental.Cache>.Value(
-                cache_dir.is_set ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work)
-            );
+            options.cache = Optional<incremental.Cache>.Value(inputs.cache);
         }
         # `--verify-cache`, or `PEPPER_CACHE_VERIFY` set to anything but
         # empty or `0`, unless `--no-verify-cache`.

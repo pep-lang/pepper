@@ -2100,8 +2100,12 @@ changed.
 - **Programs.** A program's key (`Keys.program`) hashes every file and what
   the link takes (output, `-l`, `-L`, the current folder); when
   `p/<hash of the output path>` records that key and the output's
-  hash, the build stops before sema (`-T cache` says `up to date`). A build
-  that warned records nothing, so the next one warns again.
+  hash, the build stops before sema (`-T cache` says `up to date`). The
+  record also lists the program's files but the prelude's
+  (`Cache.program_files`), which a build script's stamp hashes
+  (`driver/build_scripts.pep`), so the script runs again when a module it
+  imports changes. A build that warned records its files with no key, so
+  the next one is checked, and warns, again.
 - `-T time` prints each stage's time and `-T cache` each unit's hit or
   miss. `compiler/build_cache_test.pep` holds the cache to early cutoff,
   reuse and invalidation.
