@@ -1,6 +1,7 @@
 # pep.toml as the package manager reads it: the package's name, the oldest
 # toolchain it builds with, and its dependencies, dev-dependencies,
-# build-dependencies and `[target.'<condition>'.dependencies]`. The compiler checks the rest of the
+# build-dependencies and `[target.'<condition>'.dependencies]` (and
+# `.build-dependencies`). The compiler checks the rest of the
 # file, the conditions and `[features]` included, when it builds. Features
 # do not change what is locked: an optional dependency is resolved and
 # locked like any other. `[overrides]` replaces a package wherever the
@@ -21,7 +22,8 @@ export is_host(key: String): bool {
 }
 
 # One entry of `[dependencies]`, `[dev-dependencies]`,
-# `[build-dependencies]` or `[target.'<condition>'.dependencies]`.
+# `[build-dependencies]` or `[target.'<condition>'.dependencies]` (or
+# `.build-dependencies`).
 export struct Requirement {
     # The key: the name source code imports.
     var name: String = "";
@@ -43,7 +45,8 @@ export struct Requirement {
     # script imports it, built for the machine building.
     var build: bool = false;
     # The `[target.'<condition>']` it is under (`OS(Windows)`): the
-    # platforms that use it. Empty for every platform.
+    # platforms that use it (for a build-dependency, the hosts). Empty for
+    # every platform.
     var target: String = "";
     # Which of `optional`, `features`, `default-features`, `workspace` and
     # `package` it sets, as pep.toml writes them, which only newer
@@ -75,12 +78,10 @@ export struct Requirement {
 
     # Its key in pep.toml: `[dependencies, name]`, `[dev-dependencies,
     # name]`, `[build-dependencies, name]` or `[target, condition,
-    # dependencies, name]`.
+    # dependencies, name]` (`build-dependencies`).
     key(): Array<String> {
-        if (!target.is_empty) {
-            return ["target", target, "dependencies", name];
-        }
-        return [dev ? "dev-dependencies" : build ? "build-dependencies" : "dependencies", name];
+        var table = dev ? "dev-dependencies" : build ? "build-dependencies" : "dependencies";
+        return target.is_empty ? [table, name] : ["target", target, table, name];
     }
 
     # The revision as pep.toml writes it, for messages: `1.2`, `branch main`.
@@ -222,10 +223,11 @@ export struct Manifest {
         return parent.is_value() ? parent.value() : Path(".");
     }
 
-    # The dependency or dev-dependency named `name`.
-    requirement(name: String): Optional<Requirement> {
+    # The dependency or dev-dependency named `name`, or with `build` the
+    # build-dependency: a name may be in both.
+    requirement(name: String, build: bool): Optional<Requirement> {
         for (var requirement in requirements) {
-            if (requirement.name == name) {
+            if (requirement.name == name and requirement.build == build) {
                 return Optional<Requirement>.Value(requirement);
             }
         }
@@ -372,23 +374,24 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
             return Result<Manifest>.Err($"{path.to_string()}: '[target]' must be a table");
         }
         for (var (condition, tables) in conditions.value()) {
-            var dependencies = tables.try_get("dependencies");
-            if (dependencies.is_empty()) {
-                continue;
-            }
-            var table = dependencies.value().as_table();
-            if (table.is_empty()) {
-                return Result<Manifest>.Err(
-                    $"{path.to_string()}: '[target.'{condition}'.dependencies]' must be a table"
-                );
-            }
-            for (var (key, value) in table.value()) {
-                var requirement = _requirement(path, key, value);
-                if (requirement.is_err()) {
-                    return Result<Manifest>.Err(requirement.error().message);
+            for (var name in ["dependencies", "build-dependencies"]) {
+                var dependencies = tables.try_get(name);
+                if (dependencies.is_empty()) {
+                    continue;
                 }
-                requirement.value().target = condition;
-                manifest.requirements.append(requirement.value());
+                var table = dependencies.value().as_table();
+                if (table.is_empty()) {
+                    return Result<Manifest>.Err($"{path.to_string()}: '[target.'{condition}'.{name}]' must be a table");
+                }
+                for (var (key, value) in table.value()) {
+                    var requirement = _requirement(path, key, value);
+                    if (requirement.is_err()) {
+                        return Result<Manifest>.Err(requirement.error().message);
+                    }
+                    requirement.value().target = condition;
+                    requirement.value().build = name == "build-dependencies";
+                    manifest.requirements.append(requirement.value());
+                }
             }
         }
     }

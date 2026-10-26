@@ -412,14 +412,17 @@ an_override_replaces_a_package_everywhere_with_a_folder() {
 }
 
 # What `parent` (empty for the project) asks of `source` under
-# `condition`, for `lock_targets`.
-ask(wanted: OrderedMap<String, Array<Wanted>>, parent: String, source: String, condition: String) {
+# `condition`, for `lock_targets`; with `build`, a build-dependency leads
+# to it.
+ask(wanted: OrderedMap<String, Array<Wanted>>, parent: String, source: String, condition: String, build: bool = false) {
     var requirement = Requirement();
     requirement.target = condition;
     if (!wanted.contains(source)) {
         wanted[source] = Array<Wanted>();
     }
-    wanted[source].append(Wanted("", parent.is_empty, false, parent, requirement));
+    var wanted_one = Wanted("", parent.is_empty, false, parent, requirement);
+    wanted_one.build = build;
+    wanted[source].append(wanted_one);
 }
 
 [Test]
@@ -436,12 +439,17 @@ lock_targets_join_a_way_with_and_and_ways_with_or() {
     ask(wanted, "f", "a", "");
     # A way with no condition makes it needed everywhere.
     ask(wanted, "a", "g", "B");
+    # Below a build-dependency the conditions are the host's, left out.
+    ask(wanted, "a", "h", "H", true);
+    ask(wanted, "h", "i", "I", true);
     var targets = lock_targets(wanted);
     expect_equal(targets["a"], "A");
     expect_equal(targets["b"], "(A) && (B)");
     expect_equal(targets["e"], "(A) || (C)");
     expect_equal(targets["f"], "A");
     expect_equal(targets["g"], "");
+    expect_equal(targets["h"], "A");
+    expect_equal(targets["i"], "A");
 }
 
 [Test]
@@ -498,6 +506,62 @@ target_dependencies_are_locked_for_every_platform_and_fetched_for_one() {
     var both = hosts.package(project.dir, ["add", "--dev", "--target", "OS(Linux)", "someone/geometry"]);
     expect_exit(both, 1);
     expect_contains(both.stderr, "--dev and --target name different tables; give one");
+}
+
+[Test]
+add_build_adds_build_dependencies_whose_target_conditions_hold_for_the_host() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("build_add");
+    var project = Project("build_add", "");
+    write_file(project.dir.join("main.pep"), "main(): int {\n    return 0;\n}\n");
+    write_file(
+        project.dir.join("build.pep"),
+        "import geometry;\n\nmain(): int {\n    print($\"pep:warning={geometry.geometry_version()}\");\n    return 0;\n}\n"
+    );
+    expect_exit(hosts.package(project.dir, ["add", "--build", "other/numbers@1"]), 0);
+    expect_contains(
+        project.manifest(), "[build-dependencies]\nnumbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    expect_contains(project.lock(), "\nbuild = true\n");
+    # Taken among the build-dependencies; the code may import it too.
+    var taken = hosts.package(project.dir, ["add", "--build", "other/numbers@1"]);
+    expect_exit(taken, 1);
+    expect_contains(taken.stderr, "a dependency named 'numbers' already exists (github:other/numbers)");
+    expect_exit(hosts.package(project.dir, ["add", "other/numbers@1"]), 0);
+    expect_false(project.lock().contains("build = true"));
+    var both = hosts.package(project.dir, ["add", "--build", "--dev", "someone/geometry"]);
+    expect_exit(both, 1);
+    expect_contains(both.stderr, "--dev and --build name different tables; give one");
+
+    # A condition holds for the host the script runs on, even in a build
+    # for another target, so the lock records none.
+    var system = system_name();
+    var host = system == "windows" ? "OS(Windows)" : system == "macos" ? "OS(MacOS)" : "OS(Linux)";
+    var other = system == "linux" ? "x86_64-pc-windows-msvc" : "x86_64-unknown-linux-gnu";
+    expect_exit(hosts.package(project.dir, ["add", "--build", "--target", host, "someone/geometry@1"]), 0);
+    expect_contains(
+        project.manifest(),
+        $"[target.\"{host}\".build-dependencies]\ngeometry = {{ github = \"someone/geometry\", version = \"1\" }}\n"
+    );
+    expect_false(project.lock().contains("\ntarget = "));
+    var built = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--target", other]));
+    expect_contains(built.stderr, "warning: app: 1.1.0 1.3.1\n");
+    # False on the host, it is not the script's.
+    write_file(project.dir.join("pep.toml"), project.manifest().replace($"\"{host}\"", "'OS(Wasi)'"));
+    var refused = run(hosts.command(tool("pep-build").to_string(), project.dir, Array<String>()));
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "error: 'geometry' is a build-dependency only for hosts where 'OS(Wasi)' holds, which this one does not"
+    );
+
+    # `remove` takes a name out of every table it is in.
+    expect_exit(hosts.package(project.dir, ["remove", "geometry"]), 0);
+    expect_exit(hosts.package(project.dir, ["remove", "numbers"]), 0);
+    expect_false(project.manifest().contains("numbers"));
+    expect_false(project.manifest().contains("geometry"));
 }
 
 [Test]
@@ -2569,17 +2633,17 @@ a_build_script_runs_again_when_a_module_it_imports_changes() {
 [Test]
 a_build_script_runs_on_the_host_and_compiles_c_for_the_target() {
     # Another system's triple: its object is checked whether or not this
-    # host has the system root to link it (CI's cross-link jobs do).
+    # host has the system root to link it. CI's cross-link jobs build the
+    # same project (scripts/ci-cross-link.sh) and its cross-run jobs run it.
     bool on_linux = system_name() == "linux";
     var triple = on_linux ? "x86_64-pc-windows-msvc" : "x86_64-unknown-linux-gnu";
     var folder = TempFolder("package_script_cross");
     var dir = folder.path;
+    var testdata = Path("pep-package").join("testdata");
     write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n");
-    write_file(
-        dir.join("main.pep"), "extern int native_add(int a, int b);\n\nmain(): int {\n    return native_add(2, 3);\n}\n"
-    );
-    write_file(dir.join("build.pep"), read_file(Path("pep-package").join("testdata").join("native_build.pep.txt")));
-    write_file(dir.join("c").join("add.c"), "int native_add(int a, int b) { return a + b; }\n");
+    write_file(dir.join("main.pep"), read_file(testdata.join("native_main.pep.txt")));
+    write_file(dir.join("build.pep"), read_file(testdata.join("native_build.pep.txt")));
+    write_file(dir.join("c").join("add.c"), read_file(testdata.join("native_add.c")));
     var built = run(
         process.Command(tool("pep-build").to_string()).arguments(["--target", triple]).working_directory(dir)
     );
@@ -2602,6 +2666,9 @@ a_build_script_runs_on_the_host_and_compiles_c_for_the_target() {
     } else {
         # The object linked would need the target's system root.
         expect_contains(built.stderr, $"note: linking for '{triple}'");
+        print(
+            $"skipped linking: no system root for '{triple}' here; CI's cross-link and cross-run jobs link and run it"
+        );
     }
 }
 

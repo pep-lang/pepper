@@ -423,6 +423,23 @@ reads_target_dependencies() {
     expect_equal(m.git_dependencies().count, 2);
     expect_equal(m.git_dependencies(Optional<link.Target>.Value(linux))[0].name, "epoll");
 
+    # `.build-dependencies`: the script's, for the host whatever the target.
+    var scripted = link.parse_manifest(
+        Path("/p/pep.toml"),
+        "[package]\nname = \"p\"\n"
+            + "[target.'OS(Windows) || OS(Linux) || OS(MacOS)'.build-dependencies]\nhere = { github = \"a/here\" }\n"
+            + "[target.'OS(Wasi)'.build-dependencies]\nnever = { github = \"a/never\" }\n"
+    );
+    expect_true(scripted.is_ok());
+    var s = scripted.value();
+    expect_equal(s.dependencies.count, 0);
+    expect_equal(s.build_dependencies.count, 2);
+    expect_equal(s.build_dependency("never").value().table(), "target.'OS(Wasi)'.build-dependencies");
+    var wasi = link.Target.parse("wasm32-wasip1").value();
+    var for_wasi = s.git_dependencies(Optional<link.Target>.Value(wasi));
+    expect_equal(for_wasi.count, 1);
+    expect_equal(for_wasi[0].name, "here");
+
     expect_equal(
         errors("[package]\nname = \"a\"\n[target.'OS(Darwin)'.dependencies]\nx = { github = \"a/x\" }\n"),
         "OS(Darwin): unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]"
@@ -433,7 +450,19 @@ reads_target_dependencies() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[target.'OS(Windows)'.dev-dependencies]\nx = { github = \"a/x\" }\n"),
-        "dev-dependencies: unknown key 'dev-dependencies' in '[target.'OS(Windows)']'; expected one of 'dependencies'"
+        "dev-dependencies: unknown key 'dev-dependencies' in '[target.'OS(Windows)']'; expected one of 'dependencies', 'build-dependencies'"
+    );
+    expect_equal(
+        errors(
+            "[package]\nname = \"a\"\n[build-dependencies]\nx = { github = \"a/x\" }\n[target.'OS(Windows)'.build-dependencies]\nx = { github = \"a/x\" }\n"
+        ),
+        "x: 'x' is in both '[build-dependencies]' and '[target.'OS(Windows)'.build-dependencies]'; keep it in one"
+    );
+    expect_equal(
+        errors(
+            "[package]\nname = \"a\"\n[target.'OS(Windows)'.build-dependencies]\nx = { github = \"a/x\", optional = true }\n"
+        ),
+        "optional: build-dependency 'x' cannot be optional; only '[dependencies]' are"
     );
     expect_equal(
         errors(

@@ -7,7 +7,9 @@
 # `build` runs on each host: it builds the examples below for the host, runs
 # them and keeps what they print in <output-dir>/expected/, then builds them
 # for the other two operating systems (`--target`, with the system roots
-# ci-provision-cross.sh set up) into <output-dir>/<os>/.
+# ci-provision-cross.sh set up) into <output-dir>/<os>/. So too the project
+# `native-script`, whose build script, built for the host, compiles C for the
+# target (pep-package's test a_build_script_runs_on_the_host_and_compiles_c_for_the_target).
 #
 # `run` runs on each host after every `build`: <artifacts-dir> holds each
 # host's <output-dir> in a folder of its own. It runs every program built for
@@ -16,6 +18,7 @@
 set -euo pipefail
 
 EXAMPLES="hello interpolation-format maps-sorted json-structs threads-basics simd-basics"
+PROGRAMS="$EXAMPLES native-script"
 
 # The runners: x86_64 Linux and Windows, and an arm64 Mac. (A function, not
 # an associative array: macOS ships bash 3.2.)
@@ -44,6 +47,7 @@ case "${1:-}" in
     out=${3:?usage: ci-cross-link.sh build <compiler> <output-dir>}
     rm -rf "$out"
     mkdir -p "$out/expected" "$out/native"
+    out=$(cd "$out" && pwd)
     for example in $EXAMPLES; do
       source="$repo_root/docs/examples/$example.pep"
       native="$out/native/$(executable "$host" "$example")"
@@ -55,6 +59,23 @@ case "${1:-}" in
         "$compiler" --target "$(triple "$os")" "$source" -o "$out/$os/$(executable "$os" "$example")" --build "$out/$os/build"
       done
     done
+    # The project native-script, from the test's files.
+    project="$out/native-script"
+    testdata="$repo_root/tools/pep-package/testdata"
+    mkdir -p "$project/c"
+    printf '[package]\nname = "app"\n' > "$project/pep.toml"
+    cp "$testdata/native_main.pep.txt" "$project/main.pep"
+    cp "$testdata/native_build.pep.txt" "$project/build.pep"
+    cp "$testdata/native_add.c" "$project/c/add.c"
+    compiler_path=$(cd "$(dirname "$compiler")" && pwd)/$(basename "$compiler")
+    native="$out/native/$(executable "$host" native-script)"
+    (cd "$project" && "$compiler_path" -o "$native")
+    "$native" > "$out/expected/native-script.txt"
+    for os in linux macos windows; do
+      [ "$os" != "$host" ] || continue
+      (cd "$project" && "$compiler_path" --target "$(triple "$os")" -o "$out/$os/$(executable "$os" native-script)")
+    done
+    rm -rf "$project"
     # The objects stay, so `run` can compare what two hosts compiled for
     # the same target when a program fails.
     rm -rf "$out/native"
@@ -69,7 +90,7 @@ case "${1:-}" in
     for from in "$artifacts"/cross-from-*; do
       [ "$from" != "$expected" ] || continue
       [ -d "$from/$host" ] || { echo "$(basename "$from") built nothing for $host" >&2; exit 1; }
-      for example in $EXAMPLES; do
+      for example in $PROGRAMS; do
         program="$from/$host/$(executable "$host" "$example")"
         chmod +x "$program"
         count=$((count + 1))

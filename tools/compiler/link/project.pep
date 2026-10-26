@@ -5,7 +5,9 @@
 ## `[dev-dependencies]`, which only the project's tests and examples see,
 ## and of `[target.'<condition>'.dependencies]`, which only a build for a
 ## target the `[Target(...)]` condition selects sees, and of
-## `[build-dependencies]`, which only the package's build script sees) is
+## `[build-dependencies]`, which only the package's build script sees, and
+## of `[target.'<condition>'.build-dependencies]`, which only a script
+## built on a host the condition selects sees) is
 ## the name source code imports; `generated` names the modules a
 ## package's build script wrote (`Packages._generated`). `[features]` names optional parts of a package: turning a
 ## feature on defines the build option `<package>_<feature>` and turns on
@@ -282,7 +284,8 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
 }
 
 ## One entry of `[dependencies]`, `[dev-dependencies]`,
-## `[build-dependencies]` or `[target.'<condition>'.dependencies]`.
+## `[build-dependencies]` or `[target.'<condition>'.dependencies]` (or
+## `.build-dependencies`).
 export struct Dependency {
     ## The key: the name source code imports.
     var name: String;
@@ -300,8 +303,13 @@ export struct Dependency {
     ## workspace (`Packages` reads it so).
     var version: String = "";
     ## The condition of the `[target.'<condition>'.dependencies]` table it
-    ## is in (`OS(Windows)`), or empty for every target.
+    ## is in (`OS(Windows)`), or empty for every target. For one in
+    ## `.build-dependencies`, the host's: its build script's build is for
+    ## the host.
     var target: String = "";
+    ## Whether it is in `[build-dependencies]` or
+    ## `[target.'<condition>'.build-dependencies]`.
+    var build: bool = false;
     ## `target` read as the body of a `[Target(...)]`.
     var condition: Attribute? = Optional<Attribute>.Empty;
     ## `optional = true`: a build sees it only when a feature turns it on
@@ -354,9 +362,11 @@ export struct Dependency {
     }
 
     ## The table it is in, as a message names it:
-    ## `target.'OS(Windows)'.dependencies`, else `dependencies`.
+    ## `target.'OS(Windows)'.dependencies`, else `dependencies` (or
+    ## `build-dependencies`).
     table(): String {
-        return target.is_empty ? "dependencies" : $"target.'{target}'.dependencies";
+        var name = build ? "build-dependencies" : "dependencies";
+        return target.is_empty ? name : $"target.'{target}'.{name}";
     }
 
     ## Its source as `pep.lock` writes it (`github:owner/name`, or
@@ -584,7 +594,8 @@ export struct Manifest {
             }
             named.append_all(manifest.build_dependencies);
             for (var d in named) {
-                if (build.is_value() and !d.matches(build.value())) {
+                # A build script's build is for the host.
+                if (build.is_value() and !d.matches(d.build ? Target() : build.value())) {
                     continue;
                 }
                 if (d.host.is_value() and !path_override(d).is_value()) {
@@ -1225,8 +1236,8 @@ struct _Reader {
                 var given = boolean(field_path, field, value);
                 if (given.is_value()
                     and given.value()
-                    and (path[0] == "dev-dependencies" or path[0] == "build-dependencies")) {
-                    var kind = path[0] == "dev-dependencies" ? "dev-dependency" : "build-dependency";
+                    and (path[path.count - 2] == "dev-dependencies" or path[path.count - 2] == "build-dependencies")) {
+                    var kind = path[path.count - 2] == "dev-dependencies" ? "dev-dependency" : "build-dependency";
                     error($"{kind} '{name}' cannot be optional; only '[dependencies]' are", key_span(field_path));
                     continue;
                 }
@@ -1247,7 +1258,7 @@ struct _Reader {
                 unknown_key(
                     path,
                     field,
-                    path.count > 2 ? $"target.'{path[1]}'.dependencies" : path[0],
+                    path.count > 2 ? $"target.'{path[1]}'.{path[2]}" : path[0],
                     [
                         "github",
                         "gitlab",
@@ -1458,7 +1469,8 @@ struct _Reader {
 
     ## The `[target]` table: each key a condition, holding a
     ## `dependencies` table whose entries are appended to the manifest's
-    ## dependencies, marked with it.
+    ## dependencies, marked with it, and a `build-dependencies` table,
+    ## appended to its build-dependencies.
     targets(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
         for (var (condition, value) in members) {
             var at = ["target", condition];
@@ -1473,8 +1485,8 @@ struct _Reader {
             }
             for (var (key, inner) in tables.value()) {
                 var path = _at(at, key);
-                if (key != "dependencies") {
-                    unknown_key(at, key, $"target.'{condition}'", ["dependencies"]);
+                if (key != "dependencies" and key != "build-dependencies") {
+                    unknown_key(at, key, $"target.'{condition}'", ["dependencies", "build-dependencies"]);
                     continue;
                 }
                 var entries = table(path, key, inner);
@@ -1486,7 +1498,12 @@ struct _Reader {
                 for (var d in found) {
                     d.target = condition;
                     d.condition = Optional<Attribute>.Value(parsed.value());
-                    manifest.dependencies.append(d);
+                    d.build = key == "build-dependencies";
+                    if (d.build) {
+                        manifest.build_dependencies.append(d);
+                    } else {
+                        manifest.dependencies.append(d);
+                    }
                 }
             }
         }
@@ -1547,6 +1564,11 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
                     manifest.dependencies :
                     key == "dev-dependencies" ? manifest.dev_dependencies : manifest.build_dependencies;
                 reader.dependencies(at, into, table.value());
+                if (key == "build-dependencies") {
+                    for (var d in into) {
+                        d.build = true;
+                    }
+                }
             }
         } else if (key == "target") {
             var table = reader.table(at, key, value);
@@ -1593,6 +1615,12 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
     reader.check_features(manifest);
     for (var d in manifest.dependencies) {
         var first = manifest.dependency(d.name).value();
+        if (first !== d) {
+            reader.error($"'{d.name}' is in both '[{first.table()}]' and '[{d.table()}]'; keep it in one", d.name_span);
+        }
+    }
+    for (var d in manifest.build_dependencies) {
+        var first = manifest.build_dependency(d.name).value();
         if (first !== d) {
             reader.error($"'{d.name}' is in both '[{first.table()}]' and '[{d.table()}]'; keep it in one", d.name_span);
         }
@@ -2359,6 +2387,12 @@ export struct Packages {
             }
             if (!dependency.is_value()) {
                 return Resolution.NotADependency;
+            }
+            if (!dependency.value().matches(target)) {
+                var condition = dependency.value().target;
+                return Resolution.Missing(
+                    $"'{first}' is a build-dependency only for hosts where '{condition}' holds, which this one does not; put '[Target({condition})]' on the import"
+                );
             }
         } else if (!dependency.is_value()) {
             dependency = manifest.dev_dependency(first);

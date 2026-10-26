@@ -11,6 +11,7 @@
 #     pepper package add other/json@2.x --name fast_json
 #     pepper package add --dev someone/fixtures  # only for tests and examples
 #     pepper package add --target 'OS(Windows)' someone/winapi  # only on Windows
+#     pepper package add --build someone/codegen  # only for the build script
 #     pepper package add --optional --features simd someone/zlib  # for a feature to turn on
 #     pepper package add someone/shapes --package geo  # the workspace member geo, by its own tags
 #     pepper package remove geometry
@@ -110,6 +111,10 @@ main(args: String[]): int {
     );
     var add_dev = add.flag(
         "dev", help = "add it to [dev-dependencies], which only the project's tests and examples import"
+    );
+    var add_build = add.flag(
+        "build",
+        help = "add it to [build-dependencies], which only the package's build script imports, built for the machine building"
     );
     var add_target = add.option(
         "target",
@@ -286,8 +291,14 @@ main(args: String[]): int {
         if (add_dev.is_set and add_target.is_set) {
             return fail("--dev and --target name different tables; give one");
         }
+        if (add_dev.is_set and add_build.is_set) {
+            return fail("--dev and --build name different tables; give one");
+        }
         if (add_dev.is_set and add_optional.is_set) {
             return fail("a dev-dependency cannot be optional; give --dev or --optional");
+        }
+        if (add_build.is_set and add_optional.is_set) {
+            return fail("a build-dependency cannot be optional; give --build or --optional");
         }
         var features = Array<toml.TomlValue>();
         for (var names in add_features.values()) {
@@ -312,6 +323,7 @@ main(args: String[]): int {
             add_name.value_or(""),
             add_member.value_or(""),
             add_dev.is_set,
+            add_build.is_set,
             add_target.value_or(""),
             extra
         );
@@ -1075,7 +1087,9 @@ struct Project {
     # `extra` holds the entry's keys beyond its source and version
     # (`optional`, `features`, `default-features`). A `member` of the
     # repository's workspace is its `package`, at a version of its own tags.
-    add(spec: String, given_name: String, member: String, dev: bool, target: String, extra: toml.TomlValue): int {
+    add(
+        spec: String, given_name: String, member: String, dev: bool, build: bool, target: String, extra: toml.TomlValue
+    ): int {
         if (offline) {
             return fail(
                 $"--offline, and adding '{spec}' reads which versions it offers over the network; run 'pepper package add' without --offline (or PEPPER_OFFLINE)"
@@ -1113,7 +1127,7 @@ struct Project {
         if (manifest.is_err()) {
             return fail(manifest.error().message);
         }
-        var taken = manifest.value().requirement(name);
+        var taken = manifest.value().requirement(name, build);
         if (taken.is_value()) {
             return fail(
                 $"a dependency named '{name}' already exists ({taken.value().source()}); add this one with --name"
@@ -1152,6 +1166,7 @@ struct Project {
         var added = Requirement();
         added.name = name;
         added.dev = dev;
+        added.build = build;
         added.target = target;
         var set = edited.set(added.key(), entry, inline = true);
         if (set.is_err()) {
@@ -1187,7 +1202,7 @@ struct Project {
             }
         }
         _notes(graph.value());
-        say($"'import {name};' now imports {source}");
+        say($"'import {name};' now imports {source}" + (build ? " in the build script" : ""));
         return 0;
     }
 
