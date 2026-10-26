@@ -3,6 +3,7 @@
 # (a real panic, standard output and error at /dev/null, and iOS's unified
 # log, which a program in the simulator cannot read).
 
+import async;
 import os;
 import process;
 
@@ -11,10 +12,19 @@ import process;
 what_a_panic_writes_reaches_logcat() {
     var marker = $"pepper-mobile-test-{os.SystemTime.now().unix_milliseconds()}";
     _pep_write_error($"{marker} first\n{marker} second\n".c_str());
-    var log = process.Command("logcat").arguments(["-d", "-e", marker]).run();
-    expect_true(log.is_ok());
-    expect_true(log.value().stdout.contains($"{marker} first"));
-    expect_true(log.value().stdout.contains($"{marker} second"));
+    # logd takes the lines in a moment later.
+    var text = "";
+    for (var _ in 0..50) {
+        var log = process.Command("logcat").arguments(["-d", "-e", marker]).run();
+        expect_true(log.is_ok());
+        text = log.value().stdout;
+        if (text.contains($"{marker} second")) {
+            break;
+        }
+        async.sleep(100);
+    }
+    expect_true(text.contains($"{marker} first"));
+    expect_true(text.contains($"{marker} second"));
 }
 
 [Test]

@@ -16,7 +16,8 @@
 # as its subsystem). A stream attached to anything else, a terminal or a
 # pipe as `adb shell` and `simctl spawn` give a program, or Xcode's console,
 # stays as it is. Nothing is checked per write, so printing costs what it
-# does elsewhere.
+# does elsewhere. At exit and in a panic, `_pep_platform_log_drain` lets the
+# readers finish first.
 #
 # `_pep_write_error` (internals.pep), which panics, backtraces and the
 # debugger channel write through, also logs its text itself, at once, so a
@@ -70,16 +71,27 @@ extern void* os_log_create(char* subsystem, char* category);
 [Target(OS(IOS))]
 extern void _os_log_impl(void* dso, void* log, u8 kind, char* format, void* buffer, uint size);
 
+[Target(OS(IOS) || OS(Android))]
+extern int open(char* path, int flags, ...);
+[Target(OS(IOS) || OS(Android))]
+extern int atexit(void* function);
+[Target(OS(IOS) || OS(Android))]
+extern int usleep(uint microseconds);
+[Target(OS(IOS) || OS(Android))]
+extern int fflush(void* stream);
+
 # The logging state, from C's malloc and kept for the process's life:
 # [1] and [2] are 1 when standard output or error goes to the log through a
 # reader thread; [3] is the tag (a C string); on iOS [4] is the image's
-# Mach-O header (os_log's `dso`) and [5] the os_log handle.
+# Mach-O header (os_log's `dso`) and [5] the os_log handle; [6] and [7]
+# become 1 when the reader of standard output or error has logged all it
+# read and ended.
 [Target(OS(IOS) || OS(Android))]
 const _pep_platform_log_state: __ptr<ulong> = _pep_platform_log_start();
 
 [Target(OS(IOS) || OS(Android))]
 _pep_platform_log_start(): __ptr<ulong> {
-    __ptr<ulong> state = calloc(6, 8);
+    __ptr<ulong> state = calloc(8, 8);
     # Dl_info { dli_fname, dli_fbase, dli_sname, dli_saddr }
     __ptr<ulong> info = calloc(4, 8);
     __ptr<char> tag = "pepper";
@@ -94,11 +106,45 @@ _pep_platform_log_start(): __ptr<ulong> {
     }
     free(info);
     for (var fd in 1..3) {
-        if (_pep_stream_detached(fd)) {
-            state[fd] = _pep_platform_log_route(fd) ? 1 : 0;
+        if (_pep_stream_detached(fd) && _pep_platform_log_route(fd, state + 5 + fd)) {
+            state[fd] = 1;
         }
     }
+    # The readers would die with the process before logging what is left:
+    # drain them at exit. Registered first, it runs after every later
+    # `atexit` handler, which may still print.
+    if (state[1] == 1 || state[2] == 1) {
+        atexit(__function_pointer(_pep_platform_log_drain));
+    }
     return state;
+}
+
+# Waits, for a second at most, until the readers have logged everything
+# written so far: points standard output and error at /dev/null, which
+# closes the pipes' last write ends (unless a child process still holds
+# one), so each reader reads to the end and ends. Later output is lost; the
+# process is about to end (at exit, or in a panic).
+[Target(OS(IOS) || OS(Android))]
+export _pep_platform_log_drain() {
+    var state = _pep_platform_log_state;
+    if (state == __null || (state[1] != 1 && state[2] != 1)) {
+        return;
+    }
+    fflush(__null);
+    var null_device = open("/dev/null", 1);  # O_WRONLY
+    for (var fd in 1..3) {
+        if (state[fd] == 1) {
+            dup2(null_device, fd);
+        }
+    }
+    close(null_device);
+    for (var _ in 0..100) {
+        if ((state[1] != 1 || __atomic_load<ulong>(state + 6) == 1)
+            && (state[2] != 1 || __atomic_load<ulong>(state + 7) == 1)) {
+            return;
+        }
+        usleep(10000);
+    }
 }
 
 # The file name of the image at `path`, without a `lib` prefix or a `.so`
@@ -141,10 +187,10 @@ _pep_stream_detached(fd: int): bool {
     return detached;
 }
 
-# Points `fd` at a pipe whose reader thread logs what it reads; whether it
-# could.
+# Points `fd` at a pipe whose reader thread logs what it reads, and sets
+# `done` to 1 when it ends; whether it could.
 [Target(OS(IOS) || OS(Android))]
-_pep_platform_log_route(fd: int): bool {
+_pep_platform_log_route(fd: int, done: __ptr<ulong>): bool {
     __ptr<int> ends = malloc(8);
     if (pipe(ends) != 0) {
         free(ends);
@@ -152,10 +198,12 @@ _pep_platform_log_route(fd: int): bool {
     }
     # The read end stays out of child processes (F_SETFD, FD_CLOEXEC).
     fcntl(ends[0], 2, 1);
-    # The thread's argument: the read end, then the level, taken over by it.
-    __ptr<int> job = malloc(8);
-    job[0] = ends[0];
-    job[1] = fd == 1 ? _PEP_LOG_OUTPUT : _PEP_LOG_ERROR;
+    # The thread's argument, taken over by it: the read end, the level, and
+    # `done`.
+    __ptr<ulong> job = malloc(24);
+    job[0] = ends[0] as ulong;
+    job[1] = (fd == 1 ? _PEP_LOG_OUTPUT : _PEP_LOG_ERROR) as ulong;
+    job[2] = unsafe_cast<ulong>(done);
     __ptr<__ptr<void>> thread = malloc(8);
     var started = pthread_create(thread, __null, __function_pointer(_pep_platform_log_reader), job) == 0;
     if (started) {
@@ -176,9 +224,10 @@ _pep_platform_log_route(fd: int): bool {
 # signal handler without SA_RESTART ever runs on it.
 [Target(OS(IOS) || OS(Android))]
 _pep_platform_log_reader(job: __ptr<void>): __ptr<void> {
-    __ptr<int> fields = job;
-    var fd = fields[0];
-    var level = fields[1];
+    __ptr<ulong> fields = job;
+    var fd = fields[0] as int;
+    var level = fields[1] as int;
+    var done = unsafe_cast<__ptr<ulong>>(fields[2]);
     free(job);
     __ptr<char> buffer = malloc(_PEP_LOG_BUFFER);
     ulong held = 0;
@@ -207,6 +256,7 @@ _pep_platform_log_reader(job: __ptr<void>): __ptr<void> {
     }
     close(fd);
     free(buffer);
+    __atomic_store<ulong>(done, 1);
     return __null;
 }
 

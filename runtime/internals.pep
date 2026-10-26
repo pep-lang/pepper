@@ -1389,6 +1389,8 @@ _pep_write_panic(location: __ptr<char>, message: __ptr<char>, kind: __ptr<char>)
 # The same in one write, so that the platform's log holds it as one message.
 [Target(OS(IOS) || OS(Android))]
 _pep_write_panic(location: __ptr<char>, message: __ptr<char>, kind: __ptr<char>) {
+    # What the program printed before the panic, logged before it aborts.
+    _pep_platform_log_drain();
     __ptr<char> place = location == __null ? "" : location;
     __ptr<char> separator = location == __null ? "" : ": ";
     var size = strlen(place) + strlen(separator) + strlen(kind) + strlen(message) + 2;

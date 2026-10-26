@@ -356,8 +356,9 @@ in an app, and the terminal from a shell. Nothing is checked per write: a
 
 A panic's message and its backtrace also go straight to the log, whether
 or not standard error is attached, so that they are there before the
-process aborts. Lines printed just before a panic may
-be lost when the process aborts before the log's thread has written them.
+process aborts. At exit, and in a panic, the runtime waits (a second at
+most) for its threads to log what was printed before, so the last lines
+are not lost; output after that point goes nowhere.
 
 ## App folders
 
