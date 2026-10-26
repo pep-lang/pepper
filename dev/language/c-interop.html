@@ -1089,6 +1089,18 @@ folders.</li>
 <li>A C program links at most one Pepper static library: each holds its own
 copy of the runtime, and two would define it twice. Shared libraries
 keep their runtimes to themselves, so a program may load several.</li>
+<li>A library's thread-locals (its own and the runtime's) use the
+initial-exec TLS model, as a program's do, where reading one costs a
+load, except on Android (see below). On Linux this makes a <code>.so</code> built
+from either kind need static TLS (<code>readelf -d</code> shows <code>FLAGS STATIC_TLS</code>): a program that links it always loads it, but a <code>dlopen</code>
+of it works only while glibc's spare static
+TLS (512 bytes by default, which the <code>glibc.rtld.optional_static_tls</code>
+tunable raises) has room for its thread-locals. macOS and Windows have
+no such limit.</li>
+<li>On Android every app loads its native code with <code>dlopen</code>, and bionic
+refuses initial-exec there, so an Android library's thread-locals use
+the general-dynamic model, which costs a call (<code>__tls_get_addr</code> on
+x86_64, a TLS descriptor's on arm64) per access.</li>
 </ul>
 <h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
 <ul>

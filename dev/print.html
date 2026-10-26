@@ -19943,6 +19943,18 @@ folders.</li>
 <li>A C program links at most one Pepper static library: each holds its own
 copy of the runtime, and two would define it twice. Shared libraries
 keep their runtimes to themselves, so a program may load several.</li>
+<li>A library's thread-locals (its own and the runtime's) use the
+initial-exec TLS model, as a program's do, where reading one costs a
+load, except on Android (see below). On Linux this makes a <code>.so</code> built
+from either kind need static TLS (<code>readelf -d</code> shows <code>FLAGS STATIC_TLS</code>): a program that links it always loads it, but a <code>dlopen</code>
+of it works only while glibc's spare static
+TLS (512 bytes by default, which the <code>glibc.rtld.optional_static_tls</code>
+tunable raises) has room for its thread-locals. macOS and Windows have
+no such limit.</li>
+<li>On Android every app loads its native code with <code>dlopen</code>, and bionic
+refuses initial-exec there, so an Android library's thread-locals use
+the general-dynamic model, which costs a call (<code>__tls_get_addr</code> on
+x86_64, a TLS descriptor's on arm64) per access.</li>
 </ul>
 <h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
 <ul>
@@ -20239,8 +20251,8 @@ ordinary machine code for an iPhone, an iPad, the iOS simulator, or an
 Android phone. An app calls the Pepper code through C, as any C library is
 called: mark the functions <code>[Export]</code>, build a library with <code>--lib static</code>
 (see <a href="language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>), or on iOS
-an <code>.xcframework</code> or a Swift package (<code>--lib xcframework</code>, <code>--lib swift-package</code>), and call it from Swift directly, or from Kotlin and Java
-through JNI.</p>
+an <code>.xcframework</code> or a Swift package (<code>--lib xcframework</code>, <code>--lib swift-package</code>) and on Android an <code>.aar</code> (<code>--lib aar</code>), and call it from
+Swift directly, or from Kotlin and Java through JNI.</p>
 <h2 id="targets"><a class="header" href="#targets">Targets</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Triple</th><th>Runs on</th></tr></thead><tbody>
 <tr><td><code>aarch64-apple-ios</code></td><td>iPhone and iPad</td></tr>
@@ -20397,7 +20409,37 @@ once:</p>
 </code></pre>
 <p>With Gradle, put each ABI's <code>.so</code> in <code>src/main/jniLibs/&lt;abi&gt;/</code>
 (<code>arm64-v8a</code>, <code>x86_64</code>), or build it from the module's <code>CMakeLists.txt</code>
-with the static library as an imported target.</p>
+with the static library as an imported target, or add the <code>.aar</code> below.</p>
+<h2 id="packaging-for-gradle"><a class="header" href="#packaging-for-gradle">Packaging for Gradle</a></h2>
+<p><code>--lib aar</code> builds the library as a shared library for every Android ABI
+at once, as one Android library (<code>.aar</code>) a Gradle build adds as a single
+dependency. It needs no Gradle and no JDK: the compiler builds each <code>.so</code>
+with the NDK (found as for any Android link, above) and writes the archive
+itself.</p>
+<pre><code class="language-sh">pepper build --lib aar greeter.pep -o greeter.aar
+</code></pre>
+<p>The name comes from the output (<code>greeter</code>, which takes letters, digits and
+<code>_</code>): the library <code>libgreeter.so</code>, which Java loads with
+<code>System.loadLibrary("greeter")</code>, its header <code>greeter.h</code>, and the manifest's
+package, <code>pepper.greeter</code>. It holds:</p>
+<pre><code class="language-text">greeter.aar
+  AndroidManifest.xml       minSdkVersion 30
+  classes.jar, R.txt, res/  empty: the library has no Java code or resources
+  include/greeter.h
+  jni/arm64-v8a/libgreeter.so
+  jni/x86_64/libgreeter.so
+  LICENSE-OpenSSL.txt       only when the library imports tls (see Shipping)
+</code></pre>
+<p>Add it to the app module, and Gradle puts each ABI's <code>.so</code> in the APK:</p>
+<pre><code class="language-kotlin">dependencies {
+    implementation(files("libs/greeter.aar"))
+}
+</code></pre>
+<p>The <code>.so</code> holds only the Pepper code and its C functions, so the JNI
+functions (<code>jni.c</code> above) go in a library of the app's own, built with the
+NDK against <code>include/greeter.h</code> and linked with the <code>.aar</code>'s
+<code>jni/&lt;abi&gt;/libgreeter.so</code> (<code>-L jni/&lt;abi&gt; -lgreeter</code>). Java loads that
+library, and Android loads <code>libgreeter.so</code> first as its dependency.</p>
 <h2 id="threads-1"><a class="header" href="#threads-1">Threads</a></h2>
 <p>Exported functions may be called from any thread (see
 <a href="language/c-interop.html#initialization-panics-and-threads">Initialization, panics and threads</a>),
@@ -20470,10 +20512,17 @@ usual (Xcode's <em>Strip Linked Product</em>, the Android Gradle plugin's
 <code>strip</code> of <code>jniLibs</code>). A Pepper library adds the runtime parts the
 program uses: the prototype app's library below is about 1 MB unstripped.</li>
 <li>Each Android ABI needs its own <code>.so</code>; Google Play requires <code>arm64-v8a</code>.</li>
+<li>An Android library's thread-locals (its own and the runtime's) use the
+general-dynamic TLS model, since the app loads its <code>.so</code> with <code>dlopen</code>
+and bionic refuses initial-exec there; each access costs a call. A
+library for desktop Linux keeps initial-exec, which is faster but needs
+static TLS, so a <code>dlopen</code> of its <code>.so</code> may fail (see
+<a href="language/c-interop.html#building-the-library">Building the library</a>).</li>
 <li><strong>OpenSSL's license.</strong> An Android program or app that imports <code>tls</code> (or
 <code>http</code>) contains OpenSSL, which is under the Apache License 2.0, so it
 must give its users a copy of that license: ship
-<code>runtime/tls/android/LICENSE.txt</code> from the toolchain with it, as an app
+<code>runtime/tls/android/LICENSE.txt</code> from the toolchain with it (a <code>--lib shared</code> build for Android writes it beside the <code>.so</code> as
+<code>LICENSE-OpenSSL.txt</code>, and <code>--lib aar</code> puts that in the <code>.aar</code>), as an app
 does in its open-source licenses screen (Google Play Services'
 <code>oss-licenses</code> plugin, or a page of the app's own), and say that the app
 includes OpenSSL. The iOS build bundles nothing.</li>
@@ -20494,13 +20543,16 @@ simulator with <code>xcodebuild test</code>.</li>
 <li><code>android/</code>: an activity in Java with the JNI functions in <code>jni.c</code>, and
 <code>build.sh</code>, which builds the APK with the Android SDK's own tools
 (<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed), installs it
-in the emulator, starts it and checks its log.</li>
+in the emulator, starts it and checks its log. With
+<code>PEPPER_ANDROID_AAR=1</code> it builds the library with <code>--lib aar</code> instead,
+checks the <code>.aar</code>'s layout, and links <code>jni.c</code> against its
+<code>libgreeter.so</code>, which the APK carries beside it.</li>
 </ul>
 <p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
-(<code>adb shell</code>), then builds and runs the two apps and the Swift package's
-tests. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
+(<code>adb shell</code>), then builds and runs the two apps, the Swift package's
+tests, and the Android app again on the <code>.aar</code>. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to <code>localhost</code> and <code>127.0.0.1</code>, checks that ALPN chose
 <code>http/1.1</code>, sends <code>GET /</code>, checks that a connector without the authority is
@@ -20509,10 +20561,8 @@ access. Set <code>PEPPER_MOBILE_TLS_URL</code> to an <code>https://</code> URL t
 public host through the system's roots. On Android the same check runs in
 the emulator against the same kind of server, which <code>adb reverse</code> makes the
 emulator's <code>localhost</code>, with the same opt-in public fetch. The Android run
-also works on Linux, for the host's ABI (x86_64 there, where the prototype
-app is skipped until
-<a href="https://github.com/pep-lang/pepper/issues/246">pepper#246</a> is fixed), as CI
-runs it: <code>scripts/ci-provision-android.sh</code> sets up an emulator on a
+also works on Linux, for the host's ABI (x86_64 there), as CI runs it:
+<code>scripts/ci-provision-android.sh</code> sets up an emulator on a
 GitHub-hosted Linux runner, since Apple silicon runners cannot run one.</p>
 <pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 </code></pre>
@@ -20530,9 +20580,10 @@ whenever the version the script pins has not been published.</p>
 SecIdentity and Network.framework).</li>
 <li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
 by hand; a generator could write them from the header.</li>
-<li><strong>Packaging</strong>: an Android library (<code>.aar</code>), <code>pep.toml</code> keys for
-<code>--lib xcframework</code>, and Mac Catalyst and macOS slices in the
-<code>.xcframework</code>.</li>
+<li><strong>Packaging</strong>: <code>pep.toml</code> keys for <code>--lib xcframework</code> and <code>--lib aar</code>,
+an <code>.aar</code> for an API level other than 30, Mac Catalyst and macOS slices
+in the <code>.xcframework</code>, and <code>--lib jnilibs</code> (each ABI's <code>.so</code> laid out
+for Gradle's <code>jniLibs</code>).</li>
 <li><strong>Other targets</strong>: 32-bit Android (<code>armeabi-v7a</code>, <code>x86</code>), Mac Catalyst,
 tvOS, watchOS and visionOS.</li>
 </ul>
@@ -22082,6 +22133,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
+<tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
@@ -22248,7 +22300,9 @@ macOS, <code>name.dll</code> (and its import library <code>name.lib</code>) on W
 <code>soname</code> is its file name; on macOS and iOS its install name is
 <code>@rpath/&lt;file name&gt;</code>, so a program that links it finds it on its run
 path. Linking one for another platform needs its system root, as an
-executable does (<code>--sysroot</code>).</li>
+executable does (<code>--sysroot</code>). For Android, when the program imports
+<code>tls</code>, the <code>.so</code> holds the toolchain's static OpenSSL, and its license
+goes beside it as <code>LICENSE-OpenSSL.txt</code>.</li>
 </ul>
 <p>The header goes beside the library, named for it without the <code>lib</code> prefix
 (<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
@@ -22277,6 +22331,21 @@ committed to.</li>
 </ul>
 <p>They cannot be combined with <code>--target</code> or the <code>--emit</code> options. See
 <a href="tools/../language/mobile.html#packaging-for-xcode-and-swiftpm">iOS and Android</a>.</p>
+<h3 id="--lib-aar"><a class="header" href="#--lib-aar"><code>--lib aar</code></a></h3>
+<p>Builds the shared library of an Android app's Pepper code for every
+Android ABI at once (<code>arm64-v8a</code> and <code>x86_64</code>), packaged as an Android
+library a Gradle build adds: <code>name.aar</code> (<code>-o name.aar</code>), named for its
+output, which takes letters, digits and <code>_</code>. It holds
+<code>jni/&lt;abi&gt;/libname.so</code> for each ABI, the header as <code>include/name.h</code>, an
+<code>AndroidManifest.xml</code> for the package <code>pepper.name</code> and API level 30, the
+empty <code>classes.jar</code>, <code>R.txt</code> and <code>res/</code> an <code>.aar</code> must have, and, when the
+program imports <code>tls</code>, OpenSSL's license as <code>LICENSE-OpenSSL.txt</code>. The
+compiler builds each library by running itself with <code>--lib shared --target &lt;triple&gt;</code>, side by side, each in a folder of the build folder's
+<code>aar/</code>, and writes the zip itself, so this needs the Android NDK (found as
+for any Android link: <code>--sysroot</code>, <code>ANDROID_NDK_HOME</code> or <code>ANDROID_HOME</code>)
+but no Gradle or JDK. It cannot be combined with <code>--target</code> or the
+<code>--emit</code> options. See
+<a href="tools/../language/mobile.html#packaging-for-gradle">iOS and Android</a>.</p>
 <h3 id="--test"><a class="header" href="#--test"><code>--test</code></a></h3>
 <p>Builds the entry file's tests into a test program, which
 <a href="tools/pep-test.html">pep-test</a> runs. A build without it leaves every <code>[Test]</code>
