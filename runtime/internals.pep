@@ -1228,11 +1228,25 @@ extern long write(int fd, void* buf, ulong n);
 [Target(OS(Windows))]
 extern int _write(int fd, void* buf, uint n);
 extern ulong strlen(char* s);
+[Target(OS(IOS) || OS(Android))]
+extern int snprintf(char* buffer, ulong size, char* format, ...);
 
 # Write the C string `text` to standard error, unbuffered.
-[Target(!OS(Windows))]
+[Target(!OS(Windows) && !OS(IOS) && !OS(Android))]
 export _pep_write_error(text: __ptr<char>) {
     write(2, text, strlen(text));
+}
+
+# On a phone, also to the platform's log, at once, so that a panic reaches
+# it before the process aborts; standard error itself only when it is
+# attached to something (see mobile.pep), or the text would be logged twice.
+[Target(OS(IOS) || OS(Android))]
+export _pep_write_error(text: __ptr<char>) {
+    var size = strlen(text);
+    if (!_pep_platform_log_routes(2)) {
+        write(2, text, size);
+    }
+    _pep_platform_log(_PEP_LOG_ERROR, text, size);
 }
 
 [Target(OS(Windows))]
@@ -1361,6 +1375,7 @@ _pep_run_panic_hook(message: __ptr<char>, location: __ptr<char>) {
 }
 
 # Writes `location: <kind><message>` and a newline to standard error.
+[Target(!OS(IOS) && !OS(Android))]
 _pep_write_panic(location: __ptr<char>, message: __ptr<char>, kind: __ptr<char>) {
     if (location != __null) {
         _pep_write_error(location);
@@ -1369,6 +1384,22 @@ _pep_write_panic(location: __ptr<char>, message: __ptr<char>, kind: __ptr<char>)
     _pep_write_error(kind);
     _pep_write_error(message);
     _pep_write_error("\n");
+}
+
+# The same in one write, so that the platform's log holds it as one message.
+[Target(OS(IOS) || OS(Android))]
+_pep_write_panic(location: __ptr<char>, message: __ptr<char>, kind: __ptr<char>) {
+    __ptr<char> place = location == __null ? "" : location;
+    __ptr<char> separator = location == __null ? "" : ": ";
+    var size = strlen(place) + strlen(separator) + strlen(kind) + strlen(message) + 2;
+    __ptr<char> line = malloc(size);
+    if (line == __null) {
+        _pep_write_error(message);
+        return;
+    }
+    snprintf(line, size, "%s%s%s%s\n", place, separator, kind, message);
+    _pep_write_error(line);
+    free(line);
 }
 
 # The panic backtrace's state: [0] is 1 when the build asks for a backtrace

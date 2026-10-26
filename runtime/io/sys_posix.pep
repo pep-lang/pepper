@@ -934,12 +934,17 @@ _io_sys_realpath(path: Path): IoResult<Path> {
     return IoResult<Path>.ok(Path(_io_string_from_c(r)));
 }
 
-# Android has no /tmp; /data/local/tmp is the one any process may write.
+# Android has no /tmp: an app's is its cache folder, once the app gives it
+# (`pepper_set_app_directories`); /data/local/tmp is the one a shell
+# program may write.
 [Target(!OS(Windows) && !OS(Android))]
 _io_default_temp_dir(): String { return "/tmp"; }
 
 [Target(OS(Android))]
-_io_default_temp_dir(): String { return "/data/local/tmp"; }
+_io_default_temp_dir(): String {
+    __ptr<char> cache = _pep_app_directory(1);
+    return cache == __null ? "/data/local/tmp" : String(cache);
+}
 
 [Target(!OS(Windows))]
 export _io_sys_temp_dir(): Path {
