@@ -3,6 +3,7 @@
 
 import [TypeFlags, TypeName] from "model";
 import [set_name] from "names";
+import [type_ids] from "type_ids";
 
 ## The type sema infers: `auto`.
 export const AUTO = "__auto";
@@ -218,6 +219,13 @@ export extend TypeName {
         if (this.name == name) {
             return true;
         }
+        if (sub_types.count == 0) {
+            return false;
+        }
+        var ids = type_ids();
+        if (ids.is_value()) {
+            return ids.value().names(this).contains(name);
+        }
         for (var t in sub_types) {
             if (t.mentions(name)) {
                 return true;
@@ -271,6 +279,15 @@ export extend TypeName {
     ##
     ## @returns true for `Array<(name: String, count: int)>`
     labels_arguments(): bool {
+        var ids = type_ids();
+        if (ids.is_value()) {
+            for (var t in sub_types) {
+                if (ids.value().labeled_tuple(t)) {
+                    return true;
+                }
+            }
+            return false;
+        }
         for (var t in sub_types) {
             if (t._has_labeled_tuple()) {
                 return true;
@@ -391,6 +408,13 @@ export extend TypeName {
     contains_auto(): bool {
         if (name == AUTO) {
             return true;
+        }
+        if (sub_types.count == 0) {
+            return false;
+        }
+        var ids = type_ids();
+        if (ids.is_value()) {
+            return ids.value().contains_auto(this);
         }
         for (var t in sub_types) {
             if (t.contains_auto()) {
@@ -520,6 +544,10 @@ export extend TypeName {
         if (sub_types.count == 0) {
             return name;
         }
+        var ids = type_ids();
+        if (ids.is_value()) {
+            return ids.value().spelling(this);
+        }
         var out = StringBuilder();
         _spell(out);
         return out.to_string();
@@ -553,6 +581,13 @@ export extend TypeName {
         if (name != other.name or flags != other.flags or sub_types.count != other.sub_types.count) {
             return false;
         }
+        if (sub_types.count == 0) {
+            return true;
+        }
+        var ids = type_ids();
+        if (ids.is_value()) {
+            return ids.value().same(this, other);
+        }
         ulong i = 0;
         while (i < sub_types.count) {
             if (!(sub_types[i] == other.sub_types[i])) {
@@ -571,6 +606,8 @@ export extend TypeName {
         sub_types = other.sub_types;
         flags = other.flags;
         labels = other.labels;
+        # A type this one is placed in compares the ids its arguments keep.
+        type_id = 0;
     }
 
     ## Replaces generic parameter `param_name` with `type_arg` throughout
@@ -590,6 +627,7 @@ export extend TypeName {
             var replaced = sub_types[i]._replaced(param_name, type_arg);
             if (replaced.is_value()) {
                 sub_types[i] = replaced.value();
+                type_id = 0;
             }
             i += 1;
         }
@@ -658,6 +696,24 @@ export replace_map(ty: TypeName, type_map: Array<(String, TypeName)>) {
 ## @param text the string
 ## @returns the type
 export parse_type_string(text: String): TypeName {
+    # Only a type with arguments costs more to parse than to look up.
+    if (!text.contains("<")) {
+        return _parse_type_string(text);
+    }
+    var ids = type_ids();
+    if (!ids.is_value()) {
+        return _parse_type_string(text);
+    }
+    var known = ids.value().parsed(text);
+    if (known.is_value()) {
+        return known.value();
+    }
+    var parsed = _parse_type_string(text);
+    ids.value().note_parsed(text, parsed);
+    return parsed;
+}
+
+_parse_type_string(text: String): TypeName {
     var cursor = _TypeCursor(text);
     var plain = cursor.read();
     if (plain.is_value() and cursor.at == text.size) {

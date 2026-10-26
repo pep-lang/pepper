@@ -250,6 +250,56 @@ replace_and_copy_share_type_arguments() {
     expect_equal(argument.to_string(), "Array<Array<int>>");
 }
 
+# While the passes run, a table of types answers what a type is (#210):
+# the same as walking it, for a type changed in place too, a copy placed in
+# another type and then changed (as alias expansion does) included.
+[Test]
+type_ids_answer_as_walking_the_type_does() {
+    var outer = sema.begin_type_ids();
+    var deep = sema.parse_type_string("Array<Array<Array<int>>>");
+    expect_equal(deep.to_string(), "Array<Array<Array<int>>>");
+    var again = sema.parse_type_string("Array<Array<Array<int>>>");
+    expect_false(again === deep);
+    expect_true(again == deep);
+    expect_true(deep.mentions("int"));
+    expect_false(deep.contains_auto());
+    # Changing the type held, or what a parse gave, changes no other type.
+    again.sub_types[0] = sema.parse_type_string("Array<__auto>");
+    expect_equal(again.to_string(), "Array<Array<__auto>>");
+    expect_true(again.contains_auto());
+    expect_false(again == deep);
+    expect_equal(deep.to_string(), "Array<Array<Array<int>>>");
+    var parsed = sema.parse_type_string("Array<Array<Array<int>>>");
+    parsed.sub_types[0].assign(sema.TypeName.named("int"));
+    expect_equal(parsed.to_string(), "Array<int>");
+    expect_equal(sema.parse_type_string("Array<Array<Array<int>>>").to_string(), "Array<Array<Array<int>>>");
+    var holder = sema.TypeName.with_args("Box", [deep.copy()]);
+    expect_equal(holder.to_string(), "Box<Array<Array<Array<int>>>>");
+    holder.sub_types[0].assign(sema.TypeName.named("int"));
+    expect_equal(holder.to_string(), "Box<int>");
+    # Labels are no part of a type's identity, but are of its fingerprint.
+    var labeled = sema.parse_type_string("__tuple<int, int>");
+    labeled.labels = ["x", "y"];
+    var plain = sema.parse_type_string("__tuple<int, int>");
+    expect_true(labeled == plain);
+    expect_true(sema.TypeName.with_args("Box", [labeled]).labels_arguments());
+    expect_false(sema.TypeName.with_args("Box", [plain]).labels_arguments());
+    var with_labels = sema.Fingerprint();
+    labeled.fingerprint(with_labels);
+    var without = sema.Fingerprint();
+    plain.fingerprint(without);
+    expect_true(with_labels.value != without.value);
+    var inside = sema.Fingerprint();
+    labeled.fingerprint(inside);
+    sema.end_type_ids(outer);
+    # Without the table: the same answers, and the same fingerprint.
+    var walked = sema.Fingerprint();
+    labeled.fingerprint(walked);
+    expect_equal(walked.value, inside.value);
+    expect_equal(again.to_string(), "Array<Array<__auto>>");
+    expect_true(again.contains_auto());
+}
+
 # `verify_injected` finds a construct whose type the compiler injects still
 # in its placeholder form: string literals in a parameter default before
 # `resolve_injected` (step 18), and nothing once every pass has run.

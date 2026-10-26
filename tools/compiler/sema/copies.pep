@@ -288,7 +288,12 @@ _is_current(how: _CopyMethod?): bool {
 
 ## Whether `method` of `st` is its `Copyable<T>` implementation.
 _is_copy_method_of(st: StructDef, method: FunctionDef): bool {
-    var how = _copy_method(st);
+    return _is_copy_method(_copy_method(st), method);
+}
+
+## Whether `method` is the `Copyable<T>` implementation of a struct that
+## implements it as `how` says (`_copy_method`).
+_is_copy_method(how: _CopyMethod?, method: FunctionDef): bool {
     if (!how.is_value()) {
         return false;
     }
@@ -407,8 +412,10 @@ _contained(module: Module, ty: TypeName, copyable: bool): Array<(TypeName, _Hop)
     }
     var st = found.value();
     if (copyable) {
+        # Looked up once, not once per method (#210).
+        var how = _copy_method(st);
         for (var m in st.method_members) {
-            if (_is_copy_method_of(st, m)) {
+            if (_is_copy_method(how, m)) {
                 for (var (copied, loc) in _copy_calls(m)) {
                     out.append((copied, _Hop(false, ty, "", copied, loc)));
                 }

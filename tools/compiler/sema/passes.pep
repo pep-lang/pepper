@@ -67,6 +67,7 @@ import [strip_bodies] from "strip_bodies";
 import [synthesize] from "synthesize";
 import [resolve_type_aliases] from "type_aliases";
 import [check_type_arguments] from "type_argument_checks";
+import [begin_type_ids, end_type_ids] from "type_ids";
 import [check_value_structs] from "value_structs";
 import [lower_with_blocks] from "with_blocks";
 import [check_withheld] from "withheld";
@@ -163,6 +164,15 @@ export run_passes(module: Module, target: Target, sources: SourceText[]): Result
 ## @param limit how many steps to run
 ## @returns how many steps ran, or the error a step reported
 export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic> {
+    # The passes ask the same deep types the same questions: the table
+    # answers each once per distinct type (#210).
+    var outer = begin_type_ids();
+    var ran = _run_steps(module, state, limit);
+    end_type_ids(outer);
+    return ran;
+}
+
+_run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic> {
     var steps = _Steps(limit, state);
     while (steps.ran < limit and steps.ran < PORTED_STEPS) {
         var error = _step(steps.ran, module, state);

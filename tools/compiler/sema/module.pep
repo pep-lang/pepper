@@ -29,6 +29,7 @@ export [CALL_METHOD, CLOSURE_PREFIX, is_closure_struct] from "closures";
 export [is_comparison, is_overflow_test, op_name, simd_result, weak_result] from "operators";
 export [thread_local_constant] from "shared_type_checks";
 export [Fingerprint] from "fingerprint";
+export [begin_type_ids, end_type_ids] from "type_ids";
 ## Checked units and their records in the build cache.
 export [
     CheckedUnit, drop_body, finish_checked, full_body, function_facts, interface_hash, resume_checked, settle_merged

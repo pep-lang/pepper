@@ -332,6 +332,11 @@ while stack:
 
 # In-memory fields `copy()` leaves out, with their documentation.
 NOT_COPIED = {
+    'type_id': [
+        "## In memory only, and not kept by `copy()`: the type's id in the",
+        "## passes' table of types (`type_ids.pep`), once asked for. A copy may",
+        "## be changed in place, and the types it is placed in would not see it.",
+    ],
     'body_origin': [
         '## In memory only, and not kept by `copy()`: the body as the record',
         "## it was read from wrote it, which hashing a delta's base or an own",
@@ -391,11 +396,11 @@ def gen_struct(name, fields, doc, internal=()):
             setup,val=[],'this.sub_types.clone()'
         lines+=['        '+l for l in setup]
         vals.append(f'{fname(f["name"])} = {val}')
-    if internal:
+    kept=[f for f in internal if f['name'] not in NOT_COPIED]
+    if kept:
         lines.append(f'        var _copy = {name}({", ".join(vals)});')
-        for f in internal:
-            if f['name'] not in NOT_COPIED:
-                lines.append(f'        _copy.{f["name"]} = this.{f["name"]};')
+        for f in kept:
+            lines.append(f'        _copy.{f["name"]} = this.{f["name"]};')
         lines.append('        return _copy;')
     else:
         lines.append(f'        return {name}({", ".join(vals)});')
@@ -405,10 +410,17 @@ def gen_struct(name, fields, doc, internal=()):
     lines.append('    ##')
     lines.append('    ## @param into the fingerprint')
     lines.append('    fingerprint(into: Fingerprint) {')
-    lines.append(f'        into.add_text("{name}");')
+    body=[f'        into.add_text("{name}");']
     for f in fields:
         if f['skip']: continue
-        lines+=['        '+l for l in fingerprint_of(f'this.{fname(f["name"])}',parse_type(f['type']))]
+        body+=['        '+l for l in fingerprint_of(f'this.{fname(f["name"])}',parse_type(f['type']))]
+    if name=='TypeName':
+        # The whole type in one word, which the passes' table of types
+        # keeps for each distinct type (`type_ids.type_print`): walking it
+        # cost each level of a nested literal the levels below it (#210).
+        # fingerprint_of still ran above, for the `_itemN` names.
+        body=['        into.add(type_print(this));']
+    lines+=body
     lines.append('    }')
     lines.append('')
     lines.append('    to_json(): JsonValue {')
@@ -550,6 +562,7 @@ import [JsonValue] from json;
 import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
 import [UnitDecls, PendingBody] from "pending";
+import [type_print] from "type_ids";
 
 '''
 footer='''
