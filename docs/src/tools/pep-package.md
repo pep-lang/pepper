@@ -99,11 +99,12 @@ version tags, so publishing one needs no registry account:
 | `add ... --name <name>`, `-n <name>` | The name source code imports it by |
 | `add ... --package <name>` | Depends on the member `<name>` of the repository's workspace, at a version of its own `<name>-v<version>` tags (see [A member as a Git dependency](projects.md#a-member-as-a-git-dependency)) |
 | `add ... --dev` | Adds it to `[dev-dependencies]`, which only the project's tests and examples import |
-| `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use |
+| `add ... --build` | Adds it to `[build-dependencies]`, which only the package's build script imports |
+| `add ... --target <condition>`, `-t <condition>` | Adds it to `[target.'<condition>'.dependencies]`, which only builds for the targets the condition selects use; with `--build`, to `[target.'<condition>'.build-dependencies]` |
 | `add ... --optional` | Marks it `optional = true`: a build uses it only when a feature turns it on |
 | `add ... --features <names>`, `-F <names>` | The dependency's features to turn on, written to its `features`: a comma-separated list, or repeat the option |
 | `add ... --no-default-features` | Leaves the dependency's `default` feature off: `default-features = false` |
-| `remove <name>` | Removes a dependency or dev-dependency, by its name or its `owner/name` |
+| `remove <name>` | Removes a dependency, dev-dependency or build-dependency, by its name or its `owner/name` |
 | `update [<name>...]` | Moves dependencies to the newest versions their ranges allow; every one when none is named |
 | `update --verify` | Updates one dependency at a time and builds after each, keeping only the updates that build |
 | `publish` | Checks the package and runs its tests, then tags its version and pushes the tag (see [`publish`](#publish)) |
@@ -223,11 +224,24 @@ pepper package add someone/shapes --package geo   # geo = { github = "someone/sh
 and examples import it, and projects that depend on this one ignore it
 (see [Projects: pep.toml](projects.md#dev-dependencies)).
 
+`--build` adds it to `[build-dependencies]`: only the package's
+[build script](projects.md#build-scripts) imports it (see
+[Projects: pep.toml](projects.md#build-dependencies)). The name may also be
+in `[dependencies]`, so `add` refuses it only when a build-dependency
+has it. It cannot be given with `--dev` or `--optional`.
+
+```bash
+pepper package add --build someone/codegen   # [build-dependencies] codegen = { github = "someone/codegen", version = "1.2.0" }
+```
+
 `--target <condition>` adds it to `[target.'<condition>'.dependencies]`:
 only a build for a target the condition selects sees it. The condition is
 what `[Target(...)]` takes (`OS(Windows)`, `OS(Linux) && Arch(x64)`; see
 [Platform selection](../language/platform-selection.md)); quote it for the
-shell. It cannot be given with `--dev`.
+shell. It cannot be given with `--dev`. With `--build`, it adds it to
+`[target.'<condition>'.build-dependencies]`, whose condition holds for the
+machine building, which the script runs on (see
+[Projects: pep.toml](projects.md#targetconditionbuild-dependencies)).
 
 `--optional`, `--features <names>` and `--no-default-features` write the
 entry's `optional = true`, `features = [...]` and `default-features =
@@ -238,8 +252,9 @@ them on.
 ### `remove <name>`
 
 Removes the dependency with that name (or that `owner/name`) from
-`pep.toml`, whichever table it is in, and drops from `pep.lock` every
-package nothing needs any more.
+`pep.toml`, whichever table it is in (from each, when both
+`[dependencies]` and `[build-dependencies]` have it), and drops from
+`pep.lock` every package nothing needs any more.
 
 ### `update [<name>...]`
 
@@ -843,7 +858,10 @@ package that only `[target.'<condition>'.dependencies]` lead to has
 conditions join with `&&` and other ways with `||`, so
 `target = "(OS(Linux)) || (OS(Windows))"` is needed on either. A build
 fetches a package only when its `target` holds for what it builds for,
-the platform `--target` names in a cross build.
+the platform `--target` names in a cross build. The condition of a
+`[target.'<condition>'.build-dependencies]` is left out: it holds for the
+machine building, which a lock every machine shares cannot name, so a
+build fetches such a package whatever it builds for.
 
 ```toml
 [[package]]
@@ -1043,9 +1061,10 @@ asks for 1.x, whatever name each imports it by (see
   dependencies' included: a dependency's build script runs in the
   project's build. A package both its code and a build script need is one
   copy, at one version.
-- Every `[target.'<condition>'.dependencies]`, the project's and its
-  dependencies', is resolved with the rest, whatever the platform
-  resolving, so one version of a package serves every platform.
+- Every `[target.'<condition>'.dependencies]` and
+  `.build-dependencies`, the project's and its dependencies', is resolved
+  with the rest, whatever the platform resolving, so one version of a
+  package serves every platform.
 
 ### Two majors of one package
 

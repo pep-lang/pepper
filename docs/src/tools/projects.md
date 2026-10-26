@@ -417,6 +417,11 @@ codegen = { github = "someone/codegen", version = "1" }
   in the build of the script that imports it.
 - **Not optional:** `optional = true` there is an error; a script reads its
   package's features from `PEP_FEATURES`.
+- **Only on some hosts:** `[target.'<condition>'.build-dependencies]`
+  holds those a script needs only on some machines; see
+  [below](#targetconditionbuild-dependencies).
+- **Added with** `pepper package add --build` (see
+  [pep-package](pep-package.md#add-ownernamerange)).
 - **Needs toolchain 0.11.0**, as `[dev-dependencies]` does.
 
 ```text
@@ -477,7 +482,42 @@ epoll = { github = "someone/epoll", version = "0.3" }
 `pepper package add --target 'OS(Windows)'` adds one, and `pepper package
 remove` removes one (see [pep-package](pep-package.md#add-ownernamerange)).
 A name may be in only one of the dependency tables, and a `[target]` table
-holds only `dependencies`.
+holds only `dependencies` and
+[`build-dependencies`](#targetconditionbuild-dependencies).
+
+## `[target.'<condition>'.build-dependencies]`
+
+A package the [build script](#build-scripts) needs only on some machines
+goes in a `[target]` table's `build-dependencies`, written as in
+[`[build-dependencies]`](#build-dependencies):
+
+```toml
+[target.'OS(Windows)'.build-dependencies]
+vswhere = { github = "someone/vswhere", version = "1" }
+```
+
+- **The condition holds for the host**, the machine building, not the
+  target: the script is built for and runs on the host. A cross build
+  for Linux on Windows gives its script the `OS(Windows)` ones, and none
+  of the `OS(Linux)` ones. Guard the script's import the same way:
+
+  ```pepper
+  [Target(OS(Windows))]
+  import vswhere;
+  ```
+
+  An import a script reaches on another host is an error:
+
+  ```text
+  build.pep:1:8: error: 'vswhere' is a build-dependency only for hosts where 'OS(Windows)' holds, which this one does not; put '[Target(OS(Windows))]' on the import
+  ```
+
+- **Locked and fetched on every host:** `pep.lock` is shared by every
+  machine, so it records no condition for them, and a build fetches them
+  whatever it builds for.
+- **The rest is as for `[build-dependencies]`:** never optional, a name
+  only once among them, added with `pepper package add --build --target
+  '<condition>'`.
 
 ## `[features]`
 

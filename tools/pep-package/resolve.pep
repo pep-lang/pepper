@@ -1124,7 +1124,8 @@ export newest_release(refs: Array<RemoteRef>, member: String = ""): Optional<(Ve
 # The condition under which a build needs each source of `wanted`: the
 # `[target.'<condition>']` of each requirement on a way to it, all of
 # which must hold, or else those of another way. Empty when a way has
-# none: every build needs it.
+# none: every build needs it. A build-dependency's condition is left out:
+# it holds for the host, which a lock shared between hosts cannot name.
 export lock_targets(wanted: OrderedMap<String, Array<Wanted>>): HashMap<String, String> {
     # Each source's ways, each its conditions sorted; a way that holds
     # another's conditions and more adds nothing, so a cycle settles.
@@ -1139,7 +1140,7 @@ export lock_targets(wanted: OrderedMap<String, Array<Wanted>>): HashMap<String, 
                     ways.try_get(ask.parent).value_or(Array<Array<String>>());
                 for (var way in from) {
                     var conditions = way.copy();
-                    var condition = ask.requirement.target;
+                    var condition = ask.requirement.build ? "" : ask.requirement.target;
                     if (!condition.is_empty and !conditions.contains(condition)) {
                         conditions.append(condition);
                         conditions.sort((a, b) => a.compare(b));
