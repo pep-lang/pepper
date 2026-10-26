@@ -308,6 +308,11 @@ private over_h2(response: http.Response): bool {
 
 [Test]
 clients_choose_http2_through_alpn() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });
@@ -339,6 +344,11 @@ clients_choose_http2_through_alpn() {
 
 [Test]
 sessions_share_one_http2_connection() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });
