@@ -1,8 +1,10 @@
 ## Build scripts: a package's `build.pep` (or the file `[build]`'s
 ## `script` names), which a build compiles for the host and runs before it
-## builds the program, and the `pep:` instructions the script prints to say
-## what to link. Each package's script runs in `<build>/<package>-<hash>/`, and
-## its result is kept there, in `stamp`, until what it depends on changes.
+## loads the program, and the `pep:` instructions the script prints to say
+## what to link and which build options to define. Each package's script
+## runs in `<build>/<package>-<hash>/` (`Manifest.script_folder`), the
+## modules it generates are in `out/` there, and its result is kept there,
+## in `stamp`, until what it depends on changes.
 
 import compiler.codegen;
 import digest;
@@ -14,7 +16,7 @@ import process;
 import toolchain;
 import "linker";
 
-## What the build scripts of a program's packages add to its link.
+## What the build scripts of a program's packages add to its build.
 export struct ScriptOutput {
     ## Libraries to link, by name (`pep:link=NAME`).
     var libraries: String[] = Array<String>();
@@ -22,6 +24,9 @@ export struct ScriptOutput {
     var library_dirs: Path[] = Array<Path>();
     ## Object files and static libraries to link (`pep:object=FILE`).
     var objects: Path[] = Array<Path>();
+    ## The build options to define (`pep:build-option=NAME[=VALUE]`), each
+    ## named `<package>_<NAME>`, as a feature's are.
+    var build_options: HashMap<String, String> = HashMap<String, String>();
 }
 
 ## What a build passes each build script, besides the package.
@@ -29,7 +34,7 @@ export struct ScriptInputs {
     ## What the program is built for.
     var target: link.Target = link.Target();
     ## The build's intermediate folder (`--build`): each script works in
-    ## `<build_dir>/<package>`.
+    ## `Manifest.script_folder(build_dir)`.
     var build_dir: Path = Path(".");
     ## The optimization level, 0 to 3.
     var opt_level: uint = 0;
@@ -42,14 +47,16 @@ export struct ScriptInputs {
 
 ## Runs the build script of each package a build of `entry` turns on, the
 ## project's first, and gathers what they print. A script is compiled for
-## the host with this compiler and runs in its package's folder; with
-## nothing it depends on changed since its last run (`_key`), its last
-## output is used again instead.
+## the host with this compiler, with its package's build-dependencies, and
+## runs in its package's folder; with nothing it depends on changed since
+## its last run (`_key`), its last output is used again instead. In the
+## build of a build script (`Target.build_script_root`), the scripts of its
+## build-dependencies run, and not its own.
 ##
 ## @param entry the program's entry file
 ## @param inputs what the build is for
-## @returns what to link, or why a script could not run or what it printed
-##   is wrong
+## @returns what to link and define, or why a script could not run or what
+##   it printed is wrong
 export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput, String> {
     var output = ScriptOutput();
     var packages = link.Packages(entry, inputs.target);
@@ -67,16 +74,19 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
         # The project's own script is the user's code; a dependency's is not.
         bool own = packages.project.is_value()
             and manifest.dir().normalize().to_string() == packages.project.value().normalize().to_string();
+        if (own and inputs.target.build_script_root.is_value()) {
+            continue;
+        }
         if (inputs.refuse and !own) {
             return Result<ScriptOutput, String>.err(
                 $"the dependency '{name}' has a build script, {script.value().value()}, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it"
             );
         }
-        var ran = _run(name, manifest.dir(), script.value().value(), packages.features_on(manifest), inputs);
+        var ran = _run(name, manifest, script.value().value(), packages, inputs);
         if (ran.is_err()) {
             return Result<ScriptOutput, String>.err(ran.error());
         }
-        var applied = _apply(name, manifest.dir(), ran.value(), output);
+        var applied = _apply(name, manifest, ran.value(), output);
         if (applied.is_err()) {
             return Result<ScriptOutput, String>.err(applied.error());
         }
@@ -84,15 +94,19 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
     return Result<ScriptOutput, String>.ok(output);
 }
 
-# The output of the build script `script` of the package `name` in `dir`:
-# its last, when nothing its key covers changed, else that of running it
+# The output of the build script `script` of the package `name`, whose
+# pep.toml is `manifest`, one of `packages`: its last, when nothing its key
+# covers changed and its `out` folder is there, else that of running it
 # again. One build at a time runs a package's script, under the lock file
 # in its folder.
-_run(name: String, dir: Path, script: Path, features: String[], inputs: ScriptInputs): Result<String, String> {
-    # Two packages of one name (a fork, say) each get their own folder.
-    var folder_hash = digest.to_hex(digest.blake3(link.absolute(dir).normalize().to_string())).substr(0, 8);
-    var work = inputs.build_dir.join(Path($"{name}-{folder_hash}"));
+_run(
+    name: String, manifest: link.Manifest, script: Path, packages: link.Packages, inputs: ScriptInputs
+): Result<String, String> {
+    var dir = manifest.dir();
+    var work = manifest.script_folder(inputs.build_dir);
     var out = work.join(Path("out"));
+    # It holds the generated modules too, which the stamp does not name.
+    bool lost = !out.is_directory();
     var created = Directory.create_all(out);
     if (created.is_err()) {
         return Result<String, String>.err($"cannot create {out}: {created.error().message}");
@@ -107,21 +121,37 @@ _run(name: String, dir: Path, script: Path, features: String[], inputs: ScriptIn
     if (held.is_err()) {
         return Result<String, String>.err($"cannot lock {lock_path}: {held.error().message}");
     }
-    var ran = _run_locked(name, dir, script, work, _environment(name, dir, out, features, inputs));
+    # Its own source, its package's pep.toml, and pep.lock, which holds its
+    # build-dependencies' revisions.
+    var sources = [script, manifest.path, packages.deps_root.value().join(Path(link.LOCK_FILE))];
+    var environment = _environment(name, dir, out, packages.features_on(manifest), inputs);
+    var ran = _run_locked(name, dir, sources, work, environment, packages.deps_root.value(), lost, inputs.refuse);
     lock.close();
     return ran;
 }
 
-# `_run`, holding the lock: `stamp` holds the key, then the output.
-_run_locked(name: String, dir: Path, script: Path, work: Path, environment: String[][]): Result<String, String> {
+# `_run`, holding the lock: `stamp` holds the key, then the output. The
+# script is `sources[0]`, built for the host with the packages `deps_root`
+# serves; `lost`, its `out` folder was gone, so it runs again.
+_run_locked(
+    name: String,
+    dir: Path,
+    sources: Path[],
+    work: Path,
+    environment: String[][],
+    deps_root: Path,
+    lost: bool,
+    refuse: bool
+): Result<String, String> {
+    var script = sources[0];
     var stamp = work.join(Path("stamp"));
     var kept = File.read_to_string(stamp);
-    if (kept.is_ok()) {
+    if (kept.is_ok() and !lost) {
         var split = kept.value().split_once("\n");
         if (split.is_value()) {
             var (key, last) = split.value();
-            # An object it made since deleted (its `out` emptied) needs a run.
-            if (key == _key(dir, script, environment, last) and _objects_exist(dir, last)) {
+            # An object it made since deleted needs a run.
+            if (key == _key(dir, sources, environment, last) and _objects_exist(dir, last)) {
                 return Result<String, String>.ok(last);
             }
         }
@@ -131,20 +161,23 @@ _run_locked(name: String, dir: Path, script: Path, work: Path, environment: Stri
     if (compiler.is_err()) {
         return Result<String, String>.err($"cannot find this compiler to build {script}: {compiler.error().message}");
     }
-    # For the host; and its own build runs no build scripts, or a project's
-    # script would build itself.
+    # For the host, with its package's build-dependencies; that build runs
+    # their scripts and not this one, which would build itself.
+    var arguments = [
+        script.to_string(),
+        "-o",
+        executable.to_string(),
+        "--build",
+        work.join(Path("build")).to_string(),
+        "--build-script",
+        link.absolute(deps_root).to_string()
+    ];
+    if (refuse) {
+        arguments.append("--no-build-scripts");
+    }
     var built = process
         .Command(compiler.value().to_string())
-        .arguments(
-            [
-                script.to_string(),
-                "-o",
-                executable.to_string(),
-                "--build",
-                work.join(Path("build")).to_string(),
-                "--skip-build-scripts"
-            ]
-        )
+        .arguments(arguments)
         .stdout(process.Stream.Pipe)
         .stderr(process.Stream.Pipe)
         .run();
@@ -182,7 +215,7 @@ _run_locked(name: String, dir: Path, script: Path, work: Path, environment: Stri
             File.stderr().write_all($"warning: {name}: {line.substr_bytes(8, line.size - 8)}\n");
         }
     }
-    var written = File.write_text(stamp, _key(dir, script, environment, printed) + "\n" + printed);
+    var written = File.write_text(stamp, _key(dir, sources, environment, printed) + "\n" + printed);
     if (written.is_err()) {
         return Result<String, String>.err($"cannot write {stamp}: {written.error().message}");
     }
@@ -207,15 +240,17 @@ _environment(name: String, dir: Path, out: Path, features: String[], inputs: Scr
     ];
 }
 
-# What a script's run depends on, as a hash: its inputs, its own source,
-# and the files and variables its `output` names with `rerun-if-changed`
-# and `rerun-if-env-changed`.
-_key(dir: Path, script: Path, environment: String[][], output: String): String {
+# What a script's run depends on, as a hash: its inputs, the files
+# `sources` (its own source first), and the files and variables its
+# `output` names with `rerun-if-changed` and `rerun-if-env-changed`.
+_key(dir: Path, sources: Path[], environment: String[][], output: String): String {
     var text = StringBuilder();
     for (var variable in environment) {
         text.append($"{variable[0]}={variable[1]}\n");
     }
-    text.append($"script {_hash(script)}\n");
+    for (var source in sources) {
+        text.append($"{source} {_hash(source)}\n");
+    }
     for (var line in _instructions(output)) {
         if (line.starts_with("rerun-if-changed=")) {
             var path = dir.join(Path(line.substr_bytes(17, line.size - 17)));
@@ -262,12 +297,16 @@ _instructions(output: String): String[] {
     return lines;
 }
 
-# Adds what the output of the build script of `name`, in `dir`, says to
-# link to `into`: a relative path is relative to `dir`.
-_apply(name: String, dir: Path, output: String, into: ScriptOutput): Result<void, String> {
+# Adds what the output of the build script of `name`, whose pep.toml is
+# `manifest`, says to link and define to `into`: a relative path is
+# relative to the package's folder.
+_apply(name: String, manifest: link.Manifest, output: String, into: ScriptOutput): Result<void, String> {
+    var dir = manifest.dir();
     for (var line in _instructions(output)) {
         var split = line.split_once("=");
-        var known = ["link", "link-path", "object", "warning", "rerun-if-changed", "rerun-if-env-changed"];
+        var known = [
+            "link", "link-path", "object", "build-option", "warning", "rerun-if-changed", "rerun-if-env-changed"
+        ];
         if (!split.is_value() or !known.contains(split.value().0)) {
             return Result<void, String>.err(
                 $"the build script of '{name}' printed 'pep:{line}'; expected 'pep:' followed by one of {", ".join(known)}, '=' and a value"
@@ -291,6 +330,16 @@ _apply(name: String, dir: Path, output: String, into: ScriptOutput): Result<void
                 );
             }
             into.objects.append(object);
+        } else if (instruction == "build-option") {
+            # `NAME` is `NAME=1`, as with `-D`.
+            var defined = value.split_once("=");
+            var option = manifest.build_option(defined.is_value() ? defined.value().0 : value);
+            if (!link.is_build_option_name(option)) {
+                return Result<void, String>.err(
+                    $"the build script of '{name}' printed 'pep:{line}', and '{option}' is not a build option name; a name is a letter or '_' followed by letters, digits and '_'"
+                );
+            }
+            into.build_options[option] = defined.is_value() ? defined.value().1 : "1";
         }
     }
     return Result<void, String>.ok();

@@ -1,6 +1,6 @@
 # pep.toml as the package manager reads it: the package's name, the oldest
-# toolchain it builds with, and its dependencies, dev-dependencies and
-# `[target.'<condition>'.dependencies]`. The compiler checks the rest of the
+# toolchain it builds with, and its dependencies, dev-dependencies,
+# build-dependencies and `[target.'<condition>'.dependencies]`. The compiler checks the rest of the
 # file, the conditions and `[features]` included, when it builds. Features
 # do not change what is locked: an optional dependency is resolved and
 # locked like any other. `[overrides]` replaces a package wherever the
@@ -20,8 +20,8 @@ export is_host(key: String): bool {
     return key == "github" or key == "gitlab" or key == "codeberg";
 }
 
-# One entry of `[dependencies]`, `[dev-dependencies]` or
-# `[target.'<condition>'.dependencies]`.
+# One entry of `[dependencies]`, `[dev-dependencies]`,
+# `[build-dependencies]` or `[target.'<condition>'.dependencies]`.
 export struct Requirement {
     # The key: the name source code imports.
     var name: String = "";
@@ -39,6 +39,9 @@ export struct Requirement {
     # Whether it is in `[dev-dependencies]`: only the project's own tests
     # and examples use it, so a project depending on this one ignores it.
     var dev: bool = false;
+    # Whether it is in `[build-dependencies]`: only the package's build
+    # script imports it, built for the machine building.
+    var build: bool = false;
     # The `[target.'<condition>']` it is under (`OS(Windows)`): the
     # platforms that use it. Empty for every platform.
     var target: String = "";
@@ -71,12 +74,13 @@ export struct Requirement {
     }
 
     # Its key in pep.toml: `[dependencies, name]`, `[dev-dependencies,
-    # name]` or `[target, condition, dependencies, name]`.
+    # name]`, `[build-dependencies, name]` or `[target, condition,
+    # dependencies, name]`.
     key(): Array<String> {
         if (!target.is_empty) {
             return ["target", target, "dependencies", name];
         }
-        return [dev ? "dev-dependencies" : "dependencies", name];
+        return [dev ? "dev-dependencies" : build ? "build-dependencies" : "dependencies", name];
     }
 
     # The revision as pep.toml writes it, for messages: `1.2`, `branch main`.
@@ -301,7 +305,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
         }
         manifest.vendor = vendor.value().as_string().value();
     }
-    for (var name in ["dependencies", "dev-dependencies"]) {
+    for (var name in ["dependencies", "dev-dependencies", "build-dependencies"]) {
         var dependencies = root.try_get(name);
         if (dependencies.is_empty()) {
             continue;
@@ -316,6 +320,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
                 return Result<Manifest>.Err(requirement.error().message);
             }
             requirement.value().dev = name == "dev-dependencies";
+            requirement.value().build = name == "build-dependencies";
             manifest.requirements.append(requirement.value());
         }
     }
@@ -403,7 +408,8 @@ export newer_manifest_features(): Array<(String, String)> {
         ("workspace", "0.11.0"),
         ("fetch.vendor", "0.11.0"),
         ("retract", "0.11.0"),
-        ("audit", "0.11.0")
+        ("audit", "0.11.0"),
+        ("build-dependencies", "0.11.0")
     ];
 }
 
@@ -413,7 +419,7 @@ export newer_manifest_features(): Array<(String, String)> {
 # own key.
 export const DEPENDENCY_FEATURES_RELEASE = "0.11.0";
 
-# One `[dependencies]` or `[dev-dependencies]` entry.
+# One `[dependencies]`, `[dev-dependencies]` or `[build-dependencies]` entry.
 _requirement(path: Path, key: String, value: toml.TomlValue): Result<Requirement> {
     var fields = value.as_table();
     if (fields.is_empty()) {

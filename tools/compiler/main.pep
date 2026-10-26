@@ -173,9 +173,10 @@ _main(args: String[]): int {
         "no-build-scripts",
         help = "Fail, rather than run it, when a dependency the build turns on has a build script (`build.pep`), which runs the dependency's code on this machine; the project's own still runs (also `PEPPER_NO_BUILD_SCRIPTS=1`)"
     );
-    var skip_build_scripts = parser.flag(
-        "skip-build-scripts",
-        help = "Internal: run no build scripts. A build gives it to the build of each package's build script, which is in the project too"
+    var build_script = parser.option(
+        "build-script",
+        help = "Internal: build a package's build script, whose package sees its `[build-dependencies]` from the project in DIR, and run the build scripts of those, not its own. A build gives it to the build of each package's build script",
+        value_name = "DIR"
     );
     var ir = parser.flag("emit-llvm", help = "Emit LLVM IR (optimized at the `-O` level)");
     var emit_static = parser.option<_StaticMode>(
@@ -423,6 +424,9 @@ _main(args: String[]): int {
     }
     setup.target.default_features = !no_default_features.is_set;
     setup.target.members = members;
+    if (build_script.is_set) {
+        setup.target.build_script_root = Optional<Path>.Value(Path(build_script.value()));
+    }
     # Without `-O`, `PEPPER_OPT_LEVEL` picks the level, as in pep-build, so a
     # whole test suite can run optimized.
     if (!opt_level.is_value()) {
@@ -614,7 +618,11 @@ _main(args: String[]): int {
             return 1;
         }
     }
-    if (!(linked.is_set or checked.is_set or model.is_set or steps.is_set or ir.is_set)) {
+    var sysroot_dir = driver.effective_sysroot(
+        setup.target, sysroot.is_set ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
+    );
+    # A build script's build has what the build that runs it fetched.
+    if (!(linked.is_set or checked.is_set or model.is_set or steps.is_set or ir.is_set or build_script.is_set)) {
         # A project builds with what pep.lock lists: fetch what is missing.
         var fetched = driver.fetch_dependencies(
             entry,
@@ -626,6 +634,24 @@ _main(args: String[]): int {
             File.stderr().write_all(fetched.error() + "\n");
             return 1;
         }
+    }
+    # The packages' build scripts run before the program loads: it imports
+    # the modules they generate, and the build options they define select
+    # its code.
+    setup.build_dir = Optional<Path>.Value(build_folder);
+    var inputs = driver.ScriptInputs();
+    inputs.target = setup.target;
+    inputs.build_dir = build_folder;
+    inputs.opt_level = opt_level.value();
+    inputs.sysroot = sysroot_dir;
+    inputs.refuse = no_build_scripts.is_set or os.environment_flag("PEPPER_NO_BUILD_SCRIPTS");
+    var scripts = driver.run_build_scripts(entry, inputs);
+    if (scripts.is_err()) {
+        _report(scripts.error());
+        return 1;
+    }
+    for (var (name, value) in scripts.value().build_options) {
+        setup.target.build_options[name] = value;
     }
     # A build links the bodies of only the files it checks
     # (`driver.build`).
@@ -762,9 +788,7 @@ _main(args: String[]): int {
         }
         options.libraries = linked_libraries;
         options.library_dirs = library_dirs.values();
-        options.sysroot = driver.effective_sysroot(
-            setup.target, sysroot.is_set ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
-        );
+        options.sysroot = sysroot_dir;
         # A cached unit's sema is skipped, so its expansions would not be
         # written for `--debug-static=expanded`.
         if (!no_cache.is_set and !options.debug_static_expanded) {
@@ -786,26 +810,13 @@ _main(args: String[]): int {
             options.worker_args.append(args[k]);
         }
         options.early_worker = early_worker;
-        if (!skip_build_scripts.is_set) {
-            var inputs = driver.ScriptInputs();
-            inputs.target = setup.target;
-            inputs.build_dir = build_folder;
-            inputs.opt_level = opt_level.value();
-            inputs.sysroot = options.sysroot;
-            inputs.refuse = no_build_scripts.is_set or os.environment_flag("PEPPER_NO_BUILD_SCRIPTS");
-            var scripts = driver.run_build_scripts(entry, inputs);
-            if (scripts.is_err()) {
-                _report(scripts.error());
-                return 1;
+        for (var library in scripts.value().libraries) {
+            if (!options.libraries.contains(library)) {
+                options.libraries.append(library);
             }
-            for (var library in scripts.value().libraries) {
-                if (!options.libraries.contains(library)) {
-                    options.libraries.append(library);
-                }
-            }
-            options.library_dirs.append_all(scripts.value().library_dirs);
-            options.objects = scripts.value().objects;
         }
+        options.library_dirs.append_all(scripts.value().library_dirs);
+        options.objects = scripts.value().objects;
         var made = driver.build(program.value(), options);
         if (made.is_err()) {
             # Empty: printed already (a syntax error read late).

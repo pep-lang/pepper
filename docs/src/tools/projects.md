@@ -37,6 +37,9 @@ shapes    = { path = "../shapes" }
 [dev-dependencies]
 fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
 
+[build-dependencies]
+codegen   = { github = "someone/codegen", version = "1" }    # only the build script imports it
+
 [target.'OS(Windows)'.dependencies]
 winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
 
@@ -77,7 +80,7 @@ that folder's `.pep`, wherever `pepper build` runs.
 | `output` | The executable; building for Windows adds `.exe` to a name with no extension | the package's `name` |
 | `include` | An array of extra folders to search for modules, as `-I` adds | none |
 | `link` | An array of C libraries to link, as `-l` adds | none |
-| `script` | The package's [build script](#build-scripts), which builds its C code before its Pepper code is built | `build.pep`, when there is one |
+| `script` | The package's [build script](#build-scripts), which builds its C code, or generates Pepper code, before its Pepper code is built | `build.pep`, when there is one |
 
 Options on the command line still apply: `pepper build -O` builds the
 project optimized, and `-o` names another output. A file argument builds that
@@ -90,11 +93,17 @@ project.
 A package that binds a C library can carry the library's C source and build
 it itself, so its users install nothing. Its build script, a Pepper program
 in `build.pep` at the package's root (or the file `[build]`'s `script`
-names), compiles the C code, and prints what the build must link. Every
-build of a program that uses the package (a dependency, or the project
-itself) compiles the script for the machine it runs on and runs it before
-it builds the program, even when it builds for another platform with
-`--target`. Cargo users know it as `build.rs`.
+names), compiles the C code, and prints what the build must link. It can
+also write Pepper modules the package imports ([Generated
+modules](#generated-modules)) and define build options its code reads.
+Every build of a program that uses the package (a dependency, or the
+project itself) compiles the script for the machine it runs on and runs it
+before it loads the program, even when it builds for another platform with
+`--target`. The script imports the runtime and its package's
+[`[build-dependencies]`](#build-dependencies), and stands apart from the
+code it builds: building it does not load its package's root module,
+which may import what the script generates, though it may import a file
+beside it. Cargo users know it as `build.rs`.
 
 ```text
 native/
@@ -135,7 +144,7 @@ The script runs in the package's folder, with these environment variables:
 | `PEP_OPT_LEVEL` | The optimization level, `0` to `3` |
 | `PEP_FEATURES` | The package's [features](#features) the build turns on, separated by commas |
 | `PEP_PACKAGE_NAME`, `PEP_PACKAGE_DIR` | The package's name and folder |
-| `PEP_OUT_DIR` | A folder of the package's own for what the script makes: `.pep/build/<package>-<hash>/out`, `<hash>` naming where the package is (below `--build`'s folder when given) |
+| `PEP_OUT_DIR` | A folder of the package's own for what the script makes, and the package's [generated modules](#generated-modules): `.pep/build/<package>-<hash>/out`, `<hash>` naming where the package is (below `--build`'s folder when given) |
 | `PEP_CLANG` | The clang the build links with (see [What the compiler links](../language/linking.md#what-the-compiler-links)), empty when there is none; it compiles C for any target LLVM supports |
 | `PEP_SYSROOT` | The target's system root (`--sysroot`), empty when there is none |
 
@@ -147,6 +156,7 @@ what to do; other lines are its own and ignored:
 | `pep:object=<file>` | Links an object file or a static library (`.a`, `.lib`) |
 | `pep:link=<name>` | Links a library by name, as `-l` does |
 | `pep:link-path=<dir>` | Adds a folder the linker searches, as `-L` does |
+| `pep:build-option=<NAME>[=<value>]` | Defines the [build option](../language/build-options.md) `<package>_<NAME>`, as `-D` does (a bare `NAME` is `NAME=1`); the package's code reads it as a feature's |
 | `pep:warning=<text>` | Shows `warning: <package>: <text>` |
 | `pep:rerun-if-changed=<path>` | Runs the script again when the file, or any file in the folder, changes |
 | `pep:rerun-if-env-changed=<name>` | Runs the script again when the environment variable changes |
@@ -158,12 +168,64 @@ standard error is passed on.
 
 **When it runs again.** The build keeps the script's output in
 `.pep/build/<package>-<hash>/stamp`, and uses it again until something the script
-depends on changes: its own file, the variables above, and what its
-`rerun-if-changed` and `rerun-if-env-changed` lines name. A script that
-reads other files, such as its C sources or Pepper files of its own it
+depends on changes: its own file, its package's `pep.toml`, the project's
+`pep.lock` (which holds its build-dependencies' revisions), the variables
+above, and what its `rerun-if-changed` and `rerun-if-env-changed` lines
+name; or until its `PEP_OUT_DIR`, or an object it named, is gone. A script
+that reads other files, such as its C sources or Pepper files of its own it
 imports, names them with `rerun-if-changed`; a change to a file it does not
 name leaves its last output in use. Builds that run side by side
 (`pepper test`) run one package's script one at a time.
+
+### Generated modules
+
+A script can write Pepper code, such as bindings made from a C header or
+tables computed at build time, into `PEP_OUT_DIR`: its `module.pep` there is
+the module the package's code imports as `generated`, and a folder there
+holding a `module.pep` is `generated.<folder>`. Only the package's own
+files see it, and its imports resolve against the package's dependencies.
+
+```pepper
+# build.pep: generates the module that names what it was built for.
+import [File, Path] from io;
+import os;
+
+main(): int {
+    var out = Path(os.environment("PEP_OUT_DIR").value());
+    var target = os.environment("PEP_TARGET").value();
+    File.write_text(out.join(Path("module.pep")), "export built_for(): String {\n    return \"" + target + "\";\n}\n");
+    print("pep:build-option=FAST=1");
+    return 0;
+}
+```
+
+```pepper
+# module.pep of the package `native`
+import generated;
+
+export describe(): String {
+    return "native for " + generated.built_for();
+}
+
+[BuildOption("native_FAST")]
+export fast(): bool {
+    return true;
+}
+```
+
+A generated module is part of the program like any file: its build cache
+key covers its text, so a script that writes something new rebuilds what
+imports it. A package with no build script has no `generated` module, and a
+dependency the package names `generated` is imported in its place. An
+import of a module the script did not write is an error at the import:
+
+```text
+module.pep:1:8: error: the build script of 'native', native/build.pep, wrote no module 'generated': no native/.pep/build/native-1a2b3c4d/out/module.pep
+```
+
+The language server finds a package's generated modules after a build has
+made them in the project's `.pep/build`, and does not see the build options
+a script defines.
 
 **What a build script can do.** A build script is a program like any
 other: it runs with your permissions, can read and write any file you
@@ -181,11 +243,8 @@ before any of its code is in a program you chose to run. So:
   dependency's script, naming it. The project's own script still runs: it
   is your code.
 
-What is not supported yet: generating Pepper code (a `.pep` file a package
-imports from `PEP_OUT_DIR`), setting build options from a script, a
-`[build-dependencies]` table (a script imports the runtime and the
-packages the project depends on), a helper package for finding a library
-with `pkg-config` and compiling C with the target's flags, and a `[native]`
+What is not supported yet: a helper package for finding a library with
+`pkg-config` and compiling C with the target's flags, and a `[native]`
 table that compiles C sources without a script.
 
 ## `[dependencies]`
@@ -322,6 +381,44 @@ name may be in only one of the two tables.
 main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
     1 | import fixtures;
       |        ^~~~~~~~
+```
+
+## `[build-dependencies]`
+
+A package the [build script](#build-scripts) imports, such as a code
+generator or a helper for compiling C, goes in `[build-dependencies]`,
+written as in `[dependencies]`:
+
+```toml
+[build-dependencies]
+codegen = { github = "someone/codegen", version = "1" }
+```
+
+- **Who sees them:** only the package's build script, which is built for
+  the machine the build runs on, so they are too; they are never linked
+  into the program. The script sees no other dependency of its package
+  (an import of one says to add it here), and the package's code does not
+  see its build-dependencies. A name may be in `[dependencies]` too, for
+  both to import.
+- **Part of the package:** unlike dev-dependencies, every package's
+  build-dependencies are resolved, a dependency's included, since its
+  script runs in your build. One the package's other packages need too is
+  one copy, at one version, as for any dependency.
+- **Locked and vendored with the rest:** `pep.lock` records them beside the
+  other packages, each that only build-dependencies lead to marked
+  `build = true` (and `pepper package tree` marks it `[build]`), `pepper
+  build` fetches them, `pepper package vendor` copies them, `audit` checks
+  them, and `[overrides]` and [two majors](pep-package.md#two-majors-of-one-package)
+  apply to them as to the rest. A build-dependency's own build script runs
+  in the build of the script that imports it.
+- **Not optional:** `optional = true` there is an error; a script reads its
+  package's features from `PEP_FEATURES`.
+- **Needs toolchain 0.11.0**, as `[dev-dependencies]` does.
+
+```text
+main.pep:1:8: error: 'codegen' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here
+    1 | import codegen;
+      |        ^~~~~~~
 ```
 
 ## `[target.'<condition>'.dependencies]`

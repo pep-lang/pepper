@@ -19,7 +19,9 @@ pep-build main.pep -D USE_LIBCRYPTO -D LOG_LEVEL=2 -D BACKEND=zlib -o app
 can mark code only tests use (see [Unit tests](testing.md#test-builds)).
 A package's `[features]` that a build turns on define options too, named
 `<package>_<feature>` (`http_tls`; see
-[Features](../tools/projects.md#features)).
+[Features](../tools/projects.md#features)), and so do the
+`pep:build-option=NAME` lines a package's build script prints, named
+`<package>_<NAME>` (see [Build scripts](../tools/projects.md#build-scripts)).
 
 A name is a letter or `_`, then letters, digits and `_`. Any other name is
 an error:

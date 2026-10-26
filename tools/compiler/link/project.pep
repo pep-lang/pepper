@@ -4,8 +4,10 @@
 ## dependencies. Each key of `[dependencies]` (and of
 ## `[dev-dependencies]`, which only the project's tests and examples see,
 ## and of `[target.'<condition>'.dependencies]`, which only a build for a
-## target the `[Target(...)]` condition selects sees) is the name source
-## code imports. `[features]` names optional parts of a package: turning a
+## target the `[Target(...)]` condition selects sees, and of
+## `[build-dependencies]`, which only the package's build script sees) is
+## the name source code imports; `generated` names the modules a
+## package's build script wrote (`Packages._generated`). `[features]` names optional parts of a package: turning a
 ## feature on defines the build option `<package>_<feature>` and turns on
 ## the optional dependencies and dependency features it lists
 ## (`Packages.turn_on_features`). `[overrides]`, read only from the
@@ -26,6 +28,7 @@
 
 import [Attribute, Span] from compiler.ast;
 import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
+import digest;
 import io;
 import [File, Path] from io;
 import os;
@@ -33,7 +36,7 @@ import compiler.parse;
 import process;
 import toml;
 import [TomlValue] from toml;
-import [range_major] from toolchain;
+import [build_script, range_major] from toolchain;
 import "files" as files;
 import [Target, TEST_BUILD_OPTION] from "platform";
 
@@ -278,8 +281,8 @@ export read_lock(path: Path): Result<LockedPackage[], String> {
     return Result<LockedPackage[], String>.ok(locked);
 }
 
-## One entry of `[dependencies]`, `[dev-dependencies]` or
-## `[target.'<condition>'.dependencies]`.
+## One entry of `[dependencies]`, `[dev-dependencies]`,
+## `[build-dependencies]` or `[target.'<condition>'.dependencies]`.
 export struct Dependency {
     ## The key: the name source code imports.
     var name: String;
@@ -420,6 +423,10 @@ export struct Manifest {
     ## `[dev-dependencies]`, in the order they are written: seen only by a
     ## build of this project's tests or examples (`Packages.dev`).
     var dev_dependencies: Dependency[] = Array<Dependency>();
+    ## `[build-dependencies]`, in the order they are written: seen only by
+    ## the package's build script, which is built for the host
+    ## (`Target.build_script_root`).
+    var build_dependencies: Dependency[] = Array<Dependency>();
     ## `[features]`, in the order they are written.
     var features: Feature[] = Array<Feature>();
     ## Whether it has a `[workspace]` table: it is the root of a workspace.
@@ -480,6 +487,11 @@ export struct Manifest {
         return _named(dev_dependencies, name);
     }
 
+    ## The build-dependency named `name`, if any.
+    build_dependency(name: String): Dependency? {
+        return _named(build_dependencies, name);
+    }
+
     ## The feature named `name`, if any.
     feature(name: String): Feature? {
         for (var f in features) {
@@ -519,6 +531,20 @@ export struct Manifest {
         return Optional<Dependency>.Empty;
     }
 
+    ## The folder a build whose intermediate folder is `build_dir` runs this
+    ## package's build script in: `<package>-<hash>`, named for the package
+    ## (its folder's, when it has no name) and a hash of its folder, so two
+    ## packages of one name each get their own. The script's `PEP_OUT_DIR`
+    ## is its `out` folder, which holds the package's generated modules.
+    ##
+    ## @param build_dir the build's intermediate folder (`--build`)
+    ## @returns the folder
+    script_folder(build_dir: Path): Path {
+        var named = name.is_empty ? dir().file_name().value_or("project") : name;
+        var hash = digest.to_hex(digest.blake3(files.path_key(dir()))).substr(0, 8);
+        return build_dir.join(Path($"{named}-{hash}"));
+    }
+
     ## The build option the feature `feature` defines when it is on:
     ## `<package>_<feature>`, such as `http_tls`.
     build_option(feature: String): String {
@@ -529,7 +555,7 @@ export struct Manifest {
     ## dependencies of every `path` dependency they reach, which the
     ## project fetches into its own `.pep/deps`; for a workspace root,
     ## those of every member too. Another package's dev-dependencies are
-    ## not part of this project. A Git dependency this manifest's
+    ## not part of this project; every package's build-dependencies are. A Git dependency this manifest's
     ## `[overrides]` replaces with a `path` counts as that folder. A `path`
     ## dependency whose `pep.toml` cannot be read is skipped: importing it
     ## reports why.
@@ -556,6 +582,7 @@ export struct Manifest {
             if (is_own) {
                 named.append_all(manifest.dev_dependencies);
             }
+            named.append_all(manifest.build_dependencies);
             for (var d in named) {
                 if (build.is_value() and !d.matches(build.value())) {
                     continue;
@@ -1196,10 +1223,11 @@ struct _Reader {
                 member = given.value_or("");
             } else if (field == "optional") {
                 var given = boolean(field_path, field, value);
-                if (given.is_value() and given.value() and path[0] == "dev-dependencies") {
-                    error(
-                        $"dev-dependency '{name}' cannot be optional; only '[dependencies]' are", key_span(field_path)
-                    );
+                if (given.is_value()
+                    and given.value()
+                    and (path[0] == "dev-dependencies" or path[0] == "build-dependencies")) {
+                    var kind = path[0] == "dev-dependencies" ? "dev-dependency" : "build-dependency";
+                    error($"{kind} '{name}' cannot be optional; only '[dependencies]' are", key_span(field_path));
                     continue;
                 }
                 optional = given.value_or(false);
@@ -1512,12 +1540,13 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.build(manifest, table.value());
             }
-        } else if (key == "dependencies" or key == "dev-dependencies") {
+        } else if (key == "dependencies" or key == "dev-dependencies" or key == "build-dependencies") {
             var table = reader.table(at, key, value);
             if (table.is_value()) {
-                reader.dependencies(
-                    at, key == "dependencies" ? manifest.dependencies : manifest.dev_dependencies, table.value()
-                );
+                var into = key == "dependencies" ?
+                    manifest.dependencies :
+                    key == "dev-dependencies" ? manifest.dev_dependencies : manifest.build_dependencies;
+                reader.dependencies(at, into, table.value());
             }
         } else if (key == "target") {
             var table = reader.table(at, key, value);
@@ -1552,7 +1581,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'",
                 reader.key_span(at)
             );
         }
@@ -1689,10 +1718,11 @@ join_workspace(manifest: Manifest): Result<void, String> {
     return problems.is_empty ? Result<void, String>.ok() : Result<void, String>.err(problems);
 }
 
-## `manifest`'s dependencies and dev-dependencies.
+## `manifest`'s dependencies, dev-dependencies and build-dependencies.
 _all_dependencies(manifest: Manifest): Dependency[] {
     var named = manifest.dependencies.clone();
     named.append_all(manifest.dev_dependencies);
+    named.append_all(manifest.build_dependencies);
     return named;
 }
 
@@ -1874,6 +1904,13 @@ export struct Packages {
     ## What the program is built for, which picks the
     ## `[target.'<condition>'.dependencies]` it sees.
     var target: Target = Target();
+    ## The build's intermediate folder (`--build`), which holds each
+    ## package's generated modules (`Manifest.script_folder`); empty for
+    ## the project's `.pep/build`.
+    var build_dir: Path? = Optional<Path>.Empty;
+    ## The folder of each package's generated modules that `resolve` found
+    ## (absolute) -> that package's manifest, which governs their imports.
+    var _generated_by: HashMap<String, Manifest> = HashMap<String, Manifest>();
     ## Folder -> the manifest governing it, or why it could not be used, or
     ## Empty when none does.
     var _by_dir: HashMap<String, Result<Manifest, String>?> = HashMap<String, Result<Manifest, String>?>();
@@ -1896,12 +1933,20 @@ export struct Packages {
     ## @param root the program's root file
     ## @param target what it is built for: a test build (`TEST_BUILD_OPTION`)
     ##   sees the project's dev-dependencies, as a build of a file in its
-    ##   `examples` folder does
+    ##   `examples` folder does; the build of a build script
+    ##   (`Target.build_script_root`) has the script's package as its project
     construct(root: Path, target: Target = Target()) {
         this.target = target;
         project = files.find_project(root);
         deps_root = project;
-        if (project.is_value()) {
+        if (target.build_script_root.is_value()) {
+            # The package the script is in, served by the build that runs it.
+            deps_root = target.build_script_root;
+            var own = _manifest_for(files.dir_of(files.absolute(root)));
+            if (own.is_value() and own.value().is_ok()) {
+                project = Optional<Path>.Value(own.value().value().dir());
+            }
+        } else if (project.is_value()) {
             var manifest = _manifest_at(project.value());
             if (manifest.is_value()) {
                 deps_root = Optional<Path>.Value(manifest.value().deps_root());
@@ -1950,7 +1995,10 @@ export struct Packages {
         }
         for (var package in built) {
             _visit(package);
-            if (target.default_features and package.feature("default").is_value()) {
+            # A build script reads its package's features from `PEP_FEATURES`.
+            if (target.default_features
+                and !target.build_script_root.is_value()
+                and package.feature("default").is_value()) {
                 _enable(package, "default");
             }
         }
@@ -2017,7 +2065,9 @@ export struct Packages {
     }
 
     ## Turns on the dependencies of `manifest` that are not optional (and
-    ## the project's dev-dependencies, in a dev build).
+    ## the project's dev-dependencies, in a dev build); in the build of a
+    ## build script, the project's build-dependencies instead of its
+    ## dependencies.
     _visit(manifest: Manifest) {
         var key = _key(manifest);
         if (!_visited.insert(key)) {
@@ -2025,8 +2075,12 @@ export struct Packages {
         }
         reached.append(manifest);
         var named = manifest.dependencies.copy();
-        if (dev and key == project.value().normalize().to_string()) {
-            named.append_all(manifest.dev_dependencies);
+        if (key == project.value().normalize().to_string()) {
+            if (target.build_script_root.is_value()) {
+                named = manifest.build_dependencies.copy();
+            } else if (dev) {
+                named.append_all(manifest.dev_dependencies);
+            }
         }
         for (var d in named) {
             if (!d.optional) {
@@ -2276,7 +2330,14 @@ export struct Packages {
                 file = cwd.value().join(from).normalize();
             }
         }
+        # A generated module is its package's, wherever the build put it.
         var governing = _manifest_for(files.dir_of(file));
+        var text = file.to_string();
+        for (var (out, package) in _generated_by) {
+            if (text.starts_with(out)) {
+                governing = Optional<Result<Manifest, String>>.Value(Result<Manifest, String>.ok(package));
+            }
+        }
         if (!governing.is_value()) {
             return Resolution.NotADependency;
         }
@@ -2286,13 +2347,33 @@ export struct Packages {
         var manifest = governing.value().value();
         var parts = name.split(".");
         var first = parts[0];
-        var dependency = manifest.dependency(first);
-        if (!dependency.is_value()) {
-            dependency = manifest.dev_dependency(first);
+        bool own = manifest.dir().normalize().to_string() == project.value().normalize().to_string();
+        # A build script imports its package's build-dependencies alone.
+        bool script = own and target.build_script_root.is_value();
+        var dependency = script ? manifest.build_dependency(first) : manifest.dependency(first);
+        if (script) {
+            if (!dependency.is_value() and manifest.dependency(first).is_value()) {
+                return Resolution.Missing(
+                    $"'{first}' is a dependency of '{manifest.name}', which its build script does not import; add it to '[build-dependencies]'"
+                );
+            }
             if (!dependency.is_value()) {
                 return Resolution.NotADependency;
             }
-            if (manifest.dir().normalize().to_string() != project.value().normalize().to_string()) {
+        } else if (!dependency.is_value()) {
+            dependency = manifest.dev_dependency(first);
+            if (!dependency.is_value() and manifest.build_dependency(first).is_value()) {
+                return Resolution.Missing(
+                    $"'{first}' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here"
+                );
+            }
+            if (!dependency.is_value() and first == GENERATED_MODULE) {
+                return _generated(manifest, parts);
+            }
+            if (!dependency.is_value()) {
+                return Resolution.NotADependency;
+            }
+            if (!own) {
                 return Resolution.Missing(
                     $"'{first}' is a dev-dependency of the package '{manifest.name}', which only its own tests and examples import"
                 );
@@ -2322,13 +2403,7 @@ export struct Packages {
             }
             return Resolution.Missing($"dependency '{first}' names the folder {package}, which does not exist");
         }
-        var module = package;
-        ulong i = 1;
-        while (i < parts.count) {
-            module = module.join(Path(parts[i]));
-            i += 1;
-        }
-        var module_file = module.join(Path(files.MODULE_FILE));
+        var module_file = _module_file(package, parts);
         if (module_file.is_file()) {
             return Resolution.Found(module_file);
         }
@@ -2337,7 +2412,41 @@ export struct Packages {
         }
         return Resolution.Missing($"package '{first}' has no module '{name}': no {module_file}");
     }
+
+    ## `import generated` (or `generated.b.c`) in a file of `manifest`'s
+    ## package, which has a build script: the module the script wrote into
+    ## its `PEP_OUT_DIR` (`module.pep` there, or `b/c/module.pep`).
+    _generated(manifest: Manifest, parts: String[]): Resolution {
+        var script = build_script(manifest.dir());
+        if (!script.is_ok() or !script.value().is_value()) {
+            return Resolution.NotADependency;
+        }
+        var build = build_dir.is_value() ? build_dir.value() : project.value().join(Path(".pep")).join(Path("build"));
+        var out = files.absolute(manifest.script_folder(build).join(Path("out"))).normalize();
+        _generated_by[out.to_string()] = manifest;
+        var module_file = _module_file(out, parts);
+        if (module_file.is_file()) {
+            return Resolution.Found(module_file);
+        }
+        return Resolution.Missing(
+            $"the build script of '{manifest.name}', {script.value().value()}, wrote no module '{".".join(parts)}': no {module_file}"
+        );
+    }
 }
+
+## The `module.pep` of the module `parts` names in the package in
+## `package`: its root's for one part, else `b/c/module.pep` for `a.b.c`.
+_module_file(package: Path, parts: String[]): Path {
+    var module = package;
+    for (var i in 1..parts.count) {
+        module = module.join(Path(parts[i]));
+    }
+    return module.join(Path(files.MODULE_FILE));
+}
+
+## The module name a package's code imports the modules its build script
+## generates by: `import generated`.
+const GENERATED_MODULE = "generated";
 
 ## Whether `file` is in the `examples` folder of the project at `project`,
 ## or a folder below it.
