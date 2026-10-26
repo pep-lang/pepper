@@ -316,3 +316,31 @@ task_locals_are_per_task() {
     expect_equal(request_id.get(), 99);
     request_id.clear();
 }
+
+[Target(OS(Android))]
+extern ulong pthread_self();
+[Target(OS(Android))]
+[Link(name = "llvm.frameaddress")]
+extern void* frame_address(int level);
+
+# Bionic's stack top for the calling thread (see fiber_posix.pep).
+[Target(OS(Android))]
+bionic_stack_top(): ulong {
+    return unsafe_cast<__ptr<ulong>>(pthread_self() + 144)[0];
+}
+
+# On Android a task's fiber tells bionic where its stack ends, so the
+# frame-pointer walk GWP-ASan runs on a sampled malloc or free stays on it
+# (#253).
+[Test]
+[Target(OS(Android))]
+fibers_set_bionic_stack_top() {
+    var thread_top = bionic_stack_top();
+    async.run_with(async.RuntimeOptions().stack_size(65536), () => {
+        var here = unsafe_cast<ulong>(frame_address(0));
+        var top = bionic_stack_top();
+        expect_true(top > here);
+        expect_true(top - here <= 65536);
+    });
+    expect_equal(bionic_stack_top(), thread_top);
+}
