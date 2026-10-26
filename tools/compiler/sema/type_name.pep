@@ -224,7 +224,7 @@ export extend TypeName {
         }
         var ids = type_ids();
         if (ids.is_value()) {
-            return ids.value().names(this).contains(name);
+            return ids.value().facts(this).names.contains(name);
         }
         for (var t in sub_types) {
             if (t.mentions(name)) {
@@ -282,7 +282,7 @@ export extend TypeName {
         var ids = type_ids();
         if (ids.is_value()) {
             for (var t in sub_types) {
-                if (ids.value().labeled_tuple(t)) {
+                if (ids.value().facts(t).labeled_tuple) {
                     return true;
                 }
             }
@@ -414,7 +414,7 @@ export extend TypeName {
         }
         var ids = type_ids();
         if (ids.is_value()) {
-            return ids.value().contains_auto(this);
+            return ids.value().facts(this).auto;
         }
         for (var t in sub_types) {
             if (t.contains_auto()) {

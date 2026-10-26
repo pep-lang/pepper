@@ -156,7 +156,7 @@ struct _TypesFound {
     add(ty: TypeName) {
         # Most types hold none, which the table knows without a walk (#210).
         var ids = type_ids();
-        if (ty.sub_types.count > 0 and ids.is_value() and !ids.value().special(ty)) {
+        if (ty.sub_types.count > 0 and ids.is_value() and !ids.value().facts(ty).special) {
             return;
         }
         for (var sub in ty.sub_types) {

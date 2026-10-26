@@ -53,10 +53,10 @@ _contains_param(ty: TypeName, params: String[]): bool {
     # The names in a type are known once per distinct type (#210).
     var ids = type_ids();
     if (ids.is_value() and ty.sub_types.count > 0) {
-        if (ids.value().member_type(ty)) {
+        if (ids.value().facts(ty).member_type) {
             return true;
         }
-        var names = ids.value().names(ty);
+        var names = ids.value().facts(ty).names;
         for (var p in params) {
             if (names.contains(p)) {
                 return true;
@@ -453,7 +453,7 @@ _spelled_types(types: TypeName[]): HashSet<String> {
 _type_key(ty: TypeName): String {
     var ids = type_ids();
     if (ids.is_value()) {
-        return $"#{ids.value().bare(ty)}";
+        return $"#{ids.value().facts(ty).bare}";
     }
     var kind = ty.flags == TypeFlags.Function ? "f" : "s";
     if (ty.sub_types.count == 0) {

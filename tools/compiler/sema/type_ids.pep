@@ -34,8 +34,8 @@ var _cell: __ptr<void>;
 const _LOW: ulong = 0xffffffff;
 const _HIGH: ulong = 0xffffffff00000000;
 
-## One distinct type.
-struct _Entry {
+## One distinct type, and what the passes ask of it.
+export struct TypeFacts {
     var name: String;
     var flags: TypeFlags;
     var labels: String[];
@@ -80,7 +80,7 @@ struct _Entry {
 ## The passes' table of types.
 export struct TypeIds {
     var _serial: ulong;
-    var _entries: Array<_Entry> = Array<_Entry>();
+    var _entries: Array<TypeFacts> = Array<TypeFacts>();
     # The first entry (index plus one) of each key.
     var _first: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
     # What `parse_type_string` made of each text.
@@ -118,45 +118,9 @@ export struct TypeIds {
         return _spelling(id(ty));
     }
 
-    ## Returns `type_print(ty)`.
-    print(ty: TypeName): ulong {
-        return _entry(id(ty)).print;
-    }
-
-    ## Returns `ty.contains_auto()`.
-    contains_auto(ty: TypeName): bool {
-        return _entry(id(ty)).auto;
-    }
-
-    ## Returns the id `==` compares: the type's, labels aside.
-    bare(ty: TypeName): ulong {
-        return _entry(id(ty)).bare;
-    }
-
-    ## Returns the distinct names in `ty`, its own included, in no order.
-    names(ty: TypeName): String[] {
-        return _entry(id(ty)).names;
-    }
-
-    ## Returns whether a name in `ty` holds a `<`.
-    angled(ty: TypeName): bool {
-        return _entry(id(ty)).angled;
-    }
-
-    ## Returns whether a name in `ty` is a static block's `field.Type`.
-    member_type(ty: TypeName): bool {
-        return _entry(id(ty)).member_type;
-    }
-
-    ## Returns whether a function, weak or tuple type is in `ty`, `ty`
-    ## included.
-    special(ty: TypeName): bool {
-        return _entry(id(ty)).special;
-    }
-
-    ## Returns whether a tuple with labels is in `ty`, `ty` included.
-    labeled_tuple(ty: TypeName): bool {
-        return _entry(id(ty)).labeled_tuple;
+    ## Returns what the table knows of `ty`.
+    facts(ty: TypeName): TypeFacts {
+        return _entry(id(ty));
     }
 
     ## Returns what `parse_type_string` made of `text` before, if anything:
@@ -191,13 +155,13 @@ export struct TypeIds {
         _entry(made).canonical = made;
     }
 
-    _entry(id: ulong): _Entry {
+    _entry(id: ulong): TypeFacts {
         return _entries[(id & _LOW) - 1];
     }
 
     # Whether `ty` is still entry `e`: its own fields, and its arguments'
     # ids as they keep them.
-    static _matches(e: _Entry, ty: TypeName): bool {
+    static _matches(e: TypeFacts, ty: TypeName): bool {
         if (e.args.count != ty.sub_types.count or e.flags != ty.flags or e.labels.count != ty.labels.count) {
             return false;
         }
@@ -240,7 +204,7 @@ export struct TypeIds {
             }
             at = e.next;
         }
-        var e = _Entry(name, flags, labels.copy(), args);
+        var e = TypeFacts(name, flags, labels.copy(), args);
         e.next = first.is_value() ? first.value() : 0;
         _entries.append(e);
         ulong made = _serial | _entries.count;
@@ -422,7 +386,7 @@ export end_type_ids(outer: TypeIds?) {
 export type_print(ty: TypeName): ulong {
     var ids = type_ids();
     if (ids.is_value()) {
-        return ids.value().print(ty);
+        return ids.value().facts(ty).print;
     }
     var prints = Array<ulong>();
     for (var sub in ty.sub_types) {

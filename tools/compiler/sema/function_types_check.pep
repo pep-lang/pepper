@@ -387,7 +387,7 @@ struct _FunctionTypes {
         }
         var ids = type_ids();
         if (ids.is_value() and ty.sub_types.count > 0) {
-            var names = ids.value().names(ty);
+            var names = ids.value().facts(ty).names;
             for (var p in unbound) {
                 if (names.contains(p)) {
                     return true;

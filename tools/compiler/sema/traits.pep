@@ -305,10 +305,10 @@ struct _TraitTypes {
         # of a nested literal is in the level above it (#210).
         var ids = type_ids();
         if (ids.is_value()) {
-            if (ids.value().angled(ty)) {
+            if (ids.value().facts(ty).angled) {
                 return true;
             }
-            for (var held in ids.value().names(ty)) {
+            for (var held in ids.value().facts(ty).names) {
                 if (names.contains(held)) {
                     return true;
                 }
