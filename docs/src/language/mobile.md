@@ -286,9 +286,7 @@ differences:
 
 - **Starting processes.** An iOS app cannot start other programs, and the
   `process` module's `Command.spawn` returns an `IoError` there. On Android
-  it works, but an app has few programs to start, and below API level 34
-  `Command.working_directory` makes `spawn` return an `IoError` (bionic
-  lacks `posix_spawn_file_actions_addchdir_np` there).
+  it works, but an app has few programs to start.
 - **TLS on iOS.** The `tls` module uses the system's Security.framework
   (Secure Transport), so `TlsConnector` and `http.Client`'s `https://` URLs
   work with nothing bundled: the server's certificate is checked against

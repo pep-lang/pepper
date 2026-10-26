@@ -1615,8 +1615,9 @@ How the language lowers:
   NDK's `_Unwind_Backtrace` for `debug` (bionic's `backtrace` is API 33),
   and plain
   `stat`/`readdir` on x86_64 iOS, which has no `$INODE64` variants.
-  `posix_spawn_file_actions_addchdir_np` (bionic API 34) is looked up
-  with `dlsym`, as on Linux. `tls` links a static OpenSSL on Android
+  `process` starts every child by fork and exec there
+  (`_process_fork_spawn`), since bionic's `posix_spawnp` reports a failed
+  exec only as exit code 127. `tls` links a static OpenSSL on Android
   (`tls/openssl_android.pep`). `scripts/mobile-test.sh` runs the docs
   examples in the simulator and the emulator on a Mac, and the Android half
   on Linux too (see the book's `language/mobile.md`).
