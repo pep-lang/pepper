@@ -1564,8 +1564,10 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
                     manifest.dependencies :
                     key == "dev-dependencies" ? manifest.dev_dependencies : manifest.build_dependencies;
                 reader.dependencies(at, into, table.value());
-                for (var d in manifest.build_dependencies) {
-                    d.build = true;
+                if (key == "build-dependencies") {
+                    for (var d in into) {
+                        d.build = true;
+                    }
                 }
             }
         } else if (key == "target") {

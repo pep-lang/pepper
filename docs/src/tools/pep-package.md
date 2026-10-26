@@ -858,10 +858,11 @@ package that only `[target.'<condition>'.dependencies]` lead to has
 conditions join with `&&` and other ways with `||`, so
 `target = "(OS(Linux)) || (OS(Windows))"` is needed on either. A build
 fetches a package only when its `target` holds for what it builds for,
-the platform `--target` names in a cross build. The condition of a
-`[target.'<condition>'.build-dependencies]` is left out: it holds for the
-machine building, which a lock every machine shares cannot name, so a
-build fetches such a package whatever it builds for.
+the platform `--target` names in a cross build. The conditions of a
+`[target.'<condition>'.build-dependencies]`, and of what a
+build-dependency leads to, are left out: they hold for the machine
+building, which a lock every machine shares cannot name, so a build
+fetches such a package whatever it builds for.
 
 ```toml
 [[package]]

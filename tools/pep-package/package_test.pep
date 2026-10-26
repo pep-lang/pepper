@@ -412,14 +412,17 @@ an_override_replaces_a_package_everywhere_with_a_folder() {
 }
 
 # What `parent` (empty for the project) asks of `source` under
-# `condition`, for `lock_targets`.
-ask(wanted: OrderedMap<String, Array<Wanted>>, parent: String, source: String, condition: String) {
+# `condition`, for `lock_targets`; with `build`, a build-dependency leads
+# to it.
+ask(wanted: OrderedMap<String, Array<Wanted>>, parent: String, source: String, condition: String, build: bool = false) {
     var requirement = Requirement();
     requirement.target = condition;
     if (!wanted.contains(source)) {
         wanted[source] = Array<Wanted>();
     }
-    wanted[source].append(Wanted("", parent.is_empty, false, parent, requirement));
+    var wanted_one = Wanted("", parent.is_empty, false, parent, requirement);
+    wanted_one.build = build;
+    wanted[source].append(wanted_one);
 }
 
 [Test]
@@ -436,12 +439,17 @@ lock_targets_join_a_way_with_and_and_ways_with_or() {
     ask(wanted, "f", "a", "");
     # A way with no condition makes it needed everywhere.
     ask(wanted, "a", "g", "B");
+    # Below a build-dependency the conditions are the host's, left out.
+    ask(wanted, "a", "h", "H", true);
+    ask(wanted, "h", "i", "I", true);
     var targets = lock_targets(wanted);
     expect_equal(targets["a"], "A");
     expect_equal(targets["b"], "(A) && (B)");
     expect_equal(targets["e"], "(A) || (C)");
     expect_equal(targets["f"], "A");
     expect_equal(targets["g"], "");
+    expect_equal(targets["h"], "A");
+    expect_equal(targets["i"], "A");
 }
 
 [Test]
