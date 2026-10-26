@@ -20480,9 +20480,7 @@ differences:</p>
 <ul>
 <li><strong>Starting processes.</strong> An iOS app cannot start other programs, and the
 <code>process</code> module's <code>Command.spawn</code> returns an <code>IoError</code> there. On Android
-it works, but an app has few programs to start, and below API level 34
-<code>Command.working_directory</code> makes <code>spawn</code> return an <code>IoError</code> (bionic
-lacks <code>posix_spawn_file_actions_addchdir_np</code> there).</li>
+it works, but an app has few programs to start.</li>
 <li><strong>TLS on iOS.</strong> The <code>tls</code> module uses the system's Security.framework
 (Secure Transport), so <code>TlsConnector</code> and <code>http.Client</code>'s <code>https://</code> URLs
 work with nothing bundled: the server's certificate is checked against
