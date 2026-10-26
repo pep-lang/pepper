@@ -153,8 +153,10 @@ machine it runs on, with itself and `--build-script`, into
 scripts run; then it runs the script in the package's folder, links what
 it says to, defines the build options it names, and resolves the
 package's `import generated` to the [modules](projects.md#generated-modules)
-it wrote. A script whose inputs have not changed since its last run is not
-run again. The `--emit-*` modes run them too, since the program they load
+it wrote. A script whose inputs, the Pepper files it imports among them,
+have not changed since its last run is not run again. The script builds in
+the program's [build cache](#the-build-cache), even under `--no-cache`,
+whose record of the script's build names the files it imports. The `--emit-*` modes run them too, since the program they load
 may import what a script generates.
 
 `--no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`) fails instead of

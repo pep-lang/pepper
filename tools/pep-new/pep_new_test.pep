@@ -58,6 +58,16 @@ a_new_package_passes_its_tests() {
     expect_contains(tested.stdout, "1 passed, 0 failed");
     # Its CI publishes its reference, which needs every public declaration documented.
     expect_exit(in_folder(project, "pep-doc", ["package", "--check"]), 0);
+
+    # Its example build script, turned on, links its C function.
+    write_file(project.join("pep.toml"), manifest.replace("# [build]\n# script", "[build]\nscript"));
+    write_file(
+        project.join("tests").join("native_test.pep"),
+        "extern int geometry_add(int a, int b);\n\n[Test]\nadds_in_c() {\n    expect_equal(geometry_add(2, 3), 5);\n}\n"
+    );
+    var native = in_folder(project, "pepper", ["test", "-I", packages.to_string(), "tests"]);
+    expect_exit(native, 0);
+    expect_contains(native.stdout, "2 passed, 0 failed");
 }
 
 # `pep-init` names the project after the current folder, and without

@@ -1552,7 +1552,17 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     }
     clock.lap(options.library.is_value() and options.library.value() == LibraryKind.Static ? "archive" : "link");
     if (options.cache.is_value()) {
-        options.cache.value().record(options.output, program_key, !warnings.is_empty);
+        # A build script's stamp hashes these (`build_scripts.pep`).
+        # shortcut: prelude files (the runtime, forced imports) are left out,
+        # since hashing the runtime would cost every build; list them if a
+        # script's stamp must follow a `PEPPER_RUNTIME` edit.
+        var files = Array<String>();
+        for (var file in program.files) {
+            if (!file.prelude) {
+                files.append(file.name);
+            }
+        }
+        options.cache.value().record(options.output, program_key, !warnings.is_empty, files);
     }
     return Result<Built, String>.ok(report);
 }

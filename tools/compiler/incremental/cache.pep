@@ -390,14 +390,39 @@ export struct Cache {
         return built.is_ok() and digest.to_hex(digest.blake3(built.value())) == lines[1];
     }
 
+    ## Returns the files the program that writes `output` was last built
+    ## from, as `record` listed them, when it was built with no warnings.
+    ##
+    ## @param output the executable
+    ## @returns the files' paths, or `Empty` when there is no record
+    program_files(output: Path): String[]? {
+        var record = File.read_to_string(_record(output));
+        if (record.is_err()) {
+            return Optional<String[]>.Empty;
+        }
+        var lines = record.value().split("\n");
+        if (lines.count < 2) {
+            return Optional<String[]>.Empty;
+        }
+        var files = Array<String>();
+        for (var i in 2..lines.count) {
+            if (!lines[i].is_empty) {
+                files.append(lines[i]);
+            }
+        }
+        return Optional<String[]>.Value(files);
+    }
+
     ## Records that `output` is the program keyed `key`, built with no
-    ## warnings; a build that warned forgets it instead, so it is checked,
-    ## and warns, again.
+    ## warnings from `files`; a build that warned forgets it instead, so it
+    ## is checked, and warns, again.
     ##
     ## @param output the executable
     ## @param key the program's key
     ## @param warned whether the build printed warnings
-    record(output: Path, key: String, warned: bool) {
+    ## @param files the paths of the files it was built from, which
+    ##   `program_files` returns
+    record(output: Path, key: String, warned: bool, files: String[]) {
         var path = _record(output);
         if (warned) {
             File.remove(path);
@@ -412,7 +437,9 @@ export struct Cache {
             return;
         }
         var partial = Path($"{path}.{process.id()}");
-        var written = File.write_text(partial, $"{key}\n{digest.to_hex(digest.blake3(built.value()))}\n");
+        var written = File.write_text(
+            partial, $"{key}\n{digest.to_hex(digest.blake3(built.value()))}\n" + "\n".join(files) + "\n"
+        );
         if (written.is_err() or File.rename(partial, path).is_err()) {
             File.remove(partial);
         }

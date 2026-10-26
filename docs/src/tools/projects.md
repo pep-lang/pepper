@@ -168,13 +168,17 @@ standard error is passed on.
 
 **When it runs again.** The build keeps the script's output in
 `.pep/build/<package>-<hash>/stamp`, and uses it again until something the script
-depends on changes: its own file, its package's `pep.toml`, the project's
-`pep.lock` (which holds its build-dependencies' revisions), the variables
-above, and what its `rerun-if-changed` and `rerun-if-env-changed` lines
-name; or until its `PEP_OUT_DIR`, or an object it named, is gone. A script
-that reads other files, such as its C sources or Pepper files of its own it
-imports, names them with `rerun-if-changed`; a change to a file it does not
-name leaves its last output in use. Builds that run side by side
+depends on changes: its own file, every Pepper file it imports (files of
+its own beside it, and its build-dependencies' sources; not the runtime),
+its package's `pep.toml`, the project's `pep.lock` (which holds its
+build-dependencies' revisions), the variables above, and what its
+`rerun-if-changed` and `rerun-if-env-changed` lines name; or until its
+`PEP_OUT_DIR`, or an object it named, is gone. The files it imports are the
+ones the [build cache](pep-build.md#the-build-cache) recorded its last build used, so a script
+whose build warned, or a cache that was emptied, runs again. A script that
+reads other files at run time, such as its C sources, names them with
+`rerun-if-changed`; a change to a file it neither imports nor names leaves
+its last output in use. Builds that run side by side
 (`pepper test`) run one package's script one at a time.
 
 ### Generated modules
