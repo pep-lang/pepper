@@ -2396,13 +2396,31 @@ a_build_script_generates_a_module_with_a_build_dependency_locked_and_vendored() 
         return;
     }
     var hosts = Hosts("generated");
+    # `other/marker`'s own build script generates its module, which runs in
+    # the build of gen's script.
+    add_version(
+        hosts.folder.path,
+        "other/marker",
+        "1.0.0",
+        [
+            "pep.toml",
+            "[package]\nname = \"marker\"\n",
+            "module.pep",
+            "import generated;\n\nexport mark(): String {\n    return generated.greeting();\n}\n",
+            "build.pep",
+            read_file(Path("pep-package").join("testdata").join("own_generated_build.pep.txt"))
+        ]
+    );
+    publish(hosts.folder.path, "other/marker");
     add_version(
         hosts.folder.path,
         "someone/gen",
         "1.0.0",
         [
             "pep.toml",
-            "[package]\nname = \"gen\"\n\n[build-dependencies]\nnumbers = { github = \"other/numbers\", version = \"1\" }\n",
+            "[package]\nname = \"gen\"\n\n[dependencies]\ngeometry = { github = \"someone/geometry\", version = \"1\" }\n\n"
+                + "[build-dependencies]\nnumbers = { github = \"other/numbers\", version = \"1\" }\n"
+                + "marker = { github = \"other/marker\", version = \"1\" }\n",
             "module.pep",
             "import generated;\n\nexport version(): String {\n    return generated.made_with();\n}\n\n"
                 + "[Target(BuildOption(gen_LEVEL) == 2)]\nexport level(): int {\n    return 2;\n}\n",
@@ -2417,18 +2435,20 @@ a_build_script_generates_a_module_with_a_build_dependency_locked_and_vendored() 
         "import gen;\n\nmain(): int {\n    print($\"{gen.version()} {gen.level()}\");\n    return 0;\n}\n"
     );
     expect_exit(hosts.package(project.dir, ["fetch"]), 0);
-    # Only a build-dependency leads to numbers.
+    # Only a build-dependency leads to marker; geometry leads to numbers too.
     var lock = project.lock();
     expect_contains(lock, "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
     expect_equal(lock.split("\nbuild = true\n").count, 2);
-    expect_true(lock.find("\nbuild = true\n") < lock.find("source = \"github:someone/gen\""));
-    expect_contains(hosts.package(project.dir, ["tree"]).stdout, "numbers 1.3.1 (github:other/numbers) [build]");
-    expect_equal(hosts.build_and_run(project.dir), "numbers 1.3.1 2\n");
+    expect_true(lock.find("source = \"github:other/marker\"") < lock.find("\nbuild = true\n"));
+    expect_true(lock.find("\nbuild = true\n") < lock.find("source = \"github:other/numbers\""));
+    expect_contains(hosts.package(project.dir, ["tree"]).stdout, "marker 1.0.0 (github:other/marker) [build]");
+    var expected = "numbers 1.3.1 hello 1.1.0 1.3.1 2\n";
+    expect_equal(hosts.build_and_run(project.dir), expected);
     # Its generated module lost, the script runs again.
     var folders = glob(project.dir.to_string().replace("\\", "/") + "/.pep/build/gen-*");
     expect_true(folders.count == 1);
     Directory.remove_all(folders[0].join("out"));
-    expect_equal(hosts.build_and_run(project.dir), "numbers 1.3.1 2\n");
+    expect_equal(hosts.build_and_run(project.dir), expected);
 
     # Vendored, with no host or cache, the script still builds with it.
     expect_exit(hosts.package(project.dir, ["vendor"]), 0);
@@ -2442,8 +2462,7 @@ a_build_script_generates_a_module_with_a_build_dependency_locked_and_vendored() 
     );
     expect_exit(vendored, 0);
     expect_equal(
-        run(process.Command(project.dir.join("app" + toolchain.executable_suffix()).to_string())).stdout,
-        "numbers 1.3.1 2\n"
+        run(process.Command(project.dir.join("app" + toolchain.executable_suffix()).to_string())).stdout, expected
     );
     # --no-build-scripts still refuses it.
     var refused = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--no-build-scripts"]));

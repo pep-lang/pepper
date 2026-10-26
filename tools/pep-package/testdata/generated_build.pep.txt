@@ -1,14 +1,22 @@
 # The build script of the test package `someone/gen`: writes the module
-# its code imports as `generated`, naming the version of its
-# build-dependency `numbers`, and defines the build option `gen_LEVEL`.
+# its code imports as `generated`, which names the version of its
+# build-dependency `numbers`, says what its build-dependency `marker` (whose
+# own build script generates it) says, and imports `geometry`, a dependency
+# of `gen` the project does not have; and defines the build option
+# `gen_LEVEL`.
 
+import marker;
 import numbers;
 import [File, Path] from io;
 import os;
 
 main(): int {
     var out = Path(os.environment("PEP_OUT_DIR").value());
-    var text = "export made_with(): String {\n    return \"numbers " + numbers.numbers_version() + "\";\n}\n";
+    var text = "import geometry;\n\nexport made_with(): String {\n    return \"numbers "
+        + numbers.numbers_version()
+        + " "
+        + marker.mark()
+        + " \" + geometry.geometry_version();\n}\n";
     if (File.write_text(out.join(Path("module.pep")), text).is_err()) {
         return 1;
     }
