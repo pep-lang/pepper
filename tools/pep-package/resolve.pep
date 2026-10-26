@@ -10,7 +10,9 @@
 # `minimum_toolchain` is newer than the toolchain resolving; any other
 # revision that needs a newer one is an error. Only the project's own
 # `[dev-dependencies]` are in its graph, not those of its dependencies, and
-# a package only they lead to is locked as `dev`. Every platform's
+# a package only they lead to is locked as `dev`. Every package's
+# `[build-dependencies]` are, as its build script imports them, and a
+# package only they lead to is locked as `build`. Every platform's
 # `[target.'<condition>'.dependencies]` are in the graph, so pep.lock is
 # the same on each; a package only they lead to is locked with the
 # condition under which a build needs it (`target`). The project's
@@ -48,6 +50,8 @@ export struct Wanted {
     var from_root: bool = false;
     # Whether a dev-dependency of the project leads to it.
     var dev: bool = false;
+    # Whether a build-dependency leads to it.
+    var build: bool = false;
     # The source of the package whose pep.toml asks; empty for the
     # project's.
     var parent: String = "";
@@ -492,8 +496,10 @@ export struct Resolver {
             var targets = lock_targets(wanted);
             for (var (key, locked) in chosen) {
                 locked.dev = true;
+                locked.build = true;
                 for (var ask in wanted[key]) {
                     locked.dev = locked.dev and ask.dev;
+                    locked.build = locked.build and ask.build;
                 }
                 locked.target = targets.try_get(key).value_or("");
                 graph.packages.append(locked);
@@ -567,13 +573,15 @@ export struct Resolver {
     # Every requirement in the graph, by graph key (`_split`): the
     # project's, then those of each package chosen so far (and of folders
     # `path` names). What the project's dependencies lead to is read
-    # first, then what only its dev-dependencies do, which is marked `dev`.
+    # first, then what only its dev-dependencies do, which is marked `dev`;
+    # what a build-dependency leads to is marked `build`.
     gather(chosen: OrderedMap<String, Locked>): Result<OrderedMap<String, Array<Wanted>>> {
         var wanted = OrderedMap<String, Array<Wanted>>();
         var name = root.name.is_empty ? "pep.toml" : root.name;
         # Each manifest to read, who it is, whether it is the project's,
-        # whether a dev-dependency leads to it, and its source.
-        var queue = Array<(Manifest, String, bool, bool, String)>();
+        # whether a dev-dependency and a build-dependency lead to it, and
+        # its source.
+        var queue = Array<(Manifest, String, bool, bool, bool, String)>();
         # A workspace's members are the project's own too, read once each.
         var roots = [(root, name)];
         var read = HashSet<String>();
@@ -585,26 +593,44 @@ export struct Resolver {
             }
         }
         for (var (manifest, label) in roots) {
-            queue.append((manifest, label, true, false, ""));
+            queue.append((manifest, label, true, false, false, ""));
         }
         ulong next = 0;
         var dev_queued = false;
+        # Build-dependencies last, so a package any other way leads to is
+        # read, with what it asks for, as not `build`.
+        ulong build_from = 0;
         while (true) {
             if (next == queue.count) {
-                if (dev_queued) {
+                if (build_from > 0) {
                     break;
                 }
-                dev_queued = true;
-                for (var (manifest, label) in roots) {
-                    queue.append((manifest, label, true, true, ""));
+                if (dev_queued) {
+                    # Each package read so far, again for its build-dependencies.
+                    build_from = queue.count;
+                    for (var index in 0..build_from) {
+                        var (again, again_label, again_root, again_dev, _, again_parent) = queue[index];
+                        queue.append((again, again_label, again_root, again_dev, true, again_parent));
+                    }
+                } else {
+                    dev_queued = true;
+                    for (var (manifest, label) in roots) {
+                        queue.append((manifest, label, true, true, false, ""));
+                    }
                 }
             }
-            var (manifest, requirer, from_root, dev, parent) = queue[next];
+            # The re-read packages give only their build-dependencies; what
+            # those lead to gives everything, as `build`.
+            bool only_build = build_from > 0 and next < 2 * build_from;
+            var (manifest, requirer, from_root, dev, by_build, parent) = queue[next];
             next += 1;
             for (var requirement in manifest.requirements) {
                 # The project's dev-dependencies once, last; never another
                 # package's.
                 if (requirement.dev != (from_root and dev)) {
+                    continue;
+                }
+                if ((requirement.build and !by_build) or (only_build and !requirement.build)) {
                     continue;
                 }
                 if (requirement.is_path() and requirement.kind == "version") {
@@ -626,7 +652,9 @@ export struct Resolver {
                 if (!wanted.contains(source)) {
                     wanted[source] = Array<Wanted>();
                 }
-                wanted[source].append(Wanted(requirer, from_root, dev, parent, requirement));
+                var ask = Wanted(requirer, from_root, dev, parent, requirement);
+                ask.build = by_build or requirement.build;
+                wanted[source].append(ask);
                 # The copy it reads, and the parent of what that asks for.
                 var key = requirement.is_path() ? source : copy_key(chosen, source, requirement);
                 if (read.contains(key)) {
@@ -657,7 +685,7 @@ export struct Resolver {
                 if (dependency.is_err()) {
                     return Result<OrderedMap<String, Array<Wanted>>>.Err(dependency.error().message);
                 }
-                queue.append((dependency.value(), label, false, dev, key));
+                queue.append((dependency.value(), label, false, dev, ask.build, key));
             }
         }
         return Result<OrderedMap<String, Array<Wanted>>>.Ok(_split(wanted));

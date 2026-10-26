@@ -39,6 +39,10 @@ export struct Setup {
     var sources: HashMap<String, String> = HashMap<String, String>();
     ## Leave the files' bodies to `Program.link_bodies`: binding only.
     var defer_bodies: bool = false;
+    ## The build's intermediate folder (`--build`), where `import generated`
+    ## finds the modules a package's build script wrote; empty for the
+    ## project's `.pep/build`.
+    var build_dir: Path? = Optional<Path>.Empty;
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -412,7 +416,7 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         prelude.append(path.value());
     }
     prelude.append_all(runtime.sources);
-    var loaded = load(root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies);
+    var loaded = load(root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies, setup.build_dir);
     if (loaded.is_err()) {
         return loaded;
     }
@@ -446,6 +450,9 @@ struct _Queued {
 ##   gains the build options of the project's features turned on
 ##   (`Packages.turn_on_features`)
 ## @param sources the text of files to take from here rather than the disk, by `files.path_key`
+## @param defer_bodies whether to leave the files' bodies to `Program.link_bodies`
+## @param build_dir the build's intermediate folder, which holds the
+##   packages' generated modules; empty for the project's `.pep/build`
 ## @returns the program, or why a file cannot be read or parsed or a feature
 ##   turned on
 export load(
@@ -454,7 +461,8 @@ export load(
     search_paths: Path[],
     target: Target,
     sources: HashMap<String, String> = HashMap<String, String>(),
-    defer_bodies: bool = false
+    defer_bodies: bool = false,
+    build_dir: Path? = Optional<Path>.Empty
 ): Result<Program, String> {
     var program = Program();
     var index = HashMap<String, ulong>();
@@ -462,6 +470,7 @@ export load(
     var resolved = Array<Array<String?>>();
     # The `pep.toml` each file falls under, for the dependencies it imports.
     var packages = Packages(root, target);
+    packages.build_dir = build_dir;
     var features = packages.turn_on_features();
     if (features.is_err()) {
         return Result<Program, String>.err(features.error());
@@ -474,6 +483,9 @@ export load(
         }
     }
     var roots = ModuleRoots(project);
+    var script_module = target.build_script_root.is_value() and packages.project.is_value() ?
+        roots.key(packages.project.value()) :
+        "";
     # A stack: the root is taken first, and each file's imports are loaded
     # before the prelude.
     var root_key = roots.key(root);
@@ -614,8 +626,10 @@ export load(
         # A file of a module sees the declarations of the module's other
         # files, so loading one loads its `module.pep`, and with it the
         # files the module reaches. Spelled from the file's own path, as an
-        # import of it would be.
-        if (loaded.module_root.is_value()) {
+        # import of it would be. Not in a build script's build, of the
+        # module its package's folder is: the script stands apart from the
+        # code it builds, which may import what it generates.
+        if (loaded.module_root.is_value() and roots.key(loaded.module_root.value()) != script_module) {
             var module_key = roots.key(loaded.module_root.value());
             var dir = path.parent();
             while (dir.is_value()) {

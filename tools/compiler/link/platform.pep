@@ -6,6 +6,7 @@
 
 import compiler.ast;
 import [Attribute, Expression, Literal, Span] from compiler.ast;
+import [Path] from io;
 import [architecture, system_name] from os;
 
 ## The attribute that marks a unit test: `[Test]`.
@@ -73,6 +74,12 @@ export struct Target {
     ## The names of the other workspace members built with the project's
     ## package (`--all`, `-p`), whose features are unified with its.
     var members: String[] = Array<String>();
+    ## In the build of a package's build script (`--build-script DIR`), the
+    ## folder whose `.pep/deps`, `pep.lock` and `[overrides]` serve the
+    ## build that runs it: the script's package then sees its
+    ## `[build-dependencies]` instead of its `[dependencies]`. Empty in any
+    ## other build.
+    var build_script_root: Path? = Optional<Path>.Empty;
 
     ## Creates the target the compiler runs on, with no build options.
     construct() {

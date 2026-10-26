@@ -66,7 +66,7 @@ short, and `pepper help build` runs it.
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
 | `-v`, `--verbose` | Accepted; prints nothing more yet | off |
-| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members`, `--skip-build-scripts` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
+| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members`, `--build-script <dir>` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
 | `-h`, `--help` | Print the options | |
 | `-V`, `--version` | Print the version | |
 
@@ -144,12 +144,18 @@ pep-package: error: cannot fetch github:someone/geometry: --offline, and neither
 
 ### Build scripts and `--no-build-scripts`
 
-Once the dependencies are fetched, the compiler runs the
-[build script](projects.md#build-scripts) of each package the build turns
-on (the project's first): it builds the script for the machine it runs on,
-with itself and `--skip-build-scripts`, into `.pep/build/<package>-<hash>/`,
-runs it in the package's folder, and links what it says to. A script whose
-inputs have not changed since its last run is not run again.
+Once the dependencies are fetched, and before it loads the program, the
+compiler runs the [build script](projects.md#build-scripts) of each package
+the build turns on (the project's first): it builds the script for the
+machine it runs on, with itself and `--build-script`, into
+`.pep/build/<package>-<hash>/`, where the script's package sees only its
+[`[build-dependencies]`](projects.md#build-dependencies) and their own
+scripts run; then it runs the script in the package's folder, links what
+it says to, defines the build options it names, and resolves the
+package's `import generated` to the [modules](projects.md#generated-modules)
+it wrote. A script whose inputs have not changed since its last run is not
+run again. The `--emit-*` modes run them too, since the program they load
+may import what a script generates.
 
 `--no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`) fails instead of
 running a dependency's script, which runs that package's code on this

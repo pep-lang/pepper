@@ -303,8 +303,9 @@ First it checks, and lists every check that fails at once:
   ```
 
 - `minimum_toolchain` is at least the release that reads each newer
-  `pep.toml` feature the package uses: `[dev-dependencies]`, `[target]`,
-  `[features]`, `[overrides]` and `[workspace]` tables, and a
+  `pep.toml` feature the package uses: `[dev-dependencies]`,
+  `[build-dependencies]`, `[target]`, `[features]`, `[overrides]` and
+  `[workspace]` tables, and a
   dependency's `optional`, `features`, `default-features`, `workspace`
   and `package`, need 0.11.0;
 - `pep.toml` has no `[overrides]`: a dependent builds with the packages
@@ -348,6 +349,8 @@ dependent imports the package by, when that is not the package's own
 marks:
 
 - `[dev]`: only the project's dev-dependencies lead to it;
+- `[build]`: only build-dependencies lead to it (see
+  [`[build-dependencies]`](projects.md#build-dependencies));
 - `[target: <condition>]`: only builds for the targets the condition
   selects need it (see [`[target]` tables](projects.md#targetconditiondependencies));
 - `[override: <source>]`: the project's [`[overrides]`](projects.md#overrides)
@@ -590,7 +593,8 @@ pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the pa
 ```
 
 Commit the folder with `pep.toml` and `pep.lock`. It holds every package
-in the lock: every platform's, and those only `[dev-dependencies]` lead
+in the lock: every platform's, those only `[build-dependencies]` lead to,
+which build scripts build with, and those only `[dev-dependencies]` lead
 to, since `pepper test` and the examples build from it too (Cargo vendors
 everything for the same reason). A fork an `[overrides]` entry names is vendored in
 the original's place; a `path` override is not, its folder being the
@@ -703,6 +707,7 @@ each with the nodes of its own dependencies:
       "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
       "source": "github:other/winapi",
       "dev": false,
+      "build": false,
       "target": "OS(Windows)",
       "override": null,
       "optional": true,
@@ -725,6 +730,7 @@ asks for it:
 | `commit` | Its locked commit, or `null` for the project and a folder |
 | `source` | Its source (`github:other/winapi`); `""` for the project |
 | `dev` | Whether only the project's dev-dependencies lead to it (`[dev]`) |
+| `build` | Whether only build-dependencies lead to it (`[build]`) |
 | `target` | The condition of the targets that need it (`[target: ...]`), or `null` for every target |
 | `override` | What `[overrides]` replaces it with (`[override: ...]`), or `null` |
 | `optional` | Whether the entry says `optional = true` (`[optional]`) |
@@ -768,6 +774,7 @@ with `--exit-code` as without `--json`:
 | `latest` | The newest version it offers, or `null` when it has none |
 | `source` | Its source |
 | `dev` | Whether only the project's dev-dependencies lead to it |
+| `build` | Whether only build-dependencies lead to it |
 | `target` | The condition of the targets that need it, or `null` |
 | `retracted` | Why its author retracted the locked version, or `null` |
 
@@ -780,6 +787,7 @@ with the exit status as without `--json`:
 | `patched` | Its `patched` versions, as written |
 | `package`, `version`, `source` | The affected package, its locked version and its source |
 | `dev` | Whether only the project's dev-dependencies lead to it |
+| `build` | Whether only build-dependencies lead to it |
 | `target` | The condition of the targets that need it, or `null` |
 | `paths`, `total` | The first 20 paths to it and how many there are, as `why --json` writes them |
 
@@ -802,7 +810,10 @@ sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 ```
 
 A package that only the project's `[dev-dependencies]` lead to has
-`dev = true`; one that a dependency leads to as well does not.
+`dev = true`; one that a dependency leads to as well does not. A package
+that only [`[build-dependencies]`](projects.md#build-dependencies) lead to,
+any package's, has `build = true`: a build script imports it, built for the
+machine building, and no program links it.
 
 A member of a repository's workspace (a dependency with
 [`package`](projects.md#a-member-as-a-git-dependency)) has `#` and the
@@ -1028,6 +1039,10 @@ asks for 1.x, whatever name each imports it by (see
 - The project's own `[dev-dependencies]` are resolved with its
   dependencies, as requirements of the project; a dependency's
   `[dev-dependencies]` are not part of the graph at all.
+- Every package's `[build-dependencies]` are resolved with the rest, its
+  dependencies' included: a dependency's build script runs in the
+  project's build. A package both its code and a build script need is one
+  copy, at one version.
 - Every `[target.'<condition>'.dependencies]`, the project's and its
   dependencies', is resolved with the rest, whatever the platform
   resolving, so one version of a package serves every platform.

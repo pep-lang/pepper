@@ -105,7 +105,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -613,6 +613,11 @@ reads_features() {
     expect_equal(
         errors("[package]\nname = \"a\"\n[dev-dependencies]\ny = { path = \"y\", optional = true }\n"),
         "optional: dev-dependency 'y' cannot be optional; only '[dependencies]' are"
+    );
+    expect_equal(errors("[package]\nname = \"a\"\n[build-dependencies]\ny = { path = \"y\" }\n"), "");
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[build-dependencies]\ny = { path = \"y\", optional = true }\n"),
+        "optional: build-dependency 'y' cannot be optional; only '[dependencies]' are"
     );
 }
 

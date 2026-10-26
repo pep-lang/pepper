@@ -13,7 +13,9 @@
 #
 # A member of a repository's workspace has the member after `#` in its
 # source (`github:someone/shapes#geo`), and its own commit and checkout.
-# A package only `[dev-dependencies]` lead to has `dev = true`, and one only
+# A package only `[dev-dependencies]` lead to has `dev = true`, one only
+# `[build-dependencies]` lead to (a build script's, built for the machine
+# building, never linked into the program) has `build = true`, and one only
 # `[target.'<condition>'.dependencies]` lead to has `target`, the
 # condition under which a build needs it (`target = "OS(Windows)"`): the
 # lock lists every platform's packages, and a build fetches only its
@@ -42,6 +44,8 @@ export struct Locked {
     var sha256: String = "";
     # Whether only the project's dev-dependencies lead to it.
     var dev: bool = false;
+    # Whether only build-dependencies lead to it.
+    var build: bool = false;
     # The `[Target(...)]` condition under which a build needs it, or empty
     # when every build does.
     var target: String = "";
@@ -114,6 +118,8 @@ export read_lock(path: Path): Result<Array<Locked>> {
         locked.sha256 = _text(item, "sha256");
         var dev = item.try_get("dev");
         locked.dev = dev.is_value() and dev.value().as_bool().value_or(false);
+        var build = item.try_get("build");
+        locked.build = build.is_value() and build.value().as_bool().value_or(false);
         locked.target = _text(item, "target");
         locked.replaced_by = _text(item, "override");
         locked.major = _text(item, "major");
@@ -162,6 +168,9 @@ export lock_text(packages: Array<Locked>): String {
         }
         if (locked.dev) {
             text += "dev = true\n";
+        }
+        if (locked.build) {
+            text += "build = true\n";
         }
         if (!locked.target.is_empty) {
             text += "target = " + toml.TomlValue.String(locked.target).to_string() + "\n";

@@ -97,6 +97,9 @@ export struct LockedGraph {
         if (package.dev) {
             text += " [dev]";
         }
+        if (package.build) {
+            text += " [build]";
+        }
         if (!package.target.is_empty) {
             text += $" [target: {package.target}]";
         }
@@ -129,6 +132,7 @@ export struct LockedGraph {
         node["commit"] = _text(package.commit);
         node["source"] = JsonValue.String(edge.source);
         node["dev"] = JsonValue.Bool(package.dev);
+        node["build"] = JsonValue.Bool(package.build);
         node["target"] = _text(package.target);
         node["override"] = _text(package.replaced_by);
         node["optional"] = JsonValue.Bool(requirement.optional);
@@ -467,6 +471,7 @@ export struct LockedGraph {
             entry["latest"] = row[3] == "-" ? JsonValue.Null : JsonValue.String(row[3]);
             entry["source"] = JsonValue.String(row[4]);
             entry["dev"] = JsonValue.Bool(package.dev);
+            entry["build"] = JsonValue.Bool(package.build);
             entry["target"] = _text(package.target);
             entry["retracted"] = _text(row[5]);
             list.append(entry);

@@ -2391,6 +2391,82 @@ a_build_script_compiles_a_packages_c_file_once_until_it_changes() {
 }
 
 [Test]
+a_build_script_generates_a_module_with_a_build_dependency_locked_and_vendored() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("generated");
+    add_version(
+        hosts.folder.path,
+        "someone/gen",
+        "1.0.0",
+        [
+            "pep.toml",
+            "[package]\nname = \"gen\"\n\n[build-dependencies]\nnumbers = { github = \"other/numbers\", version = \"1\" }\n",
+            "module.pep",
+            "import generated;\n\nexport version(): String {\n    return generated.made_with();\n}\n\n"
+                + "[Target(BuildOption(gen_LEVEL) == 2)]\nexport level(): int {\n    return 2;\n}\n",
+            "build.pep",
+            read_file(Path("pep-package").join("testdata").join("generated_build.pep.txt"))
+        ]
+    );
+    publish(hosts.folder.path, "someone/gen");
+    var project = Project("generated", "gen = { github = \"someone/gen\", version = \"1\" }\n");
+    write_file(
+        project.dir.join("main.pep"),
+        "import gen;\n\nmain(): int {\n    print($\"{gen.version()} {gen.level()}\");\n    return 0;\n}\n"
+    );
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    # Only a build-dependency leads to numbers.
+    var lock = project.lock();
+    expect_contains(lock, "source = \"github:other/numbers\"\nversion = \"1.3.1\"\n");
+    expect_equal(lock.split("\nbuild = true\n").count, 2);
+    expect_true(lock.find("\nbuild = true\n") < lock.find("source = \"github:someone/gen\""));
+    expect_contains(hosts.package(project.dir, ["tree"]).stdout, "numbers 1.3.1 (github:other/numbers) [build]");
+    expect_equal(hosts.build_and_run(project.dir), "numbers 1.3.1 2\n");
+    # Its generated module lost, the script runs again.
+    var folders = glob(project.dir.to_string().replace("\\", "/") + "/.pep/build/gen-*");
+    expect_true(folders.count == 1);
+    Directory.remove_all(folders[0].join("out"));
+    expect_equal(hosts.build_and_run(project.dir), "numbers 1.3.1 2\n");
+
+    # Vendored, with no host or cache, the script still builds with it.
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_true(project.dir.join("vendor/github.com/other/numbers/module.pep").is_file());
+    Directory.remove_all(project.dir.join(".pep"));
+    Directory.remove_all(hosts.home());
+    var vendored = run(
+        hosts.command(
+            tool("pep-build").to_string(), project.dir, ["--locked", "--offline"]
+        ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+    );
+    expect_exit(vendored, 0);
+    expect_equal(
+        run(process.Command(project.dir.join("app" + toolchain.executable_suffix()).to_string())).stdout,
+        "numbers 1.3.1 2\n"
+    );
+    # --no-build-scripts still refuses it.
+    var refused = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--no-build-scripts"]));
+    expect_exit(refused, 1);
+    expect_contains(refused.stderr, "error: the dependency 'gen' has a build script, ");
+
+    # A package's own code does not see its build-dependencies.
+    write_file(
+        project.dir.join("pep.toml"),
+        project.manifest() + "\n[build-dependencies]\nnumbers = { github = \"other/numbers\", version = \"1\" }\n"
+    );
+    write_file(
+        project.dir.join("main.pep"),
+        "import numbers;\n\nmain(): int {\n    print(numbers.numbers_version());\n    return 0;\n}\n"
+    );
+    var hidden = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--offline"]));
+    expect_exit(hidden, 1);
+    expect_contains(
+        hidden.stderr, "error: 'numbers' is a build-dependency, which only the package's build script imports"
+    );
+}
+
+[Test]
 a_projects_own_build_script_runs_and_what_it_prints_is_checked() {
     var folder = TempFolder("package_own_build_script");
     var dir = folder.path;
@@ -2408,7 +2484,7 @@ a_projects_own_build_script_runs_and_what_it_prints_is_checked() {
     expect_contains(built.stderr, "warning: app: made it\n");
     expect_contains(
         built.stderr,
-        "error: the build script of 'app' printed 'pep:linky=m'; expected 'pep:' followed by one of link, link-path, object, warning, rerun-if-changed, rerun-if-env-changed, '=' and a value"
+        "error: the build script of 'app' printed 'pep:linky=m'; expected 'pep:' followed by one of link, link-path, object, build-option, warning, rerun-if-changed, rerun-if-env-changed, '=' and a value"
     );
     write_file(script, "main(): int {\n    print(\"pep:link-path=lib\");\n    return 3;\n}\n");
     var failed = run(process.Command(tool("pep-build").to_string()).working_directory(dir));
@@ -2418,6 +2494,23 @@ a_projects_own_build_script_runs_and_what_it_prints_is_checked() {
     write_file(script, "main(): int {\n    print(\"pep:link-path=lib\");\n    return 0;\n}\n");
     expect_exit(run(process.Command(tool("pep-build").to_string()).working_directory(dir)), 0);
     expect_equal(run(process.Command(dir.join("app" + toolchain.executable_suffix()).to_string())).stdout, "built\n");
+    # `import generated` is the module the script writes into PEP_OUT_DIR,
+    # and `pep:build-option` defines `app_<NAME>`.
+    write_file(
+        dir.join("main.pep"),
+        "import generated;\n\n[Target(BuildOption(app_TIMES) == 7)]\ntimes(): int {\n    return 7;\n}\n\n"
+            + "main(): int {\n    print($\"{generated.greeting()} {times()}\");\n    return 0;\n}\n"
+    );
+    var no_module = run(process.Command(tool("pep-build").to_string()).working_directory(dir));
+    expect_exit(no_module, 1);
+    expect_contains(no_module.stderr, "make.pep, wrote no module 'generated': no ");
+    write_file(script, read_file(Path("pep-package").join("testdata").join("own_generated_build.pep.txt")));
+    expect_exit(run(process.Command(tool("pep-build").to_string()).working_directory(dir)), 0);
+    expect_equal(run(process.Command(dir.join("app" + toolchain.executable_suffix()).to_string())).stdout, "hello 7\n");
+    write_file(script, "main(): int {\n    print(\"pep:build-option=a-b\");\n    return 0;\n}\n");
+    var bad_option = run(process.Command(tool("pep-build").to_string()).working_directory(dir));
+    expect_exit(bad_option, 1);
+    expect_contains(bad_option.stderr, "printed 'pep:build-option=a-b', and 'app_a-b' is not a build option name");
     # A `script` that does not exist is an error.
     write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[build]\nscript = \"nope.pep\"\n");
     var missing = run(process.Command(tool("pep-build").to_string()).working_directory(dir));
