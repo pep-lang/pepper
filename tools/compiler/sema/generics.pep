@@ -24,6 +24,7 @@ import [
 import [concrete_overrides] from "overloads";
 import [for_each_place, Place, PlaceVisitor] from "places";
 import [GrowingList, PassMemo, PassState] from "state";
+import [type_ids] from "type_ids";
 import [parse_type_string] from "type_name";
 import [Rewriter] from "walk";
 
@@ -48,6 +49,20 @@ _written(variable: VariableDef): Loc {
 _contains_param(ty: TypeName, params: String[]): bool {
     if (ty.name.ends_with(".Type")) {
         return true;
+    }
+    # The names in a type are known once per distinct type (#210).
+    var ids = type_ids();
+    if (ids.is_value() and ty.sub_types.count > 0) {
+        if (ids.value().facts(ty).member_type) {
+            return true;
+        }
+        var names = ids.value().facts(ty).names;
+        for (var p in params) {
+            if (names.contains(p)) {
+                return true;
+            }
+        }
+        return false;
     }
     for (var p in params) {
         if (p == ty.name) {
@@ -436,6 +451,10 @@ _spelled_types(types: TypeName[]): HashSet<String> {
 # What tells `ty` apart as `==` does: its name, flags and arguments, not
 # its labels.
 _type_key(ty: TypeName): String {
+    var ids = type_ids();
+    if (ids.is_value()) {
+        return $"#{ids.value().facts(ty).bare}";
+    }
     var kind = ty.flags == TypeFlags.Function ? "f" : "s";
     if (ty.sub_types.count == 0) {
         return $"{ty.name}/{kind}";

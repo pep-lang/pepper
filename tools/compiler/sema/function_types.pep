@@ -33,6 +33,7 @@ import [
 ] from "model";
 import [PassState] from "state";
 import [apply_synthesized, count_step, finish, is_zero, null_guard, skip_static_objects] from "synthesize";
+import [type_ids] from "type_ids";
 import [parse_type_string, WEAK] from "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
@@ -153,6 +154,11 @@ struct _TypesFound {
     ## (innermost first, so a `(int) => (int) => int` registers its return
     ## type before itself).
     add(ty: TypeName) {
+        # Most types hold none, which the table knows without a walk (#210).
+        var ids = type_ids();
+        if (ty.sub_types.count > 0 and ids.is_value() and !ids.value().facts(ty).special) {
+            return;
+        }
         for (var sub in ty.sub_types) {
             add(sub);
         }

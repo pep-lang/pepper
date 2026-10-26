@@ -7,6 +7,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import "builder";
 import [Loc] from "loc";
 import [Expression, StructDef, TypeName] from "model";
+import [type_ids] from "type_ids";
 import [parse_type_string, sized_number_name] from "type_name";
 
 ## Returns `loc` as a diagnostic's location.
@@ -149,7 +150,17 @@ _expression_loc(e: Expression): Loc {
 ## `ty` spelled one way, its integer types by their sized names (`i32` for
 ## `int`), a pointer `__ptr<T>` among them.
 _canonical(ty: TypeName): TypeName {
-    return _sized(parse_type_string(ty.to_string()));
+    var ids = type_ids();
+    if (!ids.is_value()) {
+        return _sized(parse_type_string(ty.to_string()));
+    }
+    var known = ids.value().canonical(ty);
+    if (known.is_value()) {
+        return known.value();
+    }
+    var made = _sized(parse_type_string(ty.to_string()));
+    ids.value().note_canonical(ty, made);
+    return made;
 }
 
 # Parsed type `ty` with its number types by their sized names. Its

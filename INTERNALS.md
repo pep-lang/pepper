@@ -877,7 +877,23 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   it (`fill_defaults` and alias expansion copy an argument before
   changing it). Copying arguments whole made each level of a nested
   literal hold the levels below it again: memory quadratic in its depth
-  (#210). `arithmetic.result_type` gives the type two numbers
+  (#210). While the passes run (`run_steps_with`), types are interned in
+  the thread's table of types (`type_ids.pep`, `begin_type_ids` and
+  `end_type_ids`): each distinct type (name, flags, labels, arguments) is
+  one entry, and a `TypeName` keeps its entry's id in `type_id`, trusted
+  while its own fields and its arguments' ids still match the entry, so
+  asking a type costs its own node, not the levels nested in it.
+  `to_string`, `==`, `contains_auto`, `mentions`, `labels_arguments` and
+  `fingerprint` answer from the entry, and `parse_type_string` and
+  `_canonical` from what the table made of the text or type before (a
+  copy, whose arguments are copies too). Each asked every level of a
+  nested literal about every level below it: time quadratic in its depth
+  (#210). `copy()` gives a type no id, and `assign`, `replace`,
+  `fill_defaults` and alias expansion drop the id of the type they
+  change: a type that holds it compares the ids its arguments keep.
+  Outside the passes (the builder, codegen, the language server's
+  requests) there is no table, and each walks the type as before.
+  `arithmetic.result_type` gives the type two numbers
   promote to. `static_type_of` gives a best-effort static type for
   operator resolution and print conversion. A method's result on a
   generic instance with no specialization yet comes from the base, its

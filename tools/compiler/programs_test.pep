@@ -566,18 +566,19 @@ const_string_types_alike_whole_and_in_units() {
 # Nested collection literals and generic calls are typed in one walk, not
 # one level per specialization round: 20 levels took 11 s and 120 more than
 # 10 minutes (#202), and generic calls past eight levels failed to infer.
-# 64 levels keep the test quick; 254 (the nesting limit) build too, in about
-# two minutes and 2 GB: types share their arguments (#210), but each level's
-# specialization still spells its element type whole in its names, and the
-# passes compare and look types up by those spellings.
+# 96 levels of array take about as long as 64 did before the passes asked
+# a table of types (`type_ids.pep`) about each type rather than walk every
+# level below it, and 254 (the nesting limit) build in about a minute and
+# 2 GB (#210). The calls stay at 64 levels: each nests twice.
 [Test]
 nested_literals_build_in_time_and_run() {
     var folder = TempFolder("programs_nested_literals");
-    ulong depth = 64;
+    ulong depth = 96;
+    ulong calls = 64;
     var source = "id<T>(x: T): T {\n    return x;\n}\n\nexport main(): int {\n"
         + $"    var a = {"[".repeat(depth)}7{"]".repeat(depth)};\n"
         + $"    var m = {"[1: ".repeat(16)}2{"]".repeat(16)};\n"
-        + $"    var i = {"id(".repeat(depth)}3{")".repeat(depth)};\n"
+        + $"    var i = {"id(".repeat(calls)}3{")".repeat(calls)};\n"
         + $"    return a{"[0]".repeat(depth)} + m{"[1]".repeat(16)} + i;\n}\n";
     var path = folder.path.join("nested.pep");
     write_file(path, source);
@@ -588,8 +589,8 @@ nested_literals_build_in_time_and_run() {
     if (error.is_value()) {
         panic($"nested.pep does not build:\n{error.value()}");
     }
-    # Generous: it builds in under a minute, and took over three with a round
-    # a level.
+    # Generous: it builds in about 30 s, and took about 40 without the table
+    # of types.
     if (seconds >= 150) {
         panic($"nested.pep took {seconds} s to build");
     }

@@ -4,6 +4,7 @@
 import [checked_member_counts, copy_without_body, unit_decls] from "checked";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
 import [TraitTypeMemo] from "state";
+import [type_ids] from "type_ids";
 import [parse_type_string] from "type_name";
 
 ## Returns the trait a type names: a plain (non-pointer, non-function) type
@@ -296,6 +297,23 @@ struct _TraitTypes {
         # A type carried as a flat name is looked through as written.
         if (names.contains(name) or name.contains("<")) {
             return true;
+        }
+        if (ty.sub_types.count == 0) {
+            return false;
+        }
+        # The names in a type are known once per distinct type: each level
+        # of a nested literal is in the level above it (#210).
+        var ids = type_ids();
+        if (ids.is_value()) {
+            if (ids.value().facts(ty).angled) {
+                return true;
+            }
+            for (var held in ids.value().facts(ty).names) {
+                if (names.contains(held)) {
+                    return true;
+                }
+            }
+            return false;
         }
         for (var sub in ty.sub_types) {
             if (_mentions_trait(sub)) {

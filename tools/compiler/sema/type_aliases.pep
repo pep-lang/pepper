@@ -84,6 +84,8 @@ struct _Resolver {
         }
         # Nested arguments first; each is expanded independently, copied
         # first since other types share their arguments (`TypeName.copy`).
+        # Changed in place: a type `ty` is placed in compares the id it keeps.
+        ty.type_id = 0;
         ulong at = 0;
         while (at < ty.sub_types.count) {
             ty.sub_types[at] = ty.sub_types[at].copy();

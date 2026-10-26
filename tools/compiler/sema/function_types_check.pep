@@ -24,6 +24,7 @@ import "shared_functions";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [trait_def] from "traits";
+import [type_ids] from "type_ids";
 import [AUTO, parse_type_string, replace_map, VOID, VOID_PTR] from "type_name";
 import "value_structs";
 import [Rewriter, rewrite_expression] from "walk";
@@ -134,6 +135,8 @@ export defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
 ## generic parameter's default. Type names nest only as deep as the
 ## program spells them.
 export fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
+    # Changed in place: a type `ty` is placed in compares the id it keeps.
+    ty.type_id = 0;
     ulong at = 0;
     while (at < ty.sub_types.count) {
         # Copied first: other types share their arguments (`TypeName.copy`).
@@ -325,6 +328,9 @@ struct _FunctionTypes {
     var spelled_structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
     ## The first struct of each name.
     var named_structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
+    ## `with_defaults` of each type it was asked for, by the type's id: filling
+    ## in each level's defaults again cost a nested type its depth (#210).
+    var filled: HashMap<ulong, TypeName> = HashMap<ulong, TypeName>();
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -379,6 +385,16 @@ struct _FunctionTypes {
                 return true;
             }
         }
+        var ids = type_ids();
+        if (ids.is_value() and ty.sub_types.count > 0) {
+            var names = ids.value().facts(ty).names;
+            for (var p in unbound) {
+                if (names.contains(p)) {
+                    return true;
+                }
+            }
+            return false;
+        }
         for (var t in ty.sub_types) {
             if (mentions_unbound(t)) {
                 return true;
@@ -389,9 +405,24 @@ struct _FunctionTypes {
 
     ## `ty` canonical, with every omitted type argument filled in.
     with_defaults(ty: TypeName): TypeName {
-        var filled = _canonical(ty);
-        fill_defaults(filled, defaults);
-        return _canonical(filled);
+        var ids = type_ids();
+        if (ids.is_value()) {
+            var key = ids.value().id(ty);
+            var known = filled.try_get(key);
+            if (known.is_value()) {
+                return known.value();
+            }
+            var made = _filled(ty);
+            filled[key] = made;
+            return made;
+        }
+        return _filled(ty);
+    }
+
+    _filled(ty: TypeName): TypeName {
+        var out = _canonical(ty);
+        fill_defaults(out, defaults);
+        return _canonical(out);
     }
 
     is_trait(ty: TypeName): bool {

@@ -14,6 +14,7 @@ import [JsonValue] from json;
 import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
 import [UnitDecls, PendingBody] from "pending";
+import [type_print] from "type_ids";
 
 ## `BinaryOp`, a type of the sema model.
 export enum BinaryOp {
@@ -7207,6 +7208,10 @@ export enum TypeFlags {
 
 ## `TypeName`, a type of the sema model.
 export struct TypeName {
+    ## In memory only, and not kept by `copy()`: the type's id in the
+    ## passes' table of types (`type_ids.pep`), once asked for. A copy may
+    ## be changed in place, and the types it is placed in would not see it.
+    var type_id: ulong = 0;
     var name: String;
     var sub_types: Array<TypeName>;
     var flags: TypeFlags;
@@ -7236,17 +7241,7 @@ export struct TypeName {
     ##
     ## @param into the fingerprint
     fingerprint(into: Fingerprint) {
-        into.add_text("TypeName");
-        into.add_text(this.name);
-        into.add(this.sub_types.count);
-        for (var _item584 in this.sub_types) {
-            _item584.fingerprint(into);
-        }
-        this.flags.fingerprint(into);
-        into.add(this.labels.count);
-        for (var _item587 in this.labels) {
-            into.add_text(_item587);
-        }
+        into.add(type_print(this));
     }
 
     to_json(): JsonValue {

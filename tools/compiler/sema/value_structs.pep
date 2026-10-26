@@ -299,6 +299,9 @@ struct _Mutating {
     var found: Array<(String, String, Loc)> = Array<(String, String, Loc)>();
     ## The name of each found method's struct, in the same order.
     var owners: String[] = Array<String>();
+    ## `struct\noverload set` → where its first found member changes `this`:
+    ## a scan of `found` per call cost a nested literal its depth (#210).
+    var first_of_set: HashMap<String, Loc> = HashMap<String, Loc>();
 
     construct() {}
 
@@ -306,6 +309,10 @@ struct _Mutating {
         at[$"{ty}\n{method}"] = loc;
         found.append((ty, method, loc));
         owners.append(owner);
+        var set = $"{ty}\n{set_name(method)}";
+        if (!first_of_set.contains(set)) {
+            first_of_set[set] = loc;
+        }
     }
 
     contains(ty: String, method: String): bool {
@@ -321,12 +328,7 @@ struct _Mutating {
         if (direct.is_value()) {
             return direct;
         }
-        for (var (t, m, loc) in found) {
-            if (t == spelled and set_name(m) == method) {
-                return Optional<Loc>.Value(loc);
-            }
-        }
-        return Optional<Loc>.Empty;
+        return first_of_set.try_get($"{spelled}\n{method}");
     }
 }
 
