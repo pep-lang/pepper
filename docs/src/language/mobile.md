@@ -343,7 +343,7 @@ own reads, writing each line to the platform's log:
   standard output at the `I` level, standard error at `E`.
   `adb logcat -s greeter` shows them.
 - **iOS**: the unified log, through `os_log`, with that name as the
-  subsystem: standard output at the default level, standard error as
+  subsystem (the app's own, for a static library linked into it): standard output at the default level, standard error as
   errors. Console.app and `log show` show them (`xcrun simctl spawn booted
   log show` in the simulator).
 

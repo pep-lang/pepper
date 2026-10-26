@@ -87,7 +87,11 @@ _pep_platform_log_start(): __ptr<ulong> {
         tag = _pep_platform_log_tag(unsafe_cast<__ptr<char>>(info[0]));
     }
     state[3] = unsafe_cast<ulong>(tag);
-    _pep_platform_log_open(state, tag, info[1]);
+    [Target(OS(IOS))]
+    {
+        state[4] = info[1];
+        state[5] = unsafe_cast<ulong>(os_log_create(tag, "pepper"));
+    }
     free(info);
     for (var fd in 1..3) {
         if (_pep_stream_detached(fd)) {
@@ -95,15 +99,6 @@ _pep_platform_log_start(): __ptr<ulong> {
         }
     }
     return state;
-}
-
-[Target(OS(Android))]
-_pep_platform_log_open(state: __ptr<ulong>, tag: __ptr<char>, image: ulong) {}
-
-[Target(OS(IOS))]
-_pep_platform_log_open(state: __ptr<ulong>, tag: __ptr<char>, image: ulong) {
-    state[4] = image;
-    state[5] = unsafe_cast<ulong>(os_log_create(tag, "pepper"));
 }
 
 # The file name of the image at `path`, without a `lib` prefix or a `.so`
@@ -229,22 +224,24 @@ export _pep_platform_log(level: int, text: __ptr<char>, size: ulong) {
     if (_pep_platform_log_state == __null) {
         return;
     }
+    # One NUL-terminated copy, each line break made a NUL in turn.
+    __ptr<char> lines = malloc(size + 1);
+    if (lines == __null) {
+        return;
+    }
+    memcpy(lines, text, size);
+    lines[size] = 0;
     ulong start = 0;
     while (start < size) {
         var end = start;
-        while (end < size && text[end] != '\n') {
+        while (end < size && lines[end] != '\n') {
             end += 1;
         }
-        __ptr<char> line = malloc(end - start + 1);
-        if (line == __null) {
-            return;
-        }
-        memcpy(line, text + start, end - start);
-        line[end - start] = 0;
-        _pep_platform_log_line(level, line);
-        free(line);
+        lines[end] = 0;
+        _pep_platform_log_line(level, lines + start);
         start = end + 1;
     }
+    free(lines);
 }
 
 [Target(OS(Android))]

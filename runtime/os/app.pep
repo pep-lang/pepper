@@ -113,18 +113,11 @@ _os_app_directories(): AppDirectories? {
     var paths = Array<String>();
     for (var directory in [_OS_DOCUMENT_DIRECTORY, _OS_CACHES_DIRECTORY]) {
         var found = search(directory, _OS_USER_DOMAIN, 1);
-        if (found != __null && count(found) > 0) {
-            paths.append(_os_cf_string(to_c, at(found, 0)));
-        }
+        paths.append(found != __null && count(found) > 0 ? _os_cf_string(to_c, at(found, 0)) : String());
     }
     paths.append(_os_cf_string(to_c, temporary()));
     pop(pool);
-    for (var path in paths) {
-        if (path.is_empty) {
-            return Optional<AppDirectories>.Empty;
-        }
-    }
-    if (paths.count != 3) {
+    if (paths.contains("")) {
         return Optional<AppDirectories>.Empty;
     }
     # NSTemporaryDirectory ends in '/'.

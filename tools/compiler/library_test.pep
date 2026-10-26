@@ -448,10 +448,9 @@ writes_each_platforms_archive_with_its_index() {
         _build(dir, _NO_RUNTIME_LIBRARY, options, false, target);
         var bytes = File.read_bytes(archive).value();
         expect_true(bytes.count > 8);
-        var header = File.read_to_string(dir.join(Path("add.h"))).value();
-        expect_true(header.contains("int32_t times(int32_t a, int32_t b);"));
-        # The runtime's own export (runtime/mobile.pep), on Android only.
-        expect_equal(header.contains("void pepper_set_app_directories("), triple.ends_with("android"));
+        expect_true(
+            File.read_to_string(dir.join(Path("add.h"))).value().contains("int32_t times(int32_t a, int32_t b);")
+        );
         var map = _archive_map(archive);
         if (!map.is_empty) {
             if (!map.contains($"{add} in ")) {
@@ -459,6 +458,24 @@ writes_each_platforms_archive_with_its_index() {
             }
             expect_true(map.contains($"{add} in "));
         }
+    }
+}
+
+# The runtime's own `[Export]` (runtime/mobile.pep), whose body the passes
+# hold in the stash, reaches an Android library's header, and only
+# Android's.
+[Test]
+exports_the_runtimes_app_directories_on_android() {
+    var folder = TempFolder("c_runtime_export");
+    for (var (triple, file) in [("aarch64-linux-android", "libadd.a"), ("aarch64-apple-ios", "libadd.a")]) {
+        var target = link.Target.parse(triple).value();
+        var dir = folder.path.join(Path(triple));
+        Directory.create_all(dir);
+        var options = driver.BuildOptions(dir.join(Path(file)), dir.join(Path("build")));
+        options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
+        _build(dir, _NO_RUNTIME_LIBRARY, options, true, target);
+        var header = File.read_to_string(dir.join(Path("add.h"))).value();
+        expect_equal(header.contains("void pepper_set_app_directories("), triple.ends_with("android"));
     }
 }
 
