@@ -6,7 +6,8 @@
 #
 # A context is a malloc'd block of three words: the saved stack pointer, the
 # base of the fiber's mapping, and the mapping's length (both zero for the
-# thread's own context, which runs on the thread's stack). A fiber's stack is
+# thread's own context, which runs on the thread's stack, but see Android
+# below). A fiber's stack is
 # an anonymous private mapping whose lowest page is a guard (PROT_NONE), so an
 # overflow faults instead of writing over other memory. Pages are committed
 # on first touch; Linux maps with MAP_NORESERVE so a large reserve costs
@@ -16,6 +17,16 @@
 # generator defines as a few instructions of assembly (see
 # tools/compiler/codegen/globals.pep); `__prepare_context` lays out a new
 # stack so that the first switch into it calls `entry(null)`.
+#
+# Android: bionic's frame-pointer unwinder, which GWP-ASan runs on a sampled
+# malloc or free, follows saved frame pointers while they stay below the
+# thread's stack top (`pthread_internal_t::stack_top`). On a fiber that bound
+# is the thread's stack, not the fiber's, so a frame pointer register that
+# code without frame pointers left holding data (bionic's own on x86-64,
+# OpenSSL's) passes the check, and the walk reads unmapped memory (#253). So
+# there a thread's context keeps that stack top in its length word, and a
+# switch points the field at the top of the stack it resumes, as a thread's
+# own would be.
 
 import "sys_posix";
 
@@ -53,10 +64,39 @@ const _FIBER_MAP_FLAGS = 4098;
 const _FIBER_PAGE_SIZE_NAME = 29;
 
 # The calling thread as a context: what a fiber switches back to.
-[Target(OS(Linux) || OS(Mac))]
+[Target((OS(Linux) && !OS(Android)) || OS(Mac))]
 _async_fiber_thread_context(): __ptr<void> {
     return _pep_malloc(24);
 }
+
+# The calling thread as a context, holding the thread's stack top in its
+# length word, or 0 when bionic's field does not look like one.
+[Target(OS(Android))]
+_async_fiber_thread_context(): __ptr<void> {
+    var context = _pep_malloc(24);
+    var top = _async_fiber_stack_top()[0];
+    var here = unsafe_cast<ulong>(_fiber_frame_address(0));
+    # shortcut: the field's offset is bionic's private layout (the same from
+    # Android 11, where the field came in, to 14 at least); a value that is
+    # not just above this frame leaves the field alone. Recheck on a new
+    # Android.
+    if (top > here && top - here < 0x40000000 && top % 8 == 0) {
+        __ptr<ulong> words = context;
+        words[2] = top;
+    }
+    return context;
+}
+
+# Where bionic keeps the calling thread's stack top: `stack_top` in its
+# `pthread_internal_t`, which `pthread_self()` points at (64-bit ABIs).
+[Target(OS(Android))]
+_async_fiber_stack_top(): __ptr<ulong> {
+    return unsafe_cast<__ptr<ulong>>(pthread_self() + 144);
+}
+
+[Target(OS(Android))]
+[Link(name = "llvm.frameaddress")]
+extern void* _fiber_frame_address(int level);
 
 # Frees what `_async_fiber_thread_context` made.
 [Target(OS(Linux) || OS(Mac))]
@@ -98,8 +138,22 @@ _async_fiber_destroy(context: __ptr<void>) {
 
 # Saves the running context into `from` and resumes `to`. Returns when
 # something switches back to `from`.
-[Target(OS(Linux) || OS(Mac))]
+[Target((OS(Linux) && !OS(Android)) || OS(Mac))]
 _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     __ptr<__ptr<void>> resume = to;
+    __switch_context(from, resume[0]);
+}
+
+# As above, and points bionic's stack top at `to`'s when the thread's
+# context has one (a switch is always between a thread and a fiber, so
+# `from` or `to` is the thread's).
+[Target(OS(Android))]
+_async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
+    __ptr<__ptr<void>> resume = to;
+    __ptr<ulong> from_words = from;
+    __ptr<ulong> to_words = to;
+    if (from_words[2] != 0 && to_words[2] != 0) {
+        _async_fiber_stack_top()[0] = to_words[1] + to_words[2];
+    }
     __switch_context(from, resume[0]);
 }
