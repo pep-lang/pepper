@@ -19956,6 +19956,9 @@ refuses initial-exec there, so an Android library's thread-locals use
 the general-dynamic model, which costs a call (<code>__tls_get_addr</code> on
 x86_64, a TLS descriptor's on arm64) per access.</li>
 </ul>
+<p>Swift, Kotlin and Java code can call the exports with its own values
+instead: <code>--bindings swift</code> and <code>--bindings java</code> write bindings beside the
+header (see <a href="language/mobile.html#bindings">iOS and Android</a>).</p>
 <h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
 <ul>
 <li>Module-scope variables are initialized when the library is loaded, before
@@ -20325,38 +20328,78 @@ as <code>TARGET_OS_MAC</code> and <code>__linux__</code> are in C (see
 runtime's macOS and Linux code serves them, with a few declarations
 narrowed where they differ. At run time, <code>os.system_os()</code> returns
 <code>OperatingSystem.IOS</code> or <code>OperatingSystem.Android</code>.</p>
+<h2 id="bindings"><a class="header" href="#bindings">Bindings</a></h2>
+<p>Swift, Kotlin and Java call the library's <code>[Export]</code>ed functions (see
+<a href="language/c-interop.html">Calling Pepper from C</a>) through bindings the compiler
+generates beside the C header, so the app passes its own values and
+writes no glue: <code>--bindings swift</code> or <code>--bindings java</code> with <code>--lib</code>, and
+<code>--lib swift-package</code> and <code>--lib aar</code> (below) write them themselves.
+Names are camel case (<code>count_words</code> is <code>countWords</code>), and each export
+crosses as:</p>
+<div class="table-wrapper"><table><thead><tr><th>Pepper</th><th>Swift</th><th>Java and Kotlin</th></tr></thead><tbody>
+<tr><td><code>bool</code></td><td><code>Bool</code></td><td><code>boolean</code></td></tr>
+<tr><td><code>i8</code>, <code>u8</code>, <code>char</code></td><td><code>Int8</code>, <code>UInt8</code>, <code>CChar</code></td><td><code>byte</code></td></tr>
+<tr><td><code>short</code>, <code>ushort</code></td><td><code>Int16</code>, <code>UInt16</code></td><td><code>short</code></td></tr>
+<tr><td><code>int</code>, <code>uint</code></td><td><code>Int32</code>, <code>UInt32</code></td><td><code>int</code></td></tr>
+<tr><td><code>long</code>, <code>ulong</code></td><td><code>Int64</code>, <code>UInt64</code></td><td><code>long</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td><code>Float</code>, <code>Double</code></td><td><code>float</code>, <code>double</code></td></tr>
+<tr><td>an enum</td><td>its stored integer</td><td>its stored integer</td></tr>
+<tr><td><code>String</code></td><td><code>String</code></td><td><code>String</code></td></tr>
+<tr><td>a struct</td><td>a class owning one reference</td><td>a class owning one reference, <code>AutoCloseable</code></td></tr>
+<tr><td><code>__ptr&lt;T&gt;</code></td><td><code>UnsafeMutablePointer&lt;T&gt;?</code> (<code>UnsafeMutableRawPointer?</code> for <code>void</code>)</td><td><code>long</code></td></tr>
+<tr><td><code>extern (A) =&gt; R</code></td><td><code>@convention(c)</code> function</td><td>none: an error</td></tr>
+</tbody></table>
+</div>
+<p>Java has no unsigned types: <code>u8</code> through <code>ulong</code> keep their bits in the
+signed type of their size. A <code>String</code> crosses as UTF-8 both ways (a Java
+string's own bytes, not JNI's modified UTF-8), and a string Pepper returns
+ends at its first NUL. JNI cannot pass a C function pointer, so an export
+that takes or returns one is an error at its type when Java bindings are
+built, as are an export whose camel-case name is a Java keyword or
+another's, and a struct named as the library's own class.</p>
+<p>A struct handle is an object that owns one reference to the Pepper value:
+Swift's class releases it in <code>deinit</code>, and Java's in <code>close()</code>, which
+<code>try</code>-with-resources and Kotlin's <code>use</code> call (a handle never closed leaks
+its value; there is no finalizer, which would release it on another
+thread). Its reference count is a plain one unless the struct is
+<code>[Shared]</code>, so a handle stays on one thread, as the Pepper value would.</p>
 <h2 id="calling-pepper-from-swift"><a class="header" href="#calling-pepper-from-swift">Calling Pepper from Swift</a></h2>
-<p>Swift calls C directly. Give <code>swiftc</code> the generated header as the bridging
-header, and link the library:</p>
-<pre><code class="language-sh">xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios15.0-simulator -parse-as-library \
-  -import-objc-header greeter.h App.swift -L . -lgreeter -o App.app/App
+<p><code>--bindings swift</code> writes, beside the header, <code>greeter.swift</code>: a Swift
+function for each export, over the C module <code>Cgreeter</code> that the
+<code>module.modulemap</code> it also writes declares. Compile it with the app's
+Swift code, find the module map with <code>-I</code>, and link the library:</p>
+<pre><code class="language-sh">pepper build --target aarch64-apple-ios-simulator --lib static --bindings swift greeter.pep -o libgreeter.a
+xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios15.0-simulator -parse-as-library \
+  -I . App.swift greeter.swift -L . -lgreeter -o App.app/App
 </code></pre>
-<p>In an Xcode project, add the library to the target's <em>Link Binary With
-Libraries</em> phase and <code>#include "greeter.h"</code> in the target's bridging header.
-A <code>String</code> crosses as a pointer and a size, and a returned string is freed
-with <code>pepper_string_free</code>:</p>
-<pre><code class="language-swift">func pepperGreeting(_ name: String) -&gt; String {
-    let result = name.withCString { greet($0, strlen($0)) }!
-    defer { pepper_string_free(result) }
-    return String(cString: result)
-}
+<pre><code class="language-swift">print(greet("iOS"))         // String in, String out: the C copy is freed
+let tally = tallyNew()      // a Pepper struct, released when `tally` goes
+print(tallyAdd(tally, 3))
 </code></pre>
+<p>Without the bindings, Swift calls the C functions directly through the
+header as a bridging header (<code>-import-objc-header greeter.h</code>): a <code>String</code>
+crosses as a pointer and a size, and a returned string is freed with
+<code>pepper_string_free</code>.</p>
 <h2 id="packaging-for-xcode-and-swiftpm"><a class="header" href="#packaging-for-xcode-and-swiftpm">Packaging for Xcode and SwiftPM</a></h2>
 <p><code>--lib xcframework</code> builds the library for every iOS target at once, as one
 <code>.xcframework</code> Xcode adds as a single dependency: a device slice and a
 simulator slice holding both simulator architectures, each with the header
-and a module map, so Swift imports it by name with no bridging header.
-<code>--lib swift-package</code> puts it in a Swift package. Neither needs Xcode or an
-SDK: the compiler builds each static library and writes the rest itself.</p>
+and a module map, so Swift imports its C functions by name with no bridging
+header. <code>--lib swift-package</code> puts it in a Swift package with the Swift
+bindings. Neither needs Xcode or an SDK: the compiler builds each static
+library and writes the rest itself.</p>
 <pre><code class="language-sh">pepper build --lib xcframework greeter.pep -o Greeter.xcframework
 pepper build --lib swift-package greeter.pep -o Greeter
 </code></pre>
 <p>The name comes from the output (<code>Greeter</code>): the module (<code>import Greeter</code>),
-the library (<code>libGreeter.a</code>) and its header (<code>Greeter.h</code>). The second
-writes:</p>
+the library (<code>libGreeter.a</code>) and its header (<code>Greeter.h</code>). In the Swift
+package the module <code>Greeter</code> is the Swift bindings, over the C module
+<code>CGreeter</code>, which code that calls the C functions directly imports
+instead:</p>
 <pre><code class="language-text">Greeter/
   Package.swift
-  Greeter.xcframework/
+  Sources/Greeter/Greeter.swift   the bindings
+  CGreeter.xcframework/
     Info.plist
     ios-arm64/                    libGreeter.a, Headers/Greeter.h, Headers/module.modulemap
     ios-arm64_x86_64-simulator/   the same, its libGreeter.a holding arm64 and x86_64
@@ -20372,74 +20415,57 @@ targets: [
 </code></pre>
 <pre><code class="language-swift">import Greeter
 
-let result = "iOS".withCString { greet($0, strlen($0)) }!
-defer { pepper_string_free(result) }
-print(String(cString: result))
+print(greet("iOS"))
 </code></pre>
 <p>The slices are built for iOS 15 and later. A library that links others
 (<code>[Link]</code>, <code>-l</code>) names them in its header, as <code>--lib static</code> does; the app
 links them itself.</p>
 <h2 id="calling-pepper-from-kotlin-or-java"><a class="header" href="#calling-pepper-from-kotlin-or-java">Calling Pepper from Kotlin or Java</a></h2>
-<p>Kotlin and Java reach C through JNI: a shared library holds the Pepper code
-and a C function for each <code>native</code> method, named for its class, which
-converts Java's types to the C ones the header declares. Link both with the
-NDK's clang into the <code>.so</code> the app loads:</p>
-<pre><code class="language-sh">pepper build --target aarch64-linux-android --lib static greeter.pep -o pepper/libgreeter.a
-$NDK/toolchains/llvm/prebuilt/*/bin/clang --target=aarch64-linux-android30 -shared -fPIC \
-  -I pepper jni.c pepper/libgreeter.a -lm -o jniLibs/arm64-v8a/libgreeter.so
+<p><code>--bindings java</code> (with <code>--lib shared</code>) writes, beside the header,
+<code>greeter.jar</code>: the class <code>pepper.greeter.Greeter</code>, a <code>static native</code>
+method for each export, which loads <code>libgreeter.so</code> when first used, and a
+class for each struct. Their JNI functions, which convert Java's values,
+are compiled into the library from <code>greeter_jni.c</code>, also written there.
+The jar's class files are written by the compiler, so it needs no JDK.</p>
+<pre><code class="language-sh">pepper build --target aarch64-linux-android --lib shared --bindings java greeter.pep \
+  -o jniLibs/arm64-v8a/libgreeter.so
 </code></pre>
-<pre><code class="language-c">JNIEXPORT jstring JNICALL
-Java_dev_pepper_demo_MainActivity_greet(JNIEnv* env, jclass cls, jstring name) {
-    const char* bytes = (*env)-&gt;GetStringUTFChars(env, name, NULL);
-    char* result = greet(bytes, strlen(bytes));
-    (*env)-&gt;ReleaseStringUTFChars(env, name, bytes);
-    jstring greeting = (*env)-&gt;NewStringUTF(env, result);
-    pepper_string_free(result);
-    return greeting;
-}
-</code></pre>
-<p>The Kotlin side declares the function <code>external</code> and loads the library
-once:</p>
-<pre><code class="language-kotlin">class MainActivity : Activity() {
-    companion object {
-        init { System.loadLibrary("greeter") }
-        @JvmStatic external fun greet(name: String): String
-    }
-}
+<pre><code class="language-kotlin">import pepper.greeter.Greeter
+
+println(Greeter.greet("Android"))
+Greeter.tallyNew().use { tally -&gt; println(Greeter.tallyAdd(tally, 3)) }
 </code></pre>
 <p>With Gradle, put each ABI's <code>.so</code> in <code>src/main/jniLibs/&lt;abi&gt;/</code>
-(<code>arm64-v8a</code>, <code>x86_64</code>), or build it from the module's <code>CMakeLists.txt</code>
-with the static library as an imported target, or add the <code>.aar</code> below.</p>
+(<code>arm64-v8a</code>, <code>x86_64</code>) and the jar in the module's dependencies, or add
+the <code>.aar</code> below, which holds both.</p>
 <h2 id="packaging-for-gradle"><a class="header" href="#packaging-for-gradle">Packaging for Gradle</a></h2>
 <p><code>--lib aar</code> builds the library as a shared library for every Android ABI
-at once, as one Android library (<code>.aar</code>) a Gradle build adds as a single
-dependency. It needs no Gradle and no JDK: the compiler builds each <code>.so</code>
-with the NDK (found as for any Android link, above) and writes the archive
-itself.</p>
+at once, with the Java bindings, as one Android library (<code>.aar</code>) a Gradle
+build adds as a single dependency. It needs no Gradle and no JDK: the
+compiler builds each <code>.so</code> with the NDK (found as for any Android link,
+above) and writes the archive itself.</p>
 <pre><code class="language-sh">pepper build --lib aar greeter.pep -o greeter.aar
 </code></pre>
 <p>The name comes from the output (<code>greeter</code>, which takes letters, digits and
-<code>_</code>): the library <code>libgreeter.so</code>, which Java loads with
-<code>System.loadLibrary("greeter")</code>, its header <code>greeter.h</code>, and the manifest's
-package, <code>pepper.greeter</code>. It holds:</p>
+<code>_</code>): the library <code>libgreeter.so</code>, its header <code>greeter.h</code>, and the Java
+package, <code>pepper.greeter</code>, also the manifest's. It holds:</p>
 <pre><code class="language-text">greeter.aar
   AndroidManifest.xml       minSdkVersion 30
-  classes.jar, R.txt, res/  empty: the library has no Java code or resources
+  classes.jar               the Java bindings: pepper.greeter.Greeter, and a class per struct
+  R.txt, res/               empty: the library has no resources
   include/greeter.h
   jni/arm64-v8a/libgreeter.so
   jni/x86_64/libgreeter.so
   LICENSE-OpenSSL.txt       only when the library imports tls (see Shipping)
 </code></pre>
-<p>Add it to the app module, and Gradle puts each ABI's <code>.so</code> in the APK:</p>
+<p>Add it to the app module, and Gradle puts each ABI's <code>.so</code> in the APK and
+the classes on the app's class path:</p>
 <pre><code class="language-kotlin">dependencies {
     implementation(files("libs/greeter.aar"))
 }
 </code></pre>
-<p>The <code>.so</code> holds only the Pepper code and its C functions, so the JNI
-functions (<code>jni.c</code> above) go in a library of the app's own, built with the
-NDK against <code>include/greeter.h</code> and linked with the <code>.aar</code>'s
-<code>jni/&lt;abi&gt;/libgreeter.so</code> (<code>-L jni/&lt;abi&gt; -lgreeter</code>). Java loads that
-library, and Android loads <code>libgreeter.so</code> first as its dependency.</p>
+<p>Each <code>.so</code> holds the Pepper code and the JNI functions, so the app calls
+<code>Greeter.greet("x")</code> with no C of its own.</p>
 <h2 id="threads-1"><a class="header" href="#threads-1">Threads</a></h2>
 <p>Exported functions may be called from any thread (see
 <a href="language/c-interop.html#initialization-panics-and-threads">Initialization, panics and threads</a>),
@@ -20536,23 +20562,22 @@ breakpoints in the <code>.pep</code> files by path.</p>
 same Pepper library, <a href="language/../../examples/mobile/greeter.pep"><code>greeter.pep</code></a>:</p>
 <ul>
 <li><code>ios/</code>: a SwiftUI app (<code>PepperDemo.swift</code>), and <code>build.sh</code>, which builds
-it with <code>swiftc</code> for the simulator and for devices, installs it in a
-booted simulator, launches it and checks its output; and <code>package/</code>, a
-Swift package whose tests <code>import Greeter</code> from the package <code>--lib swift-package</code> writes, which <code>package.sh</code> builds and runs in the
-simulator with <code>xcodebuild test</code>.</li>
-<li><code>android/</code>: an activity in Java with the JNI functions in <code>jni.c</code>, and
-<code>build.sh</code>, which builds the APK with the Android SDK's own tools
-(<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed), installs it
-in the emulator, starts it and checks its log. With
-<code>PEPPER_ANDROID_AAR=1</code> it builds the library with <code>--lib aar</code> instead,
-checks the <code>.aar</code>'s layout, and links <code>jni.c</code> against its
-<code>libgreeter.so</code>, which the APK carries beside it.</li>
+it with <code>swiftc</code> and the library's <code>--bindings swift</code> for the simulator
+and for devices, installs it in a booted simulator, launches it and
+checks its output; and <code>package/</code>, a Swift package whose tests <code>import Greeter</code> from the package <code>--lib swift-package</code> writes and call its
+bindings, which <code>package.sh</code> builds and runs in the simulator with
+<code>xcodebuild test</code>.</li>
+<li><code>android/</code>: an activity in Java that calls the bindings of the library's
+<code>--lib aar</code> (<code>pepper.greeter.Greeter</code>), and <code>build.sh</code>, which builds the
+<code>.aar</code>, checks its layout, and builds the APK with the Android SDK's own
+tools (<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed),
+installs it in the emulator, starts it and checks its log.</li>
 </ul>
 <p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
-(<code>adb shell</code>), then builds and runs the two apps, the Swift package's
-tests, and the Android app again on the <code>.aar</code>. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
+(<code>adb shell</code>), then builds and runs the two apps and the Swift package's
+tests. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to <code>localhost</code> and <code>127.0.0.1</code>, checks that ALPN chose
 <code>http/1.1</code>, sends <code>GET /</code>, checks that a connector without the authority is
@@ -20578,8 +20603,9 @@ whenever the version the script pins has not been published.</p>
 <ul>
 <li><strong>TLS on iOS</strong>: servers, client certificates and TLS 1.3 (which need a
 SecIdentity and Network.framework).</li>
-<li><strong>Generated bindings</strong>: the JNI layer and the Swift wrappers are written
-by hand; a generator could write them from the header.</li>
+<li><strong>Bindings</strong>: <code>[T]</code> and <code>Data</code> (an export takes no array), <code>Result</code> as
+<code>throws</code> (an export returns no <code>Result</code>), callbacks (a C function
+pointer is Swift-only), and a struct's exports as methods of its class.</li>
 <li><strong>Packaging</strong>: <code>pep.toml</code> keys for <code>--lib xcframework</code> and <code>--lib aar</code>,
 an <code>.aar</code> for an API level other than 30, Mac Catalyst and macOS slices
 in the <code>.xcframework</code>, and <code>--lib jnilibs</code> (each ABI's <code>.so</code> laid out
@@ -22134,6 +22160,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
 <tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
+<tr><td><code>--bindings swift</code>, <code>--bindings java</code></td><td>With <code>--lib static</code> or <code>--lib shared</code> (<code>java</code>: <code>--lib shared</code>), also write Swift or Java bindings of the <code>[Export]</code>ed functions beside the header</td><td>none</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
@@ -22308,6 +22335,28 @@ goes beside it as <code>LICENSE-OpenSSL.txt</code>.</li>
 (<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
 warning. See
 <a href="tools/../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
+<p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
+header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed
+functions with its own values (a <code>String</code> in and out, an object for each
+struct handle), named in camel case:</p>
+<ul>
+<li><code>--bindings swift</code> writes <code>name.swift</code>, a Swift function for each export
+and a class for each struct handle, and the <code>module.modulemap</code> of the C
+module they import, <code>Cname</code> (the header). Compile <code>name.swift</code> with the
+app's Swift code and <code>-I</code> its folder.</li>
+<li><code>--bindings java</code> (only with <code>--lib shared</code>) writes <code>name.jar</code>, the class
+<code>pepper.name.Name</code> (in Pascal case) of a <code>static native</code> method for each
+export, which loads <code>libname.so</code>, and a class for each struct handle
+(<code>AutoCloseable</code>); and <code>name_jni.c</code>, the JNI functions of those methods,
+which the link compiles into the library. The class files are written
+by the compiler, so this needs no JDK, but the link needs a clang that
+finds <code>jni.h</code>, as the Android NDK's does. An export that passes a C
+function pointer, or whose name Java cannot use, is an error.</li>
+</ul>
+<p><code>--lib swift-package</code> and <code>--lib aar</code> write them themselves; with those,
+or without <code>--lib</code>, <code>--bindings</code> is a usage error. See
+<a href="tools/../language/mobile.html#bindings">iOS and Android</a>.</p>
 <h3 id="--lib-xcframework---lib-swift-package"><a class="header" href="#--lib-xcframework---lib-swift-package"><code>--lib xcframework</code>, <code>--lib swift-package</code></a></h3>
 <p>Builds the static library of an iOS app's Pepper code for every iOS target
 at once, packaged as Xcode and SwiftPM take it. Each is named for its
@@ -22324,8 +22373,10 @@ by side, each in a folder of the build folder's <code>xcframework/</code>, and
 writes the simulator's two archives into one universal file itself, as
 <code>lipo</code> would, so this needs no Xcode and works on any system.</li>
 <li><code>--lib swift-package</code> writes the folder <code>Name</code> (<code>-o Name</code>) holding
-<code>Name.xcframework</code> and a <code>Package.swift</code> whose library product <code>Name</code> is
-that binary target, for iOS 15 and later. An app adds it as a local
+<code>CName.xcframework</code> (as above, its module named <code>CName</code>), the Swift
+bindings of <code>--bindings swift</code> as <code>Sources/Name/Name.swift</code>, and a
+<code>Package.swift</code> whose library product <code>Name</code> is that Swift target over
+the binary target, for iOS 15 and later. An app adds it as a local
 package (<code>.package(path: "Name")</code>), or from the repository it is
 committed to.</li>
 </ul>
@@ -22338,9 +22389,11 @@ library a Gradle build adds: <code>name.aar</code> (<code>-o name.aar</code>), n
 output, which takes letters, digits and <code>_</code>. It holds
 <code>jni/&lt;abi&gt;/libname.so</code> for each ABI, the header as <code>include/name.h</code>, an
 <code>AndroidManifest.xml</code> for the package <code>pepper.name</code> and API level 30, the
-empty <code>classes.jar</code>, <code>R.txt</code> and <code>res/</code> an <code>.aar</code> must have, and, when the
-program imports <code>tls</code>, OpenSSL's license as <code>LICENSE-OpenSSL.txt</code>. The
-compiler builds each library by running itself with <code>--lib shared --target &lt;triple&gt;</code>, side by side, each in a folder of the build folder's
+Java bindings of <code>--bindings java</code> as <code>classes.jar</code> (each <code>.so</code> holds their
+JNI functions), the empty <code>R.txt</code> and <code>res/</code> an <code>.aar</code> must have, and,
+when the program imports <code>tls</code>, OpenSSL's license as
+<code>LICENSE-OpenSSL.txt</code>. The compiler builds each library by running itself
+with <code>--lib shared --bindings java --target &lt;triple&gt;</code>, side by side, each in a folder of the build folder's
 <code>aar/</code>, and writes the zip itself, so this needs the Android NDK (found as
 for any Android link: <code>--sysroot</code>, <code>ANDROID_NDK_HOME</code> or <code>ANDROID_HOME</code>)
 but no Gradle or JDK. It cannot be combined with <code>--target</code> or the

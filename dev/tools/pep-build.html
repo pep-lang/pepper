@@ -203,6 +203,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
 <tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
+<tr><td><code>--bindings swift</code>, <code>--bindings java</code></td><td>With <code>--lib static</code> or <code>--lib shared</code> (<code>java</code>: <code>--lib shared</code>), also write Swift or Java bindings of the <code>[Export]</code>ed functions beside the header</td><td>none</td></tr>
 <tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
@@ -377,6 +378,28 @@ goes beside it as <code>LICENSE-OpenSSL.txt</code>.</li>
 (<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
 warning. See
 <a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
+<p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
+header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed
+functions with its own values (a <code>String</code> in and out, an object for each
+struct handle), named in camel case:</p>
+<ul>
+<li><code>--bindings swift</code> writes <code>name.swift</code>, a Swift function for each export
+and a class for each struct handle, and the <code>module.modulemap</code> of the C
+module they import, <code>Cname</code> (the header). Compile <code>name.swift</code> with the
+app's Swift code and <code>-I</code> its folder.</li>
+<li><code>--bindings java</code> (only with <code>--lib shared</code>) writes <code>name.jar</code>, the class
+<code>pepper.name.Name</code> (in Pascal case) of a <code>static native</code> method for each
+export, which loads <code>libname.so</code>, and a class for each struct handle
+(<code>AutoCloseable</code>); and <code>name_jni.c</code>, the JNI functions of those methods,
+which the link compiles into the library. The class files are written
+by the compiler, so this needs no JDK, but the link needs a clang that
+finds <code>jni.h</code>, as the Android NDK's does. An export that passes a C
+function pointer, or whose name Java cannot use, is an error.</li>
+</ul>
+<p><code>--lib swift-package</code> and <code>--lib aar</code> write them themselves; with those,
+or without <code>--lib</code>, <code>--bindings</code> is a usage error. See
+<a href="../language/mobile.html#bindings">iOS and Android</a>.</p>
 <h3 id="--lib-xcframework---lib-swift-package"><a class="header" href="#--lib-xcframework---lib-swift-package"><code>--lib xcframework</code>, <code>--lib swift-package</code></a></h3>
 <p>Builds the static library of an iOS app's Pepper code for every iOS target
 at once, packaged as Xcode and SwiftPM take it. Each is named for its
@@ -393,8 +416,10 @@ by side, each in a folder of the build folder's <code>xcframework/</code>, and
 writes the simulator's two archives into one universal file itself, as
 <code>lipo</code> would, so this needs no Xcode and works on any system.</li>
 <li><code>--lib swift-package</code> writes the folder <code>Name</code> (<code>-o Name</code>) holding
-<code>Name.xcframework</code> and a <code>Package.swift</code> whose library product <code>Name</code> is
-that binary target, for iOS 15 and later. An app adds it as a local
+<code>CName.xcframework</code> (as above, its module named <code>CName</code>), the Swift
+bindings of <code>--bindings swift</code> as <code>Sources/Name/Name.swift</code>, and a
+<code>Package.swift</code> whose library product <code>Name</code> is that Swift target over
+the binary target, for iOS 15 and later. An app adds it as a local
 package (<code>.package(path: "Name")</code>), or from the repository it is
 committed to.</li>
 </ul>
@@ -407,9 +432,11 @@ library a Gradle build adds: <code>name.aar</code> (<code>-o name.aar</code>), n
 output, which takes letters, digits and <code>_</code>. It holds
 <code>jni/&lt;abi&gt;/libname.so</code> for each ABI, the header as <code>include/name.h</code>, an
 <code>AndroidManifest.xml</code> for the package <code>pepper.name</code> and API level 30, the
-empty <code>classes.jar</code>, <code>R.txt</code> and <code>res/</code> an <code>.aar</code> must have, and, when the
-program imports <code>tls</code>, OpenSSL's license as <code>LICENSE-OpenSSL.txt</code>. The
-compiler builds each library by running itself with <code>--lib shared --target &lt;triple&gt;</code>, side by side, each in a folder of the build folder's
+Java bindings of <code>--bindings java</code> as <code>classes.jar</code> (each <code>.so</code> holds their
+JNI functions), the empty <code>R.txt</code> and <code>res/</code> an <code>.aar</code> must have, and,
+when the program imports <code>tls</code>, OpenSSL's license as
+<code>LICENSE-OpenSSL.txt</code>. The compiler builds each library by running itself
+with <code>--lib shared --bindings java --target &lt;triple&gt;</code>, side by side, each in a folder of the build folder's
 <code>aar/</code>, and writes the zip itself, so this needs the Android NDK (found as
 for any Android link: <code>--sysroot</code>, <code>ANDROID_NDK_HOME</code> or <code>ANDROID_HOME</code>)
 but no Gradle or JDK. It cannot be combined with <code>--target</code> or the

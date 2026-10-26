@@ -1102,6 +1102,9 @@ refuses initial-exec there, so an Android library's thread-locals use
 the general-dynamic model, which costs a call (<code>__tls_get_addr</code> on
 x86_64, a TLS descriptor's on arm64) per access.</li>
 </ul>
+<p>Swift, Kotlin and Java code can call the exports with its own values
+instead: <code>--bindings swift</code> and <code>--bindings java</code> write bindings beside the
+header (see <a href="mobile.html#bindings">iOS and Android</a>).</p>
 <h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
 <ul>
 <li>Module-scope variables are initialized when the library is loaded, before
