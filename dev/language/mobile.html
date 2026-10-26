@@ -492,6 +492,18 @@ includes OpenSSL. The iOS build bundles nothing.</li>
 <p><code>-g</code> writes DWARF, which LLDB reads in both Xcode and Android Studio. Build
 the library with <code>-g</code> and the app in its debug configuration, and set
 breakpoints in the <code>.pep</code> files by path.</p>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p><code>pepper test --target</code> builds a package's <code>[Test]</code> functions for the
+simulator or Android and runs them there, reporting as on the desktop (see
+<a href="../tools/pep-test.html#testing-on-ios-and-android">Testing on iOS and Android</a>):</p>
+<pre><code class="language-sh">pepper test --target aarch64-apple-ios-simulator   # in the booted simulator
+pepper test --target x86_64-linux-android          # on the running emulator
+</code></pre>
+<p>An Android test runs as an <code>adb shell</code> program, which SELinux allows less
+than an app: it cannot make a Unix socket file or a hard link in the
+folders it can write, such as <code>/data/local/tmp</code>.
+Mark a test that needs them <code>[Target(!OS(Android))]</code>, or leave the part
+that does out, as the runtime's own tests do.</p>
 <h2 id="the-prototype-apps"><a class="header" href="#the-prototype-apps">The prototype apps</a></h2>
 <p><code>docs/examples/mobile/</code> holds a small app for each platform that calls the
 same Pepper library, <a href="../../examples/mobile/greeter.pep"><code>greeter.pep</code></a>:</p>
@@ -509,7 +521,8 @@ tools (<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner<
 installs it in the emulator, starts it and checks its log.</li>
 </ul>
 <p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
-it builds every documentation example for the iOS simulator and for Android,
+it runs the runtime's <code>[Test]</code>s in the simulator and in the emulator with
+<code>pep-test --target</code>, builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
 (<code>adb shell</code>), then builds and runs the two apps and the Swift package's
 tests. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
@@ -523,7 +536,10 @@ the emulator against the same kind of server, which <code>adb reverse</code> mak
 emulator's <code>localhost</code>, with the same opt-in public fetch. The Android run
 also works on Linux, for the host's ABI (x86_64 there), as CI runs it:
 <code>scripts/ci-provision-android.sh</code> sets up an emulator on a
-GitHub-hosted Linux runner, since Apple silicon runners cannot run one.</p>
+GitHub-hosted Linux runner, since Apple silicon runners cannot run one.
+CI's <code>mobile</code> workflow (<code>.github/workflows/mobile.yml</code>) runs the script on
+both, with the commit's own compiler (see
+<a href="../contributing/tests.html#on-ios-and-android">Testing the runtime and the compiler</a>).</p>
 <pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 </code></pre>
 <p>From a checkout, programs for Android that import <code>tls</code> need the static

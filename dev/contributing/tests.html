@@ -302,6 +302,31 @@ decision and its reason in its log and in the run's summary, under
 "Compiler". To check a commit by hand:</p>
 <pre><code class="language-bash">scripts/ci-published-compiler.sh [&lt;commit&gt;]   # exit 0: the published compiler will do
 </code></pre>
+<h3 id="on-ios-and-android"><a class="header" href="#on-ios-and-android">On iOS and Android</a></h3>
+<p><code>scripts/mobile-test.sh</code> runs the runtime's tests in the iOS simulator and
+the Android emulator, with <code>pep-test --target</code> (see
+<a href="../tools/pep-test.html#testing-on-ios-and-android">Testing on iOS and Android</a>),
+from <code>runtime/</code> as above, then every docs example and the prototype apps
+(see <a href="../language/mobile.html#the-prototype-apps">iOS and Android</a>). By
+hand, on a Mac with Xcode, or on Linux for Android:</p>
+<pre><code class="language-bash">bash scripts/openssl-android.sh fetch runtime     # once: the tls module's OpenSSL for Android
+PEPPER_RUNTIME=$PWD/runtime bash scripts/mobile-test.sh target/compiler/pep-build /tmp/mobile android
+</code></pre>
+<p>Or only the tests, in a simulator or emulator already running:</p>
+<pre><code class="language-bash">cd runtime
+pepper test --target x86_64-linux-android
+</code></pre>
+<p>CI's <code>mobile</code> workflow (<code>.github/workflows/mobile.yml</code>) runs the script on
+GitHub-hosted runners, iOS on macOS and Android on Linux (where
+<code>scripts/ci-provision-android.sh</code> sets up the emulator, with KVM), on
+every push to main and nightly, but not on pull requests: the iOS job
+takes about 40 minutes on a 3-core macOS runner and holds one of the
+few macOS runners CI's own test jobs wait for. Each job builds the commit's compiler with
+stage 0, from the build cache the test jobs keep, and the Android job
+fetches the OpenSSL itself, so <code>gh workflow run mobile.yml --ref &lt;branch&gt;</code>
+checks a branch with nothing else to set up. A test that cannot run there
+(the runtime's need a Unix socket file or a hard link, which <code>adb shell</code>
+may not make) leaves that part out with <code>[Target(!OS(Android))]</code>.</p>
 <p>Two Pepper tools depend on packages in other repositories. The compiler
 written in Pepper, <code>tools/compiler</code>, depends on <code>pep-lang/pepper-llvm</code>, and
 the language server <code>tools/pep-lsp</code> depends on <code>pep-lang/pepper-lsp</code>. Both
