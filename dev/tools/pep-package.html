@@ -445,8 +445,9 @@ Each is an error at its <code>path</code>, printed before the list:</p>
 </li>
 <li>
 <p><code>minimum_toolchain</code> is at least the release that reads each newer
-<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>, <code>[target]</code>,
-<code>[features]</code>, <code>[overrides]</code> and <code>[workspace]</code> tables, and a
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>,
+<code>[build-dependencies]</code>, <code>[target]</code>, <code>[features]</code>, <code>[overrides]</code> and
+<code>[workspace]</code> tables, and a
 dependency's <code>optional</code>, <code>features</code>, <code>default-features</code>, <code>workspace</code>
 and <code>package</code>, need 0.11.0;</p>
 </li>
@@ -487,6 +488,8 @@ dependent imports the package by, when that is not the package's own
 marks:</p>
 <ul>
 <li><code>[dev]</code>: only the project's dev-dependencies lead to it;</li>
+<li><code>[build]</code>: only build-dependencies lead to it (see
+<a href="projects.html#build-dependencies"><code>[build-dependencies]</code></a>);</li>
 <li><code>[target: &lt;condition&gt;]</code>: only builds for the targets the condition
 selects need it (see <a href="projects.html#targetconditiondependencies"><code>[target]</code> tables</a>);</li>
 <li><code>[override: &lt;source&gt;]</code>: the project's <a href="projects.html#overrides"><code>[overrides]</code></a>
@@ -678,7 +681,8 @@ pep-package: vendored numbers 1.3.1 (github:other/numbers)
 pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
 </code></pre>
 <p>Commit the folder with <code>pep.toml</code> and <code>pep.lock</code>. It holds every package
-in the lock: every platform's, and those only <code>[dev-dependencies]</code> lead
+in the lock: every platform's, those only <code>[build-dependencies]</code> lead to,
+which build scripts build with, and those only <code>[dev-dependencies]</code> lead
 to, since <code>pepper test</code> and the examples build from it too (Cargo vendors
 everything for the same reason). A fork an <code>[overrides]</code> entry names is vendored in
 the original's place; a <code>path</code> override is not, its folder being the
@@ -773,6 +777,7 @@ each with the nodes of its own dependencies:</p>
       "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
       "source": "github:other/winapi",
       "dev": false,
+      "build": false,
       "target": "OS(Windows)",
       "override": null,
       "optional": true,
@@ -792,6 +797,7 @@ asks for it:</p>
 <tr><td><code>commit</code></td><td>Its locked commit, or <code>null</code> for the project and a folder</td></tr>
 <tr><td><code>source</code></td><td>Its source (<code>github:other/winapi</code>); <code>""</code> for the project</td></tr>
 <tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it (<code>[dev]</code>)</td></tr>
+<tr><td><code>build</code></td><td>Whether only build-dependencies lead to it (<code>[build]</code>)</td></tr>
 <tr><td><code>target</code></td><td>The condition of the targets that need it (<code>[target: ...]</code>), or <code>null</code> for every target</td></tr>
 <tr><td><code>override</code></td><td>What <code>[overrides]</code> replaces it with (<code>[override: ...]</code>), or <code>null</code></td></tr>
 <tr><td><code>optional</code></td><td>Whether the entry says <code>optional = true</code> (<code>[optional]</code>)</td></tr>
@@ -830,6 +836,7 @@ with <code>--exit-code</code> as without <code>--json</code>:</p>
 <tr><td><code>latest</code></td><td>The newest version it offers, or <code>null</code> when it has none</td></tr>
 <tr><td><code>source</code></td><td>Its source</td></tr>
 <tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>build</code></td><td>Whether only build-dependencies lead to it</td></tr>
 <tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
 <tr><td><code>retracted</code></td><td>Why its author retracted the locked version, or <code>null</code></td></tr>
 </tbody></table>
@@ -841,6 +848,7 @@ with the exit status as without <code>--json</code>:</p>
 <tr><td><code>patched</code></td><td>Its <code>patched</code> versions, as written</td></tr>
 <tr><td><code>package</code>, <code>version</code>, <code>source</code></td><td>The affected package, its locked version and its source</td></tr>
 <tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>build</code></td><td>Whether only build-dependencies lead to it</td></tr>
 <tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
 <tr><td><code>paths</code>, <code>total</code></td><td>The first 20 paths to it and how many there are, as <code>why --json</code> writes them</td></tr>
 </tbody></table>
@@ -860,7 +868,10 @@ commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
 sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
 <p>A package that only the project's <code>[dev-dependencies]</code> lead to has
-<code>dev = true</code>; one that a dependency leads to as well does not.</p>
+<code>dev = true</code>; one that a dependency leads to as well does not. A package
+that only <a href="projects.html#build-dependencies"><code>[build-dependencies]</code></a> lead to,
+any package's, has <code>build = true</code>: a build script imports it, built for the
+machine building, and no program links it.</p>
 <p>A member of a repository's workspace (a dependency with
 <a href="projects.html#a-member-as-a-git-dependency"><code>package</code></a>) has <code>#</code> and the
 member after the repository in its <code>source</code>, and its own commit, the one
@@ -1053,6 +1064,10 @@ until the override changes or <code>update</code> names the package.</li>
 <li>The project's own <code>[dev-dependencies]</code> are resolved with its
 dependencies, as requirements of the project; a dependency's
 <code>[dev-dependencies]</code> are not part of the graph at all.</li>
+<li>Every package's <code>[build-dependencies]</code> are resolved with the rest, its
+dependencies' included: a dependency's build script runs in the
+project's build. A package both its code and a build script need is one
+copy, at one version.</li>
 <li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code>, the project's and its
 dependencies', is resolved with the rest, whatever the platform
 resolving, so one version of a package serves every platform.</li>

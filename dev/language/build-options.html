@@ -200,7 +200,9 @@ one wins.</li>
 can mark code only tests use (see <a href="testing.html#test-builds">Unit tests</a>).
 A package's <code>[features]</code> that a build turns on define options too, named
 <code>&lt;package&gt;_&lt;feature&gt;</code> (<code>http_tls</code>; see
-<a href="../tools/projects.html#features">Features</a>).</p>
+<a href="../tools/projects.html#features">Features</a>), and so do the
+<code>pep:build-option=NAME</code> lines a package's build script prints, named
+<code>&lt;package&gt;_&lt;NAME&gt;</code> (see <a href="../tools/projects.html#build-scripts">Build scripts</a>).</p>
 <p>A name is a letter or <code>_</code>, then letters, digits and <code>_</code>. Any other name is
 an error:</p>
 <pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'

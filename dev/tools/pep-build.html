@@ -241,7 +241,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
-<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--skip-build-scripts</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--build-script &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
 </tbody></table>
@@ -304,12 +304,18 @@ fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --off
 pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
 </code></pre>
 <h3 id="build-scripts-and---no-build-scripts"><a class="header" href="#build-scripts-and---no-build-scripts">Build scripts and <code>--no-build-scripts</code></a></h3>
-<p>Once the dependencies are fetched, the compiler runs the
-<a href="projects.html#build-scripts">build script</a> of each package the build turns
-on (the project's first): it builds the script for the machine it runs on,
-with itself and <code>--skip-build-scripts</code>, into <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/</code>,
-runs it in the package's folder, and links what it says to. A script whose
-inputs have not changed since its last run is not run again.</p>
+<p>Once the dependencies are fetched, and before it loads the program, the
+compiler runs the <a href="projects.html#build-scripts">build script</a> of each package
+the build turns on (the project's first): it builds the script for the
+machine it runs on, with itself and <code>--build-script</code>, into
+<code>.pep/build/&lt;package&gt;-&lt;hash&gt;/</code>, where the script's package sees only its
+<a href="projects.html#build-dependencies"><code>[build-dependencies]</code></a> and their own
+scripts run; then it runs the script in the package's folder, links what
+it says to, defines the build options it names, and resolves the
+package's <code>import generated</code> to the <a href="projects.html#generated-modules">modules</a>
+it wrote. A script whose inputs have not changed since its last run is not
+run again. The <code>--emit-*</code> modes run them too, since the program they load
+may import what a script generates.</p>
 <p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
 running a dependency's script, which runs that package's code on this
 machine; the project's own script still runs:</p>

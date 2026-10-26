@@ -215,6 +215,9 @@ shapes    = { path = "../shapes" }
 [dev-dependencies]
 fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
 
+[build-dependencies]
+codegen   = { github = "someone/codegen", version = "1" }    # only the build script imports it
+
 [target.'OS(Windows)'.dependencies]
 winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
 
@@ -249,7 +252,7 @@ that folder's <code>.pep</code>, wherever <code>pepper build</code> runs.</p>
 <tr><td><code>output</code></td><td>The executable; building for Windows adds <code>.exe</code> to a name with no extension</td><td>the package's <code>name</code></td></tr>
 <tr><td><code>include</code></td><td>An array of extra folders to search for modules, as <code>-I</code> adds</td><td>none</td></tr>
 <tr><td><code>link</code></td><td>An array of C libraries to link, as <code>-l</code> adds</td><td>none</td></tr>
-<tr><td><code>script</code></td><td>The package's <a href="#build-scripts">build script</a>, which builds its C code before its Pepper code is built</td><td><code>build.pep</code>, when there is one</td></tr>
+<tr><td><code>script</code></td><td>The package's <a href="#build-scripts">build script</a>, which builds its C code, or generates Pepper code, before its Pepper code is built</td><td><code>build.pep</code>, when there is one</td></tr>
 </tbody></table>
 </div>
 <p>Options on the command line still apply: <code>pepper build -O</code> builds the
@@ -261,11 +264,17 @@ project.</p>
 <p>A package that binds a C library can carry the library's C source and build
 it itself, so its users install nothing. Its build script, a Pepper program
 in <code>build.pep</code> at the package's root (or the file <code>[build]</code>'s <code>script</code>
-names), compiles the C code, and prints what the build must link. Every
-build of a program that uses the package (a dependency, or the project
-itself) compiles the script for the machine it runs on and runs it before
-it builds the program, even when it builds for another platform with
-<code>--target</code>. Cargo users know it as <code>build.rs</code>.</p>
+names), compiles the C code, and prints what the build must link. It can
+also write Pepper modules the package imports (<a href="#generated-modules">Generated
+modules</a>) and define build options its code reads.
+Every build of a program that uses the package (a dependency, or the
+project itself) compiles the script for the machine it runs on and runs it
+before it loads the program, even when it builds for another platform with
+<code>--target</code>. The script imports the runtime and its package's
+<a href="#build-dependencies"><code>[build-dependencies]</code></a>, and stands apart from the
+code it builds: building it does not load its package's root module,
+which may import what the script generates, though it may import a file
+beside it. Cargo users know it as <code>build.rs</code>.</p>
 <pre><code class="language-text">native/
 ├── pep.toml
 ├── module.pep        # extern int native_add(int a, int b); and the API around it
@@ -299,7 +308,7 @@ main(): int {
 <tr><td><code>PEP_OPT_LEVEL</code></td><td>The optimization level, <code>0</code> to <code>3</code></td></tr>
 <tr><td><code>PEP_FEATURES</code></td><td>The package's <a href="#features">features</a> the build turns on, separated by commas</td></tr>
 <tr><td><code>PEP_PACKAGE_NAME</code>, <code>PEP_PACKAGE_DIR</code></td><td>The package's name and folder</td></tr>
-<tr><td><code>PEP_OUT_DIR</code></td><td>A folder of the package's own for what the script makes: <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/out</code>, <code>&lt;hash&gt;</code> naming where the package is (below <code>--build</code>'s folder when given)</td></tr>
+<tr><td><code>PEP_OUT_DIR</code></td><td>A folder of the package's own for what the script makes, and the package's <a href="#generated-modules">generated modules</a>: <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/out</code>, <code>&lt;hash&gt;</code> naming where the package is (below <code>--build</code>'s folder when given)</td></tr>
 <tr><td><code>PEP_CLANG</code></td><td>The clang the build links with (see <a href="../language/linking.html#what-the-compiler-links">What the compiler links</a>), empty when there is none; it compiles C for any target LLVM supports</td></tr>
 <tr><td><code>PEP_SYSROOT</code></td><td>The target's system root (<code>--sysroot</code>), empty when there is none</td></tr>
 </tbody></table>
@@ -310,6 +319,7 @@ what to do; other lines are its own and ignored:</p>
 <tr><td><code>pep:object=&lt;file&gt;</code></td><td>Links an object file or a static library (<code>.a</code>, <code>.lib</code>)</td></tr>
 <tr><td><code>pep:link=&lt;name&gt;</code></td><td>Links a library by name, as <code>-l</code> does</td></tr>
 <tr><td><code>pep:link-path=&lt;dir&gt;</code></td><td>Adds a folder the linker searches, as <code>-L</code> does</td></tr>
+<tr><td><code>pep:build-option=&lt;NAME&gt;[=&lt;value&gt;]</code></td><td>Defines the <a href="../language/build-options.html">build option</a> <code>&lt;package&gt;_&lt;NAME&gt;</code>, as <code>-D</code> does (a bare <code>NAME</code> is <code>NAME=1</code>); the package's code reads it as a feature's</td></tr>
 <tr><td><code>pep:warning=&lt;text&gt;</code></td><td>Shows <code>warning: &lt;package&gt;: &lt;text&gt;</code></td></tr>
 <tr><td><code>pep:rerun-if-changed=&lt;path&gt;</code></td><td>Runs the script again when the file, or any file in the folder, changes</td></tr>
 <tr><td><code>pep:rerun-if-env-changed=&lt;name&gt;</code></td><td>Runs the script again when the environment variable changes</td></tr>
@@ -321,12 +331,54 @@ other than 0, which shows what it printed. What the script printed on
 standard error is passed on.</p>
 <p><strong>When it runs again.</strong> The build keeps the script's output in
 <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/stamp</code>, and uses it again until something the script
-depends on changes: its own file, the variables above, and what its
-<code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines name. A script that
-reads other files, such as its C sources or Pepper files of its own it
+depends on changes: its own file, its package's <code>pep.toml</code>, the project's
+<code>pep.lock</code> (which holds its build-dependencies' revisions), the variables
+above, and what its <code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines
+name; or until its <code>PEP_OUT_DIR</code>, or an object it named, is gone. A script
+that reads other files, such as its C sources or Pepper files of its own it
 imports, names them with <code>rerun-if-changed</code>; a change to a file it does not
 name leaves its last output in use. Builds that run side by side
 (<code>pepper test</code>) run one package's script one at a time.</p>
+<h3 id="generated-modules"><a class="header" href="#generated-modules">Generated modules</a></h3>
+<p>A script can write Pepper code, such as bindings made from a C header or
+tables computed at build time, into <code>PEP_OUT_DIR</code>: its <code>module.pep</code> there is
+the module the package's code imports as <code>generated</code>, and a folder there
+holding a <code>module.pep</code> is <code>generated.&lt;folder&gt;</code>. Only the package's own
+files see it, and its imports resolve against the package's dependencies.</p>
+<pre><code class="language-pepper"># build.pep: generates the module that names what it was built for.
+import [File, Path] from io;
+import os;
+
+main(): int {
+    var out = Path(os.environment("PEP_OUT_DIR").value());
+    var target = os.environment("PEP_TARGET").value();
+    File.write_text(out.join(Path("module.pep")), "export built_for(): String {\n    return \"" + target + "\";\n}\n");
+    print("pep:build-option=FAST=1");
+    return 0;
+}
+</code></pre>
+<pre><code class="language-pepper"># module.pep of the package `native`
+import generated;
+
+export describe(): String {
+    return "native for " + generated.built_for();
+}
+
+[BuildOption("native_FAST")]
+export fast(): bool {
+    return true;
+}
+</code></pre>
+<p>A generated module is part of the program like any file: its build cache
+key covers its text, so a script that writes something new rebuilds what
+imports it. A package with no build script has no <code>generated</code> module, and a
+dependency the package names <code>generated</code> is imported in its place. An
+import of a module the script did not write is an error at the import:</p>
+<pre><code class="language-text">module.pep:1:8: error: the build script of 'native', native/build.pep, wrote no module 'generated': no native/.pep/build/native-1a2b3c4d/out/module.pep
+</code></pre>
+<p>The language server finds a package's generated modules after a build has
+made them in the project's <code>.pep/build</code>, and does not see the build options
+a script defines.</p>
 <p><strong>What a build script can do.</strong> A build script is a program like any
 other: it runs with your permissions, can read and write any file you
 can, start programs and use the network. Building a project that depends
@@ -341,11 +393,8 @@ read: <code>note: native 1.0.0 (github:someone/native) has a build script, which
 dependency's script, naming it. The project's own script still runs: it
 is your code.</li>
 </ul>
-<p>What is not supported yet: generating Pepper code (a <code>.pep</code> file a package
-imports from <code>PEP_OUT_DIR</code>), setting build options from a script, a
-<code>[build-dependencies]</code> table (a script imports the runtime and the
-packages the project depends on), a helper package for finding a library
-with <code>pkg-config</code> and compiling C with the target's flags, and a <code>[native]</code>
+<p>What is not supported yet: a helper package for finding a library with
+<code>pkg-config</code> and compiling C with the target's flags, and a <code>[native]</code>
 table that compiles C sources without a script.</p>
 <h2 id="dependencies"><a class="header" href="#dependencies"><code>[dependencies]</code></a></h2>
 <p>Each key is the name source code imports, and its value says where the
@@ -457,6 +506,38 @@ name may be in only one of the two tables.</p>
 <pre><code class="language-text">main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
     1 | import fixtures;
       |        ^~~~~~~~
+</code></pre>
+<h2 id="build-dependencies"><a class="header" href="#build-dependencies"><code>[build-dependencies]</code></a></h2>
+<p>A package the <a href="#build-scripts">build script</a> imports, such as a code
+generator or a helper for compiling C, goes in <code>[build-dependencies]</code>,
+written as in <code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[build-dependencies]
+codegen = { github = "someone/codegen", version = "1" }
+</code></pre>
+<ul>
+<li><strong>Who sees them:</strong> only the package's build script, which is built for
+the machine the build runs on, so they are too; they are never linked
+into the program. The script sees no other dependency of its package
+(an import of one says to add it here), and the package's code does not
+see its build-dependencies. A name may be in <code>[dependencies]</code> too, for
+both to import.</li>
+<li><strong>Part of the package:</strong> unlike dev-dependencies, every package's
+build-dependencies are resolved, a dependency's included, since its
+script runs in your build. One the package's other packages need too is
+one copy, at one version, as for any dependency.</li>
+<li><strong>Locked and vendored with the rest:</strong> <code>pep.lock</code> records them beside the
+other packages, each that only build-dependencies lead to marked
+<code>build = true</code> (and <code>pepper package tree</code> marks it <code>[build]</code>), <code>pepper build</code> fetches them, <code>pepper package vendor</code> copies them, <code>audit</code> checks
+them, and <code>[overrides]</code> and <a href="pep-package.html#two-majors-of-one-package">two majors</a>
+apply to them as to the rest. A build-dependency's own build script runs
+in the build of the script that imports it.</li>
+<li><strong>Not optional:</strong> <code>optional = true</code> there is an error; a script reads its
+package's features from <code>PEP_FEATURES</code>.</li>
+<li><strong>Needs toolchain 0.11.0</strong>, as <code>[dev-dependencies]</code> does.</li>
+</ul>
+<pre><code class="language-text">main.pep:1:8: error: 'codegen' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here
+    1 | import codegen;
+      |        ^~~~~~~
 </code></pre>
 <h2 id="targetconditiondependencies"><a class="header" href="#targetconditiondependencies"><code>[target.'&lt;condition&gt;'.dependencies]</code></a></h2>
 <p>A package only some platforms need, such as a binding to a Windows API,
