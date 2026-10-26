@@ -22286,8 +22286,10 @@ machine it runs on, with itself and <code>--build-script</code>, into
 scripts run; then it runs the script in the package's folder, links what
 it says to, defines the build options it names, and resolves the
 package's <code>import generated</code> to the <a href="tools/projects.html#generated-modules">modules</a>
-it wrote. A script whose inputs have not changed since its last run is not
-run again. The <code>--emit-*</code> modes run them too, since the program they load
+it wrote. A script whose inputs, the Pepper files it imports among them,
+have not changed since its last run is not run again. The script builds in
+the program's <a href="tools/pep-build.html#the-build-cache">build cache</a>, even under <code>--no-cache</code>,
+whose record of the script's build names the files it imports. The <code>--emit-*</code> modes run them too, since the program they load
 may import what a script generates.</p>
 <p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
 running a dependency's script, which runs that package's code on this
@@ -23005,13 +23007,17 @@ other than 0, which shows what it printed. What the script printed on
 standard error is passed on.</p>
 <p><strong>When it runs again.</strong> The build keeps the script's output in
 <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/stamp</code>, and uses it again until something the script
-depends on changes: its own file, its package's <code>pep.toml</code>, the project's
-<code>pep.lock</code> (which holds its build-dependencies' revisions), the variables
-above, and what its <code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines
-name; or until its <code>PEP_OUT_DIR</code>, or an object it named, is gone. A script
-that reads other files, such as its C sources or Pepper files of its own it
-imports, names them with <code>rerun-if-changed</code>; a change to a file it does not
-name leaves its last output in use. Builds that run side by side
+depends on changes: its own file, every Pepper file it imports (files of
+its own beside it, and its build-dependencies' sources; not the runtime),
+its package's <code>pep.toml</code>, the project's <code>pep.lock</code> (which holds its
+build-dependencies' revisions), the variables above, and what its
+<code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines name; or until its
+<code>PEP_OUT_DIR</code>, or an object it named, is gone. The files it imports are the
+ones the <a href="tools/pep-build.html#the-build-cache">build cache</a> recorded its last
+build used, so after the cache is emptied the script runs again. A script that
+reads other files at run time, such as its C sources, names them with
+<code>rerun-if-changed</code>; a change to a file it neither imports nor names leaves
+its last output in use. Builds that run side by side
 (<code>pepper test</code>) run one package's script one at a time.</p>
 <h3 id="generated-modules"><a class="header" href="#generated-modules">Generated modules</a></h3>
 <p>A script can write Pepper code, such as bindings made from a C header or
@@ -23660,6 +23666,8 @@ with the template's placeholder name replaced by the package's:</p>
   greet.pep                 one documented function, geometry.greet
   tests/greet_test.pep      import geometry; and a [Test]
   tests/run.sh              runs the tests with the package on the import path
+  native/build.pep          an example build script, not wired in: compiles native/add.c
+  native/add.c              the example's C function, geometry_add
   .github/workflows/ci.yml  tests on Linux, macOS and Windows; releases on a vX.Y.Z tag
   .gitignore                .pep/
   README.md                 what it does, how to add it, test it and release it
@@ -23670,6 +23678,11 @@ the package's folder on the import path under that name, so they run with
 <code>PATH</code>), as CI does. The README and <code>pep.toml</code> name the repository as
 <code>OWNER/pepper-&lt;name&gt;</code>: put in the GitHub owner. The template's own
 <code>TEMPLATE.md</code> lists what else to fill in.</p>
+<p><code>native/</code> shows a <a href="tools/projects.html#build-scripts">build script</a> that compiles
+C code for the build's target. Nothing runs it until <code>pep.toml</code>'s
+commented-out <code>[build]</code> is turned on, since toolchains before 0.11 have no
+build scripts; then set <code>minimum_toolchain = "0.11.0"</code> too. A package
+without C code deletes the folder.</p>
 <p>The files come from the template repository word for word, so a package
 started either way is the same; the template's CI checks that what
 <code>pepper new mypkg --lib --license Apache-2.0</code> writes matches it. To

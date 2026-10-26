@@ -231,6 +231,8 @@ with the template's placeholder name replaced by the package's:</p>
   greet.pep                 one documented function, geometry.greet
   tests/greet_test.pep      import geometry; and a [Test]
   tests/run.sh              runs the tests with the package on the import path
+  native/build.pep          an example build script, not wired in: compiles native/add.c
+  native/add.c              the example's C function, geometry_add
   .github/workflows/ci.yml  tests on Linux, macOS and Windows; releases on a vX.Y.Z tag
   .gitignore                .pep/
   README.md                 what it does, how to add it, test it and release it
@@ -241,6 +243,11 @@ the package's folder on the import path under that name, so they run with
 <code>PATH</code>), as CI does. The README and <code>pep.toml</code> name the repository as
 <code>OWNER/pepper-&lt;name&gt;</code>: put in the GitHub owner. The template's own
 <code>TEMPLATE.md</code> lists what else to fill in.</p>
+<p><code>native/</code> shows a <a href="projects.html#build-scripts">build script</a> that compiles
+C code for the build's target. Nothing runs it until <code>pep.toml</code>'s
+commented-out <code>[build]</code> is turned on, since toolchains before 0.11 have no
+build scripts; then set <code>minimum_toolchain = "0.11.0"</code> too. A package
+without C code deletes the folder.</p>
 <p>The files come from the template repository word for word, so a package
 started either way is the same; the template's CI checks that what
 <code>pepper new mypkg --lib --license Apache-2.0</code> writes matches it. To

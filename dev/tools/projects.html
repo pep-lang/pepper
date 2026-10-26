@@ -331,13 +331,17 @@ other than 0, which shows what it printed. What the script printed on
 standard error is passed on.</p>
 <p><strong>When it runs again.</strong> The build keeps the script's output in
 <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/stamp</code>, and uses it again until something the script
-depends on changes: its own file, its package's <code>pep.toml</code>, the project's
-<code>pep.lock</code> (which holds its build-dependencies' revisions), the variables
-above, and what its <code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines
-name; or until its <code>PEP_OUT_DIR</code>, or an object it named, is gone. A script
-that reads other files, such as its C sources or Pepper files of its own it
-imports, names them with <code>rerun-if-changed</code>; a change to a file it does not
-name leaves its last output in use. Builds that run side by side
+depends on changes: its own file, every Pepper file it imports (files of
+its own beside it, and its build-dependencies' sources; not the runtime),
+its package's <code>pep.toml</code>, the project's <code>pep.lock</code> (which holds its
+build-dependencies' revisions), the variables above, and what its
+<code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines name; or until its
+<code>PEP_OUT_DIR</code>, or an object it named, is gone. The files it imports are the
+ones the <a href="pep-build.html#the-build-cache">build cache</a> recorded its last
+build used, so after the cache is emptied the script runs again. A script that
+reads other files at run time, such as its C sources, names them with
+<code>rerun-if-changed</code>; a change to a file it neither imports nor names leaves
+its last output in use. Builds that run side by side
 (<code>pepper test</code>) run one package's script one at a time.</p>
 <h3 id="generated-modules"><a class="header" href="#generated-modules">Generated modules</a></h3>
 <p>A script can write Pepper code, such as bindings made from a C header or
