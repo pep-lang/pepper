@@ -2545,10 +2545,11 @@ a_build_script_runs_again_when_a_module_it_imports_changes() {
     write_file(dir.join("pep.toml"), "[package]\nname = \"app\"\n");
     write_file(dir.join("main.pep"), "main(): int {\n    return 0;\n}\n");
     write_file(dir.join("helper.pep"), "export word(): String {\n    return \"one\";\n}\n");
-    # It counts its runs in its output folder.
+    # It counts its runs in its output folder. Its build warns (a deprecated
+    # call), which still leaves the files it imports recorded.
     write_file(
         dir.join("build.pep"),
-        "import [File, Path] from io;\nimport os;\nimport \"helper\";\n\nmain(): int {\n"
+        "import [File, Path] from io;\nimport os;\nimport \"helper\";\n\nmain(): int {\n    arguments();\n"
             + "    var runs = Path(os.environment(\"PEP_OUT_DIR\").value()).join(Path(\"runs.txt\"));\n"
             + "    File.write_text(runs, File.read_to_string(runs).ok_or(\"\") + word() +\"\\n\");\n"
             + "    return 0;\n}\n"

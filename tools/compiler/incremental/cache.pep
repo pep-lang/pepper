@@ -391,7 +391,7 @@ export struct Cache {
     }
 
     ## Returns the files the program that writes `output` was last built
-    ## from, as `record` listed them, when it was built with no warnings.
+    ## from, as `record` listed them.
     ##
     ## @param output the executable
     ## @returns the files' paths, or `Empty` when there is no record
@@ -413,9 +413,10 @@ export struct Cache {
         return Optional<String[]>.Value(files);
     }
 
-    ## Records that `output` is the program keyed `key`, built with no
-    ## warnings from `files`; a build that warned forgets it instead, so it
-    ## is checked, and warns, again.
+    ## Records that `output` is the program keyed `key`, built from `files`.
+    ## A build that warned is recorded with no key, so `is_built` is false
+    ## and the next build is checked, and warns, again; `program_files`
+    ## still lists its files.
     ##
     ## @param output the executable
     ## @param key the program's key
@@ -424,21 +425,19 @@ export struct Cache {
     ##   `program_files` returns
     record(output: Path, key: String, warned: bool, files: String[]) {
         var path = _record(output);
-        if (warned) {
+        var built = File.read_bytes(output);
+        if (built.is_err()) {
             File.remove(path);
             return;
         }
-        var built = File.read_bytes(output);
-        if (built.is_err()) {
-            return;
-        }
+        var recorded = warned ? "" : key;
         var created = Directory.create_all(path.parent().value());
         if (created.is_err()) {
             return;
         }
         var partial = Path($"{path}.{process.id()}");
         var written = File.write_text(
-            partial, $"{key}\n{digest.to_hex(digest.blake3(built.value()))}\n" + "\n".join(files) + "\n"
+            partial, $"{recorded}\n{digest.to_hex(digest.blake3(built.value()))}\n" + "\n".join(files) + "\n"
         );
         if (written.is_err() or File.rename(partial, path).is_err()) {
             File.remove(partial);

@@ -174,8 +174,8 @@ its package's `pep.toml`, the project's `pep.lock` (which holds its
 build-dependencies' revisions), the variables above, and what its
 `rerun-if-changed` and `rerun-if-env-changed` lines name; or until its
 `PEP_OUT_DIR`, or an object it named, is gone. The files it imports are the
-ones the [build cache](pep-build.md#the-build-cache) recorded its last build used, so a script
-whose build warned, or a cache that was emptied, runs again. A script that
+ones the [build cache](pep-build.md#the-build-cache) recorded its last
+build used, so after the cache is emptied the script runs again. A script that
 reads other files at run time, such as its C sources, names them with
 `rerun-if-changed`; a change to a file it neither imports nor names leaves
 its last output in use. Builds that run side by side
