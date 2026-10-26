@@ -1,0 +1,120 @@
+# The mobile run: scripts/mobile-test.sh in the iOS simulator (macOS) and
+# the Android x86_64 emulator (Linux, with KVM): the runtime's `[Test]`s,
+# through `pep-test --target`, every documentation example, the TLS check
+# and the prototype apps.
+#
+# Each job builds this commit's compiler with stage 0 (the build of main
+# .github/stage0 pins), as ci.yml's test jobs do for a compiler change,
+# from the compiler's build cache those jobs save, and builds against this
+# checkout's runtime. The Android job also provisions the emulator
+# (scripts/ci-provision-android.sh) and fetches the static OpenSSL the tls
+# module links (scripts/openssl-android.sh fetch runtime). So a dispatch
+# needs nothing written by hand:
+#
+#   gh workflow run mobile.yml --ref <branch>
+#
+# It runs on each push to main, nightly (catching a change to the runner
+# images or the SDKs), and by hand. It is not a required check, and it
+# does not run on pull requests: measured on #252, the iOS job takes about
+# 40 minutes on a 3-core macOS runner (the runtime's test programs and the
+# examples build there), and it holds one of the org's few macOS runners,
+# so CI's own test-macos jobs queued behind it; the Android job takes about
+# 15. Before merging a change to the runtime's platform code, dispatch it
+# on the branch (or run scripts/mobile-test.sh by hand).
+name: mobile
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+# Runs queue, so each one finishes with a result.
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  mobile:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ios
+            runner: macos-15
+          - platform: android
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    # The step caps below sum to less, so a stall trips a step (naming the
+    # phase and running the diagnostics) rather than cancelling the job.
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v7
+
+      # LLVM, stage 0, and this commit's compiler in PEPPER_COMPILER_DIR.
+      - uses: ./.github/actions/prepare-tests
+        timeout-minutes: 30
+        with:
+          compiler: "true"
+          token: ${{ github.token }}
+
+      - name: Provision the Android emulator and OpenSSL
+        if: matrix.platform == 'android'
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          bash -euxo pipefail scripts/ci-provision-android.sh
+          bash -euxo pipefail scripts/openssl-android.sh fetch runtime
+
+      # About 40 minutes on iOS and 15 on Android (see the top).
+      - name: Run the tests and the examples
+        timeout-minutes: 55
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          PEPPER_RUNTIME: ${{ github.workspace }}/runtime
+        run: bash -euxo pipefail scripts/mobile-test.sh "$PEPPER_COMPILER_DIR/pep-build" "$RUNNER_TEMP/mobile" "$PLATFORM"
+
+      # The simulator's or the emulator's state, and the run's logs (each
+      # build's and each program's output) as an artifact.
+      - name: Diagnostics
+        if: failure() || cancelled()
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set +e
+          "$PEPPER_COMPILER_DIR/pep-build" --version
+          if [ "$(uname -s)" = Darwin ]; then
+            xcrun simctl list devices booted
+            xcrun --sdk iphonesimulator --show-sdk-path
+          else
+            adb=$ANDROID_HOME/platform-tools/adb
+            "$adb" devices -l
+            echo "::group::emulator.log"
+            cat "$RUNNER_TEMP/mobile/emulator.log"
+            echo "::endgroup::"
+            # Bounded: once mobile-test.sh has stopped the emulator, adb
+            # would wait for a device forever.
+            echo "::group::logcat crashes"
+            timeout 30 "$adb" logcat -d -b crash
+            echo "::endgroup::"
+          fi
+          df -m .
+          ls -l "$RUNNER_TEMP/mobile" "$RUNNER_TEMP/mobile/$PLATFORM"
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      - name: Upload the logs
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-${{ matrix.platform }}
+          path: |
+            ${{ runner.temp }}/mobile/**/*.log
+            ${{ runner.temp }}/mobile/**/*.out
+          retention-days: 7
+          if-no-files-found: ignore

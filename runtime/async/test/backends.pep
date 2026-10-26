@@ -24,14 +24,14 @@ export best_backend(): String {
     return "Poll";
 }
 
-# Whether this system has io_uring (Linux only); a test of it has nothing to
-# check elsewhere.
-[Target(OS(Linux))]
+# Whether this system has io_uring (Linux only, and not Android,
+# which refuses it to apps and to `adb shell`); a test of it has nothing to check elsewhere.
+[Target(OS(Linux) && !OS(Android))]
 export has_io_uring(): bool {
     return true;
 }
 
-[Target(!OS(Linux))]
+[Target(!OS(Linux) || OS(Android))]
 export has_io_uring(): bool {
     return false;
 }

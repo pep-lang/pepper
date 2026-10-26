@@ -71,6 +71,10 @@ The program answers two requests, both made by `pep-test`:
   test started ends with it (a job object on Windows, a process group
   elsewhere), so none holds `pep-test`'s pipes to its output open.
 
+With `PEPPER_TEST_DIRECTORY` set and not empty, the program first makes
+that folder its current one: `pep-test` sets it where a program cannot
+start in the folder the tests run from (the iOS simulator).
+
 ### Constructor
 
 #### TestRunner()

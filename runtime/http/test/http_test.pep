@@ -311,6 +311,11 @@ a_handler_takes_over_the_connection_after_101() {
 
 [Test]
 a_handler_takes_over_a_tls_connection_after_101() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });
@@ -444,6 +449,11 @@ client_checks_the_url() {
 
 [Test]
 https_over_loopback() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });

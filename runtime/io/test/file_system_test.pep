@@ -359,8 +359,14 @@ copy_rename_and_remove_files() {
 }
 
 # A hard link names the same file, and keeps it when the first name moves.
+# Android's SELinux refuses `link` to an `adb shell` program, which is how
+# pep-test runs this there.
 [Test]
 hard_links_keep_a_file_its_first_name_leaves() {
+    [Target(OS(Android))]
+    {
+        return;
+    }
     var folder = TempFolder("hard_links");
     var d = folder.path;
     var a = d.join("a.txt");

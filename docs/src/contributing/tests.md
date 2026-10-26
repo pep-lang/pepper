@@ -146,6 +146,39 @@ decision and its reason in its log and in the run's summary, under
 scripts/ci-published-compiler.sh [<commit>]   # exit 0: the published compiler will do
 ```
 
+### On iOS and Android
+
+`scripts/mobile-test.sh` runs the runtime's tests in the iOS simulator and
+the Android emulator, with `pep-test --target` (see
+[Testing on iOS and Android](../tools/pep-test.md#testing-on-ios-and-android)),
+from `runtime/` as above, then every docs example and the prototype apps
+(see [iOS and Android](../language/mobile.md#the-prototype-apps)). By
+hand, on a Mac with Xcode, or on Linux for Android:
+
+```bash
+bash scripts/openssl-android.sh fetch runtime     # once: the tls module's OpenSSL for Android
+PEPPER_RUNTIME=$PWD/runtime bash scripts/mobile-test.sh target/compiler/pep-build /tmp/mobile android
+```
+
+Or only the tests, in a simulator or emulator already running:
+
+```bash
+cd runtime
+pepper test --target x86_64-linux-android
+```
+
+CI's `mobile` workflow (`.github/workflows/mobile.yml`) runs the script on
+GitHub-hosted runners, iOS on macOS and Android on Linux (where
+`scripts/ci-provision-android.sh` sets up the emulator, with KVM), on
+every push to main and nightly, but not on pull requests: the iOS job
+takes about 40 minutes on a 3-core macOS runner and holds one of the
+few macOS runners CI's own test jobs wait for. Each job builds the commit's compiler with
+stage 0, from the build cache the test jobs keep, and the Android job
+fetches the OpenSSL itself, so `gh workflow run mobile.yml --ref <branch>`
+checks a branch with nothing else to set up. A test that cannot run there
+(the runtime's need a Unix socket file or a hard link, which `adb shell`
+may not make) leaves that part out with `[Target(!OS(Android))]`.
+
 Two Pepper tools depend on packages in other repositories. The compiler
 written in Pepper, `tools/compiler`, depends on `pep-lang/pepper-llvm`, and
 the language server `tools/pep-lsp` depends on `pep-lang/pepper-lsp`. Both

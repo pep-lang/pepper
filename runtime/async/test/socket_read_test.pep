@@ -5,16 +5,7 @@
 
 import async;
 import io;
-
-[Target(OS(Linux))]
-on_linux(): bool {
-    return true;
-}
-
-[Target(!OS(Linux))]
-on_linux(): bool {
-    return false;
-}
+import [has_io_uring] from "backends";
 
 reads_end_on(backend: async.Backend) {
     async.run_with(
@@ -73,7 +64,7 @@ reads_end_on_poll() {
 # Receives go through the ring here, so a cancel waits for the kernel's.
 [Test]
 reads_end_on_io_uring() {
-    if (on_linux()) {
+    if (has_io_uring()) {
         reads_end_on(async.Backend.IoUring);
     }
 }

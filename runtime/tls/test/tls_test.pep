@@ -87,6 +87,11 @@ client(connector: tls.TlsConnector, port: u16, host: String, rounds: int): bool 
 
 [Test]
 tls_echoes_over_loopback() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });
@@ -183,6 +188,11 @@ ping(connector: tls.TlsConnector, port: u16): bool {
 
 [Test]
 tls_client_certificates() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });
@@ -230,6 +240,11 @@ tls_client_certificates() {
 
 [Test]
 tls_reports_bad_identity_files() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });
@@ -288,6 +303,11 @@ negotiate(listener: io.TcpListener, acceptor: tls.TlsAcceptor, offered: String[]
 
 [Test]
 tls_negotiates_protocols_with_alpn() {
+    # A TLS server is not supported on iOS yet (docs/src/language/mobile.md).
+    [Target(OS(IOS))]
+    {
+        return;
+    }
     keep_for_the_program(() => {
         tls.TlsConnector.create();
     });

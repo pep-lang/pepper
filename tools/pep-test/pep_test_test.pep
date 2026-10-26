@@ -130,6 +130,17 @@ reports_a_file_that_does_not_build() {
     expect_ends_with(ran.stdout, "1 passed, 0 failed; 1 test program did not build\n");
 }
 
+# iOS tests run in the simulator only (scripts/mobile-test.sh runs them
+# there, and on Android, in CI's mobile workflow).
+[Test]
+refuses_an_ios_device_target() {
+    var folder = TempFolder("pep_test_ios");
+    write_file(folder.path.join("a_test.pep"), "[Test]\npasses() {}\n");
+    var ran = pep_test(folder.path, ["--target", "aarch64-apple-ios"]);
+    expect_exit(ran, 2);
+    expect_contains(ran.stderr, "simulator triple such as 'aarch64-apple-ios-simulator', not 'aarch64-apple-ios'");
+}
+
 [Test]
 sets_the_build_environment_for_the_builds_only() {
     var folder = TempFolder("pep_test_build_environment");

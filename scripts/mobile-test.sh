@@ -4,7 +4,9 @@
 #
 #   bash scripts/mobile-test.sh <compiler> <output-dir> [ios|android|all] [example-prefix...]
 #
-# <compiler> is a built pep-build. Each documentation example (docs/examples/,
+# <compiler> is a built pep-build. First the runtime's `[Test]`s run on
+# each platform, through `pep-test --target`, built from this checkout.
+# Each documentation example (docs/examples/,
 # a `name.pep` or a folder with `main.pep`) whose name starts with one of the
 # prefixes (all of them when none is given) is built for each platform, run
 # there, and must exit 0, as tools/pep-doc/examples_test.pep requires on the
@@ -137,6 +139,23 @@ report() {
   failures=$((failures + 1))
 }
 
+# The runtime's `[Test]`s for the triple `$1`, run in the simulator or
+# emulator by `pep-test --target` (built from this checkout), from runtime/
+# as scripts/pepper-tests.sh runs them. `$2` names the platform.
+run_tests() {
+  local triple=$1 platform=$2
+  echo "=== $platform: the runtime's tests"
+  mkdir -p "$out/bin"
+  if ! "$compiler" -O "$repo_root/tools/pep-test/main.pep" -o "$out/bin/pep-test" \
+    --build "$out/build-pep-test"; then
+    report "$platform pep-test (build)"
+    return
+  fi
+  # pep-test finds pep-build on the PATH.
+  (cd "$repo_root/runtime" && PATH="$(dirname "$compiler"):$PATH" "$out/bin/pep-test" --target "$triple" \
+    --build-environment PEPC_NO_COMPILATION_UNITS=1) || report "$platform runtime tests"
+}
+
 run_ios() {
   echo "=== iOS simulator"
   local sdk device booted_here=0
@@ -150,6 +169,7 @@ run_ios() {
   fi
   device=${device% *}
   xcrun simctl bootstatus "$device" -b > /dev/null
+  PEPPER_IOS_SIMULATOR=$device run_tests aarch64-apple-ios-simulator ios
 
   local dir="$out/ios"
   build_all aarch64-apple-ios-simulator "$dir" ios
@@ -234,6 +254,7 @@ run_android() {
     [ "$waited" -lt 300 ] || { echo "the emulator did not boot"; cat "$out/emulator.log"; return 1; }
   done
   "$adb" -s "$serial" shell mkdir -p /data/local/tmp/pepper
+  ANDROID_SERIAL=$serial run_tests "$triple" android
 
   local count=0
   while read -r name entry; do
