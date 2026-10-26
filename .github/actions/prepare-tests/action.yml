@@ -142,9 +142,10 @@ runs:
 
     # Saved by every run, pull requests' too, since it is small: the
     # repository keeps 10 GB of caches, which the tests' caches used to fill.
-    # Not after a rerun, which restored this very key.
+    # Not after a rerun, which restored this very key, and only from CI:
+    # the mobile workflow's jobs would save the same caches again.
     - name: Save the compiler's build cache
-      if: inputs.compiler == 'true' && steps.restore.outputs.cache-hit != 'true'
+      if: inputs.compiler == 'true' && steps.restore.outputs.cache-hit != 'true' && github.workflow == 'CI'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.workspace }}/target-test/compiler

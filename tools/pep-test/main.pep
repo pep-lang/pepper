@@ -290,7 +290,8 @@ test_command(options: Options, program: String, arguments: Array<String>, temp: 
             line += $" {shell_quote(argument)}";
         }
         if (!folder.is_empty) {
-            line = $"mkdir -p {folder} && {line}; status=$?; rm -rf {folder}; exit $status";
+            var quoted = shell_quote(folder);
+            line = $"mkdir -p {quoted} && {line}; status=$?; rm -rf {quoted}; exit $status";
         }
         return process.Command(options.tool).arguments(["shell", line]);
     }
@@ -317,10 +318,17 @@ shell_quote(text: String): String {
 push_program(options: Options, program: String, folder: String): String? {
     var pushes = [["shell", $"mkdir -p {options.device}"], ["push", program, $"{options.device}/"]];
     var remote = folder.replace("\\", "/");
-    if (!remote.is_empty and !remote.starts_with("/") and !remote.contains(":") and !remote.split("/").contains("..")) {
+    # Once each: a folder that does not build is built again a file at a
+    # time, and each of those programs needs the same data.
+    if (!remote.is_empty
+        and !remote.starts_with("/")
+        and !remote.contains(":")
+        and !remote.split("/").contains("..")
+        and !options.pushed.contains(remote)) {
+        options.pushed.append(remote);
         var parent = Path(remote).parent();
         var into = parent.is_value() ? $"{options.device}/{parent.value().to_string()}" : options.device;
-        pushes.append_all([["shell", $"mkdir -p {into}"], ["push", folder, $"{into}/"]]);
+        pushes.append_all([["shell", $"mkdir -p {shell_quote(into)}"], ["push", folder, $"{into}/"]]);
     }
     for (var arguments in pushes) {
         var ran = process.Command(options.tool).arguments(arguments).run();
@@ -385,8 +393,11 @@ struct Options {
     var runner: Runner = Runner.Host;
     var tool: String = "";
     var device: String = "";
+    # The test folders already pushed to the Android device.
+    var pushed: Array<String> = __null;
 
     construct() {
+        this.pushed = Array<String>();
         this.filters = Array<String>();
         this.imports = Array<String>();
         this.library_dirs = Array<String>();

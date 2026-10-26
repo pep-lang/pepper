@@ -354,7 +354,8 @@ pepper test --target x86_64-linux-android          # on the running emulator
 ```
 
 An Android test runs as an `adb shell` program, which SELinux allows less
-than an app: it cannot make a Unix socket file or a hard link anywhere.
+than an app: it cannot make a Unix socket file or a hard link in the
+folders it can write, such as `/data/local/tmp`.
 Mark a test that needs them `[Target(!OS(Android))]`, or leave the part
 that does out, as the runtime's own tests do.
 
