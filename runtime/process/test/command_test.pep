@@ -9,11 +9,6 @@ import process;
 
 [Test]
 run_reports_a_missing_program() {
-    # Android's posix_spawnp reports no failed exec (#251).
-    [Target(OS(Android))]
-    {
-        return;
-    }
     var missing = process.Command("no-such-program-for-pepper").run();
     expect_true(missing.is_err());
     expect_true(missing.error().is_not_found());
@@ -33,11 +28,12 @@ exec_returns_why_the_program_cannot_start() {
 # A child started in another folder through fork and exec, the path for a
 # glibc without posix_spawn_file_actions_addchdir_np (before 2.29), which
 # `PEPPER_PROCESS_FORK_SPAWN` forces: the test sets it and checks the
-# child's folder and the errors it reports. Only Linux has the path; a
-# process test on another thread meanwhile takes it too, which is as valid.
+# child's folder and the errors it reports. Only Linux and Android, which
+# starts every child this way, have the path; a process test on another
+# thread meanwhile takes it too, which is as valid.
 [Test]
 starts_a_child_in_a_folder_by_fork_and_exec() {
-    if (os.system_name() != "linux") {
+    if (os.system_name() != "linux" and os.system_name() != "android") {
         return;
     }
     os.set_environment("PEPPER_PROCESS_FORK_SPAWN", "1");

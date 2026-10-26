@@ -4,10 +4,12 @@
 # signatures for Windows and WASI.
 #
 # A child starts with posix_spawnp, which searches the PATH and reports a
-# failed exec as its result. Pipes are made close-on-exec, so a child
-# started by another thread does not inherit them; posix_spawn's file
-# actions give the child its own ends as descriptors 0, 1 and 2. On macOS,
-# POSIX_SPAWN_CLOEXEC_DEFAULT closes every other descriptor in the child.
+# failed exec as its result. Android's bionic reports none (its child
+# `_exit(127)`s), so Android starts every child by fork and exec. Pipes are
+# made close-on-exec, so a child started by another thread does not inherit
+# them; posix_spawn's file actions give the child its own ends as
+# descriptors 0, 1 and 2. On macOS, POSIX_SPAWN_CLOEXEC_DEFAULT closes every
+# other descriptor in the child.
 
 import io;
 import os;
@@ -239,6 +241,11 @@ _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stre
     if (command._working_directory.is_value() and !_process_spawn_changes_folder()) {
         return _process_fork_spawn(command, stdin, stdout, stderr);
     }
+    # Bionic's posix_spawnp reports no failed exec (#251).
+    [Target(OS(Android))]
+    {
+        return _process_fork_spawn(command, stdin, stdout, stderr);
+    }
     __ptr<void> actions = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     __ptr<void> attributes = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     posix_spawn_file_actions_init(actions);
@@ -458,10 +465,10 @@ _process_spawn_changes_folder(): bool {
 }
 
 # Starts `command` with fork and exec, for a working directory posix_spawn
-# cannot set (glibc before 2.29). Everything the child needs is made before
-# the fork: between fork and exec it only duplicates descriptors, changes
-# folder and execs, and reports a failure through a close-on-exec pipe, as
-# Rust's standard library does.
+# cannot set (glibc before 2.29), and for every child on Android. Everything
+# the child needs is made before the fork: between fork and exec it only
+# duplicates descriptors, changes folder and execs, and reports a failure
+# through a close-on-exec pipe, as Rust's standard library does.
 [Target(OS(Linux))]
 _process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
     var streams = [stdin, stdout, stderr];
@@ -518,7 +525,8 @@ _process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Str
     # environment while the child starts.
     var environment_values = command._environment_entries();
     __ptr<__ptr<char>> envp = _process_c_strings(environment_values);
-    var directory = command._working_directory.value().to_string();
+    var changes_folder = command._working_directory.is_value();
+    var directory = changes_folder ? command._working_directory.value().to_string() : "";
     var program = command.program;
     var device = "/dev/null";
     __ptr<char> directory_text = directory.c_str();
@@ -540,7 +548,7 @@ _process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Str
             }
             at = at + 1;
         }
-        if (chdir(directory_text) == 0) {
+        if (!changes_folder or chdir(directory_text) == 0) {
             execvpe(program_text, argv, envp);
         }
         failed[0] = io.IoError.last().code;
