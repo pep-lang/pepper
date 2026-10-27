@@ -208,7 +208,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
-<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script</td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
+<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script; a <code>[native]</code> table still compiles, unless it has <code>flags</code></td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
@@ -318,9 +318,18 @@ have not changed since its last run is not run again. The script builds in
 the program's <a href="#the-build-cache">build cache</a>, even under <code>--no-cache</code>,
 whose record of the script's build names the files it imports. The <code>--emit-*</code> modes run them too, since the program they load
 may import what a script generates.</p>
+<p>After a package's script, if it has one, the compiler compiles the C its
+<a href="projects.html#native"><code>[native]</code></a> table and the
+<code>[target.'&lt;condition&gt;'.native]</code> tables that hold for the target name,
+with its own clang for the target, the system root and the <code>-O</code> level,
+into <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/native/&lt;target&gt;/</code>, and links the objects. An
+object whose source, included headers (from clang's <code>-MD</code> list) and flags
+have not changed is not compiled again.</p>
 <p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
 running a dependency's script, which runs that package's code on this
-machine; the project's own script still runs:</p>
+machine; the project's own script still runs, and so does every
+<code>[native]</code> table, which runs no package code, except a dependency's table with
+<code>flags</code>, which could load a clang plugin from the package and is refused:</p>
 <pre><code class="language-text">error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
 </code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>

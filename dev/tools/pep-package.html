@@ -436,6 +436,12 @@ that branch holds;</p>
 <p><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</p>
 </li>
 <li>
+<p>each <code>sources</code> pattern and <code>include</code> folder of its
+<a href="projects.html#native"><code>[native]</code></a> tables names a file committed in the
+package (<code>git ls-files</code>): a dependent's copy, and a vendored one, holds
+only those, so an ignored or generated file would be missing there;</p>
+</li>
+<li>
 <p>every dependency asks for a version range, not a branch, tag, commit
 or the default branch, so a project depending on this one can resolve
 it with its other packages; a <code>path</code> dependency, such as a workspace
