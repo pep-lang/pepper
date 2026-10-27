@@ -7,12 +7,12 @@
 
 import [drop_body] from "checked";
 import [Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
-import [set_name] from "names";
+import [set_name, without_type_arguments] from "names";
 import [for_each_place, Place, PlaceVisitor] from "places";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import "type_name";
-import [Rewriter] from "walk";
+import [Rewriter, rewrite_block] from "walk";
 
 ## The methods the passes and code generation call without a use in the
 ## source naming them: iteration, copies, hashing, interpolation and the
@@ -93,11 +93,12 @@ _trait_methods(module: Module): HashSet<String> {
 ## @param specialized a struct specialization, just made
 ## @param state the passes' state
 export defer_methods(module: Module, specialized: StructDef, state: PassState) {
-    # A struct with generic methods keeps its methods' bodies: a call in a
-    # body given back late to one of its generic methods would be bound
-    # without that method's specializations (`describe([u])` to the plain
-    # `describe(bool)` beside `describe<T>(Array<T>)`).
-    if (!state.lazy_methods or specialized.generic_methods.count > 0) {
+    # A struct whose methods call its generic methods keeps their bodies:
+    # a call in a body given back late would be bound without the generic
+    # method's specializations (`describe([u])` to the plain
+    # `describe(bool)` beside `describe<T>(Array<T>)`, `tag_of<U>()` to
+    # none).
+    if (!state.lazy_methods or _calls_generic_methods(specialized)) {
         return;
     }
     if (!state.trait_method_names.is_value()) {
@@ -116,18 +117,57 @@ export defer_methods(module: Module, specialized: StructDef, state: PassState) {
     }
 }
 
+## Whether a method of `st` calls one of its generic methods.
+_calls_generic_methods(st: StructDef): bool {
+    if (st.generic_methods.count == 0) {
+        return false;
+    }
+    var calls = _GenericCalls();
+    for (var m in st.generic_methods) {
+        calls.names.insert(set_name(m.name));
+    }
+    for (var m in st.method_members) {
+        if (m.body.is_value()) {
+            rewrite_block(m.body.value(), calls);
+        }
+    }
+    return calls.found;
+}
+
+## Finds a call of a generic method by its bare name or on `this`.
+struct _GenericCalls {
+    var names: HashSet<String> = HashSet<String>();
+    var found: bool = false;
+
+    rewrite(e: Expression): Expression {
+        match (e) {
+            FunctionCall(node) => {
+                found = found or names.contains(without_type_arguments(node.function));
+            }
+            MethodCall(node) => {
+                if (node.this_value is ThisRef) {
+                    found = found or names.contains(without_type_arguments(node.method));
+                }
+            }
+            else => {}
+        }
+        return e;
+    }
+}
+
+extend _GenericCalls with Rewriter;
+
 ## Gives back the bodies of the deferred methods that the code walked so
 ## far names, as `_MethodUses` finds them.
 ##
 ## @param module the model
 ## @param state the passes' state
 ## @returns whether any body came back
-export specialize_used_methods(module: Module, state: PassState, by_name: bool = false): bool {
+export specialize_used_methods(module: Module, state: PassState): bool {
     if (state.deferred.count == 0) {
         return false;
     }
     var uses = _MethodUses(module, state);
-    uses.by_name = by_name;
     # Every place of concrete code, free functions' defaults included.
     for_each_place(module, uses, extensions = false, fields = false);
     # A use on a type spelled as written rather than as the struct is
@@ -239,8 +279,6 @@ struct _MethodUses {
     var on: HashSet<String> = HashSet<String>();
     ## The methods used on values of a type not known yet.
     var anywhere: HashSet<String> = HashSet<String>();
-    ## Whether every use counts by name alone, whatever its type.
-    var by_name: bool = false;
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -293,10 +331,6 @@ struct _MethodUses {
     _found(receiver: Expression, method: String) {
         var name = set_name(method);
         if (state.deferred.count == 0) {
-            return;
-        }
-        if (by_name) {
-            anywhere.insert(name);
             return;
         }
         # A static call through a type (`Result<Uri>.ok`): the type may be
