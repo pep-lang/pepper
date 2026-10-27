@@ -602,6 +602,12 @@ def own_lines(label, expr, tree, blank_bodies='true'):
                f'        {om}.blank_bodies = {blank_bodies};', f'        {om}.blank_locs = true;',
                f'        {om}.pending_as_bytes = true;', f'        _m_FunctionDef_write({om}, {m});',
                f'        base.own_method("{label}", {s}.name, {m}.name, interface_text({om}));', '    }',
+               # A value struct's constructor bodies go in too: codegen folds
+               # a reader's constant built by one (`value_struct_constant`).
+               f'    if ({s}.is_value()) {{', f'        for (var {m} in {s}.constructors) {{',
+               f'            var {om} = RecordOut();', f'            {om}.blank_locs = true;',
+               f'            {om}.pending_as_bytes = true;', f'            _m_FunctionDef_write({om}, {m});',
+               f'            base.own_method("{label}", {s}.name, "__ctor", interface_text({om}));', '        }', '    }',
                # The fields' order goes under `.#order`, which no reader
                # names: only one that uses the whole list (`member_lines`)
                # depends on it, so a field inserted keeps the others' lines.

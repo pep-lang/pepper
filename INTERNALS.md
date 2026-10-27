@@ -3467,7 +3467,10 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    stays checked: its body is left out of `stash_bodies`
    (`PassState.rechecked_methods`) and the struct counts as extended
    (`extended_checked`), so the passes walk it as a method an extension
-   added;
+   added. A changed constructor's struct is replaced as for an added field
+   (step 4), since `synthesize` completes only the constructors of the
+   structs it checks (#270); it gives up on one with generic methods,
+   attributes or enum cases;
 3. puts each added struct, function or method after the one before it in
    its file (`_add`, `_add_struct`): a struct unchecked, so the passes
    check it whole, and a method's struct walked as for a changed method; it
@@ -3477,7 +3480,7 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    declared, one code calls without naming (`called_without_naming`), a
    constructor, or the first function of its file;
 4. replaces the struct of each added field with the one built now,
-   unchecked (`_add_field`), so the passes check it whole: its bodies, the
+   unchecked (`_replace_struct`), so the passes check it whole: its bodies, the
    members synthesized from its fields (`__dtor`, copies) and its layout.
    Code outside it reads fields by name and their offsets from code
    generation (`S.offset.f`), so nothing else is checked again. It gives
@@ -3617,8 +3620,10 @@ element, entry or name the delta adds, changes or drops, each hashed with
 non-generic bodies blanked (`blank_bodies`) and positions blanked
 (`blank_locs`). Generic bodies stay in, because a reader specializes them,
 and so do traits' default method bodies, because `apply_extensions` copies
-them into each adopting struct, whose compilation unit compiles them.
-Left out:
+them into each adopting struct, whose compilation unit compiles them, and a
+value struct's constructor bodies, under the struct's name, because codegen
+folds a reader's constant built by one into its initializer
+(`value_struct_constant`). Left out:
 
 - The fields in `NOT_INTERFACE` (`literal_args`, `call_targets`,
   `argument_names`, `stripped`, `summaries_to_record`, `cached_files`).

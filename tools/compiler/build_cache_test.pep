@@ -1114,6 +1114,35 @@ copies_the_field_an_edit_adds() {
     expect_true(field.rechecked.contains(a));
 }
 
+# Writes `tab.pep`, whose struct `Table` stores `stored` from its
+# constructor, and `main.pep`, whose `main` returns 0 when a `Table(3)`
+# holds `count`.
+_write_constructed(root: Path, stored: String, count: int) {
+    File.write_text(
+        root.join(Path("tab.pep")),
+        "export struct Table {\n    var count: ulong;\n    construct(count: ulong) {\n        this.count = "
+            + stored
+            + ";\n    }\n}\n"
+    );
+    File.write_text(
+        root.join(Path("main.pep")),
+        $"import \"tab\";\nmain(): int {{\n    return Table(3).count == {count} ? 0 : 1;\n}}\n"
+    );
+}
+
+# A constructor's changed body is checked again with its whole struct, which
+# `synthesize` completes (#270).
+[Test]
+checks_again_the_struct_of_a_changed_constructor() {
+    var folder = TempFolder("constructor");
+    var root = folder.path;
+    _write_constructed(root, "count", 3);
+    _build_with_runtime(root, "main.pep");
+    _write_constructed(root, "count + 1", 4);
+    var built = _build_with_runtime(root, "main.pep");
+    expect_true(built.rechecked.contains(_unit_of(_load(root), "tab.pep")));
+}
+
 # Writes a program whose `a.pep` starts with `top` and declares struct
 # `Thing` with `methods` before `size`, and whose `b.pep` calls `Thing.size` and a generic method, which
 # its record adds a specialization of to `Thing`.

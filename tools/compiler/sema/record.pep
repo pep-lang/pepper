@@ -858,7 +858,7 @@ export struct DeltaBase {
         lines.append_all(_own);
         lines.sort((a, b) => a.compare(b));
         var hasher = digest.Blake3();
-        hasher.update("pepper own interface 6\n");
+        hasher.update("pepper own interface 7\n");
         for (var line in lines) {
             hasher.update(line);
             hasher.update("\n");

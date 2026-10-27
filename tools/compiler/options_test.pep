@@ -747,6 +747,40 @@ an_unused_value_struct_constant_is_left_out_of_the_program() {
     expect_true(used > without + 80000);
 }
 
+[Test]
+a_cached_build_takes_an_edited_imported_constructor() {
+    # pepper#270: an edit of an imported constructor's body, built again on
+    # the cache, of a plain struct (whose constructor is checked again with
+    # its struct) and of a value struct, whose constructor codegen folds
+    # into the constant `T` the program's own compilation unit builds with it.
+    for (var value in [false, true]) {
+        var folder = TempFolder("options_edited_constructor");
+        var types = (stored: String) => (value ? "[Value]\n" : "")
+            + "export struct Table {\n    var count: ulong;\n\n    construct(count: ulong) {\n        this.count = "
+            + stored
+            + ";\n    }\n}\n";
+        var global = value ? "const T = Table(3);\n\n" : "";
+        var reads = value ? "    print(T.count);\n" : "";
+        File.write_text(
+            folder.path.join(Path("main.pep")),
+            $"import \"tab\";\n\n{global}main(): int {{\n    var t = Table(3);\n    print(t.count);\n{reads}    return 0;\n}}\n"
+        );
+        var program = folder.path.join(Path("main" + toolchain.executable_suffix()));
+        var arguments = [
+            "main.pep", "-o", program.to_string(), "--build", "build", "--cache", "cache", "--verify-cache"
+        ];
+        for (var (stored, expected) in [("count", "3\n"), ("count + 1", "4\n")]) {
+            File.write_text(folder.path.join(Path("tab.pep")), types(stored));
+            _succeeds(folder.path, arguments);
+            var command = process.Command(program.to_string());
+            command.stdout(process.Stream.Pipe);
+            var ran = command.run();
+            expect_true(ran.is_ok());
+            expect_equal(ran.value().stdout.replace("\r\n", "\n"), value ? expected + expected : expected);
+        }
+    }
+}
+
 # pepper#230: `-o` into folders that do not exist yet makes them, and a
 # folder it cannot make is an error naming it.
 [Test]

@@ -6825,6 +6825,15 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                     _m_FunctionDef_write(_own1518, _m1517);
                     base.own_method("structs", _s1514.name, _m1517.name, interface_text(_own1518));
                 }
+                if (_s1514.is_value()) {
+                    for (var _m1517 in _s1514.constructors) {
+                        var _own1518 = RecordOut();
+                        _own1518.blank_locs = true;
+                        _own1518.pending_as_bytes = true;
+                        _m_FunctionDef_write(_own1518, _m1517);
+                        base.own_method("structs", _s1514.name, "__ctor", interface_text(_own1518));
+                    }
+                }
                 if (split__fields1516) {
                     var _order1520 = StringBuilder();
                     for (var _f1519 in _fields1516) {
@@ -6869,6 +6878,15 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                     _own1527.pending_as_bytes = true;
                     _m_FunctionDef_write(_own1527, _m1526);
                     base.own_method("structs", _s1523.name, _m1526.name, interface_text(_own1527));
+                }
+                if (_s1523.is_value()) {
+                    for (var _m1526 in _s1523.constructors) {
+                        var _own1527 = RecordOut();
+                        _own1527.blank_locs = true;
+                        _own1527.pending_as_bytes = true;
+                        _m_FunctionDef_write(_own1527, _m1526);
+                        base.own_method("structs", _s1523.name, "__ctor", interface_text(_own1527));
+                    }
                 }
                 if (split__fields1525) {
                     var _order1529 = StringBuilder();
