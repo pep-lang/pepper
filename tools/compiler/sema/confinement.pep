@@ -24,6 +24,7 @@ import io;
 import [Path] from io;
 import [absolute, demangle_name, Runtime, Target] from compiler.link;
 import os;
+import [MATCH_LOCAL, TRY_LOCAL] from "builder";
 import [has_stashed, is_checked_function, unit_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
@@ -2968,6 +2969,17 @@ struct _RegionWalk {
     ## disconnected value hands it over; a raw slot (runtime only) hands
     ## over a value the runtime promises nothing else references.
     eval_move(value: Expression): long {
+        if (value is SymbolRef(hidden)) {
+            var found = local(hidden.id);
+            if (found.is_value() and (hidden.id.starts_with(TRY_LOCAL) or hidden.id.starts_with(MATCH_LOCAL))) {
+                # The builder's own hand-over out of a `?` or `match`
+                # value's hidden local: the value keeps its links, and the
+                # local, now null, references nothing.
+                var kept = found.value().region;
+                found.value().region = -1;
+                return kept;
+            }
+        }
         moves += 1;
         if (value is SymbolRef(node)) {
             var found = local(node.id);

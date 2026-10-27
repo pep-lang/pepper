@@ -88,6 +88,8 @@ export const STRING_CONSTANT = "StringConstant";
 export const CAST_VALUE = "__cast_value";
 ## The hidden local that holds a `?` operand: `__try_0`, `__try_1`, ...
 export const TRY_LOCAL = "__try_";
+## The hidden local that holds a `match` statement's value: `__match_0`, ...
+export const MATCH_LOCAL = "__match_";
 ## The compile-time API's name inside a `static` block.
 export const REFLECT = "reflect";
 ## The function an interpolated string (`$"{x}"`) calls on each value.
@@ -2574,7 +2576,7 @@ struct _Builder {
         value: ast.Expression, keyword: ast.Span, arms: _Arm[], else_arm: (Loc, Block)?, partial: bool
     ): Built<Statement> {
         var n = next_match();
-        var subject = $"__match_{n}";
+        var subject = $"{MATCH_LOCAL}{n}";
         var at = loc(value.span());
         var subject_value = expression(value)?;
         var hidden = _hidden(subject, subject_value, at);
@@ -2612,6 +2614,12 @@ struct _Builder {
                         )
                     )
                 );
+            }
+            if (bindings.count > 0) {
+                # The bindings hold what the arm uses: the subject lets go
+                # of its value, so a binding can be the only reference (#266).
+                var drop = Expression.Move(MoveExpression(_symbol(subject, at), at));
+                items.append(Statement.Expression(drop));
             }
             items.append_all(body.items);
             body.items = items;
@@ -4553,9 +4561,13 @@ struct _Builder {
                     var name = $"{TRY_LOCAL}{tries}";
                     tries += 1;
                     lifter.tries.append(_Try(name, lifted, at));
-                    return Built<ast.Expression>.Ok(
-                        _ast_method_call(ast.Expression.SymbolRef(name, at), "value", Array<ast.Expression>(), at)
+                    # `move(__try_N).value()`: the operand is a temporary of
+                    # the statement, so its local lets go of it here and the
+                    # value read is the only reference left to it (#266).
+                    var hidden = ast.Expression.FunctionCall(
+                        ast.Expression.SymbolRef("move", at), [ast.Expression.SymbolRef(name, at)], at
                     );
+                    return Built<ast.Expression>.Ok(_ast_method_call(hidden, "value", Array<ast.Expression>(), at));
                 }
                 var lifted = lift_walk(operand, conditional, lifter)?;
                 if (op == "++" or op == "--") {

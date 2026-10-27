@@ -317,6 +317,15 @@ variable, stored in a field, or returned and kept still holds the value:
 {{#include ../../examples/memory-move-closure.pep}}
 ```
 
+What `?` or a pattern binding takes out of a call's result can be moved
+too: the `Result` or `Optional` the call returned is a temporary, which
+lets go of its value once the value is read. One kept in a variable still
+holds it:
+
+```pepper
+{{#include ../../examples/memory-move-unwrapped.pep}}
+```
+
 In a loop, the check counts every reference the loop's body makes,
 wherever in the body it is made: a statement after the `move` runs again
 before the next pass's `move`. So a loop can move a variable it gives a
