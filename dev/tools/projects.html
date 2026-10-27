@@ -397,9 +397,14 @@ read: <code>note: native 1.0.0 (github:someone/native) has a build script, which
 dependency's script, naming it. The project's own script still runs: it
 is your code.</li>
 </ul>
-<p>What is not supported yet: a helper package for finding a library with
-<code>pkg-config</code> and compiling C with the target's flags, and a <code>[native]</code>
-table that compiles C sources without a script.</p>
+<p>The package <a href="https://github.com/pep-lang/pepper-build"><code>build</code></a>, added to
+<code>[build-dependencies]</code> (<code>pepper package add --build pep-lang/pepper-build --name build</code>), does the common work: <code>build.cc</code> compiles C with the
+target's clang, flags and system root, <code>build.pkg_config</code> finds a library
+with <code>pkg-config</code> (pointing it at the system root when cross-compiling),
+and <code>build.emit</code> and <code>build.env</code> print the <code>pep:</code> lines and read the
+variables above.</p>
+<p>What is not supported yet: a <code>[native]</code> table that compiles C sources
+without a script.</p>
 <h2 id="dependencies"><a class="header" href="#dependencies"><code>[dependencies]</code></a></h2>
 <p>Each key is the name source code imports, and its value says where the
 package comes from and which revision to use:</p>
@@ -537,6 +542,11 @@ apply to them as to the rest. A build-dependency's own build script runs
 in the build of the script that imports it.</li>
 <li><strong>Not optional:</strong> <code>optional = true</code> there is an error; a script reads its
 package's features from <code>PEP_FEATURES</code>.</li>
+<li><strong>Only on some hosts:</strong> <code>[target.'&lt;condition&gt;'.build-dependencies]</code>
+holds those a script needs only on some machines; see
+<a href="#targetconditionbuild-dependencies">below</a>.</li>
+<li><strong>Added with</strong> <code>pepper package add --build</code> (see
+<a href="pep-package.html#add-ownernamerange">pep-package</a>).</li>
 <li><strong>Needs toolchain 0.11.0</strong>, as <code>[dev-dependencies]</code> does.</li>
 </ul>
 <pre><code class="language-text">main.pep:1:8: error: 'codegen' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here
@@ -595,7 +605,38 @@ checks it.</p>
 </ul>
 <p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="pep-package.html#add-ownernamerange">pep-package</a>).
 A name may be in only one of the dependency tables, and a <code>[target]</code> table
-holds only <code>dependencies</code>.</p>
+holds only <code>dependencies</code> and
+<a href="#targetconditionbuild-dependencies"><code>build-dependencies</code></a>.</p>
+<h2 id="targetconditionbuild-dependencies"><a class="header" href="#targetconditionbuild-dependencies"><code>[target.'&lt;condition&gt;'.build-dependencies]</code></a></h2>
+<p>A package the <a href="#build-scripts">build script</a> needs only on some machines
+goes in a <code>[target]</code> table's <code>build-dependencies</code>, written as in
+<a href="#build-dependencies"><code>[build-dependencies]</code></a>:</p>
+<pre><code class="language-toml">[target.'OS(Windows)'.build-dependencies]
+vswhere = { github = "someone/vswhere", version = "1" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The condition holds for the host</strong>, the machine building, not the
+target: the script is built for and runs on the host. A cross build
+for Linux on Windows gives its script the <code>OS(Windows)</code> ones, and none
+of the <code>OS(Linux)</code> ones. Guard the script's import the same way:</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]
+import vswhere;
+</code></pre>
+<p>An import a script reaches on another host is an error:</p>
+<pre><code class="language-text">build.pep:1:8: error: 'vswhere' is a build-dependency only for hosts where 'OS(Windows)' holds, which this one does not; put '[Target(OS(Windows))]' on the import
+</code></pre>
+</li>
+<li>
+<p><strong>Locked and fetched on every host:</strong> <code>pep.lock</code> is shared by every
+machine, so it records no condition for them, and a build fetches them
+whatever it builds for.</p>
+</li>
+<li>
+<p><strong>The rest is as for <code>[build-dependencies]</code>:</strong> never optional, a name
+only once among them, added with <code>pepper package add --build --target '&lt;condition&gt;'</code>.</p>
+</li>
+</ul>
 <h2 id="features"><a class="header" href="#features"><code>[features]</code></a></h2>
 <p>A package with optional parts, such as TLS support in a client, names
 them in <code>[features]</code>, so a project that does not want one neither builds

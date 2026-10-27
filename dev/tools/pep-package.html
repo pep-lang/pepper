@@ -271,11 +271,12 @@ so <a href="#audit"><code>audit</code></a> reports it.</li>
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
 <tr><td><code>add ... --package &lt;name&gt;</code></td><td>Depends on the member <code>&lt;name&gt;</code> of the repository's workspace, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags (see <a href="projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
 <tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
-<tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use</td></tr>
+<tr><td><code>add ... --build</code></td><td>Adds it to <code>[build-dependencies]</code>, which only the package's build script imports</td></tr>
+<tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use; with <code>--build</code>, to <code>[target.'&lt;condition&gt;'.build-dependencies]</code></td></tr>
 <tr><td><code>add ... --optional</code></td><td>Marks it <code>optional = true</code>: a build uses it only when a feature turns it on</td></tr>
 <tr><td><code>add ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The dependency's features to turn on, written to its <code>features</code>: a comma-separated list, or repeat the option</td></tr>
 <tr><td><code>add ... --no-default-features</code></td><td>Leaves the dependency's <code>default</code> feature off: <code>default-features = false</code></td></tr>
-<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
+<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency, dev-dependency or build-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
 <tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="#publish"><code>publish</code></a>)</td></tr>
@@ -373,19 +374,30 @@ defaults to the member's:</p>
 <p><code>--dev</code> adds it to <code>[dev-dependencies]</code> instead: only the project's tests
 and examples import it, and projects that depend on this one ignore it
 (see <a href="projects.html#dev-dependencies">Projects: pep.toml</a>).</p>
+<p><code>--build</code> adds it to <code>[build-dependencies]</code>: only the package's
+<a href="projects.html#build-scripts">build script</a> imports it (see
+<a href="projects.html#build-dependencies">Projects: pep.toml</a>). The name may also be
+in <code>[dependencies]</code>, so <code>add</code> refuses it only when a build-dependency
+has it. It cannot be given with <code>--dev</code> or <code>--optional</code>.</p>
+<pre><code class="language-bash">pepper package add --build someone/codegen   # [build-dependencies] codegen = { github = "someone/codegen", version = "1.2.0" }
+</code></pre>
 <p><code>--target &lt;condition&gt;</code> adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>:
 only a build for a target the condition selects sees it. The condition is
 what <code>[Target(...)]</code> takes (<code>OS(Windows)</code>, <code>OS(Linux) &amp;&amp; Arch(x64)</code>; see
 <a href="../language/platform-selection.html">Platform selection</a>); quote it for the
-shell. It cannot be given with <code>--dev</code>.</p>
+shell. It cannot be given with <code>--dev</code>. With <code>--build</code>, it adds it to
+<code>[target.'&lt;condition&gt;'.build-dependencies]</code>, whose condition holds for the
+machine building, which the script runs on (see
+<a href="projects.html#targetconditionbuild-dependencies">Projects: pep.toml</a>).</p>
 <p><code>--optional</code>, <code>--features &lt;names&gt;</code> and <code>--no-default-features</code> write the
 entry's <code>optional = true</code>, <code>features = [...]</code> and <code>default-features = false</code> (see <a href="projects.html#features">Features</a>). A dev-dependency cannot be
 optional. The package's features are not checked until a build turns
 them on.</p>
 <h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
 <p>Removes the dependency with that name (or that <code>owner/name</code>) from
-<code>pep.toml</code>, whichever table it is in, and drops from <code>pep.lock</code> every
-package nothing needs any more.</p>
+<code>pep.toml</code>, whichever table it is in (from each, when both
+<code>[dependencies]</code> and <code>[build-dependencies]</code> have it), and drops from
+<code>pep.lock</code> every package nothing needs any more.</p>
 <h3 id="update-name"><a class="header" href="#update-name"><code>update [&lt;name&gt;...]</code></a></h3>
 <p>Moves the named dependencies (every one, when none is named) to the newest
 version their ranges allow, and says which other package holds one back
@@ -896,7 +908,11 @@ package that only <code>[target.'&lt;condition&gt;'.dependencies]</code> lead to
 conditions join with <code>&amp;&amp;</code> and other ways with <code>||</code>, so
 <code>target = "(OS(Linux)) || (OS(Windows))"</code> is needed on either. A build
 fetches a package only when its <code>target</code> holds for what it builds for,
-the platform <code>--target</code> names in a cross build.</p>
+the platform <code>--target</code> names in a cross build. The conditions of a
+<code>[target.'&lt;condition&gt;'.build-dependencies]</code>, and of what a
+build-dependency leads to, are left out: they hold for the machine
+building, which a lock every machine shares cannot name, so a build
+fetches such a package whatever it builds for.</p>
 <pre><code class="language-toml">[[package]]
 name = "winapi"
 source = "github:someone/winapi"
@@ -1068,9 +1084,10 @@ dependencies, as requirements of the project; a dependency's
 dependencies' included: a dependency's build script runs in the
 project's build. A package both its code and a build script need is one
 copy, at one version.</li>
-<li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code>, the project's and its
-dependencies', is resolved with the rest, whatever the platform
-resolving, so one version of a package serves every platform.</li>
+<li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code> and
+<code>.build-dependencies</code>, the project's and its dependencies', is resolved
+with the rest, whatever the platform resolving, so one version of a
+package serves every platform.</li>
 </ul>
 <h3 id="two-majors-of-one-package"><a class="header" href="#two-majors-of-one-package">Two majors of one package</a></h3>
 <p>A new major version breaks its users on purpose, so a range in another

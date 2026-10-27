@@ -23073,9 +23073,14 @@ read: <code>note: native 1.0.0 (github:someone/native) has a build script, which
 dependency's script, naming it. The project's own script still runs: it
 is your code.</li>
 </ul>
-<p>What is not supported yet: a helper package for finding a library with
-<code>pkg-config</code> and compiling C with the target's flags, and a <code>[native]</code>
-table that compiles C sources without a script.</p>
+<p>The package <a href="https://github.com/pep-lang/pepper-build"><code>build</code></a>, added to
+<code>[build-dependencies]</code> (<code>pepper package add --build pep-lang/pepper-build --name build</code>), does the common work: <code>build.cc</code> compiles C with the
+target's clang, flags and system root, <code>build.pkg_config</code> finds a library
+with <code>pkg-config</code> (pointing it at the system root when cross-compiling),
+and <code>build.emit</code> and <code>build.env</code> print the <code>pep:</code> lines and read the
+variables above.</p>
+<p>What is not supported yet: a <code>[native]</code> table that compiles C sources
+without a script.</p>
 <h2 id="dependencies"><a class="header" href="#dependencies"><code>[dependencies]</code></a></h2>
 <p>Each key is the name source code imports, and its value says where the
 package comes from and which revision to use:</p>
@@ -23213,6 +23218,11 @@ apply to them as to the rest. A build-dependency's own build script runs
 in the build of the script that imports it.</li>
 <li><strong>Not optional:</strong> <code>optional = true</code> there is an error; a script reads its
 package's features from <code>PEP_FEATURES</code>.</li>
+<li><strong>Only on some hosts:</strong> <code>[target.'&lt;condition&gt;'.build-dependencies]</code>
+holds those a script needs only on some machines; see
+<a href="tools/projects.html#targetconditionbuild-dependencies">below</a>.</li>
+<li><strong>Added with</strong> <code>pepper package add --build</code> (see
+<a href="tools/pep-package.html#add-ownernamerange">pep-package</a>).</li>
 <li><strong>Needs toolchain 0.11.0</strong>, as <code>[dev-dependencies]</code> does.</li>
 </ul>
 <pre><code class="language-text">main.pep:1:8: error: 'codegen' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here
@@ -23271,7 +23281,38 @@ checks it.</p>
 </ul>
 <p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="tools/pep-package.html#add-ownernamerange">pep-package</a>).
 A name may be in only one of the dependency tables, and a <code>[target]</code> table
-holds only <code>dependencies</code>.</p>
+holds only <code>dependencies</code> and
+<a href="tools/projects.html#targetconditionbuild-dependencies"><code>build-dependencies</code></a>.</p>
+<h2 id="targetconditionbuild-dependencies"><a class="header" href="#targetconditionbuild-dependencies"><code>[target.'&lt;condition&gt;'.build-dependencies]</code></a></h2>
+<p>A package the <a href="tools/projects.html#build-scripts">build script</a> needs only on some machines
+goes in a <code>[target]</code> table's <code>build-dependencies</code>, written as in
+<a href="tools/projects.html#build-dependencies"><code>[build-dependencies]</code></a>:</p>
+<pre><code class="language-toml">[target.'OS(Windows)'.build-dependencies]
+vswhere = { github = "someone/vswhere", version = "1" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The condition holds for the host</strong>, the machine building, not the
+target: the script is built for and runs on the host. A cross build
+for Linux on Windows gives its script the <code>OS(Windows)</code> ones, and none
+of the <code>OS(Linux)</code> ones. Guard the script's import the same way:</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]
+import vswhere;
+</code></pre>
+<p>An import a script reaches on another host is an error:</p>
+<pre><code class="language-text">build.pep:1:8: error: 'vswhere' is a build-dependency only for hosts where 'OS(Windows)' holds, which this one does not; put '[Target(OS(Windows))]' on the import
+</code></pre>
+</li>
+<li>
+<p><strong>Locked and fetched on every host:</strong> <code>pep.lock</code> is shared by every
+machine, so it records no condition for them, and a build fetches them
+whatever it builds for.</p>
+</li>
+<li>
+<p><strong>The rest is as for <code>[build-dependencies]</code>:</strong> never optional, a name
+only once among them, added with <code>pepper package add --build --target '&lt;condition&gt;'</code>.</p>
+</li>
+</ul>
 <h2 id="features"><a class="header" href="#features"><code>[features]</code></a></h2>
 <p>A package with optional parts, such as TLS support in a client, names
 them in <code>[features]</code>, so a project that does not want one neither builds
@@ -23871,11 +23912,12 @@ so <a href="tools/pep-package.html#audit"><code>audit</code></a> reports it.</li
 <tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
 <tr><td><code>add ... --package &lt;name&gt;</code></td><td>Depends on the member <code>&lt;name&gt;</code> of the repository's workspace, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags (see <a href="tools/projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
 <tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
-<tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use</td></tr>
+<tr><td><code>add ... --build</code></td><td>Adds it to <code>[build-dependencies]</code>, which only the package's build script imports</td></tr>
+<tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use; with <code>--build</code>, to <code>[target.'&lt;condition&gt;'.build-dependencies]</code></td></tr>
 <tr><td><code>add ... --optional</code></td><td>Marks it <code>optional = true</code>: a build uses it only when a feature turns it on</td></tr>
 <tr><td><code>add ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The dependency's features to turn on, written to its <code>features</code>: a comma-separated list, or repeat the option</td></tr>
 <tr><td><code>add ... --no-default-features</code></td><td>Leaves the dependency's <code>default</code> feature off: <code>default-features = false</code></td></tr>
-<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency or dev-dependency, by its name or its <code>owner/name</code></td></tr>
+<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency, dev-dependency or build-dependency, by its name or its <code>owner/name</code></td></tr>
 <tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
 <tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
 <tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="tools/pep-package.html#publish"><code>publish</code></a>)</td></tr>
@@ -23973,19 +24015,30 @@ defaults to the member's:</p>
 <p><code>--dev</code> adds it to <code>[dev-dependencies]</code> instead: only the project's tests
 and examples import it, and projects that depend on this one ignore it
 (see <a href="tools/projects.html#dev-dependencies">Projects: pep.toml</a>).</p>
+<p><code>--build</code> adds it to <code>[build-dependencies]</code>: only the package's
+<a href="tools/projects.html#build-scripts">build script</a> imports it (see
+<a href="tools/projects.html#build-dependencies">Projects: pep.toml</a>). The name may also be
+in <code>[dependencies]</code>, so <code>add</code> refuses it only when a build-dependency
+has it. It cannot be given with <code>--dev</code> or <code>--optional</code>.</p>
+<pre><code class="language-bash">pepper package add --build someone/codegen   # [build-dependencies] codegen = { github = "someone/codegen", version = "1.2.0" }
+</code></pre>
 <p><code>--target &lt;condition&gt;</code> adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>:
 only a build for a target the condition selects sees it. The condition is
 what <code>[Target(...)]</code> takes (<code>OS(Windows)</code>, <code>OS(Linux) &amp;&amp; Arch(x64)</code>; see
 <a href="tools/../language/platform-selection.html">Platform selection</a>); quote it for the
-shell. It cannot be given with <code>--dev</code>.</p>
+shell. It cannot be given with <code>--dev</code>. With <code>--build</code>, it adds it to
+<code>[target.'&lt;condition&gt;'.build-dependencies]</code>, whose condition holds for the
+machine building, which the script runs on (see
+<a href="tools/projects.html#targetconditionbuild-dependencies">Projects: pep.toml</a>).</p>
 <p><code>--optional</code>, <code>--features &lt;names&gt;</code> and <code>--no-default-features</code> write the
 entry's <code>optional = true</code>, <code>features = [...]</code> and <code>default-features = false</code> (see <a href="tools/projects.html#features">Features</a>). A dev-dependency cannot be
 optional. The package's features are not checked until a build turns
 them on.</p>
 <h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
 <p>Removes the dependency with that name (or that <code>owner/name</code>) from
-<code>pep.toml</code>, whichever table it is in, and drops from <code>pep.lock</code> every
-package nothing needs any more.</p>
+<code>pep.toml</code>, whichever table it is in (from each, when both
+<code>[dependencies]</code> and <code>[build-dependencies]</code> have it), and drops from
+<code>pep.lock</code> every package nothing needs any more.</p>
 <h3 id="update-name"><a class="header" href="#update-name"><code>update [&lt;name&gt;...]</code></a></h3>
 <p>Moves the named dependencies (every one, when none is named) to the newest
 version their ranges allow, and says which other package holds one back
@@ -24496,7 +24549,11 @@ package that only <code>[target.'&lt;condition&gt;'.dependencies]</code> lead to
 conditions join with <code>&amp;&amp;</code> and other ways with <code>||</code>, so
 <code>target = "(OS(Linux)) || (OS(Windows))"</code> is needed on either. A build
 fetches a package only when its <code>target</code> holds for what it builds for,
-the platform <code>--target</code> names in a cross build.</p>
+the platform <code>--target</code> names in a cross build. The conditions of a
+<code>[target.'&lt;condition&gt;'.build-dependencies]</code>, and of what a
+build-dependency leads to, are left out: they hold for the machine
+building, which a lock every machine shares cannot name, so a build
+fetches such a package whatever it builds for.</p>
 <pre><code class="language-toml">[[package]]
 name = "winapi"
 source = "github:someone/winapi"
@@ -24668,9 +24725,10 @@ dependencies, as requirements of the project; a dependency's
 dependencies' included: a dependency's build script runs in the
 project's build. A package both its code and a build script need is one
 copy, at one version.</li>
-<li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code>, the project's and its
-dependencies', is resolved with the rest, whatever the platform
-resolving, so one version of a package serves every platform.</li>
+<li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code> and
+<code>.build-dependencies</code>, the project's and its dependencies', is resolved
+with the rest, whatever the platform resolving, so one version of a
+package serves every platform.</li>
 </ul>
 <h3 id="two-majors-of-one-package"><a class="header" href="#two-majors-of-one-package">Two majors of one package</a></h3>
 <p>A new major version breaks its users on purpose, so a range in another
