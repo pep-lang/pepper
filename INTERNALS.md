@@ -1410,8 +1410,11 @@ as one module, recording in `owners` the file that declares each symbol;
    sema has already cloned the concrete specializations.
 2. **`emit_globals`.** Module-scope variables become LLVM globals. A
    constant initializer is set directly, a string constant's included
-   (`const X = "text";`, `string_constant_value`), so nothing reaches an
-   unread one and the linker drops it. Other initializers go into
+   (`const X = "text";`), and that of any `[Value]` struct whose only
+   constructor just stores constants and its parameters in fields, called
+   with constant arguments (`value_struct_constant`, which reads the
+   constructor's body, kept by `strip_bodies` and in the interface hash),
+   so nothing reaches an unread one and the linker drops it. Other initializers go into
    `__pep_global_init`, registered in `llvm.global_ctors`, in the order of
    `module.globals` (see `initialization_order`, `sema/program.pep`). A `[ThreadLocal]`
    global (`is_thread_local`; `codegen/globals.pep`) is an LLVM

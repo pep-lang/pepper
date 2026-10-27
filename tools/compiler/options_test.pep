@@ -724,6 +724,29 @@ an_unused_string_constant_is_left_out_of_the_program() {
     expect_true(used > without + 80000);
 }
 
+[Test]
+an_unused_value_struct_constant_is_left_out_of_the_program() {
+    # pepper#269: so is a `[Value]` struct of constants, as
+    # pepper-unicode's tables are, an enum field's default case included. A
+    # constructor that does more than store its arguments still runs at
+    # startup.
+    var folder = TempFolder("options_unused_value_constant");
+    var table = "a".repeat(100000);
+    var types = "enum Kind {\n    Wide = 3,\n    Narrow,\n}\n\n[Value]\nstruct Table {\n    var text: StringConstant;\n    var count: ulong;\n    var wide: bool = true;\n    var kind: Kind;\n\n    construct(text: StringConstant, count: ulong = 7) {\n        this.text = text;\n        this.count = count;\n    }\n}\n\n[Value]\nstruct Noisy {\n    var count: ulong;\n\n    construct(count: ulong) {\n        print(\"made\");\n        this.count = count * 2;\n    }\n}\n\n";
+    var hello = "main(): int {\n    print(\"hi\");\n    return 0;\n}\n";
+    var without = _built_size(folder.path, "without", types + hello, "hi\n");
+    var unused = _built_size(folder.path, "unused", $"{types}const TABLE = Table(\"{table}\", 3);\n\n{hello}", "hi\n");
+    expect_true(unused < without + 20000);
+    var reads = "main(): int {\n    print(TABLE.text.size);\n    print(TABLE.text[99999]);\n    print(TABLE.count);\n    print(TABLE.wide);\n    print(TABLE.kind == Kind.Wide);\n    print(SHORT.count);\n    print(NOISY.count);\n    return 0;\n}\n";
+    var used = _built_size(
+        folder.path,
+        "used",
+        $"{types}const TABLE = Table(\"{table}\", 3);\nconst SHORT = Table(\"b\");\nconst NOISY = Noisy(4);\n\n{reads}",
+        "made\n100000\na\n3\ntrue\ntrue\n7\n8\n"
+    );
+    expect_true(used > without + 80000);
+}
+
 # pepper#230: `-o` into folders that do not exist yet makes them, and a
 # folder it cannot make is an error naming it.
 [Test]
