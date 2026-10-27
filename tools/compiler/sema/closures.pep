@@ -262,6 +262,16 @@ struct _ClosureLifter {
         return Expression.FunctionCall(FunctionCallExpression(ty.to_string(), Array<Expression>(), loc));
     }
 
+    # A bare method of the enclosing struct as a value, `name` as written:
+    # `S.m` for a static one, else `__this.m`.
+    _method_value(method: String, name: String, loc: Loc): Expression {
+        if (ctx.statics.contains(method)) {
+            return Expression.MemberRef(MemberRefExpression(static_receiver(loc), name, loc));
+        }
+        use_this(loc);
+        return Expression.MemberRef(MemberRefExpression(_this_ref(loc), name, loc));
+    }
+
     walk_block(block: Block) {
         scopes.append(Array<ulong>());
         ulong i = 0;
@@ -417,16 +427,7 @@ struct _ClosureLifter {
                     use_this(node.loc);
                     return Expression.MemberRef(MemberRefExpression(_this_ref(node.loc), node.id, node.loc));
                 } else if (inside and ctx.this_ty.is_value() and ctx.methods.contains(node.id)) {
-                    # A bare method of the enclosing struct as a value: `S.m`
-                    # for a static one, else `__this.m`.
-                    Expression receiver = Expression.ThisRef;
-                    if (ctx.statics.contains(node.id)) {
-                        receiver = static_receiver(node.loc);
-                    } else {
-                        use_this(node.loc);
-                        receiver = _this_ref(node.loc);
-                    }
-                    return Expression.MemberRef(MemberRefExpression(receiver, node.id, node.loc));
+                    return _method_value(node.id, node.id, node.loc);
                 }
                 return e;
             }
@@ -448,6 +449,13 @@ struct _ClosureLifter {
                 } else if (resolve(node.function).is_value()) {
                     # A call through a local of function type.
                     use_var(resolve(node.function).value(), loc);
+                } else if (node.bare
+                    and node.args.count == 0
+                    and inside
+                    and ctx.this_ty.is_value()
+                    and ctx.methods.contains(name)) {
+                    # `make<int>` with no parentheses: the method's value.
+                    expr = _method_value(name, node.function, loc);
                 } else if (inside
                     and ctx.this_ty.is_value()
                     and ctx.statics.contains(name)

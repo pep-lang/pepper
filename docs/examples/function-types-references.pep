@@ -27,6 +27,12 @@ struct Box<T> {
     map<U>(f: (T) => U): Box<U> {
         return Box<U>(f(value));
     }
+
+    # Inside a method, a generic method's bare name with its type
+    # arguments is `this.map<String>`.
+    mapper(): ((T) => String) => Box<String> {
+        return map<String>;
+    }
 }
 
 larger<T>(a: T, b: T): T {
@@ -66,6 +72,7 @@ main(): int {
     assert(to_long((x: int): long => x * 2).value == 6, "generic method");
     var to_text: ((int) => String) => Box<String> = b.map;
     assert(to_text((x: int) => "three").value == "three", "inferred generic method");
+    assert(b.mapper()((x: int) => "3").value == "3", "bare generic method name");
 
     var steps = Array<(int) => Point>();
     steps.append(p.shifted);

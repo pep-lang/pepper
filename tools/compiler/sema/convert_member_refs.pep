@@ -159,25 +159,8 @@ struct _MemberRefs {
         if (fields.contains(id)) {
             return Expression.MemberRef(MemberRefExpression(Expression.ThisRef, id, node.loc));
         }
-        # A bare method name is the method as a value, as `this.m` (or `S.m`
-        # for a static method) would write it.
         if (methods.contains(id)) {
-            var receiver = Expression.ThisRef;
-            if (methods.contains(_STATIC_MARK + id)) {
-                if (methods.contains(_GENERIC_BASE)) {
-                    return e;
-                }
-                # A specialization is named as `Box<int>.m` writes it: a
-                # constructor-style receiver.
-                if (struct_name.contains("<")) {
-                    receiver = Expression.FunctionCall(
-                        FunctionCallExpression(struct_name, Array<Expression>(), node.loc)
-                    );
-                } else {
-                    receiver = Expression.SymbolRef(SymbolRefExpression(struct_name, TypeName.auto(), node.loc));
-                }
-            }
-            return Expression.MemberRef(MemberRefExpression(receiver, id, node.loc));
+            return _method_value(e, id, id, node.loc);
         }
         # File-scope globals and struct names (the receiver of a static
         # call) are visible from methods too.
@@ -190,11 +173,35 @@ struct _MemberRefs {
         return e;
     }
 
+    ## A bare method name as the method's value, as `this.m` (or `S.m` for
+    ## a static method) would write it; `e` when a generic base's static
+    ## method, which has no name to write it on.
+    _method_value(e: Expression, method: String, name: String, at: Loc): Expression {
+        var receiver = Expression.ThisRef;
+        if (methods.contains(_STATIC_MARK + method)) {
+            if (methods.contains(_GENERIC_BASE)) {
+                return e;
+            }
+            # A specialization is named as `Box<int>.m` writes it: a
+            # constructor-style receiver.
+            if (struct_name.contains("<")) {
+                receiver = Expression.FunctionCall(FunctionCallExpression(struct_name, Array<Expression>(), at));
+            } else {
+                receiver = Expression.SymbolRef(SymbolRefExpression(struct_name, TypeName.auto(), at));
+            }
+        }
+        return Expression.MemberRef(MemberRefExpression(receiver, name, at));
+    }
+
     _call(e: Expression, node: FunctionCallExpression): Expression {
         # A call with explicit type arguments (`make<String>(n)`) names its
         # method by the name before them. A converted string literal
         # constructs `String` even beside a method named `String`.
         var name = without_type_arguments(node.function);
+        # `make<int>` with no parentheses is the generic method's value.
+        if (node.bare and node.args.count == 0 and methods.contains(name)) {
+            return _method_value(e, name, node.function, node.loc);
+        }
         if (!methods.calls_method(name, node.args.count) or _is_converted_literal(node)) {
             return e;
         }
