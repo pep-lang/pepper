@@ -1562,10 +1562,13 @@ const requests = async.Atomic&lt;long&gt;(0);   # changed with requests.fetch_ad
 var depth: int = 0;                       # one per thread
 </code></pre>
 <p>A global whose initializer is a literal (a number, a <code>bool</code>, <code>__null</code>, or a
-string literal) is set when the program loads, with no code run. One that
-nothing reads, like a function nothing calls, is left out of the executable,
-so a module's data tables cost only the programs that use them. A Windows
-build with <code>-g</code> keeps them all.</p>
+string literal) is set when the program loads, with no code run. So is a
+<a href="language/value-structs.html"><code>[Value]</code> struct</a> made of literals, when its constructor only
+stores its arguments and constants in its fields
+(<code>const TABLE = Table("...", 4);</code>); a constructor that does anything else
+runs at startup. One that nothing reads, like a function nothing calls, is
+left out of the executable, so a module's data tables cost only the
+programs that use them. A Windows build with <code>-g</code> keeps them all.</p>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
 <p><code>value as Type</code> converts a value to another type explicitly, like <code>static_cast</code>
 in C++:</p>
