@@ -1733,6 +1733,7 @@ struct Project {
                 "'[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it"
             );
         }
+        problems.append_all(_uncommitted_native(root, _package_dir().to_string()));
         var minimum = manifest.value().minimum_toolchain;
         for (var (key, release) in newer_manifest_features()) {
             if (root.lookup(key).is_value() and !_at_least(minimum, release)) {
@@ -1907,4 +1908,52 @@ struct Project {
 _at_least(minimum: String, release: String): bool {
     var given = semver.parse(minimum);
     return given.is_ok() and given.value().compare(semver.parse(release).value()) >= 0;
+}
+
+# The `sources` and `include` of the `[native]` tables of `root`, the
+# pep.toml of the package in `at`, that match no file committed there: a
+# dependent's copy of the package holds only those.
+_uncommitted_native(root: toml.TomlValue, at: String): Array<String> {
+    var problems = Array<String>();
+    var tables = Array<(String, toml.TomlValue)>();
+    var native = root.try_get("native");
+    if (native.is_value()) {
+        tables.append(("[native]", native.value()));
+    }
+    var targets = root.try_get("target");
+    if (targets.is_value() and targets.value().as_table().is_value()) {
+        for (var (condition, value) in targets.value().as_table().value()) {
+            var inner = value.try_get("native");
+            if (inner.is_value()) {
+                tables.append(($"[target.'{condition}'.native]", inner.value()));
+            }
+        }
+    }
+    if (tables.is_empty) {
+        return problems;
+    }
+    var listed = git(["ls-files", "-z"], at);
+    var files = listed.is_ok() ? listed.value().split("\0") : Array<String>();
+    for (var (table, value) in tables) {
+        for (var key in ["sources", "include"]) {
+            var items = value.try_get(key);
+            if (items.is_empty() or items.value().as_array().is_empty()) {
+                continue;
+            }
+            for (var item in items.value().as_array().value()) {
+                var pattern = item.as_string().value_or("");
+                var folder = pattern.ends_with("/") ? pattern : pattern + "/";
+                bool found = false;
+                for (var file in files) {
+                    found = found or (key == "sources" ? io.glob_matches(pattern, file) : file.starts_with(folder));
+                }
+                if (!found) {
+                    problems.append(
+                        $"'{table}' '{key}' names '{pattern}', which no file committed in the package matches, so a dependent would not get it; commit it"
+                    );
+                }
+            }
+        }
+    }
+    return problems;
 }

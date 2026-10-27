@@ -298,6 +298,10 @@ First it checks, and lists every check that fails at once:
 - `version` is a version (`1.2.0`), newer than every version tag
   `origin` has;
 - `[package]` has a `description`, `license` and `repository`;
+- each `sources` pattern and `include` folder of its
+  [`[native]`](projects.md#native) tables names a file committed in the
+  package (`git ls-files`): a dependent's copy, and a vendored one, holds
+  only those, so an ignored or generated file would be missing there;
 - every dependency asks for a version range, not a branch, tag, commit
   or the default branch, so a project depending on this one can resolve
   it with its other packages; a `path` dependency, such as a workspace

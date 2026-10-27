@@ -245,7 +245,8 @@ before any of its code is in a program you chose to run. So:
 - `pepper build --no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`, which
   `pepper test` and `pepper run` builds see too) fails instead of running a
   dependency's script, naming it. The project's own script still runs: it
-  is your code.
+  is your code. A [`[native]`](#native) table, which runs no package
+  code, compiles under it too, unless a dependency's has `flags`.
 
 The package [`build`](https://github.com/pep-lang/pepper-build), added to
 `[build-dependencies]` (`pepper package add --build pep-lang/pepper-build
@@ -255,8 +256,65 @@ with `pkg-config` (pointing it at the system root when cross-compiling),
 and `build.emit` and `build.env` print the `pep:` lines and read the
 variables above.
 
-What is not supported yet: a `[native]` table that compiles C sources
-without a script.
+A package whose C needs only compiling and linking says so in a
+[`[native]`](#native) table instead, with no script.
+
+## `[native]`
+
+C sources the build compiles for its target and links, with no build
+script: the common case of a package that bundles a C library.
+
+```toml
+[native]
+sources    = ["c/*.c"]           # files, or globs of them
+include    = ["c/include"]       # -I
+defines    = ["SQLITE_OMIT_LOAD_EXTENSION", "LEVEL=2"]   # -D
+flags      = ["-Wno-unused"]     # more clang flags
+link       = ["m"]               # libraries to link, as -l adds
+pkg-config = ["zlib"]            # libraries pkg-config describes
+
+[target.'OS(Windows)'.native]
+sources = ["c/win/*.c"]
+link    = ["ws2_32"]
+```
+
+| Key | What it is |
+| --- | --- |
+| `sources` | The C files to compile, or globs of them (`*`, `**`, `?`, `[...]`, `{a,b}`, as [`io.glob`](../reference/io-glob.md) takes); a pattern that names no file is an error at the pattern |
+| `include` | Folders to search for headers |
+| `defines` | Macros, `NAME` or `NAME=value` |
+| `flags` | More flags for clang, for every source |
+| `link` | Libraries to link by name, such as `m` or `ws2_32` |
+| `pkg-config` | Libraries to find with `pkg-config`: its `--cflags` compile the sources, and its `--libs` are linked. It is the `pkg-config` that `PKG_CONFIG` names, else the one on the `PATH`; building for another system, it is pointed at the system root's `.pc` folders (`PKG_CONFIG_LIBDIR` and `PKG_CONFIG_SYSROOT_DIR`) unless `PKG_CONFIG_LIBDIR` is set, and without `--sysroot` that is an error. A library it does not find is an error naming it |
+
+Every path is relative to the package's folder. A
+`[target.'<condition>'.native]` table, with the same keys, adds to
+`[native]` in a build whose **target** the condition (what
+[`[Target(...)]`](../language/platform-selection.md) takes) selects: the C is
+part of the program, so `--target` decides, not the machine the build runs
+on. A package may have only target tables.
+
+Each source is compiled with the clang the build links with, as a build
+script's `PEP_CLANG`, for the build's target (`--target=<triple>`), its
+system root (`--sysroot`), its optimization level (`-O`), and, for Linux
+and Android, `-fPIC`, then these flags, in the package's folder. The objects
+are linked into the program. A dependency's `[native]` table is
+compiled for every program that uses the package, and since it runs no
+package code, `--no-build-scripts` allows it; a dependency's `flags`
+could load a clang plugin from the package (`-fplugin=`), so with them it
+is refused, as a build script is.
+
+**With a build script.** A package may have both: its script runs first,
+and its `PEP_OUT_DIR` is searched for headers, so the C can include one
+the script generates.
+
+**When it compiles again.** Each object is kept in
+`.pep/build/<package>-<hash>/native/<target>/` (`<target>` its triple), named after its source's path
+(`c/add.c` makes `c_add.c.o`), beside a key that covers clang, the flags,
+the source's text, and the text of every header it includes, which clang
+lists as it compiles (`-MD`). A build compiles a source again only when its
+key changes or its object is gone; editing a header recompiles exactly the
+sources that include it.
 
 ## `[dependencies]`
 

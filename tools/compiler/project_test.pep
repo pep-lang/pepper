@@ -105,7 +105,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -450,7 +450,7 @@ reads_target_dependencies() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[target.'OS(Windows)'.dev-dependencies]\nx = { github = \"a/x\" }\n"),
-        "dev-dependencies: unknown key 'dev-dependencies' in '[target.'OS(Windows)']'; expected one of 'dependencies', 'build-dependencies'"
+        "dev-dependencies: unknown key 'dev-dependencies' in '[target.'OS(Windows)']'; expected one of 'dependencies', 'build-dependencies', 'native'"
     );
     expect_equal(
         errors(
@@ -475,6 +475,47 @@ reads_target_dependencies() {
             "[package]\nname = \"a\"\n[target.'OS(Windows)'.dependencies]\nx = { github = \"a/x\", tags = \"v1\" }\n"
         ),
         "tags: unknown key 'tags' in '[target.'OS(Windows)'.dependencies]'; expected one of 'github', 'gitlab', 'codeberg', 'path', 'package', 'version', 'branch', 'tag', 'commit', 'optional', 'features', 'default-features', 'workspace'"
+    );
+}
+
+[Test]
+reads_native_tables() {
+    var parsed = link.parse_manifest(
+        Path("/p/pep.toml"),
+        "[package]\nname = \"p\"\n[native]\nsources = [\"c/*.c\"]\ninclude = [\"c/include\"]\n"
+            + "defines = [\"FAST=1\"]\nflags = [\"-Wall\"]\nlink = [\"m\"]\npkg-config = [\"zlib\"]\n"
+            + "[target.'OS(Windows)'.native]\nsources = [\"c/win.c\"]\nlink = [\"ws2_32\"]\n"
+            + "[target.'OS(Wasi)'.native]\nlink = [\"never\"]\n"
+    );
+    expect_true(parsed.is_ok());
+    var m = parsed.value();
+    var windows = m.native_for(link.Target.parse("x86_64-pc-windows-msvc").value()).value();
+    expect_equal(", ".join(windows.sources), "c/*.c, c/win.c");
+    expect_equal(", ".join(windows.link), "m, ws2_32");
+    expect_equal(", ".join(windows.include), "c/include");
+    expect_equal(", ".join(windows.defines), "FAST=1");
+    expect_equal(", ".join(windows.flags), "-Wall");
+    expect_equal(", ".join(windows.pkg_config), "zlib");
+    expect_equal(m.text.substr_bytes(windows.source_spans[1].start, 9), "\"c/win.c\"");
+    var linux = m.native_for(link.Target.parse("x86_64-unknown-linux-gnu").value()).value();
+    expect_equal(", ".join(linux.sources), "c/*.c");
+    expect_equal(", ".join(linux.link), "m");
+    # No table holds: nothing to compile.
+    var only_windows = link.parse_manifest(
+        Path("/p/pep.toml"), "[package]\nname = \"p\"\n[target.'OS(Windows)'.native]\nsources = [\"w.c\"]\n"
+    );
+    expect_false(only_windows.value().native_for(link.Target.parse("x86_64-unknown-linux-gnu").value()).is_value());
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[native]\nsource = [\"c/*.c\"]\n"),
+        "source: unknown key 'source' in '[native]'; expected one of 'sources', 'include', 'defines', 'flags', 'link', 'pkg-config'"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[target.'OS(Linux)'.native]\nlinks = [\"m\"]\n"),
+        "links: unknown key 'links' in '[target.'OS(Linux)'.native]'; expected one of 'sources', 'include', 'defines', 'flags', 'link', 'pkg-config'"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[native]\nsources = \"c/*.c\"\n"),
+        "\"c/*.c\": 'sources' must be an array of strings, not a string"
     );
 }
 
