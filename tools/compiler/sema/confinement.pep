@@ -24,7 +24,6 @@ import io;
 import [Path] from io;
 import [absolute, demangle_name, Runtime, Target] from compiler.link;
 import os;
-import [MATCH_LOCAL, TRY_LOCAL] from "builder";
 import [has_stashed, is_checked_function, unit_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
@@ -645,11 +644,13 @@ struct _Lock {
     }
 }
 
-## A local in scope: its region (-1 for none) and type.
+## A local in scope: its region (-1 for none), type, and whether the
+## builder made it (`VariableDef.hidden`).
 struct _ScopeLocal {
     var name: String;
     var region: long;
     var ty: TypeName;
+    var hidden = false;
 
     construct(name: String, region: long, ty: TypeName) {
         this.name = name;
@@ -2681,6 +2682,7 @@ struct _RegionWalk {
             joined = link(r, value, variable.default.value());
         }
         declare(variable.name, joined, declared);
+        scopes.last().last().hidden = variable.hidden;
     }
 
     ## The lock of the first leaf of `value` that is locked, or -1.
@@ -2971,10 +2973,11 @@ struct _RegionWalk {
     eval_move(value: Expression): long {
         if (value is SymbolRef(hidden)) {
             var found = local(hidden.id);
-            if (found.is_value() and (hidden.id.starts_with(TRY_LOCAL) or hidden.id.starts_with(MATCH_LOCAL))) {
+            if (found.is_value() and found.value().hidden) {
                 # The builder's own hand-over out of a `?` or `match`
-                # value's hidden local: the value keeps its links, and the
-                # local, now null, references nothing.
+                # value's hidden local (`__try_N`, `__match_N`): the value
+                # keeps its links, and the local, now null, references
+                # nothing.
                 var kept = found.value().region;
                 found.value().region = -1;
                 return kept;
