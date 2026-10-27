@@ -33,7 +33,7 @@ short, and `pepper help build` runs it.
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
 | `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
 | `--frozen` | Both `--locked` and `--offline` | off |
-| `--no-build-scripts` | Fail, rather than run it, when a dependency has a build script | off, or `PEPPER_NO_BUILD_SCRIPTS` |
+| `--no-build-scripts` | Fail, rather than run it, when a dependency has a build script; a `[native]` table still compiles | off, or `PEPPER_NO_BUILD_SCRIPTS` |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
@@ -159,9 +159,18 @@ the program's [build cache](#the-build-cache), even under `--no-cache`,
 whose record of the script's build names the files it imports. The `--emit-*` modes run them too, since the program they load
 may import what a script generates.
 
+After a package's script, if it has one, the compiler compiles the C its
+[`[native]`](projects.md#native) table and the
+`[target.'<condition>'.native]` tables that hold for the target name,
+with its own clang for the target, the system root and the `-O` level,
+into `.pep/build/<package>-<hash>/native/<target>/`, and links the objects. An
+object whose source, included headers (from clang's `-MD` list) and flags
+have not changed is not compiled again.
+
 `--no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`) fails instead of
 running a dependency's script, which runs that package's code on this
-machine; the project's own script still runs:
+machine; the project's own script still runs, and so does every
+`[native]` table, which runs no package code:
 
 ```text
 error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it

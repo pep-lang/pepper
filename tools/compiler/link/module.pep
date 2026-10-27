@@ -37,6 +37,7 @@ export [
     LockedPackage,
     Manifest,
     ManifestError,
+    Native,
     Packages,
     Resolution,
     DEPS_DIR,

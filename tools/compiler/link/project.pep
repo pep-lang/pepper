@@ -397,6 +397,40 @@ export struct Feature {
     }
 }
 
+## A `[native]` table, or a `[target.'<condition>'.native]` one: C sources
+## a build compiles for its target and links, with no build script
+## (`driver.run_build_scripts`). Every path is relative to the package.
+export struct Native {
+    ## `sources`: C files, or globs of them (`c/*.c`).
+    var sources: String[] = Array<String>();
+    ## Where each of `sources` is written.
+    var source_spans: Span[] = Array<Span>();
+    ## `include`: folders to search for headers, as `-I` adds.
+    var include: String[] = Array<String>();
+    ## `defines`: macros, `NAME` or `NAME=value`, as `-D` takes.
+    var defines: String[] = Array<String>();
+    ## `flags`: more clang flags for every source.
+    var flags: String[] = Array<String>();
+    ## `link`: libraries to link by name, as `-l` adds.
+    var link: String[] = Array<String>();
+    ## `pkg-config`: libraries `pkg-config` finds, whose flags compile the
+    ## sources and which are linked.
+    var pkg_config: String[] = Array<String>();
+    ## Its `[target]` table's condition; none for `[native]`.
+    var condition: Attribute? = Optional<Attribute>.Empty;
+
+    ## Appends what `other` lists to what this one does.
+    _add(other: Native) {
+        sources.append_all(other.sources);
+        source_spans.append_all(other.source_spans);
+        include.append_all(other.include);
+        defines.append_all(other.defines);
+        flags.append_all(other.flags);
+        link.append_all(other.link);
+        pkg_config.append_all(other.pkg_config);
+    }
+}
+
 ## A problem with a `pep.toml`, at a byte range of its text.
 export struct ManifestError {
     var message: String;
@@ -459,10 +493,29 @@ export struct Manifest {
     ## the source it replaces (`github:owner/name`). Only the project's own
     ## apply, and in a workspace only the root's.
     var overrides: Dependency[] = Array<Dependency>();
+    ## `[native]`, then each `[target.'<condition>'.native]`, in the order
+    ## they are written (`native_for`).
+    var native: Native[] = Array<Native>();
 
     construct(path: Path, text: String) {
         this.path = path;
         this.text = text;
+    }
+
+    ## The C a build for `build` compiles: `[native]` and each
+    ## `[target.'<condition>'.native]` whose condition holds for it, as one
+    ## table; none when no table holds.
+    native_for(build: Target): Native? {
+        Native? all = Optional<Native>.Empty;
+        for (var table in native) {
+            if (_selects(table.condition, build)) {
+                if (!all.is_value()) {
+                    all = Optional<Native>.Value(Native());
+                }
+                all.value()._add(table);
+            }
+        }
+        return all;
     }
 
     ## The folder holding the `pep.toml`: the project's root.
@@ -1064,6 +1117,34 @@ struct _Reader {
         }
     }
 
+    ## The `[native]` table at `at` (`[target, condition, native]` too),
+    ## which errors call `[name]`.
+    native(at: String[], name: String, members: OrderedMap<String, TomlValue>): Native {
+        var table = Native();
+        for (var (key, value) in members) {
+            var path = _at(at, key);
+            if (key == "sources") {
+                table.sources = strings(path, key, value);
+                for (var source in table.sources) {
+                    table.source_spans.append(item_span(path, source));
+                }
+            } else if (key == "include") {
+                table.include = strings(path, key, value);
+            } else if (key == "defines") {
+                table.defines = strings(path, key, value);
+            } else if (key == "flags") {
+                table.flags = strings(path, key, value);
+            } else if (key == "link") {
+                table.link = strings(path, key, value);
+            } else if (key == "pkg-config") {
+                table.pkg_config = strings(path, key, value);
+            } else {
+                unknown_key(at, key, name, ["sources", "include", "defines", "flags", "link", "pkg-config"]);
+            }
+        }
+        return table;
+    }
+
     ## `[retract]`, each key a version or range and its value the reason,
     ## or `[audit]`, whose `ignore` lists advisory ids: pep-package reads
     ## both, and the build only checks their types.
@@ -1469,8 +1550,8 @@ struct _Reader {
 
     ## The `[target]` table: each key a condition, holding a
     ## `dependencies` table whose entries are appended to the manifest's
-    ## dependencies, marked with it, and a `build-dependencies` table,
-    ## appended to its build-dependencies.
+    ## dependencies, marked with it, a `build-dependencies` table,
+    ## appended to its build-dependencies, and a `native` table.
     targets(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
         for (var (condition, value) in members) {
             var at = ["target", condition];
@@ -1485,12 +1566,18 @@ struct _Reader {
             }
             for (var (key, inner) in tables.value()) {
                 var path = _at(at, key);
-                if (key != "dependencies" and key != "build-dependencies") {
-                    unknown_key(at, key, $"target.'{condition}'", ["dependencies", "build-dependencies"]);
+                if (key != "dependencies" and key != "build-dependencies" and key != "native") {
+                    unknown_key(at, key, $"target.'{condition}'", ["dependencies", "build-dependencies", "native"]);
                     continue;
                 }
                 var entries = table(path, key, inner);
                 if (!entries.is_value()) {
+                    continue;
+                }
+                if (key == "native") {
+                    var found = native(path, $"target.'{condition}'.native", entries.value());
+                    found.condition = Optional<Attribute>.Value(parsed.value());
+                    manifest.native.append(found);
                     continue;
                 }
                 var found = Array<Dependency>();
@@ -1570,6 +1657,11 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
                     }
                 }
             }
+        } else if (key == "native") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                manifest.native.insert(0, reader.native(at, key, table.value()));
+            }
         } else if (key == "target") {
             var table = reader.table(at, key, value);
             if (table.is_value()) {
@@ -1603,7 +1695,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'",
                 reader.key_span(at)
             );
         }

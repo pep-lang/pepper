@@ -1698,6 +1698,7 @@ publish_checks_tests_tags_and_pushes_the_version() {
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
             + "\n[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
             + "\n[overrides]\n\"github:other/numbers\" = { path = \"../near\" }\n"
+            + "\n[native]\nsources = [\"c/*.c\"]\n"
     );
     var refused = package(["publish", "--dry-run"]);
     expect_exit(refused, 1);
@@ -1729,6 +1730,15 @@ publish_checks_tests_tags_and_pushes_the_version() {
     expect_contains(
         refused.stderr,
         "\n  '[overrides]' replaces packages for this project only, so a dependent would build with the originals; remove it\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  'native' needs toolchain 0.11.0, and older ones reject it; set '[package]' minimum_toolchain = \"0.11.0\" or later\n"
+    );
+    # A dependent's copy holds only what is committed.
+    expect_contains(
+        refused.stderr,
+        "\n  '[native]' 'sources' names 'c/*.c', which no file committed in the package matches, so a dependent would not get it; commit it\n"
     );
     expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");
     expect_contains(
@@ -2670,6 +2680,193 @@ a_build_script_runs_on_the_host_and_compiles_c_for_the_target() {
             $"skipped linking: no system root for '{triple}' here; CI's cross-link and cross-run jobs link and run it"
         );
     }
+}
+
+[Test]
+a_native_table_compiles_a_packages_c_until_a_header_changes() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("native_table");
+    add_version(
+        hosts.folder.path,
+        "someone/cnative",
+        "1.0.0",
+        [
+            "pep.toml",
+            "[package]\nname = \"cnative\"\n\n[native]\nsources = [\"c/*.c\"]\ninclude = [\"c/include\"]\n"
+                + "defines = [\"BASE=1\"]\n\n[target.'OS(Windows)'.native]\ndefines = [\"OFFSET=10\"]\n\n"
+                + "[target.'!OS(Windows)'.native]\ndefines = [\"OFFSET=20\"]\n",
+            "module.pep",
+            "extern int native_add(int a, int b);\n\nexport add(a: int, b: int): int {\n    return native_add(a, b);\n}\n",
+            "c/add.c",
+            "#include \"extra.h\"\n\nint native_add(int a, int b) { return a + b + BASE + OFFSET + EXTRA; }\n",
+            "c/include/extra.h",
+            "#define EXTRA 0\n"
+        ]
+    );
+    publish(hosts.folder.path, "someone/cnative");
+    var project = Project("native_table", "cnative = { github = \"someone/cnative\", version = \"1\" }\n");
+    write_file(
+        project.dir.join("main.pep"),
+        "import cnative;\n\nmain(): int {\n    print(cnative.add(2, 3));\n    return 0;\n}\n"
+    );
+    # Its target's table holds: OFFSET is 10 on Windows, 20 elsewhere.
+    var offset = system_name() == "windows" ? 10 : 20;
+    expect_equal(hosts.build_and_run(project.dir), $"{6 + offset}\n");
+    var folders = glob(project.dir.to_string().replace("\\", "/") + "/.pep/build/cnative-*");
+    expect_true(folders.count == 1);
+    # In a folder for the target.
+    var objects = glob(folders[0].to_string().replace("\\", "/") + "/native/*/c_add.c.o");
+    expect_true(objects.count == 1);
+    var object = objects[0];
+    # Nothing it depends on changed: the object is not compiled again.
+    long old = 1000000000000000000;
+    object.set_modified(old);
+    expect_equal(hosts.build_and_run(project.dir), $"{6 + offset}\n");
+    expect_equal(object.metadata().value().modified, old);
+    # A header it includes changed: it is. `--no-build-scripts` allows the
+    # table, which runs no package code.
+    var checkout = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("cnative");
+    write_file(checkout.join("c").join("include").join("extra.h"), "#define EXTRA 100\n");
+    expect_equal(hosts.build_and_run(project.dir, ["--no-build-scripts"]), $"{106 + offset}\n");
+    expect_true(object.metadata().value().modified != old);
+
+    # Vendored, with no host or cache, the copy holds its C.
+    expect_exit(hosts.package(project.dir, ["vendor"]), 0);
+    expect_true(project.dir.join("vendor/github.com/someone/cnative/c/include/extra.h").is_file());
+    Directory.remove_all(project.dir.join(".pep"));
+    Directory.remove_all(hosts.home());
+    var vendored = run(
+        hosts.command(
+            tool("pep-build").to_string(), project.dir, ["--locked", "--offline"]
+        ).environment("PEPPER_PACKAGE_GITHUB_URL", hosts.url + "/nowhere")
+    );
+    expect_exit(vendored, 0);
+    expect_equal(
+        run(process.Command(project.dir.join("app" + toolchain.executable_suffix()).to_string())).stdout,
+        $"{6 + offset}\n"
+    );
+}
+
+[Test]
+a_projects_native_table_builds_after_its_script_and_for_the_target() {
+    var folder = TempFolder("package_native_table");
+    var dir = folder.path.join("app");
+    var build = (arguments: Array<String>) => {
+        return run(process.Command(tool("pep-build").to_string()).arguments(arguments).working_directory(dir));
+    };
+    var program = dir.join("app" + toolchain.executable_suffix());
+    var manifest = "[package]\nname = \"app\"\n\n[native]\nsources = [\"c/*.c\"]\n";
+    write_file(dir.join("pep.toml"), manifest);
+    write_file(
+        dir.join("main.pep"),
+        "extern int native_add(int a, int b);\n\nmain(): int {\n    print($\"{native_add(1, 1)}\");\n    return 0;\n}\n"
+    );
+    # The script runs first: the C includes the header it writes.
+    write_file(
+        dir.join("build.pep"),
+        "import [File, Path] from io;\nimport os;\n\nmain(): int {\n"
+            + "    var out = Path(os.environment(\"PEP_OUT_DIR\").value());\n"
+            + "    File.write_text(out.join(Path(\"made.h\")), \"#define MADE 40\\n\");\n    return 0;\n}\n"
+    );
+    write_file(
+        dir.join("c").join("add.c"), "#include \"made.h\"\n\nint native_add(int a, int b) { return a + b + MADE; }\n"
+    );
+    expect_exit(build(Array<String>()), 0);
+    expect_equal(run(process.Command(program.to_string())).stdout, "42\n");
+
+    # A source pattern that names nothing is an error at it, as is a key
+    # the table does not have, and C that does not compile.
+    write_file(dir.join("pep.toml"), manifest.replace("c/*.c", "c/*.cc"));
+    var unmatched = build(Array<String>());
+    expect_exit(unmatched, 1);
+    expect_contains(unmatched.stderr, "pep.toml:5:12: error: 'c/*.cc' names no file in the package\n");
+    write_file(dir.join("pep.toml"), manifest + "sauce = [\"x\"]\n");
+    var unknown = build(Array<String>());
+    expect_exit(unknown, 1);
+    expect_contains(
+        unknown.stderr,
+        "error: unknown key 'sauce' in '[native]'; expected one of 'sources', 'include', 'defines', 'flags', 'link', 'pkg-config'"
+    );
+    write_file(dir.join("pep.toml"), manifest);
+    write_file(dir.join("c").join("bad.c"), "int broken( {\n");
+    var bad = build(Array<String>());
+    expect_exit(bad, 1);
+    expect_contains(bad.stderr, "error: cannot compile 'c/bad.c' of the '[native]' table of 'app':\n");
+    File.remove(dir.join("c").join("bad.c"));
+
+    # `pkg-config` names libraries a fake pkg-config describes: its
+    # `--cflags` define FROM_PKG.
+    var fake = folder.path.join("fake" + toolchain.executable_suffix());
+    var fake_source = folder.path.join("fake.pep");
+    write_file(
+        fake_source,
+        "import io;\n\nmain(args: String[]): int {\n    if (args[2] != \"fake\") {\n"
+            + "        io.File.stderr().write_all(\"Package nope was not found\");\n        return 1;\n    }\n"
+            + "    print(args[1] == \"--cflags\" ? \"-DFROM_PKG=2\" : \"\");\n    return 0;\n}\n"
+    );
+    expect_true(build_program(fake_source, fake, folder.path.join("fake_build")).is_empty());
+    write_file(dir.join("pep.toml"), manifest + "pkg-config = [\"fake\"]\n");
+    write_file(
+        dir.join("c").join("add.c"),
+        "#include \"made.h\"\n\nint native_add(int a, int b) { return a + b + MADE + FROM_PKG; }\n"
+    );
+    var with_pkg = (arguments: Array<String>) => {
+        return run(
+            process
+                .Command(tool("pep-build").to_string())
+                .arguments(arguments)
+                .working_directory(dir)
+                .environment("PKG_CONFIG", fake.to_string())
+        );
+    };
+    expect_exit(with_pkg(Array<String>()), 0);
+    expect_equal(run(process.Command(program.to_string())).stdout, "44\n");
+    write_file(dir.join("pep.toml"), manifest + "pkg-config = [\"nope\"]\n");
+    var missing = with_pkg(Array<String>());
+    expect_exit(missing, 1);
+    expect_contains(
+        missing.stderr,
+        "error: pkg-config cannot find 'nope', which the '[native]' table of 'app' names: Package nope was not found\n"
+    );
+
+    # For another system's triple, its object is that system's, and the
+    # tables whose conditions hold for it add their sources.
+    bool on_linux = system_name() == "linux";
+    var triple = on_linux ? "x86_64-pc-windows-msvc" : "x86_64-unknown-linux-gnu";
+    var other = on_linux ? "Windows" : "Linux";
+    write_file(dir.join("pep.toml"), manifest + $"\n[target.'OS({other})'.native]\nsources = [\"c/other/*.c\"]\n");
+    write_file(
+        dir.join("c").join("add.c"), "#include \"made.h\"\n\nint native_add(int a, int b) { return a + b + MADE; }\n"
+    );
+    write_file(dir.join("c").join("other").join("other.c"), "int native_other(void) { return 1; }\n");
+    var crossed = build(["--target", triple]);
+    var folders = glob(dir.to_string().replace("\\", "/") + "/.pep/build/app-*");
+    expect_true(folders.count == 1);
+    var native = folders[0].join("native").join(triple);
+    for (var name in ["c_add.c.o", "c_other_other.c.o"]) {
+        var bytes = File.read_bytes(native.join(name)).value();
+        expect_true(bytes.count > 20);
+        if (on_linux) {
+            expect_equal(bytes[0] as int, 0x64);
+            expect_equal(bytes[1] as int, 0x86);
+        } else {
+            expect_equal(bytes[0] as int, 0x7f);
+            expect_equal(bytes[18] as int, 62);
+        }
+    }
+    if (!crossed.status.success()) {
+        expect_contains(crossed.stderr, $"note: linking for '{triple}'");
+        print(
+            $"skipped linking: no system root for '{triple}' here; CI's cross-link and cross-run jobs link and run it"
+        );
+    }
+    # Built for this system, that table does not hold.
+    expect_exit(build(Array<String>()), 0);
+    var native_glob = folders[0].to_string().replace("\\", "/") + "/native/*/";
+    expect_true(glob(native_glob + "c_add.c.o").count == 2);
+    expect_true(glob(native_glob + "c_other_other.c.o").count == 1);
 }
 
 [Test]

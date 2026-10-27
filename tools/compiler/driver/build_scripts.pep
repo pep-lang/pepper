@@ -71,7 +71,8 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
         if (script.is_err()) {
             return Result<ScriptOutput, String>.err(script.error());
         }
-        if (!script.value().is_value()) {
+        var native = manifest.native_for(inputs.target);
+        if (!script.value().is_value() and !native.is_value()) {
             continue;
         }
         var name = manifest.name.is_empty ? manifest.dir().file_name().value_or("project") : manifest.name;
@@ -81,18 +82,28 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
         if (own and inputs.target.build_script_root.is_value()) {
             continue;
         }
-        if (inputs.refuse and !own) {
-            return Result<ScriptOutput, String>.err(
-                $"the dependency '{name}' has a build script, {script.value().value()}, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it"
-            );
+        if (script.value().is_value()) {
+            if (inputs.refuse and !own) {
+                return Result<ScriptOutput, String>.err(
+                    $"the dependency '{name}' has a build script, {script.value().value()}, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it"
+                );
+            }
+            var ran = _run(name, manifest, script.value().value(), packages, inputs);
+            if (ran.is_err()) {
+                return Result<ScriptOutput, String>.err(ran.error());
+            }
+            var applied = _apply(name, manifest, ran.value(), output);
+            if (applied.is_err()) {
+                return Result<ScriptOutput, String>.err(applied.error());
+            }
         }
-        var ran = _run(name, manifest, script.value().value(), packages, inputs);
-        if (ran.is_err()) {
-            return Result<ScriptOutput, String>.err(ran.error());
-        }
-        var applied = _apply(name, manifest, ran.value(), output);
-        if (applied.is_err()) {
-            return Result<ScriptOutput, String>.err(applied.error());
+        # After the script, so the C can include the headers it wrote. It
+        # runs no package code, so `refuse` allows it.
+        if (native.is_value()) {
+            var built = _build_native(name, manifest, native.value(), script.value().is_value(), inputs, output);
+            if (built.is_err()) {
+                return Result<ScriptOutput, String>.err(built.error());
+            }
         }
     }
     return Result<ScriptOutput, String>.ok(output);
@@ -115,23 +126,31 @@ _run(
     if (created.is_err()) {
         return Result<String, String>.err($"cannot create {out}: {created.error().message}");
     }
-    var lock_path = work.join(Path("lock"));
-    var opened = io.OpenOptions().write(true).create(true).open(lock_path);
-    if (opened.is_err()) {
-        return Result<String, String>.err($"cannot open {lock_path}: {opened.error().message}");
-    }
-    var lock = opened.value();
-    var held = lock.lock();
-    if (held.is_err()) {
-        return Result<String, String>.err($"cannot lock {lock_path}: {held.error().message}");
+    var lock = _lock(work.join(Path("lock")));
+    if (lock.is_err()) {
+        return Result<String, String>.err(lock.error());
     }
     # Its own source, its package's pep.toml, and pep.lock, which holds its
     # build-dependencies' revisions.
     var sources = [script, manifest.path, packages.deps_root.value().join(Path(link.LOCK_FILE))];
     var environment = _environment(name, dir, out, packages.features_on(manifest), inputs);
     var ran = _run_locked(name, dir, sources, work, environment, packages.deps_root.value(), lost, inputs);
-    lock.close();
+    lock.value().close();
     return ran;
+}
+
+# The file `path`, opened and locked, so one build at a time works in its
+# folder; closing it unlocks it.
+_lock(path: Path): Result<File, String> {
+    var opened = io.OpenOptions().write(true).create(true).open(path);
+    if (opened.is_err()) {
+        return Result<File, String>.err($"cannot open {path}: {opened.error().message}");
+    }
+    var held = opened.value().lock();
+    if (held.is_err()) {
+        return Result<File, String>.err($"cannot lock {path}: {held.error().message}");
+    }
+    return Result<File, String>.ok(opened.value());
 }
 
 # `_run`, holding the lock: `stamp` holds the key, then the output. The
@@ -366,4 +385,282 @@ _apply(name: String, manifest: link.Manifest, output: String, into: ScriptOutput
         }
     }
     return Result<void, String>.ok();
+}
+
+# Compiles the C sources `native` lists, the `[native]` tables of the
+# package `name` whose pep.toml is `manifest`, for the build's target, with
+# clang in the package's folder, and adds the objects and what the tables
+# link to `into`. `scripted`: the package has a build script, whose
+# `PEP_OUT_DIR` is searched for headers. Each object is kept in the
+# package's script folder, in `native/<target>/`, beside the key it was compiled
+# under (`_native_key`), and compiled again only when its key changes.
+_build_native(
+    name: String, manifest: link.Manifest, native: link.Native, scripted: bool, inputs: ScriptInputs, into: ScriptOutput
+): Result<void, String> {
+    var dir = manifest.dir();
+    for (var library in native.link) {
+        if (!into.libraries.contains(library)) {
+            into.libraries.append(library);
+        }
+    }
+    var triple = codegen.target_triple(inputs.target);
+    var flags = ["--target=" + triple, $"-O{inputs.opt_level}"];
+    if (inputs.sysroot.is_value()) {
+        flags.append("--sysroot=" + inputs.sysroot.value().to_string());
+    }
+    # So an object links into a shared library too; elsewhere it is the default.
+    if (inputs.target.os == "linux" or inputs.target.os == "android") {
+        flags.append("-fPIC");
+    }
+    var work = manifest.script_folder(inputs.build_dir);
+    if (scripted) {
+        flags.append("-I" + link.absolute(work.join(Path("out"))).to_string());
+    }
+    for (var folder in native.include) {
+        flags.append("-I" + folder);
+    }
+    for (var define in native.defines) {
+        flags.append("-D" + define);
+    }
+    for (var library in native.pkg_config) {
+        var found = _pkg_config(name, library, inputs, into);
+        if (found.is_err()) {
+            return Result<void, String>.err(found.error());
+        }
+        flags.append_all(found.value());
+    }
+    flags.append_all(native.flags);
+    var sources = _native_sources(manifest, native);
+    if (sources.is_err()) {
+        return Result<void, String>.err(sources.error());
+    }
+    if (sources.value().is_empty) {
+        return Result<void, String>.ok();
+    }
+    var clang = find_link_driver();
+    if (!clang.is_value()) {
+        return Result<void, String>.err(
+            $"cannot compile the '[native]' sources of '{name}': this toolchain has no clang (see PEPPER_LLVM_PREFIX)"
+        );
+    }
+    # A folder per target, so builds for two do not replace each other's.
+    var folder = link.absolute(work.join(Path("native")).join(Path(triple)));
+    var created = Directory.create_all(folder);
+    if (created.is_err()) {
+        return Result<void, String>.err($"cannot create {folder}: {created.error().message}");
+    }
+    var lock = _lock(folder.join(Path("lock")));
+    if (lock.is_err()) {
+        return Result<void, String>.err(lock.error());
+    }
+    var compiled = _compile_native(name, dir, clang.value(), flags, sources.value(), folder, into);
+    lock.value().close();
+    return compiled;
+}
+
+# `_build_native`, holding the lock on `folder`: compiles each of
+# `sources`, relative to `dir`, with `clang` and `flags` into `folder`,
+# unless its object's key still holds.
+_compile_native(
+    name: String, dir: Path, clang: Path, flags: String[], sources: String[], folder: Path, into: ScriptOutput
+): Result<void, String> {
+    var stems = HashMap<String, String>();
+    # shortcut: compiles one source at a time; run clang side by side when a
+    # package's many sources make its first build slow.
+    for (var source in sources) {
+        var stem = source.replace("/", "_").replace(":", "_");
+        var other = stems.try_get(stem);
+        if (other.is_value()) {
+            return Result<void, String>.err(
+                $"cannot compile both '{other.value()}' and '{source}' of the '[native]' table of '{name}': each makes {stem}.o; rename one"
+            );
+        }
+        stems[stem] = source;
+        var object = folder.join(Path(stem + ".o"));
+        var depfile = folder.join(Path(stem + ".d"));
+        var stamp = folder.join(Path(stem + ".key"));
+        var arguments = flags.copy();
+        arguments.append_all(
+            ["-c", source, "-o", object.to_string(), "-MD", "-MF", depfile.to_string(), "-MT", "object"]
+        );
+        var command = clang.to_string() + "\n" + "\n".join(arguments);
+        into.objects.append(object);
+        var kept = File.read_to_string(stamp);
+        var key = _native_key(dir, command, depfile);
+        if (kept.is_ok() and key.is_value() and kept.value() == key.value() and object.is_file()) {
+            continue;
+        }
+        var ran = process.Command(clang.to_string()).arguments(arguments).working_directory(dir).run();
+        if (ran.is_err()) {
+            return Result<void, String>.err($"cannot run {clang}: {ran.error().message}");
+        }
+        if (!ran.value().status.success()) {
+            # Clang's own `error:` lines would keep the report from adding one.
+            return Result<void, String>.err(
+                $"error: cannot compile '{source}' of the '[native]' table of '{name}':\n{(ran.value().stderr + ran.value().stdout).trim()}"
+            );
+        }
+        # Its warnings.
+        if (!ran.value().stderr.trim().is_empty) {
+            File.stderr().write_all(ran.value().stderr);
+        }
+        var written = File.write_text(stamp, _native_key(dir, command, depfile).value_or(""));
+        if (written.is_err()) {
+            return Result<void, String>.err($"cannot write {stamp}: {written.error().message}");
+        }
+    }
+    return Result<void, String>.ok();
+}
+
+# The files `native`'s `sources` name, relative to its package's folder
+# and with `/` separators, each once; an error at the pattern that names
+# none.
+_native_sources(manifest: link.Manifest, native: link.Native): Result<String[], String> {
+    var prefix = link.absolute(manifest.dir()).to_string().replace("\\", "/") + "/";
+    var sources = Array<String>();
+    for (var k in 0..native.sources.count) {
+        var found = 0;
+        for (var path in io.glob(prefix + native.sources[k])) {
+            var written = path.to_string().replace("\\", "/");
+            if (path.is_file() and written.starts_with(prefix)) {
+                found += 1;
+                var source = written.substr_bytes(prefix.size, written.size - prefix.size);
+                if (!sources.contains(source)) {
+                    sources.append(source);
+                }
+            }
+        }
+        if (found == 0) {
+            var problem = link.ManifestError(
+                $"'{native.sources[k]}' names no file in the package", native.source_spans[k]
+            );
+            return Result<String[], String>.err(link.render_manifest_errors(manifest.path, manifest.text, [problem]));
+        }
+    }
+    return Result<String[], String>.ok(sources);
+}
+
+# What an object depends on, as a hash: `command`, which compiles it, and
+# every file its depfile names (the source, and each header it includes,
+# relative to `dir`); none when there is no depfile.
+_native_key(dir: Path, command: String, depfile: Path): String? {
+    var listed = File.read_to_string(depfile);
+    if (listed.is_err()) {
+        return Optional<String>.Empty;
+    }
+    var text = StringBuilder();
+    text.append(command + "\n");
+    for (var file in _depfile_paths(listed.value())) {
+        var path = dir.join(Path(file));
+        text.append($"{path} {_hash(path)}\n");
+    }
+    return Optional<String>.Value(digest.to_hex(digest.blake3(text.to_string())));
+}
+
+# The files a depfile clang wrote with `-MD -MT object` names: the words
+# after `object:`, where `\` before a line break continues the line, `\`
+# before a space or `#` keeps it, and `$$` is `$`.
+_depfile_paths(text: String): String[] {
+    var start = text.find(":");
+    var from = start < 0 ? 0 as ulong : start as ulong + 1;
+    var words = text
+        .substr_bytes(from, text.size - from)
+        .replace("\\\r\n", " ")
+        .replace("\\\n", " ")
+        .replace("\\ ", "\0")
+        .replace("\\#", "#")
+        .replace("$$", "$")
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .replace("\t", " ");
+    var paths = Array<String>();
+    for (var word in words.split(" ")) {
+        if (!word.is_empty) {
+            paths.append(word.replace("\0", " "));
+        }
+    }
+    return paths;
+}
+
+# The flags pkg-config gives to compile with `library`, which the
+# `[native]` table of `name` names; what it gives to link it is added to
+# `into`.
+_pkg_config(name: String, library: String, inputs: ScriptInputs, into: ScriptOutput): Result<String[], String> {
+    var cflags = _run_pkg_config(name, library, "--cflags", inputs);
+    if (cflags.is_err()) {
+        return cflags;
+    }
+    var libs = _run_pkg_config(name, library, "--libs", inputs);
+    if (libs.is_err()) {
+        return libs;
+    }
+    for (var flag in libs.value()) {
+        if (flag.starts_with("-L")) {
+            into.library_dirs.append(Path(flag.substr_bytes(2, flag.size - 2)));
+        } else if (flag.starts_with("-l") or flag == "-pthread") {
+            var named = flag == "-pthread" ? "pthread" : flag.substr_bytes(2, flag.size - 2);
+            if (!into.libraries.contains(named)) {
+                into.libraries.append(named);
+            }
+        } else if (flag.ends_with(".a") or flag.ends_with(".lib")) {
+            into.objects.append(Path(flag));
+        } else {
+            File.stderr().write_all(
+                $"warning: {name}: pkg-config gives '{flag}' to link {library}, which the build cannot pass on: ignored\n"
+            );
+        }
+    }
+    return cflags;
+}
+
+# What `pkg-config <query> <library>` prints, split into flags: the
+# pkg-config `PKG_CONFIG` names, else the one on the PATH, which a build
+# for another system points at the target's system root's `.pc` folders,
+# unless `PKG_CONFIG_LIBDIR` is set.
+# shortcut: splits at spaces, so a path holding an escaped space breaks;
+# parse pkg-config's quoting when a library needs it.
+_run_pkg_config(name: String, library: String, query: String, inputs: ScriptInputs): Result<String[], String> {
+    var program = os.environment("PKG_CONFIG").value_or("pkg-config");
+    var command = process.Command(program).arguments([query, library]);
+    var triple = codegen.target_triple(inputs.target);
+    if (triple != codegen.target_triple(link.Target()) and !os.environment("PKG_CONFIG_LIBDIR").is_value()) {
+        if (!inputs.sysroot.is_value()) {
+            return Result<String[], String>.err(
+                $"cannot ask pkg-config for '{library}', which the '[native]' table of '{name}' names, for {triple}: the build has no --sysroot, so pkg-config would describe this machine's libraries; set PKG_CONFIG_LIBDIR to the folders holding the target's .pc files"
+            );
+        }
+        var root = inputs.sysroot.value().to_string();
+        var folders = Array<String>();
+        for (var folder in [
+            "/usr/lib/pkgconfig",
+            "/usr/share/pkgconfig",
+            "/usr/local/lib/pkgconfig",
+            $"/usr/lib/{inputs.target.arch}-linux-gnu/pkgconfig"
+        ]) {
+            folders.append(root + folder);
+        }
+        var separator = os.system_os() == os.OperatingSystem.Windows ? ";" : ":";
+        command.environment("PKG_CONFIG_LIBDIR", separator.join(folders));
+        if (!os.environment("PKG_CONFIG_SYSROOT_DIR").is_value()) {
+            command.environment("PKG_CONFIG_SYSROOT_DIR", root);
+        }
+    }
+    var ran = command.run();
+    if (ran.is_err()) {
+        return Result<String[], String>.err(
+            $"cannot run {program} to find '{library}', which the '[native]' table of '{name}' names: {ran.error().message}; install pkg-config, or set PKG_CONFIG to the pkg-config to run"
+        );
+    }
+    if (!ran.value().status.success()) {
+        return Result<String[], String>.err(
+            $"pkg-config cannot find '{library}', which the '[native]' table of '{name}' names: {ran.value().stderr.trim()}\ninstall it, or add the folder holding {library}.pc to PKG_CONFIG_PATH"
+        );
+    }
+    var flags = Array<String>();
+    for (var flag in ran.value().stdout.trim().split(" ")) {
+        if (!flag.trim().is_empty) {
+            flags.append(flag.trim());
+        }
+    }
+    return Result<String[], String>.ok(flags);
 }

@@ -412,7 +412,8 @@ export newer_manifest_features(): Array<(String, String)> {
         ("fetch.vendor", "0.11.0"),
         ("retract", "0.11.0"),
         ("audit", "0.11.0"),
-        ("build-dependencies", "0.11.0")
+        ("build-dependencies", "0.11.0"),
+        ("native", "0.11.0")
     ];
 }
 

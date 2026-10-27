@@ -9,7 +9,9 @@
 # for the other two operating systems (`--target`, with the system roots
 # ci-provision-cross.sh set up) into <output-dir>/<os>/. So too the project
 # `native-script`, whose build script, built for the host, compiles C for the
-# target (pep-package's test a_build_script_runs_on_the_host_and_compiles_c_for_the_target).
+# target (pep-package's test a_build_script_runs_on_the_host_and_compiles_c_for_the_target),
+# and `native-table`, whose `[native]` table compiles C for the target
+# (a_projects_native_table_builds_after_its_script_and_for_the_target).
 #
 # `run` runs on each host after every `build`: <artifacts-dir> holds each
 # host's <output-dir> in a folder of its own. It runs every program built for
@@ -18,7 +20,7 @@
 set -euo pipefail
 
 EXAMPLES="hello interpolation-format maps-sorted json-structs threads-basics simd-basics"
-PROGRAMS="$EXAMPLES native-script"
+PROGRAMS="$EXAMPLES native-script native-table"
 
 # The runners: x86_64 Linux and Windows, and an arm64 Mac. (A function, not
 # an associative array: macOS ships bash 3.2.)
@@ -74,6 +76,21 @@ case "${1:-}" in
     for os in linux macos windows; do
       [ "$os" != "$host" ] || continue
       (cd "$project" && "$compiler_path" --target "$(triple "$os")" -o "$out/$os/$(executable "$os" native-script)")
+    done
+    rm -rf "$project"
+    # The project native-table: the same C, compiled for the target by its
+    # `[native]` table, with a define that a target condition chooses.
+    project="$out/native-table"
+    mkdir -p "$project/c"
+    printf '[package]\nname = "app"\n\n[native]\nsources = ["c/*.c"]\n\n[target.%s.native]\ndefines = ["NATIVE_WINDOWS"]\n' "'OS(Windows)'" > "$project/pep.toml"
+    cp "$testdata/native_main.pep.txt" "$project/main.pep"
+    printf '#ifdef NATIVE_WINDOWS\nint native_add(int a, int b) { return a + b + 100; }\n#else\nint native_add(int a, int b) { return a + b; }\n#endif\n' > "$project/c/add.c"
+    native="$out/native/$(executable "$host" native-table)"
+    (cd "$project" && "$compiler_path" -o "$native")
+    "$native" > "$out/expected/native-table.txt"
+    for os in linux macos windows; do
+      [ "$os" != "$host" ] || continue
+      (cd "$project" && "$compiler_path" --target "$(triple "$os")" -o "$out/$os/$(executable "$os" native-table)")
     done
     rm -rf "$project"
     # The objects stay, so `run` can compare what two hosts compiled for
