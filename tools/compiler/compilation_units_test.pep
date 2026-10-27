@@ -74,8 +74,9 @@ binds_a_generic_overload_beside_a_plain_one() {
 }
 
 # A generic method's bare name with its type arguments is its value
-# (#274), in a method and in a closure, static or not, with or without
-# parameters: it was built as a call, typed as the method's result.
+# (#274), in a method, an extension and a closure, static or not, with
+# or without parameters: it was built as a call, typed as the method's
+# result.
 [Test]
 names_a_generic_method_by_its_bare_name_as_a_value() {
     _builds_and_runs(
@@ -83,7 +84,7 @@ names_a_generic_method_by_its_bare_name_as_a_value() {
         [
             (
                 "main.pep",
-                "struct Tags<U> {\n    var tag = \"tag\";\n    tag_of<T>(): String {\n        return tag;\n    }\n    pick<T>(x: T): String {\n        return tag;\n    }\n    static make<T>(): String {\n        return \"made\";\n    }\n    tag_later(): () => String {\n        return tag_of<U>;\n    }\n    pick_later(): (U) => String {\n        return pick<U>;\n    }\n    make_later(): () => String {\n        return make<U>;\n    }\n    in_closure(): () => String {\n        return () => {\n            var f = tag_of<int>;\n            return f();\n        };\n    }\n}\nmain(): int {\n    var t = Tags<bool>();\n    if (t.tag_later()() != \"tag\" or t.pick_later()(true) != \"tag\") {\n        return 1;\n    }\n    return t.make_later()() == \"made\" and t.in_closure()() == \"tag\" ? 0 : 2;\n}\n"
+                "struct Tags<U> {\n    var tag = \"tag\";\n    tag_of<T>(): String {\n        return tag;\n    }\n    pick<T>(x: T): String {\n        return tag;\n    }\n    static make<T>(): String {\n        return \"made\";\n    }\n    tag_later(): () => String {\n        return tag_of<U>;\n    }\n    pick_later(): (U) => String {\n        return pick<U>;\n    }\n    make_later(): () => String {\n        return make<U>;\n    }\n    in_closure(): () => String {\n        return () => {\n            var f = tag_of<int>;\n            return f();\n        };\n    }\n}\ntrait Later {\n    extended(): () => String;\n}\nextend Tags<bool> with Later {\n    extended(): () => String {\n        return tag_of<int>;\n    }\n}\nmain(): int {\n    var t = Tags<bool>();\n    if (t.extended()() != \"tag\") {\n        return 3;\n    }\n    if (t.tag_later()() != \"tag\" or t.pick_later()(true) != \"tag\") {\n        return 1;\n    }\n    return t.make_later()() == \"made\" and t.in_closure()() == \"tag\" ? 0 : 2;\n}\n"
             )
         ]
     );
