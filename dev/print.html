@@ -9308,6 +9308,47 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>What <code>?</code> or a pattern binding takes out of a call's result can be moved
+too: the <code>Result</code> or <code>Optional</code> the call returned is a temporary, which
+lets go of its value once the value is read. One kept in a variable still
+holds it:</p>
+<pre><code class="language-pepper">import async;
+
+struct Connection {
+    var id: int;
+
+    construct(id: int) {
+        this.id = id;
+    }
+}
+
+connect(id: int): Result&lt;Connection, String&gt; {
+    return Result&lt;Connection, String&gt;.ok(Connection(id));
+}
+
+open_both(pool: async.Channel&lt;Connection&gt;): Result&lt;void, String&gt; {
+    # The `Result` is a temporary: once `?` has read it, `first` holds
+    # the only reference to the connection.
+    var first = connect(1)?;
+    pool.send(move(first));
+    if (connect(2) is Ok(second)) {
+        pool.send(move(second));
+    }
+
+    # var kept = connect(3);
+    # var third = kept?;
+    # pool.send(move(third));   # error: 'kept' also references its value
+    return Result&lt;void, String&gt;.ok();
+}
+
+main(): int {
+    var pool = async.Channel&lt;Connection&gt;();
+    open_both(pool);
+    print($"{pool.receive().value().id}");  # 1
+    print($"{pool.receive().value().id}");  # 2
+    return 0;
+}
+</code></pre>
 <p>In a loop, the check counts every reference the loop's body makes,
 wherever in the body it is made: a statement after the <code>move</code> runs again
 before the next pass's <code>move</code>. So a loop can move a variable it gives a
