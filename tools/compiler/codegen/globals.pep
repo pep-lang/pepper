@@ -510,8 +510,24 @@ extend Generator {
             PointerLiteral => {
                 return Optional<llvm.Value>.Value(llvm_ty.zero());
             }
-            Default(_) => {
-                return Optional<llvm.Value>.Value(llvm_ty.zero());
+            # An enum field's zero: its default case, as `zero_for` writes it.
+            Cast(node) => {
+                if (node.kind == sema.CastKind.Synthesized and kind == llvm.TypeKind.Integer) {
+                    match (node.expr) {
+                        IntLiteral(v) => {
+                            return Optional<llvm.Value>.Value(llvm_ty.const_int(v));
+                        }
+                        else => {}
+                    }
+                }
+            }
+            # A type's default, as a store would make it: an enum's is its
+            # default case.
+            Default(default_ty) => {
+                var made = codegen_default_expr(default_ty);
+                if (made.is_ok()) {
+                    return Optional<llvm.Value>.Value(made.value());
+                }
             }
             StringLiteral(node) => {
                 if (node.is_raw and kind == llvm.TypeKind.Pointer) {
