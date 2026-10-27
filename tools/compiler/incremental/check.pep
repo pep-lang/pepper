@@ -841,12 +841,11 @@ _add_struct(after: sema.Module, fresh: sema.Module, loc: sema.Loc): bool {
 
 # Replaces the record's struct of the name of `fresh`, a struct as built now
 # with a field the record's lacks or a changed constructor, with `fresh`,
-# unchecked, so the passes
-# check it whole: its members' bodies, the members they synthesize from its
-# fields (`__dtor`, copies) and its layout. Code outside it reads its fields
-# by name and its layout from code generation, which the passes leave alone.
-# Adds the record's struct to `replaced`. Whether it could: the record has
-# the struct, checked, and is not generic.
+# unchecked, so the passes check it whole: its members' bodies, the members
+# they synthesize from its fields (`__dtor`, copies) and its layout. Code
+# outside it reads its fields by name and its layout from code generation,
+# which the passes leave alone. Adds the record's struct to `replaced`.
+# Whether it could: the record has the struct, checked, and is not generic.
 _replace_struct(after: sema.Module, fresh: sema.StructDef, replaced: sema.StructDef[]): bool {
     for (var old in replaced) {
         if (old.name == fresh.name) {
