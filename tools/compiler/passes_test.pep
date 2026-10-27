@@ -718,7 +718,7 @@ nested_array_literals_keep_few_methods_per_level() {
     expect_equal(at_24 - at_16, at_16 - at_8);
     # 67 a level now, 128 before.
     var per_level = (at_16 - at_8) / 8;
-    if (per_level > 80) {
+    if (per_level > 70) {
         panic($"a level of a nested array literal keeps {per_level} method bodies");
     }
 }
