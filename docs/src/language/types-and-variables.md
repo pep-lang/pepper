@@ -393,10 +393,13 @@ var depth: int = 0;                       # one per thread
 ```
 
 A global whose initializer is a literal (a number, a `bool`, `__null`, or a
-string literal) is set when the program loads, with no code run. One that
-nothing reads, like a function nothing calls, is left out of the executable,
-so a module's data tables cost only the programs that use them. A Windows
-build with `-g` keeps them all.
+string literal) is set when the program loads, with no code run. So is a
+[`[Value]` struct](value-structs.md) made of literals, when its constructor only
+stores its arguments and constants in its fields
+(`const TABLE = Table("...", 4);`); a constructor that does anything else
+runs at startup. One that nothing reads, like a function nothing calls, is
+left out of the executable, so a module's data tables cost only the
+programs that use them. A Windows build with `-g` keeps them all.
 
 ## Casting with `as`
 
