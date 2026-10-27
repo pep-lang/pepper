@@ -544,6 +544,9 @@ export recheck_compilation_unit(
     var built = HashMap<uint, sema.Module>();
     var rechecked = Array<(sema.FunctionDef, String, String)>();
     var methods = HashSet<String>();
+    # The structs an added field or a changed constructor replaced, as the
+    # record had them.
+    var replaced = Array<sema.StructDef>();
     for (var (file, name, body) in base.changed) {
         if (!built.contains(file)) {
             var made = sema.build_file(program.files[file as ulong].module, file);
@@ -560,6 +563,25 @@ export recheck_compilation_unit(
             return _not_rechecked("match");
         }
         var (function, owner, kind) = old.value();
+        # `synthesize` completes the constructors of the structs it checks
+        # whole only: a new body put into a checked one has no `this` (#270).
+        # So its struct is checked again whole, when it is a plain one, as
+        # for an added field.
+        if (kind == "constructor") {
+            var fresh_struct = Optional<sema.StructDef>.Empty;
+            for (var st in built[file].structs) {
+                if (st.name == owner
+                    and st.generic_methods.count == 0
+                    and !st.enum_cases.is_value()
+                    and st.attributes.count == 0) {
+                    fresh_struct = Optional<sema.StructDef>.Value(st);
+                }
+            }
+            if (!fresh_struct.is_value() or !_replace_struct(after, fresh_struct.value(), replaced)) {
+                return _not_rechecked("a constructor");
+            }
+            continue;
+        }
         var checked = kind.is_empty ?
             after.checked.functions.contains(function.name) :
             after.checked.structs.contains(owner);
@@ -583,8 +605,6 @@ export recheck_compilation_unit(
         after.checked.summaries.remove(key);
         after.recorded_summaries.remove(function.loc);
     }
-    # The structs an added field replaced, as the record had them.
-    var replaced = Array<sema.StructDef>();
     for (var (file, name) in base.added) {
         if (!built.contains(file)) {
             var made = sema.build_file(program.files[file as ulong].module, file);
@@ -714,7 +734,7 @@ _add(
         }
         for (var field in st.field_members) {
             if (field.loc == loc) {
-                return _add_field(after, st, replaced);
+                return _replace_struct(after, st, replaced);
             }
         }
     }
@@ -820,16 +840,16 @@ _add_struct(after: sema.Module, fresh: sema.Module, loc: sema.Loc): bool {
 }
 
 # Replaces the record's struct of the name of `fresh`, a struct as built now
-# with a field the record's lacks, with `fresh`, unchecked, so the passes
-# check it whole: its members' bodies, the members they synthesize from its
-# fields (`__dtor`, copies) and its layout. Code outside it reads its fields
-# by name and its layout from code generation, which the passes leave alone.
-# Adds the record's struct to `replaced`. Whether it could: the record has
-# the struct, checked, and is not generic.
-_add_field(after: sema.Module, fresh: sema.StructDef, replaced: sema.StructDef[]): bool {
+# with a field the record's lacks or a changed constructor, with `fresh`,
+# unchecked, so the passes check it whole: its members' bodies, the members
+# they synthesize from its fields (`__dtor`, copies) and its layout. Code
+# outside it reads its fields by name and its layout from code generation,
+# which the passes leave alone. Adds the record's struct to `replaced`.
+# Whether it could: the record has the struct, checked, and is not generic.
+_replace_struct(after: sema.Module, fresh: sema.StructDef, replaced: sema.StructDef[]): bool {
     for (var old in replaced) {
         if (old.name == fresh.name) {
-            # Another field of it, which `fresh` has too.
+            # Replaced already, for another change `fresh` has too.
             return true;
         }
     }
