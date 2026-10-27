@@ -363,12 +363,6 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
             return;
         }
         if (module.struct_specs.count == struct_specs and module.func_specs.count == func_specs) {
-            # Before what no use named goes, any use of a method's name
-            # keeps it, whatever the type it is called on: the types
-            # spelled in the code may name a struct otherwise.
-            if (specialize_used_methods(module, state, true)) {
-                continue;
-            }
             drop_unused_methods(module, state);
             return;
         }

@@ -704,6 +704,48 @@ joins_the_runtime_overload_sets() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# Each level of a nested array literal is an `Array<T>` specialization,
+# and keeps only the methods something uses (#210): `Array<T>` has generic
+# methods, so every level kept all 63, and the iterators, views and sorter
+# they name, 128 method bodies a level that every pass walked.
+[Test]
+nested_array_literals_keep_few_methods_per_level() {
+    var folder = TempFolder("passes_nested_literal_methods");
+    var at_8 = _bodies_at_depth(folder, 8);
+    var at_16 = _bodies_at_depth(folder, 16);
+    var at_24 = _bodies_at_depth(folder, 24);
+    # As many more per level at any depth: linear.
+    expect_equal(at_24 - at_16, at_16 - at_8);
+    # 67 a level now, 128 before.
+    var per_level = (at_16 - at_8) / 8;
+    if (per_level > 70) {
+        panic($"a level of a nested array literal keeps {per_level} method bodies");
+    }
+}
+
+# How many methods with bodies the structs have once the passes ran over a
+# program holding a nested array literal `depth` levels deep.
+_bodies_at_depth(folder: TempFolder, depth: ulong): ulong {
+    var root = folder.path.join($"depth{depth}");
+    Directory.create_all(root);
+    var main = root.join("main.pep");
+    File.write_text(
+        main, "main(): int {\n    var a = " + "[".repeat(depth) + "1" + "]".repeat(depth) + ";\n    return 0;\n}\n"
+    );
+    var program = link.load_program(main, link.Setup()).value();
+    var module = sema.merge(program).value();
+    sema.run_passes(module, program.target, program.sources()).value();
+    ulong bodies = 0;
+    for (var st in module.structs) {
+        for (var m in st.method_members) {
+            if (m.body.is_value()) {
+                bodies += 1;
+            }
+        }
+    }
+    return bodies;
+}
+
 # Deprecated methods the compiler calls for the source: a `for` loop's
 # `next()` and `current()`, a `with` block's `enter()`, and operator
 # overloads, reported at `for`, `with` and the operator.
