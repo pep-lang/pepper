@@ -135,8 +135,8 @@ _calls_generic_methods(st: StructDef): bool {
 }
 
 ## Finds a call of a generic method by its bare name or on `this`.
-# shortcut: method values (`tag_of<U>` uncalled) are not looked for, since
-# they do not build yet (#274); look for them too once they do.
+# A method value (`tag_of<U>` or `this.tag_of<U>` uncalled) needs no
+# such care: given back late, it is specialized by the name it writes.
 struct _GenericCalls {
     var names: HashSet<String> = HashSet<String>();
     var found: bool = false;

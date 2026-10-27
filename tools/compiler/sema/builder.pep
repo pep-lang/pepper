@@ -1878,8 +1878,14 @@ struct _Builder {
             }
             TypeLiteral(type_name) => {
                 var ty = type_name_from(type_name);
+                # `make<int>` with no parentheses: a call, unless it names a
+                # method (`convert_member_refs`) or needs arguments.
                 return Built<Expression>.Ok(
-                    _call(ty.to_string(), Array<Expression>(), loc(type_name.span), _labeled(type_name, ty))
+                    Expression.FunctionCall(
+                        FunctionCallExpression(
+                            ty.to_string(), Array<Expression>(), loc(type_name.span), _labeled(type_name, ty), true
+                        )
+                    )
                 );
             }
             SizeOf(type_name) => {
