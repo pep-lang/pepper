@@ -476,8 +476,9 @@ reports_confinement_error(index: ulong) {
 }
 
 # The hidden local of a `?` or of a `match` over a call lets go of its
-# value once the value is read, so a `move` of what it gave is accepted;
-# a value that another local or `this` still holds is not (#266).
+# value once the value is read when the code moves what it gave, so the
+# move is accepted; a value another local or `this` still holds is not
+# (#266).
 [Test]
 moves_a_value_from_a_hidden_local() {
     var folder = TempFolder("passes_hidden_local_moves");
@@ -486,10 +487,10 @@ moves_a_value_from_a_hidden_local() {
 
 hidden_local_move_programs(): String[] {
     return [
-        "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nrun(): Result<int, String> {\n    var f = make()?;\n    var m = async.Mutex<Foo>(move(f));\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
+        "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nrun(): Result<int, String> {\n    var f = make()?;\n    if (f.x == 0) {\n        var m = async.Mutex<Foo>(move(f));\n    }\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
         "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nmaybe(): Foo? {\n    return Optional<Foo>.Value(Foo());\n}\n\nrun(): int? {\n    var f = maybe()?;\n    var m = async.Mutex<Foo>(move(f));\n    return Optional<int>.Value(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
         "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nmain(): int {\n    if (make() is Ok(f)) {\n        var m = async.Mutex<Foo>(move(f));\n    }\n    while (make() is Ok(g)) {\n        var m = async.Mutex<Foo>(move(g));\n        break;\n    }\n    match (make()) {\n        Ok(h) => {\n            var m = async.Mutex<Foo>(move(h));\n        }\n        Err(e) => {}\n    }\n    return 0;\n}\n",
-        "# expect: accepted\nimport async;\n\nstruct Handle {\n    var p: __ptr<void>;\n\n    construct(p: __ptr<void>) {\n        this.p = p;\n    }\n}\n\nopen(): Result<__ptr<void>, String> {\n    return Result<__ptr<void>, String>.ok(__null);\n}\n\nrun(): Result<int, String> {\n    var m = async.Mutex<Handle>(Handle(open()?));\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
+        "# expect: accepted\nimport async;\n\nstruct Handle {\n    var p: __ptr<void>;\n\n    construct(p: __ptr<void>) {\n        this.p = p;\n    }\n}\n\nopen(): Result<__ptr<void>, String> {\n    return Result<__ptr<void>, String>.ok(__null);\n}\n\nrun(): Result<int, String> {\n    var h = Handle(open()?);\n    var m = async.Mutex<Handle>(move(h));\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
         "# expect: main.pep:15:35: error: 'f' cannot be moved: 'r' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nrun(): Result<int, String> {\n    var r = make();\n    var f = r?;\n    var m = async.Mutex<Foo>(move(f));\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
         "# expect: main.pep:15:39: error: 'f' cannot be moved: 'r' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nmain(): int {\n    var r = make();\n    if (r is Ok(f)) {\n        var m = async.Mutex<Foo>(move(f));\n    }\n    return 0;\n}\n",
         "# expect: main.pep:21:39: error: 'f' cannot be moved: 'this' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nstruct Holder {\n    var r: Result<Foo, String>;\n\n    construct() {\n        this.r = make();\n    }\n\n    run(): Result<int, String> {\n        var f = this.r?;\n        var m = async.Mutex<Foo>(move(f));\n        return Result<int, String>.ok(0);\n    }\n}\n\nmain(): int {\n    Holder().run();\n    return 0;\n}\n"

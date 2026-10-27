@@ -738,9 +738,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     pattern the case and the binding's position), which
     `resolve_implicit_types` types from the payload field and checks
     (`enums.case_value_type`), and `lower_matches` replaces with the field.
-    After an arm's bindings, a discarded `Expression.Move` of `__match_N`
-    releases the subject, so a binding of a call's result can be its
-    value's only reference.
+    When the arm's body moves a binding (`_moved_names`), a discarded
+    `Expression.Move` of `__match_N` after the bindings releases the
+    subject, so a binding of a call's result can be its value's only
+    reference.
     A literal pattern (`1`, `"import"`) carries the test `subject ==
     literal` in `CasePattern.literal`, so the passes type and resolve it
     like any `==` (a `String`'s `==` included); its `case` is the literal as
@@ -786,8 +787,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     evaluation order, becomes a hidden `__try_N` local holding its operand
     and `if (__try_N._propagates()) { return
     R._from_residual(__try_N._residual()); }`, where `R` is the declared
-    return type (`RETURN_TYPE`); the `?` reads `move(__try_N).value()`, so
-    the operand is released with the statement, like a C++ temporary. The
+    return type (`RETURN_TYPE`); the `?` reads `__try_N.value()`. When
+    the block moves a local such a declaration declares,
+    `block_in_context` makes that read `Expression.Move(__try_N).value()`
+    (`_TryReleaser`), so the operand is released with the read. The
     `_propagates`, `_residual` and `_from_residual` members of `Result`
     and `Optional` (runtime) make this work without types, and an error
     converts as `_from_residual`'s argument (`[Implicit]`). A non-

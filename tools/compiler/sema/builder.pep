@@ -75,7 +75,7 @@ import [
     WithSubject
 ] from "model";
 import [AUTO, POINTER, TUPLE] from "type_name";
-import [Rewriter, rewrite_block, rewrite_expression, rewrite_children] from "walk";
+import [Rewriter, rewrite_block, rewrite_children, rewrite_expression, rewrite_statement] from "walk";
 
 ## What a build step makes, or the error that stops the build.
 type Built<T> = Result<T, Diagnostic>;
@@ -1434,6 +1434,66 @@ struct _ClosureUseFinder {
 
 extend _ClosureUseFinder with Rewriter;
 
+## Collects the locals that `move(x)` hands over.
+struct _MovedNames {
+    var names = HashSet<String>();
+
+    construct() {}
+
+    rewrite(e: Expression): Expression {
+        if (e is FunctionCall(node)) {
+            if (node.function == "move" and node.args.count == 1) {
+                if (node.args[0] is SymbolRef(moved)) {
+                    names.insert(moved.id);
+                }
+            }
+        }
+        return e;
+    }
+}
+
+extend _MovedNames with Rewriter;
+
+## The locals `items` (and the blocks and closures in them) move.
+_moved_names(items: Statement[]): HashSet<String> {
+    var finder = _MovedNames();
+    rewrite_block(Block(items = items), finder);
+    return finder.names;
+}
+
+## Whether `items[start..end]` declares a local named in `names`.
+_declares_one_of_names(items: Statement[], start: ulong, end: ulong, names: HashSet<String>): bool {
+    for (var i in start..end) {
+        if (items[i] is Declaration(declaration)) {
+            if (declaration is Variable(variable)) {
+                if (names.contains(variable.name)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+## Makes each `?`'s read of its hidden local, `__try_N.value()`, move the
+## operand out of it, so the operand is released with the read.
+struct _TryReleaser {
+    construct() {}
+
+    rewrite(e: Expression): Expression {
+        if (e is MethodCall(node)) {
+            if (node.this_value is SymbolRef(local)) {
+                if (node.method == "value" and local.id.starts_with(TRY_LOCAL)) {
+                    node.this_value = Expression.Move(MoveExpression(node.this_value, node.loc));
+                }
+            }
+        }
+        return e;
+    }
+}
+
+extend _TryReleaser with Rewriter;
+
 ## Returns whether two keys of pattern elements are the same.
 _same_key(a: String[], b: String[]): bool {
     if (a.count != b.count) {
@@ -2264,10 +2324,15 @@ struct _Builder {
 
     block_in_context(b: ast.Block): Built<Block> {
         var items = Array<Statement>();
+        # Where each declaration that uses `?` starts and ends in `items`.
+        var tried = Array<(ulong, ulong)>();
         for (var statement in b.statements) {
             # A statement using `?` lowers to several, its hidden locals first.
             var lowered = lift(statement)?;
             if (lowered.is_value()) {
+                if (statement is Declaration(_) or statement is Destructure(_, _, _, _)) {
+                    tried.append((items.count, items.count + lowered.value().count));
+                }
                 items.append_all(lowered.value());
                 continue;
             }
@@ -2279,6 +2344,20 @@ struct _Builder {
             } else {
                 var built = this.statement(statement)?;
                 items.append(built);
+            }
+        }
+        if (tried.count > 0) {
+            # A `?` operand's hidden local holds its value to the end of the
+            # block; when the block moves a local declared from it, the
+            # read moves the operand out instead, so the local can be the
+            # value's only reference (#266).
+            var moved = _moved_names(items);
+            for (var (start, end) in tried) {
+                if (_declares_one_of_names(items, start, end, moved)) {
+                    for (var i in start..end) {
+                        items[i] = rewrite_statement(items[i], _TryReleaser());
+                    }
+                }
             }
         }
         return Built<Block>.Ok(Block(items = items, attributes = b.attributes));
@@ -2615,9 +2694,15 @@ struct _Builder {
                     )
                 );
             }
-            if (bindings.count > 0) {
-                # The bindings hold what the arm uses: the subject lets go
-                # of its value, so a binding can be the only reference (#266).
+            var moved = _moved_names(body.items);
+            var drops = false;
+            for (var b in bindings) {
+                drops = drops or moved.contains(b.name);
+            }
+            if (drops) {
+                # The arm moves a binding: the subject lets go of its value
+                # once the bindings hold it, so a binding can be the only
+                # reference (#266).
                 var drop = Expression.Move(MoveExpression(_symbol(subject, at), at));
                 items.append(Statement.Expression(drop));
             }
@@ -4561,13 +4646,9 @@ struct _Builder {
                     var name = $"{TRY_LOCAL}{tries}";
                     tries += 1;
                     lifter.tries.append(_Try(name, lifted, at));
-                    # `move(__try_N).value()`: the operand is a temporary of
-                    # the statement, so its local lets go of it here and the
-                    # value read is the only reference left to it (#266).
-                    var hidden = ast.Expression.FunctionCall(
-                        ast.Expression.SymbolRef("move", at), [ast.Expression.SymbolRef(name, at)], at
+                    return Built<ast.Expression>.Ok(
+                        _ast_method_call(ast.Expression.SymbolRef(name, at), "value", Array<ast.Expression>(), at)
                     );
-                    return Built<ast.Expression>.Ok(_ast_method_call(hidden, "value", Array<ast.Expression>(), at));
                 }
                 var lifted = lift_walk(operand, conditional, lifter)?;
                 if (op == "++" or op == "--") {
