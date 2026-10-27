@@ -247,9 +247,16 @@ before any of its code is in a program you chose to run. So:
   dependency's script, naming it. The project's own script still runs: it
   is your code.
 
-What is not supported yet: a helper package for finding a library with
-`pkg-config` and compiling C with the target's flags, and a `[native]`
-table that compiles C sources without a script.
+The package [`build`](https://github.com/pep-lang/pepper-build), added to
+`[build-dependencies]` (`pepper package add --build pep-lang/pepper-build
+--name build`), does the common work: `build.cc` compiles C with the
+target's clang, flags and system root, `build.pkg_config` finds a library
+with `pkg-config` (pointing it at the system root when cross-compiling),
+and `build.emit` and `build.env` print the `pep:` lines and read the
+variables above.
+
+What is not supported yet: a `[native]` table that compiles C sources
+without a script.
 
 ## `[dependencies]`
 
