@@ -246,7 +246,7 @@ before any of its code is in a program you chose to run. So:
   `pepper test` and `pepper run` builds see too) fails instead of running a
   dependency's script, naming it. The project's own script still runs: it
   is your code. A [`[native]`](#native) table, which runs no package
-  code, compiles under it too.
+  code, compiles under it too, unless a dependency's has `flags`.
 
 The package [`build`](https://github.com/pep-lang/pepper-build), added to
 `[build-dependencies]` (`pepper package add --build pep-lang/pepper-build
@@ -300,7 +300,9 @@ system root (`--sysroot`), its optimization level (`-O`), and, for Linux
 and Android, `-fPIC`, then these flags, in the package's folder. The objects
 are linked into the program. A dependency's `[native]` table is
 compiled for every program that uses the package, and since it runs no
-package code, `--no-build-scripts` allows it.
+package code, `--no-build-scripts` allows it; a dependency's `flags`
+could load a clang plugin from the package (`-fplugin=`), so with them it
+is refused, as a build script is.
 
 **With a build script.** A package may have both: its script runs first,
 and its `PEP_OUT_DIR` is searched for headers, so the C can include one

@@ -98,8 +98,14 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
             }
         }
         # After the script, so the C can include the headers it wrote. It
-        # runs no package code, so `refuse` allows it.
+        # runs no package code, so `refuse` allows it, but for its `flags`.
         if (native.is_value()) {
+            # A clang flag can load a plugin from the package (`-fplugin=`).
+            if (inputs.refuse and !own and !native.value().flags.is_empty) {
+                return Result<ScriptOutput, String>.err(
+                    $"the dependency '{name}' gives its '[native]' C the clang flags '{" ".join(native.value().flags)}', which could load code from the package, and '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses them; read them, and build without that option to use them"
+                );
+            }
             var built = _build_native(name, manifest, native.value(), script.value().is_value(), inputs, output);
             if (built.is_err()) {
                 return Result<ScriptOutput, String>.err(built.error());

@@ -1698,7 +1698,7 @@ publish_checks_tests_tags_and_pushes_the_version() {
             + "\n[dev-dependencies]\nfixtures = { path = \"../fixtures\" }\n"
             + "\n[target.'OS(Windows)'.dependencies]\nwinapi = { github = \"someone/winapi\", version = \"1\" }\n"
             + "\n[overrides]\n\"github:other/numbers\" = { path = \"../near\" }\n"
-            + "\n[native]\nsources = [\"c/*.c\"]\n"
+            + "\n[native]\nsources = [\"c/*.c\"]\ninclude = [\"c/include\"]\n"
     );
     var refused = package(["publish", "--dry-run"]);
     expect_exit(refused, 1);
@@ -1739,6 +1739,10 @@ publish_checks_tests_tags_and_pushes_the_version() {
     expect_contains(
         refused.stderr,
         "\n  '[native]' 'sources' names 'c/*.c', which no file committed in the package matches, so a dependent would not get it; commit it\n"
+    );
+    expect_contains(
+        refused.stderr,
+        "\n  '[native]' 'include' names 'c/include', which no file committed in the package matches, so a dependent would not get it; commit it\n"
     );
     expect_contains(refused.stderr, "\n  the work tree has changes that are not committed:\n    M pep.toml\n");
     expect_contains(
@@ -2731,6 +2735,19 @@ a_native_table_compiles_a_packages_c_until_a_header_changes() {
     write_file(checkout.join("c").join("include").join("extra.h"), "#define EXTRA 100\n");
     expect_equal(hosts.build_and_run(project.dir, ["--no-build-scripts"]), $"{106 + offset}\n");
     expect_true(object.metadata().value().modified != old);
+    # Its clang flags could load a plugin from the package: refused.
+    var manifest = checkout.join("pep.toml");
+    var original = read_file(manifest);
+    # A checkout may hold CRLF lines.
+    write_file(manifest, original.replace("defines = [\"BASE=1\"]", "defines = [\"BASE=1\"]\nflags = [\"-w\"]"));
+    var refused = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--no-build-scripts"]));
+    expect_exit(refused, 1);
+    expect_contains(
+        refused.stderr,
+        "error: the dependency 'cnative' gives its '[native]' C the clang flags '-w', which could load code from the package, and '--no-build-scripts'"
+    );
+    expect_equal(hosts.build_and_run(project.dir), $"{106 + offset}\n");
+    write_file(manifest, original);
 
     # Vendored, with no host or cache, the copy holds its C.
     expect_exit(hosts.package(project.dir, ["vendor"]), 0);
