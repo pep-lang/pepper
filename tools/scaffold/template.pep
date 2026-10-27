@@ -158,11 +158,6 @@ export package_files(): OrderedMap<String, String> {
             "      - name: Publish the reference",
             "        run: |",
             "          set -euo pipefail",
-            "          # grep reads it all: with -q, pipefail could fail on pepper's broken pipe.",
-            "          if ! pepper doc help | grep '^  package ' >/dev/null; then",
-            "            echo \"this toolchain's pep-doc has no 'package': nothing to publish\"",
-            "            exit 0",
-            "          fi",
             "          site=\"$RUNNER_TEMP/site\"",
             "          if git ls-remote --exit-code --heads origin gh-pages; then",
             "            git fetch --depth 1 origin gh-pages",
@@ -172,6 +167,8 @@ export package_files(): OrderedMap<String, String> {
             "          fi",
             "          pepper doc package --site \"$site\"",
             "          git -C \"$site\" add -A",
+            "          # A re-run for a tag already published has nothing to commit.",
+            "          git -C \"$site\" diff --cached --quiet && exit 0",
             "          git -C \"$site\" -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com commit -m \"Reference for $GITHUB_REF_NAME\"",
             "          git -C \"$site\" push origin HEAD:gh-pages",
         ]
@@ -188,6 +185,8 @@ export package_files(): OrderedMap<String, String> {
             "One module, **`mypkg`**:",
             "",
             "- **`mypkg.greet(name)`** returns a greeting for `name`.",
+            "- **`mypkg.add(a, b)`** returns `a + b`, computed in C (`native/add.c`,",
+            "  which the `[native]` table in `pep.toml` compiles and links).",
             "",
             "```pepper",
             "import mypkg;",
@@ -254,6 +253,24 @@ export package_files(): OrderedMap<String, String> {
             "Apache-2.0; see [LICENSE](LICENSE).",
         ]
     );
+    files["add.pep"] = _text(
+        [
+            "## Arithmetic in C: `add`, which `native/add.c` implements.",
+            "",
+            "extern int mypkg_add(int a, int b);",
+            "",
+            "## Returns `a + b`, computed by the C function `mypkg_add` in `native/add.c`.",
+            "##",
+            "## @param a the first number",
+            "## @param b the second number",
+            "## @returns their sum",
+            "## @example",
+            "##     mypkg.add(2, 3);   # 5",
+            "export add(a: int, b: int): int {",
+            "    return mypkg_add(a, b);",
+            "}",
+        ]
+    );
     files["greet.pep"] = _text(
         [
             "## Greetings: `greet`.",
@@ -288,41 +305,17 @@ export package_files(): OrderedMap<String, String> {
             "",
             "# This file only gathers the module's public API from its other files.",
             "",
+            "import \"add\";",
             "import \"greet\";",
             "",
+            "export add;",
             "export greet;",
         ]
     );
     files["native/add.c"] = _text(
-        ["/* The example C code native/build.pep compiles. */", "int mypkg_add(int a, int b) { return a + b; }",]
-    );
-    files["native/build.pep"] = _text(
         [
-            "# An example build script, which nothing runs yet: it compiles",
-            "# native/add.c for the build's target with the clang the build hands it,",
-            "# and links the object, so the package's code can declare and call",
-            "# `extern int mypkg_add(int a, int b);`. To use it, uncomment `[build]` in",
-            "# pep.toml, which needs Pepper 0.11 or later. Delete this folder if the",
-            "# package has no C code. See",
-            "# https://docs.pepper-lang.dev/dev/tools/projects.html#build-scripts.",
-            "",
-            "import [Path] from io;",
-            "import os;",
-            "import process;",
-            "",
-            "main(): int {",
-            "    var object = Path(os.environment(\"PEP_OUT_DIR\").value()).join(Path(\"add.o\"));",
-            "    var compiled = process",
-            "        .Command(os.environment(\"PEP_CLANG\").value())",
-            "        .arguments([\"--target=\" + os.environment(\"PEP_TARGET\").value(), \"-c\", \"native/add.c\", \"-o\", object.to_string()])",
-            "        .run();",
-            "    if (compiled.is_err() or !compiled.value().status.success()) {",
-            "        return 1;",
-            "    }",
-            "    print($\"pep:object={object}\");",
-            "    print(\"pep:rerun-if-changed=native/add.c\");",
-            "    return 0;",
-            "}",
+            "/* The example C code that `[native]` in pep.toml compiles; add.pep calls it. */",
+            "int mypkg_add(int a, int b) { return a + b; }",
         ]
     );
     files["pep.toml"] = _text(
@@ -333,16 +326,29 @@ export package_files(): OrderedMap<String, String> {
             "description = \"One line saying what the package does\"",
             "license = \"Apache-2.0\"",
             "repository = \"https://github.com/OWNER/pepper-mypkg\"",
-            "# The oldest Pepper toolchain that builds the package: CI also tests with",
-            "# it, and `pepper package` skips a version whose minimum is newer than the",
-            "# user's toolchain. Toolchains before 0.11 reject the key, so set it only",
-            "# once the package needs 0.11 or later.",
-            "# minimum_toolchain = \"0.11.0\"",
+            "# The oldest Pepper toolchain that builds the package (0.11 added",
+            "# `[native]`): CI also tests with it, and `pepper package` skips a version",
+            "# whose minimum is newer than the user's toolchain.",
+            "minimum_toolchain = \"0.11.0\"",
             "",
-            "# To compile and link C code, uncomment these two lines and set",
-            "# `minimum_toolchain` to \"0.11.0\": native/build.pep is the example.",
-            "# [build]",
-            "# script = \"native/build.pep\"",
+            "# C code the build compiles and links into every program that uses the",
+            "# package: native/add.c is the example, which add.pep calls. A package",
+            "# with none deletes this table, native/, add.pep, tests/add_test.pep and",
+            "# `add` in module.pep.",
+            "[native]",
+            "sources = [\"native/*.c\"]",
+        ]
+    );
+    files["tests/add_test.pep"] = _text(
+        [
+            "# The mypkg package's C code.",
+            "",
+            "import mypkg;",
+            "",
+            "[Test]",
+            "adds_in_c() {",
+            "    expect_equal(mypkg.add(2, 3), 5);",
+            "}",
         ]
     );
     files["tests/greet_test.pep"] = _text(
