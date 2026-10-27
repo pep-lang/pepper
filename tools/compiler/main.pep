@@ -859,7 +859,7 @@ _env_opt_level(): Result<uint, String> {
 
 ## The release this compiler belongs to: `scripts/set-version.sh` sets it.
 version(): String {
-    return "0.11.0-dev";
+    return "0.11.0";
 }
 
 ## The channels `-T` names, which `--Tall` enables (`pep-doc check` reads

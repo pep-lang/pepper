@@ -66,7 +66,7 @@ import "tree";
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.11.0-dev";
+    return "0.11.0";
 }
 
 main(args: String[]): int {
