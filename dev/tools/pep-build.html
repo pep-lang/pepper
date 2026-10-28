@@ -208,7 +208,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
-<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script; a <code>[native]</code> table still compiles, unless it has <code>flags</code></td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
+<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script; a <code>[native]</code> table still compiles, unless a dependency's has <code>flags</code> that could load code (<a href="projects.html#native">which it allows</a>)</td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
@@ -328,8 +328,14 @@ have not changed is not compiled again.</p>
 <p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
 running a dependency's script, which runs that package's code on this
 machine; the project's own script still runs, and so does every
-<code>[native]</code> table, which runs no package code, except a dependency's table with
-<code>flags</code>, which could load a clang plugin from the package and is refused:</p>
+<code>[native]</code> table, which runs no package code. A dependency's table is
+refused when one of its <code>flags</code> is not on the short list that cannot load
+code or name a file (<a href="projects.html#native"><code>[native]</code></a> lists it), since a
+flag such as <code>-fplugin=</code> makes clang load a plugin from the package. The
+error is at the flag in the dependency's <code>pep.toml</code>:</p>
+<pre><code class="language-text">app/.pep/deps/github.com/someone/native/pep.toml:8:10: error: '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses the clang flag '-fplugin=x' of the dependency 'native', which could load code or name a file; it allows only -O0 to -O3, -Os, -Oz, -std=, -march=, -mcpu=, -mtune= and plain -W, -f and -m options; read the flag, and build without that option to use it
+</code></pre>
+<p>A dependency's build script is refused outright:</p>
 <pre><code class="language-text">error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
 </code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>

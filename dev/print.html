@@ -22242,7 +22242,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
 <tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
 <tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
-<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script; a <code>[native]</code> table still compiles, unless it has <code>flags</code></td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
+<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script; a <code>[native]</code> table still compiles, unless a dependency's has <code>flags</code> that could load code (<a href="tools/projects.html#native">which it allows</a>)</td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
@@ -22362,8 +22362,14 @@ have not changed is not compiled again.</p>
 <p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
 running a dependency's script, which runs that package's code on this
 machine; the project's own script still runs, and so does every
-<code>[native]</code> table, which runs no package code, except a dependency's table with
-<code>flags</code>, which could load a clang plugin from the package and is refused:</p>
+<code>[native]</code> table, which runs no package code. A dependency's table is
+refused when one of its <code>flags</code> is not on the short list that cannot load
+code or name a file (<a href="tools/projects.html#native"><code>[native]</code></a> lists it), since a
+flag such as <code>-fplugin=</code> makes clang load a plugin from the package. The
+error is at the flag in the dependency's <code>pep.toml</code>:</p>
+<pre><code class="language-text">app/.pep/deps/github.com/someone/native/pep.toml:8:10: error: '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses the clang flag '-fplugin=x' of the dependency 'native', which could load code or name a file; it allows only -O0 to -O3, -Os, -Oz, -std=, -march=, -mcpu=, -mtune= and plain -W, -f and -m options; read the flag, and build without that option to use it
+</code></pre>
+<p>A dependency's build script is refused outright:</p>
 <pre><code class="language-text">error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
 </code></pre>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
@@ -23142,7 +23148,8 @@ read: <code>note: native 1.0.0 (github:someone/native) has a build script, which
 <code>pepper test</code> and <code>pepper run</code> builds see too) fails instead of running a
 dependency's script, naming it. The project's own script still runs: it
 is your code. A <a href="tools/projects.html#native"><code>[native]</code></a> table, which runs no package
-code, compiles under it too, unless a dependency's has <code>flags</code>.</li>
+code, compiles under it too, unless a dependency's has <code>flags</code> that
+could load code (see <a href="tools/projects.html#native"><code>[native]</code></a>).</li>
 </ul>
 <p>The package <a href="https://github.com/pep-lang/pepper-build"><code>build</code></a>, added to
 <code>[build-dependencies]</code> (<code>pepper package add --build pep-lang/pepper-build --name build</code>), does the common work: <code>build.cc</code> compiles C with the
@@ -23188,9 +23195,27 @@ system root (<code>--sysroot</code>), its optimization level (<code>-O</code>), 
 and Android, <code>-fPIC</code>, then these flags, in the package's folder. The objects
 are linked into the program. A dependency's <code>[native]</code> table is
 compiled for every program that uses the package, and since it runs no
-package code, <code>--no-build-scripts</code> allows it; a dependency's <code>flags</code>
-could load a clang plugin from the package (<code>-fplugin=</code>), so with them it
-is refused, as a build script is.</p>
+package code, <code>--no-build-scripts</code> allows it. A flag can make clang load
+code from the package (<code>-fplugin=</code>, <code>-Xclang -load</code>) or read or write a
+file, so under <code>--no-build-scripts</code> a dependency's <code>flags</code> must each be
+one of these, or the build fails with an error at the flag:</p>
+<ul>
+<li><code>-O0</code> to <code>-O3</code>, <code>-Os</code>, <code>-Oz</code>;</li>
+<li><code>-std=&lt;name&gt;</code>, and <code>-march=</code>, <code>-mcpu=</code> and <code>-mtune=</code> with a value of
+letters, digits, <code>.</code>, <code>_</code>, <code>+</code> and <code>-</code>;</li>
+<li><code>-W&lt;name&gt;</code> (<code>-Wall</code>, <code>-Wno-pointer-sign</code>, <code>-Werror=format</code>), of letters,
+digits, <code>_</code>, <code>+</code>, <code>-</code> and <code>=</code>, so never <code>-Wl,</code>, <code>-Wa,</code> or <code>-Wp,</code>;</li>
+<li><code>-f&lt;name&gt;</code> (<code>-fwrapv</code>, <code>-fno-strict-aliasing</code>), of letters, digits,
+<code>_</code>, <code>+</code> and <code>-</code>, so never one with a <code>=</code> value, except <code>-fplugin</code>,
+<code>-fpass-plugin</code>, <code>-fprofile…</code>, <code>-fmodule…</code>, <code>-fimplicit-module…</code>,
+<code>-fsave-…</code>, <code>-ftime-trace…</code>, <code>-fcrash-…</code>, <code>-fintegrated-as</code>,
+<code>-fproc-stat-report…</code> and <code>-fexperimental-openacc-macro-override</code>, and
+their <code>-fno-</code> forms;</li>
+<li><code>-m&lt;name&gt;</code> (<code>-mavx2</code>, <code>-mno-sse4.2</code>), of letters, digits, <code>.</code>, <code>_</code>, <code>+</code>
+and <code>-</code>, except <code>-mllvm</code>, <code>-mmlir</code> and <code>-mlink…</code>.</li>
+</ul>
+<p>Everything else is refused, <code>-I</code>, <code>-D</code>, <code>-include</code>, <code>-Xclang</code>, <code>@file</code>
+and <code>--</code> options among them (<code>include</code> and <code>defines</code> give the first two).</p>
 <p><strong>With a build script.</strong> A package may have both: its script runs first,
 and its <code>PEP_OUT_DIR</code> is searched for headers, so the C can include one
 the script generates.</p>
