@@ -133,7 +133,8 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
 ## `+` (`-W` may add `=<value>`, `-m` may add `.`), less the `-f` and `-m`
 ## families that load code or take a file: `-fplugin`, `-fpass-plugin`,
 ## `-fprofile`, `-fmodule`, `-fimplicit-module`, `-fsave-`,
-## `-ftime-trace`, `-fcrash-`, `-fintegrated-as`, `-mllvm` and `-mlink`
+## `-ftime-trace`, `-fcrash-`, `-fintegrated-as`, `-fproc-stat-report`,
+## `-fexperimental-openacc-macro-override`, `-mllvm`, `-mmlir` and `-mlink`
 ## (and their `no-` forms).
 ##
 ## @param flag one of the table's `flags`
@@ -144,7 +145,7 @@ export native_flag_allowed(flag: String): bool {
         "^(-O[0-3sz]|-std=[A-Za-z0-9+]+|-m(arch|cpu|tune)=[A-Za-z0-9_.+-]+|-W[A-Za-z0-9][A-Za-z0-9_+=-]*|-f[A-Za-z0-9][A-Za-z0-9_+-]*|-m[A-Za-z0-9][A-Za-z0-9_.+-]*)$"
     );
     var refused = regex.Regex(
-        "^(-f(no-)?(plugin|pass-plugin|profile|module|implicit-module|save-|time-trace|crash-|integrated-as)|-m(no-)?(llvm|link))"
+        "^(-f(no-)?(plugin|pass-plugin|profile|module|implicit-module|save-|time-trace|crash-|integrated-as|proc-stat-report|experimental-openacc-macro-override)|-m(no-)?(llvm|mlir|link))"
     );
     return allowed.is_match(flag) and !refused.is_match(flag);
 }

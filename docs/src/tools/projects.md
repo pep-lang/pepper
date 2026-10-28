@@ -314,10 +314,11 @@ one of these, or the build fails with an error at the flag:
 - `-f<name>` (`-fwrapv`, `-fno-strict-aliasing`), of letters, digits,
   `_`, `+` and `-`, so never one with a `=` value, except `-fplugin`,
   `-fpass-plugin`, `-fprofile…`, `-fmodule…`, `-fimplicit-module…`,
-  `-fsave-…`, `-ftime-trace…`, `-fcrash-…` and `-fintegrated-as`, and
+  `-fsave-…`, `-ftime-trace…`, `-fcrash-…`, `-fintegrated-as`,
+  `-fproc-stat-report…` and `-fexperimental-openacc-macro-override`, and
   their `-fno-` forms;
 - `-m<name>` (`-mavx2`, `-mno-sse4.2`), of letters, digits, `.`, `_`, `+`
-  and `-`, except `-mllvm` and `-mlink…`.
+  and `-`, except `-mllvm`, `-mmlir` and `-mlink…`.
 
 Everything else is refused, `-I`, `-D`, `-include`, `-Xclang`, `@file`
 and `--` options among them (`include` and `defines` give the first two).
