@@ -134,9 +134,11 @@ _calls_generic_methods(st: StructDef): bool {
     return calls.found;
 }
 
-## Finds a call of a generic method by its bare name or on `this`.
-# A method value (`tag_of<U>` or `this.tag_of<U>` uncalled) needs no
-# such care: given back late, it is specialized by the name it writes.
+## Finds a call of a generic method by its bare name or on `this`, or its
+## value, which the expected type may pick the specialization of (`pick`,
+## `this.pick`; #276).
+# A value naming its type arguments (`this.tag_of<U>`) needs no such care:
+# given back late, it is specialized by the name it writes.
 struct _GenericCalls {
     var names: HashSet<String> = HashSet<String>();
     var found: bool = false;
@@ -150,6 +152,14 @@ struct _GenericCalls {
                 if (node.this_value is ThisRef) {
                     found = found or names.contains(without_type_arguments(node.method));
                 }
+            }
+            MemberRef(node) => {
+                if (node.lhs is ThisRef) {
+                    found = found or names.contains(node.name);
+                }
+            }
+            SymbolRef(node) => {
+                found = found or names.contains(node.id);
             }
             else => {}
         }

@@ -584,6 +584,14 @@ struct _Substituter {
                     node.method = parsed.to_string();
                 }
             }
+            # A generic method's value, `this.pick<U>`.
+            MemberRef(node) => {
+                if (node.name.contains("<")) {
+                    var parsed = parse_type_string(node.name);
+                    replace_map(parsed, type_map);
+                    node.name = parsed.to_string();
+                }
+            }
             SymbolRef(node) => {
                 replace_map(node.ty, type_map);
             }
