@@ -106,6 +106,24 @@ names_a_generic_method_as_a_value_in_a_body_given_back_late() {
     );
 }
 
+# `this.pick`, a generic method picked by the expected type, in a generic
+# struct (#276): bound in the base as `this.pick<U>`, its name kept `U`
+# when the struct was specialized, while the bare `pick` worked. Built
+# whole, the bare `pick` failed too: its body was given back after the
+# last round of method specializations, so `pick<bool>` was never made.
+[Test]
+names_a_generic_method_on_this_picked_by_the_expected_type() {
+    _builds_and_runs(
+        "generic_method_value_this",
+        [
+            (
+                "main.pep",
+                "struct Later<U> {\n    var tag = \"tag\";\n    pick<T>(x: T): String {\n        return tag;\n    }\n    picked(): (U) => String {\n        return pick;\n    }\n    this_picked(): (U) => String {\n        return this.pick;\n    }\n    this_named(): (U) => String {\n        return this.pick<U>;\n    }\n}\nmain(): int {\n    var l = Later<bool>();\n    if (l.picked()(true) != \"tag\" or l.this_picked()(false) != \"tag\") {\n        return 1;\n    }\n    return l.this_named()(true) == \"tag\" ? 0 : 2;\n}\n"
+            )
+        ]
+    );
+}
+
 # A closure in a generic method of a compilation unit below, specialized in this
 # compilation unit, capturing a local whose type is inferred: the compilation
 # unit walked only the structs it declared or extended, not the checked struct
