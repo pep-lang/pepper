@@ -17,8 +17,9 @@
 # which builds a program without that package's files; reference chains
 # 100,000 deep, released without overflowing the stack; source nested as
 # deep as the parser allows, and one level deeper; the message a stack
-# overflow prints on the main thread, a `Thread` and a task; and the panic hook, which every
-# other kind of panic runs first. The programs are in `testdata/`.
+# overflow prints on the main thread, a `Thread` and a task; and the
+# panic hook, which every other kind of panic runs first. The programs are
+# in `testdata/`.
 
 import [File, Path, glob] from io;
 import os;
@@ -624,15 +625,12 @@ a_runtime_inside_a_package_folder_is_not_part_of_that_package() {
     var source = folder.path.join("program").join("main.pep");
     write_file(source, "main(): int {\n    print(\"built\");\n    return 0;\n}\n");
     var program = folder.path.join("program").join("main" + toolchain.executable_suffix());
-    var built = run(
-        process
-            .Command(tool("pep-build").to_string())
-            .arguments(
-                [source.to_string(), "-o", program.to_string(), "--build", folder.path.join("build").to_string()]
-            )
-            .environment("PEPPER_RUNTIME", runtime.to_string())
-    );
-    expect_exit(built, 0);
+    var environment = HashMap<String, String>();
+    environment["PEPPER_RUNTIME"] = runtime.to_string();
+    var error = build_program(source, program, folder.path.join("build"), Array<String>(), environment);
+    if (error.is_value()) {
+        panic($"main.pep does not build:\n{error.value()}");
+    }
     var output = run(process.Command(program.to_string()));
     expect_exit(output, 0);
     expect_equal(output.stdout, "built\n");

@@ -91,18 +91,28 @@ export copy_executable(from: Path, to: Path) {
 ## @param program the executable to write
 ## @param build the folder for the build files
 ## @param options more options for `pep-build`, such as `-I tests`
+## @param environment environment variables to set for `pep-build`, such
+##   as `PEPPER_RUNTIME`
 ## @returns none when it builds; else what `pep-build` printed
-export build_program(source: Path, program: Path, build: Path, options: Array<String> = Array<String>()): String? {
-    var built = run(
-        process
-            .Command(tool("pep-build").to_string())
-            .argument(source.to_string())
-            .argument("-o")
-            .argument(program.to_string())
-            .argument("--build")
-            .argument(build.to_string())
-            .arguments(options)
-    );
+export build_program(
+    source: Path,
+    program: Path,
+    build: Path,
+    options: Array<String> = Array<String>(),
+    environment: HashMap<String, String> = HashMap<String, String>()
+): String? {
+    var command = process
+        .Command(tool("pep-build").to_string())
+        .argument(source.to_string())
+        .argument("-o")
+        .argument(program.to_string())
+        .argument("--build")
+        .argument(build.to_string())
+        .arguments(options);
+    for (var (name, value) in environment) {
+        command.environment(name, value);
+    }
+    var built = run(command);
     if (built.status.success()) {
         return Optional<String>.Empty;
     }
