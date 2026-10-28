@@ -31,10 +31,12 @@ import [
     UnaryOp,
     VariableDef
 ] from "model";
+import "named_arguments";
 import [set_name, without_type_arguments] from "names";
+import "resolve_resolvables";
 import [PassState] from "state";
 import [FUNCTION] from "type_name";
-import [Rewriter, rewrite_children] from "walk";
+import [Rewriter, rewrite_block, rewrite_children] from "walk";
 
 ## The method holding a closure's body.
 export const CALL_METHOD = "__call";
@@ -1025,6 +1027,83 @@ _inherit_deprecation(attributes: Array<Array<ast.Attribute>>, lifted: StructDef[
     }
 }
 
+## The first identifier, in the function that makes the closure `closure`,
+## that nothing types and nothing declares: no parameter or local of that
+## function, and no function, global, struct, enum, alias or extern.
+_undeclared_near(module: Module, closure: String): SymbolRefExpression? {
+    var top = _Known(module);
+    # What `_Known` leaves out.
+    var others = HashSet<String>();
+    for (var g in module.globals) {
+        others.insert(g.name);
+    }
+    for (var e in module.enums) {
+        others.insert(e.name);
+    }
+    for (var a in module.type_aliases) {
+        others.insert(a.name);
+    }
+    var bodies = module.functions.copy();
+    for (var st in module.structs) {
+        bodies.append_all(st.constructors);
+        bodies.append_all(st.method_members);
+    }
+    for (var function in bodies) {
+        if (!function.body.is_value()) {
+            continue;
+        }
+        var finder = _UndeclaredFinder(closure, top, others, _declared_names(function));
+        rewrite_block(function.body.value(), finder);
+        if (finder.makes and finder.first.is_value()) {
+            return finder.first;
+        }
+    }
+    return Optional<SymbolRefExpression>.Empty;
+}
+
+## Whether a body makes the closure `closure`, and the first untyped
+## identifier in it that `top`, `others` and `locals` do not name.
+struct _UndeclaredFinder {
+    var closure: String;
+    var top: _Known;
+    var others: HashSet<String>;
+    var locals: HashSet<String>;
+    var makes: bool = false;
+    var first: SymbolRefExpression? = Optional<SymbolRefExpression>.Empty;
+
+    construct(closure: String, top: _Known, others: HashSet<String>, locals: HashSet<String>) {
+        this.closure = closure;
+        this.top = top;
+        this.others = others;
+        this.locals = locals;
+    }
+
+    rewrite(e: Expression): Expression {
+        match (e) {
+            MakeClosure(node) => {
+                if (node.closure == closure) {
+                    makes = true;
+                }
+            }
+            SymbolRef(node) => {
+                var id = node.id;
+                bool declared = top.functions.contains(id)
+                    or top.structs.contains(id)
+                    or top.externs.contains(id)
+                    or others.contains(id)
+                    or locals.contains(id);
+                if (!declared and !first.is_value() and (node.ty.is_empty() or node.ty.is_auto())) {
+                    first = Optional<SymbolRefExpression>.Value(node);
+                }
+            }
+            else => {}
+        }
+        return e;
+    }
+}
+
+extend _UndeclaredFinder with Rewriter;
+
 ## Reports the first closure whose parameter, return or captured type is
 ## still `auto` once every type is final: the type must be written.
 ##
@@ -1061,9 +1140,18 @@ export check_closures(module: Module, state: PassState) {
             }
             for (var field in st.field_members) {
                 if (field.ty.contains_auto()) {
-                    state.report(
-                        error_at($"cannot infer the type of '{field.name}', which this closure captures", field.loc)
-                    );
+                    # Most often the local has no type because its
+                    # initializer names something undeclared, which codegen
+                    # reports without the closure: report that instead (#285).
+                    var undeclared = _undeclared_near(module, st.name);
+                    if (undeclared.is_value()) {
+                        var name = undeclared.value();
+                        state.report(error_at($"use of undeclared identifier '{name.id}'", name.loc));
+                    } else {
+                        state.report(
+                            error_at($"cannot infer the type of '{field.name}', which this closure captures", field.loc)
+                        );
+                    }
                     return;
                 }
             }
