@@ -1,0 +1,1033 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Sockets - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/io-socket.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/io/socket.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="sockets"><a class="header" href="#sockets">Sockets</a></h1>
+<p>TCP and UDP sockets: <code>TcpListener</code> accepts connections, <code>TcpStream</code> is
+one connection, <code>UdpSocket</code> sends and receives datagrams.</p>
+<p>Every call blocks the calling thread until it completes (in a task, it
+parks only the task), or until the socket's read or write timeout
+expires. Addresses are <code>SocketAddress</code> values; <code>resolve</code> turns a host
+name into them.</p>
+<p>Source: <code>runtime/io/socket.pep</code></p>
+<h2 id="tcplistener"><a class="header" href="#tcplistener">TcpListener</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct TcpListener
+</code></pre>
+<p>A TCP socket that listens for connections.</p>
+<p><code>TcpListener.bind</code> opens one on a local address; each <code>accept()</code> waits for
+the next connection and returns it as a <code>TcpStream</code> together with the
+peer's address. Binding to port 0 lets the system choose a free port;
+<code>local_address()</code> tells which.</p>
+<p>On POSIX the listener sets <code>SO_REUSEADDR</code>, so a server can restart while
+connections from its previous run linger in <code>TIME_WAIT</code>. An IPv6 listener
+keeps the system's default for accepting IPv4 too (on Linux and macOS it
+does, on Windows it does not).</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Every operation on a
+closed listener fails with an error no <code>IoError</code> predicate identifies
+(<code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpStream</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+print(listener.local_address().value().to_string());   # 127.0.0.1:&lt;port&gt;
+while (true) {
+    var (stream, peer) = listener.accept().value();
+    stream.write_all("hello " + peer.to_string());
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed listener: <code>is_open()</code> is false and every operation
+fails. Use <code>TcpListener.bind</code> to get an open one.</p>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="bind"><a class="header" href="#bind">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;TcpListener&gt;
+</code></pre>
+<p>Opens a TCP socket bound to <code>address</code> and starts listening on it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address to listen on: a specific interface (<code>127.0.0.1:8080</code>), every interface (<code>0.0.0.0:8080</code>, <code>[::]:8080</code>), or port 0 for any free port</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the listening socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine's, <code>is_permission_denied()</code> for a privileged port, or another platform error</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="is_open"><a class="header" href="#is_open">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the listener is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>TcpListener()</code> never bound</li>
+</ul>
+<h4 id="accept"><a class="header" href="#accept">accept</a></h4>
+<pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
+</code></pre>
+<p>Waits for the next incoming connection and returns it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream and the peer's address; an error when the listener is closed, or another platform error</li>
+</ul>
+<h4 id="incoming"><a class="header" href="#incoming">incoming</a></h4>
+<pre><code class="language-pepper">incoming(): Incoming
+</code></pre>
+<p>Returns an iterator that accepts connections one at a time, for a
+<code>for</code> loop over incoming streams.</p>
+<p>Each step waits in <code>accept()</code> and yields the connected stream, or the
+error <code>accept()</code> returned; an error does not end the iteration, so a
+server can log it and keep going, or <code>break</code>. The iteration ends once
+the listener is closed. Use <code>accept()</code> instead when the peer's address
+is needed.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new <code>Incoming</code> positioned before the first connection</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
+for (var connection in listener.incoming()) {
+    if (connection.is_err()) {
+        print(connection.error().message);
+        continue;
+    }
+    connection.value().write_all("hello");
+}
+</code></pre>
+<h4 id="local_address"><a class="header" href="#local_address">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the address the listener is bound to, with the port the
+system chose when it was bound to port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address; an error when the listener is closed, or another platform error</li>
+</ul>
+<h4 id="close"><a class="header" href="#close">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the listener now. Closing a closed listener does nothing.
+Connections already accepted stay open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="incoming-1"><a class="header" href="#incoming-1">Incoming</a></h2>
+<pre><code class="language-pepper">struct Incoming
+</code></pre>
+<p>The iterator <code>TcpListener.incoming()</code> returns: each connection the
+listener accepts, as an <code>IoResult&lt;TcpStream&gt;</code>.</p>
+<p><code>next()</code> waits for the next connection; an accept error is yielded as an
+item rather than ending the iteration. The iteration ends once the
+listener is closed. The iterator holds a reference to the listener, so
+the listener stays open while the iterator lives.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="incoming-2"><a class="header" href="#incoming-2">Incoming()</a></h4>
+<pre><code class="language-pepper">construct(listener: TcpListener)
+</code></pre>
+<p>Makes an iterator over the connections <code>listener</code> accepts.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>listener</code> — the listener to accept on</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="next"><a class="header" href="#next">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Waits for the next connection.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true with the connection or the accept error as the current item; false once the listener is closed</li>
+</ul>
+<h4 id="current"><a class="header" href="#current">current</a></h4>
+<pre><code class="language-pepper">current(): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Returns the item the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the accepted stream, or the error accepting it</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called or returned false ("Incoming.current() without a connection")</li>
+</ul>
+<h2 id="sharedtcplistener"><a class="header" href="#sharedtcplistener">SharedTcpListener</a></h2>
+<pre><code class="language-pepper">[Shared] struct SharedTcpListener
+</code></pre>
+<p>A TCP listening socket that any thread can accept connections on: the
+thread-safe counterpart of <code>TcpListener</code>, for servers that accept on every
+worker of <code>async.run</code> at once (see <code>async.spawn_on_each_worker</code>). Each
+connection goes to one of the threads waiting in <code>accept</code>, and the stream
+it returns belongs to that thread.</p>
+<p>A <code>shared</code> function may capture it. There is no <code>close()</code>, since another
+thread may be waiting on it: the socket closes when the last reference
+goes, which, for accept loops in tasks, is once <code>async.run</code> has cancelled
+them (<code>accept</code> then fails and the loop returns).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpListener</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+        async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
+                }
+                var (stream, peer) = accepted.value();
+                stream.write_all("hello");
+            }
+        });
+    });
+    return 0;
+}
+</code></pre>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="sharedtcplistener-1"><a class="header" href="#sharedtcplistener-1">SharedTcpListener()</a></h4>
+<pre><code class="language-pepper">construct(handle: SocketHandle)
+</code></pre>
+<p>Wraps a listening socket. Use <code>SharedTcpListener.bind</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the listening socket, or an invalid handle for none</li>
+</ul>
+<h3 id="static-methods-1"><a class="header" href="#static-methods-1">Static methods</a></h3>
+<h4 id="bind-1"><a class="header" href="#bind-1">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;SharedTcpListener&gt;
+</code></pre>
+<p>Opens a TCP socket bound to <code>address</code> and starts listening on it, as
+<code>TcpListener.bind</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address to listen on (port 0 for any free port)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the listening socket, or the errors <code>TcpListener.bind</code> returns</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="accept-1"><a class="header" href="#accept-1">accept</a></h4>
+<pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
+</code></pre>
+<p>Waits for the next incoming connection and returns it, as
+<code>TcpListener.accept</code> does. Several threads may wait at once; each
+connection wakes one of them (or, on some systems, several, and the
+rest keep waiting).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream, owned by the calling thread, and the peer's address; an error when the waiting task is cancelled, or another platform error</li>
+</ul>
+<h4 id="local_address-1"><a class="header" href="#local_address-1">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the address the listener is bound to, with the port the
+system chose when it was bound to port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address, or a platform error</li>
+</ul>
+<h2 id="tcpstream"><a class="header" href="#tcpstream">TcpStream</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct TcpStream
+</code></pre>
+<p>A TCP connection: a reliable, ordered stream of bytes in both directions.</p>
+<p>Get one from <code>TcpStream.connect</code> (to an address), <code>TcpStream.connect_host</code>
+(to a host name) or <code>TcpListener.accept</code>. <code>read</code> appends what has arrived
+to a byte array and returns 0 once the peer has closed its side; <code>write</code>
+sends bytes.</p>
+<p>Each call is one system call and blocks until it can make progress: a
+<code>read</code> returns as soon as some bytes are there, not when <code>max</code> bytes are,
+and a <code>write</code> may send fewer bytes than given. <code>read_exact</code> and
+<code>write_all</code> loop until done. Sending never raises <code>SIGPIPE</code>; writing to a
+connection the peer has closed fails with <code>is_connection_reset()</code>.</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Every operation on a
+closed stream fails with an error no <code>IoError</code> predicate identifies
+(<code>EBADF</code> on POSIX, <code>ERROR_INVALID_HANDLE</code> on Windows).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TcpListener</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var stream = io.TcpStream.connect_host("example.com", 80).value();
+stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
+var reply = Array&lt;u8&gt;();
+while (stream.read(reply, 4096).value() &gt; 0) {
+}
+</code></pre>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed stream: <code>is_open()</code> is false and every operation
+fails. Use <code>TcpStream.connect</code> or <code>TcpListener.accept</code> to get an open
+one.</p>
+<h3 id="static-methods-2"><a class="header" href="#static-methods-2">Static methods</a></h3>
+<h4 id="connect"><a class="header" href="#connect">connect</a></h4>
+<pre><code class="language-pepper">static connect(address: SocketAddress): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Opens a connection to <code>address</code>, waiting until it is established.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the address to connect to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream; an error with <code>is_connection_refused()</code> when nothing listens there, <code>is_timed_out()</code> when the peer does not answer, or another platform error</li>
+</ul>
+<h4 id="connect_timeout"><a class="header" href="#connect_timeout">connect_timeout</a></h4>
+<pre><code class="language-pepper">static connect_timeout(address: SocketAddress, milliseconds: ulong): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Opens a connection to <code>address</code> like <code>connect</code>, but gives up with
+<code>is_timed_out()</code> when it is not established within <code>milliseconds</code>,
+instead of after the system's own limit (often minutes).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the address to connect to</li>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 waits as long as <code>connect</code> does</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream, with no read or write timeout; an error with <code>is_timed_out()</code> when the time runs out, <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error as for <code>connect</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = TcpStream.connect_timeout(SocketAddress.parse("192.0.2.1:80").value(), 2000);
+if (r.is_err() &amp;&amp; r.error().is_timed_out()) {
+    print("no answer within 2 seconds");
+}
+</code></pre>
+<h4 id="connect_host"><a class="header" href="#connect_host">connect_host</a></h4>
+<pre><code class="language-pepper">static connect_host(host: String, port: u16): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Resolves <code>host</code> with <code>resolve</code> and connects to the first of its
+addresses that accepts, trying them in order.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>host</code> — a host name or an IP address</li>
+<li><code>port</code> — the port to connect to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream; the error from <code>resolve</code> when the name has no address, or the error from the last address tried</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = TcpStream.connect_host("localhost", 8080);
+if (r.is_err() &amp;&amp; r.error().is_connection_refused()) {
+    print("nothing is listening on 8080");
+}
+</code></pre>
+<h4 id="adopt"><a class="header" href="#adopt">adopt</a></h4>
+<pre><code class="language-pepper">static adopt(transfer: SocketTransfer): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Takes the connection out of <code>transfer</code> (see <code>into_transfer</code>) into a
+new stream on the calling thread. Only the first <code>adopt</code> of a token
+gets the connection.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transfer</code> — the token from <code>into_transfer</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
+</ul>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the stream is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>TcpStream()</code> never connected</li>
+</ul>
+<h4 id="read"><a class="header" href="#read">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until data arrives, then appends up to <code>max</code> bytes of it to
+<code>buffer</code> with a single system call, like <code>File.read</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read; 0 reads nothing and returns 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 once the peer has closed its side of the connection; an error with <code>is_connection_reset()</code> when the connection was reset, an error when the stream is closed, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var buffer = Array&lt;u8&gt;();
+var n = stream.read(buffer, 4096).value();   # buffer.count == n
+</code></pre>
+<h4 id="read_exact"><a class="header" href="#read_exact">read_exact</a></h4>
+<pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Reads until exactly <code>count</code> more bytes are appended to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>count</code> — the number of bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once <code>count</code> bytes are appended; an error when the peer closes the connection first ("connection closed after n of count bytes", code <code>EIO</code> on POSIX, <code>ERROR_HANDLE_EOF</code> on Windows, which no predicate matches), or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
+</ul>
+<h4 id="write"><a class="header" href="#write">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends bytes from <code>data</code> with a single system call, waiting until the
+system can take at least some of them.</p>
+<p>The send may be partial: it can send fewer than <code>data.count</code> bytes.
+Use <code>write_all</code> to send everything.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent, which may be less than <code>data.count</code>; an error with <code>is_connection_reset()</code> when the peer has closed or reset the connection, an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
+<p>If an error occurs part of <code>data</code> may already have been sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">stream.write_all("ping");
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
+</ul>
+<h4 id="shutdown_write"><a class="header" href="#shutdown_write">shutdown_write</a></h4>
+<pre><code class="language-pepper">shutdown_write(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the sending side of the connection: the peer's reads return 0
+once it has read everything sent before. This side can still read.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="set_no_delay"><a class="header" href="#set_no_delay">set_no_delay</a></h4>
+<pre><code class="language-pepper">set_no_delay(enabled: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Turns Nagle's algorithm off (<code>true</code>) or on (<code>false</code>) with
+<code>TCP_NODELAY</code>. With it off, small writes go out at once instead of
+being held back to combine with later ones: lower latency for
+request/response traffic, more packets.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>enabled</code> — true to send small writes immediately</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="set_read_timeout"><a class="header" href="#set_read_timeout">set_read_timeout</a></h4>
+<pre><code class="language-pepper">set_read_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a read waits: when no data arrives for
+<code>milliseconds</code>, the read fails with <code>is_timed_out()</code> and the stream
+stays open for another try. Each wait counts on its own, so a
+<code>read_exact</code> may take longer in all. 0, the default, waits as long as
+it takes. It works outside a task and in one, where the task's
+<code>async.timeout</code> can end the wait sooner.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the stream is closed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">stream.set_read_timeout(5000);   # give up after 5 seconds of silence
+</code></pre>
+<h4 id="read_timeout"><a class="header" href="#read_timeout">read_timeout</a></h4>
+<pre><code class="language-pepper">read_timeout(): ulong
+</code></pre>
+<p>Returns the read timeout <code>set_read_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="set_write_timeout"><a class="header" href="#set_write_timeout">set_write_timeout</a></h4>
+<pre><code class="language-pepper">set_write_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a write waits for the system to take more data: when
+it can take none for <code>milliseconds</code> (the peer is not reading), the
+write fails with <code>is_timed_out()</code>, possibly after sending part of the
+data. Each wait counts on its own. 0, the default, waits as long as
+it takes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the stream is closed</li>
+</ul>
+<h4 id="write_timeout"><a class="header" href="#write_timeout">write_timeout</a></h4>
+<pre><code class="language-pepper">write_timeout(): ulong
+</code></pre>
+<p>Returns the write timeout <code>set_write_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="local_address-2"><a class="header" href="#local_address-2">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns this side's address of the connection.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="peer_address"><a class="header" href="#peer_address">peer_address</a></h4>
+<pre><code class="language-pepper">peer_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the peer's address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peer's address; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="into_transfer"><a class="header" href="#into_transfer">into_transfer</a></h4>
+<pre><code class="language-pepper">into_transfer(): SocketTransfer
+</code></pre>
+<p>Moves the connection out of this stream, into a token another thread
+can take it from with <code>TcpStream.adopt</code>. The stream is closed
+afterwards (<code>is_open()</code> is false), and a task waiting on it on this
+worker wakes with an error.</p>
+<p>Inside <code>async.run</code> a socket belongs to the worker that uses it; this
+is how a task hands a connection to a task on another worker, such as
+one started with <code>async.spawn</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the token; for a closed stream, one that <code>adopt</code> fails on</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+import io;
+
+serve(listener: io.TcpListener) {
+    var (stream, peer) = listener.accept().value();
+    var transfer = stream.into_transfer();
+    async.spawn&lt;void&gt;(() =&gt; {
+        var mine = io.TcpStream.adopt(transfer).value();
+        mine.write_all("hello from another worker");
+    });
+}
+</code></pre>
+<h4 id="close-1"><a class="header" href="#close-1">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the connection now. Closing a closed stream does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="sockettransfer"><a class="header" href="#sockettransfer">SocketTransfer</a></h2>
+<pre><code class="language-pepper">[Shared] struct SocketTransfer
+</code></pre>
+<p>A connection on its way from one thread to another: made by
+<code>TcpStream.into_transfer</code> (or <code>UnixStream.into_transfer</code>), taken by
+<code>TcpStream.adopt</code> (or <code>UnixStream.adopt</code>, for a Unix domain connection).
+Unlike a stream, it is thread-safe, so a <code>shared</code> function (a body for
+<code>async.spawn</code> or <code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry
+it. If no one adopts it, the connection is closed when the last
+reference goes.</p>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h4 id="sockettransfer-1"><a class="header" href="#sockettransfer-1">SocketTransfer()</a></h4>
+<pre><code class="language-pepper">construct(handle: SocketHandle)
+</code></pre>
+<p>Wraps a socket handle. <code>TcpStream.into_transfer</code> makes these; use it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the socket, or an invalid handle for an empty token</li>
+</ul>
+<h2 id="udpsocket"><a class="header" href="#udpsocket">UdpSocket</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct UdpSocket
+</code></pre>
+<p>A UDP socket: sends and receives datagrams, each delivered whole or not at
+all, in no guaranteed order.</p>
+<p><code>UdpSocket.bind</code> opens one on a local address (port 0 for any free port).
+<code>send_to</code> and <code>receive_from</code> name the peer on each call; after <code>connect</code>,
+<code>send</code> and <code>receive</code> use the connected peer and ignore datagrams from
+anyone else.</p>
+<p>Each receive takes one datagram. A datagram longer than <code>max</code> is
+truncated to <code>max</code> bytes and the rest is lost, so size <code>max</code> for the
+largest datagram expected (at most 65507 bytes over IPv4).</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var socket = io.UdpSocket.bind(io.SocketAddress.parse("0.0.0.0:9000").value()).value();
+var buffer = Array&lt;u8&gt;();
+var (n, from) = socket.receive_from(buffer, 65507).value();
+socket.send_to(buffer, from);   # echo it back
+</code></pre>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h4 id="udpsocket-1"><a class="header" href="#udpsocket-1">UdpSocket()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed socket: <code>is_open()</code> is false and every operation
+fails. Use <code>UdpSocket.bind</code> to get an open one.</p>
+<h3 id="static-methods-3"><a class="header" href="#static-methods-3">Static methods</a></h3>
+<h4 id="bind-2"><a class="header" href="#bind-2">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: SocketAddress): IoResult&lt;UdpSocket&gt;
+</code></pre>
+<p>Opens a UDP socket bound to <code>address</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address to receive on; port 0 for any free port</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the bound socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine's, or another platform error</li>
+</ul>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="is_open-2"><a class="header" href="#is_open-2">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the socket is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>UdpSocket()</code> never bound</li>
+</ul>
+<h4 id="send_to"><a class="header" href="#send_to">send_to</a></h4>
+<pre><code class="language-pepper">send_to(data: u8[], address: SocketAddress): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends <code>data</code> as one datagram to <code>address</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the datagram's bytes</li>
+<li><code>address</code> — where to send it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent (all of <code>data</code>); an error when the datagram is too large, when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="receive_from"><a class="header" href="#receive_from">receive_from</a></h4>
+<pre><code class="language-pepper">receive_from(buffer: u8[], max: ulong): IoResult&lt;(ulong, SocketAddress)&gt;
+</code></pre>
+<p>Waits for the next datagram and appends up to <code>max</code> of its bytes to
+<code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended and the sender's address; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="connect-1"><a class="header" href="#connect-1">connect</a></h4>
+<pre><code class="language-pepper">connect(address: SocketAddress): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the socket's default peer: <code>send</code> goes to <code>address</code>, and
+<code>receive</code> and <code>receive_from</code> only take datagrams from it. No packet is
+sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the peer</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="send"><a class="header" href="#send">send</a></h4>
+<pre><code class="language-pepper">send(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends <code>data</code> as one datagram to the connected peer.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the datagram's bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent; an error when the socket is not connected or is closed, or another platform error</li>
+</ul>
+<h4 id="receive"><a class="header" href="#receive">receive</a></h4>
+<pre><code class="language-pepper">receive(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits for the next datagram from the connected peer and appends up to
+<code>max</code> of its bytes to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="set_broadcast"><a class="header" href="#set_broadcast">set_broadcast</a></h4>
+<pre><code class="language-pepper">set_broadcast(enabled: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Allows (<code>true</code>) or forbids (<code>false</code>) sending to a broadcast address
+such as <code>255.255.255.255</code> (<code>SO_BROADCAST</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>enabled</code> — true to allow broadcasts</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="set_read_timeout-1"><a class="header" href="#set_read_timeout-1">set_read_timeout</a></h4>
+<pre><code class="language-pepper">set_read_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a receive waits: when no datagram arrives for
+<code>milliseconds</code>, <code>receive</code> or <code>receive_from</code> fails with
+<code>is_timed_out()</code> and the socket stays open for another try. 0, the
+default, waits as long as it takes. It works outside a task and in
+one, where the task's <code>async.timeout</code> can end the wait sooner.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the socket is closed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">socket.set_read_timeout(5000);   # give up after 5 seconds of silence
+</code></pre>
+<h4 id="read_timeout-1"><a class="header" href="#read_timeout-1">read_timeout</a></h4>
+<pre><code class="language-pepper">read_timeout(): ulong
+</code></pre>
+<p>Returns the read timeout <code>set_read_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="set_write_timeout-1"><a class="header" href="#set_write_timeout-1">set_write_timeout</a></h4>
+<pre><code class="language-pepper">set_write_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a send waits for room in the system's buffer: when
+there is none for <code>milliseconds</code>, the send fails with
+<code>is_timed_out()</code>. 0, the default, waits as long as it takes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the socket is closed</li>
+</ul>
+<h4 id="write_timeout-1"><a class="header" href="#write_timeout-1">write_timeout</a></h4>
+<pre><code class="language-pepper">write_timeout(): ulong
+</code></pre>
+<p>Returns the write timeout <code>set_write_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="local_address-3"><a class="header" href="#local_address-3">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the address the socket is bound to, with the port the system
+chose when it was bound to port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="peer_address-1"><a class="header" href="#peer_address-1">peer_address</a></h4>
+<pre><code class="language-pepper">peer_address(): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Returns the connected peer's address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peer's address; an error when the socket is not connected or is closed, or another platform error</li>
+</ul>
+<h4 id="close-2"><a class="header" href="#close-2">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the socket now. Closing a closed socket does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/io-address.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/io-unix.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/io-address.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/io-unix.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

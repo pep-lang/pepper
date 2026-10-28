@@ -1,0 +1,379 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Select - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/async-select.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/async/select.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="select"><a class="header" href="#select">Select</a></h1>
+<p>Waiting on several channels at once: <code>Select&lt;E&gt;</code> takes the first value
+any of them receives, or sends a value to the first that has room, and
+turns what happened into a case of your own enum, which a <code>match</code> then
+handles.</p>
+<p>Source: <code>runtime/async/select.pep</code></p>
+<h2 id="select-1"><a class="header" href="#select-1">Select</a></h2>
+<pre><code class="language-pepper">struct Select&lt;E&gt;
+</code></pre>
+<p>Waits on several channels at once and takes the first value any of them
+receives, or sends to the first that has room, like Go's <code>select</code>.</p>
+<p>Each channel to receive from is added with <code>receive(channel, wrap)</code>,
+where <code>wrap</code> turns one of its values into an <code>E</code>, usually a case of an
+enum of your own that carries it. A value to send is added with
+<code>send(channel, value, sent)</code>, where <code>sent</code> returns the <code>E</code> that says it
+was sent. <code>wait()</code> then fires whichever arm is ready first and returns
+its <code>E</code>, for a <code>match</code> to handle. The channels may carry different types.</p>
+<ul>
+<li>The value is taken under the channel's own lock, so no other receiver
+can take it between "ready" and "take".</li>
+<li>A send arm's value goes into its channel only when that arm fires;
+until then the select holds it. Once sent, the arm leaves the select,
+so the next <code>wait()</code> does not send it again. A value never sent is
+dropped with the select.</li>
+<li>When several channels have values, each wait starts after the channel
+that fired last, so a busy channel cannot starve the others.</li>
+<li>A channel that is closed and empty is skipped, and so is a send arm
+whose channel is closed. Once every arm is, <code>wait()</code> returns an error.</li>
+<li>In a task (see <code>run</code>), waiting parks the task and its worker runs other
+tasks; a cancel or the task's <code>timeout</code> ends the wait.</li>
+</ul>
+<p>A Select is not <code>[Shared]</code>: use it from the thread (or task) that made it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — the type every channel's values are turned into</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">enum Event {
+    Job(job: Job),
+    Tick(count: long),
+    Stop,
+}
+
+var select = async.Select&lt;Event&gt;();
+select.receive(jobs, (job: Job): Event =&gt; Event.Job(job));
+select.receive(ticks, (count: long): Event =&gt; Event.Tick(count));
+select.receive(quit, (stop: bool): Event =&gt; Event.Stop);
+var running = true;
+while (running) {
+    match (select.wait()) {
+        Ok(event) =&gt; {
+            match (event) {
+                Job(job) =&gt; { run(job); }
+                Tick(count) =&gt; { report(count); }
+                Stop =&gt; { running = false; }
+            }
+        }
+        Err(error) =&gt; { running = false; }   # every channel closed
+    }
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="select-2"><a class="header" href="#select-2">Select()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a select with no channels yet.</p>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="receive"><a class="header" href="#receive">receive</a></h4>
+<pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
+</code></pre>
+<p>Adds <code>channel</code>: its values, turned into an <code>E</code> by <code>wrap</code>, are among
+those <code>wait()</code> returns.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the channel's values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>channel</code> — the channel to receive from</li>
+<li><code>wrap</code> — turns a value received from <code>channel</code> into an <code>E</code>; it runs on the waiting thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">select.receive(lines, (line: String): Event =&gt; Event.Line(line));
+</code></pre>
+<h4 id="send"><a class="header" href="#send">send</a></h4>
+<pre><code class="language-pepper">send&lt;T&gt;(channel: Channel&lt;T&gt;, [Move] value: T, sent: () =&gt; E)
+</code></pre>
+<p>Adds a send arm: <code>wait()</code> sends <code>value</code> to <code>channel</code> once the channel
+has room (a bounded channel that is full waits), and returns what
+<code>sent</code> returns.</p>
+<p><code>value</code> must be a new value, as for <code>Channel.send</code>: the select holds
+it and moves it into the channel only when this arm fires, so it is
+never sent if another arm fires first. Once sent, the arm leaves the
+select. A send arm whose channel is closed never fires, and its value
+is dropped with the select.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the channel's values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>channel</code> — the channel to send to</li>
+<li><code>value</code> — the value to send; a new value, which the compiler checks</li>
+<li><code>sent</code> — returns the <code>E</code> that <code>wait()</code> returns once the value is sent; it runs on the waiting thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">select.send(results, copy(line), (): Event =&gt; Event.Sent);
+</code></pre>
+<h4 id="wait"><a class="header" href="#wait">wait</a></h4>
+<pre><code class="language-pepper">wait(): Result&lt;E&gt;
+</code></pre>
+<p>Fires the first arm that is ready, waiting until one is: takes the
+next value any of the channels receives, or sends a send arm's value
+to a channel with room.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the arm's <code>E</code> (the value received, turned into an <code>E</code>, or what a send arm's <code>sent</code> returned); or an error once every channel is closed (and empty, for a receive arm), when the select has no arms, or when the task's wait was cancelled or timed out</li>
+</ul>
+<h4 id="wait_for"><a class="header" href="#wait_for">wait_for</a></h4>
+<pre><code class="language-pepper">wait_for(milliseconds: ulong): Result&lt;E&gt;
+</code></pre>
+<p>Like <code>wait()</code>, but gives up after about <code>milliseconds</code> milliseconds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest time to wait</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the arm's <code>E</code>, as for <code>wait()</code>; or an error if the time ran out, once every channel is closed (and empty, for a receive arm), or when the task's wait was cancelled</li>
+</ul>
+<h4 id="try_wait"><a class="header" href="#try_wait">try_wait</a></h4>
+<pre><code class="language-pepper">try_wait(): Result&lt;E&gt;
+</code></pre>
+<p>Fires an arm if one is ready now, without waiting: takes a value if a
+channel has one waiting, or sends a send arm's value if its channel
+has room.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the arm's <code>E</code>, as for <code>wait()</code>; or an error if no arm is ready, or once every channel is closed (and empty, for a receive arm)</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/async-channel.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/async-cpus.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/async-channel.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/async-cpus.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

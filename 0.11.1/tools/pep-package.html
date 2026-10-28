@@ -1,0 +1,1261 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The package manager: pep-package - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/tools/pep-package.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="the-package-manager-pep-package"><a class="header" href="#the-package-manager-pep-package">The package manager: pep-package</a></h1>
+<p><code>pep-package</code> fetches a project's dependencies and keeps its <code>pep.toml</code> and
+<code>pep.lock</code>. <code>pepper package</code> runs it with the same arguments:</p>
+<pre><code class="language-bash">pepper package add someone/geometry          # the newest version, imported as 'geometry'
+pepper package add other/json@2.x --name fast_json
+pepper package add semver                    # the package the index lists as 'semver'
+pepper package search terminal               # the index's packages these words describe
+pepper package info semver                   # its description, versions, toolchain and license
+pepper package add --dev someone/fixtures    # only the project's tests and examples import it
+pepper package add --target 'OS(Windows)' someone/winapi   # only builds for Windows use it
+pepper package add --optional --features simd someone/zlib  # only a feature turns it on
+pepper package remove geometry
+pepper package update                        # every dependency, as far as the ranges allow
+pepper package update --verify               # one at a time, keeping the updates that build
+pepper package fetch                         # what pep.lock lists
+pepper package publish --dry-run             # check and test the release pep.toml's version names
+pepper package publish                       # ... then tag it v&lt;version&gt; (&lt;member&gt;-v&lt;version&gt;) and push the tag
+pepper package tree                          # the dependency graph pep.lock records
+pepper package tree --invert numbers         # what depends on numbers
+pepper package why numbers                   # the paths from the project to numbers
+pepper package outdated                      # packages behind their ranges or the newest version
+pepper package install someone/tool          # builds its program into the Pepper home's bin
+pepper package install --list                # what is installed there, and from where
+pepper package uninstall tool
+pepper package audit                         # locked packages a security advisory affects
+pepper package vendor                        # every locked package into vendor/, for builds with no network
+pepper package cache info                    # the download cache every project shares
+pepper package cache clean
+</code></pre>
+<pre><code class="language-text">pep-package [-C &lt;dir&gt;] [--locked] [--offline] [--frozen] &lt;command&gt; [arguments]
+</code></pre>
+<p>It works on the project whose <code>pep.toml</code> is in the current folder or the
+nearest folder above it (see <a href="projects.html">Projects: pep.toml</a>). Packages
+are fetched with <code>git</code> when it is on the <code>PATH</code>; signing in to a private
+repository is git's concern (its credential helpers and SSH keys), so
+whatever lets <code>git clone</code> reach a repository lets <code>pep-package</code> fetch it.
+Without git, <code>pep-package</code> downloads the host's archive of each commit
+<code>pep.lock</code> pins over HTTPS instead (see <a href="#fetching-without-git">Fetching without git</a>),
+so a project with a <code>pep.lock</code> builds on a machine with no git.</p>
+<p>In a <a href="projects.html#workspaces-workspace">workspace</a>, <code>pep.lock</code> and
+<code>.pep/deps</code> are the root's, resolved for every member at once, wherever
+it runs; <code>add</code> and <code>remove</code> change the <code>pep.toml</code> of the member it runs
+in, and <code>publish</code> publishes that member.</p>
+<p><code>pepper build</code> fetches on its own what <code>pep.lock</code> lists and <code>.pep/deps</code>
+lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.
+Every package is downloaded once per machine, into a
+<a href="#the-download-cache">download cache</a> that all projects share.</p>
+<h2 id="publishing-a-package"><a class="header" href="#publishing-a-package">Publishing a package</a></h2>
+<p>A package is a Git repository with a <code>pep.toml</code>, and its releases are its
+version tags, so publishing one needs no registry account:</p>
+<ol>
+<li><strong>Start from the template.</strong>
+<a href="https://github.com/pep-lang/pepper-package-template">pep-lang/pepper-package-template</a>
+is a GitHub template repository with tests, CI on Linux, macOS and
+Windows, and a release job already set up: create a repository from it
+on GitHub, or run <code>pepper new &lt;name&gt; --lib</code>, which writes the same files
+(see <a href="pep-new.html#a-package">A package</a>). A package that builds C code
+carries a <a href="projects.html#build-scripts">build script</a>.</li>
+<li><strong>Release a version</strong> with <a href="#publish"><code>publish</code></a>: raise <code>version</code> in
+<code>pep.toml</code>, merge it to the default branch, and run
+<code>pepper package publish</code>. It checks and tests the package, then tags it
+<code>v1.2.0</code> and pushes the tag; a <a href="projects.html#workspaces-workspace">workspace</a>
+member is tagged <code>&lt;member&gt;-v1.2.0</code> instead. On a <code>v</code> tag the template's
+CI publishes a GitHub release for it.</li>
+<li><strong>List it in the <a href="#the-package-index">package index</a></strong>, once, so
+<code>pepper package add &lt;name&gt;</code> and <code>search</code> find it: open a pull request
+on <a href="https://github.com/pep-lang/index">pep-lang/index</a> that adds
+<code>packages/&lt;name&gt;.toml</code>. Later releases need no change there. Without
+it, a project still adds the package by its repository,
+<code>pepper package add owner/name</code>.</li>
+<li><strong>Withdraw a broken release</strong> by listing it in the
+<a href="projects.html#retract"><code>[retract]</code></a> table of a newer one. A release with
+a security hole also gets an advisory: release the fix, then open a
+pull request on <a href="https://github.com/pep-lang/advisories">pep-lang/advisories</a>
+so <a href="#audit"><code>audit</code></a> reports it.</li>
+</ol>
+<h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Command or option</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>-C &lt;dir&gt;</code>, <code>--directory &lt;dir&gt;</code></td><td>Works on the project at or above <code>&lt;dir&gt;</code> instead of the current folder</td></tr>
+<tr><td><code>--locked</code></td><td>Fails, leaving <code>pep.lock</code> as it is, when the command would change it (see <a href="#reproducible-builds">Reproducible builds</a>)</td></tr>
+<tr><td><code>--offline</code></td><td>Uses only what <code>.pep/deps</code> and the <a href="#the-download-cache">download cache</a> hold, and fails on anything that needs the network</td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td></tr>
+<tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
+<tr><td><code>fetch &lt;source&gt;...</code></td><td>Fetches only those locked packages (<code>github:owner/name</code>, every major of it pep.lock holds, or <code>github:owner/name@v&lt;major&gt;</code>, one), at their locked commits, resolving nothing</td></tr>
+<tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
+<tr><td><code>add &lt;name&gt;[@&lt;range&gt;]</code></td><td>Adds the package the <a href="#the-package-index">package index</a> lists as <code>&lt;name&gt;</code>, imported by that name</td></tr>
+<tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
+<tr><td><code>add ... --package &lt;name&gt;</code></td><td>Depends on the member <code>&lt;name&gt;</code> of the repository's workspace, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags (see <a href="projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
+<tr><td><code>add ... --dev</code></td><td>Adds it to <code>[dev-dependencies]</code>, which only the project's tests and examples import</td></tr>
+<tr><td><code>add ... --build</code></td><td>Adds it to <code>[build-dependencies]</code>, which only the package's build script imports</td></tr>
+<tr><td><code>add ... --target &lt;condition&gt;</code>, <code>-t &lt;condition&gt;</code></td><td>Adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>, which only builds for the targets the condition selects use; with <code>--build</code>, to <code>[target.'&lt;condition&gt;'.build-dependencies]</code></td></tr>
+<tr><td><code>add ... --optional</code></td><td>Marks it <code>optional = true</code>: a build uses it only when a feature turns it on</td></tr>
+<tr><td><code>add ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The dependency's features to turn on, written to its <code>features</code>: a comma-separated list, or repeat the option</td></tr>
+<tr><td><code>add ... --no-default-features</code></td><td>Leaves the dependency's <code>default</code> feature off: <code>default-features = false</code></td></tr>
+<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency, dev-dependency or build-dependency, by its name or its <code>owner/name</code></td></tr>
+<tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
+<tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
+<tr><td><code>publish</code></td><td>Checks the package and runs its tests, then tags its version and pushes the tag (see <a href="#publish"><code>publish</code></a>)</td></tr>
+<tr><td><code>publish --dry-run</code></td><td>Checks and tests, but neither tags nor pushes</td></tr>
+<tr><td><code>tree</code></td><td>Prints the dependency graph <code>pep.lock</code> records (see <a href="#tree"><code>tree</code></a>)</td></tr>
+<tr><td><code>tree --depth &lt;n&gt;</code>, <code>-d &lt;n&gt;</code></td><td>Prints only <code>&lt;n&gt;</code> levels of dependencies below the project</td></tr>
+<tr><td><code>tree --invert &lt;name&gt;</code>, <code>-i &lt;name&gt;</code></td><td>Prints what depends on a package instead, down to the project (see <a href="#tree---invert-name"><code>tree --invert</code></a>)</td></tr>
+<tr><td><code>tree --json</code></td><td>Prints the tree as JSON (see <a href="#json-output">JSON output</a>)</td></tr>
+<tr><td><code>why &lt;name&gt;</code></td><td>Prints the paths from the project to a package, the first 20 (see <a href="#why-name"><code>why</code></a>)</td></tr>
+<tr><td><code>why --all</code></td><td>Prints every path</td></tr>
+<tr><td><code>why --json</code></td><td>Prints the paths as JSON</td></tr>
+<tr><td><code>outdated</code></td><td>Lists the packages behind the newest version their ranges allow, or the newest overall (see <a href="#outdated"><code>outdated</code></a>)</td></tr>
+<tr><td><code>outdated --exit-code</code></td><td>Exits with status 1 when a package is outdated</td></tr>
+<tr><td><code>outdated --json</code></td><td>Prints the outdated packages as JSON</td></tr>
+<tr><td><code>install &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Builds a package's program optimized and puts it in the Pepper home's <code>bin</code>; installing it again upgrades it (see <a href="#install"><code>install</code></a>)</td></tr>
+<tr><td><code>install ... --package &lt;name&gt;</code></td><td>Installs the member <code>&lt;name&gt;</code> of the repository's (or <code>--path</code> folder's) workspace; from a repository, at a version of its own <code>&lt;name&gt;-v&lt;version&gt;</code> tags</td></tr>
+<tr><td><code>install --path &lt;dir&gt;</code></td><td>Installs the package in <code>&lt;dir&gt;</code> instead</td></tr>
+<tr><td><code>install --list</code></td><td>Lists the programs <code>install</code> put in <code>bin</code>, with their versions and sources</td></tr>
+<tr><td><code>install ... --force</code>, <code>-f</code></td><td>Replaces a program in <code>bin</code> that was installed from another source, or not by <code>install</code></td></tr>
+<tr><td><code>install ... --features &lt;names&gt;</code>, <code>-F &lt;names&gt;</code></td><td>The package's features to turn on: a comma-separated list, or repeat the option</td></tr>
+<tr><td><code>install ... --no-default-features</code></td><td>Leaves the package's <code>default</code> feature off</td></tr>
+<tr><td><code>uninstall &lt;name&gt;</code></td><td>Removes a program <code>install</code> put in <code>bin</code></td></tr>
+<tr><td><code>audit</code></td><td>Checks every package <code>pep.lock</code> records against the security advisory database, and exits with status 1 when one is affected (see <a href="#audit"><code>audit</code></a>)</td></tr>
+<tr><td><code>audit --ignore &lt;id&gt;</code></td><td>Reports that advisory but does not fail on it; repeat it for more</td></tr>
+<tr><td><code>audit --json</code></td><td>Prints the affected packages as JSON</td></tr>
+<tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="#vendor-dir"><code>vendor</code></a>)</td></tr>
+<tr><td><code>search [&lt;word&gt;...]</code></td><td>Lists the packages in the <a href="#the-package-index">package index</a> whose name, description or keywords hold every word; every package when none is given (see <a href="#search-word"><code>search</code></a>)</td></tr>
+<tr><td><code>info &lt;package&gt;</code></td><td>Prints a package's description, versions, minimum toolchain, license and repository; the package is the name the index lists it by, or <code>[host:]owner/name</code> (see <a href="#info-package"><code>info</code></a>)</td></tr>
+<tr><td><code>cache info</code></td><td>Prints the <a href="#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
+<tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
+</tbody></table>
+</div>
+<p><code>--locked</code>, <code>--offline</code> and <code>--frozen</code> go before or after the command
+(<code>pepper package fetch --locked</code>). The exit status is 0 on success, 1 when
+a command fails, and 2 for a mistake on the command line.</p>
+<h3 id="fetch"><a class="header" href="#fetch"><code>fetch</code></a></h3>
+<p>Fetches every package in <code>pep.lock</code> into the project's <code>.pep/deps</code> at its
+locked commit. When <code>pep.toml</code> names a dependency <code>pep.lock</code> does not list,
+or asks for a revision the locked one does not satisfy, <code>fetch</code> resolves it
+and updates <code>pep.lock</code>; everything else keeps its locked revision.
+Resolving reads the <code>pep.toml</code> of every package in the graph, so it
+fetches every platform's packages, those of
+<a href="projects.html#targetconditiondependencies"><code>[target]</code> tables</a> included.</p>
+<p><code>fetch &lt;source&gt;...</code> fetches only the locked packages named, at the commits
+<code>pep.lock</code> records, and resolves nothing. It is what a build runs when its
+lock lists every dependency and holds packages for other platforms:
+<code>pepper build</code> names the packages its target needs and <code>.pep/deps</code> lacks,
+so a build fetches no other platform's.</p>
+<h3 id="packages-with-a-build-script"><a class="header" href="#packages-with-a-build-script">Packages with a build script</a></h3>
+<p>A package can carry a <a href="projects.html#build-scripts">build script</a> that every
+build of a project using it compiles and runs on the building machine,
+with the user's permissions. Whenever <code>fetch</code>, <code>add</code> or <code>update</code> brings in
+a package with one (new to <code>pep.lock</code>, or at another commit), it says so
+and names the script to read:</p>
+<pre><code class="language-text">pep-package: native 1.0.0 (github:someone/native) has a build script, which every build of the project compiles and runs on this machine: read app/.pep/deps/github.com/someone/native/build.pep, or build with '--no-build-scripts' to refuse it
+</code></pre>
+<p><code>pepper build --no-build-scripts</code> then refuses to run a dependency's
+script (see <a href="pep-build.html#build-scripts-and---no-build-scripts">pep-build</a>).</p>
+<h3 id="add-ownernamerange-add-namerange"><a class="header" href="#add-ownernamerange-add-namerange"><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code>, <code>add &lt;name&gt;[@&lt;range&gt;]</code></a></h3>
+<p>Adds a dependency to <code>pep.toml</code>'s <code>[dependencies]</code> and fetches it, keeping
+the file's comments and layout. An argument that starts with <code>github:</code>,
+<code>gitlab:</code> or <code>codeberg:</code> (<code>gitlab:group/pepper-json</code>) names its host.
+Without one, <code>add</code> looks the repository up on each host in the order
+<code>pep.toml</code>'s <code>[fetch]</code> <code>hosts</code> lists (GitHub, GitLab, then Codeberg by
+default; see <a href="projects.html#fetch">Projects: pep.toml</a>) and uses the first
+that has it. When more than one does, it says so:</p>
+<pre><code class="language-text">pep-package: other/numbers is on github and codeberg; using github:other/numbers (prefix it with 'codeberg:' for another)
+</code></pre>
+<pre><code class="language-bash">pepper package add someone/geometry        # geometry = { github = "someone/geometry", version = "1.4.2" }
+pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
+pepper package add codeberg:third/shapes   # only Codeberg, without looking elsewhere
+</code></pre>
+<p>Without a range, the dependency gets the newest version tag this toolchain
+builds (see <a href="#resolving-versions">Resolving versions</a>; as a range
+that accepts compatible later versions: <code>1.4.2</code> accepts 1.4.2 up to, not
+including, 2.0.0); a repository with no version tags follows its default
+branch. The name source code imports defaults to the repository's last part,
+with <code>-</code> and <code>.</code> turned into <code>_</code> (<code>other/json</code> adds <code>json</code>); <code>--name</code> gives
+another. A name already in <code>pep.toml</code>, or the name of a runtime module
+(<code>io</code>, <code>async</code>), is an error that suggests <code>--name</code>.</p>
+<p>A bare name, with no <code>/</code> (<code>semver</code>, <code>semver@1.x</code>), is the package the
+<a href="#the-package-index">package index</a> lists by that name: <code>add</code> adds its
+source, and source code imports it by the index's name:</p>
+<pre><code class="language-bash">pepper package add semver   # semver = { github = "pep-lang/pepper-semver", version = "1.0.0" }
+</code></pre>
+<p><code>--package &lt;name&gt;</code> adds a member of the repository's
+<a href="projects.html#a-member-as-a-git-dependency">workspace</a> instead of its root
+package: the entry gets <code>package = "&lt;name&gt;"</code>, its version comes from the
+member's own <code>&lt;name&gt;-v&lt;version&gt;</code> tags, and the name source code imports
+defaults to the member's:</p>
+<pre><code class="language-bash">pepper package add someone/shapes --package geo   # geo = { github = "someone/shapes", package = "geo", version = "0.3.1" }
+</code></pre>
+<p><code>--dev</code> adds it to <code>[dev-dependencies]</code> instead: only the project's tests
+and examples import it, and projects that depend on this one ignore it
+(see <a href="projects.html#dev-dependencies">Projects: pep.toml</a>).</p>
+<p><code>--build</code> adds it to <code>[build-dependencies]</code>: only the package's
+<a href="projects.html#build-scripts">build script</a> imports it (see
+<a href="projects.html#build-dependencies">Projects: pep.toml</a>). The name may also be
+in <code>[dependencies]</code>, so <code>add</code> refuses it only when a build-dependency
+has it. It cannot be given with <code>--dev</code> or <code>--optional</code>.</p>
+<pre><code class="language-bash">pepper package add --build someone/codegen   # [build-dependencies] codegen = { github = "someone/codegen", version = "1.2.0" }
+</code></pre>
+<p><code>--target &lt;condition&gt;</code> adds it to <code>[target.'&lt;condition&gt;'.dependencies]</code>:
+only a build for a target the condition selects sees it. The condition is
+what <code>[Target(...)]</code> takes (<code>OS(Windows)</code>, <code>OS(Linux) &amp;&amp; Arch(x64)</code>; see
+<a href="../language/platform-selection.html">Platform selection</a>); quote it for the
+shell. It cannot be given with <code>--dev</code>. With <code>--build</code>, it adds it to
+<code>[target.'&lt;condition&gt;'.build-dependencies]</code>, whose condition holds for the
+machine building, which the script runs on (see
+<a href="projects.html#targetconditionbuild-dependencies">Projects: pep.toml</a>).</p>
+<p><code>--optional</code>, <code>--features &lt;names&gt;</code> and <code>--no-default-features</code> write the
+entry's <code>optional = true</code>, <code>features = [...]</code> and <code>default-features = false</code> (see <a href="projects.html#features">Features</a>). A dev-dependency cannot be
+optional. The package's features are not checked until a build turns
+them on.</p>
+<h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
+<p>Removes the dependency with that name (or that <code>owner/name</code>) from
+<code>pep.toml</code>, whichever table it is in (from each, when both
+<code>[dependencies]</code> and <code>[build-dependencies]</code> have it), and drops from
+<code>pep.lock</code> every package nothing needs any more.</p>
+<h3 id="update-name"><a class="header" href="#update-name"><code>update [&lt;name&gt;...]</code></a></h3>
+<p>Moves the named dependencies (every one, when none is named) to the newest
+version their ranges allow, and says which other package holds one back
+when one does:</p>
+<pre><code class="language-text">pep-package: github:other/numbers stays at 1.3.1, not 2.0.0: geometry 1.1.0 wants 1
+</code></pre>
+<p>A dependency on a branch moves to the branch's newest commit.</p>
+<h3 id="update---verify"><a class="header" href="#update---verify"><code>update --verify</code></a></h3>
+<p>Updates one dependency at a time and runs <code>pep-build</code> (beside
+<code>pep-package</code>, else on the <code>PATH</code>) on the project after each, with
+<code>--all</code> in a workspace. An update
+that does not build is rolled back, and the command lists those it rolled
+back.</p>
+<h3 id="publish"><a class="header" href="#publish"><code>publish</code></a></h3>
+<p>Releases the package at the version <code>pep.toml</code>'s <code>[package]</code> <code>version</code>
+names: other projects then depend on it by that version (see
+<a href="#resolving-versions">Resolving versions</a>). Raise <code>version</code>, commit,
+merge it to the default branch, then run it from the package's clone:</p>
+<pre><code class="language-text">$ pepper package publish
+pep-package: running 'pepper +0.11.0 test'
+pep-package: running 'pepper +latest test'
+pep-package: published shapes 1.2.0: tagged 3f9c2e01a7b4 v1.2.0 and pushed it to origin
+</code></pre>
+<p>First it checks, and lists every check that fails at once:</p>
+<ul>
+<li>
+<p>the work tree has no changes <code>git status</code> shows, and <code>HEAD</code> is the tip
+of the default branch of <code>origin</code>, so the commit it tags is the one
+that branch holds;</p>
+</li>
+<li>
+<p><code>version</code> is a version (<code>1.2.0</code>), newer than every version tag
+<code>origin</code> has;</p>
+</li>
+<li>
+<p><code>[package]</code> has a <code>description</code>, <code>license</code> and <code>repository</code>;</p>
+</li>
+<li>
+<p>each <code>sources</code> pattern and <code>include</code> folder of its
+<a href="projects.html#native"><code>[native]</code></a> tables names a file committed in the
+package (<code>git ls-files</code>): a dependent's copy, and a vendored one, holds
+only those, so an ignored or generated file would be missing there;</p>
+</li>
+<li>
+<p>every dependency asks for a version range, not a branch, tag, commit
+or the default branch, so a project depending on this one can resolve
+it with its other packages; a <code>path</code> dependency, such as a workspace
+sibling, needs a <code>version</code> beside it, and one inherited with
+<code>workspace = true</code> is checked as the workspace gives it. A
+dev-dependency may be anything, since a dependent ignores it;</p>
+</li>
+<li>
+<p>every <code>path</code> dependency with a <code>version</code> is a package of this
+workspace, its root or a member, published at a version the range
+accepts: <code>origin</code> has its tag (<code>numbers-v1.2.0</code>, or <code>v1.2.0</code> for the
+root), which a project outside the workspace resolves it by (see
+<a href="projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>).
+Each is an error at its <code>path</code>, printed before the list:</p>
+<pre><code class="language-text">geo/pep.toml:9:20: error: 'numbers' is not published at a version '1' accepts: origin has no such tag numbers-v&lt;version&gt;, which a dependent resolves it by; publish numbers first
+    9 | numbers = { path = "../numbers", version = "1" }
+      |                    ^~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><code>minimum_toolchain</code> is at least the release that reads each newer
+<code>pep.toml</code> feature the package uses: <code>[dev-dependencies]</code>,
+<code>[build-dependencies]</code>, <code>[target]</code>, <code>[features]</code>, <code>[overrides]</code> and
+<code>[workspace]</code> tables, and a
+dependency's <code>optional</code>, <code>features</code>, <code>default-features</code>, <code>workspace</code>
+and <code>package</code>, need 0.11.0;</p>
+</li>
+<li>
+<p><code>pep.toml</code> has no <code>[overrides]</code>: a dependent builds with the packages
+they replace, not the code the package was tested with, so a release
+waits until the fix it needs is released too.</p>
+</li>
+</ul>
+<pre><code class="language-text">pep-package: error: cannot publish shapes 1.2.0:
+  '[package]' has no 'license'
+  dependency 'numbers' names branch main, not a version range, so a dependent cannot resolve it
+  dependency 'draw' names path ../draw and no 'version', so a dependent cannot resolve it; give it the version of the package there
+  'version' 1.2.0 is not newer than the newest tag, 1.2.0; raise it in pep.toml
+</code></pre>
+<p>Run from a workspace member, it checks and tests that member, in its
+folder, and tags it <code>&lt;name&gt;-v&lt;version&gt;</code> (<code>geo-v0.3.1</code>): each member is
+released on its own, and its <code>version</code> need only be newer than its own
+tags. The workspace's root package, and a package that is no workspace's
+member, are tagged <code>v&lt;version&gt;</code>.</p>
+<p>Then it runs the package's tests with <code>pepper +&lt;minimum_toolchain&gt; test</code>
+and <code>pepper +latest test</code> (only the second without a <code>minimum_toolchain</code>),
+with the Pepper home's own <code>pepper</code> (in the home whose toolchain
+<code>pep-package</code> is, else the one <code>PEPPER_HOME</code> names, else the default one; see <a href="pep-install.html">Toolchains: pep-install</a>), so
+both toolchains must be installed there; <code>latest</code> is the newest
+installed release, not a prerelease. A failing run stops it and shows
+what the tests printed. Last, it tags <code>HEAD</code> <code>v&lt;version&gt;</code> (a member's
+tag) and pushes the
+tag to <code>origin</code>; when the push fails, it deletes the tag again.</p>
+<p><code>--dry-run</code> checks and tests, then says what it would tag, without
+tagging or pushing anything. <code>publish</code> neither creates a release page on
+the host nor needs <code>pep.lock</code>, which a dependent does not read.</p>
+<h3 id="tree"><a class="header" href="#tree"><code>tree</code></a></h3>
+<p>Prints the dependency graph <code>pep.lock</code> records, as the <code>pep.toml</code> of the
+project and of each locked package declare it. Each line is the name the
+dependent imports the package by, when that is not the package's own
+(<code>win: winapi</code>), its locked version (or short commit) and source, and
+marks:</p>
+<ul>
+<li><code>[dev]</code>: only the project's dev-dependencies lead to it;</li>
+<li><code>[build]</code>: only build-dependencies lead to it (see
+<a href="projects.html#build-dependencies"><code>[build-dependencies]</code></a>);</li>
+<li><code>[target: &lt;condition&gt;]</code>: only builds for the targets the condition
+selects need it (see <a href="projects.html#targetconditiondependencies"><code>[target]</code> tables</a>);</li>
+<li><code>[override: &lt;source&gt;]</code>: the project's <a href="projects.html#overrides"><code>[overrides]</code></a>
+replace it with a fork (<code>github:me/numbers</code>) or a folder (<code>path:../numbers</code>),
+in <code>tree</code> and <code>why</code> alike;</li>
+<li><code>[optional]</code> and <code>[features: ...]</code>: the dependent's entry says
+<code>optional = true</code>, and the features its <code>features</code> turns on. A build
+turns on more: each package's <code>default</code> feature, and what the features
+it turns on list (see <a href="projects.html#features">Features</a>).</li>
+</ul>
+<p>A package whose dependencies were listed above ends in <code>(*)</code> instead of
+listing them again:</p>
+<pre><code class="language-text">$ pepper package tree
+app
+|-- geometry 1.0.0 (github:someone/geometry)
+|   `-- numbers 1.3.1 (github:other/numbers)
+|-- win: winapi 1.0.0 (github:other/winapi) [target: OS(Windows)] [optional] [features: wide]
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- geometry 1.0.0 (github:someone/geometry) (*)
+</code></pre>
+<p><code>--depth &lt;n&gt;</code> stops <code>&lt;n&gt;</code> levels below the project (<code>--depth 1</code>: only its
+own dependencies). <code>tree</code>, <code>why</code> and <code>outdated</code> read the graph from
+<code>pep.lock</code>, checking each locked package out at its commit (with
+<code>--offline</code>, only from what it holds), and never change <code>pep.lock</code>. When
+<code>pep.toml</code> names a package <code>pep.lock</code> does not list, they fail and say to
+run <code>fetch</code> first.</p>
+<h3 id="tree---invert-name"><a class="header" href="#tree---invert-name"><code>tree --invert &lt;name&gt;</code></a></h3>
+<p>Prints the tree upside down: the package, then each package whose
+<code>pep.toml</code> asks for it, and so on down to the project. The package is
+named as for <a href="#why-name"><code>why</code></a>. Each line has the same marks as in
+<code>tree</code>, except that <code>[optional]</code> and <code>[features: ...]</code> describe the
+dependent's entry for the package on the line above, and <code>(*)</code> ends a
+package whose dependents were listed already. <code>--depth</code> counts levels
+below the package:</p>
+<pre><code class="language-text">$ pepper package tree --invert geometry
+geometry 1.0.0 (github:someone/geometry)
+|-- app
+`-- fixtures 1.0.0 (github:other/fixtures) [dev]
+    `-- app
+</code></pre>
+<h3 id="why-name"><a class="header" href="#why-name"><code>why &lt;name&gt;</code></a></h3>
+<p>Prints the paths from the project to the package, one per line. The
+package is named by its own name, its <code>owner/name</code> or source, or the name
+a dependency imports it by:</p>
+<pre><code class="language-text">$ pepper package why numbers
+app -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
+app -&gt; fixtures 1.0.0 -&gt; geometry 1.0.0 -&gt; numbers 1.3.1
+</code></pre>
+<p>It prints the first 20, then a line saying how many more there are
+(<code>and 7 more paths; --all prints every one</code>); <code>--all</code> prints every one.</p>
+<h3 id="outdated"><a class="header" href="#outdated"><code>outdated</code></a></h3>
+<p>Lists each locked package that is behind, with its locked version, the
+revision its requirements now choose (<code>wanted</code>: the newest version
+every range on it in the locked graph allows and this toolchain builds,
+or a branch's newest commit; updating a package that depends on it can
+change those ranges), and the newest version it offers (<code>latest</code>, not a prerelease).
+A package <code>[overrides]</code> replaces is left out, since its revision is the
+override's:</p>
+<pre><code class="language-text">$ pepper package outdated
+package   locked  wanted  latest  source
+numbers   1.3.1   1.3.1   3.0.0   github:other/numbers
+geometry  1.0.0   1.1.0   1.1.0   github:someone/geometry
+</code></pre>
+<p>Here <code>pepper package update</code> moves geometry to 1.1.0, and numbers stays
+below 3.0.0 until geometry's range on it allows that. With none behind,
+it prints <code>every package is at the newest version</code>. It reads what each
+package offers over the network, so with <code>--offline</code> it fails, saying it
+cannot check. The exit status is 0 whatever it finds, unless
+<code>--exit-code</code> asks for 1 when a package is outdated, for CI.</p>
+<p>A locked version its author <a href="#retracted-versions">retracted</a> is outdated
+too: its <code>locked</code> cell says <code>(retracted)</code>, and a line after the table says
+why:</p>
+<pre><code class="language-text">$ pepper package outdated
+package  locked             wanted  latest  source
+shapes   1.1.0 (retracted)  1.2.0   1.2.0   github:other/shapes
+shapes 1.1.0 is retracted: loses data
+</code></pre>
+<h3 id="search-word"><a class="header" href="#search-word"><code>search [&lt;word&gt;...]</code></a></h3>
+<p>Lists each package in the <a href="#the-package-index">package index</a> whose name,
+description or keywords hold every word given, ignoring case, one a line;
+with no words, every package. A word matches part of a word
+(<code>term</code> matches <code>terminal</code>). Finding nothing prints nothing, says so on
+stderr, and exits with status 0.</p>
+<pre><code class="language-text">$ pepper package search terminal
+term (github:pep-lang/pepper-term): Interactive terminals: raw mode, key and mouse input, ...
+tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Ratatui: ...
+</code></pre>
+<h3 id="info-package"><a class="header" href="#info-package"><code>info &lt;package&gt;</code></a></h3>
+<p>Prints what is known of a package: the index's description and keywords,
+its versions (its version tags, newest first, those its newest release
+<a href="#retracted-versions">retracts</a> marked), and the <code>minimum_toolchain</code>,
+<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, which is
+read from the <a href="#the-download-cache">download cache</a> (fetched into it
+when missing). The package is the name the index lists it by, or a
+repository as <code>add</code> takes one (<code>[host:]owner/name</code>), which need not be
+in the index; then the description is its <code>pep.toml</code>'s. A line with
+nothing to say is left out. It reads the versions from the host, so it
+fails under <code>--offline</code>.</p>
+<pre><code class="language-text">$ pepper package info semver
+semver: Semantic Versioning 2.0.0: parse, compare and order versions, and match them against ranges
+source: github:pep-lang/pepper-semver
+versions: 1.0.0
+license: Apache-2.0
+repository: https://github.com/pep-lang/pepper-semver
+keywords: semver, version, range
+</code></pre>
+<h3 id="the-package-index"><a class="header" href="#the-package-index">The package index</a></h3>
+<p>The index that <code>search</code>, <code>info</code> and <code>add &lt;name&gt;</code> read is a Git
+repository with one TOML file per package in its <code>packages</code> folder:
+<code>https://github.com/pep-lang/index.git</code>, or the repository
+<code>PEPPER_PACKAGE_INDEX</code> names (a mirror, a private index, or a <code>file://</code>
+folder). The file's name is the package's name, the one <code>add &lt;name&gt;</code>
+takes and source code imports it by (<code>packages/semver.toml</code>):</p>
+<pre><code class="language-toml">source = "github:pep-lang/pepper-semver"   # required: host:owner/name
+description = "Semantic Versioning 2.0.0: parse, compare and order versions, and match them against ranges"
+keywords = ["semver", "version", "range"]
+</code></pre>
+<p>The index lists no versions: they are the source's version tags, which
+<code>info</code> reads from the host, so a release needs no change to the index.
+To list a package, open a pull request that adds its file; a maintainer
+reviews it, and the first pull request for a name claims it. A malformed
+file fails the command with an error at its key.</p>
+<p>Like the <a href="#audit">advisory database</a>, the index is cloned into the
+download cache's home, <code>cache/index</code>, and fetched again once the copy is
+an hour old. A fetch that fails falls back to the cached copy with a
+warning that gives its age, and fails only when there is no copy; with
+<code>--offline</code>, <code>search</code> uses the copy as it is, and fails when there is
+none. The packages are also listed on
+<a href="https://pepper-lang.dev/packages.html">https://pepper-lang.dev/packages.html</a>.</p>
+<h3 id="audit"><a class="header" href="#audit"><code>audit</code></a></h3>
+<p>Checks every package <code>pep.lock</code> records, for every platform and
+dev-dependencies included, against a database of security advisories, as
+<code>cargo audit</code> does with RustSec. For each advisory that affects a locked
+version it prints the advisory, the package (marked <code>[dev]</code> or with its
+<code>[target: ...]</code> as in <a href="#tree"><code>tree</code></a>), and the paths that lead to it, as
+<a href="#why-name"><code>why</code></a> prints them:</p>
+<pre><code class="language-text">$ pepper package audit
+PEP-2026-0001 (high): numbers 1.3.1 (github:other/numbers)
+  numbers_version() lies
+  patched: &gt;=2.0.0
+  https://example.com/PEP-2026-0001
+  app -&gt; geometry 1.1.0 -&gt; numbers 1.3.1
+1 advisory affects pep.lock
+</code></pre>
+<p>The exit status is 1 when an advisory affects a package, for CI, and 0
+when none does (<code>no advisory affects pep.lock (12 in &lt;database&gt;)</code>).
+<code>--ignore &lt;id&gt;</code>, or the project's <a href="projects.html#audit"><code>[audit] ignore</code></a>
+list, names an advisory that does not fail it, such as one whose code the
+project never calls; <code>audit</code> still says on stderr which package it
+affects. Only packages locked at a version are checked: one at a branch or
+commit names no version to match.</p>
+<p><strong>The database</strong> is a Git repository of TOML files, one advisory each,
+anywhere in it: <code>https://github.com/pep-lang/advisories.git</code>, or the
+repository <code>PEPPER_ADVISORY_DB</code> names (a mirror, a private database, or a
+<code>file://</code> folder). <code>audit</code> clones it into the
+<a href="#the-download-cache">download cache</a>'s home, <code>cache/advisories</code>, and
+fetches it again once the copy is an hour old. When that fetch fails (no
+network, or the host erroring), <code>audit</code> checks against the cached copy
+and warns on stderr, giving the copy's age:</p>
+<pre><code class="language-text">pep-package: warning: cannot fetch the advisory database https://github.com/pep-lang/advisories.git, so using the cached copy from 3 days ago: ...
+</code></pre>
+<p>With no cached copy, it fails. With <code>--offline</code> it uses the copy as it
+is, and fails when there is none. An advisory:</p>
+<pre><code class="language-toml">id = "PEP-2026-0001"                      # required
+package = "github:other/numbers"          # required: the source pep.lock records (a member's: github:owner/name#member)
+title = "numbers_version() lies"
+severity = "high"                          # as written: low, medium, high, critical
+url = "https://example.com/PEP-2026-0001"
+patched = ["&gt;=2.0.0"]                      # the versions that fix it
+unaffected = ["&lt;1.0.0"]                    # the versions it never affected
+</code></pre>
+<p>A version is affected unless a <code>patched</code> or <code>unaffected</code> entry holds it.
+Each entry is a version, which names that version alone (<code>"1.2.3"</code>), or a
+range as dependencies write it (<code>"&gt;=1.2.3, &lt;2"</code>, <code>"^1.4"</code>). A malformed
+advisory fails <code>audit</code> with an error at its key.</p>
+<h3 id="vendor-dir"><a class="header" href="#vendor-dir"><code>vendor [&lt;dir&gt;]</code></a></h3>
+<p>Copies every package <code>pep.lock</code> lists into a folder of the project, so
+the repository carries its dependencies and builds with no network and no
+<a href="#the-download-cache">download cache</a>, as <code>cargo vendor</code> and
+<code>go mod vendor</code> do: for an air-gapped build, or a release archive. It
+first resolves and fetches as <a href="#fetch"><code>fetch</code></a> does, then writes each
+package at its locked commit to <code>&lt;dir&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>
+(<code>vendor/github.com/someone/geometry</code>), its files as <code>git archive</code> gives
+them, without <code>.git</code>, and sets <code>[fetch] vendor = "&lt;dir&gt;"</code> in <code>pep.toml</code>
+(see <a href="projects.html#fetch"><code>[fetch]</code></a>):</p>
+<pre><code class="language-text">$ pepper package vendor
+pep-package: vendored geometry 1.1.0 (github:someone/geometry)
+pep-package: vendored numbers 1.3.1 (github:other/numbers)
+pep-package: set '[fetch] vendor = "vendor"' in pep.toml: builds now read the packages from vendor
+</code></pre>
+<p>Commit the folder with <code>pep.toml</code> and <code>pep.lock</code>. It holds every package
+in the lock: every platform's, those only <code>[build-dependencies]</code> lead to,
+which build scripts build with, and those only <code>[dev-dependencies]</code> lead
+to, since <code>pepper test</code> and the examples build from it too (Cargo vendors
+everything for the same reason). A fork an <code>[overrides]</code> entry names is vendored in
+the original's place; a <code>path</code> override is not, its folder being the
+project's already. <code>&lt;dir&gt;/.gitattributes</code> turns git's
+line-ending conversion off there, so a checkout keeps the files byte for
+byte.</p>
+<p>Each package's folder also holds <code>.pep-commit</code>, its commit, and
+<code>.pep-checksum</code>, the SHA-256 of its files' paths and contents. In a
+vendored project, <code>pepper build</code> and <code>pepper test</code> fetch nothing: they read
+the packages from the vendor folder and check that each one the build
+needs is there at its locked commit and unedited, and fail otherwise, with
+or without <code>--locked</code> and <code>--offline</code>:</p>
+<pre><code class="language-text">error: the files in vendor/github.com/someone/geometry were changed since they were vendored (sha256 1c0f..., recorded 7b3e...); run 'pepper package vendor' to restore them, or make the change in the package itself
+</code></pre>
+<p><code>pepper package fetch</code> checks the same, and that <code>pep.lock</code> still matches
+<code>pep.toml</code>, reading only the vendor folder; it changes neither. To change
+a dependency, run <code>add</code>, <code>remove</code> or <code>update</code> (which fetch into <code>.pep/deps</code>
+as usual), then <code>vendor</code> again: that rewrites the packages that changed,
+restores edited ones, and removes those <code>pep.lock</code> no longer lists.
+<code>.pep/deps</code> is unchanged in a project that is not vendored.</p>
+<p>A vendored package holds no symbolic links. The checksum covers files
+only, and Windows makes links only in Developer Mode, so a link would
+vendor differently from host to host. <code>vendor</code> refuses a package whose
+commit holds one, naming the package and the link:</p>
+<pre><code class="language-text">pep-package: error: cannot vendor github:someone/linked: 'docs/current' is a symbolic link, which a vendored package cannot hold
+</code></pre>
+<p>A link found in a package's folder later fails the build and <code>fetch</code> the
+same way an edited file does; <code>vendor</code> again removes it.</p>
+<p>In a <a href="projects.html#workspaces">workspace</a>, run from the root or any member,
+<code>vendor</code> writes one folder at the workspace's root, holding every
+member's locked packages, and sets <code>[fetch] vendor</code> in the root's
+<code>pep.toml</code>; every member's build reads it.</p>
+<h3 id="install"><a class="header" href="#install"><code>install</code></a></h3>
+<p>Installs a command-line tool from a package, as <code>cargo install</code> and
+<code>go install</code> do: it builds the package's program, the one <code>pepper build</code>
+builds in its folder, with <code>-O</code>, and puts it in the Pepper home's <code>bin</code>,
+which <a href="pep-install.html#setting-a-machine-up"><code>pep-install setup</code></a> puts on
+the <code>PATH</code>. It needs no project.</p>
+<pre><code class="language-bash">pepper package install someone/tool          # the newest release
+pepper package install github:someone/tool@1.2
+pepper package install someone/tools --package fmt  # the workspace member fmt
+pepper package install --path .              # the package in this folder
+pepper package install --list
+pepper package uninstall tool
+</code></pre>
+<ul>
+<li><strong>Which version:</strong> the newest release the range allows (any, without
+one) that this toolchain builds, as <a href="#add-ownernamerange"><code>add</code></a> picks
+it; a package with no version tags is installed from its default
+branch. Installing it again upgrades it, or moves it to another range.
+With <code>--package &lt;name&gt;</code>, it is the workspace member <code>&lt;name&gt;</code>, by its
+own <code>&lt;name&gt;-v&lt;version&gt;</code> tags, as <code>add --package</code> reads them; with
+<code>--path</code>, the member <code>&lt;name&gt;</code> of that folder's workspace.</li>
+<li><strong>Its dependencies</strong> are those its own <code>pep.lock</code> records, when it has
+one, fetched through the <a href="#the-download-cache">download cache</a>;
+<code>--locked</code> fails rather than build with a <code>pep.lock</code> that is out of
+date, and <code>--offline</code> works only with <code>--path</code>, since choosing a version
+reads the network. <code>--features</code> and <code>--no-default-features</code> choose the
+package's features, as for <code>pepper build</code>.</li>
+<li><strong>The program's name</strong> is its <code>[build]</code> table's <code>output</code>, else its
+package's <code>name</code> (with <code>.exe</code> on Windows).</li>
+<li><strong>What it installed</strong> is recorded in <code>installed-tools.toml</code> in the home:
+each program's source, version, commit and the toolchain that built it,
+which <code>install --list</code> prints and <code>uninstall</code> reads.</li>
+<li><strong>Overwriting:</strong> a program already in <code>bin</code> is replaced only when
+<code>install</code> put it there from the same source; one from another package,
+or one it did not install (<code>pepper</code> and <code>pep-install</code> are the home's
+own), needs <code>--force</code>.</li>
+<li><strong>Replacing a running program:</strong> the new program is written beside the
+old one and renamed into place, the old one first moved aside to
+<code>&lt;name&gt;.old</code>. On Windows a running program cannot be removed, so its
+<code>.old</code> file stays until the next <code>install</code> or <code>uninstall</code> of that
+program removes it.</li>
+</ul>
+<p>The home is the one whose toolchain <code>pep-package</code> is, else <code>PEPPER_HOME</code>,
+else <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere, as for
+<a href="pep-install.html#where-toolchains-go"><code>pep-install</code></a>.
+<code>pepper install</code> is a different command: it installs toolchains.</p>
+<h3 id="json-output"><a class="header" href="#json-output">JSON output</a></h3>
+<p><code>--json</code> makes <code>tree</code>, <code>why</code> and <code>outdated</code> print one JSON object instead,
+for scripts. Its form is stable: a later release may add members, but
+does not rename or remove one.</p>
+<p><code>tree --json</code> writes the project's name and its dependencies as nodes,
+each with the nodes of its own dependencies:</p>
+<pre><code class="language-json">{
+  "name": "app",
+  "dependencies": [
+    {
+      "name": "win",
+      "package": "winapi",
+      "version": "1.0.0",
+      "commit": "79c8011a9d932b141794ad50938f3cad7ac01efd",
+      "source": "github:other/winapi",
+      "dev": false,
+      "build": false,
+      "target": "OS(Windows)",
+      "override": null,
+      "optional": true,
+      "features": ["wide"],
+      "repeated": false,
+      "dependencies": []
+    }
+  ]
+}
+</code></pre>
+<p>A node holds the package and the entry in its dependent's <code>pep.toml</code> that
+asks for it:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>The name the dependent imports the package by</td></tr>
+<tr><td><code>package</code></td><td>The package's own name (the project's, for the project)</td></tr>
+<tr><td><code>version</code></td><td>Its locked version, or <code>null</code> when it is locked by commit</td></tr>
+<tr><td><code>commit</code></td><td>Its locked commit, or <code>null</code> for the project and a folder</td></tr>
+<tr><td><code>source</code></td><td>Its source (<code>github:other/winapi</code>); <code>""</code> for the project</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it (<code>[dev]</code>)</td></tr>
+<tr><td><code>build</code></td><td>Whether only build-dependencies lead to it (<code>[build]</code>)</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it (<code>[target: ...]</code>), or <code>null</code> for every target</td></tr>
+<tr><td><code>override</code></td><td>What <code>[overrides]</code> replaces it with (<code>[override: ...]</code>), or <code>null</code></td></tr>
+<tr><td><code>optional</code></td><td>Whether the entry says <code>optional = true</code> (<code>[optional]</code>)</td></tr>
+<tr><td><code>features</code></td><td>The features the entry turns on (<code>[features: ...]</code>)</td></tr>
+<tr><td><code>repeated</code></td><td>Whether its dependencies were listed already (<code>(*)</code>), so its <code>dependencies</code> is empty</td></tr>
+<tr><td><code>dependencies</code></td><td>The nodes of its dependencies, empty below <code>--depth</code></td></tr>
+</tbody></table>
+</div>
+<p><code>tree --invert &lt;name&gt; --json</code> writes the project's name and <code>packages</code>:
+a node for each package the name matches, whose <code>name</code>, <code>optional</code> and
+<code>features</code> are its own name, <code>false</code> and <code>[]</code>, and which has no
+<code>repeated</code>. In place of <code>dependencies</code>, each node has <code>dependents</code>: the
+nodes of the packages that ask for it, the project among them as a
+node whose <code>source</code> is <code>""</code>. In those, <code>name</code>, <code>optional</code> and <code>features</code>
+describe the dependent's entry for the package above.</p>
+<p><code>why --json</code> writes <code>paths</code>, the paths it prints (every one with
+<code>--all</code>), each an array of the nodes from the project's dependency to the
+package, without <code>repeated</code> or <code>dependencies</code>, and <code>total</code>, the number of
+paths there are:</p>
+<pre><code class="language-text">{
+  "paths": [
+    [
+      { "name": "geometry", "package": "geometry", "version": "1.0.0", ... },
+      { "name": "numbers", "package": "numbers", "version": "1.3.1", ... }
+    ]
+  ],
+  "total": 1
+}
+</code></pre>
+<p><code>outdated --json</code> writes <code>packages</code>, an object for each row of the table,
+with <code>--exit-code</code> as without <code>--json</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>package</code></td><td>The package's name</td></tr>
+<tr><td><code>locked</code></td><td>Its locked version, or short commit</td></tr>
+<tr><td><code>wanted</code></td><td>The revision its requirements now choose</td></tr>
+<tr><td><code>latest</code></td><td>The newest version it offers, or <code>null</code> when it has none</td></tr>
+<tr><td><code>source</code></td><td>Its source</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>build</code></td><td>Whether only build-dependencies lead to it</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
+<tr><td><code>retracted</code></td><td>Why its author retracted the locked version, or <code>null</code></td></tr>
+</tbody></table>
+</div>
+<p><code>audit --json</code> writes <code>advisories</code>, an object for each affected package,
+with the exit status as without <code>--json</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Member</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>id</code>, <code>title</code>, <code>severity</code>, <code>url</code></td><td>The advisory's, each <code>""</code> when it gives none</td></tr>
+<tr><td><code>patched</code></td><td>Its <code>patched</code> versions, as written</td></tr>
+<tr><td><code>package</code>, <code>version</code>, <code>source</code></td><td>The affected package, its locked version and its source</td></tr>
+<tr><td><code>dev</code></td><td>Whether only the project's dev-dependencies lead to it</td></tr>
+<tr><td><code>build</code></td><td>Whether only build-dependencies lead to it</td></tr>
+<tr><td><code>target</code></td><td>The condition of the targets that need it, or <code>null</code></td></tr>
+<tr><td><code>paths</code>, <code>total</code></td><td>The first 20 paths to it and how many there are, as <code>why --json</code> writes them</td></tr>
+</tbody></table>
+</div>
+<h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
+<p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
+the dependency graph, its dependencies' dependencies included, and the
+<code>sha256</code> checksum of its files. Commit it with <code>pep.toml</code>: it is what makes
+a fresh clone build the same code.</p>
+<pre><code class="language-toml">version = 1
+
+[[package]]
+name = "geometry"
+source = "github:someone/geometry"
+version = "1.1.0"
+commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
+sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
+</code></pre>
+<p>A package that only the project's <code>[dev-dependencies]</code> lead to has
+<code>dev = true</code>; one that a dependency leads to as well does not. A package
+that only <a href="projects.html#build-dependencies"><code>[build-dependencies]</code></a> lead to,
+any package's, has <code>build = true</code>: a build script imports it, built for the
+machine building, and no program links it.</p>
+<p>A member of a repository's workspace (a dependency with
+<a href="projects.html#a-member-as-a-git-dependency"><code>package</code></a>) has <code>#</code> and the
+member after the repository in its <code>source</code>, and its own commit, the one
+its own tag names, checked out in <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;#&lt;member&gt;</code>
+(or the vendor folder). Its siblings are entries of their own:</p>
+<pre><code class="language-toml">[[package]]
+name = "geo"
+source = "github:someone/shapes#geo"
+version = "0.3.1"
+commit = "..."
+sha256 = "..."
+</code></pre>
+<p>Features do not change the lock: an optional dependency is resolved,
+locked and fetched like any other, whether or not a build turns it on, so
+<code>pep.lock</code> is the same whichever <code>--features</code> a build gives (see
+<a href="projects.html#features">Features</a>).</p>
+<p><code>pep.lock</code> lists every platform's packages, so it is the same whichever
+system writes it, as <code>Cargo.lock</code> is: a project locked on Linux builds on
+Windows with no change to the lock, and <code>--locked</code> passes on both. A
+package that only <code>[target.'&lt;condition&gt;'.dependencies]</code> lead to has
+<code>target</code>, the condition under which a build needs it; on the way to it,
+conditions join with <code>&amp;&amp;</code> and other ways with <code>||</code>, so
+<code>target = "(OS(Linux)) || (OS(Windows))"</code> is needed on either. A build
+fetches a package only when its <code>target</code> holds for what it builds for,
+the platform <code>--target</code> names in a cross build. The conditions of a
+<code>[target.'&lt;condition&gt;'.build-dependencies]</code>, and of what a
+build-dependency leads to, are left out: they hold for the machine
+building, which a lock every machine shares cannot name, so a build
+fetches such a package whatever it builds for.</p>
+<pre><code class="language-toml">[[package]]
+name = "winapi"
+source = "github:someone/winapi"
+version = "1.0.0"
+commit = "4a1f0c7e9b2d3c5a6e8f0a1b2c3d4e5f60718293"
+sha256 = "..."
+target = "OS(Windows)"
+</code></pre>
+<p>The checksum covers the files of the commit as the host's archive of it
+holds them, not the archive's bytes, which a host may compress
+differently from one download to the next. It is the SHA-256 of every
+file, symlink and hard link, in path order, each written as its kind
+(<code>f</code>, <code>x</code> for a file anyone may run, <code>l</code>, <code>h</code>), its path, its length and
+its contents. With git, <code>pep-package</code> computes it from <code>git archive</code> of
+the checkout, which holds the same files, so a lock written with git
+verifies a later fetch without it. A lock from before checksums were kept
+gains them on the next fetch.</p>
+<p>A package whose files do not match is an error that names it and both
+checksums:</p>
+<pre><code class="language-text">pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+</code></pre>
+<p>A package the project's <a href="projects.html#overrides"><code>[overrides]</code></a> replace
+keeps its own <code>source</code> and has <code>override</code>, the replacement's source: a
+fork, whose commit <code>commit</code> is and whose files <code>sha256</code> covers, or
+<code>path:</code> and the folder as <code>pep.toml</code> writes it, with no commit, since a
+folder has none to pin:</p>
+<pre><code class="language-toml">[[package]]
+name = "numbers"
+source = "github:other/numbers"
+override = "github:me/numbers"
+commit = "9d1e0c3b7a2f4e6d8c0b1a2f3e4d5c6b7a8f9e0d"
+sha256 = "..."
+</code></pre>
+<p>When the graph holds <a href="#two-majors-of-one-package">two majors of one package</a>,
+each is an entry of its own, with <code>major</code>, the major it serves (<code>1</code>, or
+<code>0.4</code> for a 0.x version), checked out in <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;@v&lt;major&gt;</code>:</p>
+<pre><code class="language-toml">[[package]]
+name = "numbers"
+source = "github:other/numbers"
+version = "1.3.1"
+major = "1"
+commit = "..."
+sha256 = "..."
+
+[[package]]
+name = "numbers"
+source = "github:other/numbers"
+version = "2.0.0"
+major = "2"
+commit = "..."
+sha256 = "..."
+</code></pre>
+<p>A command that leaves the graph as it was leaves <code>pep.lock</code> untouched, so
+a checkout with Windows line endings stays as git wrote it.</p>
+<h2 id="reproducible-builds"><a class="header" href="#reproducible-builds">Reproducible builds</a></h2>
+<p>CI builds want to fail rather than quietly change what they build:</p>
+<ul>
+<li><strong><code>--locked</code></strong> (or <code>PEPPER_LOCKED=1</code>): a command that would change
+<code>pep.lock</code> fails instead, says what would change, and leaves <code>pep.lock</code>
+as it was. <code>fetch --locked</code> passes only when <code>pep.lock</code> already matches
+<code>pep.toml</code>; it may still check packages out into <code>.pep/deps</code>.</li>
+<li><strong><code>--offline</code></strong> (or <code>PEPPER_OFFLINE=1</code>): nothing is cloned, fetched,
+downloaded or looked up. A package <code>.pep/deps</code> already holds at its
+locked commit is used, or else one the
+<a href="#the-download-cache">download cache</a> holds; one neither holds is an
+error, and so is anything that
+must read which versions a repository offers (<code>add</code>, <code>update</code>, or a
+<code>pep.toml</code> change <code>pep.lock</code> does not cover).</li>
+<li><strong><code>--frozen</code></strong>: both.</li>
+</ul>
+<p>A <a href="#vendor-dir">vendored</a> project needs neither the network nor the
+download cache, so <code>fetch --frozen</code> and <code>pepper build --frozen</code> pass with
+only the repository.</p>
+<pre><code class="language-text">$ pepper package fetch --locked
+pep-package: error: pep.lock would change, and --locked keeps it as it is:
+  updated numbers: numbers 1.3.1 -&gt; numbers 2.0.0
+run the command without --locked (or PEPPER_LOCKED), then commit pep.lock
+
+$ pepper package fetch --offline
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither .pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+</code></pre>
+<p><code>pepper build</code> and <code>pepper test</code> take the same three options for the
+fetch they do on their own (see <a href="pep-build.html">The compiler: pep-build</a>).</p>
+<h2 id="the-download-cache"><a class="header" href="#the-download-cache">The download cache</a></h2>
+<p>Each package is downloaded once per machine, into a cache in the Pepper
+home that every project shares, as Cargo's <code>~/.cargo/registry</code> and Go's
+module cache are: <code>cache/packages</code> in the home whose toolchain
+<code>pep-package</code> is, else the one <code>PEPPER_HOME</code> names, else
+<code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere (see
+<a href="pep-install.html">Toolchains: pep-install</a>). It holds, for each package,</p>
+<ul>
+<li><code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;.git</code>: a bare git repository of every commit any
+project has fetched, fetched from the host only when it lacks the commit
+a project needs, one for the repository and all its workspace members;</li>
+<li><code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code>: each archive fetched without
+git (see <a href="#fetching-without-git">Fetching without git</a>).</li>
+</ul>
+<p>A project's <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> is a clone of the cache's
+repository (its <code>origin</code> is still the host's address). Git hard-links
+the objects of a clone from a folder on the same drive, so it takes
+little space, and copies them from another drive. A clone is complete on
+its own, so deleting the cache never breaks a project: it builds from
+what <code>.pep/deps</code> holds, and the next fetch that needs a commit the
+project lacks downloads it into the cache again. Checking out a cached
+package still checks its files against <code>pep.lock</code>'s <code>sha256</code>.</p>
+<p>Processes take turns at a package: each holds a lock on
+<code>&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;.lock</code> while it fetches it, so projects fetching
+the same package at once each wait for the other and fetch it once.
+<code>cache clean</code> takes each package's lock before it removes the package,
+and keeps one a fetch is using, saying so; the lock files themselves stay.</p>
+<pre><code class="language-text">$ pepper package cache info
+/home/me/.pepper/cache/packages
+github.com/other/numbers
+github.com/someone/geometry
+$ pepper package cache clean
+pep-package: removed 2 packages from /home/me/.pepper/cache/packages
+</code></pre>
+<h2 id="fetching-without-git"><a class="header" href="#fetching-without-git">Fetching without git</a></h2>
+<p>When git is not on the <code>PATH</code>, <code>pep-package</code> fetches each commit
+<code>pep.lock</code> pins as the host's archive of it, over HTTPS, into the
+<a href="#the-download-cache">download cache</a> (once per machine), checks its files
+against the lock's <code>sha256</code> and unpacks it, without its top-level folder,
+into <code>.pep/deps</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>Host</th><th>Archive</th></tr></thead><tbody>
+<tr><td>GitHub</td><td><code>https://codeload.github.com/&lt;owner&gt;/&lt;name&gt;/tar.gz/&lt;commit&gt;</code></td></tr>
+<tr><td>GitLab</td><td><code>https://gitlab.com/&lt;owner&gt;/&lt;name&gt;/-/archive/&lt;commit&gt;/&lt;name&gt;-&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td>Codeberg</td><td><code>https://codeberg.org/&lt;owner&gt;/&lt;name&gt;/archive/&lt;commit&gt;.tar.gz</code></td></tr>
+</tbody></table>
+</div>
+<p>An unpacked package has a <code>.pep-commit</code> file naming its commit in place of
+<code>.git</code>. Choosing a revision still needs git, since it reads which tags
+and branches a repository offers: <code>add</code>, <code>update</code>, and a <code>fetch</code> that must
+resolve a dependency <code>pep.lock</code> does not pin (or a tag, which may have
+moved) fail without it, saying so. Private repositories need git too, as
+authentication is git's concern.</p>
+<h2 id="resolving-versions"><a class="header" href="#resolving-versions">Resolving versions</a></h2>
+<p>The whole project uses one version of each package, per major: one
+checkout of <code>github:other/numbers</code> 1.x serves every package whose range
+asks for 1.x, whatever name each imports it by (see
+<a href="#two-majors-of-one-package">Two majors of one package</a>).</p>
+<ul>
+<li>A version range picks the newest version tag (<code>v1.2.3</code> or <code>1.2.3</code>) that
+every package's range in its major accepts. When none does, resolution
+fails and names each package's requirement and the versions the
+repository offers. A workspace member's range reads only its own tags
+(<code>geo-v1.2.3</code>), and a repository's root package only the plain ones.</li>
+<li>A <code>path</code> with a <code>version</code> in a fetched package's <code>pep.toml</code> is the
+package of the same workspace it names, resolved by its own tags as a
+dependency on that member of the same repository (see
+<a href="projects.html#a-member-as-a-git-dependency">A member as a Git dependency</a>).</li>
+<li>A branch, tag or commit must be the same in every package that names it.</li>
+<li>The project's own <code>pep.toml</code> overrides its dependencies within a major:
+a package it names gets the revision it asks for, even outside the
+range a dependency of the same major declares, and <code>pep-package</code> says
+which requirement it overrode. A dependency's range in another major
+gets a copy of its own; to give every dependent one version whatever
+its major, use <a href="projects.html#overrides"><code>[overrides]</code></a>.</li>
+<li>A locked revision stays while it still satisfies every requirement;
+<code>update</code> is what moves it.</li>
+<li>The project's <a href="projects.html#overrides"><code>[overrides]</code></a> replace a package
+wherever the graph reaches it: the override's own revision is chosen,
+from the fork, whatever the dependents ask, and a <code>path</code> override's
+folder is read in its place. A locked revision of an override stays
+until the override changes or <code>update</code> names the package.</li>
+<li>The project's own <code>[dev-dependencies]</code> are resolved with its
+dependencies, as requirements of the project; a dependency's
+<code>[dev-dependencies]</code> are not part of the graph at all.</li>
+<li>Every package's <code>[build-dependencies]</code> are resolved with the rest, its
+dependencies' included: a dependency's build script runs in the
+project's build. A package both its code and a build script need is one
+copy, at one version.</li>
+<li>Every <code>[target.'&lt;condition&gt;'.dependencies]</code> and
+<code>.build-dependencies</code>, the project's and its dependencies', is resolved
+with the rest, whatever the platform resolving, so one version of a
+package serves every platform.</li>
+</ul>
+<h3 id="two-majors-of-one-package"><a class="header" href="#two-majors-of-one-package">Two majors of one package</a></h3>
+<p>A new major version breaks its users on purpose, so a range in another
+major names another package, as in Cargo and Go: when one dependency needs
+<code>numbers</code> 1.x and another 2.x, the project gets both.</p>
+<ul>
+<li>
+<p><strong>The major a range starts in</strong> decides: the first number of its lower
+bound (<code>1</code> for <code>1.4</code>, <code>^1.2</code> and <code>&gt;=1.0, &lt;3</code>), or for a 0.x version the
+minor (<code>0.4</code> for <code>0.4.2</code>), since a 0.x release's minor is its major. A
+range that spans majors counts as the one it starts in: <code>&gt;=1.0, &lt;3</code>
+beside a <code>2</code> gets 1.x.</p>
+</li>
+<li>
+<p><strong>Only when the graph has two.</strong> A package whose ranges all start in one
+major is one package, checked out and locked as before. One that a
+branch, tag, commit, open range (<code>*</code>, <code>&lt;2</code>) or
+<a href="projects.html#overrides">override</a> names is never split.</p>
+</li>
+<li>
+<p><strong>Each its own checkout</strong>, <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;@v&lt;major&gt;</code>
+(<code>numbers@v1</code>, <code>numbers@v2</code>), and its own <code>pep.lock</code> entry, with
+<code>major</code> (see <a href="#peplock">pep.lock</a>). <code>tree</code>, <code>why</code> and the messages name
+each by its source, <code>@v</code> and its major: <code>github:other/numbers@v1</code>.</p>
+</li>
+<li>
+<p><strong>Imports do not change.</strong> Each package imports <code>numbers</code> by its own
+key, and the compiler resolves the import to the copy of the major its
+range starts in.</p>
+</li>
+<li>
+<p><strong>The types differ.</strong> A <code>numbers</code> 1.x <code>Num</code> is not a 2.x <code>Num</code>, so
+passing one where the other is wanted is an error, which names each with
+its copy's module:</p>
+<pre><code class="language-text">main.pep:5:24: error: cannot pass a value of type 'numbers_v1.Num' as argument 1 of 'show', which has type 'numbers_v2.Num'
+    5 |     print(numbers.show(legacy.make()));
+      |                        ^~~~~~~~~~
+</code></pre>
+<p>Convert between them in code, or give the whole project one major with
+<a href="projects.html#overrides"><code>[overrides]</code></a>
+(<code>"github:other/numbers" = { github = "other/numbers", version = "2" }</code>).</p>
+</li>
+</ul>
+<h3 id="the-toolchain-a-package-needs"><a class="header" href="#the-toolchain-a-package-needs">The toolchain a package needs</a></h3>
+<p>A package states the oldest toolchain release that builds it with
+<code>minimum_toolchain</code> in its <code>[package]</code> table (see
+<a href="projects.html#package">Projects</a>). <code>add</code>, <code>update</code> and <code>fetch</code> resolve for
+the toolchain <code>pep-package</code> belongs to (the release <code>pep-package --version</code>
+prints, which <code>pepper</code> picks with the rest of the toolchain):</p>
+<ul>
+<li>
+<p>A version range skips every version whose <code>minimum_toolchain</code> is newer,
+picking the newest one left, and says which it skipped and why:</p>
+<pre><code class="language-text">pep-package: github:other/websocket skipped 1.3.0 (needs toolchain 0.11.0); this is 0.10.1
+</code></pre>
+<p>When every version the ranges accept needs a newer toolchain, resolution
+fails and names what each needs.</p>
+</li>
+<li>
+<p>A locked version that needs a newer toolchain is an error naming the
+package's version and both toolchains; <code>update</code> moves it to a version
+this toolchain builds. So is a branch, tag or commit that needs one.</p>
+</li>
+</ul>
+<p>Only the <code>pep.toml</code> of the version picked, and of the newer ones the ranges
+accept, are read: from the package's clone in <code>.pep/deps</code>, without checking
+them out, each once per run. A workspace member's is the <code>pep.toml</code> of the
+package with its name among the folders its root's <code>[workspace] members</code>
+lists at that version's commit, so a member that moved between releases is
+read where each release has it.</p>
+<h3 id="retracted-versions"><a class="header" href="#retracted-versions">Retracted versions</a></h3>
+<p>A package's author withdraws a broken release in the
+<a href="projects.html#retract"><code>[retract]</code></a> table of a newer release's <code>pep.toml</code>,
+as Go's <code>retract</code> does: the <code>[retract]</code> of a package's newest version
+(not a prerelease) speaks for every version.</p>
+<ul>
+<li>
+<p>A version range skips each retracted version, picking the newest one
+left, and says so:</p>
+<pre><code class="language-text">pep-package: github:other/shapes skipped 1.1.0 (retracted: loses data)
+</code></pre>
+<p>When every version the ranges accept is retracted, resolution fails and
+names each with its reason.</p>
+</li>
+<li>
+<p>A version <code>pep.lock</code> already holds stays, and builds: <code>fetch</code> reads no
+network for it. <a href="#outdated"><code>outdated</code></a> flags it, and <code>update</code> moves off
+it.</p>
+</li>
+</ul>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host's repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host's archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td><code>PEPPER_PACKAGE_INDEX</code></td><td>The Git repository of the <a href="#the-package-index">package index</a> <code>search</code>, <code>info</code> and <code>add &lt;name&gt;</code> read, instead of <code>https://github.com/pep-lang/index.git</code></td></tr>
+<tr><td><code>PEPPER_ADVISORY_DB</code></td><td>The Git repository of the advisory database <a href="#audit"><code>audit</code></a> reads, instead of <code>https://github.com/pep-lang/advisories.git</code></td></tr>
+<tr><td><code>PEPPER_LOCKED</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--locked</code></td></tr>
+<tr><td><code>PEPPER_OFFLINE</code></td><td>Set to anything but empty or <code>0</code>, the same as <code>--offline</code></td></tr>
+<tr><td><code>PEPPER_HOME</code></td><td>The Pepper home that holds the <a href="#the-download-cache">download cache</a>, whose <code>pepper</code> <a href="#publish"><code>publish</code></a> runs the tests with, and whose <code>bin</code> <a href="#install"><code>install</code></a> puts programs in, as for <code>pep-install</code></td></tr>
+<tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
+</tbody></table>
+</div>
+<h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
+<p><code>pep-package</code> is written in Pepper (<code>tools/pep-package</code>) and reads and
+edits <code>pep.toml</code> and <code>pep.lock</code> with the runtime's
+<a href="../reference/toml-module.html">toml module</a>, and its versions and ranges
+with the <a href="https://github.com/pep-lang/pepper-semver"><code>semver</code> package</a>,
+which its first build fetches (with git when no <code>pep-package</code> is
+installed):</p>
+<pre><code class="language-bash">pepper build tools/pep-package/main.pep -o pep-package
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tools/pep-run.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tools/pep-fmt.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tools/pep-run.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tools/pep-fmt.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

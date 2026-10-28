@@ -1,0 +1,427 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>BLAKE3 - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/digest-blake3.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/digest/blake3.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="blake3"><a class="header" href="#blake3">BLAKE3</a></h1>
+<p>BLAKE3: 32-byte digests, faster than SHA-256 in hardware without SHA
+instructions, and the hash the compiler's build cache keys objects with.
+Also a keyed hash (a MAC), key derivation, and output of any length.</p>
+<p>Source: <code>runtime/digest/blake3.pep</code></p>
+<h2 id="blake3-1"><a class="header" href="#blake3-1">Blake3</a></h2>
+<pre><code class="language-pepper">struct Blake3
+</code></pre>
+<p>An incremental BLAKE3 hasher: feed it bytes with <code>update</code>, any number of
+times and in pieces of any size, then read the 32-byte digest with
+<code>finish</code>.</p>
+<p><code>Blake3()</code> is the default hash mode; <code>Blake3.keyed</code> and
+<code>Blake3.derive_key</code> make hashers for the other two modes, and
+<code>finish(length)</code> reads output of any length in each.</p>
+<p>This is a portable implementation, one block at a time; it does not use
+SIMD or threads, so it runs well below the speed of the official C and
+Rust implementations. The digests are the same. <code>finish</code> resets the
+hasher, so it can hash a new input.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var hasher = digest.Blake3();
+hasher.update("hello ");
+hasher.update("world");
+assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a hasher in the initial state, with no input.</p>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="keyed"><a class="header" href="#keyed">keyed</a></h4>
+<pre><code class="language-pepper">static keyed(key: u8[]): Blake3
+</code></pre>
+<p>Returns a hasher for BLAKE3's keyed mode, a MAC: only someone with
+<code>key</code> can compute or check the digest of an input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the 32-byte secret key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a hasher with no input, keyed with <code>key</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>key</code> is not 32 bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.blake3("a key made some other way");
+var mac = digest.Blake3.keyed(key);
+mac.update("message");
+assert(mac.finish().count == 32, "a 32-byte MAC");
+</code></pre>
+<h4 id="derive_key"><a class="header" href="#derive_key">derive_key</a></h4>
+<pre><code class="language-pepper">static derive_key(context: String): Blake3
+</code></pre>
+<p>Returns a hasher for BLAKE3's key derivation mode: the digest of its
+input (the key material, such as a shared secret or a password hash)
+is a key for the purpose that <code>context</code> names.</p>
+<p><code>context</code> should be a hard-coded string, unique to the application
+and the purpose, such as
+<code>"example.com 2026-10-16 session tokens v1"</code>; different contexts give
+unrelated keys from the same material. Read the key with <code>finish</code>,
+or <code>finish(length)</code> for one of another length.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>context</code> — the application and purpose the key is for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a hasher with no input, for keys in <code>context</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var hasher = digest.Blake3.derive_key("example.com 2026-10-16 session tokens v1");
+hasher.update("the shared secret");
+var key = hasher.finish();
+</code></pre>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="reset"><a class="header" href="#reset">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Discards the input given so far, returning the hasher to its initial
+state.</p>
+<h4 id="update"><a class="header" href="#update">update</a></h4>
+<pre><code class="language-pepper">update(bytes: u8[])
+</code></pre>
+<p>Hashes <code>bytes</code> as the next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to add</li>
+</ul>
+<h4 id="update_range"><a class="header" href="#update_range">update_range</a></h4>
+<pre><code class="language-pepper">update_range(bytes: u8[], start: ulong, count: ulong)
+</code></pre>
+<p>Hashes <code>count</code> bytes of <code>bytes</code>, from index <code>start</code>, as the next part
+of the input; those past the end of <code>bytes</code> are left out.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes</li>
+<li><code>start</code> — the index of the first byte to add</li>
+<li><code>count</code> — how many bytes to add</li>
+</ul>
+<h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
+<pre><code class="language-pepper">update(text: String)
+</code></pre>
+<p>Hashes the UTF-8 bytes of <code>text</code> (without a terminating NUL) as the
+next part of the input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to add</li>
+</ul>
+<h4 id="finish"><a class="header" href="#finish">finish</a></h4>
+<pre><code class="language-pepper">finish(): u8[]
+</code></pre>
+<p>Returns the 32-byte digest of the input given since the hasher was
+created or last reset, then resets it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest</li>
+</ul>
+<h4 id="finish-1"><a class="header" href="#finish-1">finish</a></h4>
+<pre><code class="language-pepper">finish(length: ulong): u8[]
+</code></pre>
+<p>Returns <code>length</code> bytes of output for the input given since the
+hasher was created or last reset, then resets it: BLAKE3's extended
+output. The first 32 bytes are the digest <code>finish()</code> returns, and a
+shorter output is a prefix of a longer one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>length</code> — how many bytes to return</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the output</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var long_output = digest.Blake3();
+long_output.update("abc");
+var bytes = long_output.finish(100);
+assert(digest.to_hex(bytes).starts_with(digest.to_hex(digest.blake3("abc"))), "a prefix");
+</code></pre>
+<h4 id="finish_hex"><a class="header" href="#finish_hex">finish_hex</a></h4>
+<pre><code class="language-pepper">finish_hex(): String
+</code></pre>
+<p>Returns the digest as <code>finish</code> does, written as 64 lowercase
+hexadecimal digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the digest in hexadecimal</li>
+</ul>
+<h2 id="blake3-3"><a class="header" href="#blake3-3">blake3</a></h2>
+<pre><code class="language-pepper">blake3(bytes: u8[]): u8[]
+</code></pre>
+<p>Returns the BLAKE3 digest of <code>bytes</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte digest</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var empty = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of nothing");
+</code></pre>
+<h2 id="blake3-4"><a class="header" href="#blake3-4">blake3</a></h2>
+<pre><code class="language-pepper">blake3(text: String): u8[]
+</code></pre>
+<p>Returns the BLAKE3 digest of the UTF-8 bytes of <code>text</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the input</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte digest</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/digest-sha1.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/digest-hmac.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/digest-sha1.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/digest-hmac.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

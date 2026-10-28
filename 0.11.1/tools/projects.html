@@ -1,0 +1,1107 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Projects: pep.toml - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/tools/projects.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="projects-peptoml"><a class="header" href="#projects-peptoml">Projects: pep.toml</a></h1>
+<p>A <code>pep.toml</code> file marks the root of a project. It names the project, says
+how <code>pepper build</code> builds it, and lists the packages it depends on, so a
+project builds with <code>pepper build</code> and nothing else:</p>
+<pre><code class="language-bash">cd my_app
+pepper build          # builds the program pep.toml describes
+./my_app
+</code></pre>
+<p><code>pepper new my_app</code> starts a project with a <code>pep.toml</code>, a <code>main.pep</code> and a
+test, and <code>pepper new my_lib --lib</code> a package (see
+<a href="pep-new.html">Starting a project: pep-new and pep-init</a>). A <code>pep.toml</code> can
+say more:</p>
+<pre><code class="language-toml">[package]
+name = "my_app"
+version = "0.1.0"
+description = "Draws shapes"
+authors = ["Ada &lt;ada@example.com&gt;"]
+license = "MIT"
+repository = "https://github.com/me/my_app"
+
+[build]
+entry = "src/main.pep"
+
+[dependencies]
+geometry  = { github = "someone/geometry", version = "1.2" }
+json      = { gitlab = "group/pepper-json", version = "0.4.x" }
+fast_json = { github = "other/json", version = "2" }   # renamed: 'json' was taken
+http      = { codeberg = "someone/http", branch = "main" }
+shapes    = { path = "../shapes" }
+
+[dev-dependencies]
+fixtures  = { github = "someone/fixtures", version = "1" }   # only tests and examples import it
+
+[build-dependencies]
+codegen   = { github = "someone/codegen", version = "1" }    # only the build script imports it
+
+[target.'OS(Windows)'.dependencies]
+winapi    = { github = "someone/winapi", version = "1" }     # only builds for Windows see it
+
+[features]
+default   = ["tls"]
+tls       = ["dep:openssl"]          # a build with it defines 'my_app_tls' and uses openssl
+</code></pre>
+<p>A package is a project other projects depend on: a repository (or folder)
+with a <code>pep.toml</code> at its root. Its root <code>module.pep</code> is the module its
+dependency name imports, and any folder inside it holding a <code>module.pep</code> is a
+module of the package too.</p>
+<h2 id="package"><a class="header" href="#package"><code>[package]</code></a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td>The project's name: letters, digits and <code>_</code>, not starting with a digit. Required. <code>pepper build</code> names the executable after it.</td></tr>
+<tr><td><code>version</code></td><td>Its version, <code>major.minor.patch</code></td></tr>
+<tr><td><code>description</code></td><td>One line saying what it is</td></tr>
+<tr><td><code>authors</code></td><td>An array of names</td></tr>
+<tr><td><code>license</code></td><td>Its license, such as <code>MIT</code></td></tr>
+<tr><td><code>repository</code></td><td>Where its source lives</td></tr>
+<tr><td><code>toolchain</code></td><td>The toolchain it builds with: <code>0.3.0</code>, <code>0.3</code> for the newest installed 0.3.x, or <code>latest</code>. A <code>pepper</code> installed by <a href="pep-install.html">pep-install</a> runs that toolchain's tools in the project (see <a href="pepper.html#toolchains">Toolchains</a>); the compiler itself only checks that it is a version</td></tr>
+<tr><td><code>minimum_toolchain</code></td><td>The oldest toolchain release that builds it: <code>0.11.0</code>, or a prerelease such as <code>0.11.0-dev</code>, which comes before <code>0.11.0</code>. Resolving versions, <code>pepper package</code> skips a version of a package whose <code>minimum_toolchain</code> is newer than its own toolchain (see <a href="pep-package.html#the-toolchain-a-package-needs">Resolving versions</a>). Unlike <code>toolchain</code>, which picks the toolchain the project itself builds with, it says what the package's users need</td></tr>
+</tbody></table>
+</div>
+<h2 id="build"><a class="header" href="#build"><code>[build]</code></a></h2>
+<p><code>pepper build</code> with no file builds the project: it finds the nearest
+<code>pep.toml</code> in the current folder or a folder above it, and builds the
+<code>[build]</code> table's entry file into its output. Every path is relative to the
+folder holding <code>pep.toml</code>, and the build's intermediate files and cache go in
+that folder's <code>.pep</code>, wherever <code>pepper build</code> runs.</p>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>entry</code></td><td>The file that holds <code>main</code></td><td><code>main.pep</code></td></tr>
+<tr><td><code>output</code></td><td>The executable; building for Windows adds <code>.exe</code> to a name with no extension</td><td>the package's <code>name</code></td></tr>
+<tr><td><code>include</code></td><td>An array of extra folders to search for modules, as <code>-I</code> adds</td><td>none</td></tr>
+<tr><td><code>link</code></td><td>An array of C libraries to link, as <code>-l</code> adds</td><td>none</td></tr>
+<tr><td><code>script</code></td><td>The package's <a href="#build-scripts">build script</a>, which builds its C code, or generates Pepper code, before its Pepper code is built</td><td><code>build.pep</code>, when there is one</td></tr>
+</tbody></table>
+</div>
+<p>Options on the command line still apply: <code>pepper build -O</code> builds the
+project optimized, and <code>-o</code> names another output. A file argument builds that
+file instead (<code>pepper build tools/gen.pep</code>); the project's dependencies,
+<code>include</code> folders and <code>link</code> libraries still apply to it, since it is in the
+project.</p>
+<h2 id="build-scripts"><a class="header" href="#build-scripts">Build scripts</a></h2>
+<p>A package that binds a C library can carry the library's C source and build
+it itself, so its users install nothing. Its build script, a Pepper program
+in <code>build.pep</code> at the package's root (or the file <code>[build]</code>'s <code>script</code>
+names), compiles the C code, and prints what the build must link. It can
+also write Pepper modules the package imports (<a href="#generated-modules">Generated
+modules</a>) and define build options its code reads.
+Every build of a program that uses the package (a dependency, or the
+project itself) compiles the script for the machine it runs on and runs it
+before it loads the program, even when it builds for another platform with
+<code>--target</code>. The script imports the runtime and its package's
+<a href="#build-dependencies"><code>[build-dependencies]</code></a>, and stands apart from the
+code it builds: building it does not load its package's root module,
+which may import what the script generates, though it may import a file
+beside it. Cargo users know it as <code>build.rs</code>.</p>
+<pre><code class="language-text">native/
+├── pep.toml
+├── module.pep        # extern int native_add(int a, int b); and the API around it
+├── build.pep
+└── c/add.c
+</code></pre>
+<pre><code class="language-pepper"># build.pep: compiles c/add.c for the build's target and links it.
+import [Path] from io;
+import os;
+import process;
+
+main(): int {
+    var object = Path(os.environment("PEP_OUT_DIR").value()).join(Path("add.o"));
+    var compiled = process
+        .Command(os.environment("PEP_CLANG").value())
+        .arguments(["--target=" + os.environment("PEP_TARGET").value(), "-c", "c/add.c", "-o", object.to_string()])
+        .run();
+    if (compiled.is_err() or !compiled.value().status.success()) {
+        return 1;
+    }
+    print($"pep:object={object}");
+    print("pep:rerun-if-changed=c");
+    return 0;
+}
+</code></pre>
+<p>The script runs in the package's folder, with these environment variables:</p>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it holds</th></tr></thead><tbody>
+<tr><td><code>PEP_TARGET</code></td><td>The triple the program is built for (<code>x86_64-pc-windows-msvc</code>), as <code>--target</code> names it</td></tr>
+<tr><td><code>PEP_TARGET_OS</code>, <code>PEP_TARGET_ARCH</code></td><td>Its OS (<code>linux</code>, <code>macos</code>, <code>windows</code>, <code>wasi</code>, <code>ios</code>, <code>android</code>) and architecture (<code>x86_64</code>, <code>aarch64</code>)</td></tr>
+<tr><td><code>PEP_HOST</code></td><td>The triple of the machine the build runs on</td></tr>
+<tr><td><code>PEP_OPT_LEVEL</code></td><td>The optimization level, <code>0</code> to <code>3</code></td></tr>
+<tr><td><code>PEP_FEATURES</code></td><td>The package's <a href="#features">features</a> the build turns on, separated by commas</td></tr>
+<tr><td><code>PEP_PACKAGE_NAME</code>, <code>PEP_PACKAGE_DIR</code></td><td>The package's name and folder</td></tr>
+<tr><td><code>PEP_OUT_DIR</code></td><td>A folder of the package's own for what the script makes, and the package's <a href="#generated-modules">generated modules</a>: <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/out</code>, <code>&lt;hash&gt;</code> naming where the package is (below <code>--build</code>'s folder when given)</td></tr>
+<tr><td><code>PEP_CLANG</code></td><td>The clang the build links with (see <a href="../language/linking.html#what-the-compiler-links">What the compiler links</a>), empty when there is none; it compiles C for any target LLVM supports</td></tr>
+<tr><td><code>PEP_SYSROOT</code></td><td>The target's system root (<code>--sysroot</code>), empty when there is none</td></tr>
+</tbody></table>
+</div>
+<p>What the script prints on standard output, a line each, tells the build
+what to do; other lines are its own and ignored:</p>
+<div class="table-wrapper"><table><thead><tr><th>Line</th><th>What it does</th></tr></thead><tbody>
+<tr><td><code>pep:object=&lt;file&gt;</code></td><td>Links an object file or a static library (<code>.a</code>, <code>.lib</code>)</td></tr>
+<tr><td><code>pep:link=&lt;name&gt;</code></td><td>Links a library by name, as <code>-l</code> does</td></tr>
+<tr><td><code>pep:link-path=&lt;dir&gt;</code></td><td>Adds a folder the linker searches, as <code>-L</code> does</td></tr>
+<tr><td><code>pep:build-option=&lt;NAME&gt;[=&lt;value&gt;]</code></td><td>Defines the <a href="../language/build-options.html">build option</a> <code>&lt;package&gt;_&lt;NAME&gt;</code>, as <code>-D</code> does (a bare <code>NAME</code> is <code>NAME=1</code>); the package's code reads it as a feature's</td></tr>
+<tr><td><code>pep:warning=&lt;text&gt;</code></td><td>Shows <code>warning: &lt;package&gt;: &lt;text&gt;</code></td></tr>
+<tr><td><code>pep:rerun-if-changed=&lt;path&gt;</code></td><td>Runs the script again when the file, or any file in the folder, changes</td></tr>
+<tr><td><code>pep:rerun-if-env-changed=&lt;name&gt;</code></td><td>Runs the script again when the environment variable changes</td></tr>
+</tbody></table>
+</div>
+<p>A relative path is relative to the package's folder. A line starting <code>pep:</code>
+that is none of these is an error, as is a script that exits with a status
+other than 0, which shows what it printed. What the script printed on
+standard error is passed on.</p>
+<p><strong>When it runs again.</strong> The build keeps the script's output in
+<code>.pep/build/&lt;package&gt;-&lt;hash&gt;/stamp</code>, and uses it again until something the script
+depends on changes: its own file, every Pepper file it imports (files of
+its own beside it, and its build-dependencies' sources; not the runtime),
+its package's <code>pep.toml</code>, the project's <code>pep.lock</code> (which holds its
+build-dependencies' revisions), the variables above, and what its
+<code>rerun-if-changed</code> and <code>rerun-if-env-changed</code> lines name; or until its
+<code>PEP_OUT_DIR</code>, or an object it named, is gone. The files it imports are the
+ones the <a href="pep-build.html#the-build-cache">build cache</a> recorded its last
+build used, so after the cache is emptied the script runs again. A script that
+reads other files at run time, such as its C sources, names them with
+<code>rerun-if-changed</code>; a change to a file it neither imports nor names leaves
+its last output in use. Builds that run side by side
+(<code>pepper test</code>) run one package's script one at a time.</p>
+<h3 id="generated-modules"><a class="header" href="#generated-modules">Generated modules</a></h3>
+<p>A script can write Pepper code, such as bindings made from a C header or
+tables computed at build time, into <code>PEP_OUT_DIR</code>: its <code>module.pep</code> there is
+the module the package's code imports as <code>generated</code>, and a folder there
+holding a <code>module.pep</code> is <code>generated.&lt;folder&gt;</code>. Only the package's own
+files see it, and its imports resolve against the package's dependencies.</p>
+<pre><code class="language-pepper"># build.pep: generates the module that names what it was built for.
+import [File, Path] from io;
+import os;
+
+main(): int {
+    var out = Path(os.environment("PEP_OUT_DIR").value());
+    var target = os.environment("PEP_TARGET").value();
+    File.write_text(out.join(Path("module.pep")), "export built_for(): String {\n    return \"" + target + "\";\n}\n");
+    print("pep:build-option=FAST=1");
+    return 0;
+}
+</code></pre>
+<pre><code class="language-pepper"># module.pep of the package `native`
+import generated;
+
+export describe(): String {
+    return "native for " + generated.built_for();
+}
+
+[BuildOption("native_FAST")]
+export fast(): bool {
+    return true;
+}
+</code></pre>
+<p>A generated module is part of the program like any file: its build cache
+key covers its text, so a script that writes something new rebuilds what
+imports it. A package with no build script has no <code>generated</code> module, and a
+dependency the package names <code>generated</code> is imported in its place. An
+import of a module the script did not write is an error at the import:</p>
+<pre><code class="language-text">module.pep:1:8: error: the build script of 'native', native/build.pep, wrote no module 'generated': no native/.pep/build/native-1a2b3c4d/out/module.pep
+</code></pre>
+<p>The language server finds a package's generated modules after a build has
+made them in the project's <code>.pep/build</code>, and does not see the build options
+a script defines.</p>
+<p><strong>What a build script can do.</strong> A build script is a program like any
+other: it runs with your permissions, can read and write any file you
+can, start programs and use the network. Building a project that depends
+on a package with a build script runs that package's code on your machine,
+before any of its code is in a program you chose to run. So:</p>
+<ul>
+<li><code>pepper package add</code>, <code>update</code> and <code>fetch</code> name each package that
+arrives (new, or at another commit) with a build script, and the file to
+read: <code>note: native 1.0.0 (github:someone/native) has a build script, which every build of the project compiles and runs on this machine: read ...</code>.</li>
+<li><code>pepper build --no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>, which
+<code>pepper test</code> and <code>pepper run</code> builds see too) fails instead of running a
+dependency's script, naming it. The project's own script still runs: it
+is your code. A <a href="#native"><code>[native]</code></a> table, which runs no package
+code, compiles under it too, unless a dependency's has <code>flags</code> that
+could load code (see <a href="#native"><code>[native]</code></a>).</li>
+</ul>
+<p>The package <a href="https://github.com/pep-lang/pepper-build"><code>build</code></a>, added to
+<code>[build-dependencies]</code> (<code>pepper package add --build pep-lang/pepper-build --name build</code>), does the common work: <code>build.cc</code> compiles C with the
+target's clang, flags and system root, <code>build.pkg_config</code> finds a library
+with <code>pkg-config</code> (pointing it at the system root when cross-compiling),
+and <code>build.emit</code> and <code>build.env</code> print the <code>pep:</code> lines and read the
+variables above.</p>
+<p>A package whose C needs only compiling and linking says so in a
+<a href="#native"><code>[native]</code></a> table instead, with no script.</p>
+<h2 id="native"><a class="header" href="#native"><code>[native]</code></a></h2>
+<p>C sources the build compiles for its target and links, with no build
+script: the common case of a package that bundles a C library.</p>
+<pre><code class="language-toml">[native]
+sources    = ["c/*.c"]           # files, or globs of them
+include    = ["c/include"]       # -I
+defines    = ["SQLITE_OMIT_LOAD_EXTENSION", "LEVEL=2"]   # -D
+flags      = ["-Wno-unused"]     # more clang flags
+link       = ["m"]               # libraries to link, as -l adds
+pkg-config = ["zlib"]            # libraries pkg-config describes
+
+[target.'OS(Windows)'.native]
+sources = ["c/win/*.c"]
+link    = ["ws2_32"]
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th></tr></thead><tbody>
+<tr><td><code>sources</code></td><td>The C files to compile, or globs of them (<code>*</code>, <code>**</code>, <code>?</code>, <code>[...]</code>, <code>{a,b}</code>, as <a href="../reference/io-glob.html"><code>io.glob</code></a> takes); a pattern that names no file is an error at the pattern</td></tr>
+<tr><td><code>include</code></td><td>Folders to search for headers</td></tr>
+<tr><td><code>defines</code></td><td>Macros, <code>NAME</code> or <code>NAME=value</code></td></tr>
+<tr><td><code>flags</code></td><td>More flags for clang, for every source</td></tr>
+<tr><td><code>link</code></td><td>Libraries to link by name, such as <code>m</code> or <code>ws2_32</code></td></tr>
+<tr><td><code>pkg-config</code></td><td>Libraries to find with <code>pkg-config</code>: its <code>--cflags</code> compile the sources, and its <code>--libs</code> are linked. It is the <code>pkg-config</code> that <code>PKG_CONFIG</code> names, else the one on the <code>PATH</code>; building for another system, it is pointed at the system root's <code>.pc</code> folders (<code>PKG_CONFIG_LIBDIR</code> and <code>PKG_CONFIG_SYSROOT_DIR</code>) unless <code>PKG_CONFIG_LIBDIR</code> is set, and without <code>--sysroot</code> that is an error. A library it does not find is an error naming it</td></tr>
+</tbody></table>
+</div>
+<p>Every path is relative to the package's folder. A
+<code>[target.'&lt;condition&gt;'.native]</code> table, with the same keys, adds to
+<code>[native]</code> in a build whose <strong>target</strong> the condition (what
+<a href="../language/platform-selection.html"><code>[Target(...)]</code></a> takes) selects: the C is
+part of the program, so <code>--target</code> decides, not the machine the build runs
+on. A package may have only target tables.</p>
+<p>Each source is compiled with the clang the build links with, as a build
+script's <code>PEP_CLANG</code>, for the build's target (<code>--target=&lt;triple&gt;</code>), its
+system root (<code>--sysroot</code>), its optimization level (<code>-O</code>), and, for Linux
+and Android, <code>-fPIC</code>, then these flags, in the package's folder. The objects
+are linked into the program. A dependency's <code>[native]</code> table is
+compiled for every program that uses the package, and since it runs no
+package code, <code>--no-build-scripts</code> allows it. A flag can make clang load
+code from the package (<code>-fplugin=</code>, <code>-Xclang -load</code>) or read or write a
+file, so under <code>--no-build-scripts</code> a dependency's <code>flags</code> must each be
+one of these, or the build fails with an error at the flag:</p>
+<ul>
+<li><code>-O0</code> to <code>-O3</code>, <code>-Os</code>, <code>-Oz</code>;</li>
+<li><code>-std=&lt;name&gt;</code>, and <code>-march=</code>, <code>-mcpu=</code> and <code>-mtune=</code> with a value of
+letters, digits, <code>.</code>, <code>_</code>, <code>+</code> and <code>-</code>;</li>
+<li><code>-W&lt;name&gt;</code> (<code>-Wall</code>, <code>-Wno-pointer-sign</code>, <code>-Werror=format</code>), of letters,
+digits, <code>_</code>, <code>+</code>, <code>-</code> and <code>=</code>, so never <code>-Wl,</code>, <code>-Wa,</code> or <code>-Wp,</code>;</li>
+<li><code>-f&lt;name&gt;</code> (<code>-fwrapv</code>, <code>-fno-strict-aliasing</code>), of letters, digits,
+<code>_</code>, <code>+</code> and <code>-</code>, so never one with a <code>=</code> value, except <code>-fplugin</code>,
+<code>-fpass-plugin</code>, <code>-fprofile…</code>, <code>-fmodule…</code>, <code>-fimplicit-module…</code>,
+<code>-fsave-…</code>, <code>-ftime-trace…</code>, <code>-fcrash-…</code>, <code>-fintegrated-as</code>,
+<code>-fproc-stat-report…</code> and <code>-fexperimental-openacc-macro-override</code>, and
+their <code>-fno-</code> forms;</li>
+<li><code>-m&lt;name&gt;</code> (<code>-mavx2</code>, <code>-mno-sse4.2</code>), of letters, digits, <code>.</code>, <code>_</code>, <code>+</code>
+and <code>-</code>, except <code>-mllvm</code>, <code>-mmlir</code> and <code>-mlink…</code>.</li>
+</ul>
+<p>Everything else is refused, <code>-I</code>, <code>-D</code>, <code>-include</code>, <code>-Xclang</code>, <code>@file</code>
+and <code>--</code> options among them (<code>include</code> and <code>defines</code> give the first two).</p>
+<p><strong>With a build script.</strong> A package may have both: its script runs first,
+and its <code>PEP_OUT_DIR</code> is searched for headers, so the C can include one
+the script generates.</p>
+<p><strong>When it compiles again.</strong> Each object is kept in
+<code>.pep/build/&lt;package&gt;-&lt;hash&gt;/native/&lt;target&gt;/</code> (<code>&lt;target&gt;</code> its triple), named after its source's path
+(<code>c/add.c</code> makes <code>c_add.c.o</code>), beside a key that covers clang, the flags,
+the source's text, and the text of every header it includes, which clang
+lists as it compiles (<code>-MD</code>). A build compiles a source again only when its
+key changes or its object is gone; editing a header recompiles exactly the
+sources that include it.</p>
+<h2 id="dependencies"><a class="header" href="#dependencies"><code>[dependencies]</code></a></h2>
+<p>Each key is the name source code imports, and its value says where the
+package comes from and which revision to use:</p>
+<pre><code class="language-toml">[dependencies]
+geometry = { github = "someone/geometry", version = "1.2" }
+</code></pre>
+<pre><code class="language-pepper">import geometry;
+import geometry.solids;     # the module in the package's solids/ folder
+
+main(): int {
+    print("{0} {1}", geometry.area(3, 4), solids.volume(2));
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th></tr></thead><tbody>
+<tr><td><code>github</code>, <code>gitlab</code>, <code>codeberg</code></td><td>The repository, <code>owner/name</code> (on GitLab, <code>group/subgroup/name</code> too)</td></tr>
+<tr><td><code>path</code></td><td>A folder on disk, relative to this <code>pep.toml</code>, instead of a repository</td></tr>
+<tr><td><code>package</code></td><td>With a repository: the member of the repository's <a href="#workspaces-workspace">workspace</a> it is, by its <code>[package]</code> <code>name</code> (see <a href="#a-member-as-a-git-dependency">A member as a Git dependency</a>)</td></tr>
+<tr><td><code>version</code></td><td>A semver range of the repository's version tags: <code>1.2</code>, <code>0.4.x</code>, <code>&gt;=1.0, &lt;2</code></td></tr>
+<tr><td><code>branch</code></td><td>A branch</td></tr>
+<tr><td><code>tag</code></td><td>A tag</td></tr>
+<tr><td><code>commit</code></td><td>A commit</td></tr>
+<tr><td><code>optional</code></td><td><code>true</code>: a build uses it only when a <a href="#features">feature</a> turns it on</td></tr>
+<tr><td><code>features</code></td><td>An array of the dependency's features to turn on</td></tr>
+<tr><td><code>default-features</code></td><td><code>false</code> leaves the dependency's <code>default</code> feature off</td></tr>
+<tr><td><code>workspace</code></td><td><code>true</code>: its source and revision are its <a href="#workspaces-workspace">workspace's</a></td></tr>
+</tbody></table>
+</div>
+<p>A dependency has exactly one source, and at most one of <code>version</code>, <code>branch</code>,
+<code>tag</code> and <code>commit</code>; with none, it follows the repository's default branch.
+A <code>path</code> dependency takes only a <code>version</code>, which a build ignores and
+<a href="pep-package.html#publish"><code>publish</code></a> asks for.</p>
+<h3 id="imports"><a class="header" href="#imports">Imports</a></h3>
+<p><code>import geometry</code> imports the package's root module, its <code>module.pep</code>.
+<code>import geometry.solids</code> imports the module in its <code>solids</code> folder, and binds
+the last name, so its declarations are <code>solids.volume</code>; <code>as</code> names it
+otherwise (<code>import geometry.solids as s</code>). A dotted import whose first name
+is not a dependency looks for the nested folder on the search paths:
+<code>import a.b</code> finds <code>a/b/module.pep</code>.</p>
+<p>Because the name lives only in <code>pep.toml</code>, a package that moves to another
+host or organization, or a switch to a fork, changes one line of <code>pep.toml</code>
+and no source file. Two packages whose repositories share a name get
+different keys:</p>
+<pre><code class="language-toml">json      = { gitlab = "group/pepper-json" }
+fast_json = { github = "other/json" }
+</code></pre>
+<h3 id="where-dependencies-live"><a class="header" href="#where-dependencies-live">Where dependencies live</a></h3>
+<p>A dependency from a Git host lives in the project's
+<code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>, such as
+<code>.pep/deps/github.com/someone/geometry</code>. One copy serves the whole project:
+each package's own <code>pep.toml</code> names the packages it needs under its own
+keys, and an import in one of its files resolves against those keys, to the
+same copies. When packages need different majors of one package, each
+major is a copy of its own, <code>&lt;name&gt;@v&lt;major&gt;</code>, and an import resolves to
+the copy of the major its key's range asks for (see
+<a href="pep-package.html#two-majors-of-one-package">Two majors of one package</a>).</p>
+<p><code>pepper package</code> fetches them there and records the commit of each, the
+dependencies' dependencies included, in <code>pep.lock</code> beside <code>pep.toml</code>; commit
+<code>pep.lock</code> with <code>pep.toml</code>. <code>pepper build</code> fetches what <code>pep.lock</code> lists and
+<code>.pep/deps</code> lacks or holds at another commit, so a fresh clone builds with
+<code>pepper build</code> alone, with git or, where git is missing, by downloading each
+locked commit's archive over HTTPS and checking it against the checksum
+<code>pep.lock</code> records. See
+<a href="pep-package.html">The package manager: pep-package</a>, which also says how
+versions are chosen when several packages need one.</p>
+<pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
+pepper build
+</code></pre>
+<p>In CI, <code>pepper build --locked</code> and <code>pepper test --locked</code> fail when
+<code>pep.lock</code> is out of date with <code>pep.toml</code> instead of updating it, and
+<code>--offline</code> builds with only what <code>.pep/deps</code> and the shared
+<a href="pep-package.html#the-download-cache">download cache</a> hold (<code>--frozen</code> is both;
+<code>PEPPER_LOCKED=1</code> and <code>PEPPER_OFFLINE=1</code> do the same). See
+<a href="pep-package.html#reproducible-builds">Reproducible builds</a>. They apply to
+dev-dependencies as to the rest.</p>
+<p>A project that sets <code>[fetch] vendor</code> (<code>pepper package vendor</code> does) keeps
+its dependencies in that folder of the repository instead, and builds with
+no network and no download cache; see <a href="#fetch"><code>[fetch]</code></a>.</p>
+<h2 id="dev-dependencies"><a class="header" href="#dev-dependencies"><code>[dev-dependencies]</code></a></h2>
+<p>A package the project's tests and examples use but its code does not, such
+as a test helper, goes in <code>[dev-dependencies]</code>, written as in
+<code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[dev-dependencies]
+fixtures = { github = "someone/fixtures", version = "1" }
+</code></pre>
+<ul>
+<li><strong>Who sees them:</strong> a test build (<code>pepper test</code>, which builds with
+<code>pep-build --test</code>) and a build of a file in the project's <code>examples</code>
+folder, or a folder below it. Any other build of the project, such as
+<code>pepper build</code>, does not: an import of one there is an error that says to
+move it to <code>[dependencies]</code>.</li>
+<li><strong>Not part of the package:</strong> a project that depends on this package
+neither fetches nor resolves its dev-dependencies, so one that conflicts
+with the dependent's own dependencies does no harm.</li>
+<li><strong>Locked with the rest:</strong> <code>pep.lock</code> records them beside the other
+packages, each that only dev-dependencies lead to marked <code>dev = true</code>,
+and <code>pepper build</code> fetches them with the rest.</li>
+<li><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+<code>[dev-dependencies]</code> as an unknown table, a dependency's included. So a
+package that has one sets <code>minimum_toolchain = "0.11.0"</code> (or later) in
+<code>[package]</code>, and <code>pepper package</code> on an older toolchain skips its
+versions instead of failing to build them. <code>pepper package publish</code>
+checks it (see <a href="pep-package.html#publish">pep-package</a>).</li>
+</ul>
+<p><code>pepper package add --dev</code> adds one, and <code>pepper package remove</code> removes one
+from either table (see <a href="pep-package.html#add-ownernamerange">pep-package</a>). A
+name may be in only one of the two tables.</p>
+<pre><code class="language-text">main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
+    1 | import fixtures;
+      |        ^~~~~~~~
+</code></pre>
+<h2 id="build-dependencies"><a class="header" href="#build-dependencies"><code>[build-dependencies]</code></a></h2>
+<p>A package the <a href="#build-scripts">build script</a> imports, such as a code
+generator or a helper for compiling C, goes in <code>[build-dependencies]</code>,
+written as in <code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[build-dependencies]
+codegen = { github = "someone/codegen", version = "1" }
+</code></pre>
+<ul>
+<li><strong>Who sees them:</strong> only the package's build script, which is built for
+the machine the build runs on, so they are too; they are never linked
+into the program. The script sees no other dependency of its package
+(an import of one says to add it here), and the package's code does not
+see its build-dependencies. A name may be in <code>[dependencies]</code> too, for
+both to import.</li>
+<li><strong>Part of the package:</strong> unlike dev-dependencies, every package's
+build-dependencies are resolved, a dependency's included, since its
+script runs in your build. One the package's other packages need too is
+one copy, at one version, as for any dependency.</li>
+<li><strong>Locked and vendored with the rest:</strong> <code>pep.lock</code> records them beside the
+other packages, each that only build-dependencies lead to marked
+<code>build = true</code> (and <code>pepper package tree</code> marks it <code>[build]</code>), <code>pepper build</code> fetches them, <code>pepper package vendor</code> copies them, <code>audit</code> checks
+them, and <code>[overrides]</code> and <a href="pep-package.html#two-majors-of-one-package">two majors</a>
+apply to them as to the rest. A build-dependency's own build script runs
+in the build of the script that imports it.</li>
+<li><strong>Not optional:</strong> <code>optional = true</code> there is an error; a script reads its
+package's features from <code>PEP_FEATURES</code>.</li>
+<li><strong>Only on some hosts:</strong> <code>[target.'&lt;condition&gt;'.build-dependencies]</code>
+holds those a script needs only on some machines; see
+<a href="#targetconditionbuild-dependencies">below</a>.</li>
+<li><strong>Added with</strong> <code>pepper package add --build</code> (see
+<a href="pep-package.html#add-ownernamerange">pep-package</a>).</li>
+<li><strong>Needs toolchain 0.11.0</strong>, as <code>[dev-dependencies]</code> does.</li>
+</ul>
+<pre><code class="language-text">main.pep:1:8: error: 'codegen' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here
+    1 | import codegen;
+      |        ^~~~~~~
+</code></pre>
+<h2 id="targetconditiondependencies"><a class="header" href="#targetconditiondependencies"><code>[target.'&lt;condition&gt;'.dependencies]</code></a></h2>
+<p>A package only some platforms need, such as a binding to a Windows API,
+goes in a <code>[target]</code> table whose key is the condition, written as in
+<code>[dependencies]</code>:</p>
+<pre><code class="language-toml">[target.'OS(Windows)'.dependencies]
+winapi = { github = "someone/winapi", version = "1" }
+
+[target.'OS(Linux) &amp;&amp; Arch(x64)'.dependencies]
+epoll = { github = "someone/epoll", version = "0.3" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The condition</strong> is what <code>[Target(...)]</code> takes, <code>OS(...)</code>, <code>Arch(...)</code>
+and <code>BuildOption(...)</code> with <code>&amp;&amp;</code>, <code>||</code> and <code>!</code> (see
+<a href="../language/platform-selection.html">Platform selection</a>), and it is
+checked the same way: <code>OS(Darwin)</code> is an error at the key.</p>
+</li>
+<li>
+<p><strong>Who sees them:</strong> a build whose target the condition selects: the
+machine building, or the platform <code>--target</code> names in a cross build.
+Guard the import the same way, so other targets skip it:</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]
+import winapi;
+</code></pre>
+<p>An import a build for another target reaches is an error:</p>
+<pre><code class="language-text">main.pep:1:8: error: 'winapi' is a dependency only for targets where 'OS(Windows)' holds, which this build's does not; put '[Target(OS(Windows))]' on the import
+    1 | import winapi;
+      |        ^~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Locked for every platform:</strong> <code>pep.lock</code> lists every platform's
+packages, so it is the same on each, and marks those only some need
+with their <code>target</code> (see <a href="pep-package.html#peplock">pep.lock</a>). A build
+fetches only what its target needs; resolving a change to <code>pep.toml</code>,
+or checking the lock with <code>--locked</code>, reads every package's <code>pep.toml</code>,
+so it fetches every platform's.</p>
+</li>
+<li>
+<p><strong>In a package:</strong> a dependency's <code>[target]</code> tables apply to the
+projects that use it, for their build's target.</p>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+a <code>[target]</code> table as an unknown table, so a package that has one sets
+<code>minimum_toolchain = "0.11.0"</code> (or later) in <code>[package]</code>, as for
+<a href="#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pepper package publish</code>
+checks it.</p>
+</li>
+</ul>
+<p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="pep-package.html#add-ownernamerange">pep-package</a>).
+A name may be in only one of the dependency tables, and a <code>[target]</code> table
+holds only <code>dependencies</code> and
+<a href="#targetconditionbuild-dependencies"><code>build-dependencies</code></a>.</p>
+<h2 id="targetconditionbuild-dependencies"><a class="header" href="#targetconditionbuild-dependencies"><code>[target.'&lt;condition&gt;'.build-dependencies]</code></a></h2>
+<p>A package the <a href="#build-scripts">build script</a> needs only on some machines
+goes in a <code>[target]</code> table's <code>build-dependencies</code>, written as in
+<a href="#build-dependencies"><code>[build-dependencies]</code></a>:</p>
+<pre><code class="language-toml">[target.'OS(Windows)'.build-dependencies]
+vswhere = { github = "someone/vswhere", version = "1" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The condition holds for the host</strong>, the machine building, not the
+target: the script is built for and runs on the host. A cross build
+for Linux on Windows gives its script the <code>OS(Windows)</code> ones, and none
+of the <code>OS(Linux)</code> ones. Guard the script's import the same way:</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]
+import vswhere;
+</code></pre>
+<p>An import a script reaches on another host is an error:</p>
+<pre><code class="language-text">build.pep:1:8: error: 'vswhere' is a build-dependency only for hosts where 'OS(Windows)' holds, which this one does not; put '[Target(OS(Windows))]' on the import
+</code></pre>
+</li>
+<li>
+<p><strong>Locked and fetched on every host:</strong> <code>pep.lock</code> is shared by every
+machine, so it records no condition for them, and a build fetches them
+whatever it builds for.</p>
+</li>
+<li>
+<p><strong>The rest is as for <code>[build-dependencies]</code>:</strong> never optional, a name
+only once among them, added with <code>pepper package add --build --target '&lt;condition&gt;'</code>.</p>
+</li>
+</ul>
+<h2 id="features"><a class="header" href="#features"><code>[features]</code></a></h2>
+<p>A package with optional parts, such as TLS support in a client, names
+them in <code>[features]</code>, so a project that does not want one neither builds
+its code nor its dependencies. Each key is a feature, and its value lists
+what turning it on turns on:</p>
+<pre><code class="language-toml">[package]
+name = "http"
+
+[dependencies]
+openssl = { github = "someone/openssl", version = "3", optional = true }
+zlib    = { github = "someone/zlib", version = "1", optional = true }
+
+[features]
+default = ["tls"]
+tls     = ["dep:openssl"]                  # the optional dependency openssl
+gzip    = ["dep:zlib", "zlib/simd"]        # zlib, and zlib's feature 'simd'
+full    = ["tls", "gzip"]                  # other features of this package
+</code></pre>
+<ul>
+<li>
+<p><strong>Code reads a feature as a build option:</strong> a feature that is on defines
+the build option <code>&lt;package&gt;_&lt;feature&gt;</code>, the package's <code>name</code> and the
+feature joined with <code>_</code> (<code>http_tls</code>), so <code>[Target(BuildOption(...))]</code>,
+<code>[BuildOption("...")]</code> and <code>reflect.build_option</code> select code by it, as
+for a <code>-D</code> option (see <a href="../language/build-options.html">Build options</a>).
+A feature name is an identifier. The names join with a bare <code>_</code>, so two
+packages of one build should not share a <code>name</code>: their features would
+define the same options.</p>
+</li>
+<li>
+<p><strong>What a feature lists:</strong> another feature of the package (<code>tls</code>); an
+optional dependency, <code>dep:&lt;name&gt;</code>; or a feature of a dependency,
+<code>&lt;name&gt;/&lt;feature&gt;</code>, which turns the dependency on too when it is
+optional. Each is checked against the package's own <code>pep.toml</code>.</p>
+</li>
+<li>
+<p><strong><code>default</code></strong> is the feature a package has on unless it is asked not
+to: <code>--no-default-features</code> on <code>pepper build</code> and <code>pepper test</code> for the
+project's package, <code>default-features = false</code> in a dependency's entry
+for that dependency.</p>
+</li>
+<li>
+<p><strong>Turning features on:</strong> <code>pepper build --features tls,gzip</code> (and
+<code>pepper test --features</code>) for the project's package; a dependency's
+entry, <code>features = ["gzip"]</code>, for that package. Features are additive
+and unified across the graph, as in Cargo: a package that two others
+depend on has every feature either turns on, and there is one copy of
+it in the build.</p>
+</li>
+<li>
+<p><strong>Optional dependencies</strong> (<code>optional = true</code>) are seen only by a build
+with a feature that turns them on; guard the import with the feature's
+build option, so a build without it skips the import:</p>
+<pre><code class="language-pepper">[Target(BuildOption(http_tls))]
+import openssl;
+</code></pre>
+<p>An import of one that no feature this build turns on lists is an error:</p>
+<pre><code class="language-text">module.pep:1:8: error: 'openssl' is an optional dependency, which no feature this build turns on lists; put the '[BuildOption(...)]' of a feature that lists 'dep:openssl' on the import
+</code></pre>
+<p>A dev-dependency cannot be optional.</p>
+</li>
+<li>
+<p><strong>Locked whatever the features:</strong> <code>pep.lock</code> records optional
+dependencies like the rest, and a build fetches them whether or not a
+feature turns them on, so the lock does not depend on which features a
+build picks, as it does not on the platform.</p>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects <code>[features]</code>, and
+a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code>, so a
+package that uses them sets <code>minimum_toolchain = "0.11.0"</code> (or later),
+as for <a href="#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pepper package publish</code> checks it.</p>
+</li>
+</ul>
+<p><code>pepper package add --optional</code>, <code>--features</code> and <code>--no-default-features</code>
+write a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code> (see
+<a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<h2 id="workspaces-workspace"><a class="header" href="#workspaces-workspace">Workspaces: <code>[workspace]</code></a></h2>
+<p>A repository holding several related packages, such as a library with its
+examples or a client and a server, makes them one workspace: a <code>pep.toml</code>
+at the root lists them, and they share one <code>pep.lock</code> and one
+<code>.pep/deps</code>, so every member builds with the same revision of each
+dependency.</p>
+<pre><code class="language-text">shapes/
+  pep.toml            [workspace]
+  pep.lock            one lock for every member
+  app/pep.toml        [package] name = "app"
+  libs/geo/pep.toml   [package] name = "geo"
+  libs/draw/pep.toml  [package] name = "draw"
+</code></pre>
+<pre><code class="language-toml"># shapes/pep.toml
+[workspace]
+members = ["app", "libs/*"]
+
+[workspace.dependencies]
+numbers = { github = "someone/numbers", version = "1.2" }
+geo     = { path = "libs/geo", version = "0.3" }
+</code></pre>
+<pre><code class="language-toml"># shapes/app/pep.toml
+[package]
+name = "app"
+
+[dependencies]
+numbers = { workspace = true }                   # someone/numbers 1.2
+geo     = { workspace = true, features = ["3d"] }
+draw    = { path = "../libs/draw", version = "0.1" }
+</code></pre>
+<ul>
+<li><strong><code>members</code></strong> lists the member folders, relative to the root: a folder
+(<code>app</code>), or a glob of folders (<code>libs/*</code>, see
+<a href="../reference/io-glob.html"><code>io.glob</code></a>). Each holds a package's <code>pep.toml</code>.
+The root may be a package too, with a <code>[package]</code> of its own: it is
+then a member without being listed. A root without one only holds the
+workspace.</li>
+<li><strong>One lock:</strong> <code>pepper package</code> and <code>pepper build</code>, run in the root or
+any member, resolve every member's dependencies together into the
+root's <code>pep.lock</code>, and fetch into the root's <code>.pep/deps</code>. The members'
+own dependencies count as the project's, so when two ask for one
+package, both ranges must hold (see
+<a href="pep-package.html#resolving-versions">Resolving versions</a>).</li>
+<li><strong><code>[workspace.dependencies]</code></strong> gives a source and revision once, for
+each member to inherit with <code>workspace = true</code>. A member's entry adds
+<code>optional</code>, <code>features</code> and <code>default-features</code>, and nothing else; a
+<code>path</code> there is relative to the root.</li>
+<li><strong>Members depend on each other</strong> with <code>path</code>. A <code>version</code> beside the
+<code>path</code> is for <a href="pep-package.html#publish"><code>publish</code></a>, which refuses a
+<code>path</code> without one, and checks the sibling is published at a version
+it accepts; a build in the workspace uses the folder. A project outside
+the workspace that fetches the member reads it as the sibling of the
+same repository at that version (see below).</li>
+<li><strong>Building:</strong> <code>pepper build</code> in a member builds that member; in a root
+with no <code>[package]</code>, every member. <code>--all</code> builds every member, and
+<code>-p &lt;name&gt;</code> (repeated for more) the members by package name, from the
+root or any member, each into its own output; a member with no entry
+file, a library, is skipped. <code>pepper test --all</code> and <code>pepper test -p &lt;name&gt;</code> test them the same way (see <a href="pep-build.html">pep-build</a> and
+<a href="pep-test.html">pep-test</a>).</li>
+<li><strong>Features are unified</strong> across the members a build selects, as in
+Cargo: each member's <code>default</code> and its dependencies' features are on
+in every one of them, and <code>--features</code> turns a feature on in each
+member that has it.</li>
+<li><strong><a href="#overrides"><code>[overrides]</code></a></strong> belong in the root, and apply to every
+member; a member's own are ignored.</li>
+<li><strong>One level:</strong> a member cannot be a workspace itself, and a package is
+in the workspace of the nearest <code>pep.toml</code> above it with
+<code>[workspace]</code>, when that lists it. A package in <code>.pep/deps</code> is in none
+of the project's.</li>
+<li><strong>Needs toolchain 0.11.0,</strong> as for
+<a href="#dev-dependencies"><code>[dev-dependencies]</code></a>: <code>[workspace]</code> and a
+dependency's <code>workspace</code> and <code>package</code> are unknown to older toolchains.</li>
+</ul>
+<h3 id="a-member-as-a-git-dependency"><a class="header" href="#a-member-as-a-git-dependency">A member as a Git dependency</a></h3>
+<p>A project outside the workspace depends on one of its members by the
+repository and <code>package</code>, the member's <code>[package]</code> <code>name</code>, as Cargo does
+with a package inside a Git repository's workspace:</p>
+<pre><code class="language-toml">[dependencies]
+geo = { github = "someone/shapes", package = "geo", version = "0.3" }
+</code></pre>
+<p><code>pepper package add someone/shapes --package geo</code> writes that entry (see
+<a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<ul>
+<li><strong>Found through the root's <code>members</code>:</strong> the member is the package of
+that name among the folders the root's <code>[workspace]</code> <code>members</code> lists, so
+it may move between folders without its dependents changing. Without
+<code>package</code>, a dependency is the repository's root package.</li>
+<li><strong>Tagged on its own:</strong> <a href="pep-package.html#publish"><code>publish</code></a> in a member
+tags <code>&lt;name&gt;-v&lt;version&gt;</code> (<code>geo-v0.3.1</code>), and a member's <code>version</code> range
+reads only its own tags, so each member is released at its own pace. The
+root package keeps <code>v&lt;version&gt;</code>, as a single-package repository does.
+A package name is an identifier, with no <code>-</code>, so the tags cannot clash.</li>
+<li><strong>Its own checkout and lock entry:</strong> it is locked as
+<code>github:someone/shapes#geo</code> (see <a href="pep-package.html#peplock">pep.lock</a>),
+and checked out at its own commit in
+<code>.pep/deps/github.com/someone/shapes#geo</code>, from the same repository in
+the <a href="pep-package.html#the-download-cache">download cache</a> as every other
+member. <a href="#overrides"><code>[overrides]</code></a> name it by that source too.</li>
+<li><strong>Its siblings:</strong> a <code>path</code> with a <code>version</code> in the member's <code>pep.toml</code>
+names another package of its workspace, so the project depends on that
+member (or the root) of the same repository, at the newest of its own
+tags the version accepts, not at the commit the member was fetched at.</li>
+</ul>
+<p>A <code>package</code> with a <code>path</code>, which names a member's folder itself, or one
+that is not an identifier, is an error at the key. A <code>package</code> the
+workspace lacks is an error at its value when <code>pepper package</code> fetches it:</p>
+<pre><code class="language-text">pep.toml:5:43: error: someone/shapes has no workspace member 'gem'; its members are 'geo', 'draw'
+    5 | geo = { github = "someone/shapes", package = "gem" }
+      |                                              ^~~~~
+</code></pre>
+<h3 id="workspace-errors"><a class="header" href="#workspace-errors">Workspace errors</a></h3>
+<p>The problems of a workspace are errors at the member in the root's
+<code>members</code>, or at the dependency that inherits:</p>
+<pre><code class="language-text">pep.toml:2:19: error: workspace member 'app' is listed twice
+    2 | members = ["app", "app"]
+      |                   ^~~~~
+</code></pre>
+<ul>
+<li>a member that is not a package (no <code>pep.toml</code>), one listed twice, or
+one that is a workspace itself;</li>
+<li><code>workspace = true</code> with a source or revision of its own, in a package
+no workspace lists, or naming what <code>[workspace.dependencies]</code> lacks;</li>
+<li><code>optional</code>, <code>features</code>, <code>default-features</code> or <code>workspace</code> in
+<code>[workspace.dependencies]</code>.</li>
+</ul>
+<h2 id="overrides"><a class="header" href="#overrides"><code>[overrides]</code></a></h2>
+<p>To try a fix in a package deep in the graph, or to use a fork until the
+fix is released, the project replaces the package wherever the graph
+reaches it, without editing the <code>pep.toml</code> of each package on the way:</p>
+<pre><code class="language-toml">[overrides]
+"github:other/numbers" = { github = "me/numbers", branch = "fix-overflow" }
+"github:someone/geometry" = { path = "../geometry" }
+</code></pre>
+<ul>
+<li>
+<p><strong>The key</strong> is the source of the package it replaces, as
+<a href="pep-package.html#peplock"><code>pep.lock</code></a> writes it: the host's key, <code>:</code>,
+and the repository (<code>github:owner/name</code>, and <code>#</code> and the member for a
+<a href="#a-member-as-a-git-dependency">workspace member</a>). One table keyed by the source
+is enough, since a source is what makes two dependencies the same
+package in the graph; the name each dependent imports it by does not.</p>
+</li>
+<li>
+<p><strong>The value</strong> is the package that replaces it, written as a dependency
+is: a repository (<code>github</code>, <code>gitlab</code>, <code>codeberg</code>) with at most one of
+<code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>, or a <code>path</code>, relative to this
+<code>pep.toml</code>. It takes no <code>optional</code>, <code>features</code> or <code>default-features</code>;
+those stay on each dependency.</p>
+</li>
+<li>
+<p><strong>Everywhere, whatever is asked:</strong> every package that depends on the
+source gets the replacement, the project included, whatever version
+range or branch each asks for, in whatever major, so an override also
+makes a graph that holds <a href="pep-package.html#two-majors-of-one-package">two majors</a>
+of the package hold one. A fork is checked out in the original's
+folder, <code>.pep/deps/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code>, and a <code>path</code> override's
+folder is read in its place, its own dependencies included. Imports do
+not change.</p>
+</li>
+<li>
+<p><strong>Locked:</strong> <code>pep.lock</code> records the replacement in the package's
+<code>override</code>, with the fork's commit (see
+<a href="pep-package.html#peplock">pep.lock</a>), so <code>--locked</code> and <code>--offline</code>
+builds stay reproducible, and adding, changing or removing an override
+changes the lock.</p>
+</li>
+<li>
+<p><strong>Only the project's own:</strong> a dependency's <code>[overrides]</code> do not apply
+to the projects that use it, and <code>pepper package publish</code> refuses a
+package with any (see <a href="pep-package.html#publish">publish</a>). In a
+<a href="#workspaces-workspace">workspace</a>, only the root's apply, to every
+member; a member's are ignored, which <code>pepper package</code> warns about.</p>
+</li>
+<li>
+<p><strong>Checked by <code>pepper package</code>:</strong> an override that matches no package in
+the graph is a warning at its key, and a replacement whose <code>[package]</code>
+<code>name</code> differs from the name <code>pep.lock</code> records for the package it
+replaces is an error there:</p>
+<pre><code class="language-text">pep.toml:9:1: error: 'github:someone/geometry' is the package 'geometry', not 'numbers', which it overrides; name a fork or copy of 'numbers'
+    9 | "github:other/numbers" = { github = "someone/geometry", tag = "v1.0.0" }
+      | ^~~~~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code>
+with <code>[overrides]</code> as an unknown table.</p>
+</li>
+</ul>
+<h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
+<pre><code class="language-toml">[fetch]
+hosts = ["codeberg", "github"]
+vendor = "vendor"
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>hosts</code></td><td>The hosts <code>pepper package add owner/name</code> looks a repository up on, in order, when the argument names none; it adds the first that has it</td><td><code>["github", "gitlab", "codeberg"]</code></td></tr>
+<tr><td><code>vendor</code></td><td>The folder, relative to the project, that <a href="pep-package.html#vendor-dir"><code>pepper package vendor</code></a> copied every locked package into, which sets it. Builds then read each dependency from <code>&lt;vendor&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> instead of <code>.pep/deps</code>, fetch nothing, and fail when a package is missing, at another commit than <code>pep.lock</code>'s, or edited. A package that sets it needs <code>minimum_toolchain = "0.11.0"</code> or later</td><td>none: dependencies are fetched into <code>.pep/deps</code></td></tr>
+</tbody></table>
+</div>
+<h2 id="retract"><a class="header" href="#retract"><code>[retract]</code></a></h2>
+<p>A package withdraws its own broken releases, as Go's <code>retract</code> does: each
+key is a version, or a range as dependencies write it, and its value says
+why.</p>
+<pre><code class="language-toml">[retract]
+"1.1.0" = "loses data on Windows"
+"&gt;=1.2.0, &lt;1.2.3" = "PEP-2026-0001"
+</code></pre>
+<p>A key that is a version names that version alone, not the <code>^</code> range a
+dependency's <code>version = "1.1.0"</code> means; keys are quoted, as TOML reads
+<code>1.1.0</code> unquoted as three nested keys. Release the table in a newer
+version (a workspace member's newest release by its own tags, read from
+the member's <code>pep.toml</code>): the <code>[retract]</code> of a package's newest release
+speaks for every version, so a range no longer picks a retracted one, <code>pepper package outdated</code> flags one <code>pep.lock</code> holds, and <code>update</code> moves off it (see
+<a href="pep-package.html#retracted-versions">Retracted versions</a>). A key that is
+neither a version nor a range is an error at the key in the project's
+own <code>pep.toml</code> (a dependency's retracts nothing, so its dependents still
+resolve):</p>
+<pre><code class="language-text">pep.toml:8:1: error: '1.x.q' in '[retract]' is not a version or range: ...
+</code></pre>
+<ul>
+<li><strong>Needs toolchain 0.11.0:</strong> an older toolchain rejects a <code>pep.toml</code> with
+<code>[retract]</code> as an unknown table, so a package that has one sets
+<code>minimum_toolchain = "0.11.0"</code> (or later), which <code>pepper package publish</code> checks.</li>
+</ul>
+<h2 id="audit"><a class="header" href="#audit"><code>[audit]</code></a></h2>
+<pre><code class="language-toml">[audit]
+ignore = ["PEP-2026-0001"]   # its code is never called here
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>ignore</code></td><td>The advisories, by id, that <a href="pep-package.html#audit"><code>pepper package audit</code></a> reports but does not fail on, with <code>--ignore</code></td><td><code>[]</code></td></tr>
+</tbody></table>
+</div>
+<p>Only the project's own (in a workspace, its root's) <code>[audit]</code> applies.
+An older toolchain than 0.11.0 rejects the table.</p>
+<h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
+<p>A problem in <code>pep.toml</code> is an error located at the key or value to change:</p>
+<pre><code class="language-text">pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports
+    9 | io = { github = "someone/io" }
+      | ^~
+</code></pre>
+<ul>
+<li>Two dependencies with the same name (in one table, or in two of
+<code>[dependencies]</code>, <code>[dev-dependencies]</code> and the <code>[target]</code> tables), or a
+dependency named like a runtime module (<code>io</code>, <code>async</code>), which it would
+otherwise hide.</li>
+<li>A <code>[target]</code> condition <code>[Target(...)]</code> would reject.</li>
+<li>A feature that lists a feature the package lacks, a <code>dep:</code> that names
+no optional dependency, or a <code>&lt;name&gt;/&lt;feature&gt;</code> whose dependency does
+not exist; a dependency's <code>features</code> asking for one its package lacks
+(<code>package 'zlib' has no feature 'smid'</code>), which a build reports once
+the package is fetched.</li>
+<li>A dependency name that is not an identifier (<code>fast-json</code>): it is the name
+<code>import</code> uses.</li>
+<li>A dependency with no source or two, a repository not written <code>owner/name</code>,
+or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> and <code>commit</code>; a <code>package</code>
+with a <code>path</code>, or one that is not an identifier.</li>
+<li>An <code>[overrides]</code> key that is not a source (<code>github:owner/name</code>), or an
+override with <code>optional</code>, <code>features</code> or <code>default-features</code>.</li>
+<li>A table or key <code>pep.toml</code> does not have, or a value of the wrong type.</li>
+<li>A <code>[build]</code> <code>script</code> that names a file that does not exist, which a
+build reports.</li>
+</ul>
+<p>An import of a dependency that is not on disk says which folder is missing:</p>
+<pre><code class="language-text">main.pep:1:8: error: dependency 'geometry' is not fetched: no /home/you/my_app/.pep/deps/github.com/someone/geometry; run 'pepper package fetch'
+    1 | import geometry;
+      |        ^~~~~~~~
+</code></pre>
+<p>The language server reads <code>pep.toml</code> the same way, so imports of fetched
+dependencies resolve in the editor with no <code>-I</code>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tools/pep-build.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tools/pep-new.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tools/pep-build.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tools/pep-new.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
