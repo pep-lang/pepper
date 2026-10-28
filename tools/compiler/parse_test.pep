@@ -119,7 +119,7 @@ statements_of(source: String): String[] {
 # A local declaration may start with a tuple type (pepper#130), whose
 # last element may be optional, as may a tuple's or function type's in a
 # type argument (pepper#280), and a statement starting with `(` that
-# declares nothing stays an expression.
+# declares nothing stays an expression, `?` before `)` included.
 [Test]
 parses_a_local_declaration_that_starts_with_a_tuple_type() {
     var source = "f() {\n"
@@ -132,11 +132,12 @@ parses_a_local_declaration_that_starts_with_a_tuple_type() {
         + "    (a, b) = (b, a);\n"
         + "    (g)(x);\n"
         + "    (x);\n"
+        + "    (a, r?);\n"
         + "}\n";
     expect_equal(
         "; ".join(statements_of(source)),
         "(String, int)[] a; Optional<(int, String)> b; (line: int, column: int) c; (int) => int d; "
-            + "(String, Optional<int>) e; expression; expression; expression; expression"
+            + "(String, Optional<int>) e; expression; expression; expression; expression; expression"
     );
 }
 
