@@ -1067,6 +1067,9 @@ error_programs(): String[] {
         "# expect: main.pep:7:12: error: called object type 'String' is not a function\nname_of<T>(): String {\n    return \"n\";\n}\nmain(): int {\n    var f = name_of<int>;\n    return f() == \"n\" ? 0 : 1;\n}\n",
         "# expect: main.pep:3:12: error: called object type 'int' is not a function\ntwice(n: int): int {\n    return n() * 2;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:6:12: error: call to undeclared function 'g'\nmain(): int {\n    if (true) {\n        var g = 1;\n    }\n    return g();\n}\n",
+        # A closure capturing a local whose initializer names a module that
+        # is not imported: the undeclared name, not the capture (#285).
+        "# expect: main.pep:2:18: error: use of undeclared identifier 'nope'\nmain(): int {\n    var locals = nope.Make<int>();\n    () => bool f = () => locals.is_set();\n    return f() ? 1 : 0;\n}\n",
         "# expect: main.pep:6:13: error: too few arguments to '__simd_add': expected 2, have 1\nmain(): int {\n    var x: __ptr<int> = null;\n    var y = __address<int>(x);\n    var b = __is_pod<__ptr<char>>();\n    var v = __simd_add<int>(1);\n    return 0;\n}\n",
         "# expect: main.pep:6:17: error: too many arguments to '__function_pointer': expected 1, have 2\nstruct S {\n    static h(): int { return 2; }\n    m(): int {\n        var p = __function_pointer(h);\n        var q = __function_pointer(1, 2);\n        return 0;\n    }\n}\nmain(): int { return 0; }\n",
         "# expect: accepted\nmain(): int {\n    var x: __ptr<int> = null;\n    var y = __address<int>(x);\n    var b = __is_pod<__ptr<char>>();\n    return 0;\n}\n",
