@@ -158,5 +158,11 @@ main(): int {
     if (box.pass<(g: int, h: int)>((g: 1, h: 2)).h != 2 or box.pass(passed).b != 4) {
         return 15;
     }
+    # An optional element type closes the tuple (pepper#280).
+    var optional = Array<(String, int?)>();
+    optional.append(("x", Optional<int>.Empty));
+    if (optional.count != 1 or optional[0].1.is_value()) {
+        return 16;
+    }
     return 0;
 }

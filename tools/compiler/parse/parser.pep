@@ -1089,12 +1089,13 @@ struct Parser {
 
     # Whether the `?` at the current token makes an optional type while
     # probing, where `a ? b : c` may be a ternary instead. It does when it
-    # closes or separates type arguments, or when a name follows that ends
-    # the declaration (`Node? x;`, `Node? x = y`, `Node? x` at the end of
-    # the line).
+    # closes or separates type arguments or a tuple's or function type's
+    # elements (`Array<(String, int?)>`, pepper#280), or when a name
+    # follows that ends the declaration (`Node? x;`, `Node? x = y`,
+    # `Node? x` at the end of the line).
     _optional_suffix_in_probe(): bool {
         var next = _peek_at(1);
-        if (next.is(_source, ">") or next.is(_source, ",")) {
+        if (next.is(_source, ">") or next.is(_source, ",") or next.is(_source, ")")) {
             return true;
         }
         if (next.kind != TokenKind.Identifier or is_reserved_word(_source, next)) {
