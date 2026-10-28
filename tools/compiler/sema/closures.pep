@@ -33,6 +33,7 @@ import [
 ] from "model";
 import "named_arguments";
 import [set_name, without_type_arguments] from "names";
+import "resolve_resolvables";
 import [PassState] from "state";
 import [FUNCTION] from "type_name";
 import [Rewriter, rewrite_block, rewrite_children] from "walk";
@@ -1030,25 +1031,20 @@ _inherit_deprecation(attributes: Array<Array<ast.Attribute>>, lifted: StructDef[
 ## that nothing types and nothing declares: no parameter or local of that
 ## function, and no function, global, struct, enum, alias or extern.
 _undeclared_near(module: Module, closure: String): SymbolRefExpression? {
-    var known = HashSet<String>();
-    for (var f in module.functions) {
-        known.insert(f.name);
-    }
+    var top = _Known(module);
+    # What `_Known` leaves out.
+    var others = HashSet<String>();
     for (var g in module.globals) {
-        known.insert(g.name);
-    }
-    for (var e in module.externs) {
-        known.insert(e.name);
+        others.insert(g.name);
     }
     for (var e in module.enums) {
-        known.insert(e.name);
+        others.insert(e.name);
     }
     for (var a in module.type_aliases) {
-        known.insert(a.name);
+        others.insert(a.name);
     }
     var bodies = module.functions.copy();
     for (var st in module.structs) {
-        known.insert(st.name);
         bodies.append_all(st.constructors);
         bodies.append_all(st.method_members);
     }
@@ -1056,7 +1052,7 @@ _undeclared_near(module: Module, closure: String): SymbolRefExpression? {
         if (!function.body.is_value()) {
             continue;
         }
-        var finder = _UndeclaredFinder(closure, known, _declared_names(function));
+        var finder = _UndeclaredFinder(closure, top, others, _declared_names(function));
         rewrite_block(function.body.value(), finder);
         if (finder.makes and finder.first.is_value()) {
             return finder.first;
@@ -1066,17 +1062,19 @@ _undeclared_near(module: Module, closure: String): SymbolRefExpression? {
 }
 
 ## Whether a body makes the closure `closure`, and the first untyped
-## identifier in it that neither `known` nor `locals` names.
+## identifier in it that `top`, `others` and `locals` do not name.
 struct _UndeclaredFinder {
     var closure: String;
-    var known: HashSet<String>;
+    var top: _Known;
+    var others: HashSet<String>;
     var locals: HashSet<String>;
     var makes: bool = false;
     var first: SymbolRefExpression? = Optional<SymbolRefExpression>.Empty;
 
-    construct(closure: String, known: HashSet<String>, locals: HashSet<String>) {
+    construct(closure: String, top: _Known, others: HashSet<String>, locals: HashSet<String>) {
         this.closure = closure;
-        this.known = known;
+        this.top = top;
+        this.others = others;
         this.locals = locals;
     }
 
@@ -1088,8 +1086,13 @@ struct _UndeclaredFinder {
                 }
             }
             SymbolRef(node) => {
-                bool untyped = node.ty.is_empty() or node.ty.is_auto();
-                if (untyped and !first.is_value() and !known.contains(node.id) and !locals.contains(node.id)) {
+                var id = node.id;
+                bool declared = top.functions.contains(id)
+                    or top.structs.contains(id)
+                    or top.externs.contains(id)
+                    or others.contains(id)
+                    or locals.contains(id);
+                if (!declared and !first.is_value() and (node.ty.is_empty() or node.ty.is_auto())) {
                     first = Optional<SymbolRefExpression>.Value(node);
                 }
             }
