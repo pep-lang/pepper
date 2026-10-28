@@ -31,7 +31,7 @@ import "symbols";
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.11.1";
+    return "0.12.0-dev";
 }
 
 # How long to record a process given by `--pid` when `--duration` is not.
