@@ -290,6 +290,12 @@ struct Box&lt;T&gt; {
     map&lt;U&gt;(f: (T) =&gt; U): Box&lt;U&gt; {
         return Box&lt;U&gt;(f(value));
     }
+
+    # Inside a method, a generic method's bare name with its type
+    # arguments is `this.map&lt;String&gt;`.
+    mapper(): ((T) =&gt; String) =&gt; Box&lt;String&gt; {
+        return map&lt;String&gt;;
+    }
 }
 
 larger&lt;T&gt;(a: T, b: T): T {
@@ -329,6 +335,7 @@ main(): int {
     assert(to_long((x: int): long =&gt; x * 2).value == 6, "generic method");
     var to_text: ((int) =&gt; String) =&gt; Box&lt;String&gt; = b.map;
     assert(to_text((x: int) =&gt; "three").value == "three", "inferred generic method");
+    assert(b.mapper()((x: int) =&gt; "3").value == "3", "bare generic method name");
 
     var steps = Array&lt;(int) =&gt; Point&gt;();
     steps.append(p.shifted);
@@ -386,7 +393,10 @@ value once they are known: written (<code>b.map&lt;long&gt;</code>,
 <code>Box&lt;int&gt;.map&lt;long&gt;</code>, <code>Box&lt;int&gt;.wrap&lt;int&gt;</code>) or picked by the function
 type it flows into, as for generic functions:
 <code>var m: ((int) =&gt; String) =&gt; Box&lt;String&gt; = b.map;</code> is <code>b.map&lt;String&gt;</code>.
-Without either, <code>var m = b.map;</code> is an error that asks for them.</p>
+Without either, <code>var m = b.map;</code> is an error that asks for them. Inside
+a method, the bare name with its type arguments (<code>map&lt;String&gt;</code>) is
+<code>this.map&lt;String&gt;</code>, a value even when the method takes no arguments;
+the parentheses (<code>map&lt;String&gt;(f)</code>) call it.</p>
 </li>
 <li>
 <p><strong>A type with a constructor that takes no arguments.</strong> <code>Box&lt;int&gt;</code> on its
