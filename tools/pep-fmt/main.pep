@@ -27,7 +27,7 @@ import "format";
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.12.0-dev";
+    return "0.11.1";
 }
 
 # On a stack of `parse.STACK_SIZE`, which the deepest source fits in.
