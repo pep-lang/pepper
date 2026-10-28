@@ -416,7 +416,12 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         prelude.append(path.value());
     }
     prelude.append_all(runtime.sources);
-    var loaded = load(root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies, setup.build_dir);
+    var runtime_dir = runtime.sources.count > 0 ?
+        Optional<Path>.Value(files.dir_of(runtime.sources[0])) :
+        Optional<Path>.Empty;
+    var loaded = load(
+        root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies, setup.build_dir, runtime_dir
+    );
     if (loaded.is_err()) {
         return loaded;
     }
@@ -453,6 +458,8 @@ struct _Queued {
 ## @param defer_bodies whether to leave the files' bodies to `Program.link_bodies`
 ## @param build_dir the build's intermediate folder, which holds the
 ##   packages' generated modules; empty for the project's `.pep/build`
+## @param runtime_dir the runtime's folder, if any: its files belong to no
+##   module folder above it (a toolchain installed in a package's folder)
 ## @returns the program, or why a file cannot be read or parsed or a feature
 ##   turned on
 export load(
@@ -462,7 +469,8 @@ export load(
     target: Target,
     sources: HashMap<String, String> = HashMap<String, String>(),
     defer_bodies: bool = false,
-    build_dir: Path? = Optional<Path>.Empty
+    build_dir: Path? = Optional<Path>.Empty,
+    runtime_dir: Path? = Optional<Path>.Empty
 ): Result<Program, String> {
     var program = Program();
     var index = HashMap<String, ulong>();
@@ -482,7 +490,7 @@ export load(
             project = Optional<Path>.Value(cwd.value());
         }
     }
-    var roots = ModuleRoots(project);
+    var roots = ModuleRoots(project, runtime_dir);
     var script_module = target.build_script_root.is_value() and packages.project.is_value() ?
         roots.key(packages.project.value()) :
         "";
