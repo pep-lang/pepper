@@ -13,13 +13,14 @@
 # whose case shares its name with a type of the module; a `[Move]`
 # argument called through a `shared` function value; externs bound to C symbols Pepper functions are
 # named after, at each `-O` level; literals and generic calls nested 64
-# levels deep, built in time; reference chains 100,000 deep, released
-# without overflowing the stack; source nested as deep as the parser
-# allows, and one level deeper; the message a stack overflow prints on
-# the main thread, a `Thread` and a task; and the panic hook, which every
+# levels deep, built in time; a runtime copied into a package's folder,
+# which builds a program without that package's files; reference chains
+# 100,000 deep, released without overflowing the stack; source nested as
+# deep as the parser allows, and one level deeper; the message a stack
+# overflow prints on the main thread, a `Thread` and a task; and the panic hook, which every
 # other kind of panic runs first. The programs are in `testdata/`.
 
-import [File, Path] from io;
+import [File, Path, glob] from io;
 import os;
 import process;
 import [TempFolder] from testing;
@@ -595,6 +596,46 @@ nested_literals_build_in_time_and_run() {
         panic($"nested.pep took {seconds} s to build");
     }
     expect_exit(run(process.Command(program.to_string())), 12);
+}
+
+# ── runtime ─────────────────────────────────────────────────────────────────
+
+# A toolchain installed in a package's folder (`PEPPER_HOME=<package>/.pepper`)
+# builds a program elsewhere with its runtime alone: the runtime's files
+# belong to no module above its folder, so the package's `module.pep` and
+# its files stay out (#284).
+[Test]
+a_runtime_inside_a_package_folder_is_not_part_of_that_package() {
+    var folder = TempFolder("programs_toolchain_in_package");
+    var package = folder.path.join("package");
+    write_file(
+        package.join("module.pep"),
+        read_file(Path("compiler").join("testdata").join("toolchain_in_package").join("module.pep"))
+    );
+    # A copy of this checkout's runtime, the toolchain's.
+    var runtime = package.join(".pepper").join("runtime");
+    var skip = "../runtime/".size;
+    for (var path in glob("../runtime/**/*.pep")) {
+        if (path.is_file()) {
+            var text = path.to_string();
+            write_file(runtime.join(text.substr_bytes(skip, text.size - skip)), read_file(path));
+        }
+    }
+    var source = folder.path.join("program").join("main.pep");
+    write_file(source, "main(): int {\n    print(\"built\");\n    return 0;\n}\n");
+    var program = folder.path.join("program").join("main" + toolchain.executable_suffix());
+    var built = run(
+        process
+            .Command(tool("pep-build").to_string())
+            .arguments(
+                [source.to_string(), "-o", program.to_string(), "--build", folder.path.join("build").to_string()]
+            )
+            .environment("PEPPER_RUNTIME", runtime.to_string())
+    );
+    expect_exit(built, 0);
+    var output = run(process.Command(program.to_string()));
+    expect_exit(output, 0);
+    expect_equal(output.stdout, "built\n");
 }
 
 # ── moves ───────────────────────────────────────────────────────────────────

@@ -230,6 +230,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   folder above the working directory. `load_program` records the
   runtime's folders as keys (`Program.runtime_dirs`) for
   `Program.in_runtime`, which the build's compilation units also read.
+  It also passes the folder of the runtime's sources to `load`, whose
+  `ModuleRoots` looks for a file's `module.pep` no higher than that
+  folder: a toolchain installed in a package's folder must not make the
+  runtime's files part of that package's module (#284).
   - `import "x"` (`Import.is_local`) goes through `files.resolve_local`,
     which tries `x.pep` beside the file and then `x/module.pep`. A file
     target must be in the same module (`ModuleRoots.placement`); otherwise
