@@ -21133,6 +21133,13 @@ prints.</p>
     2 |     return frob(1);
       |            ^~~~
 </code></pre>
+<p><strong>A call of a local or parameter that is not a function</strong>, such as one
+holding what a <a href="language/function-types.html">generic function with no required arguments</a>
+returned:</p>
+<pre><code class="language-text">main.pep:6:12: error: called object type 'String' is not a function
+    6 |     return f() == "n" ? 0 : 1;
+      |            ^
+</code></pre>
 <p><strong>A type name that does not exist</strong>, often a misspelled type or a missing
 <a href="language/modules.html">import</a>:</p>
 <pre><code class="language-text">main.pep:2:12: error: unknown type name 'Frob'
