@@ -205,7 +205,9 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
      extension is released from its own repository, pep-lang/vscode-pepper.
   3. Once it is published, the workflow pushes the branch
      `release/start-0.10.0-dev`, which starts the next minor version on
-     main, unless main has already moved on; a major version is started by
+     main, unless main has already moved on or that branch has an open
+     pull request (a branch left from an earlier release, as a patch
+     release finds, is replaced); a major version is started by
      hand. GitHub Actions may not open pull requests in this repository, so
      the run's summary (and a warning) links to open its pull request; open
      it, and it merges once its CI passes, as any pull request does. Until

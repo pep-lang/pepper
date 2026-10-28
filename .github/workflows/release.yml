@@ -346,8 +346,10 @@ jobs:
           IFS=. read -r major minor _ <<< "$RELEASED"
           next="$major.$((minor + 1)).0-dev"
           branch="release/start-$next"
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
-            echo "$branch exists already"
+          # A branch left from an earlier release whose pull request merged
+          # (0.11.1 reused 0.11.0's) is stale: replace it.
+          if [ -n "$(gh pr list --head "$branch" --state open --json number --jq '.[]')" ]; then
+            echo "$branch has an open pull request already"
             exit 0
           fi
           git switch -c "$branch"
@@ -360,7 +362,7 @@ jobs:
             "v$RELEASED is released: main now builds and publishes $next (scripts/set-version.sh)." \
             > "$RUNNER_TEMP/message.txt"
           git commit -a -F "$RUNNER_TEMP/message.txt"
-          git push origin "$branch"
+          git push --force origin "$branch"
           printf '%s\n' \
             "v$RELEASED is released. This sets main's version to \`$next\` (scripts/set-version.sh), so each merge publishes the \`v$next\` prerelease that CI installs." \
             > "$RUNNER_TEMP/body.md"
