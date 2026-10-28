@@ -100,7 +100,10 @@ too:
   `Box<int>.map<long>`, `Box<int>.wrap<int>`) or picked by the function
   type it flows into, as for generic functions:
   `var m: ((int) => String) => Box<String> = b.map;` is `b.map<String>`.
-  Without either, `var m = b.map;` is an error that asks for them.
+  Without either, `var m = b.map;` is an error that asks for them. Inside
+  a method, the bare name with its type arguments (`map<String>`) is
+  `this.map<String>`, a value even when the method takes no arguments;
+  the parentheses (`map<String>(f)`) call it.
 - **A type with a constructor that takes no arguments.** `Box<int>` on its
   own names the constructor only when the constructor needs at least one
   argument; otherwise it is a call, `Box<int>()`. The same goes for a generic

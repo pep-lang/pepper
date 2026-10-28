@@ -41,14 +41,8 @@ extern ushort __wasi_args_sizes_get(void* count, void* buffer_size);
 extern ushort __wasi_args_get(void* values, void* buffer);
 extern void _Exit(int status);
 extern int fflush(void* stream);
-# C's `exit`. The IR name `exit` is Pepper's deprecated `exit`, so the
-# symbol is spelled with LLVM's `\x01` (no prefix added; Mach-O's C
-# symbols start with `_`) until pep-lang/pepper#76 is fixed.
-[Target(!OS(Mac))]
-[Link(name = "\x01exit")]
-extern void _c_exit(int status);
-[Target(OS(Mac))]
-[Link(name = "\x01_exit")]
+# C's `exit`.
+[Link(name = "exit")]
 extern void _c_exit(int status);
 
 # Nonzero in the copy `process.fork()` starts: its exit skips the parent's

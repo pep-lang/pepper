@@ -7,7 +7,7 @@ import compiler.link;
 import [NAMESPACE_SEPARATOR] from compiler.link;
 import llvm;
 import compiler.sema;
-import [Expression, Module, TypeName, VariableDef] from compiler.sema;
+import [Expression, FunctionDef, Module, TypeName, VariableDef] from compiler.sema;
 import [Address] from "address";
 import "address";
 import "calls";
@@ -134,6 +134,14 @@ extend Generator {
     ## registered via `llvm.global_ctors` so it runs before `main`.
     emit_globals(module: Module): Result<void> {
         var non_const = Array<(String, Expression, uint)>();
+        # The constructor of each `[Value]` struct that has one, which
+        # `value_struct_constant` reads.
+        var value_ctors = HashMap<String, FunctionDef>();
+        for (var st in module.structs) {
+            if (is_value_struct(st) and st.constructors.count == 1) {
+                value_ctors[st.name] = st.constructors[0];
+            }
+        }
         for (var variable in module.globals) {
             var ty_string = variable.ty.to_string();
             llvm.Type llvm_ty;
@@ -207,11 +215,13 @@ extend Generator {
                             constant = true;
                         }
                     }
-                    # `const X = "text";`: a `StringConstant` of literal
-                    # bytes. Storing it at startup would keep the bytes in
-                    # every program, read or not (pepper#155).
+                    # `const X = "text";`, a `StringConstant` of literal
+                    # bytes, or a `[Value]` struct of constants such as
+                    # `Table("text", 4)`. Storing it at startup would keep
+                    # the bytes in every program, read or not (pepper#155,
+                    # pepper#269).
                     FunctionCall(node) => {
-                        var value = string_constant_value(node, ty_string);
+                        var value = value_struct_constant(node, ty_string, value_ctors);
                         if (value.is_value()) {
                             global.set_initializer(value.value());
                             constant = true;
@@ -345,48 +355,194 @@ extend Generator {
         return Result<void>.ok();
     }
 
-    ## The constant `StringConstant` that `call`, `StringConstant(raw, size,
-    ## length)` of literals, makes for a global of type `ty`, as its
-    ## constructor would; none for any other call.
-    string_constant_value(call: sema.FunctionCallExpression, ty: String): llvm.Value? {
+    ## The constant that `call`, a call of the constructor of `[Value]`
+    ## struct `ty`, makes, when that constructor only stores constants and
+    ## its parameters in fields and every argument is a constant (a literal,
+    ## or such a call): `StringConstant(raw, size, length)` of literals,
+    ## say. None for any other call, which runs at startup as before, side
+    ## effects and all.
+    value_struct_constant(
+        call: sema.FunctionCallExpression, ty: String, ctors: HashMap<String, FunctionDef>
+    ): llvm.Value? {
         var none = Optional<llvm.Value>.Empty;
-        if (call.function != sema.STRING_CONSTANT
-            or ty != sema.STRING_CONSTANT
-            or call.args.count != 3
-            or !(call.args[0] is StringLiteral(_))) {
-            return none;
-        }
         var desc = structs.try_get(ty);
-        if (!desc.is_value()) {
+        if (call.function != ty or !desc.is_value()) {
             return none;
         }
-        var string_type = desc.value().llvm_type;
-        var values = Array<llvm.Value>();
-        for (var i in 0..string_type.field_count()) {
-            # The constructor sets `_data`, `_size` and `_length` from its
-            # parameters in that order.
-            var (field_name, _) = desc.value().fields[i];
-            if (field_name == "_data") {
-                var data = codegen_expr(call.args[0]);
-                if (data.is_err()) {
-                    return none;
-                }
-                values.append(data.value());
-                continue;
-            }
-            if (field_name != "_size" and field_name != "_length") {
+        var ctor = ctors.try_get(ty);
+        if (!ctor.is_value() or ctor.value().parameters.count < call.args.count) {
+            return none;
+        }
+        sema.full_body(ctor.value());
+        if (!ctor.value().body.is_value()) {
+            return none;
+        }
+        # Each parameter's argument, read in the caller's scope; one left
+        # out takes the parameter's default.
+        var params = HashMap<String, Expression>();
+        for (var i in 0..ctor.value().parameters.count) {
+            var param = ctor.value().parameters[i];
+            if (i < call.args.count and !(call.args[i] is DefaultArgument(_))) {
+                params[param.name] = call.args[i];
+            } else if (param.default.is_value()) {
+                params[param.name] = param.default.value();
+            } else {
                 return none;
             }
-            match (call.args[field_name == "_size" ? 1 : 2]) {
-                IntLiteral(v) => {
-                    values.append(string_type.field(i).const_int(v));
+        }
+        var llvm_type = desc.value().llvm_type;
+        var fields = Array<llvm.Value>();
+        for (var i in 0..llvm_type.field_count()) {
+            fields.append(llvm_type.field(i).zero());
+        }
+        # The body sema makes: `var this = Default<T>;`, a store per field
+        # default and per assignment, `return this;`.
+        for (var item in ctor.value().body.value().items) {
+            match (item) {
+                Declaration(declaration) => {
+                    match (declaration) {
+                        Variable(variable) => {
+                            if (variable.name != "this") {
+                                return none;
+                            }
+                        }
+                        else => {
+                            return none;
+                        }
+                    }
+                }
+                Return(ret) => {
+                    if (!ret.expr.is_value() or !(ret.expr.value() is SymbolRef(_))) {
+                        return none;
+                    }
+                }
+                Expression(expression) => {
+                    var stored = store_constant(expression, params, desc.value(), fields, ctors);
+                    if (!stored) {
+                        return none;
+                    }
                 }
                 else => {
                     return none;
                 }
             }
         }
-        return Optional<llvm.Value>.Value(string_type.const_struct(values));
+        return Optional<llvm.Value>.Value(llvm_type.const_struct(fields));
+    }
+
+    ## Stores in `fields`, the constants of struct `desc`, what `statement`
+    ## of its constructor stores: `this.f = <constant>`, or `this.f = p` for
+    ## a parameter `p`, whose argument `params` holds.
+    ##
+    ## @returns whether `statement` is such a store of a constant
+    store_constant(
+        statement: Expression,
+        params: HashMap<String, Expression>,
+        desc: StructDesc,
+        fields: Array<llvm.Value>,
+        ctors: HashMap<String, FunctionDef>
+    ): bool {
+        match (statement) {
+            Binary(store) => {
+                if (store.op != sema.BinaryOp.Assign) {
+                    return false;
+                }
+                match (store.lhs) {
+                    MemberRef(member) => {
+                        if (!(member.lhs is ThisRef)) {
+                            return false;
+                        }
+                        var rhs = store.rhs;
+                        match (rhs) {
+                            SymbolRef(symbol) => {
+                                var arg = params.try_get(symbol.id);
+                                if (!arg.is_value()) {
+                                    return false;
+                                }
+                                rhs = arg.value();
+                            }
+                            else => {}
+                        }
+                        for (var i in 0..desc.fields.count) {
+                            var (field_name, field_ty) = desc.fields[i];
+                            if (field_name == member.name) {
+                                var value = constant_value(rhs, field_ty, desc.llvm_type.field(i), ctors);
+                                if (!value.is_value()) {
+                                    return false;
+                                }
+                                fields[i] = value.value();
+                                return true;
+                            }
+                        }
+                    }
+                    else => {}
+                }
+            }
+            else => {}
+        }
+        return false;
+    }
+
+    ## The constant `expression`, an argument or a field default, is in a
+    ## slot of type `ty` (`llvm_ty` in LLVM): a literal of the slot's kind,
+    ## a type's default, a raw string literal's bytes, or a `[Value]`
+    ## struct's constant (`value_struct_constant`); none for anything else.
+    constant_value(
+        expression: Expression, ty: String, llvm_ty: llvm.Type, ctors: HashMap<String, FunctionDef>
+    ): llvm.Value? {
+        var kind = llvm_ty.kind();
+        match (expression) {
+            IntLiteral(v) => {
+                if (kind == llvm.TypeKind.Integer) {
+                    return Optional<llvm.Value>.Value(llvm_ty.const_int(v));
+                }
+            }
+            FloatLiteral(v) => {
+                if (is_float_type_kind(kind)) {
+                    return Optional<llvm.Value>.Value(llvm_ty.const_real(v));
+                }
+            }
+            BoolLiteral(v) => {
+                if (kind == llvm.TypeKind.Integer) {
+                    return Optional<llvm.Value>.Value(llvm_ty.const_uint(v ? 1 : 0));
+                }
+            }
+            PointerLiteral => {
+                return Optional<llvm.Value>.Value(llvm_ty.zero());
+            }
+            # An enum field's zero: its default case, as `zero_for` writes it.
+            Cast(node) => {
+                if (node.kind == sema.CastKind.Synthesized and kind == llvm.TypeKind.Integer) {
+                    match (node.expr) {
+                        IntLiteral(v) => {
+                            return Optional<llvm.Value>.Value(llvm_ty.const_int(v));
+                        }
+                        else => {}
+                    }
+                }
+            }
+            # A type's default, as a store would make it: an enum's is its
+            # default case.
+            Default(default_ty) => {
+                var made = codegen_default_expr(default_ty);
+                if (made.is_ok()) {
+                    return Optional<llvm.Value>.Value(made.value());
+                }
+            }
+            StringLiteral(node) => {
+                if (node.is_raw and kind == llvm.TypeKind.Pointer) {
+                    var data = codegen_expr(expression);
+                    if (data.is_ok()) {
+                        return Optional<llvm.Value>.Value(data.value());
+                    }
+                }
+            }
+            FunctionCall(node) => {
+                return value_struct_constant(node, ty, ctors);
+            }
+            else => {}
+        }
+        return Optional<llvm.Value>.Empty;
     }
 
     # Thread-locals

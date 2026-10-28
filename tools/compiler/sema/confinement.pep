@@ -644,11 +644,13 @@ struct _Lock {
     }
 }
 
-## A local in scope: its region (-1 for none) and type.
+## A local in scope: its region (-1 for none), type, and whether the
+## builder made it (`VariableDef.hidden`).
 struct _ScopeLocal {
     var name: String;
     var region: long;
     var ty: TypeName;
+    var hidden = false;
 
     construct(name: String, region: long, ty: TypeName) {
         this.name = name;
@@ -2680,6 +2682,7 @@ struct _RegionWalk {
             joined = link(r, value, variable.default.value());
         }
         declare(variable.name, joined, declared);
+        scopes.last().last().hidden = variable.hidden;
     }
 
     ## The lock of the first leaf of `value` that is locked, or -1.
@@ -2968,6 +2971,18 @@ struct _RegionWalk {
     ## disconnected value hands it over; a raw slot (runtime only) hands
     ## over a value the runtime promises nothing else references.
     eval_move(value: Expression): long {
+        if (value is SymbolRef(hidden)) {
+            var found = local(hidden.id);
+            if (found.is_value() and found.value().hidden) {
+                # The builder's own hand-over out of a `?` or `match`
+                # value's hidden local (`__try_N`, `__match_N`): the value
+                # keeps its links, and the local, now null, references
+                # nothing.
+                var kept = found.value().region;
+                found.value().region = -1;
+                return kept;
+            }
+        }
         moves += 1;
         if (value is SymbolRef(node)) {
             var found = local(node.id);

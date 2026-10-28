@@ -73,6 +73,57 @@ binds_a_generic_overload_beside_a_plain_one() {
     );
 }
 
+# A generic method's bare name with its type arguments is its value
+# (#274), in a method, an extension and a closure, static or not, with
+# or without parameters: it was built as a call, typed as the method's
+# result.
+[Test]
+names_a_generic_method_by_its_bare_name_as_a_value() {
+    _builds_and_runs(
+        "generic_method_value",
+        [
+            (
+                "main.pep",
+                "struct Tags<U> {\n    var tag = \"tag\";\n    tag_of<T>(): String {\n        return tag;\n    }\n    pick<T>(x: T): String {\n        return tag;\n    }\n    static make<T>(): String {\n        return \"made\";\n    }\n    tag_later(): () => String {\n        return tag_of<U>;\n    }\n    pick_later(): (U) => String {\n        return pick<U>;\n    }\n    make_later(): () => String {\n        return make<U>;\n    }\n    in_closure(): () => String {\n        return () => {\n            var f = tag_of<int>;\n            return f();\n        };\n    }\n}\ntrait Later {\n    extended(): () => String;\n}\nextend Tags<bool> with Later {\n    extended(): () => String {\n        return tag_of<int>;\n    }\n}\nmain(): int {\n    var t = Tags<bool>();\n    if (t.extended()() != \"tag\") {\n        return 3;\n    }\n    if (t.tag_later()() != \"tag\" or t.pick_later()(true) != \"tag\") {\n        return 1;\n    }\n    return t.make_later()() == \"made\" and t.in_closure()() == \"tag\" ? 0 : 2;\n}\n"
+            )
+        ]
+    );
+}
+
+# A struct whose methods only name a generic method as a value on `this`
+# defers their bodies (`defer_methods` looks for calls only): given back
+# late, `this.tag_of<U>` must still be specialized.
+[Test]
+names_a_generic_method_as_a_value_in_a_body_given_back_late() {
+    _builds_and_runs(
+        "generic_method_value_bodies",
+        [
+            (
+                "main.pep",
+                "struct Later<U> {\n    var tag = \"tag\";\n    tag_of<T>(): String {\n        return tag;\n    }\n    tag_later(): () => String {\n        return this.tag_of<U>;\n    }\n}\nmain(): int {\n    var f = Later<bool>().tag_later();\n    return f() == \"tag\" ? 0 : 1;\n}\n"
+            )
+        ]
+    );
+}
+
+# `this.pick`, a generic method picked by the expected type, in a generic
+# struct (#276): bound in the base as `this.pick<U>`, its name kept `U`
+# when the struct was specialized, while the bare `pick` worked. Built
+# whole, the bare `pick` failed too: its body was given back after the
+# last round of method specializations, so `pick<bool>` was never made.
+[Test]
+names_a_generic_method_on_this_picked_by_the_expected_type() {
+    _builds_and_runs(
+        "generic_method_value_this",
+        [
+            (
+                "main.pep",
+                "struct Later<U> {\n    var tag = \"tag\";\n    pick<T>(x: T): String {\n        return tag;\n    }\n    picked(): (U) => String {\n        return pick;\n    }\n    this_picked(): (U) => String {\n        return this.pick;\n    }\n    this_named(): (U) => String {\n        return this.pick<U>;\n    }\n}\nmain(): int {\n    var l = Later<bool>();\n    if (l.picked()(true) != \"tag\" or l.this_picked()(false) != \"tag\") {\n        return 1;\n    }\n    return l.this_named()(true) == \"tag\" ? 0 : 2;\n}\n"
+            )
+        ]
+    );
+}
+
 # A closure in a generic method of a compilation unit below, specialized in this
 # compilation unit, capturing a local whose type is inferred: the compilation
 # unit walked only the structs it declared or extended, not the checked struct

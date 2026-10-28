@@ -475,6 +475,30 @@ reports_confinement_error(index: ulong) {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# The hidden local of a `?` or of a `match` over a call lets go of its
+# value once the value is read when the code moves what it gave, so the
+# move is accepted; a value another local or `this` still holds is not
+# (#266).
+[Test]
+moves_a_value_from_a_hidden_local() {
+    var folder = TempFolder("passes_hidden_local_moves");
+    expect_equal(check_programs(folder, hidden_local_move_programs(), true), 0 as ulong);
+}
+
+hidden_local_move_programs(): String[] {
+    return [
+        "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nrun(): Result<int, String> {\n    var f = make()?;\n    if (f.x == 0) {\n        var m = async.Mutex<Foo>(move(f));\n    }\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
+        "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nmaybe(): Foo? {\n    return Optional<Foo>.Value(Foo());\n}\n\nrun(): int? {\n    var f = maybe()?;\n    var m = async.Mutex<Foo>(move(f));\n    return Optional<int>.Value(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
+        "# expect: accepted\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nmain(): int {\n    if (make() is Ok(f)) {\n        var m = async.Mutex<Foo>(move(f));\n    }\n    while (make() is Ok(g)) {\n        var m = async.Mutex<Foo>(move(g));\n        break;\n    }\n    match (make()) {\n        Ok(h) => {\n            var m = async.Mutex<Foo>(move(h));\n        }\n        Err(e) => {}\n    }\n    return 0;\n}\n",
+        "# expect: accepted\nimport async;\n\nstruct Handle {\n    var p: __ptr<void>;\n\n    construct(p: __ptr<void>) {\n        this.p = p;\n    }\n}\n\nopen(): Result<__ptr<void>, String> {\n    return Result<__ptr<void>, String>.ok(__null);\n}\n\nrun(): Result<int, String> {\n    var h = Handle(open()?);\n    var m = async.Mutex<Handle>(move(h));\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
+        "# expect: main.pep:15:35: error: 'f' cannot be moved: 'r' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nrun(): Result<int, String> {\n    var r = make();\n    var f = r?;\n    var m = async.Mutex<Foo>(move(f));\n    return Result<int, String>.ok(0);\n}\n\nmain(): int {\n    run();\n    return 0;\n}\n",
+        "# expect: main.pep:15:39: error: 'f' cannot be moved: 'r' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nmain(): int {\n    var r = make();\n    if (r is Ok(f)) {\n        var m = async.Mutex<Foo>(move(f));\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:21:39: error: 'f' cannot be moved: 'this' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmake(): Result<Foo, String> {\n    return Result<Foo, String>.ok(Foo());\n}\n\nstruct Holder {\n    var r: Result<Foo, String>;\n\n    construct() {\n        this.r = make();\n    }\n\n    run(): Result<int, String> {\n        var f = this.r?;\n        var m = async.Mutex<Foo>(move(f));\n        return Result<int, String>.ok(0);\n    }\n}\n\nmain(): int {\n    Holder().run();\n    return 0;\n}\n",
+        # A local of the user's named like a hidden one is checked as usual.
+        "# expect: main.pep:11:35: error: '__try_x' cannot be moved: 'keep' also references its value\nimport async;\n\nstruct Foo {\n    var x: int;\n}\n\nmain(): int {\n    var __try_x = Foo();\n    var keep = __try_x;\n    var m = async.Mutex<Foo>(move(__try_x));\n    return keep.x;\n}\n"
+    ];
+}
+
 confinement_error_programs(): String[] {
     return [
         # A value from outside moved into a locked one, and part of a locked
@@ -678,6 +702,48 @@ joins_the_runtime_overload_sets() {
         "# expect: main.pep:2:1: error: functions that differ only in their return type cannot be overloaded\nto_string(value: int): int { return value; }\nmain(): int { return to_string(0); }\n"
     ];
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
+# Each level of a nested array literal is an `Array<T>` specialization,
+# and keeps only the methods something uses (#210): `Array<T>` has generic
+# methods, so every level kept all 63, and the iterators, views and sorter
+# they name, 128 method bodies a level that every pass walked.
+[Test]
+nested_array_literals_keep_few_methods_per_level() {
+    var folder = TempFolder("passes_nested_literal_methods");
+    var at_8 = _bodies_at_depth(folder, 8);
+    var at_16 = _bodies_at_depth(folder, 16);
+    var at_24 = _bodies_at_depth(folder, 24);
+    # As many more per level at any depth: linear.
+    expect_equal(at_24 - at_16, at_16 - at_8);
+    # 67 a level now, 128 before.
+    var per_level = (at_16 - at_8) / 8;
+    if (per_level > 70) {
+        panic($"a level of a nested array literal keeps {per_level} method bodies");
+    }
+}
+
+# How many methods with bodies the structs have once the passes ran over a
+# program holding a nested array literal `depth` levels deep.
+_bodies_at_depth(folder: TempFolder, depth: ulong): ulong {
+    var root = folder.path.join($"depth{depth}");
+    Directory.create_all(root);
+    var main = root.join("main.pep");
+    File.write_text(
+        main, "main(): int {\n    var a = " + "[".repeat(depth) + "1" + "]".repeat(depth) + ";\n    return 0;\n}\n"
+    );
+    var program = link.load_program(main, link.Setup()).value();
+    var module = sema.merge(program).value();
+    sema.run_passes(module, program.target, program.sources()).value();
+    ulong bodies = 0;
+    for (var st in module.structs) {
+        for (var m in st.method_members) {
+            if (m.body.is_value()) {
+                bodies += 1;
+            }
+        }
+    }
+    return bodies;
 }
 
 # Deprecated methods the compiler calls for the source: a `for` loop's
@@ -996,6 +1062,11 @@ error_programs(): String[] {
         "# expect: accepted\npick<T>(x: T): T {\n    var s = x;\n    static (s) {\n        var t = \"ab\";\n        s = t;\n    }\n    return s;\n}\nmain(): int {\n    var p = pick<int>(1);\n    return 0;\n}\n",
         # Intrinsics: function pointers, `__ptr<T>`, typed intrinsics and SIMD arity.
         "# expect: main.pep:5:32: error: use of undeclared identifier 'g'\nf(): int { return 1; }\nmain(): int {\n    var p = __function_pointer(f);\n    var q = __function_pointer(g);\n    return 0;\n}\n",
+        # A call of a local or parameter that is not a function (#277); one
+        # declared in a block that ended is undeclared.
+        "# expect: main.pep:7:12: error: called object type 'String' is not a function\nname_of<T>(): String {\n    return \"n\";\n}\nmain(): int {\n    var f = name_of<int>;\n    return f() == \"n\" ? 0 : 1;\n}\n",
+        "# expect: main.pep:3:12: error: called object type 'int' is not a function\ntwice(n: int): int {\n    return n() * 2;\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:6:12: error: call to undeclared function 'g'\nmain(): int {\n    if (true) {\n        var g = 1;\n    }\n    return g();\n}\n",
         "# expect: main.pep:6:13: error: too few arguments to '__simd_add': expected 2, have 1\nmain(): int {\n    var x: __ptr<int> = null;\n    var y = __address<int>(x);\n    var b = __is_pod<__ptr<char>>();\n    var v = __simd_add<int>(1);\n    return 0;\n}\n",
         "# expect: main.pep:6:17: error: too many arguments to '__function_pointer': expected 1, have 2\nstruct S {\n    static h(): int { return 2; }\n    m(): int {\n        var p = __function_pointer(h);\n        var q = __function_pointer(1, 2);\n        return 0;\n    }\n}\nmain(): int { return 0; }\n",
         "# expect: accepted\nmain(): int {\n    var x: __ptr<int> = null;\n    var y = __address<int>(x);\n    var b = __is_pod<__ptr<char>>();\n    return 0;\n}\n",

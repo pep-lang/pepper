@@ -332,15 +332,23 @@ export struct ModuleRoots {
     var _normalized: HashMap<String, Path> = HashMap<String, Path>();
     # The project directory (normalized), if any.
     var _project: Path?;
+    # The runtime's directory (normalized), or "": no module folder above
+    # it holds its files, even when the toolchain sits in a module's folder.
+    var _runtime: String = "";
 
     ## Creates the module folders of a program built in the project
     ## directory `project`.
     ##
     ## @param project the project directory, if any
-    construct(project: Path?) {
+    ## @param runtime the runtime's directory, if any: its files belong to
+    ##   no module folder above it
+    construct(project: Path?, runtime: Path? = Optional<Path>.Empty) {
         if (project.is_value()) {
             var resolved = canonical_path(project.value());
             _project = Optional<Path>.Value(resolved.is_ok() ? resolved.value() : project.value());
+        }
+        if (runtime.is_value()) {
+            _runtime = normalized(runtime.value()).to_string();
         }
     }
 
@@ -372,7 +380,7 @@ export struct ModuleRoots {
         Path? root = Optional<Path>.Empty;
         if (dir.join(Path(MODULE_FILE)).is_file()) {
             root = Optional<Path>.Value(dir);
-        } else {
+        } else if (key != _runtime) {
             var parent = dir.parent();
             if (parent.is_value()) {
                 root = _of_dir(parent.value());

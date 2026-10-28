@@ -403,7 +403,7 @@ _declared(module: ast.Module, text: String): Array<(String, ast.Span, ast.Span, 
             }
             out.append((plain(decl.name), decl.span, decl.name_span, simple));
             # A re-check adds a field by checking its struct again
-            # (`_add_field`), which a generic method's specializations would
+            # (`_replace_struct`), which a generic method's specializations would
             # not survive.
             for (var f in decl.fields) {
                 var addable = simple and f.attributes.count == 0 and !f.is_const and !f.is_private;
