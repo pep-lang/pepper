@@ -2735,18 +2735,24 @@ a_native_table_compiles_a_packages_c_until_a_header_changes() {
     write_file(checkout.join("c").join("include").join("extra.h"), "#define EXTRA 100\n");
     expect_equal(hosts.build_and_run(project.dir, ["--no-build-scripts"]), $"{106 + offset}\n");
     expect_true(object.metadata().value().modified != old);
-    # Its clang flags could load a plugin from the package: refused.
+    # Flags that load no code, pepper-crypto's, are allowed too.
     var manifest = checkout.join("pep.toml");
     var original = read_file(manifest);
     # A checkout may hold CRLF lines.
-    write_file(manifest, original.replace("defines = [\"BASE=1\"]", "defines = [\"BASE=1\"]\nflags = [\"-w\"]"));
+    var crypto = "\"-O3\", \"-fno-strict-aliasing\", \"-fno-strict-overflow\", \"-fwrapv\", \"-Wno-pointer-sign\"";
+    write_file(manifest, original.replace("defines = [\"BASE=1\"]", $"defines = [\"BASE=1\"]\nflags = [{crypto}]"));
+    expect_equal(hosts.build_and_run(project.dir, ["--no-build-scripts"]), $"{106 + offset}\n");
+    # One that could load a plugin from the package is refused, at it.
+    write_file(
+        manifest,
+        original.replace("defines = [\"BASE=1\"]", $"defines = [\"BASE=1\"]\nflags = [{crypto}, \"-fplugin=x\"]")
+    );
     var refused = run(hosts.command(tool("pep-build").to_string(), project.dir, ["--no-build-scripts"]));
     expect_exit(refused, 1);
     expect_contains(
         refused.stderr,
-        "error: the dependency 'cnative' gives its '[native]' C the clang flags '-w', which could load code from the package, and '--no-build-scripts'"
+        "pep.toml:8:97: error: '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses the clang flag '-fplugin=x' of the dependency 'cnative', which could load code or name a file;"
     );
-    expect_equal(hosts.build_and_run(project.dir), $"{106 + offset}\n");
     write_file(manifest, original);
 
     # Vendored, with no host or cache, the copy holds its C.

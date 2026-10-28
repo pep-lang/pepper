@@ -246,7 +246,8 @@ before any of its code is in a program you chose to run. So:
   `pepper test` and `pepper run` builds see too) fails instead of running a
   dependency's script, naming it. The project's own script still runs: it
   is your code. A [`[native]`](#native) table, which runs no package
-  code, compiles under it too, unless a dependency's has `flags`.
+  code, compiles under it too, unless a dependency's has `flags` that
+  could load code (see [`[native]`](#native)).
 
 The package [`build`](https://github.com/pep-lang/pepper-build), added to
 `[build-dependencies]` (`pepper package add --build pep-lang/pepper-build
@@ -300,9 +301,27 @@ system root (`--sysroot`), its optimization level (`-O`), and, for Linux
 and Android, `-fPIC`, then these flags, in the package's folder. The objects
 are linked into the program. A dependency's `[native]` table is
 compiled for every program that uses the package, and since it runs no
-package code, `--no-build-scripts` allows it; a dependency's `flags`
-could load a clang plugin from the package (`-fplugin=`), so with them it
-is refused, as a build script is.
+package code, `--no-build-scripts` allows it. A flag can make clang load
+code from the package (`-fplugin=`, `-Xclang -load`) or read or write a
+file, so under `--no-build-scripts` a dependency's `flags` must each be
+one of these, or the build fails with an error at the flag:
+
+- `-O0` to `-O3`, `-Os`, `-Oz`;
+- `-std=<name>`, and `-march=`, `-mcpu=` and `-mtune=` with a value of
+  letters, digits, `.`, `_`, `+` and `-`;
+- `-W<name>` (`-Wall`, `-Wno-pointer-sign`, `-Werror=format`), of letters,
+  digits, `_`, `+`, `-` and `=`, so never `-Wl,`, `-Wa,` or `-Wp,`;
+- `-f<name>` (`-fwrapv`, `-fno-strict-aliasing`), of letters, digits,
+  `_`, `+` and `-`, so never one with a `=` value, except `-fplugin`,
+  `-fpass-plugin`, `-fprofile…`, `-fmodule…`, `-fimplicit-module…`,
+  `-fsave-…`, `-ftime-trace…`, `-fcrash-…`, `-fintegrated-as`,
+  `-fproc-stat-report…` and `-fexperimental-openacc-macro-override`, and
+  their `-fno-` forms;
+- `-m<name>` (`-mavx2`, `-mno-sse4.2`), of letters, digits, `.`, `_`, `+`
+  and `-`, except `-mllvm`, `-mmlir` and `-mlink…`.
+
+Everything else is refused, `-I`, `-D`, `-include`, `-Xclang`, `@file`
+and `--` options among them (`include` and `defines` give the first two).
 
 **With a build script.** A package may have both: its script runs first,
 and its `PEP_OUT_DIR` is searched for headers, so the C can include one

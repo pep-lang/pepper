@@ -33,7 +33,7 @@ short, and `pepper help build` runs it.
 | `--locked` | Fail, rather than fetch, when `pep.lock` is out of date with `pep.toml` | off, or `PEPPER_LOCKED` |
 | `--offline` | Fetch no dependency over the network; fail on one neither `.pep/deps` nor the download cache holds | off, or `PEPPER_OFFLINE` |
 | `--frozen` | Both `--locked` and `--offline` | off |
-| `--no-build-scripts` | Fail, rather than run it, when a dependency has a build script; a `[native]` table still compiles, unless it has `flags` | off, or `PEPPER_NO_BUILD_SCRIPTS` |
+| `--no-build-scripts` | Fail, rather than run it, when a dependency has a build script; a `[native]` table still compiles, unless a dependency's has `flags` that could load code ([which it allows](projects.md#native)) | off, or `PEPPER_NO_BUILD_SCRIPTS` |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
@@ -170,8 +170,17 @@ have not changed is not compiled again.
 `--no-build-scripts` (or `PEPPER_NO_BUILD_SCRIPTS=1`) fails instead of
 running a dependency's script, which runs that package's code on this
 machine; the project's own script still runs, and so does every
-`[native]` table, which runs no package code, except a dependency's table with
-`flags`, which could load a clang plugin from the package and is refused:
+`[native]` table, which runs no package code. A dependency's table is
+refused when one of its `flags` is not on the short list that cannot load
+code or name a file ([`[native]`](projects.md#native) lists it), since a
+flag such as `-fplugin=` makes clang load a plugin from the package. The
+error is at the flag in the dependency's `pep.toml`:
+
+```text
+app/.pep/deps/github.com/someone/native/pep.toml:8:10: error: '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses the clang flag '-fplugin=x' of the dependency 'native', which could load code or name a file; it allows only -O0 to -O3, -Os, -Oz, -std=, -march=, -mcpu=, -mtune= and plain -W, -f and -m options; read the flag, and build without that option to use it
+```
+
+A dependency's build script is refused outright:
 
 ```text
 error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
