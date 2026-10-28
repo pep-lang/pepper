@@ -478,6 +478,73 @@ reads_target_dependencies() {
     );
 }
 
+# `--no-build-scripts` passes only `[native]` flags that load no code and
+# name no file: pepper-crypto's pass.
+[Test]
+no_build_scripts_allows_only_native_flags_that_load_no_code() {
+    var allowed = [
+        "-O3",
+        "-Os",
+        "-Oz",
+        "-fno-strict-aliasing",
+        "-fno-strict-overflow",
+        "-fwrapv",
+        "-Wno-pointer-sign",
+        "-Wall",
+        "-Werror=format",
+        "-std=c11",
+        "-std=c++17",
+        "-mavx2",
+        "-mno-sse4.2",
+        "-march=x86-64-v3"
+    ];
+    var refused = [
+        "-fplugin=x",
+        "-fplugin",
+        "-fpass-plugin=x.so",
+        "-fprofile-use",
+        "-fno-profile-generate",
+        "-fmodules",
+        "-fmodule-map-file=m",
+        "-fsave-optimization-record",
+        "-fno-integrated-as",
+        "-fvisibility=hidden",
+        "-Xclang",
+        "-load",
+        "-Wl,-rpath,x",
+        "-Wa,x",
+        "-Wp,-MD,x",
+        "-mllvm",
+        "-mlink-bitcode-file",
+        "-march=../x",
+        "@file",
+        "-include",
+        "-Ifoo",
+        "-DX",
+        "--sysroot=x",
+        "-O",
+        "-O4",
+        "-std=",
+        "-W",
+        "-f",
+        "x.c",
+        ""
+    ];
+    # Named, so a failure says which flag.
+    var wrong = Array<String>();
+    for (var flag in allowed) {
+        if (!driver.native_flag_allowed(flag)) {
+            wrong.append(flag);
+        }
+    }
+    for (var flag in refused) {
+        if (driver.native_flag_allowed(flag)) {
+            wrong.append(flag);
+        }
+    }
+    expect_equal(", ".join(wrong), "");
+}
+
 [Test]
 reads_native_tables() {
     var parsed = link.parse_manifest(
@@ -497,6 +564,7 @@ reads_native_tables() {
     expect_equal(", ".join(windows.flags), "-Wall");
     expect_equal(", ".join(windows.pkg_config), "zlib");
     expect_equal(m.text.substr_bytes(windows.source_spans[1].start, 9), "\"c/win.c\"");
+    expect_equal(m.text.substr_bytes(windows.flag_spans[0].start, 7), "\"-Wall\"");
     var linux = m.native_for(link.Target.parse("x86_64-unknown-linux-gnu").value()).value();
     expect_equal(", ".join(linux.sources), "c/*.c");
     expect_equal(", ".join(linux.link), "m");

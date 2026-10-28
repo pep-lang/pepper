@@ -14,6 +14,7 @@ import [Directory, File, Path] from io;
 import compiler.link;
 import os;
 import process;
+import regex;
 import toolchain;
 import "linker";
 
@@ -101,10 +102,19 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
         # runs no package code, so `refuse` allows it, but for its `flags`.
         if (native.is_value()) {
             # A clang flag can load a plugin from the package (`-fplugin=`).
-            if (inputs.refuse and !own and !native.value().flags.is_empty) {
-                return Result<ScriptOutput, String>.err(
-                    $"the dependency '{name}' gives its '[native]' C the clang flags '{" ".join(native.value().flags)}', which could load code from the package, and '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses them; read them, and build without that option to use them"
-                );
+            if (inputs.refuse and !own) {
+                var flags = native.value().flags;
+                for (var k in 0..flags.count) {
+                    if (!native_flag_allowed(flags[k])) {
+                        var problem = link.ManifestError(
+                            $"'--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses the clang flag '{flags[k]}' of the dependency '{name}', which could load code or name a file; it allows only -O0 to -O3, -Os, -Oz, -std=, -march=, -mcpu=, -mtune= and plain -W, -f and -m options; read the flag, and build without that option to use it",
+                            native.value().flag_spans[k]
+                        );
+                        return Result<ScriptOutput, String>.err(
+                            link.render_manifest_errors(manifest.path, manifest.text, [problem])
+                        );
+                    }
+                }
             }
             var built = _build_native(name, manifest, native.value(), script.value().is_value(), inputs, output);
             if (built.is_err()) {
@@ -113,6 +123,30 @@ export run_build_scripts(entry: Path, inputs: ScriptInputs): Result<ScriptOutput
         }
     }
     return Result<ScriptOutput, String>.ok(output);
+}
+
+## Whether `--no-build-scripts` lets a dependency's `[native]` table pass
+## `flag` to clang: only when it is on a short list that cannot load code
+## or name a file to read or write. Those are `-O0` to `-O3`, `-Os`, `-Oz`,
+## `-std=<name>`, `-march=`, `-mcpu=` and `-mtune=` with a plain value, and
+## `-W<name>`, `-f<name>` and `-m<name>` of letters, digits, `-`, `_` and
+## `+` (`-W` may add `=<value>`, `-m` may add `.`), less the `-f` and `-m`
+## families that load code or take a file: `-fplugin`, `-fpass-plugin`,
+## `-fprofile`, `-fmodule`, `-fimplicit-module`, `-fsave-`,
+## `-ftime-trace`, `-fcrash-`, `-fintegrated-as`, `-mllvm` and `-mlink`
+## (and their `no-` forms).
+##
+## @param flag one of the table's `flags`
+## @returns whether the flag is allowed
+export native_flag_allowed(flag: String): bool {
+    # No `,` (`-Wl,`), `/`, `@` or separate argument (`-Xclang`) gets through.
+    var allowed = regex.Regex(
+        "^(-O[0-3sz]|-std=[A-Za-z0-9+]+|-m(arch|cpu|tune)=[A-Za-z0-9_.+-]+|-W[A-Za-z0-9][A-Za-z0-9_+=-]*|-f[A-Za-z0-9][A-Za-z0-9_+-]*|-m[A-Za-z0-9][A-Za-z0-9_.+-]*)$"
+    );
+    var refused = regex.Regex(
+        "^(-f(no-)?(plugin|pass-plugin|profile|module|implicit-module|save-|time-trace|crash-|integrated-as)|-m(no-)?(llvm|link))"
+    );
+    return allowed.is_match(flag) and !refused.is_match(flag);
 }
 
 # The output of the build script `script` of the package `name`, whose

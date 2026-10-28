@@ -411,6 +411,8 @@ export struct Native {
     var defines: String[] = Array<String>();
     ## `flags`: more clang flags for every source.
     var flags: String[] = Array<String>();
+    ## Where each of `flags` is written.
+    var flag_spans: Span[] = Array<Span>();
     ## `link`: libraries to link by name, as `-l` adds.
     var link: String[] = Array<String>();
     ## `pkg-config`: libraries `pkg-config` finds, whose flags compile the
@@ -426,6 +428,7 @@ export struct Native {
         include.append_all(other.include);
         defines.append_all(other.defines);
         flags.append_all(other.flags);
+        flag_spans.append_all(other.flag_spans);
         link.append_all(other.link);
         pkg_config.append_all(other.pkg_config);
     }
@@ -1134,6 +1137,9 @@ struct _Reader {
                 table.defines = strings(path, key, value);
             } else if (key == "flags") {
                 table.flags = strings(path, key, value);
+                for (var flag in table.flags) {
+                    table.flag_spans.append(item_span(path, flag));
+                }
             } else if (key == "link") {
                 table.link = strings(path, key, value);
             } else if (key == "pkg-config") {
