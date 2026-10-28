@@ -3,7 +3,7 @@
 ## that names no function, extern or struct is reported.
 
 import [error_at] from "common";
-import [Block, Expression, FunctionDef, Module] from "model";
+import [Block, Expression, FunctionDef, Module, TypeName] from "model";
 import "named_arguments";
 import [PassState] from "state";
 import [tuple_constructor_labels] from "tuple_literals";
@@ -128,14 +128,24 @@ export resolve_resolvables(module: Module, report_missing: bool, state: PassStat
 
 _check_calls_in(function: FunctionDef, known: _Known, type_params: HashSet<String>, state: PassState) {
     if (function.body.is_value()) {
-        _check_calls_in_block(function.body.value(), _CallChecker(known, type_params, state));
+        var checker = _CallChecker(known, type_params, state);
+        for (var p in function.parameters) {
+            checker.locals.append((p.name, p.ty));
+        }
+        _check_calls_in_block(function.body.value(), checker);
     }
 }
 
 ## Declarations' initializers are not read: this check skips them.
 _check_calls_in_block(block: Block, checker: _CallChecker) {
+    var outer = checker.locals.count;
     for (var item in block.items) {
         match (item) {
+            Declaration(declaration) => {
+                if (declaration is Variable(variable)) {
+                    checker.locals.append((variable.name, variable.ty));
+                }
+            }
             Expression(e) => {
                 rewrite_expression(e, checker);
             }
@@ -161,13 +171,19 @@ _check_calls_in_block(block: Block, checker: _CallChecker) {
             else => {}
         }
     }
+    # The block's locals go out of scope.
+    checker.locals.truncate(outer);
 }
 
-## Reports each call that names no function, extern or struct.
+## Reports each call that names no function, extern or struct, or that
+## names a local or parameter, which is not a function (a call through
+## one of function type is an `Invoke` by now).
 struct _CallChecker {
     var known: _Known;
     var type_params: HashSet<String>;
     var state: PassState;
+    ## The parameters and locals in scope, with their types, innermost last.
+    var locals: Array<(String, TypeName)> = Array<(String, TypeName)>();
 
     construct(known: _Known, type_params: HashSet<String>, state: PassState) {
         this.known = known;
@@ -196,10 +212,29 @@ struct _CallChecker {
                 or type_params.contains(function)
                 or tuple_constructor_labels(function).is_value();
             if (!known_name and !builtin) {
-                state.report(error_at($"call to undeclared function '{function}'", call.loc));
+                var local = _local_type(function);
+                if (local.is_value() and !local.value().is_auto()) {
+                    var ty = local.value().to_string();
+                    state.report(error_at($"called object type '{ty}' is not a function", call.loc));
+                } else {
+                    state.report(error_at($"call to undeclared function '{function}'", call.loc));
+                }
             }
         }
         return e;
+    }
+
+    ## The type of the innermost local or parameter named `name`.
+    _local_type(name: String): TypeName? {
+        var i = locals.count;
+        while (i > 0) {
+            i -= 1;
+            var (local, ty) = locals[i];
+            if (local == name) {
+                return Optional<TypeName>.Value(ty);
+            }
+        }
+        return Optional<TypeName>.Empty;
     }
 }
 

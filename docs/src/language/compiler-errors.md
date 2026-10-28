@@ -180,6 +180,16 @@ main.pep:2:12: error: call to undeclared function 'frob'
       |            ^~~~
 ```
 
+**A call of a local or parameter that is not a function**, such as one
+holding what a [generic function with no required arguments](function-types.md)
+returned:
+
+```text
+main.pep:6:12: error: called object type 'String' is not a function
+    6 |     return f() == "n" ? 0 : 1;
+      |            ^
+```
+
 **A type name that does not exist**, often a misspelled type or a missing
 [import](modules.md):
 
