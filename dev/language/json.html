@@ -586,7 +586,9 @@ main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
 <code>decode</code> never does. A document is always written indented.</li>
 <li>A struct's own conversion cannot be customized yet: a type converts as
 its properties do.</li>
-<li>Map keys must be <code>String</code>s.</li>
+<li>Map keys must be <code>String</code>s; a map with other keys is a compile-time
+error, as is a set, <code>Deque</code>, <code>PriorityQueue</code>, <code>ArrayView</code> or <code>BitSet</code>
+(convert it to an <code>Array</code> first).</li>
 </ul>
 <p>The <a href="../reference/json-module.html">reference</a> lists every function.</p>
 

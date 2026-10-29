@@ -2584,7 +2584,11 @@ the file, and can call itself.</p>
 <p><strong>The program starts at <code>main</code>.</strong> <code>main(): int</code> returns the process's exit
 code; return 0 for success. To receive the command-line arguments, declare
 it <code>main(args: String[]): int</code> instead. See
-<a href="language/functions.html#command-line-arguments-and-exit">Command-line arguments and exit</a>.</p>
+<a href="language/functions.html#command-line-arguments-and-exit">Command-line arguments and exit</a>. The
+entry file must declare it; a file of functions for C to call is a library
+(<code>--lib</code>), and building one as a program is an error:</p>
+<pre><code>lib.pep:1:1: error: no function named 'main' in 'lib.pep' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'
+</code></pre>
 </li>
 <li>
 <p><strong>Calls must match the declaration.</strong> Passing the wrong number of arguments
@@ -5277,7 +5281,8 @@ slices too, and follow the same rules.</li>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
-array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code>.</li>
+array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code> (the compiler says
+so: <code>cannot index 'Array&lt;int&gt;' with a value of type 'Range&lt;int&gt;'</code>).</li>
 <li>An <code>Array</code> is not itself <code>Comparable</code> (there are no conditional trait
 implementations yet), so <code>&lt;</code> between arrays and <code>sort()</code> on an array of
 arrays need <code>compare</code>: <code>rows.sort((a, b) =&gt; a.compare(b))</code>.</li>
@@ -20416,7 +20421,9 @@ main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
 <code>decode</code> never does. A document is always written indented.</li>
 <li>A struct's own conversion cannot be customized yet: a type converts as
 its properties do.</li>
-<li>Map keys must be <code>String</code>s.</li>
+<li>Map keys must be <code>String</code>s; a map with other keys is a compile-time
+error, as is a set, <code>Deque</code>, <code>PriorityQueue</code>, <code>ArrayView</code> or <code>BitSet</code>
+(convert it to an <code>Array</code> first).</li>
 </ul>
 <p>The <a href="language/../reference/json-module.html">reference</a> lists every function.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="toml"><a class="header" href="#toml">TOML</a></h1>
@@ -22510,10 +22517,13 @@ an error, and the compiler exits with status 2 after a short usage message.</p>
 <h3 id="the-entry-file"><a class="header" href="#the-entry-file">The entry file</a></h3>
 <pre><code class="language-bash">pepper build main.pep
 </code></pre>
-<p>The file that holds <code>main</code>. The compiler finds the files it imports on its
+<p>The file that holds <code>main</code> (without <code>--lib</code> or <code>--test</code>, an entry file
+with no <code>main</code> is an error). The compiler finds the files it imports on its
 own (see <a href="tools/../language/modules.html">Modules and imports</a>), so a program of many
-files is compiled by naming its entry file alone. Only the first file named
-is compiled; any others are ignored.</p>
+files is compiled by naming its entry file alone. Naming a second file is
+an error, except with <code>--test</code>, which builds the tests of several files:</p>
+<pre><code class="language-text">pep-build: error: 'b.pep' is not compiled: only the entry file is; import it from 'a.pep'
+</code></pre>
 <p>With no file, the compiler builds the project whose <code>pep.toml</code> is in the
 current folder or the nearest folder above it: its <code>[build]</code> table names the
 entry file and the output, and the build goes in the project's <code>.pep</code> (see

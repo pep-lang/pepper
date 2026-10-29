@@ -262,7 +262,11 @@ the file, and can call itself.</p>
 <p><strong>The program starts at <code>main</code>.</strong> <code>main(): int</code> returns the process's exit
 code; return 0 for success. To receive the command-line arguments, declare
 it <code>main(args: String[]): int</code> instead. See
-<a href="#command-line-arguments-and-exit">Command-line arguments and exit</a>.</p>
+<a href="#command-line-arguments-and-exit">Command-line arguments and exit</a>. The
+entry file must declare it; a file of functions for C to call is a library
+(<code>--lib</code>), and building one as a program is an error:</p>
+<pre><code>lib.pep:1:1: error: no function named 'main' in 'lib.pep' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'
+</code></pre>
 </li>
 <li>
 <p><strong>Calls must match the declaration.</strong> Passing the wrong number of arguments

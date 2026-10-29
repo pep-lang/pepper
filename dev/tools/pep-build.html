@@ -258,10 +258,13 @@ an error, and the compiler exits with status 2 after a short usage message.</p>
 <h3 id="the-entry-file"><a class="header" href="#the-entry-file">The entry file</a></h3>
 <pre><code class="language-bash">pepper build main.pep
 </code></pre>
-<p>The file that holds <code>main</code>. The compiler finds the files it imports on its
+<p>The file that holds <code>main</code> (without <code>--lib</code> or <code>--test</code>, an entry file
+with no <code>main</code> is an error). The compiler finds the files it imports on its
 own (see <a href="../language/modules.html">Modules and imports</a>), so a program of many
-files is compiled by naming its entry file alone. Only the first file named
-is compiled; any others are ignored.</p>
+files is compiled by naming its entry file alone. Naming a second file is
+an error, except with <code>--test</code>, which builds the tests of several files:</p>
+<pre><code class="language-text">pep-build: error: 'b.pep' is not compiled: only the entry file is; import it from 'a.pep'
+</code></pre>
 <p>With no file, the compiler builds the project whose <code>pep.toml</code> is in the
 current folder or the nearest folder above it: its <code>[build]</code> table names the
 entry file and the output, and the build goes in the project's <code>.pep</code> (see

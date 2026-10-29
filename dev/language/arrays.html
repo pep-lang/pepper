@@ -346,7 +346,8 @@ slices too, and follow the same rules.</li>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
-array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code>.</li>
+array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code> (the compiler says
+so: <code>cannot index 'Array&lt;int&gt;' with a value of type 'Range&lt;int&gt;'</code>).</li>
 <li>An <code>Array</code> is not itself <code>Comparable</code> (there are no conditional trait
 implementations yet), so <code>&lt;</code> between arrays and <code>sort()</code> on an array of
 arrays need <code>compare</code>: <code>rows.sort((a, b) =&gt; a.compare(b))</code>.</li>
