@@ -79,7 +79,8 @@ link    = ["m"]
 
 The build compiles each source with clang for the build's target and links
 the objects into the program. Since it runs no package code,
-`--no-build-scripts` allows it.
+`--no-build-scripts` allows it, as long as its `flags` are ones that cannot
+make clang load code (see [`[native]`](../tools/projects.md#native)).
 
 For anything more, such as generating a header or running `configure`, a
 [build script](../tools/projects.md#build-scripts) compiles the C code with
