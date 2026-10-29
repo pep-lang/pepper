@@ -334,6 +334,15 @@ export struct IpAddress {
     }
 }
 
+## Returns a hash of an address's family, bytes and scope id, what `==`
+## compares, so an `IpAddress` keys a `HashMap` or `HashSet` by its value.
+##
+## @param value the address to hash
+## @returns the 64-bit hash of the address
+export hash<IpAddress>(value: IpAddress): u64 {
+    return hash<(bool, ulong, ulong, uint)>((value._is_v6, value._high, value._low, value._scope_id));
+}
+
 ## An IP address and a port: where a socket is bound, or where it connects
 ## or sends.
 ##
@@ -486,6 +495,15 @@ export struct SocketAddress {
     !=(other: SocketAddress): bool {
         return !(this == other);
     }
+}
+
+## Returns a hash of a socket address's IP address and port, what `==`
+## compares, so a `SocketAddress` keys a `HashMap` or `HashSet` by its value.
+##
+## @param value the socket address to hash
+## @returns the 64-bit hash of the socket address
+export hash<SocketAddress>(value: SocketAddress): u64 {
+    return hash<(u64, u16)>((hash<IpAddress>(value._address), value._port));
 }
 
 ## Looks up the socket addresses of a host, with `port` attached to each.

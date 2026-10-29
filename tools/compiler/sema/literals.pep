@@ -1,11 +1,24 @@
 ## Literals: `resolve_literals`, and the conversion `resolve_injected` makes
 ## of each string literal. `-1` and `-2.5` become literals of their own, and
-## each string literal a `String` built from a raw one.
+## each string literal a `String` built from a raw one; `check_string_bytes`
+## then rejects such a `String` whose bytes are not UTF-8.
 
+import [unit_decls] from "checked";
+import "closures";
+import "common";
 import [Loc] from "loc";
 import [
-    CastExpression, CastKind, Expression, FunctionCallExpression, Module, StringLiteralExpression, TypeName, UnaryOp
+    CastExpression,
+    CastKind,
+    Expression,
+    FunctionCallExpression,
+    FunctionDef,
+    Module,
+    StringLiteralExpression,
+    TypeName,
+    UnaryOp
 ] from "model";
+import [PassState] from "state";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Folds each `-<literal>` in function bodies and global initializers into
@@ -115,3 +128,80 @@ export convert_string_literal(e: Expression): Expression {
     }
     return e;
 }
+
+## Reports each string literal whose bytes are not UTF-8 (written with
+## `\x80` to `\xFF`) that is still a `String` once `convert_to_traits` has
+## given every literal its slot's type. A `String` always holds UTF-8, so
+## such bytes are allowed only in a `StringConstant` or a C string.
+##
+## @param module the model
+## @param state the passes' state, which takes the error
+export check_string_bytes(module: Module, state: PassState) {
+    # A checked declaration was walked with its unit (its body is stashed).
+    var own = unit_decls(module);
+    var checker = _StringBytes(state);
+    # The declarations `convert_to_traits` walked, as it walks them.
+    for (var f in own.functions) {
+        checker.visit(f);
+    }
+    for (var st in own.structs) {
+        if (_is_generic_base(st)) {
+            continue;
+        }
+        for (var c in st.constructors) {
+            checker.visit(c);
+        }
+        for (var m in st.method_members) {
+            checker.visit(m);
+        }
+    }
+    for (var g in module.globals) {
+        if (g.default.is_value() and !module.checked.globals.contains(g.name)) {
+            rewrite_expression(g.default.value(), checker);
+        }
+    }
+}
+
+struct _StringBytes {
+    var state: PassState;
+
+    construct(state: PassState) {
+        this.state = state;
+    }
+
+    visit(f: FunctionDef) {
+        # A generic function's literals are checked in its specializations.
+        if (f.is_generic_func) {
+            return;
+        }
+        for (var p in f.parameters) {
+            if (p.default.is_value()) {
+                rewrite_expression(p.default.value(), this);
+            }
+        }
+        if (f.body.is_value()) {
+            rewrite_block(f.body.value(), this);
+        }
+    }
+
+    rewrite(e: Expression): Expression {
+        if (e is FunctionCall(call)) {
+            if (_is_converted_literal(call)) {
+                if (call.args[0] is StringLiteral(literal)) {
+                    # A String's `length` is 0 when its bytes are not UTF-8.
+                    if (literal.value.size > 0 and literal.value.length == 0) {
+                        state.report(
+                            error_at(
+                                "string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'",
+                                literal.loc
+                            )
+                        );
+                    }
+                }
+            }
+        }
+        return e;
+    }
+}
+
+extend _StringBytes with Rewriter;

@@ -228,14 +228,14 @@ describes, and `PEPPER_RUNTIME` names its folder outright.
 ### `-o <file>`
 
 The path of the executable, or with `--lib` of the library. Without it, the
-output goes to the current folder, named after the entry file with no
-extension (`main` for `main.pep`); with `--lib`, the library's usual file
-name for that stem (`libmain.a`). Building a project with no file, it is the
-`[build]` table's `output`, else the package's `name` in the project's
-folder (`libname.a` with `--lib`), with `.exe` added when building for
-Windows and the name has no extension. Windows runs only files ending in
-`.exe`, so otherwise name the output there: `-o main.exe`. The folders
-the path names are made when they do not exist.
+output goes to the current folder, named after the entry file (`main` for
+`main.pep`, and `main.exe` when building for Windows, which runs only files
+ending in `.exe`); with `--lib`, the library's usual file name for that stem
+(`libmain.a`). Building a project with no file, it is the `[build]` table's
+`output`, else the package's `name` in the project's folder (`libname.a`
+with `--lib`), with `.exe` added when building for Windows and the name has
+no extension. A name given with `-o` is used as it is. The folders the path
+names are made when they do not exist.
 
 With `--emit-static`, it is the folder the expanded source goes into.
 

@@ -22,6 +22,8 @@ import "internals";
 ## chosen to collide.
 ## - `String` hashes by content through the concrete `hash<String>`
 ##   override, so equal strings at different addresses collide.
+## - `Array<T>` hashes by its elements' hashes, in order, as its `==`
+##   compares them, in O(count).
 ##
 ## A struct whose keys should match by content is marked `[Equatable]`,
 ## which derives its `==` and its hash from its fields, or declares an `==`

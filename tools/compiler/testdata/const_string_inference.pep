@@ -35,5 +35,6 @@ main(): int {
     print(show(copy));
     print(show(k.QUICK_FIX));
     print($"{k.QUICK_FIX}/{LOCAL}");
+    print($"{k.BYTES.size} {k.BYTES.byte_at(1) as int} {k.BYTES.byte_at(2) as int}");
     return 0;
 }

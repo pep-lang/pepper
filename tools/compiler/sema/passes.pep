@@ -41,7 +41,7 @@ import [with_instantiation] from "instantiation";
 import [check_interpolations] from "interpolation";
 import [check_lazy] from "lazy";
 import [drop_unused_methods, specialize_used_methods] from "lazy_methods";
-import [resolve_literals] from "literals";
+import [check_string_bytes, resolve_literals] from "literals";
 import [lower_matches] from "matches";
 import [Module] from "model";
 import [bind_calls, check_link_attributes, check_named_attributes] from "named_arguments";
@@ -503,6 +503,11 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     # final.
     convert_to_traits(module, state);
     if (steps.stepped("convert_to_traits::convert_to_traits(module)")) {
+        return;
+    }
+    # A literal of bytes that are not UTF-8 is not a `String`.
+    check_string_bytes(module, state);
+    if (steps.stepped("literals::check_string_bytes(module)")) {
         return;
     }
     check_function_types(module, state);

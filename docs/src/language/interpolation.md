@@ -128,7 +128,12 @@ specification, and returns the text:
 - An index can repeat, to show one value twice or in two forms
   (`"{0} is {0:x} in hex"`).
 - It is part of the compiler, not a function in the runtime: it cannot be
-  stored in a variable or called through a function value.
+  stored in a variable or called through a function value. Wrap a call in
+  a closure instead (`(n: int) => String.format("{0:x}", n)`):
+
+  ```text
+  main.pep:2:20: error: 'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure
+  ```
 - [`print`](functions.md#printing-with-print) takes the same arguments:
   `print("{0} of {1}", done, total)` prints what `String.format` makes of
   them.

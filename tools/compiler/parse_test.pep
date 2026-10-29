@@ -76,10 +76,40 @@ groups_the_bitwise_operators_by_their_precedence() {
         ("1 | 2 & 3", "(1 | (2 & 3))"),
         ("1 & 2 ^ 3", "((1 & 2) ^ 3)")
     ]) {
-        var module = parse.parse($"f(): int {{\n    return {written};\n}}\n");
-        expect_true(module.is_ok());
-        expect_equal(module_text(module.value()).trim(), $"f(): int {{\n    return {grouped};\n}}");
+        expect_equal(returned_text(written), grouped);
     }
+}
+
+# A method call on an integer literal parses: `200.` before a name is not
+# a number (#315). A fraction, an exponent and a range still are.
+[Test]
+parses_a_method_call_on_an_integer_literal() {
+    for (var (
+        written,
+        parsed
+    ) in [
+        ("200.checked_add(100)", "200.checked_add(100)"),
+        ("0x10.count_ones()", "16.count_ones()"),
+        ("1.5", "1.5"),
+        ("1.e5", "100000.0"),
+        ("1.E-2", "0.01")
+    ]) {
+        expect_equal(returned_text(written), parsed);
+    }
+}
+
+# The expression of `return {written};` in a function, as `module_text`
+# writes it back.
+returned_text(written: String): String {
+    var module = parse.parse($"f(): int {{\n    return {written};\n}}\n");
+    if (module.is_err()) {
+        return module.error().message;
+    }
+    var text = module_text(module.value()).trim();
+    var prefix = "f(): int {\n    return ";
+    var suffix = ";\n}";
+    expect_true(text.starts_with(prefix) and text.ends_with(suffix));
+    return text.substr_bytes(prefix.size, text.size - prefix.size - suffix.size);
 }
 
 [Test]
@@ -109,6 +139,31 @@ reads_back_a_type_as_the_parser_spells_it() {
         expect_equal(parse_type_text(spelled, Span()).to_string(), spelled);
     }
     expect_true(parse_type_text("a<b c>", Span()).to_string() != "a<b c>");
+}
+
+# `\x80` to `\xFF` in a string literal are its bytes as written (#298),
+# and the literal shows them as escapes again.
+[Test]
+keeps_the_raw_bytes_of_a_string_literal() {
+    var module = parse.parse("f() {\n    var s = \"\\x80\\xFFa\";\n}\n");
+    expect_true(module.is_ok(), "the literal parses");
+    if (module.value().declarations[0] is Function(function)) {
+        if (function.body.value().statements[0] is Declaration(local)) {
+            if (local is Variable(variable)) {
+                var value = variable.default_value.value();
+                if (value is Literal(literal, _)) {
+                    if (literal is String(text)) {
+                        expect_equal(text.size, 3 as ulong);
+                        expect_equal(text.byte_at(0) as int, 0x80);
+                        expect_equal(text.byte_at(1) as int, 0xFF);
+                        expect_equal(literal.to_string(), "\"\\x80\\xFF\\x61\"");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    panic("no string literal");
 }
 
 # Each statement of `source`'s first function: the type and name a local

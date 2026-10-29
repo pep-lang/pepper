@@ -99,6 +99,15 @@ export enum Literal {
             String(text) => {
                 var out = StringBuilder();
                 out.append("\"");
+                # A String's `length` is 0 when its bytes are not UTF-8 (the
+                # `\x80` to `\xFF` of a `StringConstant`): each byte is an escape.
+                if (text.size > 0 and text.length == 0) {
+                    for (var i in 0..text.size) {
+                        out.append($"\\x{text.byte_at(i) as int:02X}");
+                    }
+                    out.append("\"");
+                    return out.to_string();
+                }
                 for (var c in text) {
                     match (c) {
                         "\n" => {
@@ -181,6 +190,11 @@ export enum Literal {
     to_json(): JsonValue {
         match (this) {
             String(text) => {
+                # Bytes that are not UTF-8 (`length` 0) go as their escapes:
+                # JSON text is UTF-8.
+                if (text.size > 0 and text.length == 0) {
+                    return tagged("Bytes", JsonValue.String(this.to_string()));
+                }
                 return tagged("String", JsonValue.String(text));
             }
             Integer(value) => {

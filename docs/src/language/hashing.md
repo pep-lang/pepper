@@ -11,10 +11,15 @@ type is [Ordering with Comparable](#ordering-with-comparable), below.
 | --- | --- | --- |
 | Numbers, `bool`, `char`, pointers | the value | the value's bits |
 | `String` | the content | the content |
+| An `Array` | element by element | the elements' hashes, combined |
 | A tuple | element by element | the elements' hashes, combined |
 | A [value struct](value-structs.md) | field by field | the fields' hashes, combined |
 | An [`[Equatable]`](#deriving-both-with-equatable) struct or enum | field by field | the fields' hashes, combined |
 | Any other struct | identity (`===`) | the object's address |
+
+The standard library's structs that compare by value also hash by it:
+`BitSet` by its members, `io.Path` by its text, and `io.IpAddress` and
+`io.SocketAddress` by their address and port.
 
 ## Struct keys use identity by default
 
@@ -54,10 +59,8 @@ out of both; a field with neither takes part:
 - An `[Equatable]` struct cannot also declare `==` or override `hash<T>`;
   either is an error. To compare some other way, drop the attribute and
   declare both by hand (below).
-- An `Array` field compares by its elements but hashes by its address, so
-  it adds nothing to the hash. Equal keys still hash equally; keys that
-  differ only in such a field share a hash, which costs speed. The same goes
-  for an `Array` in a tuple.
+- An `Array` field compares and hashes by its elements, as an `Array` key
+  does, and so does an `Array` in a tuple. Its hash takes O(count).
 - `[Equatable]` does not apply to a [value struct](value-structs.md) or an
   enum whose cases carry nothing: they already compare and hash by content.
 
@@ -102,12 +105,12 @@ Keep these rules in mind:
   note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
   ```
 
-  The runtime's own structs are not checked. An `Array` key's `==` compares
-  elements but its hash is its address, so find it with the same `Array`
-  object, not an equal one.
+  The runtime's own structs are not checked. An `Array` key matches an
+  equal `Array`: both its `==` and its hash go by its elements.
 - **Don't change a key's fields while it is in a map or set.** The entry
   stays where its old hash put it, so lookups by its new or its old fields
-  both miss it. Remove it, change it, then insert it again.
+  both miss it. Remove it, change it, then insert it again. The same goes
+  for an `Array` key's elements.
 - **One override per program.** `hash<Point>` replaces `hash<T>` for
   `Point` everywhere, including inside `HashMap`, so it may be declared in
   only one file, and that file must declare `Point` or be in its module

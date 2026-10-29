@@ -144,6 +144,16 @@ punctuation_table(): String[] {
     ];
 }
 
+# Whether a number's exponent starts at `at`: `e` or `E`, then a digit or a
+# sign.
+_exponent_at(data: __ptr<char>, size: ulong, at: ulong): bool {
+    if (at + 1 >= size or (data[at] != 'e' and data[at] != 'E')) {
+        return false;
+    }
+    var next = data[at + 1];
+    return is_digit(next) or next == '+' or next == '-';
+}
+
 # Whether the bytes of `text` occur in `data` at `offset`.
 matches_at(data: __ptr<char>, size: ulong, offset: ulong, text: String): bool {
     ulong length = text.size;
@@ -352,8 +362,11 @@ export lex(source: String, keep_comments: bool = true): Result<Token[], SyntaxEr
                 while (i < size and is_digit(data[i])) {
                     i += 1;
                 }
-                # `1..5` and `1..>5` are ranges, not `1.` and a `.`.
-                if (i < size and data[i] == '.' and !(i + 1 < size and data[i + 1] == '.')) {
+                # `1..5` and `1..>5` are ranges, not `1.` and a `.`, and
+                # `200.checked_add(1)` calls a method on `200`; `1.e5` is
+                # still a number.
+                bool member = i + 1 < size and is_identifier_start(data[i + 1]) and !_exponent_at(data, size, i + 1);
+                if (i < size and data[i] == '.' and !(i + 1 < size and data[i + 1] == '.') and !member) {
                     i += 1;
                     while (i < size and is_digit(data[i])) {
                         i += 1;

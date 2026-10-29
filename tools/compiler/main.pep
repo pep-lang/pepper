@@ -532,7 +532,9 @@ _main(args: String[]): int {
     var kind = library.is_set ?
         Optional<driver.LibraryKind>.Value(library.value()) :
         Optional<driver.LibraryKind>.Empty;
-    var out = here.join(Path(stem.is_value() ? stem.value() : "main"));
+    # A Windows executable needs its extension to run, as a project's gets.
+    var suffix = setup.target.os == "windows" ? ".exe" : "";
+    var out = here.join(Path((stem.is_value() ? stem.value() : "main") + suffix));
     if (output.is_set) {
         out = Path(output.value());
     } else if (kind.is_value()) {

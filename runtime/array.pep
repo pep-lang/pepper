@@ -1255,6 +1255,23 @@ export struct Array<T> {
         return !(this == rhs);
     }
 
+    # What `hash<Array<T>>` calls: the elements' hashes folded in order, so
+    # Arrays that are `==` hash equally and an Array keys a `HashMap` by its
+    # content. O(count). Every Array specialization keeps this method, so it
+    # folds FNV-1a style over `hash<T>` and mixes once at the end rather
+    # than hashing a `(u64, T)` tuple per element, which would specialize
+    # more code for each `T`.
+    [__Reads]
+    __hash(): u64 {
+        u64 result = 0xcbf29ce484222325;
+        ulong idx = 0;
+        while (idx < _size) {
+            result = (result ^ hash<T>(_data[idx])).wrapping_mul(0x100000001b3);
+            idx = idx + 1;
+        }
+        return hash<u64>(result);
+    }
+
     ## Appends every element of `rhs` to this Array in place (`a += b`); the
     ## same as `append_all`.
     ##
