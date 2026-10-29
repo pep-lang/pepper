@@ -117,8 +117,9 @@ Other mistakes the compiler reports:
 - `OS(...)` and `Arch(...)` are only valid inside `Target(...)`, and the
   brackets hold one attribute: `[OS(Windows)]` and
   `[Target(OS(Windows)) && Export]` are parse errors.
-- Struct fields cannot carry `[Target(...)]`. Select the whole struct instead,
-  as `Cpu` does in the first example.
+- Struct fields cannot carry `[Target(...)]` or `[BuildOption(...)]`, which
+  is an error at the attribute. Select the whole struct instead, as `Cpu`
+  does in the first example.
 
 ## Cross-compiling
 

@@ -463,6 +463,9 @@ error_programs(): String[] {
         "# expect: main.pep:6:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'\nstruct A {\n    var x: int;\n}\nextend A {\n    var y: int { get; }\n}\nmain(): int {\n    return 0;\n}\n",
         # 'Implicit' applies only to constructors
         "# expect: main.pep:2:1: error: 'Implicit' applies only to constructors\n[Implicit]\nstruct A {}\ntest(): int { return 0; }\n",
+        # A struct field cannot be selected by platform (#294).
+        "# expect: main.pep:3:5: error: a struct field cannot carry a platform selection; select the whole struct instead\nstruct S {\n    [Target(OS(Linux))]\n    var a: int;\n}\ntest(): int { return 0; }\n",
+        "# expect: main.pep:3:5: error: a struct field cannot carry a platform selection; select the whole struct instead\nstruct S {\n    [BuildOption(\"FAST\")]\n    var a: int;\n}\ntest(): int { return 0; }\n",
         # '?' can be used only in a statement of a function body
         "# expect: main.pep:11:16: error: '?' can be used only in a statement of a function body\nstruct Other {\n    construct() {}\n}\nparse(): Result<int> {\n    return Result<int>.ok(1);\n}\nmaybe(): int? {\n    return Optional<int>.Value(1);\n}\nvar g = parse()?;\ntest(): int {\n    return 0;\n}\n",
         # 'Deprecated' cannot be applied to an extension; deprecate its methods instead
