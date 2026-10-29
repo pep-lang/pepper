@@ -48,7 +48,7 @@ deprecated`.
 Put `[Deprecated(...)]` before any declaration other code refers to by name:
 
 - a function or an `extern`
-- a struct, a trait, or a type alias
+- a struct, an enum, a trait, or a type alias
 - a module-scope variable
 - a field, a method, or a constructor of a struct, or a method of an enum
 - a method in a trait or in an extension (put it on each method, not on the

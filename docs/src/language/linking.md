@@ -63,12 +63,29 @@ Putting `[Link]` in the source keeps the knowledge of which library a function
 comes from next to its declaration, so nobody building your program has to
 remember a command-line flag.
 
-## Linking C code a package builds: build scripts
+## Linking C code a package builds: `[native]` and build scripts
 
 A package can ship a C library's source instead of asking its users to
-install the library: its [build script](../tools/projects.md#build-scripts)
-compiles the C code with clang for the build's target, and prints the
-objects and libraries to link (`pep:object=...`, `pep:link=...`).
+install the library. When the C needs only compiling and linking, a
+[`[native]`](../tools/projects.md#native) table in its `pep.toml` says
+which files to compile and what to link, with no script:
+
+```toml
+[native]
+sources = ["c/*.c"]
+include = ["c/include"]
+link    = ["m"]
+```
+
+The build compiles each source with clang for the build's target and links
+the objects into the program. Since it runs no package code,
+`--no-build-scripts` allows it, as long as its `flags` are ones that cannot
+make clang load code (see [`[native]`](../tools/projects.md#native)).
+
+For anything more, such as generating a header or running `configure`, a
+[build script](../tools/projects.md#build-scripts) compiles the C code with
+clang for the build's target, and prints the objects and libraries to link
+(`pep:object=...`, `pep:link=...`).
 
 ## Linking a library from the command line: `-l`
 

@@ -241,6 +241,15 @@ main.pep:5:12: error: too many arguments to function of type '(String) => int': 
 The compiler reports [one error at a time](compiler-errors.md#one-error-at-a-time),
 so the second appears once the first is fixed.
 
+Calling a variable that does not hold a function is an error at the call,
+which names the variable's type:
+
+```text
+main.pep:3:12: error: called object type 'String' is not a function
+    3 |     return name(1);
+      |            ^~~~
+```
+
 ## Sharing function values between threads
 
 A plain function type such as `() => void` can hold any function value,

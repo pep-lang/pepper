@@ -127,7 +127,9 @@ the end of the list, since arguments are matched from the left.
 
 A default can be an expression, not only a literal: strings joined with `+`,
 an interpolated string, an array, map or tuple literal, a range, or a call.
-Each call that leaves the argument out evaluates it again.
+Each call that leaves the argument out evaluates it again. The default
+converts to the parameter's type as an argument would, so a string literal
+can be the default of an `io.Path` parameter (`path: io.Path = "out.txt"`).
 
 Defaults work the same way for methods and constructors. To give a later
 parameter a value without passing every parameter before it, name it (see

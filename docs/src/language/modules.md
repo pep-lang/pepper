@@ -259,8 +259,26 @@ geometry = { github = "someone/geometry", version = "1.2" }
 
 `import geometry;` then finds the package's root `module.pep` in the
 project's `.pep/deps`, with no `-I`, and `import geometry.solids;` the module
-in its `solids` folder. `pepper build` with no file builds the project. See
-[Projects: pep.toml](../tools/projects.md).
+in its `solids` folder. `pepper build` with no file builds the project.
+
+- **Each package imports by its own keys.** A dependency's files import the
+  packages its own `pep.toml` lists, under its names for them. When two
+  packages need different major versions of one package, each import
+  reaches the major its key asks for, and the two majors' types are
+  different types.
+- **A dev-dependency** (`[dev-dependencies]`) is imported only in a test
+  build (`--test`) and by the files in `examples/`, and a
+  build-dependency (`[build-dependencies]`) only by the package's build
+  script; an import of either anywhere else is an error at the name.
+- **A dependency only some platforms have** (`[target.'OS(Windows)'.dependencies]`)
+  is imported under the same condition, `[Target(OS(Windows))] import winapi;`,
+  so builds for other targets skip the import (see
+  [Platform-specific imports](#platform-specific-imports)).
+- **A build script's generated module** is imported as `generated` by the
+  package's own files (see
+  [Generated modules](../tools/projects.md#generated-modules)).
+
+See [Projects: pep.toml](../tools/projects.md).
 
 ### The runtime prelude and `--import`
 

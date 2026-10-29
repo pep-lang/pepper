@@ -326,7 +326,7 @@ through the same messages.
 
 - `File` calls other than `read`, `write` and `write_all` (opening,
   seeking, `sync`, directories) block the thread in a task.
-- On Windows, a `ThreadLocal` has a separate value in each task (it is
-  built on fiber local storage); elsewhere the tasks of a thread share it.
+- The tasks of a thread share its `ThreadLocal` values, on every system; a
+  [`TaskLocal<T>`](#task-local-values) gives each task its own.
 
 The [reference page](../reference/async-task.md) documents every function.

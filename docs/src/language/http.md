@@ -67,6 +67,9 @@ as a browser resolves a link (RFC 3986 section 5.2).
   was no response: the URL is not `http://` or `https://`
   (`is_invalid_input()`), the connection or TLS handshake failed, or the
   response was not valid HTTP.
+- A request that could split the message is refused with
+  `is_invalid_input()`: a header field value holding CR, LF or NUL, or a
+  field name or method that is not an RFC 9110 token.
 - Redirects (301, 302, 303, 307, 308) are followed, up to
   `max_redirects` (10) per request, and `response.url` is where the
   response came from. A 303, and a 301 or 302 after a `POST`, becomes a
@@ -98,6 +101,9 @@ as a browser resolves a link (RFC 3986 section 5.2).
   returns it).
 - A request it cannot parse gets `400 Bad Request`, header fields over
   64 KiB get `431`, and a body over `MAX_REQUEST_BODY` (16 MiB) gets `413`.
+- A handler's response with a header field (or reason phrase) that could
+  split the message gets `500 Internal Server Error` instead, over HTTP/1.1
+  and HTTP/2.
 - `Server.bind_tls` offers HTTP/2 and HTTP/1.1 through ALPN, and a
   plain-TCP client that opens with the HTTP/2 preface (prior knowledge, or
   h2c) is served HTTP/2 too. See [HTTP/2](#http2).

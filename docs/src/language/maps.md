@@ -16,7 +16,8 @@ default of `V`, and is not inserted) and `m[key] = value` writes; `insert`,
 `contains`, `remove`, `count`, `is_empty` and `clear`. A `for` loop visits a
 map's entries as `(key, value)` [tuples](tuples.md) and a set's members one
 by one. Adding or removing an entry while a loop iterates the map panics
-("Map modified during iteration"), as it does for `Array` and `HashMap`;
+with the type's name ("Map modified during iteration", "Set modified during
+iteration", and so on), as it does for `Array`;
 changing the value of a key that is present is allowed.
 
 ## Sorted: `Map` and `Set`

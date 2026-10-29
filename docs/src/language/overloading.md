@@ -134,8 +134,8 @@ inference) it is a redefinition:
 main.pep:1:1: error: redefinition of 'print'
     1 | print(text: String) {}
       | ^~~~~
-runtime/string.pep:1850:8: note: previous definition is here
- 1850 | export print(text: String) {
+runtime/string.pep:1864:8: note: previous definition is here
+ 1864 | export print(text: String) {
       |        ^~~~~
 ```
 
@@ -146,8 +146,8 @@ one file:
 main.pep:1:1: error: functions that differ only in their return type cannot be overloaded
     1 | to_string(value: int): int { return value; }
       | ^~~~~~~~~
-runtime/string.pep:1621:8: note: previous declaration is here
- 1621 | export to_string(value: int): String {
+runtime/string.pep:1635:8: note: previous declaration is here
+ 1635 | export to_string(value: int): String {
       |        ^~~~~~~~~
 ```
 
