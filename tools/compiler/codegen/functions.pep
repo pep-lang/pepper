@@ -1253,12 +1253,31 @@ extend Generator {
                 )
             );
         }
-        if (declares_member(ty, "next") and declares_member(ty, "current")) {
+        # `next` may be an overload set, with `next(location)` (#319).
+        if (declares_member_set(ty, "next") and declares_member(ty, "current")) {
             return Result<Expression>.ok(source);
         }
         return fail<Expression>(
             $"type '{ty}' is not iterable: implement Iterable<T> (iterate()) or Iterator<T> (next() and current())"
         );
+    }
+
+    ## Whether struct or trait `ty` declares method `member`, or overloads
+    ## of it (`member$...`).
+    declares_member_set(ty: String, member: String): bool {
+        if (declares_member(ty, member)) {
+            return true;
+        }
+        var desc = structs.try_get(ty);
+        if (desc.is_value()) {
+            var prefix = member + "$";
+            for (var (name, _) in desc.value().methods) {
+                if (name.starts_with(prefix)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     ## Whether struct or trait `ty` declares method `member`.

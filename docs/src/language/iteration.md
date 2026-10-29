@@ -271,6 +271,11 @@ Some things to keep in mind:
   and after `next()` returned `false` you get
   `ArrayIterator.current() past the end`. Your own iterators should follow the
   same rule.
+- **A check in `next()` can report the loop.** Overload `next` with
+  `next(location: __ptr<char>): bool` beside `next()`, and a `for` loop
+  calls that one with the loop's own location, which a panic in it can
+  report (`assert(ok, "...", location)`). Other calls of `next()` are
+  unchanged.
 
 ## Modifying a collection while you loop over it
 
