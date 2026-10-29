@@ -475,6 +475,19 @@ reports_confinement_error(index: ulong) {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# `json.encode` and `json.decode` refuse a container they do not convert,
+# a map with keys that are not strings and a set among them, rather than
+# write its properties (#404).
+[Test]
+refuses_json_for_an_unsupported_container() {
+    var folder = TempFolder("passes_json_containers");
+    var programs = [
+        "# expect: runtime/json/convert.pep:341:17: error: 'encode' cannot convert type 'HashMap<int, int>' to JSON: a map's keys must be 'String's\nimport json;\nmain(): int {\n    var m = HashMap<int, int>();\n    m[1] = 2;\n    print(json.encode(m));\n    return 0;\n}\n",
+        "# expect: runtime/json/convert.pep:775:17: error: 'decode' cannot convert type 'HashSet<int>' from JSON; decode an 'Array' and build it from that\nimport json;\nmain(): int {\n    var s = json.decode<HashSet<int>>(\"[1]\");\n    return 0;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # The hidden local of a `?` or of a `match` over a call lets go of its
 # value once the value is read when the code moves what it gave, so the
 # move is accepted; a value another local or `this` still holds is not
