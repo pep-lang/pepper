@@ -485,6 +485,17 @@ calls_a_method_on_an_integer_literal() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# An error a static block of the runtime's raises for a program's type is
+# reported at the program's call that asked for it (#330).
+[Test]
+reports_a_runtime_static_error_in_program_code() {
+    var folder = TempFolder("passes_runtime_static_error");
+    var programs = [
+        "# expect: main.pep:15:11: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON\nimport json;\n\nstruct Job {\n    var name: String;\n    var outcome: Result<int>;\n    construct(name: String, outcome: Result<int>) {\n        this.name = name;\n        this.outcome = outcome;\n    }\n}\n\nmain(): int {\n    var job = Job(\"a\", Result<int>.Ok(1));\n    print(json.encode(job));\n    return 0;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # The hidden local of a `?` or of a `match` over a call lets go of its
 # value once the value is read when the code moves what it gave, so the
 # move is accepted; a value another local or `this` still holds is not

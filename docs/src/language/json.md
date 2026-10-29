@@ -248,16 +248,19 @@ conversions to and from a `JsonValue` rather than text (with no text, a
 
 A property whose type has no JSON form, such as a pointer, a function, or
 a `Result` (a result is not a value to send over the wire), is a compile
-error naming the property. Notes follow the conversion back to the call
-that asked for it:
+error naming the property, at the call that asked for the conversion.
+Notes follow the conversion into the runtime:
 
 ```text
-runtime/json/convert.pep:358:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
-...
-main.pep:10:16: note: 'encode<Job>' is used by 'main' here
+main.pep:10:16: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
    10 |     var text = json.encode(job);
       |                ^~~~~~~~~~~
+runtime/json/convert.pep:358:21: note: reported by the runtime here
+...
 ```
+
+The same goes for any error a `static` block of the runtime's raises for
+a type of yours: it is reported in your code, where you used it.
 
 ## Current limits
 
