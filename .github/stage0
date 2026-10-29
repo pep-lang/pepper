@@ -5,10 +5,10 @@
 # (.github/workflows/stage0.yml) moves this pin: it writes the version,
 # the commit, and the build's SHA256SUMS below these comments.
 version 0.12.0-dev
-commit cad06dcb147c73a8a79631c476abac8b959f9b22
-eed85ae27b801b3fab1ec856ce1342605571400c3f0869b2260599bdaaf17c61  pepper-0.12.0-dev-linux-x64.tar.gz
-c08094ab0ff2c72673a30e446f0bb7b6d739dc0cf4865d08c3bceffad9476c6a  pepper-0.12.0-dev-macos-arm64.tar.gz
-926c7605ad4f435f18c78c1fc5f8cc949df24c0f2e9f00f2d941f09b47780315 *pepper-0.12.0-dev-windows-x64.zip
-9e6dab7fb30bc522cd12a69ce6da8c3a70d36f89b01fd45c6c9a5d752caf61b9  pepper-install-0.12.0-dev-linux-x64.tar.gz
-0e4b5a20096d9f27bf212b09b49a8e7638af4d2e0fa0f9571c00dc649f1a6a3e  pepper-install-0.12.0-dev-macos-arm64.tar.gz
-30a8f2b3b4cc174ad86123dad6a9d0220767af3cdb6336f349596676a23a5770 *pepper-install-0.12.0-dev-windows-x64.zip
+commit 895c47b9b8682444c22c610e61219e1aa626d9f9
+be0403943b9e45c1683a3912963813469ca8f209beaed16c5a22667e7d5c8d99  pepper-0.12.0-dev-linux-x64.tar.gz
+a1b284f77aa0f99dc707da689f486329048ca6851fd0b0284b68575d3bc2f9d4  pepper-0.12.0-dev-macos-arm64.tar.gz
+801e11ddb73f1743affa01a7d34b156dc52cc302bb6165a6dcc7fc507a7a9861 *pepper-0.12.0-dev-windows-x64.zip
+658d5fa4440b84dec4920714f4bd131e74085bea8a846dc85192efdded52aea4  pepper-install-0.12.0-dev-linux-x64.tar.gz
+1bb87b6458e466b019bbae1aca53a8214c98b0ba6b6e2fda0ab435e2419bf6cd  pepper-install-0.12.0-dev-macos-arm64.tar.gz
+67e4c9b7a2da61cdf82af6902c5e2d085161eb3d9683300158a9782e6a72a45e *pepper-install-0.12.0-dev-windows-x64.zip
