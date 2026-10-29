@@ -886,6 +886,9 @@ const ALL_STEPS: ulong = 1000000;
 # Programs a pass rejects.
 error_programs(): String[] {
     return [
+        # `String.format` used as a value, at `format` (#407); it is part of
+        # the compiler, not a function.
+        "# expect: main.pep:3:20: error: 'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure\nmain(): int {\n    var f = String.format;\n    return 0;\n}\n",
         # Shared struct fields, module-scope variables and thread-locals
         # that are not const, not thread-safe or not constant.
         "# expect: main.pep:4:9: error: field 'count' of shared struct 'Counter' must be 'const'\n[Shared]\nstruct Counter {\n    int count;\n}\nmain(): int { return 0; }\n",

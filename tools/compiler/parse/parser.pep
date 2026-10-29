@@ -1723,6 +1723,12 @@ struct Parser {
                     operand, name, name_span, Span(desugar.desugared_span(operand).start, member_end)
                 );
                 callee = format ? Callee.StringFormat : Callee.Other;
+                if (format and !_at("(")) {
+                    _problem(
+                        "'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure",
+                        name_span
+                    );
+                }
                 continue;
             }
             if (_at("[")) {
