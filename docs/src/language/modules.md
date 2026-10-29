@@ -82,7 +82,9 @@ sees the declarations of the module's files it imports, exported or not,
 except those marked `private`
 (see [Files of a module see each other through imports](visibility.md#files-of-a-module-see-each-other-through-imports)).
 Loading any file of a module loads its `module.pep`, and with it every file
-the module imports.
+the module imports. A file belongs to the module of the nearest folder at or
+above it that has a `module.pep`, looking no further up than a folder with a
+`pep.toml`: a project's folder is the top of its modules.
 
 This example has a `geometry` module next to `main.pep`:
 

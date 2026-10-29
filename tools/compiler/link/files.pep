@@ -380,7 +380,9 @@ export struct ModuleRoots {
         Path? root = Optional<Path>.Empty;
         if (dir.join(Path(MODULE_FILE)).is_file()) {
             root = Optional<Path>.Value(dir);
-        } else if (key != _runtime) {
+        } else if (key != _runtime and !dir.join(Path(MANIFEST_FILE)).is_file()) {
+            # A project's folder is as far up as its files' module goes: a
+            # `module.pep` above it is no part of it (#420).
             var parent = dir.parent();
             if (parent.is_value()) {
                 root = _of_dir(parent.value());
