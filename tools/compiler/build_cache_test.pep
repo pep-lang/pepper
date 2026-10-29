@@ -686,6 +686,40 @@ builds_with_debug_info_from_every_unit_in_the_cache() {
     }
 }
 
+# A name Windows reserves for a device (`nul`, `com1`), alone or before a
+# `.`, gets a `~` in front, so a unit or a build of that name has a folder
+# on every system (#305); other names stay.
+[Test]
+names_folders_around_reserved_device_names() {
+    expect_equal(incremental.safe_file_name("nul"), "~nul");
+    expect_equal(incremental.safe_file_name("NUL.1234"), "~NUL.1234");
+    expect_equal(incremental.safe_file_name("com1"), "~com1");
+    expect_equal(incremental.safe_file_name("lpt9.x"), "~lpt9.x");
+    expect_equal(incremental.safe_file_name("nulls"), "nulls");
+    expect_equal(incremental.safe_file_name("com0"), "com0");
+    expect_equal(incremental.safe_file_name("main.5"), "main.5");
+}
+
+# A program named `nul.pep` builds with the cache (#305).
+[Test]
+builds_a_program_named_like_a_device() {
+    var folder = TempFolder("cache_reserved_name");
+    var root = folder.path;
+    File.write_text(root.join(Path("nul.pep")), "main(): int {\n    return 0;\n}\n");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(root.join(Path("nul.pep")), setup);
+    expect_true(program.is_ok());
+    var options = driver.BuildOptions(root.join(Path("nul-test")), root.join(Path("build")));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+}
+
 [Test]
 builds_without_a_cache() {
     var folder = TempFolder("no_cache");
