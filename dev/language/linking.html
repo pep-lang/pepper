@@ -335,9 +335,9 @@ manager) or the Xcode Command Line Tools on macOS.</p>
 <p>Warnings from the linker are passed through unchanged, even when the link
 succeeds.</p>
 <h2 id="output-files"><a class="header" href="#output-files">Output files</a></h2>
-<p>With no <code>-o</code>, the executable is named after the first source file, without an
-extension, in the directory where you run the compiler. Windows will not run a
-file without <code>.exe</code>, so pass <code>-o main.exe</code> there. The object files and other
+<p>With no <code>-o</code>, the executable is named after the first source file, in the
+directory where you run the compiler: <code>main</code> for <code>main.pep</code>, and <code>main.exe</code>
+when building for Windows, which will not run a file without <code>.exe</code>. The object files and other
 intermediate files go in <code>.pep/build/</code> under the current directory, or in the
 directory you pass to <code>--build</code>: one object per file of the program in
 <code>&lt;name&gt;.units/</code>, and <code>&lt;name&gt;.o</code>, which runs the program's global

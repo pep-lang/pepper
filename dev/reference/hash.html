@@ -206,6 +206,8 @@ chosen to collide.</p>
 <ul>
 <li><code>String</code> hashes by content through the concrete <code>hash&lt;String&gt;</code>
 override, so equal strings at different addresses collide.</li>
+<li><code>Array&lt;T&gt;</code> hashes by its elements' hashes, in order, as its <code>==</code>
+compares them, in O(count).</li>
 </ul>
 <p>A struct whose keys should match by content is marked <code>[Equatable]</code>,
 which derives its <code>==</code> and its hash from its fields, or declares an <code>==</code>

@@ -224,15 +224,14 @@ the end of the line.</p>
 <h2 id="compile-and-run-it"><a class="header" href="#compile-and-run-it">Compile and run it</a></h2>
 <p>Pass the source file to <code>pepper build</code>. It compiles and links a native executable,
 but does not run it, so run the result yourself:</p>
-<pre><code class="language-sh">pepper build hello.pep -o hello
+<pre><code class="language-sh">pepper build hello.pep
 ./hello
 </code></pre>
 <pre><code class="language-text">Hello, world!
 </code></pre>
-<p>On Windows, name the output with <code>.exe</code> (<code>-o hello.exe</code>), since Windows will
-not run a file without an extension, and run it as <code>.\hello.exe</code>. Without <code>-o</code>
-the executable is written to the current directory, named after the source
-file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
+<p>The executable is written to the current directory, named after the source
+file: <code>hello</code> for <code>hello.pep</code>, and <code>hello.exe</code> on Windows, where you run it as
+<code>.\hello.exe</code>. Name it yourself with <code>-o</code>.</p>
 <h3 id="running-a-program"><a class="header" href="#running-a-program">Running a program</a></h3>
 <p>To build and run in one step, as <code>python hello.py</code> does, use <code>pepper run</code>.
 It keeps the executable out of your folder, and runs it again at once when

@@ -365,14 +365,14 @@ describes, and <code>PEPPER_RUNTIME</code> names its folder outright.</p>
 <h2 id="output"><a class="header" href="#output">Output</a></h2>
 <h3 id="-o-file"><a class="header" href="#-o-file"><code>-o &lt;file&gt;</code></a></h3>
 <p>The path of the executable, or with <code>--lib</code> of the library. Without it, the
-output goes to the current folder, named after the entry file with no
-extension (<code>main</code> for <code>main.pep</code>); with <code>--lib</code>, the library's usual file
-name for that stem (<code>libmain.a</code>). Building a project with no file, it is the
-<code>[build]</code> table's <code>output</code>, else the package's <code>name</code> in the project's
-folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
-Windows and the name has no extension. Windows runs only files ending in
-<code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>. The folders
-the path names are made when they do not exist.</p>
+output goes to the current folder, named after the entry file (<code>main</code> for
+<code>main.pep</code>, and <code>main.exe</code> when building for Windows, which runs only files
+ending in <code>.exe</code>); with <code>--lib</code>, the library's usual file name for that stem
+(<code>libmain.a</code>). Building a project with no file, it is the <code>[build]</code> table's
+<code>output</code>, else the package's <code>name</code> in the project's folder (<code>libname.a</code>
+with <code>--lib</code>), with <code>.exe</code> added when building for Windows and the name has
+no extension. A name given with <code>-o</code> is used as it is. The folders the path
+names are made when they do not exist.</p>
 <p>With <code>--emit-static</code>, it is the folder the expanded source goes into.</p>
 <h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
 <p>Builds a library for C code to link instead of an executable, with a C

@@ -192,6 +192,7 @@ type is <a href="#ordering-with-comparable">Ordering with Comparable</a>, below.
 <div class="table-wrapper"><table><thead><tr><th>Key type</th><th><code>==</code></th><th><code>hash&lt;K&gt;</code></th></tr></thead><tbody>
 <tr><td>Numbers, <code>bool</code>, <code>char</code>, pointers</td><td>the value</td><td>the value's bits</td></tr>
 <tr><td><code>String</code></td><td>the content</td><td>the content</td></tr>
+<tr><td>An <code>Array</code></td><td>element by element</td><td>the elements' hashes, combined</td></tr>
 <tr><td>A tuple</td><td>element by element</td><td>the elements' hashes, combined</td></tr>
 <tr><td>A <a href="value-structs.html">value struct</a></td><td>field by field</td><td>the fields' hashes, combined</td></tr>
 <tr><td>An <a href="#deriving-both-with-equatable"><code>[Equatable]</code></a> struct or enum</td><td>field by field</td><td>the fields' hashes, combined</td></tr>
@@ -281,10 +282,8 @@ itself, <code>[Equatable]</code> takes no arguments.</li>
 <li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
 either is an error. To compare some other way, drop the attribute and
 declare both by hand (below).</li>
-<li>An <code>Array</code> field compares by its elements but hashes by its address, so
-it adds nothing to the hash. Equal keys still hash equally; keys that
-differ only in such a field share a hash, which costs speed. The same goes
-for an <code>Array</code> in a tuple.</li>
+<li>An <code>Array</code> field compares and hashes by its elements, as an <code>Array</code> key
+does, and so does an <code>Array</code> in a tuple. Its hash takes O(count).</li>
 <li><code>[Equatable]</code> does not apply to a <a href="value-structs.html">value struct</a> or an
 enum whose cases carry nothing: they already compare and hash by content.</li>
 </ul>
@@ -370,14 +369,14 @@ when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</
       |     ^~
 note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
 </code></pre>
-<p>The runtime's own structs are not checked. An <code>Array</code> key's <code>==</code> compares
-elements but its hash is its address, so find it with the same <code>Array</code>
-object, not an equal one.</p>
+<p>The runtime's own structs are not checked. An <code>Array</code> key matches an
+equal <code>Array</code>: both its <code>==</code> and its hash go by its elements.</p>
 </li>
 <li>
 <p><strong>Don't change a key's fields while it is in a map or set.</strong> The entry
 stays where its old hash put it, so lookups by its new or its old fields
-both miss it. Remove it, change it, then insert it again.</p>
+both miss it. Remove it, change it, then insert it again. The same goes
+for an <code>Array</code> key's elements.</p>
 </li>
 <li>
 <p><strong>One override per program.</strong> <code>hash&lt;Point&gt;</code> replaces <code>hash&lt;T&gt;</code> for
