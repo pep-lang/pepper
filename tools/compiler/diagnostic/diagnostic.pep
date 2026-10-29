@@ -13,6 +13,7 @@
 ## `demangle`).
 
 import [Span] from compiler.ast;
+import os;
 
 ## How serious a diagnostic is.
 export enum Severity {
@@ -212,7 +213,7 @@ export struct Diagnostic {
             var at = location.value();
             var source = sources[at.file];
             var (line, column) = _position(source.text, at.span.start);
-            out.append($"{source.name}:{line}:{column}: {label}: {demangle(message)}{suffix}\n");
+            out.append($"{shown_path(source.name)}:{line}:{column}: {label}: {demangle(message)}{suffix}\n");
             _snippet(source.text, at.span, _fix_on_line(at, source.text), out);
         } else {
             out.append($"{label}: {demangle(message)}{suffix}\n");
@@ -238,6 +239,26 @@ export struct Diagnostic {
         }
         return Optional<Edit>.Empty;
     }
+}
+
+## Returns a file's name as a message shows it: on Windows, without the
+## verbatim prefix (`\\?\C:\x` is `C:\x`, `\\?\UNC\server\x` is
+## `\\server\x`), and with one separator throughout, `/` when the name has
+## one (`D:/x\lib.pep` is `D:/x/lib.pep`). Other systems' names are kept.
+##
+## @param name the file's name
+## @returns the name as shown
+export shown_path(name: String): String {
+    if (os.system_os() != os.OperatingSystem.Windows) {
+        return name;
+    }
+    var shown = name;
+    if (shown.starts_with("\\\\?\\UNC\\")) {
+        shown = "\\\\" + shown.substr_bytes(8, shown.size - 8);
+    } else if (shown.starts_with("\\\\?\\")) {
+        shown = shown.substr_bytes(4, shown.size - 4);
+    }
+    return shown.contains("/") ? shown.replace("\\", "/") : shown;
 }
 
 ## A file a diagnostic may point into: its name as diagnostics show it, and

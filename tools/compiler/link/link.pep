@@ -24,7 +24,7 @@ import compiler.ast;
 import [
     Attribute, Declaration, Expression, FunctionDecl, Module, parse_type_text, Pattern, Span, TypeName
 ] from compiler.ast;
-import [Diagnostic, Location] from compiler.diagnostic;
+import [Diagnostic, Location, shown_path] from compiler.diagnostic;
 import io;
 import [Path] from io;
 import "names" as names;
@@ -712,7 +712,7 @@ struct _Linker {
         _error(
             file,
             span,
-            $"'{name}' is declared in {file_names[from.value()[0]]}, another file of this module, which this file does not import; add an import for it"
+            $"'{name}' is declared in {shown_path(file_names[from.value()[0]])}, another file of this module, which this file does not import; add an import for it"
         );
         return true;
     }

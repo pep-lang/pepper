@@ -2561,7 +2561,10 @@ diagnostics"). The mechanics:
   module (`'units_v1.Unit'`), so the two read apart.
 - Rendering goes through `render_all(diagnostics, sources)`, the sources a
   `SourceText` per file (`program.sources()`, in load order, so file `i`
-  is `program.files[i]`).
+  is `program.files[i]`). A file's name is shown through `shown_path`,
+  which on Windows drops the verbatim `\\?\` prefix and keeps one
+  separator; a message that names a file or folder (`visibility.pep`,
+  `_describe_paths`) uses it too.
 - Each layer reports errors its own way: the parser through
   `_expect`/`_fail`, the builder by returning the `Diagnostic` as a
   `Built<T>`'s error, passes through `state.report`, codegen through an
@@ -3722,6 +3725,7 @@ the runtime's tests in `runtime/` and the tools' in `tools/` (at
 | Parser | `compiler/parse_test.pep`, `desugar_test.pep`, `tokens_test.pep`, `recovering_test.pep` | Every source file in the repository parses; written and desugared trees; every token and comment placed once; recovery on three broken forms of every file. |
 | Linking | `compiler/link_test.pep`, `imports_test.pep`, `project_test.pep` | Every corpus program links clean; the curated programs give the errors and warnings their first lines expect (`expected_outcomes.pep`); every module and test file imports what it uses; `pep.toml` projects. |
 | Sema | `compiler/sema_test.pep`, `passes_test.pep` | The builder and the passes accept the corpus, and accept or reject each curated program as its `# expect:` lines say. Add a curated program for a new error. |
+| Diagnostics | `compiler/diagnostic_test.pep` | File names as diagnostics show them: no Windows verbatim prefix, one separator. |
 | Compilation units and cache | `compiler/compilation_units_test.pep`, `build_cache_test.pep` | Programs built in compilation units and whole must both run; the cache's translation units, reuse, early cutoff and invalidation. |
 | Targets and test builds | `compiler/target_test.pep`, `test_main_test.pep` | `--target` triples, machines and link options; `--test`'s generated `main`. |
 | Corpus | `compiler/corpus_test.pep` | Builds every `tests/<Name>/test.pep` with `-I tests` and runs it from the repository's root (must exit 0); under wasmtime too, for `wasm32-wasip1`, when `WASI_SDK_PATH` names a wasi-sdk and wasmtime is found. |

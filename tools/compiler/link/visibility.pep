@@ -30,7 +30,7 @@
 
 import compiler.ast;
 import [Attribute, Declaration, Expression, FunctionDecl, Module, Span, StructDecl, TypeName] from compiler.ast;
-import [Diagnostic, Location, SourceText] from compiler.diagnostic;
+import [Diagnostic, Location, shown_path, SourceText] from compiler.diagnostic;
 import [FileScope, ProgramFile] from "link";
 import "names" as names;
 import [Target] from "platform";
@@ -107,7 +107,7 @@ export struct VisibilityError {
     ## @param files the program's files
     ## @returns the message
     message(files: ProgramFile[]): String {
-        var other = files[declared_in].name;
+        var other = shown_path(files[declared_in].name);
         match (kind) {
             Private => {
                 var module = _module_name(files[declared_in]);
