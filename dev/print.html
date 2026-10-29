@@ -1741,6 +1741,8 @@ over its arms. The value converts from that type wherever it goes, and a
 signed types and fills with zeros for unsigned types.</li>
 <li><strong>Overflow</strong> is where Pepper leaves C: it panics, for signed and unsigned
 types alike (see <a href="language/types-and-variables.html#integer-overflow">Integer overflow</a>).</li>
+<li><strong>Precedence</strong> leaves C for <code>|</code> and <code>^</code>, which share a level, so
+<code>1 | 2 ^ 3</code> is <code>(1 | 2) ^ 3</code> (see <a href="language/types-and-variables.html#operators">Operators</a>).</li>
 </ul>
 <pre><code class="language-pepper"># Arithmetic follows C's rules for promotion and conversion.
 main(): int {
@@ -2153,6 +2155,9 @@ differ from C's <code>pow</code> in the last bit; any other exponent calls <code
 </ol>
 <p>As in C, <code>&amp;</code> binds more loosely than <code>==</code>, so write <code>(flags &amp; mask) == mask</code>
 with the parentheses.</p>
+<p>Unlike C, <code>|</code> and <code>^</code> share one level and group left to right: <code>1 | 2 ^ 3</code>
+is <code>(1 | 2) ^ 3</code>, which is 0, where C reads <code>1 | (2 ^ 3)</code>, which is 1. Code
+ported from C that mixes the two needs parentheses.</p>
 <p>An expression can nest at most 256 levels deep, counting each operator of a
 chain as one level, so a sum of more than about 250 terms is a compile error
 (see <a href="language/compiler-errors.html#common-errors">Compiler errors</a>).</p>
