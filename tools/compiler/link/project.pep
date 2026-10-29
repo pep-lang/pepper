@@ -2580,6 +2580,36 @@ _module_file(package: Path, parts: String[]): Path {
 ## generates by: `import generated`.
 const GENERATED_MODULE = "generated";
 
+## Why `import <name>` in `file` finds no module, when `name` is the module
+## a build script generates and `file`'s package has a build script: the
+## build runs it only for the project and its dependencies, not for a
+## package found on the import path (`-I`).
+##
+## @param file the importing file
+## @param name the module the import names
+## @returns the reason, or none when it does not apply
+export ungenerated_module(file: Path, name: String): String? {
+    var none = Optional<String>.Empty;
+    if (name != GENERATED_MODULE and !name.starts_with(GENERATED_MODULE + ".")) {
+        return none;
+    }
+    var folder = file.parent();
+    var manifest = folder.is_value() ? find_manifest(folder.value()) : Optional<Path>.Empty;
+    if (!manifest.is_value()) {
+        return none;
+    }
+    var dir = manifest.value().parent();
+    var script = dir.is_value() ? build_script(dir.value()) : Result<Path?, String>.ok(Optional<Path>.Empty);
+    if (!script.is_ok() or !script.value().is_value()) {
+        return none;
+    }
+    var read = load_manifest(manifest.value(), Array<Path>());
+    var package = read.is_ok() ? read.value().name : dir.value().file_name().value_or("the package");
+    return Optional<String>.Value(
+        $"'{package}' generates module '{name}' with its build script, which runs only for the project and its dependencies; add '{package}' to '[dependencies]' instead of finding it on the import path"
+    );
+}
+
 ## Whether `file` is in the `examples` folder of the project at `project`,
 ## or a folder below it.
 _in_examples(project: Path, file: Path): bool {
