@@ -333,9 +333,9 @@ never a silent "no match":</p>
 <pre><code class="language-pepper">[Target(OS(Darwin))]
 f(): int { return 1; }
 </code></pre>
-<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]
+<pre><code class="language-text">main.pep:1:12: error: unknown OS 'Darwin'; expected 'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'
     1 | [Target(OS(Darwin))]
-      | ^~~~~~~~~~~~~~~~~~~~
+      |            ^~~~~~
 </code></pre>
 <p>Other mistakes the compiler reports:</p>
 <ul>
