@@ -462,7 +462,7 @@ fixtures = { github = "someone/fixtures", version = "1" }
   checks it (see [pep-package](pep-package.md#publish)).
 
 `pepper package add --dev` adds one, and `pepper package remove` removes one
-from either table (see [pep-package](pep-package.md#add-ownernamerange)). A
+from either table (see [pep-package](pep-package.md#add-ownernamerange-add-namerange)). A
 name may be in only one of the two tables.
 
 ```text
@@ -505,7 +505,7 @@ codegen = { github = "someone/codegen", version = "1" }
   holds those a script needs only on some machines; see
   [below](#targetconditionbuild-dependencies).
 - **Added with** `pepper package add --build` (see
-  [pep-package](pep-package.md#add-ownernamerange)).
+  [pep-package](pep-package.md#add-ownernamerange-add-namerange)).
 - **Needs toolchain 0.11.0**, as `[dev-dependencies]` does.
 
 ```text
@@ -564,7 +564,7 @@ epoll = { github = "someone/epoll", version = "0.3" }
   checks it.
 
 `pepper package add --target 'OS(Windows)'` adds one, and `pepper package
-remove` removes one (see [pep-package](pep-package.md#add-ownernamerange)).
+remove` removes one (see [pep-package](pep-package.md#add-ownernamerange-add-namerange)).
 A name may be in only one of the dependency tables, and a `[target]` table
 holds only `dependencies` and
 [`build-dependencies`](#targetconditionbuild-dependencies).
@@ -675,7 +675,7 @@ full    = ["tls", "gzip"]                  # other features of this package
 
 `pepper package add --optional`, `--features` and `--no-default-features`
 write a dependency's `optional`, `features` and `default-features` (see
-[pep-package](pep-package.md#add-ownernamerange)).
+[pep-package](pep-package.md#add-ownernamerange-add-namerange)).
 
 ## Workspaces: `[workspace]`
 
@@ -770,7 +770,7 @@ geo = { github = "someone/shapes", package = "geo", version = "0.3" }
 ```
 
 `pepper package add someone/shapes --package geo` writes that entry (see
-[pep-package](pep-package.md#add-ownernamerange)).
+[pep-package](pep-package.md#add-ownernamerange-add-namerange)).
 
 - **Found through the root's `members`:** the member is the package of
   that name among the folders the root's `[workspace]` `members` lists, so

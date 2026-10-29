@@ -223,7 +223,7 @@ A few things are useful once it is installed:
 
 To install the extension from the branch you have checked out instead of the
 release, see
-[The VS Code extension from a branch](../contributing/building.md#the-vs-code-extension-from-a-branch).
+[The VS Code extension](../contributing/building.md#the-vs-code-extension).
 
 ## What to read next
 

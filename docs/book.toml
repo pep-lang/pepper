@@ -16,3 +16,8 @@ additional-css = ["theme/version-switcher.css"]
 
 [output.html.search]
 enable = true
+
+# Chapters merged into others keep their old addresses.
+[output.html.redirect]
+"/language/ordering.html" = "hashing.html#ordering-with-comparable"
+"/language/text.html" = "encodings.html#text-encodings"

@@ -651,7 +651,7 @@ pep-package: error: cannot vendor github:someone/linked: 'docs/current' is a sym
 A link found in a package's folder later fails the build and `fetch` the
 same way an edited file does; `vendor` again removes it.
 
-In a [workspace](projects.md#workspaces), run from the root or any member,
+In a [workspace](projects.md#workspaces-workspace), run from the root or any member,
 `vendor` writes one folder at the workspace's root, holding every
 member's locked packages, and sets `[fetch] vendor` in the root's
 `pep.toml`; every member's build reads it.
@@ -674,7 +674,7 @@ pepper package uninstall tool
 ```
 
 - **Which version:** the newest release the range allows (any, without
-  one) that this toolchain builds, as [`add`](#add-ownernamerange) picks
+  one) that this toolchain builds, as [`add`](#add-ownernamerange-add-namerange) picks
   it; a package with no version tags is installed from its default
   branch. Installing it again upgrades it, or moves it to another range.
   With `--package <name>`, it is the workspace member `<name>`, by its

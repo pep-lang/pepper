@@ -54,20 +54,69 @@ and macOS (arm64 and x64), and installs with one command: see
 
 ## Current status
 
-Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors, methods and [properties](language/properties.md), [value structs and enums](language/value-structs.md) (`[Value]`), derived `==` and `hash` ([`[Equatable]`](language/hashing.md)), enums (with cases that carry values, methods and computed properties) and `match` (as a statement or a value, on enums, integers, characters, strings and trait values, with `is` tests, nested and tuple patterns, guards, ranges and constants), tuples
-and multiple return values, array and map literals, generics (with type
-arguments inferred at calls, and generic methods), type aliases,
-traits (with default methods, and usable as types that convert back with `as?`), function types and
-closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with adapters such as `map`,
-`filter`, `take` and `chain`, and consumers such as `fold`, `any` and `sum`),
-`with` blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (`[Export]`ed functions in a static or shared library, with a generated header). The standard library covers strings (with a `StringBuilder`, `StringConstant` for literals' constant bytes,
-`to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), a `Comparable` trait for ordered types, sortable, searchable arrays with read-only slices, hash
-maps and sets, sorted maps and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, a `BitSet` of small integers, a double-ended `Deque` and a `PriorityQueue`, atomics, threads, channels and mutexes, tasks (green threads
-that take turns on a few worker threads, parking on sockets and timeouts), file-system access (see [files](language/files.md)), text encodings (UTF-16, ASCII; see [text](language/text.md)),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies, redirects, connection reuse, ALPN), URI parsing and percent-encoding, [base64, form data and UUIDs](language/encodings.md), regular expressions, JSON (parsing and writing `JsonValue`s, JSONC documents that keep their comments, and converting structs with `json.encode` and `json.decode`), [TOML](language/toml.md) (parsing, writing, editing a document in place, and converting structs), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the `digest` module), [random numbers](language/random.md) (secure bytes from the operating system and a seedable generator), [SIMD vectors](language/simd.md) (`simd.Vector<T, N>`), command-line arguments (`main(args: String[])`, parsed into options with the `cli` module), starting child processes, the `os` module (environment variables, monotonic and wall clocks with `Duration`, and machine and user information), the `time` module (dates, times of day, time zones from the system's database, and RFC 3339, HTTP and `strftime` text), the `debug` module (stack backtraces, which a panic also prints, and the debugger), and [leveled, structured logging](language/logging.md) (the `log` module). [Unit tests](language/testing.md) are `[Test]` functions that
-`pepper test` runs in parallel, each in a process of its own. That is enough to write real
-programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter,
+Pepper is young. The core language works and is tested, and so does a
+standard library large enough to write real programs, but expect gaps. In
+the order this book covers them:
+
+- **Basics:** variables, functions, tuples and multiple return values,
+  [enums](language/enums.md) (with cases that carry values, methods and
+  computed properties) and `match` (as a statement or a value, on enums,
+  integers, characters, strings and trait values, with `is` tests, nested
+  and tuple patterns, guards, ranges and constants), `Optional` values, and
+  `Result`-based error handling (`Result` is an enum, and `?` propagates
+  errors).
+- **Collections and iteration:** array and map literals, sortable,
+  searchable arrays with read-only slices, hash maps and sets, sorted maps
+  and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, a `BitSet`
+  of small integers, a double-ended `Deque` and a `PriorityQueue`, and
+  iteration (with adapters such as `map`, `filter`, `take` and `chain`, and
+  consumers such as `fold`, `any` and `sum`).
+- **Types of your own:** structs with constructors, destructors, methods
+  and [properties](language/properties.md),
+  [value structs and enums](language/value-structs.md) (`[Value]`), derived
+  `==` and `hash` ([`[Equatable]`](language/hashing.md)), a `Comparable`
+  trait for ordered types, traits (with default methods, and usable as
+  types that convert back with `as?`), generics (with type arguments
+  inferred at calls, and generic methods), type aliases, and function types
+  and closures.
+- **Memory and resources:** `with` blocks, and weak references (to structs
+  and trait values).
+- **Concurrency:** atomics, threads, channels and mutexes, and tasks (green
+  threads that take turns on a few worker threads, parking on sockets and
+  timeouts).
+- **Organizing a program:** modules (with `export * from` re-exports), and
+  [unit tests](language/testing.md): `[Test]` functions that `pepper test`
+  runs in parallel, each in a process of its own.
+- **Compile time, platforms and C:** calling C (including C callbacks), and
+  being called from C (`[Export]`ed functions in a static or shared
+  library, with a generated header), and [SIMD vectors](language/simd.md)
+  (`simd.Vector<T, N>`).
+- **Standard library:** strings (with a `StringBuilder`, `StringConstant`
+  for literals' constant bytes, `to_string` and a `ToString` trait,
+  `$"{a + b:>8}"` interpolation with format specifications, and
+  `String.format`), file-system access (see [files](language/files.md)),
+  text encodings (UTF-16, ASCII; see
+  [text](language/encodings.md#text-encodings)), TCP, UDP and Unix domain
+  sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies,
+  redirects, connection reuse, ALPN), URI parsing and percent-encoding,
+  [base64, form data and UUIDs](language/encodings.md), regular
+  expressions, JSON (parsing and writing `JsonValue`s, JSONC documents that
+  keep their comments, and converting structs with `json.encode` and
+  `json.decode`), [TOML](language/toml.md) (parsing, writing, editing a
+  document in place, and converting structs), gzip and zlib compression,
+  tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the
+  `digest` module), [random numbers](language/random.md) (secure bytes from
+  the operating system and a seedable generator), command-line arguments
+  (`main(args: String[])`, parsed into options with the `cli` module),
+  starting child processes, the `os` module (environment variables,
+  monotonic and wall clocks with `Duration`, and machine and user
+  information), the `time` module (dates, times of day, time zones from the
+  system's database, and RFC 3339, HTTP and `strftime` text), the `debug`
+  module (stack backtraces, which a panic also prints, and the debugger),
+  and [leveled, structured logging](language/logging.md) (the `log`
+  module).
+
+[pep-fmt](tools/pep-fmt.md), the code formatter, [pep-fmt](tools/pep-fmt.md), the code formatter,
 [pep-profile](tools/pep-profile.md), which profiles a program and draws a
 flame graph, [pep-test](tools/pep-test.md), which runs unit tests, and
 [`pepper`](tools/pepper.md), the entry point that runs every
@@ -136,10 +185,16 @@ chapter shows a feature, the example was compiled and run to check it.
   compiler and runs your first program. [A tour of Pepper](tutorial/tour.md)
   then walks through the main features by building a small word-counting
   program.
-- **Language guide.** One chapter per part of the language, from
+- **Language guide.** One chapter per part of the language, in an order to
+  learn it by: the basics, from
   [types and variables](language/types-and-variables.md) to
-  [naming conventions](language/naming.md). Read it in order, or jump to the
+  [error handling](language/results.md); collections and iteration; types
+  of your own; memory; concurrency; organizing a program into modules and
+  tests; and then compile time, platforms and C, starting at
+  [attributes](language/attributes.md). Read it in order, or jump to the
   topic you need.
+- **Standard library guide.** A chapter for each area of the library, from
+  [files](language/files.md) to [HTTP](language/http.md).
 - **Tools.** [The pepper command](tools/pepper.md),
   [pep-new](tools/pep-new.md), [pep-run](tools/pep-run.md),
   [pep-fmt](tools/pep-fmt.md), [pep-profile](tools/pep-profile.md),

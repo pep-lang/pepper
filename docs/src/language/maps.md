@@ -48,8 +48,8 @@ before, equal to or after `b`. Two keys that compare equal are the same key.
 
 - Numbers and `char` compare by value, and `String` by content (the same
   order as `String.compare`). A NaN `float` or `double` key sorts after
-  every number (see [Ordering with Comparable](ordering.md)).
-- A [`Comparable`](ordering.md) struct, or one that declares a `<`
+  every number (see [Ordering with Comparable](hashing.md#ordering-with-comparable)).
+- A [`Comparable`](hashing.md#ordering-with-comparable) struct, or one that declares a `<`
   [operator](structs.md#operators), sorts by it: the generic `compare` asks
   `a < b` and `b < a`.
 - Any other struct declares `Comparable`, or overrides `compare<T>` for
