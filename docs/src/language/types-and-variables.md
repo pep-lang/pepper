@@ -499,6 +499,8 @@ conversions"), so code ported from C gives the same results:
   signed types and fills with zeros for unsigned types.
 - **Overflow** is where Pepper leaves C: it panics, for signed and unsigned
   types alike (see [Integer overflow](#integer-overflow)).
+- **Precedence** leaves C for `|` and `^`, which share a level, so
+  `1 | 2 ^ 3` is `(1 | 2) ^ 3` (see [Operators](#operators)).
 
 ```pepper
 {{#include ../../examples/types-arithmetic.pep}}
@@ -731,6 +733,10 @@ Operators bind in this order, tightest first:
 
 As in C, `&` binds more loosely than `==`, so write `(flags & mask) == mask`
 with the parentheses.
+
+Unlike C, `|` and `^` share one level and group left to right: `1 | 2 ^ 3`
+is `(1 | 2) ^ 3`, which is 0, where C reads `1 | (2 ^ 3)`, which is 1. Code
+ported from C that mixes the two needs parentheses.
 
 An expression can nest at most 256 levels deep, counting each operator of a
 chain as one level, so a sum of more than about 250 terms is a compile error
