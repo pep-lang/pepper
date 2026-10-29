@@ -3,7 +3,7 @@
 # parser; the curated programs of link_test, sema_test and passes_test
 # now hold the compiler to its diagnostics.
 
-import [parse_type_text, Span] from compiler.ast;
+import [module_text, parse_type_text, Span] from compiler.ast;
 import io;
 import [Directory, File, Path] from io;
 import compiler.parse;
@@ -60,6 +60,26 @@ return_type_of(source: String): (String, ulong) {
         return (function.return_type.to_string(), function.return_type.span.end);
     }
     return ("", 0 as ulong);
+}
+
+# `&` binds tighter than `|` and `^`, which share a level and group left to
+# right, as the book's precedence list says; unlike C, `1 | 2 ^ 3` is
+# `(1 | 2) ^ 3` (#316).
+[Test]
+groups_the_bitwise_operators_by_their_precedence() {
+    for (var (
+        written,
+        grouped
+    ) in [
+        ("1 | 2 ^ 3", "((1 | 2) ^ 3)"),
+        ("1 ^ 2 | 3", "((1 ^ 2) | 3)"),
+        ("1 | 2 & 3", "(1 | (2 & 3))"),
+        ("1 & 2 ^ 3", "((1 & 2) ^ 3)")
+    ]) {
+        var module = parse.parse($"f(): int {{\n    return {written};\n}}\n");
+        expect_true(module.is_ok());
+        expect_equal(module_text(module.value()).trim(), $"f(): int {{\n    return {grouped};\n}}");
+    }
 }
 
 [Test]
