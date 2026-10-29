@@ -267,6 +267,9 @@ export contains_platform_predicate(body: Expression): bool {
     return false;
 }
 
+## What a build option's name is, for an error about one that is not.
+export const BUILD_OPTION_NAME_RULE = "a name is a letter or '_' followed by letters, digits and '_'";
+
 ## Returns whether `name` can name a build option: a letter or `_`, then
 ## letters, digits and `_`.
 ##
@@ -566,10 +569,7 @@ struct _Evaluator {
             }
         }
         if (!is_build_option_name(name)) {
-            _fail_at(
-                $"invalid build option name '{name}'; a name is a letter or '_' followed by letters, digits and '_'",
-                argument.span()
-            );
+            _fail_at($"invalid build option name '{name}'; {BUILD_OPTION_NAME_RULE}", argument.span());
             return Optional<String>.Empty;
         }
         return Optional<String>.Value(name);

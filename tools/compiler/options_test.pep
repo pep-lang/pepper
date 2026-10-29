@@ -343,6 +343,22 @@ lib_and_lto_are_checked_and_name_their_output() {
     }
 }
 
+# `-D` refuses a build option name that is not an identifier, with or
+# without a value (#293), and takes one that is.
+[Test]
+d_checks_the_build_option_name() {
+    var folder = _program("options_define", _PROGRAM);
+    for (var (define, name) in [("2FAST", "2FAST"), ("2FAST=3", "2FAST"), ("=1", ""), ("A-B", "A-B")]) {
+        var ran = _pep_build(folder.path, ["-D", define, "main.pep", "--build", "build", "--no-cache"]);
+        expect_equal(_code(ran), 2);
+        expect_contains(
+            ran.stderr,
+            $"error: invalid build option name '{name}' in '-D {define}'; a name is a letter or '_' followed by letters, digits and '_'"
+        );
+    }
+    _succeeds(folder.path, ["-D", "_FAST2=a=b", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
+}
+
 # `--lib swift-package`: a Swift package of the Swift wrappers over an iOS
 # `.xcframework`, built on any system, whose simulator library is a
 # universal file of two archives; and the output names and options it and

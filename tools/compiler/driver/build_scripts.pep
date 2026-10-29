@@ -419,7 +419,7 @@ _apply(name: String, manifest: link.Manifest, output: String, into: ScriptOutput
             var option = manifest.build_option(defined.is_value() ? defined.value().0 : value);
             if (!link.is_build_option_name(option)) {
                 return Result<void, String>.err(
-                    $"the build script of '{name}' printed 'pep:{line}', and '{option}' is not a build option name; a name is a letter or '_' followed by letters, digits and '_'"
+                    $"the build script of '{name}' printed 'pep:{line}', and '{option}' is not a build option name; {link.BUILD_OPTION_NAME_RULE}"
                 );
             }
             into.build_options[option] = defined.is_value() ? defined.value().1 : "1";

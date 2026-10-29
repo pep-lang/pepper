@@ -11,7 +11,7 @@
 
 import compiler.ast;
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
-import [demangle_name, is_build_option_name, NAMESPACE_SEPARATOR] from compiler.link;
+import [BUILD_OPTION_NAME_RULE, demangle_name, is_build_option_name, NAMESPACE_SEPARATOR] from compiler.link;
 import [attribute_arguments, attribute_name] from "attributes";
 import [getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, TAG_FIELD] from "builder";
 import [is_checked_function] from "checked";
@@ -2234,10 +2234,7 @@ struct _Expander {
                 return Result<String, Diagnostic>.Ok(name);
             }
             return Result<String, Diagnostic>.Err(
-                error(
-                    $"invalid build option name '{name}'; a name is a letter or '_' followed by letters, digits and '_'",
-                    argument.span()
-                )
+                error($"invalid build option name '{name}'; {BUILD_OPTION_NAME_RULE}", argument.span())
             );
         }
         return Result<String, Diagnostic>.Err(
