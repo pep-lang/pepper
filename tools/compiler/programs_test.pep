@@ -17,8 +17,9 @@
 # which builds a program without that package's files; reference chains
 # 100,000 deep, released without overflowing the stack; source nested as
 # deep as the parser allows, and one level deeper; the message a stack
-# overflow prints on the main thread, a `Thread` and a task; and the
-# panic hook, which every other kind of panic runs first. The programs are
+# overflow prints on the main thread, a `Thread` and a task; the panic
+# hook, which every other kind of panic runs first; and structs named like
+# a generic's type parameters as its type arguments. The programs are
 # in `testdata/`.
 
 import [File, Path, glob] from io;
@@ -134,6 +135,15 @@ a_syntax_error_in_a_body_shows_its_line() {
         "body_literal_too_large.pep:2:15: error: integer literal is too large to be represented in a 64-bit integer\n    2 |     ulong a = 18446744073709551616;\n      |               ^~~~~~~~~~~~~~~~~~~~"
     );
     expect_true(!error.value().contains("pepc:"), "no 'pepc:' prefix");
+}
+
+# ── generics ────────────────────────────────────────────────────────────────
+
+# A struct named like a generic's type parameter (`T`, `K`, `V`) is that
+# generic's type argument, not taken for the generic itself (#317).
+[Test]
+a_struct_named_like_a_type_parameter_is_a_type_argument() {
+    expect_exit(_run("struct_named_like_type_parameter"), 5);
 }
 
 # ── visibility ──────────────────────────────────────────────────────────────
