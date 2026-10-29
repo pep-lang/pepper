@@ -388,13 +388,16 @@ _main(args: String[]): int {
     setup.import_dirs.append_all(import_dirs.values());
     setup.forced_imports.append_all(imports.values());
     for (var define in defines.values()) {
+        # `NAME` is `NAME=1`, as in C.
         var option = define.split_once("=");
-        if (option.is_value()) {
-            var (defined_name, defined) = option.value();
-            setup.target.build_options[defined_name] = defined;
-        } else {
-            setup.target.build_options[define] = "1";
+        var name = option.is_value() ? option.value().0 : define;
+        var value = option.is_value() ? option.value().1 : "1";
+        if (!link.is_build_option_name(name)) {
+            return parser.usage_error(
+                $"invalid build option name '{name}' in '-D {define}'; {link.BUILD_OPTION_NAME_RULE}"
+            );
         }
+        setup.target.build_options[name] = value;
     }
     if (entry_function.is_set) {
         setup.target.build_options[link.ENTRY_BUILD_OPTION] = entry_function.value();

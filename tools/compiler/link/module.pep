@@ -8,6 +8,7 @@ export [
 ] from "deprecation";
 export [
     DEFAULT_ANDROID_API,
+    BUILD_OPTION_NAME_RULE,
     ENTRY_BUILD_OPTION,
     is_build_option_name,
     supported_triples,
