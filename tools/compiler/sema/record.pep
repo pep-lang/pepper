@@ -11,7 +11,6 @@ import compiler.ast;
 import digest;
 import io;
 import os;
-import [Utf8] from text;
 import [Loc, LocAnchors, LocShift, NO_FILE] from "loc";
 import [Checked, EnumDef, FunctionDef, Module, StructDef, TraitDef] from "model";
 import [set_name] from "names";
@@ -987,23 +986,16 @@ export struct RecordIn {
             return;
         }
         var text_start = _next + size;
-        var bytes = Array<u8>();
-        for (var i in text_start.._data.count) {
-            bytes.append(_data[i]);
-        }
-        var decoded = Utf8.decode(bytes);
-        if (!decoded.is_value()) {
-            error = "a record whose strings are not UTF-8";
-            return;
-        }
-        var all = decoded.value();
-        ulong offset = 0;
+        __ptr<char> text = unsafe_cast<__ptr<char>>(_data.data());
+        ulong offset = text_start;
         for (var s in sizes) {
-            if (offset + s > all.size) {
+            if (offset + s > _data.count) {
                 error = "a truncated record";
                 return;
             }
-            _strings.append(all.substr_bytes(offset, s));
+            # Copied as bytes, not decoded: a string literal's text may hold
+            # bytes that are not UTF-8 (`\x80` to `\xFF` in a `StringConstant`).
+            _strings.append(s == 0 ? String() : String(text + offset, s));
             offset += s;
         }
         _end = text_start;
