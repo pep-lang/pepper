@@ -199,6 +199,9 @@ type is <a href="#ordering-with-comparable">Ordering with Comparable</a>, below.
 <tr><td>Any other struct</td><td>identity (<code>===</code>)</td><td>the object's address</td></tr>
 </tbody></table>
 </div>
+<p>The standard library's structs that compare by value also hash by it:
+<code>BitSet</code> by its members, <code>io.Path</code> by its text, and <code>io.IpAddress</code> and
+<code>io.SocketAddress</code> by their address and port.</p>
 <h2 id="struct-keys-use-identity-by-default"><a class="header" href="#struct-keys-use-identity-by-default">Struct keys use identity by default</a></h2>
 <p>A struct is a <a href="memory.html#values-and-references">reference</a>. Unless it says
 otherwise, two references are the same key only when they refer to the same

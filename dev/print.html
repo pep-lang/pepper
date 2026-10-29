@@ -1262,6 +1262,10 @@ extern ulong strlen(char* text);
 # A `const` initialized from a literal is a StringConstant.
 const GREETING = "hello";
 
+# `\x80` to `\xFF` write raw bytes, which only a StringConstant holds: a
+# byte table kept in static data.
+const TABLE = "\x01\x80\xFF";
+
 shout(text: String): String {
     return text.upper() + "!";
 }
@@ -1284,6 +1288,8 @@ main(): int {
     String typed = "pepper";
     assert(name == typed &amp;&amp; typed == name &amp;&amp; GREETING &lt; typed, "mixed comparisons");
 
+    assert(TABLE.size == 3 &amp;&amp; TABLE.byte_at(2) == 0xFF, "raw bytes");
+
     # Copying a StringConstant copies a pointer.
     var also = name;
     assert(also == name, "same text");
@@ -1294,20 +1300,39 @@ main(): int {
 # HELLO!
 </code></pre>
 <ul>
-<li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
+<li>
+<p><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
 return value of type <code>StringConstant</code>, a <code>HashMap&lt;StringConstant, V&gt;</code> key,
 and a <code>const</code> with no written type (<code>const GREETING = "hello";</code>), so a
 module-scope text constant allocates nothing and any thread may read it.
 Everywhere else, <code>var s = "x"</code> included, a literal is a <code>String</code>, as
-before.</li>
-<li><strong>Converting chains once</strong>: a literal reaches a type that converts from
+before.</p>
+</li>
+<li>
+<p><strong>Raw bytes</strong>: a <code>StringConstant</code> may hold bytes that are not UTF-8,
+written with <code>\x80</code> to <code>\xFF</code>, so a byte table can be a constant in
+static data, read with <code>size</code> and <code>byte_at</code>. Its <code>length</code> is 0, and the
+code-point API and a conversion to <code>String</code> need UTF-8. The same literal
+where a <code>String</code> is expected is an error:</p>
+<pre><code class="language-text">main.pep:3:13: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'
+    3 |     var s = "a\xFFb";
+      |             ^~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Converting chains once</strong>: a literal reaches a type that converts from
 <code>String</code> (<code>io.Path</code>, <code>Error</code>) directly, but a <code>StringConstant</code> variable
 does not, since conversions never chain. Write <code>String(text)</code> or pass a
-literal.</li>
-<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare a
+literal.</p>
+</li>
+<li>
+<p><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare a
 <code>StringConstant</code> with another <code>StringConstant</code> (a literal included) or
-with a <code>String</code>, either way round, and copy nothing.</li>
-<li><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</li>
+with a <code>String</code>, either way round, and copy nothing.</p>
+</li>
+<li>
+<p><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</p>
+</li>
 </ul>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and
 generating text, <code>byte_at</code> and <code>substr_bytes</code> work in bytes (the offsets
@@ -1396,7 +1421,7 @@ which values it accepts.</p>
 <tr><td><code>\\</code></td><td>a backslash</td></tr>
 <tr><td><code>\"</code></td><td>a double quote</td></tr>
 <tr><td><code>\'</code></td><td>a single quote</td></tr>
-<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code> (any byte in a <a href="language/types-and-variables.html#characters">character literal</a>); always two digits, so <code>"\x4"</code> is an error</td></tr>
+<tr><td><code>\xHH</code></td><td>the byte with hexadecimal code <code>HH</code>; always two digits, so <code>"\x4"</code> is an error. Up to <code>\x7F</code> it is that ASCII character. <code>\x80</code> to <code>\xFF</code> write raw bytes, which must make valid UTF-8 in a <code>String</code> (<code>"caf\xC3\xA9"</code> is <code>"café"</code>); any bytes are allowed in a <a href="language/types-and-variables.html#string-constants"><code>StringConstant</code></a> or a C string. An interpolated string stops at <code>\x7F</code></td></tr>
 <tr><td><code>\u{H...}</code></td><td>the Unicode code point with hexadecimal code <code>H...</code> (1 to 6 digits)</td></tr>
 </tbody></table>
 </div>
@@ -1860,8 +1885,10 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>The methods work at their type's own width: <code>byte 200.checked_add(100)</code> is
-Empty, while <code>200 + 100</code> on two <code>byte</code>s is 300 at <code>int</code>.</p>
+<p>The methods work at their type's own width: with <code>byte b = 200;</code>,
+<code>b.checked_add(100)</code> is Empty, while <code>200 + 100</code> on two <code>byte</code>s is 300 at
+<code>int</code>. A method can also be called on a literal, at the literal's type:
+<code>200.checked_add(100)</code> holds 300, since the literal is an <code>int</code>.</p>
 <h3 id="removing-the-checks"><a class="header" href="#removing-the-checks">Removing the checks</a></h3>
 <p>The checks stay on at every optimization level. A build that has measured
 their cost and accepts the risk can remove kinds of check with
@@ -7335,6 +7362,9 @@ type is <a href="language/hashing.html#ordering-with-comparable">Ordering with C
 <tr><td>Any other struct</td><td>identity (<code>===</code>)</td><td>the object's address</td></tr>
 </tbody></table>
 </div>
+<p>The standard library's structs that compare by value also hash by it:
+<code>BitSet</code> by its members, <code>io.Path</code> by its text, and <code>io.IpAddress</code> and
+<code>io.SocketAddress</code> by their address and port.</p>
 <h2 id="struct-keys-use-identity-by-default"><a class="header" href="#struct-keys-use-identity-by-default">Struct keys use identity by default</a></h2>
 <p>A struct is a <a href="language/memory.html#values-and-references">reference</a>. Unless it says
 otherwise, two references are the same key only when they refer to the same
@@ -29359,6 +29389,11 @@ always end in a NUL byte, so <code>c_str()</code> goes to C as it is. It has
 is expected, as if <code>String</code> had an <code>[Implicit]</code> constructor from it: the
 conversion, like <code>String(text)</code>, copies the bytes. Where C expects a
 <code>char*</code>, it passes its own bytes, as <code>c_str()</code> does.</p>
+<p>Unlike a <code>String</code>, a <code>StringConstant</code> may hold bytes that are not UTF-8:
+a literal's <code>\x80</code> to <code>\xFF</code> escapes write raw bytes, so a static byte
+table can be a string constant. Read such bytes with <code>size</code> and
+<code>byte_at</code>; <code>length</code> is 0 for them, and the code-point API (the indexer,
+iteration) and a conversion to <code>String</code> need UTF-8.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">StringConstant name = "pepper";
 assert(name.length == 6, "6 code points");
@@ -29370,7 +29405,7 @@ copy.append("!");
 <h4 id="length-2"><a class="header" href="#length-2">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
-<p>The number of Unicode code points. O(1).</p>
+<p>The number of Unicode code points, or 0 when the bytes are not UTF-8. O(1).</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>size</code></li>
@@ -29378,7 +29413,7 @@ copy.append("!");
 <h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
 <pre><code class="language-pepper">var size: ulong { get; }
 </code></pre>
-<p>The number of bytes of UTF-8, not counting the NUL terminator. O(1).</p>
+<p>The number of bytes, not counting the NUL terminator. O(1).</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>length</code></li>
@@ -29386,7 +29421,7 @@ copy.append("!");
 <h4 id="is_empty-3"><a class="header" href="#is_empty-3">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
-<p>Whether the text has no code points. O(1).</p>
+<p>Whether the text has no bytes, and so no code points. O(1).</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="stringconstant-1"><a class="header" href="#stringconstant-1">StringConstant()</a></h4>
 <pre><code class="language-pepper">construct(data: __ptr&lt;char&gt; = __null, size: ulong = 0, length: ulong = 0)
@@ -42602,6 +42637,19 @@ with the same byte-by-byte comparison.</p>
 <ul>
 <li>true when the paths' texts differ</li>
 </ul>
+<h2 id="hash-4"><a class="header" href="#hash-4">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;Path&gt;(value: Path): u64
+</code></pre>
+<p>Returns a hash of a path's text, so paths that are <code>==</code> hash equally and
+a <code>Path</code> keys a <code>HashMap</code> or <code>HashSet</code> by its text. O(length).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the path to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the path's text</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/file.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="file"><a class="header" href="#file">File</a></h1>
 <p>Source: <code>runtime/io/file.pep</code></p>
@@ -44775,6 +44823,19 @@ the IPv6 address that maps it.</p>
 <ul>
 <li>true when the family, any byte or the scope id differs</li>
 </ul>
+<h2 id="hash-5"><a class="header" href="#hash-5">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;IpAddress&gt;(value: IpAddress): u64
+</code></pre>
+<p>Returns a hash of an address's family, bytes and scope id, what <code>==</code>
+compares, so an <code>IpAddress</code> keys a <code>HashMap</code> or <code>HashSet</code> by its value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the address to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the address</li>
+</ul>
 <h2 id="socketaddress"><a class="header" href="#socketaddress">SocketAddress</a></h2>
 <pre><code class="language-pepper">struct SocketAddress
 </code></pre>
@@ -44896,6 +44957,19 @@ same port.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the address or the port differs</li>
+</ul>
+<h2 id="hash-6"><a class="header" href="#hash-6">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;SocketAddress&gt;(value: SocketAddress): u64
+</code></pre>
+<p>Returns a hash of a socket address's IP address and port, what <code>==</code>
+compares, so a <code>SocketAddress</code> keys a <code>HashMap</code> or <code>HashSet</code> by its value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the socket address to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the socket address</li>
 </ul>
 <h2 id="resolve-1"><a class="header" href="#resolve-1">resolve</a></h2>
 <pre><code class="language-pepper">resolve(host: String, port: u16): IoResult&lt;SocketAddress[]&gt;

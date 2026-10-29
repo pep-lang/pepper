@@ -441,6 +441,19 @@ the IPv6 address that maps it.</p>
 <ul>
 <li>true when the family, any byte or the scope id differs</li>
 </ul>
+<h2 id="hash"><a class="header" href="#hash">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;IpAddress&gt;(value: IpAddress): u64
+</code></pre>
+<p>Returns a hash of an address's family, bytes and scope id, what <code>==</code>
+compares, so an <code>IpAddress</code> keys a <code>HashMap</code> or <code>HashSet</code> by its value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the address to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the address</li>
+</ul>
 <h2 id="socketaddress"><a class="header" href="#socketaddress">SocketAddress</a></h2>
 <pre><code class="language-pepper">struct SocketAddress
 </code></pre>
@@ -562,6 +575,19 @@ same port.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when the address or the port differs</li>
+</ul>
+<h2 id="hash-1"><a class="header" href="#hash-1">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;SocketAddress&gt;(value: SocketAddress): u64
+</code></pre>
+<p>Returns a hash of a socket address's IP address and port, what <code>==</code>
+compares, so a <code>SocketAddress</code> keys a <code>HashMap</code> or <code>HashSet</code> by its value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the socket address to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the socket address</li>
 </ul>
 <h2 id="resolve"><a class="header" href="#resolve">resolve</a></h2>
 <pre><code class="language-pepper">resolve(host: String, port: u16): IoResult&lt;SocketAddress[]&gt;

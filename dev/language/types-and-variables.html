@@ -479,6 +479,10 @@ extern ulong strlen(char* text);
 # A `const` initialized from a literal is a StringConstant.
 const GREETING = "hello";
 
+# `\x80` to `\xFF` write raw bytes, which only a StringConstant holds: a
+# byte table kept in static data.
+const TABLE = "\x01\x80\xFF";
+
 shout(text: String): String {
     return text.upper() + "!";
 }
@@ -501,6 +505,8 @@ main(): int {
     String typed = "pepper";
     assert(name == typed &amp;&amp; typed == name &amp;&amp; GREETING &lt; typed, "mixed comparisons");
 
+    assert(TABLE.size == 3 &amp;&amp; TABLE.byte_at(2) == 0xFF, "raw bytes");
+
     # Copying a StringConstant copies a pointer.
     var also = name;
     assert(also == name, "same text");
@@ -511,20 +517,39 @@ main(): int {
 # HELLO!
 </code></pre>
 <ul>
-<li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
+<li>
+<p><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
 return value of type <code>StringConstant</code>, a <code>HashMap&lt;StringConstant, V&gt;</code> key,
 and a <code>const</code> with no written type (<code>const GREETING = "hello";</code>), so a
 module-scope text constant allocates nothing and any thread may read it.
 Everywhere else, <code>var s = "x"</code> included, a literal is a <code>String</code>, as
-before.</li>
-<li><strong>Converting chains once</strong>: a literal reaches a type that converts from
+before.</p>
+</li>
+<li>
+<p><strong>Raw bytes</strong>: a <code>StringConstant</code> may hold bytes that are not UTF-8,
+written with <code>\x80</code> to <code>\xFF</code>, so a byte table can be a constant in
+static data, read with <code>size</code> and <code>byte_at</code>. Its <code>length</code> is 0, and the
+code-point API and a conversion to <code>String</code> need UTF-8. The same literal
+where a <code>String</code> is expected is an error:</p>
+<pre><code class="language-text">main.pep:3:13: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'
+    3 |     var s = "a\xFFb";
+      |             ^~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Converting chains once</strong>: a literal reaches a type that converts from
 <code>String</code> (<code>io.Path</code>, <code>Error</code>) directly, but a <code>StringConstant</code> variable
 does not, since conversions never chain. Write <code>String(text)</code> or pass a
-literal.</li>
-<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare a
+literal.</p>
+</li>
+<li>
+<p><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> compare a
 <code>StringConstant</code> with another <code>StringConstant</code> (a literal included) or
-with a <code>String</code>, either way round, and copy nothing.</li>
-<li><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</li>
+with a <code>String</code>, either way round, and copy nothing.</p>
+</li>
+<li>
+<p><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</p>
+</li>
 </ul>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and
 generating text, <code>byte_at</code> and <code>substr_bytes</code> work in bytes (the offsets
@@ -613,7 +638,7 @@ which values it accepts.</p>
 <tr><td><code>\\</code></td><td>a backslash</td></tr>
 <tr><td><code>\"</code></td><td>a double quote</td></tr>
 <tr><td><code>\'</code></td><td>a single quote</td></tr>
-<tr><td><code>\xHH</code></td><td>the ASCII character with hexadecimal code <code>HH</code>, at most <code>\x7F</code> (any byte in a <a href="#characters">character literal</a>); always two digits, so <code>"\x4"</code> is an error</td></tr>
+<tr><td><code>\xHH</code></td><td>the byte with hexadecimal code <code>HH</code>; always two digits, so <code>"\x4"</code> is an error. Up to <code>\x7F</code> it is that ASCII character. <code>\x80</code> to <code>\xFF</code> write raw bytes, which must make valid UTF-8 in a <code>String</code> (<code>"caf\xC3\xA9"</code> is <code>"café"</code>); any bytes are allowed in a <a href="#string-constants"><code>StringConstant</code></a> or a C string. An interpolated string stops at <code>\x7F</code></td></tr>
 <tr><td><code>\u{H...}</code></td><td>the Unicode code point with hexadecimal code <code>H...</code> (1 to 6 digits)</td></tr>
 </tbody></table>
 </div>
@@ -1077,8 +1102,10 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>The methods work at their type's own width: <code>byte 200.checked_add(100)</code> is
-Empty, while <code>200 + 100</code> on two <code>byte</code>s is 300 at <code>int</code>.</p>
+<p>The methods work at their type's own width: with <code>byte b = 200;</code>,
+<code>b.checked_add(100)</code> is Empty, while <code>200 + 100</code> on two <code>byte</code>s is 300 at
+<code>int</code>. A method can also be called on a literal, at the literal's type:
+<code>200.checked_add(100)</code> holds 300, since the literal is an <code>int</code>.</p>
 <h3 id="removing-the-checks"><a class="header" href="#removing-the-checks">Removing the checks</a></h3>
 <p>The checks stay on at every optimization level. A build that has measured
 their cost and accepts the risk can remove kinds of check with

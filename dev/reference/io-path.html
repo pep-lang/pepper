@@ -775,6 +775,19 @@ with the same byte-by-byte comparison.</p>
 <ul>
 <li>true when the paths' texts differ</li>
 </ul>
+<h2 id="hash"><a class="header" href="#hash">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;Path&gt;(value: Path): u64
+</code></pre>
+<p>Returns a hash of a path's text, so paths that are <code>==</code> hash equally and
+a <code>Path</code> keys a <code>HashMap</code> or <code>HashSet</code> by its text. O(length).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the path to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the path's text</li>
+</ul>
 
                     </main>
 

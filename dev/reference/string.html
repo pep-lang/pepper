@@ -1016,6 +1016,11 @@ always end in a NUL byte, so <code>c_str()</code> goes to C as it is. It has
 is expected, as if <code>String</code> had an <code>[Implicit]</code> constructor from it: the
 conversion, like <code>String(text)</code>, copies the bytes. Where C expects a
 <code>char*</code>, it passes its own bytes, as <code>c_str()</code> does.</p>
+<p>Unlike a <code>String</code>, a <code>StringConstant</code> may hold bytes that are not UTF-8:
+a literal's <code>\x80</code> to <code>\xFF</code> escapes write raw bytes, so a static byte
+table can be a string constant. Read such bytes with <code>size</code> and
+<code>byte_at</code>; <code>length</code> is 0 for them, and the code-point API (the indexer,
+iteration) and a conversion to <code>String</code> need UTF-8.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">StringConstant name = "pepper";
 assert(name.length == 6, "6 code points");
@@ -1027,7 +1032,7 @@ copy.append("!");
 <h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
-<p>The number of Unicode code points. O(1).</p>
+<p>The number of Unicode code points, or 0 when the bytes are not UTF-8. O(1).</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>size</code></li>
@@ -1035,7 +1040,7 @@ copy.append("!");
 <h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
 <pre><code class="language-pepper">var size: ulong { get; }
 </code></pre>
-<p>The number of bytes of UTF-8, not counting the NUL terminator. O(1).</p>
+<p>The number of bytes, not counting the NUL terminator. O(1).</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>length</code></li>
@@ -1043,7 +1048,7 @@ copy.append("!");
 <h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
-<p>Whether the text has no code points. O(1).</p>
+<p>Whether the text has no bytes, and so no code points. O(1).</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="stringconstant-1"><a class="header" href="#stringconstant-1">StringConstant()</a></h4>
 <pre><code class="language-pepper">construct(data: __ptr&lt;char&gt; = __null, size: ulong = 0, length: ulong = 0)
