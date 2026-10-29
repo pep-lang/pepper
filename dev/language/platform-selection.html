@@ -347,8 +347,9 @@ an error; write <code>[Target(OS(Windows) &amp;&amp; Arch(x64))]</code>.</li>
 <li><code>OS(...)</code> and <code>Arch(...)</code> are only valid inside <code>Target(...)</code>, and the
 brackets hold one attribute: <code>[OS(Windows)]</code> and
 <code>[Target(OS(Windows)) &amp;&amp; Export]</code> are parse errors.</li>
-<li>Struct fields cannot carry <code>[Target(...)]</code>. Select the whole struct instead,
-as <code>Cpu</code> does in the first example.</li>
+<li>Struct fields cannot carry <code>[Target(...)]</code> or <code>[BuildOption(...)]</code>, which
+is an error at the attribute. Select the whole struct instead, as <code>Cpu</code>
+does in the first example.</li>
 </ul>
 <h2 id="cross-compiling"><a class="header" href="#cross-compiling">Cross-compiling</a></h2>
 <p><code>--target &lt;triple&gt;</code> compiles for another platform: <code>[Target(...)]</code> selects

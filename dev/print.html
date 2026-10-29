@@ -1765,8 +1765,8 @@ over its arms. The value converts from that type wherever it goes, and a
 signed types and fills with zeros for unsigned types.</li>
 <li><strong>Overflow</strong> is where Pepper leaves C: it panics, for signed and unsigned
 types alike (see <a href="language/types-and-variables.html#integer-overflow">Integer overflow</a>).</li>
-<li><strong>Precedence</strong> leaves C for <code>|</code> and <code>^</code>, which share a level, so
-<code>1 | 2 ^ 3</code> is <code>(1 | 2) ^ 3</code> (see <a href="language/types-and-variables.html#operators">Operators</a>).</li>
+<li><strong>Precedence</strong> is C's too, the bitwise operators included: <code>&amp;</code>, then
+<code>^</code>, then <code>|</code> (see <a href="language/types-and-variables.html#operators">Operators</a>).</li>
 </ul>
 <pre><code class="language-pepper"># Arithmetic follows C's rules for promotion and conversion.
 main(): int {
@@ -2173,7 +2173,8 @@ differ from C's <code>pow</code> in the last bit; any other exponent calls <code
 <li><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li>
 <li><code>==</code>, <code>!=</code>, <code>===</code>, <code>!==</code></li>
 <li><code>&amp;</code></li>
-<li><code>|</code>, <code>^</code></li>
+<li><code>^</code></li>
+<li><code>|</code></li>
 <li><code>&amp;&amp;</code>, <code>and</code></li>
 <li><code>||</code>, <code>or</code></li>
 <li><code>? :</code></li>
@@ -2181,9 +2182,11 @@ differ from C's <code>pow</code> in the last bit; any other exponent calls <code
 </ol>
 <p>As in C, <code>&amp;</code> binds more loosely than <code>==</code>, so write <code>(flags &amp; mask) == mask</code>
 with the parentheses.</p>
-<p>Unlike C, <code>|</code> and <code>^</code> share one level and group left to right: <code>1 | 2 ^ 3</code>
-is <code>(1 | 2) ^ 3</code>, which is 0, where C reads <code>1 | (2 ^ 3)</code>, which is 1. Code
-ported from C that mixes the two needs parentheses.</p>
+<p>Before 0.12, <code>|</code> and <code>^</code> shared one level, so <code>1 | 2 ^ 3</code> was <code>(1 | 2) ^ 3</code>
+(0); it is now C's <code>1 | (2 ^ 3)</code> (1). For one release the compiler warns
+where <code>^</code> meets <code>|</code>, or <code>&amp;</code> meets <code>^</code>, without parentheses:</p>
+<pre><code class="language-text">main.pep:2:14: warning: '^' binds tighter than '|' since 0.12; add parentheses to make the order explicit
+</code></pre>
 <p>An expression can nest at most 256 levels deep, counting each operator of a
 chain as one level, so a sum of more than about 250 terms is a compile error
 (see <a href="language/compiler-errors.html#common-errors">Compiler errors</a>).</p>
@@ -6175,6 +6178,11 @@ before the first <code>next()</code> you get <code>ArrayIterator.current() befor
 and after <code>next()</code> returned <code>false</code> you get
 <code>ArrayIterator.current() past the end</code>. Your own iterators should follow the
 same rule.</li>
+<li><strong>A check in <code>next()</code> can report the loop.</strong> Overload <code>next</code> with
+<code>next(location: __ptr&lt;char&gt;): bool</code> beside <code>next()</code>, and a <code>for</code> loop
+calls that one with the loop's own location, which a panic in it can
+report (<code>assert(ok, "...", location)</code>). Other calls of <code>next()</code> are
+unchanged.</li>
 </ul>
 <h2 id="modifying-a-collection-while-you-loop-over-it"><a class="header" href="#modifying-a-collection-while-you-loop-over-it">Modifying a collection while you loop over it</a></h2>
 <p>Changing an <code>Array</code> or a <code>String</code> while a loop is iterating over it stops the
@@ -15635,6 +15643,9 @@ main.pep:12:27: note: in pass 1 of 2 (member 'x')
 note: a 'static' block can call the 'reflect' functions and the methods of what they return; calling other functions at compile time is not supported yet
 main.pep:10:1: note: in the static block of 'dump&lt;Point&gt;'
 </code></pre>
+<p>When the block is the runtime's (a <code>json.encode</code> of your struct), the
+error is reported at the last of those uses in your code, with a note at
+the runtime's line, since that use is what you can change.</p>
 <h3 id="at-module-scope"><a class="header" href="#at-module-scope">At module scope</a></h3>
 <p>A <code>static</code> block outside any function runs once, while compiling. It has
 nothing to capture and emits no code; instead, each <code>const</code> declared at the
@@ -16456,8 +16467,9 @@ an error; write <code>[Target(OS(Windows) &amp;&amp; Arch(x64))]</code>.</li>
 <li><code>OS(...)</code> and <code>Arch(...)</code> are only valid inside <code>Target(...)</code>, and the
 brackets hold one attribute: <code>[OS(Windows)]</code> and
 <code>[Target(OS(Windows)) &amp;&amp; Export]</code> are parse errors.</li>
-<li>Struct fields cannot carry <code>[Target(...)]</code>. Select the whole struct instead,
-as <code>Cpu</code> does in the first example.</li>
+<li>Struct fields cannot carry <code>[Target(...)]</code> or <code>[BuildOption(...)]</code>, which
+is an error at the attribute. Select the whole struct instead, as <code>Cpu</code>
+does in the first example.</li>
 </ul>
 <h2 id="cross-compiling"><a class="header" href="#cross-compiling">Cross-compiling</a></h2>
 <p><code>--target &lt;triple&gt;</code> compiles for another platform: <code>[Target(...)]</code> selects
@@ -20407,14 +20419,16 @@ conversions to and from a <code>JsonValue</code> rather than text (with no text,
 <h3 id="types-it-cannot-convert"><a class="header" href="#types-it-cannot-convert">Types it cannot convert</a></h3>
 <p>A property whose type has no JSON form, such as a pointer, a function, or
 a <code>Result</code> (a result is not a value to send over the wire), is a compile
-error naming the property. Notes follow the conversion back to the call
-that asked for it:</p>
-<pre><code class="language-text">runtime/json/convert.pep:358:25: error: 'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON
-...
-main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
+error naming the property, at the call that asked for the conversion.
+Notes follow the conversion into the runtime:</p>
+<pre><code class="language-text">main.pep:10:16: error: 'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON
    10 |     var text = json.encode(job);
       |                ^~~~~~~~~~~
+runtime/json/convert.pep:358:21: note: reported by the runtime here
+...
 </code></pre>
+<p>The same goes for any error a <code>static</code> block of the runtime's raises for
+a type of yours: it is reported in your code, where you used it.</p>
 <h2 id="current-limits-2"><a class="header" href="#current-limits-2">Current limits</a></h2>
 <ul>
 <li><code>parse</code> skips comments; only a <code>JsonDocument</code> keeps them, and

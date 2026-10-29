@@ -982,8 +982,8 @@ over its arms. The value converts from that type wherever it goes, and a
 signed types and fills with zeros for unsigned types.</li>
 <li><strong>Overflow</strong> is where Pepper leaves C: it panics, for signed and unsigned
 types alike (see <a href="#integer-overflow">Integer overflow</a>).</li>
-<li><strong>Precedence</strong> leaves C for <code>|</code> and <code>^</code>, which share a level, so
-<code>1 | 2 ^ 3</code> is <code>(1 | 2) ^ 3</code> (see <a href="#operators">Operators</a>).</li>
+<li><strong>Precedence</strong> is C's too, the bitwise operators included: <code>&amp;</code>, then
+<code>^</code>, then <code>|</code> (see <a href="#operators">Operators</a>).</li>
 </ul>
 <pre><code class="language-pepper"># Arithmetic follows C's rules for promotion and conversion.
 main(): int {
@@ -1390,7 +1390,8 @@ differ from C's <code>pow</code> in the last bit; any other exponent calls <code
 <li><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li>
 <li><code>==</code>, <code>!=</code>, <code>===</code>, <code>!==</code></li>
 <li><code>&amp;</code></li>
-<li><code>|</code>, <code>^</code></li>
+<li><code>^</code></li>
+<li><code>|</code></li>
 <li><code>&amp;&amp;</code>, <code>and</code></li>
 <li><code>||</code>, <code>or</code></li>
 <li><code>? :</code></li>
@@ -1398,9 +1399,11 @@ differ from C's <code>pow</code> in the last bit; any other exponent calls <code
 </ol>
 <p>As in C, <code>&amp;</code> binds more loosely than <code>==</code>, so write <code>(flags &amp; mask) == mask</code>
 with the parentheses.</p>
-<p>Unlike C, <code>|</code> and <code>^</code> share one level and group left to right: <code>1 | 2 ^ 3</code>
-is <code>(1 | 2) ^ 3</code>, which is 0, where C reads <code>1 | (2 ^ 3)</code>, which is 1. Code
-ported from C that mixes the two needs parentheses.</p>
+<p>Before 0.12, <code>|</code> and <code>^</code> shared one level, so <code>1 | 2 ^ 3</code> was <code>(1 | 2) ^ 3</code>
+(0); it is now C's <code>1 | (2 ^ 3)</code> (1). For one release the compiler warns
+where <code>^</code> meets <code>|</code>, or <code>&amp;</code> meets <code>^</code>, without parentheses:</p>
+<pre><code class="language-text">main.pep:2:14: warning: '^' binds tighter than '|' since 0.12; add parentheses to make the order explicit
+</code></pre>
 <p>An expression can nest at most 256 levels deep, counting each operator of a
 chain as one level, so a sum of more than about 250 terms is a compile error
 (see <a href="compiler-errors.html#common-errors">Compiler errors</a>).</p>

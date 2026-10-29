@@ -342,6 +342,9 @@ main.pep:12:27: note: in pass 1 of 2 (member 'x')
 note: a 'static' block can call the 'reflect' functions and the methods of what they return; calling other functions at compile time is not supported yet
 main.pep:10:1: note: in the static block of 'dump&lt;Point&gt;'
 </code></pre>
+<p>When the block is the runtime's (a <code>json.encode</code> of your struct), the
+error is reported at the last of those uses in your code, with a note at
+the runtime's line, since that use is what you can change.</p>
 <h3 id="at-module-scope"><a class="header" href="#at-module-scope">At module scope</a></h3>
 <p>A <code>static</code> block outside any function runs once, while compiling. It has
 nothing to capture and emits no code; instead, each <code>const</code> declared at the

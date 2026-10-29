@@ -747,6 +747,11 @@ before the first <code>next()</code> you get <code>ArrayIterator.current() befor
 and after <code>next()</code> returned <code>false</code> you get
 <code>ArrayIterator.current() past the end</code>. Your own iterators should follow the
 same rule.</li>
+<li><strong>A check in <code>next()</code> can report the loop.</strong> Overload <code>next</code> with
+<code>next(location: __ptr&lt;char&gt;): bool</code> beside <code>next()</code>, and a <code>for</code> loop
+calls that one with the loop's own location, which a panic in it can
+report (<code>assert(ok, "...", location)</code>). Other calls of <code>next()</code> are
+unchanged.</li>
 </ul>
 <h2 id="modifying-a-collection-while-you-loop-over-it"><a class="header" href="#modifying-a-collection-while-you-loop-over-it">Modifying a collection while you loop over it</a></h2>
 <p>Changing an <code>Array</code> or a <code>String</code> while a loop is iterating over it stops the

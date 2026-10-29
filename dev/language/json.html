@@ -572,14 +572,16 @@ conversions to and from a <code>JsonValue</code> rather than text (with no text,
 <h3 id="types-it-cannot-convert"><a class="header" href="#types-it-cannot-convert">Types it cannot convert</a></h3>
 <p>A property whose type has no JSON form, such as a pointer, a function, or
 a <code>Result</code> (a result is not a value to send over the wire), is a compile
-error naming the property. Notes follow the conversion back to the call
-that asked for it:</p>
-<pre><code class="language-text">runtime/json/convert.pep:358:25: error: 'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON
-...
-main.pep:10:16: note: 'encode&lt;Job&gt;' is used by 'main' here
+error naming the property, at the call that asked for the conversion.
+Notes follow the conversion into the runtime:</p>
+<pre><code class="language-text">main.pep:10:16: error: 'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON
    10 |     var text = json.encode(job);
       |                ^~~~~~~~~~~
+runtime/json/convert.pep:358:21: note: reported by the runtime here
+...
 </code></pre>
+<p>The same goes for any error a <code>static</code> block of the runtime's raises for
+a type of yours: it is reported in your code, where you used it.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
 <li><code>parse</code> skips comments; only a <code>JsonDocument</code> keeps them, and
