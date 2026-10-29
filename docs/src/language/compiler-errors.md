@@ -397,7 +397,7 @@ main.pep:3:19: error: type 'int' is not iterable: implement Iterable<T> (iterate
 **An import that names nothing** (see [Modules and imports](modules.md)):
 
 ```text
-main.pep:1:8: error: cannot find "nope.pep" or the module folder "nope" next to this file
+main.pep:1:8: error: cannot find 'nope.pep' or the module folder 'nope' next to this file
     1 | import "nope";
       |        ^~~~~~
 ```

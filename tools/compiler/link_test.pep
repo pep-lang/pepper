@@ -101,7 +101,7 @@ reports_linking_errors() {
         # An unknown module and an unknown file.
         [
             "main.pep",
-            "# expect: main.pep:3:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, runtime\n# expect: main.pep:4:8: error: cannot find \"missing.pep\" or the module folder \"missing\" next to this file\nimport nowhere;\nimport \"missing\";\nmain(): int { return 0; }\n"
+            "# expect: main.pep:3:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, runtime\n# expect: main.pep:4:8: error: cannot find 'missing.pep' or the module folder 'missing' next to this file\nimport nowhere;\nimport \"missing\";\nmain(): int { return 0; }\n"
         ],
         # A private symbol, a name two imports give different meanings,
         # and a qualifier that names no import.
