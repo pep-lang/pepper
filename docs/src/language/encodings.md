@@ -2,7 +2,8 @@
 
 Networked programs keep writing bytes as text and back: credentials in an
 HTTP header, a token in a URL, a value in a query string, an identifier in a
-database. These live in a few places:
+database. Files, protocols and C libraries also hand over text in encodings
+other than UTF-8. These live in a few places:
 
 | What | Where | Functions |
 |---|---|---|
