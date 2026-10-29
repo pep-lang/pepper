@@ -63,3 +63,7 @@ attributes [JSON](json.md) uses: `[Name("key")]`, `[Ignore]` and
 `[Required]`. `unknown_keys = toml.UnknownKeys.Reject` makes an unknown key
 an error. See the [reference](../reference/toml-module.md) for every
 function.
+
+A table's keys are strings, so a map with other keys is a compile-time
+error, as is a set, `Deque`, `PriorityQueue`, `ArrayView` or `BitSet`
+(convert it to an `Array` first), as for [JSON](json.md#current-limits).
