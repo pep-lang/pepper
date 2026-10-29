@@ -28,6 +28,7 @@ import [has_stashed, is_checked_function, unit_decls, take_stashed] from "checke
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import "common";
+import [copy_blocker] from "copies";
 import [READS_ATTRIBUTE] from "lazy";
 import [Loc] from "loc";
 import [
@@ -2331,24 +2332,28 @@ struct _RegionWalk {
         var message = "";
         var lock_loc = Loc.none();
         var advice = "";
+        var verb = "pass";
         if (a >= 0 and b < 0) {
             var lock = locks[a as ulong];
             message = $"'{what}' cannot move into the value locked by '{lock.name}'";
             lock_loc = lock.loc;
-            advice = $"'{spelled}' is not thread-safe, so the locked value cannot share it with the rest of the program; pass 'copy({what})'";
+            advice = $"'{spelled}' is not thread-safe, so the locked value cannot share it with the rest of the program";
         } else if (a < 0 and b >= 0) {
             var lock = locks[b as ulong];
             message = $"'{what}' is part of the value locked by '{lock.name}' and cannot outlive the lock";
             lock_loc = lock.loc;
-            advice = $"'{spelled}' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy({what})'";
+            advice = $"'{spelled}' is not thread-safe, so no part of the locked value may be kept outside the block";
+            verb = "take";
         } else if (a >= 0 and b >= 0) {
             var from = locks[b as ulong];
             message = $"'{what}' is part of the value locked by '{from.name}' and cannot move into the value locked by '{locks[a as ulong].name}'";
             lock_loc = from.loc;
-            advice = $"'{spelled}' is not thread-safe, so two locked values cannot share it; pass 'copy({what})'";
+            advice = $"'{spelled}' is not thread-safe, so two locked values cannot share it";
         } else {
             return;
         }
+        var blocked = cannot_copy(e);
+        advice += blocked.is_value() ? $"; {blocked.value()}" : $"; {verb} 'copy({what})'";
         report(
             _error_at_known(
                 message, _expression_loc(e)
@@ -2377,6 +2382,17 @@ struct _RegionWalk {
     local_region(name: String): long {
         var found = local(name);
         return found.is_value() ? found.value().region : -1;
+    }
+
+    ## Why the value of `e` cannot be copied, for a note that would
+    ## otherwise suggest `copy(...)`; empty when it can, or its type is
+    ## unknown.
+    cannot_copy(e: Expression): String? {
+        var found = ty(e);
+        if (!found.is_value()) {
+            return Optional<String>.Empty;
+        }
+        return copy_blocker(program.module, program.safe, found.value());
     }
 
     ty(e: Expression): TypeName? {
@@ -2641,13 +2657,15 @@ struct _RegionWalk {
                         var lock = locks[locked as ulong];
                         var e = ret.expr.value();
                         var what = _describe(e);
+                        var blocked = cannot_copy(e);
                         report(
                             _error_at_known(
                                 $"'{what}' is part of the value locked by '{lock.name}' and cannot be returned from the block",
                                 _expression_loc(e)
-                            ).with_note(
-                                "locked here", known_location(lock.loc)
-                            ).with_note($"return 'copy({what})' instead", Optional<Location>.Empty)
+                            ).with_note("locked here", known_location(lock.loc)).with_note(
+                                blocked.is_value() ? blocked.value() : $"return 'copy({what})' instead",
+                                Optional<Location>.Empty
+                            )
                         );
                     }
                 }
@@ -2929,6 +2947,8 @@ struct _RegionWalk {
         if (locked >= 0) {
             var lock = locks[locked as ulong];
             var what = _describe(arg);
+            var blocked = cannot_copy(arg);
+            var fix = blocked.is_value() ? blocked.value() : $"capture 'copy({what})'";
             report(
                 _error_at_known(
                     $"closure captures '{what}', which is part of the value locked by '{lock.name}'",
@@ -2937,8 +2957,7 @@ struct _RegionWalk {
                     "locked here",
                     known_location(lock.loc)
                 ).with_note(
-                    $"a function value can carry what it captures out of the block; capture 'copy({what})'",
-                    Optional<Location>.Empty
+                    $"a function value can carry what it captures out of the block; {fix}", Optional<Location>.Empty
                 )
             );
         }
@@ -3015,12 +3034,14 @@ struct _RegionWalk {
                             }
                         }
                     }
+                    var blocked = cannot_copy(value);
+                    var instead = blocked.is_value() ? blocked.value() : $"pass 'copy({node.id})' instead";
                     report(
                         _error_at_known(
                             $"'{node.id}' cannot be moved: {why}",
                             node.loc
                         ).with_note(
-                            "only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead",
+                            $"only a variable that holds the one reference to a new value can hand it over; {instead}",
                             Optional<Location>.Empty
                         )
                     );
@@ -3689,32 +3710,34 @@ struct _Checks {
                         known_location(blamed.value())
                     );
                 }
+                var blocked = walk.cannot_copy(arg);
+                var new_value = blocked.is_value() ?
+                    $"pass a new value ({blocked.value()})" :
+                    $"pass a new value, such as 'copy({what})'";
                 # A local can hand its value over instead of copying it.
                 bool handed = false;
                 if (arg is SymbolRef(node)) {
                     if (walk.local(node.id).is_value()) {
                         handed = true;
-                        diagnostic = diagnostic
-                            .with_note(
-                                $"hand it over with 'move({what})', or pass a new value, such as 'copy({what})'",
-                                Optional<Location>.Empty
+                        diagnostic = diagnostic.with_note(
+                            $"hand it over with 'move({what})', or {new_value}",
+                            Optional<Location>.Empty
+                        ).with_fix(
+                            Fix(
+                                $"Hand '{node.id}' over with 'move({node.id})'",
+                                location_of(node.loc),
+                                $"move({node.id})"
                             )
-                            .with_fix(
-                                Fix(
-                                    $"Hand '{node.id}' over with 'move({node.id})'",
-                                    location_of(node.loc),
-                                    $"move({node.id})"
-                                )
-                            )
-                            .with_fix(
+                        );
+                        if (!blocked.is_value()) {
+                            diagnostic = diagnostic.with_fix(
                                 Fix($"Pass a copy with 'copy({node.id})'", location_of(node.loc), $"copy({node.id})")
                             );
+                        }
                     }
                 }
                 if (!handed) {
-                    diagnostic = diagnostic.with_note(
-                        $"pass a new value, such as 'copy({what})'", Optional<Location>.Empty
-                    );
+                    diagnostic = diagnostic.with_note(new_value, Optional<Location>.Empty);
                 }
                 error = Optional<Diagnostic>.Value(diagnostic);
             }

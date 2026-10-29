@@ -499,6 +499,47 @@ hidden_local_move_programs(): String[] {
     ];
 }
 
+# A confinement error's note suggests 'copy(x)' only for a value that can be
+# copied; for one that cannot, it says what blocks the copy (#292).
+# In two parts, as each program takes about 25 seconds.
+[Test]
+notes_a_copy_only_when_the_value_can_be_copied_part_1() {
+    notes_a_copy_only_when_the_value_can_be_copied(0);
+}
+
+[Test]
+notes_a_copy_only_when_the_value_can_be_copied_part_2() {
+    notes_a_copy_only_when_the_value_can_be_copied(1);
+}
+
+notes_a_copy_only_when_the_value_can_be_copied(part: ulong) {
+    var folder = TempFolder($"passes_confinement_copy_notes_{part}");
+    var all = copy_note_programs();
+    var programs = Array<String>();
+    var start = part * 4;
+    var end = start + 4;
+    for (var i in start..end) {
+        programs.append(all[i]);
+    }
+    expect_equal(
+        check_expected(folder, programs, (path: Path): String => outcome(path, true, notes = true)), 0 as ulong
+    );
+}
+
+copy_note_programs(): String[] {
+    return [
+        "# expect: main.pep:20:16: error: 'reply' is part of the value locked by 'replies' and cannot be returned from the block\n# expect: note: 'Reply' cannot be copied: field 'callback' of 'Reply' holds '() => void', which is a plain function value\nimport async;\n\nstruct Reply {\n    var text: String;\n    var callback: () => void;\n\n    construct(text: String) {\n        this.text = text;\n        this.callback = () => {};\n    }\n}\n\nconst replies = async.ThreadLocal<Reply>();\n\nlatest(): Reply {\n    replies.set(Reply(\"hi\"));\n    with (var reply = replies.enter()) {\n        return reply;\n    }\n    return Reply(\"\");\n}\n\nmain(): int {\n    print(latest().text);\n    return 0;\n}\n",
+        "# expect: main.pep:20:16: error: 'reply' is part of the value locked by 'replies' and cannot outlive the lock\n# expect: note: 'Reply' is not thread-safe, so no part of the locked value may be kept outside the block; 'Reply' cannot be copied: field 'callback' of 'Reply' holds '() => void', which is a plain function value\nimport async;\n\nstruct Reply {\n    var text: String;\n    var callback: () => void;\n\n    construct(text: String) {\n        this.text = text;\n        this.callback = () => {};\n    }\n}\n\nconst replies = async.Mutex<Reply>(Reply(\"hi\"));\n\nmain(): int {\n    var kept = Reply(\"\");\n    with (var reply = replies.lock()) {\n        kept = reply;\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:21:13: error: closure captures 'held', which is part of the value locked by 'replies'\n# expect: note: a function value can carry what it captures out of the block; 'Reply' cannot be copied: field 'callback' of 'Reply' holds '() => void', which is a plain function value\nimport async;\n\nstruct Reply {\n    var text: String;\n    var callback: () => void;\n\n    construct(text: String) {\n        this.text = text;\n        this.callback = () => {};\n    }\n}\n\nconst replies = async.Mutex<Reply>(Reply(\"hi\"));\n\nmain(): int {\n    var f = (): ulong => 0;\n    with (var reply = replies.lock()) {\n        var held = reply;\n        f = (): ulong => held.text.size;\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:19:12: error: 'r' is not a new value, but parameter 'value' takes a value that nothing else references\n# expect: note: hand it over with 'move(r)', or pass a new value ('Reply' cannot be copied: field 'callback' of 'Reply' holds '() => void', which is a plain function value)\nimport async;\n\nstruct Reply {\n    var text: String;\n    var callback: () => void;\n\n    construct(text: String) {\n        this.text = text;\n        this.callback = () => {};\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Reply>();\n    var r = Reply(\"hi\");\n    var keep = r;\n    c.send(r);\n    return 0;\n}\n",
+        "# expect: main.pep:19:17: error: 'r' cannot be moved: 'keep' also references its value\n# expect: note: only a variable that holds the one reference to a new value can hand it over; 'Reply' cannot be copied: field 'callback' of 'Reply' holds '() => void', which is a plain function value\nimport async;\n\nstruct Reply {\n    var text: String;\n    var callback: () => void;\n\n    construct(text: String) {\n        this.text = text;\n        this.callback = () => {};\n    }\n}\n\nmain(): int {\n    var c = async.Channel<Reply>();\n    var r = Reply(\"hi\");\n    var keep = r;\n    c.send(move(r));\n    return 0;\n}\n",
+        # A blocker the type is itself, and one two fields deep.
+        "# expect: main.pep:15:16: error: 'handle' is part of the value locked by 'handles' and cannot be returned from the block\n# expect: note: 'Handle' cannot be copied: it owns a handle\nimport async;\n\n[NotCopyable(\"owns a handle\")]\nstruct Handle {\n    var n: int;\n}\n\nconst handles = async.ThreadLocal<Handle>();\n\nlatest(): Handle {\n    handles.set(Handle());\n    with (var handle = handles.enter()) {\n        return handle;\n    }\n    return Handle();\n}\n\nmain(): int {\n    return latest().n;\n}\n",
+        "# expect: main.pep:26:16: error: 'reply' is part of the value locked by 'replies' and cannot be returned from the block\n# expect: note: 'Reply' cannot be copied: field 'inner' of 'Reply' holds 'Inner'; field 'callback' of 'Inner' holds '() => void', which is a plain function value\nimport async;\n\nstruct Inner {\n    var callback: () => void;\n\n    construct() {\n        this.callback = () => {};\n    }\n}\n\nstruct Reply {\n    var inner: Inner;\n\n    construct() {\n        this.inner = Inner();\n    }\n}\n\nconst replies = async.ThreadLocal<Reply>();\n\nlatest(): Reply {\n    replies.set(Reply());\n    with (var reply = replies.enter()) {\n        return reply;\n    }\n    return Reply();\n}\n\nmain(): int {\n    latest();\n    return 0;\n}\n",
+        "# expect: main.pep:9:16: error: 'list' is part of the value locked by 'names' and cannot be returned from the block\n# expect: note: return 'copy(list)' instead\nimport async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nfirst(): Array<String> {\n    with (var list = names.lock()) {\n        return list;\n    }\n    return Array<String>();\n}\n\nmain(): int {\n    return first().count as int;\n}\n"
+    ];
+}
+
 confinement_error_programs(): String[] {
     return [
         # A value from outside moved into a locked one, and part of a locked
@@ -784,8 +825,9 @@ check_programs(folder: TempFolder, programs: String[], runtime: bool = false): u
 # How the passes end on the program rooted at `root`: `accepted`, or the
 # first line of the error that loading, merging or a pass reports, its
 # file named from the program's folder (`main.pep`) or the runtime's
-# (`runtime/...`).
-outcome(root: Path, runtime: bool): String {
+# (`runtime/...`), and with `notes` each note of a pass's error that has
+# no location.
+outcome(root: Path, runtime: bool, notes: bool = false): String {
     var setup = link.Setup();
     setup.runtime = runtime;
     var program = link.load_program(root, setup);
@@ -798,7 +840,14 @@ outcome(root: Path, runtime: bool): String {
     }
     var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
     if (ran.is_err()) {
-        return headline(render_all([ran.error()], program.value().sources()), root);
+        var rendered = render_all([ran.error()], program.value().sources());
+        var lines = [headline(rendered, root)];
+        for (var line in rendered.split("\n")) {
+            if (notes and line.starts_with("note: ")) {
+                lines.append(line);
+            }
+        }
+        return "\n".join(lines);
     }
     return "accepted";
 }
