@@ -2384,7 +2384,17 @@ export struct StringIterator {
     ## @panics if the String was modified since the
     ##   iterator was created
     next(): bool {
-        assert(_source._version == _version, "String modified during iteration");
+        return next(__caller_location());
+    }
+
+    ## `next()` for a `for` loop, which passes its own location so that
+    ## the panic names the loop.
+    ##
+    ## @param location the loop's location, which a panic reports
+    ## @returns true when positioned on a code point, false at the end
+    ## @panics if the String was modified since the
+    next(location: __ptr<char>): bool {
+        assert(_source._version == _version, "String modified during iteration", location);
         if (_started) {
             _offset = _next_offset;
         } else {

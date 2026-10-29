@@ -295,7 +295,10 @@ for (var x in nums) {
 Every method that changes an `Array` counts, including storing an element with
 `nums[i] = v`. For a `String`, `append` and `grow` count, and the message is
 `String modified during iteration`. The check happens on the iterator's next
-step, so modifying the collection after the loop is finished is fine.
+step, so modifying the collection after the loop is finished is fine. The
+panic names the `for` loop's line (`main.pep:3:5: panic: Array modified
+during iteration`). The maps, sets, `Deque` and array slices check the same
+way, each with its own message.
 
 To change elements as you go, loop over an index with `while` and store through
 it, or collect the changes in a second array and apply them after the loop.
