@@ -19,7 +19,7 @@ import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
 import [Target, undefined_build_option_comparisons] from "platform";
-import [load_manifest, Packages] from "project";
+import [load_manifest, Packages, ungenerated_module] from "project";
 import "project";
 import [check_visibility] from "visibility";
 
@@ -622,7 +622,10 @@ export load(
             if (imp.is_local) {
                 message = $"cannot find '{imp.stem()}.pep' or the module folder '{imp.stem()}' next to this file";
             } else {
-                message = $"cannot find module '{imp.name}': no {imp.name.replace(".", "/")}/module.pep in {_describe_paths(search_paths)}";
+                var ungenerated = ungenerated_module(path, imp.name);
+                message = ungenerated.is_value() ?
+                    ungenerated.value() :
+                    $"cannot find module '{imp.name}': no {imp.name.replace(".", "/")}/module.pep in {_describe_paths(search_paths)}";
             }
             # Only a module search depends on `-I`; a missing file is
             # missing everywhere.

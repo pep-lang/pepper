@@ -289,6 +289,18 @@ reports_check_errors_and_warnings() {
             "# expect: main.pep:6:9: error: 'hidden' is private to lib.pep; declare it with 'export' to use it from another file\n# expect: lib.pep:2:1: note: declared here\nimport \"lib\";\nmain(): int {\n\tvar x = Lib();\r\n\treturn hidden(x) + Lib.make().n;\r\n}\r\n",
             "lib.pep",
             "export struct Lib { var n: int; static make(): Lib { return Lib(); } }\nhidden(l: Lib): int { return l.n; }\n"
+        ],
+        # A package with a build script, found on the import path, whose
+        # `generated` module no build makes (#413).
+        [
+            "main.pep",
+            "# expect: deps/gen/module.pep:1:8: error: 'gen' generates module 'generated' with its build script, which runs only for the project and its dependencies; add 'gen' to '[dependencies]' instead of finding it on the import path\nimport gen;\nmain(): int {\n    return gen.answer();\n}\n",
+            "deps/gen/pep.toml",
+            "[package]\nname = \"gen\"\nversion = \"0.1.0\"\n",
+            "deps/gen/build.pep",
+            "main(): int {\n    return 0;\n}\n",
+            "deps/gen/module.pep",
+            "import generated;\nexport answer(): int {\n    return generated.answer();\n}\n"
         ]
     ];
     expect_equal(check_trees(folder, trees, outcome), 0 as ulong);
