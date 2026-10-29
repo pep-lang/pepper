@@ -42,7 +42,7 @@
 import compiler.ast;
 import cli;
 import compiler.codegen;
-import [render_all] from compiler.diagnostic;
+import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
 import compiler.driver;
 import compiler.incremental;
 import io;
@@ -63,7 +63,7 @@ _main(args: String[]): int {
     var parser = cli.Parser("pep-build", "Pepper compiler", version());
     var files = parser.positionals(
         "SOURCE_FILES",
-        "The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it"
+        "The program's entry file. The files it imports are found on their own, so name only this one (several only with `--test`). With none, builds the project whose `pep.toml` is in the current directory or above it"
     );
     var import_dirs = parser.multiple<Path>("", "I", "Add a directory to the import search path", "DIR");
     var imports = parser.multiple("import", help = "Force an import by name", value_name = "NAME");
@@ -287,6 +287,11 @@ _main(args: String[]): int {
         return parser.usage_error("'--part' needs '--compile-part'");
     }
     var paths = files.values();
+    # A program is its entry file and what that imports; only `--test`
+    # builds several files' tests together.
+    if (paths.count > 1 and !test.is_set) {
+        return parser.usage_error($"'{paths[1]}' is not compiled: only the entry file is; import it from '{paths[0]}'");
+    }
     var path = paths.is_empty ? Optional<String>.Empty : Optional<String>.Value(paths[0]);
     # The workspace members `--all` and `-p` select: with no file, each is
     # built in a child of its own; with one, their features are unified.
@@ -684,6 +689,20 @@ _main(args: String[]): int {
         _report(program.error());
         return 1;
     }
+    # An executable starts in `main`; without one the linker's own error
+    # would be all the user sees (LNK1561 on Windows). Not before the
+    # program's own linking errors, which the build reports; not in a
+    # worker, which would report it again.
+    if (setup.defer_bodies
+        and program.value().errors.is_empty
+        and !compilation_unit_worker.is_set
+        and !kind.is_value()
+        and !test.is_set
+        and !entry_function.is_set
+        and !_declares_function(entry, "main")) {
+        _report(_no_main(entry));
+        return 1;
+    }
     if (emit_static.is_set) {
         # The copies go into `-o`, else `<stem>.static`.
         var stem = entry.file_stem();
@@ -890,6 +909,16 @@ _declares_function(path: Path, name: String): bool {
         }
     }
     return false;
+}
+
+# The error for an entry file with no `main`, at its start.
+_no_main(entry: Path): String {
+    var source = File.read_to_string(entry);
+    var name = entry.file_name().value_or(entry.to_string());
+    var error = Diagnostic.error(
+        $"no function named 'main' in '{name}' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'"
+    ).at(Location(0, ast.Span(0, 0)));
+    return error.render([SourceText(entry.to_string(), source.is_ok() ? source.value() : "")]);
 }
 
 # Prints `message` on standard error as an error: with `error:` unless it is

@@ -6,6 +6,7 @@
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
+import [demangle_name] from compiler.link;
 import [is_numeric_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE] from "builder";
 import [unit_decls] from "checked";
@@ -226,6 +227,8 @@ enum _SlotKind {
     Assignment,
     Return,
     Variable,
+    ## The index of `[]`, whose indexer method is the compiler's.
+    Index,
     Silent,
 }
 
@@ -270,11 +273,34 @@ struct _FlowSlot {
             Variable => {
                 return $"cannot initialize variable '{name}' of type '{expected}' with a value of type '{actual}'";
             }
+            Index => {
+                # `name` is the indexed type; a range asks for a slice.
+                var advice = actual.starts_with("Range<") ?
+                    "; write 'slice(start, end)' for part of it" :
+                    $", which takes '{expected}'";
+                return $"cannot index '{name}' with a value of type '{actual}'{advice}";
+            }
             Silent => {
                 return "";
             }
         }
     }
+}
+
+## Whether `method` is the indexer `a[i]` and `a[i] = v` call.
+_is_indexer(method: String): bool {
+    var name = set_name(method);
+    return name == "__index_get" or name == "__index_set";
+}
+
+## Whether `st` declares a method, static or not, named `method`.
+_declares_method(st: StructDef, method: String): bool {
+    for (var m in st.method_members) {
+        if (set_name(m.name) == method) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ## Collects the calls, operators and ternaries of an expression, in order.
@@ -840,10 +866,34 @@ struct _FunctionTypes {
                 }
             }
             MethodCall(node) => {
+                # `S.m()` on a struct the receiver names, with no `m`: code
+                # generation would take `S` for a variable (#411).
+                if (node.this_value is SymbolRef(receiver)) {
+                    var found = named_structs.try_get(receiver.id);
+                    var method = set_name(node.method);
+                    # A struct's name, as a static call's receiver, has the
+                    # struct as its type.
+                    bool type_name = receiver.ty.is_empty()
+                        or receiver.ty.is_auto()
+                        or receiver.ty.to_string() == receiver.id;
+                    if (type_name and found.is_value() and !_declares_method(found.value(), method)) {
+                        state.report(
+                            error_at($"no static method named '{method}' in '{demangle_name(receiver.id)}'", node.loc)
+                        );
+                        return;
+                    }
+                }
                 var this_type = static_type_of(node.this_value, table, current, state);
                 if (this_type.is_value()) {
                     var params = parameters_of_method(this_type.value(), node.method);
-                    if (params.is_value()) {
+                    if (params.is_value()
+                        and _is_indexer(node.method)
+                        and node.args.count > 0
+                        and params.value().count > 0) {
+                        # `a[i]` and `a[i] = v`: the index, by the operator.
+                        var slot = _FlowSlot(_SlotKind.Index, "", this_type.value().display(), node.loc);
+                        flows_into(node.args[0], params.value()[0], slot);
+                    } else if (params.is_value()) {
                         check_arguments(
                             $"argument {{}} of '{node.method}'", params.value(), node.args, node.loc, false
                         );

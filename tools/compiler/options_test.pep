@@ -359,6 +359,19 @@ d_checks_the_build_option_name() {
     _succeeds(folder.path, ["-D", "_FAST2=a=b", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
 }
 
+# A second source file is not compiled, so naming one is an error that says
+# to import it, rather than an error about the entry file (#360).
+[Test]
+refuses_a_second_source_file() {
+    var folder = _program("options_two_files", "main(): int {\n    return helper();\n}\n");
+    File.write_text(folder.path.join(Path("b.pep")), "export helper(): int {\n    return 0;\n}\n");
+    var ran = _pep_build(folder.path, ["main.pep", "b.pep", "-o", "ab", "--build", "build", "--no-cache"]);
+    expect_equal(_code(ran), 2);
+    expect_contains(
+        ran.stderr, "pep-build: error: 'b.pep' is not compiled: only the entry file is; import it from 'main.pep'"
+    );
+}
+
 # With no `-o`, the executable is named for the entry file, with `.exe` on
 # Windows, which runs nothing without it (#314); `-o` names it as given.
 [Test]
@@ -372,6 +385,20 @@ names_the_executable_for_the_entry_file() {
     expect_true(ran.is_ok() and ran.value().status.success());
     _succeeds(folder.path, ["main.pep", "-o", "given", "--build", "build", "--no-cache"]);
     expect_true(folder.path.join(Path("given")).is_file());
+}
+
+# An entry file with no `main` is an error at its start that suggests
+# `--lib`, not the linker's (#362); with `--lib` it builds.
+[Test]
+an_executable_needs_main() {
+    var folder = _program("options_no_main", _LIBRARY);
+    var ran = _pep_build(folder.path, ["main.pep", "-o", "never", "--build", "build", "--no-cache"]);
+    expect_equal(_code(ran), 1);
+    expect_contains(
+        ran.stderr,
+        "main.pep:1:1: error: no function named 'main' in 'main.pep' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'"
+    );
+    _succeeds(folder.path, ["--lib", "static", "main.pep", "--build", "build", "--no-cache"]);
 }
 
 # `--lib swift-package`: a Swift package of the Swift wrappers over an iOS

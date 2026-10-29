@@ -4090,4 +4090,5 @@ the checkout (`PEPPER_TARGET_DIR`).
 - **Only the first sema error is reported** per compile
   (`PassState.report`).
 - **Unused CLI flags**: `-v`, and `-T` channels other than `time` and
-  `cache`. Only the first source file is compiled (except under `--test`).
+  `cache`. Naming a second source file is an error (except under
+  `--test`): only the entry file is compiled.

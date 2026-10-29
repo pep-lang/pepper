@@ -36,7 +36,13 @@ consistently. The first form is the one used throughout this book.
 - **The program starts at `main`.** `main(): int` returns the process's exit
   code; return 0 for success. To receive the command-line arguments, declare
   it `main(args: String[]): int` instead. See
-  [Command-line arguments and exit](#command-line-arguments-and-exit).
+  [Command-line arguments and exit](#command-line-arguments-and-exit). The
+  entry file must declare it; a file of functions for C to call is a library
+  (`--lib`), and building one as a program is an error:
+
+  ```
+  lib.pep:1:1: error: no function named 'main' in 'lib.pep' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'
+  ```
 - **Calls must match the declaration.** Passing the wrong number of arguments
   is a compile error:
 

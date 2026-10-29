@@ -268,6 +268,8 @@ a type of yours: it is reported in your code, where you used it.
   `decode` never does. A document is always written indented.
 - A struct's own conversion cannot be customized yet: a type converts as
   its properties do.
-- Map keys must be `String`s.
+- Map keys must be `String`s; a map with other keys is a compile-time
+  error, as is a set, `Deque`, `PriorityQueue`, `ArrayView` or `BitSet`
+  (convert it to an `Array` first).
 
 The [reference](../reference/json-module.md) lists every function.

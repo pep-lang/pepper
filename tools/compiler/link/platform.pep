@@ -431,7 +431,7 @@ struct _Evaluator {
                     return _fail_at($"'{id}' needs the name of a build option, such as '[{id}(\"USE_ZLIB\")]'", span);
                 }
                 if (_is_target(id)) {
-                    return _fail($"platform predicate `{id}` used without a value in {attribute_text(attribute)}");
+                    return _fail_at($"'{id}' needs a predicate, such as '[{id}(OS(Linux))]'", span);
                 }
                 return true;
             }
@@ -444,8 +444,9 @@ struct _Evaluator {
                         }
                         if (_is_target(id)) {
                             if (arguments.count != 1) {
-                                return _fail(
-                                    $"Target takes exactly one value (a boolean over OS(...), Arch(...) and BuildOption(...)) in {attribute_text(attribute)}"
+                                return _fail_at(
+                                    $"'{id}' takes exactly one predicate, a boolean over 'OS(...)', 'Arch(...)' and 'BuildOption(...)'",
+                                    call_span
                                 );
                             }
                             return _predicate(arguments[0]);
@@ -471,31 +472,29 @@ struct _Evaluator {
     }
 
     _bad_body(): String {
-        return $"invalid platform predicate in {attribute_text(attribute)}";
+        return $"invalid platform predicate in '{attribute_text(attribute)}'; expected 'OS(...)', 'Arch(...)' or 'BuildOption(...)'";
     }
 
     _predicate(e: Expression): bool {
         match (e) {
             FunctionCall(function, arguments, call_span) => {
                 match (function) {
-                    SymbolRef(id, _) => {
+                    SymbolRef(id, id_span) => {
                         var lower = id.lower();
                         if (lower == "os") {
-                            return _os_matches(arguments);
+                            return _os_matches(id, arguments, call_span);
                         }
                         if (lower == "arch") {
-                            return _arch_matches(arguments);
+                            return _arch_matches(id, arguments, call_span);
                         }
                         if (_is_build_option(id)) {
                             var name = _build_option_name(id, arguments, call_span);
                             return name.is_value() and target.build_options.contains(name.value());
                         }
                         if (_is_target(id)) {
-                            return _fail($"`{id}` cannot be nested inside Target(...) in {attribute_text(attribute)}");
+                            return _fail_at($"'{id}' cannot be nested inside 'Target(...)'", id_span);
                         }
-                        return _fail(
-                            $"unknown predicate `{id}` (expected OS, Arch or BuildOption) in {attribute_text(attribute)}"
-                        );
+                        return _fail_at($"unknown predicate '{id}'; expected 'OS', 'Arch' or 'BuildOption'", id_span);
                     }
                     else => {
                         return _fail(_bad_body());
@@ -527,9 +526,9 @@ struct _Evaluator {
                 }
                 return _fail(_bad_body());
             }
-            SymbolRef(id, _) => {
-                return _fail(
-                    $"bare symbol `{id}` is not a predicate; expected OS(...), Arch(...) or BuildOption(...) in {attribute_text(attribute)}"
+            SymbolRef(id, span) => {
+                return _fail_at(
+                    $"'{id}' is not a predicate; expected 'OS(...)', 'Arch(...)' or 'BuildOption(...)'", span
                 );
             }
             else => {
@@ -728,21 +727,12 @@ struct _Evaluator {
         }
     }
 
-    _os_matches(arguments: Expression[]): bool {
-        if (arguments.count != 1) {
-            return _fail($"OS predicate takes exactly one value in {attribute_text(attribute)}");
+    _os_matches(name: String, arguments: Expression[], call_span: Span): bool {
+        var value = _value_of(name, arguments, call_span, _OS_VALUES);
+        if (!value.is_value()) {
+            return false;
         }
-        var value = "";
-        match (arguments[0]) {
-            SymbolRef(id, _) => {
-                value = id;
-            }
-            else => {
-                return _fail(
-                    $"OS predicate value must be a symbol (Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in {attribute_text(attribute)}"
-                );
-            }
-        }
+        var value_span = arguments[0].span();
         var host = target.os;
         if (host != "windows"
             and host != "macos"
@@ -752,7 +742,7 @@ struct _Evaluator {
             and host != "android") {
             return false;
         }
-        match (value.lower()) {
+        match (value.value().lower()) {
             "windows" => {
                 return host == "windows";
             }
@@ -772,27 +762,15 @@ struct _Evaluator {
                 return host == "android";
             }
             else => {
-                return _fail(
-                    $"unknown OS value `{value}` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in {attribute_text(attribute)}"
-                );
+                return _fail_at($"unknown OS '{value.value()}'; expected {_OS_VALUES}", value_span);
             }
         }
     }
 
-    _arch_matches(arguments: Expression[]): bool {
-        if (arguments.count != 1) {
-            return _fail($"Arch predicate takes exactly one value in {attribute_text(attribute)}");
-        }
-        var value = "";
-        match (arguments[0]) {
-            SymbolRef(id, _) => {
-                value = id;
-            }
-            else => {
-                return _fail(
-                    $"Arch predicate value must be a symbol (x64, aarch64, wasm32) in {attribute_text(attribute)}"
-                );
-            }
+    _arch_matches(name: String, arguments: Expression[], call_span: Span): bool {
+        var value = _value_of(name, arguments, call_span, _ARCH_VALUES);
+        if (!value.is_value()) {
+            return false;
         }
         var host = "";
         match (target.arch) {
@@ -809,16 +787,36 @@ struct _Evaluator {
                 return false;
             }
         }
-        var lower = value.lower();
+        var lower = value.value().lower();
         if (lower == host) {
             return true;
         }
         if (lower == "x64" or lower == "aarch64" or lower == "wasm32") {
             return false;
         }
-        return _fail($"unknown Arch value `{value}` (expected x64, aarch64, wasm32) in {attribute_text(attribute)}");
+        return _fail_at($"unknown Arch '{value.value()}'; expected {_ARCH_VALUES}", arguments[0].span());
+    }
+
+    # The one name `OS(...)` or `Arch(...)` (`name`) is given, which is one of
+    # `values`; empty after reporting a call without one.
+    _value_of(name: String, arguments: Expression[], call_span: Span, values: String): String? {
+        if (arguments.count != 1) {
+            _fail_at($"'{name}' takes exactly one value: {values}", call_span);
+            return Optional<String>.Empty;
+        }
+        if (arguments[0] is SymbolRef(id, _)) {
+            return Optional<String>.Value(id);
+        }
+        _fail_at($"the value of '{name}' must be a name: {values}", arguments[0].span());
+        return Optional<String>.Empty;
     }
 }
+
+# The values `OS(...)` takes, as an error lists them.
+const _OS_VALUES = "'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'";
+
+# The values `Arch(...)` takes, as an error lists them.
+const _ARCH_VALUES = "'x64', 'aarch64' or 'wasm32'";
 
 ## A comparison with a build option the target does not define, which is
 ## false.

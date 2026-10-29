@@ -87,10 +87,15 @@ an error, and the compiler exits with status 2 after a short usage message.
 pepper build main.pep
 ```
 
-The file that holds `main`. The compiler finds the files it imports on its
+The file that holds `main` (without `--lib` or `--test`, an entry file
+with no `main` is an error). The compiler finds the files it imports on its
 own (see [Modules and imports](../language/modules.md)), so a program of many
-files is compiled by naming its entry file alone. Only the first file named
-is compiled; any others are ignored.
+files is compiled by naming its entry file alone. Naming a second file is
+an error, except with `--test`, which builds the tests of several files:
+
+```text
+pep-build: error: 'b.pep' is not compiled: only the entry file is; import it from 'a.pep'
+```
 
 With no file, the compiler builds the project whose `pep.toml` is in the
 current folder or the nearest folder above it: its `[build]` table names the

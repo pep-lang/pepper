@@ -137,6 +137,22 @@ a_syntax_error_in_a_body_shows_its_line() {
     expect_true(!error.value().contains("pepc:"), "no 'pepc:' prefix");
 }
 
+# A `{` never closed is reported where its `}` was due, with a note at the
+# `{` (#328).
+[Test]
+an_unclosed_brace_notes_the_brace() {
+    var folder = TempFolder("programs_unclosed_brace");
+    var source = folder.path.join("unclosed_brace.pep");
+    # Written here: in testdata/, the repository's parse test would read it.
+    write_file(source, "main(): int {\n    return 0;\n\n\n");
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(error.value(), "unclosed_brace.pep:5:1: error: expected '}'\n    5 | \n      | ^\n");
+    expect_contains(
+        error.value(), "unclosed_brace.pep:1:13: note: to match this '{'\n    1 | main(): int {\n      |             ^"
+    );
+}
+
 # ── generics ────────────────────────────────────────────────────────────────
 
 # A struct named like a generic's type parameter (`T`, `K`, `V`) is that
