@@ -374,6 +374,20 @@ names_the_executable_for_the_entry_file() {
     expect_true(folder.path.join(Path("given")).is_file());
 }
 
+# An entry file with no `main` is an error at its start that suggests
+# `--lib`, not the linker's (#362); with `--lib` it builds.
+[Test]
+an_executable_needs_main() {
+    var folder = _program("options_no_main", _LIBRARY);
+    var ran = _pep_build(folder.path, ["main.pep", "-o", "never", "--build", "build", "--no-cache"]);
+    expect_equal(_code(ran), 1);
+    expect_contains(
+        ran.stderr,
+        "main.pep:1:1: error: no function named 'main' in 'main.pep' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'"
+    );
+    _succeeds(folder.path, ["--lib", "static", "main.pep", "--build", "build", "--no-cache"]);
+}
+
 # `--lib swift-package`: a Swift package of the Swift wrappers over an iOS
 # `.xcframework`, built on any system, whose simulator library is a
 # universal file of two archives; and the output names and options it and

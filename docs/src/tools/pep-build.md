@@ -87,7 +87,8 @@ an error, and the compiler exits with status 2 after a short usage message.
 pepper build main.pep
 ```
 
-The file that holds `main`. The compiler finds the files it imports on its
+The file that holds `main` (without `--lib` or `--test`, an entry file
+with no `main` is an error). The compiler finds the files it imports on its
 own (see [Modules and imports](../language/modules.md)), so a program of many
 files is compiled by naming its entry file alone. Only the first file named
 is compiled; any others are ignored.

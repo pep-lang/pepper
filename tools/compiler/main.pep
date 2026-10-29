@@ -42,7 +42,7 @@
 import compiler.ast;
 import cli;
 import compiler.codegen;
-import [render_all] from compiler.diagnostic;
+import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
 import compiler.driver;
 import compiler.incremental;
 import io;
@@ -684,6 +684,20 @@ _main(args: String[]): int {
         _report(program.error());
         return 1;
     }
+    # An executable starts in `main`; without one the linker's own error
+    # would be all the user sees (LNK1561 on Windows). Not before the
+    # program's own linking errors, which the build reports; not in a
+    # worker, which would report it again.
+    if (setup.defer_bodies
+        and program.value().errors.is_empty
+        and !compilation_unit_worker.is_set
+        and !kind.is_value()
+        and !test.is_set
+        and !entry_function.is_set
+        and !_declares_function(entry, "main")) {
+        _report(_no_main(entry));
+        return 1;
+    }
     if (emit_static.is_set) {
         # The copies go into `-o`, else `<stem>.static`.
         var stem = entry.file_stem();
@@ -890,6 +904,16 @@ _declares_function(path: Path, name: String): bool {
         }
     }
     return false;
+}
+
+# The error for an entry file with no `main`, at its start.
+_no_main(entry: Path): String {
+    var source = File.read_to_string(entry);
+    var name = entry.file_name().value_or(entry.to_string());
+    var error = Diagnostic.error(
+        $"no function named 'main' in '{name}' to start the program in; to build a library instead, pass '--lib static' or '--lib shared'"
+    ).at(Location(0, ast.Span(0, 0)));
+    return error.render([SourceText(entry.to_string(), source.is_ok() ? source.value() : "")]);
 }
 
 # Prints `message` on standard error as an error: with `error:` unless it is
