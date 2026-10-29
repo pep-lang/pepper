@@ -57,6 +57,10 @@ export syntax_actions(document: lsp.TextDocument): lsp.CodeAction[] {
         return out;
     }
     for (var w in parsed.value().warnings) {
+        # Only a deprecation has a replacement to offer.
+        if (!w.message.is_empty) {
+            continue;
+        }
         var diagnostic = lsp.Diagnostic(
             document.range_of(w.span.start, w.span.end), $"{w.what} is deprecated: {w.instead}", lsp.SEVERITY_WARNING
         );
