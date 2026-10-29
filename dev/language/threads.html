@@ -557,7 +557,8 @@ note: threads change a shared struct's state through a thread-safe member such a
 </code></pre>
 <p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves, and so
 are the synchronization types below: <code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code>,
-<code>Condition&lt;T&gt;</code>, <code>Once</code> and <code>Lazy&lt;T&gt;</code>.</p>
+<code>Condition&lt;T&gt;</code>, <code>RwLock&lt;T&gt;</code>, <code>Semaphore</code>, <code>Barrier</code>, <code>Latch</code>, <code>Once</code> and
+<code>Lazy&lt;T&gt;</code>.</p>
 <h3 id="module-scope-variables"><a class="header" href="#module-scope-variables">Module-scope variables</a></h3>
 <p>Every module-scope variable is implicitly shared, exported or not: any
 function can use it, and any function can run on any thread. So it follows
@@ -1579,14 +1580,13 @@ must be thread-safe, since every thread gets the same value.</li>
 declared outside the block: such a variable is an outside value, whatever
 it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the only reference
 (<code>list.append(move(job))</code>).</li>
-<li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
-not re-entrant.</li>
+<li>A Mutex is not re-entrant, and neither is an <code>RwLock</code>.</li>
 <li>The value a <code>Select</code>'s <code>wait()</code> returns is not a new value for a lock
 body, since it comes from <code>wrap</code>, a function value the <code>Select</code> keeps,
 and may share what <code>wrap</code> captured; <code>copy</code> it to move it into a locked
 value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
-which panics.</li>
+or asking to write an <code>RwLock</code> the thread holds, which panic.</li>
 </ul>
 
                     </main>

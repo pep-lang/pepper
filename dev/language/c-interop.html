@@ -871,8 +871,10 @@ so pair it with <a href="platform-selection.html"><code>[Target(Arch(...))]</cod
 <h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
 <p>A C function is only callable if the library that defines it is linked into
 your program. The C library is always linked. For anything else, attach
-<code>[Link("name")]</code> to the extern or pass <code>-l name</code> to the compiler. The
-<a href="linking.html">Linking</a> chapter covers both.</p>
+<code>[Link("name")]</code> to the extern or pass <code>-l name</code> to the compiler. A
+package that bundles the C source compiles it with a
+<a href="../tools/projects.html#native"><code>[native]</code></a> table in its <code>pep.toml</code>, or a
+build script. The <a href="linking.html">Linking</a> chapter covers all of these.</p>
 <pre><code class="language-pepper">[Target(OS(Windows))]
 [Link("gdi32")]
 extern ulong GetStockObject(int kind);

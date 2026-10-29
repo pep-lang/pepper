@@ -198,7 +198,8 @@ default of <code>V</code>, and is not inserted) and <code>m[key] = value</code> 
 <code>contains</code>, <code>remove</code>, <code>count</code>, <code>is_empty</code> and <code>clear</code>. A <code>for</code> loop visits a
 map's entries as <code>(key, value)</code> <a href="tuples.html">tuples</a> and a set's members one
 by one. Adding or removing an entry while a loop iterates the map panics
-("Map modified during iteration"), as it does for <code>Array</code> and <code>HashMap</code>;
+with the type's name ("Map modified during iteration", "Set modified during
+iteration", and so on), as it does for <code>Array</code>;
 changing the value of a key that is present is allowed.</p>
 <h2 id="sorted-map-and-set"><a class="header" href="#sorted-map-and-set">Sorted: <code>Map</code> and <code>Set</code></a></h2>
 <p><code>Map&lt;K, V&gt;</code> keeps its entries sorted by key, on a red-black tree. Besides

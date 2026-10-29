@@ -475,8 +475,26 @@ geometry = { github = "someone/geometry", version = "1.2" }
 </code></pre>
 <p><code>import geometry;</code> then finds the package's root <code>module.pep</code> in the
 project's <code>.pep/deps</code>, with no <code>-I</code>, and <code>import geometry.solids;</code> the module
-in its <code>solids</code> folder. <code>pepper build</code> with no file builds the project. See
-<a href="../tools/projects.html">Projects: pep.toml</a>.</p>
+in its <code>solids</code> folder. <code>pepper build</code> with no file builds the project.</p>
+<ul>
+<li><strong>Each package imports by its own keys.</strong> A dependency's files import the
+packages its own <code>pep.toml</code> lists, under its names for them. When two
+packages need different major versions of one package, each import
+reaches the major its key asks for, and the two majors' types are
+different types.</li>
+<li><strong>A dev-dependency</strong> (<code>[dev-dependencies]</code>) is imported only in a test
+build (<code>--test</code>) and by the files in <code>examples/</code>, and a
+build-dependency (<code>[build-dependencies]</code>) only by the package's build
+script; an import of either anywhere else is an error at the name.</li>
+<li><strong>A dependency only some platforms have</strong> (<code>[target.'OS(Windows)'.dependencies]</code>)
+is imported under the same condition, <code>[Target(OS(Windows))] import winapi;</code>,
+so builds for other targets skip the import (see
+<a href="#platform-specific-imports">Platform-specific imports</a>).</li>
+<li><strong>A build script's generated module</strong> is imported as <code>generated</code> by the
+package's own files (see
+<a href="../tools/projects.html#generated-modules">Generated modules</a>).</li>
+</ul>
+<p>See <a href="../tools/projects.html">Projects: pep.toml</a>.</p>
 <h3 id="the-runtime-prelude-and---import"><a class="header" href="#the-runtime-prelude-and---import">The runtime prelude and <code>--import</code></a></h3>
 <p>The runtime itself is not a module: its files are loaded into every program,
 and their exports, such as <code>String</code>, <code>Array</code>, and <code>Result</code>, are visible

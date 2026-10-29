@@ -269,7 +269,9 @@ every case already handles (see <a href="enums.html#match">Enums</a>); a compari
 a build option that is not defined (see
 <a href="build-options.html#comparing-values">Build options</a>); and an <code>[Export]</code> that
 has no effect, or a <code>--lib</code> build that exports nothing (see
-<a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>).</p>
+<a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>). A package's
+build script can print warnings of its own (see
+<a href="../tools/projects.html#build-scripts">Build scripts</a>).</p>
 <h2 id="deprecations"><a class="header" href="#deprecations">Deprecations</a></h2>
 <p>A use of a declaration marked <code>[Deprecated("message")]</code> warns at the name,
 with the message and a note at the declaration. When the attribute names a
@@ -464,6 +466,15 @@ main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomi
 main.pep:2:9: note: previous definition is here
     2 |     var n = 1;
       |         ^
+</code></pre>
+<p>A function's parameters share the outermost scope of its body, as in C++,
+so a local of the same name as a parameter is a redefinition too:</p>
+<pre><code class="language-text">main.pep:2:9: error: redefinition of 'x'
+    2 |     var x = 5;
+      |         ^
+main.pep:1:3: note: previous definition is here
+    1 | f(x: bool): int {
+      |   ^
 </code></pre>
 <p>The same holds for top-level types: two structs, traits, enums or type
 aliases of one name in a file, or exported by two

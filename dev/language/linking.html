@@ -260,11 +260,24 @@ symbol: <code>[Link(lib = "m", name = "cbrt")]</code> (see
 <p>Putting <code>[Link]</code> in the source keeps the knowledge of which library a function
 comes from next to its declaration, so nobody building your program has to
 remember a command-line flag.</p>
-<h2 id="linking-c-code-a-package-builds-build-scripts"><a class="header" href="#linking-c-code-a-package-builds-build-scripts">Linking C code a package builds: build scripts</a></h2>
+<h2 id="linking-c-code-a-package-builds-native-and-build-scripts"><a class="header" href="#linking-c-code-a-package-builds-native-and-build-scripts">Linking C code a package builds: <code>[native]</code> and build scripts</a></h2>
 <p>A package can ship a C library's source instead of asking its users to
-install the library: its <a href="../tools/projects.html#build-scripts">build script</a>
-compiles the C code with clang for the build's target, and prints the
-objects and libraries to link (<code>pep:object=...</code>, <code>pep:link=...</code>).</p>
+install the library. When the C needs only compiling and linking, a
+<a href="../tools/projects.html#native"><code>[native]</code></a> table in its <code>pep.toml</code> says
+which files to compile and what to link, with no script:</p>
+<pre><code class="language-toml">[native]
+sources = ["c/*.c"]
+include = ["c/include"]
+link    = ["m"]
+</code></pre>
+<p>The build compiles each source with clang for the build's target and links
+the objects into the program. Since it runs no package code,
+<code>--no-build-scripts</code> allows it, as long as its <code>flags</code> are ones that cannot
+make clang load code (see <a href="../tools/projects.html#native"><code>[native]</code></a>).</p>
+<p>For anything more, such as generating a header or running <code>configure</code>, a
+<a href="../tools/projects.html#build-scripts">build script</a> compiles the C code with
+clang for the build's target, and prints the objects and libraries to link
+(<code>pep:object=...</code>, <code>pep:link=...</code>).</p>
 <h2 id="linking-a-library-from-the-command-line--l"><a class="header" href="#linking-a-library-from-the-command-line--l">Linking a library from the command line: <code>-l</code></a></h2>
 <p>The <code>-l</code> option links a library for one build:</p>
 <pre><code class="language-sh">pepper build main.pep -l m -o main

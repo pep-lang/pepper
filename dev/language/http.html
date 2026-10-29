@@ -306,6 +306,9 @@ fields and leaves the body to read as a stream (see
 was no response: the URL is not <code>http://</code> or <code>https://</code>
 (<code>is_invalid_input()</code>), the connection or TLS handshake failed, or the
 response was not valid HTTP.</li>
+<li>A request that could split the message is refused with
+<code>is_invalid_input()</code>: a header field value holding CR, LF or NUL, or a
+field name or method that is not an RFC 9110 token.</li>
 <li>Redirects (301, 302, 303, 307, 308) are followed, up to
 <code>max_redirects</code> (10) per request, and <code>response.url</code> is where the
 response came from. A 303, and a 301 or 302 after a <code>POST</code>, becomes a
@@ -336,6 +339,9 @@ standard reason phrase when <code>reason</code> is empty (<code>reason_phrase(st
 returns it).</li>
 <li>A request it cannot parse gets <code>400 Bad Request</code>, header fields over
 64 KiB get <code>431</code>, and a body over <code>MAX_REQUEST_BODY</code> (16 MiB) gets <code>413</code>.</li>
+<li>A handler's response with a header field (or reason phrase) that could
+split the message gets <code>500 Internal Server Error</code> instead, over HTTP/1.1
+and HTTP/2.</li>
 <li><code>Server.bind_tls</code> offers HTTP/2 and HTTP/1.1 through ALPN, and a
 plain-TCP client that opens with the HTTP/2 preface (prior knowledge, or
 h2c) is served HTTP/2 too. See <a href="#http2">HTTP/2</a>.</li>

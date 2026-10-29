@@ -659,6 +659,12 @@ main.pep:5:12: error: too many arguments to function of type '(String) =&gt; int
 </code></pre>
 <p>The compiler reports <a href="compiler-errors.html#one-error-at-a-time">one error at a time</a>,
 so the second appears once the first is fixed.</p>
+<p>Calling a variable that does not hold a function is an error at the call,
+which names the variable's type:</p>
+<pre><code class="language-text">main.pep:3:12: error: called object type 'String' is not a function
+    3 |     return name(1);
+      |            ^~~~
+</code></pre>
 <h2 id="sharing-function-values-between-threads"><a class="header" href="#sharing-function-values-between-threads">Sharing function values between threads</a></h2>
 <p>A plain function type such as <code>() =&gt; void</code> can hold any function value,
 including a closure that captures a <code>String</code> or an <code>Array</code>. Such values stay

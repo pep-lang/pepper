@@ -361,7 +361,9 @@ main(): int {
 </code></pre>
 <p>A default can be an expression, not only a literal: strings joined with <code>+</code>,
 an interpolated string, an array, map or tuple literal, a range, or a call.
-Each call that leaves the argument out evaluates it again.</p>
+Each call that leaves the argument out evaluates it again. The default
+converts to the parameter's type as an argument would, so a string literal
+can be the default of an <code>io.Path</code> parameter (<code>path: io.Path = "out.txt"</code>).</p>
 <p>Defaults work the same way for methods and constructors. To give a later
 parameter a value without passing every parameter before it, name it (see
 <a href="#named-arguments">Named arguments</a>).</p>
