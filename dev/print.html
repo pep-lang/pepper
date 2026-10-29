@@ -3217,19 +3217,32 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li>The format must be a <strong>string literal</strong>: the compiler reads it, so an
+<li>
+<p>The format must be a <strong>string literal</strong>: the compiler reads it, so an
 index out of range, an argument no brace names, or a bad specification
 is an error at compile time. <code>{{</code> and <code>}}</code> are literal braces, as in an
-interpolated string.</li>
-<li>Each argument is <strong>evaluated once</strong>, from left to right, however many
-braces name it and in whatever order.</li>
-<li>An index can repeat, to show one value twice or in two forms
-(<code>"{0} is {0:x} in hex"</code>).</li>
-<li>It is part of the compiler, not a function in the runtime: it cannot be
-stored in a variable or called through a function value.</li>
-<li><a href="language/functions.html#printing-with-print"><code>print</code></a> takes the same arguments:
+interpolated string.</p>
+</li>
+<li>
+<p>Each argument is <strong>evaluated once</strong>, from left to right, however many
+braces name it and in whatever order.</p>
+</li>
+<li>
+<p>An index can repeat, to show one value twice or in two forms
+(<code>"{0} is {0:x} in hex"</code>).</p>
+</li>
+<li>
+<p>It is part of the compiler, not a function in the runtime: it cannot be
+stored in a variable or called through a function value. Wrap a call in
+a closure instead (<code>(n: int) =&gt; String.format("{0:x}", n)</code>):</p>
+<pre><code class="language-text">main.pep:2:20: error: 'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure
+</code></pre>
+</li>
+<li>
+<p><a href="language/functions.html#printing-with-print"><code>print</code></a> takes the same arguments:
 <code>print("{0} of {1}", done, total)</code> prints what <code>String.format</code> makes of
-them.</li>
+them.</p>
+</li>
 </ul>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A value with no conversion is reported at its braces, with a note at its
@@ -8403,8 +8416,10 @@ and locals can all use them.</li>
 <code>var s: Stack&lt;String&gt;;</code>.</li>
 <li><code>Stack&lt;int&gt;</code> and <code>Stack&lt;String&gt;</code> are different types.</li>
 <li>A type argument is a type. The one exception is a number, which only
-the lane count of a <a href="language/simd.html">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>); a
-struct of your own cannot compute with a number parameter.</li>
+the lane count of a <a href="language/simd.html">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>), or
+a parameter that a struct or function of your own passes on as one
+(<code>counting&lt;T, N&gt;(): Vector&lt;T, N&gt;</code>); a number anywhere else is an error at
+the number. A struct of your own cannot compute with a number parameter.</li>
 <li>Each type argument makes a separate copy of the struct, so a struct whose
 copy needs a copy with a larger argument never ends: <code>struct Foo&lt;T&gt;</code> with
 a field <code>var inner: Foo&lt;Array&lt;T&gt;&gt;</code> makes <code>Foo&lt;int&gt;</code> need
@@ -18175,9 +18190,13 @@ type argument:</p>
 <p><code>N</code> is written as a number, a power of two from 1 to 64:</p>
 <pre><code class="language-text">main.pep:3:30: error: lane count of 'Vector&lt;int, 3&gt;' must be a power of two from 1 to 64, not '3'
 </code></pre>
-<p>A number is a type argument only here, for a lane count; it is not a
-general constant parameter, so code cannot compute with <code>N</code> (use the
-<code>count</code> property for the lane count as a value).</p>
+<p>A number is a type argument only here, for a lane count (and for a
+struct of yours that passes its parameter on as one, such as a field of
+type <code>Vector&lt;T, N&gt;</code>). Anywhere else it is an error at the number:</p>
+<pre><code class="language-text">main.pep:5:20: error: '4' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector&lt;float, 4&gt;'
+</code></pre>
+<p>It is not a general constant parameter, so code cannot compute with <code>N</code>
+(use the <code>count</code> property for the lane count as a value).</p>
 </li>
 <li>
 <p>Sixteen bytes (<code>Vector&lt;byte, 16&gt;</code>, <code>Vector&lt;short, 8&gt;</code>, <code>Vector&lt;int, 4&gt;</code>,

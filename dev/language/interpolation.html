@@ -388,19 +388,32 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li>The format must be a <strong>string literal</strong>: the compiler reads it, so an
+<li>
+<p>The format must be a <strong>string literal</strong>: the compiler reads it, so an
 index out of range, an argument no brace names, or a bad specification
 is an error at compile time. <code>{{</code> and <code>}}</code> are literal braces, as in an
-interpolated string.</li>
-<li>Each argument is <strong>evaluated once</strong>, from left to right, however many
-braces name it and in whatever order.</li>
-<li>An index can repeat, to show one value twice or in two forms
-(<code>"{0} is {0:x} in hex"</code>).</li>
-<li>It is part of the compiler, not a function in the runtime: it cannot be
-stored in a variable or called through a function value.</li>
-<li><a href="functions.html#printing-with-print"><code>print</code></a> takes the same arguments:
+interpolated string.</p>
+</li>
+<li>
+<p>Each argument is <strong>evaluated once</strong>, from left to right, however many
+braces name it and in whatever order.</p>
+</li>
+<li>
+<p>An index can repeat, to show one value twice or in two forms
+(<code>"{0} is {0:x} in hex"</code>).</p>
+</li>
+<li>
+<p>It is part of the compiler, not a function in the runtime: it cannot be
+stored in a variable or called through a function value. Wrap a call in
+a closure instead (<code>(n: int) =&gt; String.format("{0:x}", n)</code>):</p>
+<pre><code class="language-text">main.pep:2:20: error: 'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure
+</code></pre>
+</li>
+<li>
+<p><a href="functions.html#printing-with-print"><code>print</code></a> takes the same arguments:
 <code>print("{0} of {1}", done, total)</code> prints what <code>String.format</code> makes of
-them.</li>
+them.</p>
+</li>
 </ul>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A value with no conversion is reported at its braces, with a note at its

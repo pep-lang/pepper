@@ -258,8 +258,10 @@ and locals can all use them.</li>
 <code>var s: Stack&lt;String&gt;;</code>.</li>
 <li><code>Stack&lt;int&gt;</code> and <code>Stack&lt;String&gt;</code> are different types.</li>
 <li>A type argument is a type. The one exception is a number, which only
-the lane count of a <a href="simd.html">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>); a
-struct of your own cannot compute with a number parameter.</li>
+the lane count of a <a href="simd.html">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>), or
+a parameter that a struct or function of your own passes on as one
+(<code>counting&lt;T, N&gt;(): Vector&lt;T, N&gt;</code>); a number anywhere else is an error at
+the number. A struct of your own cannot compute with a number parameter.</li>
 <li>Each type argument makes a separate copy of the struct, so a struct whose
 copy needs a copy with a larger argument never ends: <code>struct Foo&lt;T&gt;</code> with
 a field <code>var inner: Foo&lt;Array&lt;T&gt;&gt;</code> makes <code>Foo&lt;int&gt;</code> need

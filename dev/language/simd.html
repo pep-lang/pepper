@@ -247,9 +247,13 @@ type argument:</p>
 <p><code>N</code> is written as a number, a power of two from 1 to 64:</p>
 <pre><code class="language-text">main.pep:3:30: error: lane count of 'Vector&lt;int, 3&gt;' must be a power of two from 1 to 64, not '3'
 </code></pre>
-<p>A number is a type argument only here, for a lane count; it is not a
-general constant parameter, so code cannot compute with <code>N</code> (use the
-<code>count</code> property for the lane count as a value).</p>
+<p>A number is a type argument only here, for a lane count (and for a
+struct of yours that passes its parameter on as one, such as a field of
+type <code>Vector&lt;T, N&gt;</code>). Anywhere else it is an error at the number:</p>
+<pre><code class="language-text">main.pep:5:20: error: '4' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector&lt;float, 4&gt;'
+</code></pre>
+<p>It is not a general constant parameter, so code cannot compute with <code>N</code>
+(use the <code>count</code> property for the lane count as a value).</p>
 </li>
 <li>
 <p>Sixteen bytes (<code>Vector&lt;byte, 16&gt;</code>, <code>Vector&lt;short, 8&gt;</code>, <code>Vector&lt;int, 4&gt;</code>,
