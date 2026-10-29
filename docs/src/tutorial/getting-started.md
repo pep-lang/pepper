@@ -52,7 +52,7 @@ Pass the source file to `pepper build`. It compiles and links a native executabl
 but does not run it, so run the result yourself:
 
 ```sh
-pepper build hello.pep -o hello
+pepper build hello.pep
 ./hello
 ```
 
@@ -60,10 +60,9 @@ pepper build hello.pep -o hello
 Hello, world!
 ```
 
-On Windows, name the output with `.exe` (`-o hello.exe`), since Windows will
-not run a file without an extension, and run it as `.\hello.exe`. Without `-o`
-the executable is written to the current directory, named after the source
-file with no extension (`hello` for `hello.pep`).
+The executable is written to the current directory, named after the source
+file: `hello` for `hello.pep`, and `hello.exe` on Windows, where you run it as
+`.\hello.exe`. Name it yourself with `-o`.
 
 ### Running a program
 
