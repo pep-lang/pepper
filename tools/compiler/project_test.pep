@@ -442,7 +442,7 @@ reads_target_dependencies() {
 
     expect_equal(
         errors("[package]\nname = \"a\"\n[target.'OS(Darwin)'.dependencies]\nx = { github = \"a/x\" }\n"),
-        "OS(Darwin): unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]"
+        "OS(Darwin): unknown OS 'Darwin'; expected 'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[target.'Windows)]'.dependencies]\nx = { github = \"a/x\" }\n"),

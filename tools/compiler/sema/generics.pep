@@ -113,6 +113,21 @@ _extension_params(structs: StructDef[], ext: ExtensionDef): String[] {
     return Array<String>();
 }
 
+## Whether `ty` spells generic struct `base` itself (`HashSet<K>` with its
+## own parameters), not a specialization whose arguments are structs named
+## like those parameters (a program's own `struct K`; #317).
+_is_base_itself(base: StructDef, ty: TypeName, struct_index: HashMap<String, ulong>): bool {
+    if (!(base.ty == ty)) {
+        return false;
+    }
+    for (var argument in ty.sub_types) {
+        if (struct_index.contains(argument.name)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 ## Whether `ty` is a generic type a declaration can ask for.
 _is_requested(ty: TypeName, params: String[]): bool {
     return ty.is_generic() and !ty.name.starts_with("__") and !_contains_param(ty, params);
@@ -403,7 +418,7 @@ export gather_generics(module: Module, state: PassState) {
         }
         var found = struct_index.try_get(ty.name);
         if (found.is_value()) {
-            if (module.structs[found.value()].ty == ty) {
+            if (_is_base_itself(module.structs[found.value()], ty, struct_index)) {
                 continue;
             }
             struct_specs.append(ty);
@@ -420,7 +435,8 @@ export gather_generics(module: Module, state: PassState) {
         }
         var st = struct_index.try_get(ty.name);
         if (st.is_value()) {
-            if (!(module.structs[st.value()].ty == ty) and !struct_spelled.contains(_type_key(ty))) {
+            if (!_is_base_itself(module.structs[st.value()], ty, struct_index)
+                and !struct_spelled.contains(_type_key(ty))) {
                 module.struct_specs.append(ty.copy());
                 struct_spelled.insert(_type_key(ty));
             }

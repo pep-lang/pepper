@@ -852,4 +852,13 @@ export struct Path {
     }
 }
 
+## Returns a hash of a path's text, so paths that are `==` hash equally and
+## a `Path` keys a `HashMap` or `HashSet` by its text. O(length).
+##
+## @param value the path to hash
+## @returns the 64-bit hash of the path's text
+export hash<Path>(value: Path): u64 {
+    return hash<String>(value._value);
+}
+
 extend Path with ToString;

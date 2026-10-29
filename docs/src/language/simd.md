@@ -30,9 +30,16 @@ Bring them in with `import simd;` and write `simd.Vector<byte, 16>`, or
   main.pep:3:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'
   ```
 
-  A number is a type argument only here, for a lane count; it is not a
-  general constant parameter, so code cannot compute with `N` (use the
-  `count` property for the lane count as a value).
+  A number is a type argument only here, for a lane count (and for a
+  struct of yours that passes its parameter on as one, such as a field of
+  type `Vector<T, N>`). Anywhere else it is an error at the number:
+
+  ```text
+  main.pep:5:20: error: '4' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector<float, 4>'
+  ```
+
+  It is not a general constant parameter, so code cannot compute with `N`
+  (use the `count` property for the lane count as a value).
 
 - Sixteen bytes (`Vector<byte, 16>`, `Vector<short, 8>`, `Vector<int, 4>`,
   `Vector<float, 4>`, `Vector<double, 2>`) fits a vector register on every

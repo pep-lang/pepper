@@ -488,6 +488,16 @@ refuses_json_for_an_unsupported_container() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A method called on an integer literal is the literal's type's (#315).
+[Test]
+calls_a_method_on_an_integer_literal() {
+    var folder = TempFolder("passes_literal_method");
+    var programs = [
+        "# expect: accepted\nmain(): int {\n    var y = 200.checked_add(100);\n    var z = 7.to_string();\n    return y.value() - 300 + z.size as int - 1;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # The hidden local of a `?` or of a `match` over a call lets go of its
 # value once the value is read when the code moves what it gave, so the
 # move is accepted; a value another local or `this` still holds is not
@@ -693,6 +703,16 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # A static call of a method the struct does not declare names the
+        # method and the struct, at the method (#411).
+        "# expect: main.pep:9:19: error: no static method named 'nope' in 'Point'\nstruct Point {\n    var x: int;\n    static make(): Point {\n        return Point();\n    }\n}\nmain(): int {\n    var p = Point.nope();\n    return 0;\n}\n",
+        "# expect: main.pep:6:52: error: no static method named 'millis' in 'Duration'\nimport async;\nimport os;\n\nmain(): int {\n    with (var deadline = async.timeout(os.Duration.millis(50))) {\n    }\n    return 0;\n}\n",
+        # A number as the type argument of a struct or a function that takes
+        # no lane count, at the number (#308); a struct that passes its
+        # parameter on as a `Vector`'s lane count takes one.
+        "# expect: main.pep:6:20: error: '4' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector<float, 4>'\nstruct Buffer<N> {\n    var size: int;\n}\nmain(): int {\n    var b = Buffer<4>();\n    return b.size;\n}\n",
+        "# expect: main.pep:6:18: error: '7' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector<float, 4>'\nshow<T>(value: T): int {\n    return 1;\n}\nmain(): int {\n    var c = show<7>(3);\n    return c;\n}\n",
+        "# expect: accepted\nimport simd;\nstruct Wrap<T: simd.Lane, N> {\n    var v: simd.Vector<T, N>;\n}\nmain(): int {\n    var w = Wrap<int, 8>();\n    return w.v.count as int - 8;\n}\n",
         # A member a constrained extension withholds from a specialization.
         "# expect: main.pep:5:15: error: no member named 'square_root' in 'Vector<int, 4>'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 4>(4);\n    var r = v.square_root();\n    return 0;\n}\n",
         "# expect: main.pep:21:9: error: no member named 'label' in 'Box<Circle>'\ntrait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Named> {\n    label(): String { return item.name(); }\n}\nmain(): int {\n    var box = Box<Circle>(Circle());\n    box.label();\n    return 0;\n}\n"
@@ -889,6 +909,9 @@ const ALL_STEPS: ulong = 1000000;
 # Programs a pass rejects.
 error_programs(): String[] {
     return [
+        # `String.format` used as a value, at `format` (#407); it is part of
+        # the compiler, not a function.
+        "# expect: main.pep:3:20: error: 'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure\nmain(): int {\n    var f = String.format;\n    return 0;\n}\n",
         # Shared struct fields, module-scope variables and thread-locals
         # that are not const, not thread-safe or not constant.
         "# expect: main.pep:4:9: error: field 'count' of shared struct 'Counter' must be 'const'\n[Shared]\nstruct Counter {\n    int count;\n}\nmain(): int { return 0; }\n",
@@ -953,12 +976,14 @@ error_programs(): String[] {
         "# expect: main.pep:19:12: error: cannot call mutating method 'grow' on a temporary 'Span'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmake(): Span {\n    return Span(1, 2);\n}\n\nmain(): int {\n    make().grow(1);\n    return 0;\n}\n",
         "# expect: main.pep:16:7: error: cannot call mutating method 'grow' on const variable 's'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.grow(1);\n    return 0;\n}\n",
         "# expect: main.pep:8:24: error: cannot change 'this' in a closure: the closure holds a copy of 'Span'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    later(): () => void {\n        return () => { end = 5; };\n    }\n}\n\nmain(): int {\n    return 0;\n}\n",
+        # An unknown predicate, at its name (#329).
+        "# expect: main.pep:2:9: error: unknown predicate 'Foo'; expected 'OS', 'Arch' or 'BuildOption'\n[Target(Foo(Linux))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A misspelled OS, in code that would be dropped anyway.
-        "# expect: main.pep:2:1: error: unknown OS value `Windoze` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Windoze))]\n[Target(OS(Windoze))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        "# expect: main.pep:2:12: error: unknown OS 'Windoze'; expected 'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'\n[Target(OS(Windoze))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A build option comparison with no literal.
         "# expect: main.pep:2:24: error: '==' cannot compare two build options; compare a 'BuildOption(...)' with a literal\n[Target(BuildOption(A) == BuildOption(B))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A malformed predicate inside a dropped block.
-        "# expect: main.pep:4:9: error: unknown Arch value `z80` (expected x64, aarch64, wasm32) in [Target(Arch(z80))]\nmain(): int {\n    [Target(OS(Windows))] {\n        [Target(Arch(z80))] {\n            return 1;\n        }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:4:22: error: unknown Arch 'z80'; expected 'x64', 'aarch64' or 'wasm32'\nmain(): int {\n    [Target(OS(Windows))] {\n        [Target(Arch(z80))] {\n            return 1;\n        }\n    }\n    return 0;\n}\n",
         # A test that takes a parameter, and one that returns a value.
         "# expect: main.pep:3:3: error: test 't' must take no parameters\n[Test]\nt(x: int) {}\nmain(): int { return 0; }\n",
         "# expect: main.pep:3:1: error: test 't' must return nothing, not 'int'\n[Test]\nt(): int { return 1; }\nmain(): int { return 0; }\n",

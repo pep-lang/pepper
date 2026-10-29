@@ -730,3 +730,18 @@ with the same byte-by-byte comparison.
 
 **Returns**
 - true when the paths' texts differ
+
+## hash
+
+```pepper
+hash<Path>(value: Path): u64
+```
+
+Returns a hash of a path's text, so paths that are `==` hash equally and
+a `Path` keys a `HashMap` or `HashSet` by its text. O(length).
+
+**Parameters**
+- `value` — the path to hash
+
+**Returns**
+- the 64-bit hash of the path's text

@@ -17,6 +17,10 @@ type is [Ordering with Comparable](#ordering-with-comparable), below.
 | An [`[Equatable]`](#deriving-both-with-equatable) struct or enum | field by field | the fields' hashes, combined |
 | Any other struct | identity (`===`) | the object's address |
 
+The standard library's structs that compare by value also hash by it:
+`BitSet` by its members, `io.Path` by its text, and `io.IpAddress` and
+`io.SocketAddress` by their address and port.
+
 ## Struct keys use identity by default
 
 A struct is a [reference](memory.md#values-and-references). Unless it says

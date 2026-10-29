@@ -102,9 +102,9 @@ f(): int { return 1; }
 ```
 
 ```text
-main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]
+main.pep:1:12: error: unknown OS 'Darwin'; expected 'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'
     1 | [Target(OS(Darwin))]
-      | ^~~~~~~~~~~~~~~~~~~~
+      |            ^~~~~~
 ```
 
 Other mistakes the compiler reports:

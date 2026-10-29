@@ -570,8 +570,10 @@ type has methods that say what to do on overflow instead of panicking:
 {{#include ../../examples/types-overflow.pep}}
 ```
 
-The methods work at their type's own width: `byte 200.checked_add(100)` is
-Empty, while `200 + 100` on two `byte`s is 300 at `int`.
+The methods work at their type's own width: with `byte b = 200;`,
+`b.checked_add(100)` is Empty, while `200 + 100` on two `byte`s is 300 at
+`int`. A method can also be called on a literal, at the literal's type:
+`200.checked_add(100)` holds 300, since the literal is an `int`.
 
 ### Removing the checks
 
