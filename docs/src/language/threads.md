@@ -577,6 +577,14 @@ two must never meet:
         |                 ^~~~~~~
   ```
 
+  A value that [cannot be copied](memory.md#copying-a-value-with-copy)
+  cannot leave the block at all. The note then says why instead of
+  suggesting `copy(...)`, naming the field that blocks the copy:
+
+  ```text
+  note: 'Reply' cannot be copied: field 'callback' of 'Reply' holds '() => void', which is a plain function value
+  ```
+
 - **Closures.** A closure written in the block cannot capture part of the
   locked value, since a function value could carry it out.
 - **Two locks.** Values locked by two nested blocks stay apart as well.

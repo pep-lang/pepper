@@ -1413,6 +1413,56 @@ _skeleton(ty: TypeName, indent: String): String {
     return "\n".join(out);
 }
 
+## Why a value of type `ty` cannot be copied, on one line for a note that
+## would otherwise suggest `copy(...)`: the fields (or `Copyable` methods)
+## that reach what blocks the copy, as the copy error names them.
+##
+## @param module the model
+## @param safe the thread-safe structs
+## @param ty the value's type
+## @returns the reason, or empty when a `ty` can be copied
+export copy_blocker(module: Module, safe: ThreadSafeStructs, ty: TypeName): String? {
+    var found = _first_blocker(module, safe, ty);
+    if (!found.is_value()) {
+        return Optional<String>.Empty;
+    }
+    var (path, blocker) = found.value();
+    var why = blocker.what();
+    match (blocker.kind) {
+        Destructor => {
+            why = "has a destructor";
+        }
+        RawPointerField => {
+            why = $"has raw pointer field '{blocker.field}'";
+        }
+        NotCopyable => {
+            if (!blocker.why.is_empty) {
+                why = blocker.why;
+            }
+        }
+        else => {}
+    }
+    if (path.count == 0) {
+        var it = blocker.kind == _BlockerKind.NotCopyable and blocker.why.is_empty ? "" : $": it {why}";
+        return Optional<String>.Value($"'{ty.display()}' cannot be copied{it}");
+    }
+    var steps = Array<String>();
+    ulong i = 0;
+    for (var hop in path) {
+        i += 1;
+        var reached = i < path.count ? path[i].owner : blocker.ty;
+        if (!hop.is_field) {
+            steps.append($"'{hop.owner.display()}' copies a '{reached.display()}'");
+        } else if (hop.owner.is_tuple()) {
+            steps.append($"element {hop.field} of '{hop.owner.display()}' holds '{reached.display()}'");
+        } else {
+            steps.append($"field '{hop.field}' of '{hop.owner.display()}' holds '{reached.display()}'");
+        }
+    }
+    var through = "; ".join(steps);
+    return Optional<String>.Value($"'{ty.display()}' cannot be copied: {through}, which {why}");
+}
+
 _cannot_copy(
     module: Module, state: PassState, root: TypeName, fallback: Loc, path: Array<_Hop>, blocker: _Blocker
 ): Diagnostic {

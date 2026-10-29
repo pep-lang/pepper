@@ -302,7 +302,7 @@ the compiler checks every call:
   main.pep:8:24: error: 'a' cannot be moved: 'b' also references its value
       8 |     names.replace(move(a));
         |                        ^
-  note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
+  note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(a)' instead
   ```
 
 Only a variable still in scope counts: one declared in a block that has
