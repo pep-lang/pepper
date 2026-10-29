@@ -423,8 +423,8 @@ extend Generator {
                 var zero = context.int64_type().zero();
                 element_hash = unless_null([pointer], zero, () => call_function(derived, [item]))?;
             } else if (!own_hash and functions.contains(equality_method(element)) and _is_pointer(item)) {
-                # An object compared by its `==` but hashed by identity (an
-                # `Array`): equal elements would hash apart, so it adds
+                # An object compared by its `==` but hashed by identity (such
+                # as `io.Path`): equal elements would hash apart, so it adds
                 # nothing to the hash.
                 continue;
             } else if (own_hash) {
