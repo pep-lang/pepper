@@ -401,6 +401,17 @@ an_executable_needs_main() {
     _succeeds(folder.path, ["--lib", "static", "main.pep", "--build", "build", "--no-cache"]);
 }
 
+# A rebuild starts a compilation unit worker that loads the program too;
+# an error loading it is still printed once (#300).
+[Test]
+prints_a_load_error_once_on_a_rebuild() {
+    var folder = _program("options_error_once", _PROGRAM);
+    _succeeds(folder.path, ["main.pep", "-o", "main", "--build", "build"]);
+    var ran = _pep_build(folder.path, ["nothere.pep", "-o", "never", "--build", "build"]);
+    expect_equal(_code(ran), 1);
+    expect_equal(ran.stderr.split("error:").count, 2 as ulong);
+}
+
 # `--lib swift-package`: a Swift package of the Swift wrappers over an iOS
 # `.xcframework`, built on any system, whose simulator library is a
 # universal file of two archives; and the output names and options it and

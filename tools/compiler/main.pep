@@ -686,7 +686,11 @@ _main(args: String[]): int {
     }
     var program = link.load_program(entry, setup);
     if (program.is_err()) {
-        _report(program.error());
+        # A compilation unit worker loads the program as its build does,
+        # which reports the error itself (#300).
+        if (!compilation_unit_worker.is_set) {
+            _report(program.error());
+        }
         return 1;
     }
     # An executable starts in `main`; without one the linker's own error
