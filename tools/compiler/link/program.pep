@@ -99,7 +99,7 @@ export struct Program {
             var parsed = parse.parse(f.source);
             if (parsed.is_err()) {
                 var error = parsed.error();
-                return Optional<String>.Value(_render(f.name, f.source, error.span, error.message));
+                return Optional<String>.Value(_render(f.name, f.source, error));
             }
             f.module = parsed.value();
             if (again) {
@@ -256,6 +256,10 @@ export struct Program {
         while (i < files.count) {
             for (var w in files[i].module.warnings) {
                 var at = Location(i, w.span);
+                if (!w.message.is_empty) {
+                    out.append(Diagnostic.warning(w.message).at(at));
+                    continue;
+                }
                 out.append(
                     Diagnostic.deprecated(
                         w.what, w.instead, at, Fix($"Replace {w.what} with `{w.replacement}`", at, w.replacement)
@@ -536,7 +540,7 @@ export load(
         var parsed = defer_bodies ? parse.parse_declarations(source.value()) : parse.parse(source.value());
         if (parsed.is_err()) {
             var error = parsed.error();
-            return Result<Program, String>.err(_render(path.to_string(), source.value(), error.span, error.message));
+            return Result<Program, String>.err(_render(path.to_string(), source.value(), error));
         }
         var module = parsed.value();
         ulong file = program.files.count;
@@ -728,7 +732,25 @@ _describe_paths(paths: Path[]): String {
 }
 
 # A parse error as the compiler reports it: `file:line:column: error: ...`
-# and the line, with a caret under the span.
-_render(name: String, source: String, span: Span, message: String): String {
-    return Diagnostic.error(message).at(Location(0, span)).render([SourceText(name, source)]);
+# and the line, with a caret under the span, and a note at the place it is
+# about, such as the `{` a missing `}` should close.
+_render(name: String, source: String, error: parse.ParseError): String {
+    var diagnostic = Diagnostic.error(error.message).at(Location(0, error.span));
+    # Only the recovering parse finds that place: read again on this
+    # error path alone, and kept when its first error is this one.
+    var related = error.related;
+    var related_message = error.related_message;
+    if (!related.is_value()) {
+        var recovered = parse.parse_recovering(source).errors;
+        if (recovered.count > 0
+            and recovered[0].span.start == error.span.start
+            and recovered[0].message == error.message) {
+            related = recovered[0].related;
+            related_message = recovered[0].related_message;
+        }
+    }
+    if (related.is_value()) {
+        diagnostic = diagnostic.with_note(related_message, Optional<Location>.Value(Location(0, related.value())));
+    }
+    return diagnostic.render([SourceText(name, source)]);
 }

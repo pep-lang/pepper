@@ -248,16 +248,19 @@ conversions to and from a `JsonValue` rather than text (with no text, a
 
 A property whose type has no JSON form, such as a pointer, a function, or
 a `Result` (a result is not a value to send over the wire), is a compile
-error naming the property. Notes follow the conversion back to the call
-that asked for it:
+error naming the property, at the call that asked for the conversion.
+Notes follow the conversion into the runtime:
 
 ```text
-runtime/json/convert.pep:358:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
-...
-main.pep:10:16: note: 'encode<Job>' is used by 'main' here
+main.pep:10:16: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
    10 |     var text = json.encode(job);
       |                ^~~~~~~~~~~
+runtime/json/convert.pep:358:21: note: reported by the runtime here
+...
 ```
+
+The same goes for any error a `static` block of the runtime's raises for
+a type of yours: it is reported in your code, where you used it.
 
 ## Current limits
 
@@ -265,6 +268,8 @@ main.pep:10:16: note: 'encode<Job>' is used by 'main' here
   `decode` never does. A document is always written indented.
 - A struct's own conversion cannot be customized yet: a type converts as
   its properties do.
-- Map keys must be `String`s.
+- Map keys must be `String`s; a map with other keys is a compile-time
+  error, as is a set, `Deque`, `PriorityQueue`, `ArrayView` or `BitSet`
+  (convert it to an `Array` first).
 
 The [reference](../reference/json-module.md) lists every function.

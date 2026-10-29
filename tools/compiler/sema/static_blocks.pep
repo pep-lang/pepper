@@ -16,6 +16,7 @@ import [attribute_arguments, attribute_name] from "attributes";
 import [getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, TAG_FIELD] from "builder";
 import [is_checked_function] from "checked";
 import "common";
+import "confinement";
 import "instantiation";
 import [convert_string_literal] from "literals";
 import [Loc] from "loc";
@@ -1059,7 +1060,7 @@ struct _Expander {
                 error = error.with_note(
                     $"in the static block of '{context.name}'", Optional<Location>.Value(location_of(context.loc))
                 );
-                error = with_requests(error);
+                error = in_program_code(with_requests(error));
             }
             return Result<Block, Diagnostic>.Err(error);
         }
@@ -1130,6 +1131,45 @@ struct _Expander {
             return Optional<String[]>.Value(statement_source(source, span, taken, names));
         }
         return Optional<String[]>.Value([expression_source(source, span, taken, names)]);
+    }
+
+    # `error`, raised in a static block of the runtime's (`json.encode`'s for
+    # a program's struct), at the last place among its notes in the
+    # program's own code, where the program asked for it, with the
+    # runtime's line as a note (#330); `error` itself when it is in the
+    # program's code already or no note is.
+    in_program_code(error: Diagnostic): Diagnostic {
+        if (!error.location.is_value()) {
+            return error;
+        }
+        var runtime = _runtime_files(state);
+        var file = error.location.value().file;
+        if (file >= runtime.count or !runtime[file]) {
+            return error;
+        }
+        long chosen = -1;
+        ulong i = 0;
+        while (i < error.notes.count) {
+            var at = error.notes[i].location;
+            if (at.is_value() and at.value().file < runtime.count and !runtime[at.value().file]) {
+                chosen = i as long;
+            }
+            i += 1;
+        }
+        if (chosen < 0) {
+            return error;
+        }
+        var moved = Diagnostic.error(error.message).at(error.notes[chosen as ulong].location.value());
+        moved = moved.with_note("reported by the runtime here", error.location);
+        i = 0;
+        while (i < error.notes.count) {
+            if (i != chosen as ulong) {
+                moved.notes.append(error.notes[i]);
+            }
+            i += 1;
+        }
+        moved.fixes = error.fixes;
+        return moved;
     }
 
     # `error` with a note for each specialization that led to the one being

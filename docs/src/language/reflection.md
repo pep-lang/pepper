@@ -103,6 +103,10 @@ note: a 'static' block can call the 'reflect' functions and the methods of what 
 main.pep:10:1: note: in the static block of 'dump<Point>'
 ```
 
+When the block is the runtime's (a `json.encode` of your struct), the
+error is reported at the last of those uses in your code, with a note at
+the runtime's line, since that use is what you can change.
+
 ### At module scope
 
 A `static` block outside any function runs once, while compiling. It has

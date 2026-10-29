@@ -103,7 +103,8 @@ A slice is safe by construction:
 ## Not yet
 
 - Slices are read-only; there is no slice that writes through to its
-  array, and no `a[1..4]` syntax: write `a.slice(1, 4)`.
+  array, and no `a[1..4]` syntax: write `a.slice(1, 4)` (the compiler says
+  so: `cannot index 'Array<int>' with a value of type 'Range<int>'`).
 - An `Array` is not itself `Comparable` (there are no conditional trait
   implementations yet), so `<` between arrays and `sort()` on an array of
   arrays need `compare`: `rows.sort((a, b) => a.compare(b))`.

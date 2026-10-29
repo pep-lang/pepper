@@ -618,7 +618,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   - A `for (var x in e)` loop becomes a block holding a hidden
     `__for_iterator_N` local (initialized with `Expression.ForIterator(e)`)
     and a `while (it.next()) { var x = it.current(); { body } }`. The model
-    has no `for` statement.
+    has no `for` statement. When the iterator overloads `next` with
+    `next(location: __ptr<char>)`, `resolve_implicit_types`
+    (`_resolve_method_overload`) passes the loop's location to it, so a
+    check in it reports the loop.
   - A `with (var x = scope) { body } else { other }` block becomes a block
     holding a hidden `__with_scope_N` local (the scope), `var x =
     __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
@@ -4090,4 +4093,5 @@ the checkout (`PEPPER_TARGET_DIR`).
 - **Only the first sema error is reported** per compile
   (`PassState.report`).
 - **Unused CLI flags**: `-v`, and `-T` channels other than `time` and
-  `cache`. Only the first source file is compiled (except under `--test`).
+  `cache`. Naming a second source file is an error (except under
+  `--test`): only the entry file is compiled.

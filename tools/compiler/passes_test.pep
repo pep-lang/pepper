@@ -475,6 +475,19 @@ reports_confinement_error(index: ulong) {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# `json.encode` and `json.decode` refuse a container they do not convert,
+# a map with keys that are not strings and a set among them, rather than
+# write its properties (#404).
+[Test]
+refuses_json_for_an_unsupported_container() {
+    var folder = TempFolder("passes_json_containers");
+    var programs = [
+        "# expect: main.pep:6:11: error: 'encode' cannot convert type 'HashMap<int, int>' to JSON: a map's keys must be 'String's\nimport json;\nmain(): int {\n    var m = HashMap<int, int>();\n    m[1] = 2;\n    print(json.encode(m));\n    return 0;\n}\n",
+        "# expect: main.pep:4:13: error: 'decode' cannot convert type 'HashSet<int>' from JSON; decode an 'Array' and build it from that\nimport json;\nmain(): int {\n    var s = json.decode<HashSet<int>>(\"[1]\");\n    return 0;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # A method called on an integer literal is the literal's type's (#315).
 [Test]
 calls_a_method_on_an_integer_literal() {
@@ -501,6 +514,17 @@ suggests_no_extend_for_a_sealed_trait() {
     var rendered = render_all([ran.error()], program.value().sources());
     expect_true(rendered.contains("error: 'String' does not conform to trait 'Lane'"));
     expect_false(rendered.contains("declare it with"));
+}
+
+# An error a static block of the runtime's raises for a program's type is
+# reported at the program's call that asked for it (#330).
+[Test]
+reports_a_runtime_static_error_in_program_code() {
+    var folder = TempFolder("passes_runtime_static_error");
+    var programs = [
+        "# expect: main.pep:15:11: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON\nimport json;\n\nstruct Job {\n    var name: String;\n    var outcome: Result<int>;\n    construct(name: String, outcome: Result<int>) {\n        this.name = name;\n        this.outcome = outcome;\n    }\n}\n\nmain(): int {\n    var job = Job(\"a\", Result<int>.Ok(1));\n    print(json.encode(job));\n    return 0;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
 # The hidden local of a `?` or of a `match` over a call lets go of its
@@ -708,9 +732,12 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
-        # `Lane` is sealed: a program cannot conform a type to it, and the
-        # error for a type that is not a lane suggests no `extend` (#365).
+        # `Lane` is sealed: a program cannot conform a type to it (#365).
         "# expect: main.pep:6:19: error: 'Lane' is sealed: only the runtime declares which types conform to it\nimport simd;\nstruct Money {\n    long cents;\n}\nextend Money with simd.Lane {\n}\nmain(): int {\n    return 0;\n}\n",
+        # An index of the wrong type names `[]`'s operand, not the indexer
+        # method; a range asks for `slice` (#312).
+        "# expect: main.pep:4:16: error: cannot index 'Array<int>' with a value of type 'Range<int>'; write 'slice(start, end)' for part of it\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    var s = a[1..4];\n    return 0;\n}\n",
+        "# expect: main.pep:4:7: error: cannot index 'Array<int>' with a value of type 'String', which takes 'ulong'\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    a[\"x\"] = 2;\n    return 0;\n}\n",
         # A static call of a method the struct does not declare names the
         # method and the struct, at the method (#411).
         "# expect: main.pep:9:19: error: no static method named 'nope' in 'Point'\nstruct Point {\n    var x: int;\n    static make(): Point {\n        return Point();\n    }\n}\nmain(): int {\n    var p = Point.nope();\n    return 0;\n}\n",
