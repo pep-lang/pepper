@@ -359,6 +359,19 @@ d_checks_the_build_option_name() {
     _succeeds(folder.path, ["-D", "_FAST2=a=b", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
 }
 
+# A second source file is not compiled, so naming one is an error that says
+# to import it, rather than an error about the entry file (#360).
+[Test]
+refuses_a_second_source_file() {
+    var folder = _program("options_two_files", "main(): int {\n    return helper();\n}\n");
+    File.write_text(folder.path.join(Path("b.pep")), "export helper(): int {\n    return 0;\n}\n");
+    var ran = _pep_build(folder.path, ["main.pep", "b.pep", "-o", "ab", "--build", "build", "--no-cache"]);
+    expect_equal(_code(ran), 2);
+    expect_contains(
+        ran.stderr, "pep-build: error: 'b.pep' is not compiled: only the entry file is; import it from 'main.pep'"
+    );
+}
+
 # `--lib swift-package`: a Swift package of the Swift wrappers over an iOS
 # `.xcframework`, built on any system, whose simulator library is a
 # universal file of two archives; and the output names and options it and

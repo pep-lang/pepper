@@ -63,7 +63,7 @@ _main(args: String[]): int {
     var parser = cli.Parser("pep-build", "Pepper compiler", version());
     var files = parser.positionals(
         "SOURCE_FILES",
-        "The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it"
+        "The program's entry file. The files it imports are found on their own, so name only this one (several only with `--test`). With none, builds the project whose `pep.toml` is in the current directory or above it"
     );
     var import_dirs = parser.multiple<Path>("", "I", "Add a directory to the import search path", "DIR");
     var imports = parser.multiple("import", help = "Force an import by name", value_name = "NAME");
@@ -287,6 +287,11 @@ _main(args: String[]): int {
         return parser.usage_error("'--part' needs '--compile-part'");
     }
     var paths = files.values();
+    # A program is its entry file and what that imports; only `--test`
+    # builds several files' tests together.
+    if (paths.count > 1 and !test.is_set) {
+        return parser.usage_error($"'{paths[1]}' is not compiled: only the entry file is; import it from '{paths[0]}'");
+    }
     var path = paths.is_empty ? Optional<String>.Empty : Optional<String>.Value(paths[0]);
     # The workspace members `--all` and `-p` select: with no file, each is
     # built in a child of its own; with one, their features are unified.
