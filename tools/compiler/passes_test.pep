@@ -690,6 +690,10 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # An index of the wrong type names `[]`'s operand, not the indexer
+        # method; a range asks for `slice` (#312).
+        "# expect: main.pep:4:16: error: cannot index 'Array<int>' with a value of type 'Range<int>'; write 'slice(start, end)' for part of it\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    var s = a[1..4];\n    return 0;\n}\n",
+        "# expect: main.pep:4:7: error: cannot index 'Array<int>' with a value of type 'String', which takes 'ulong'\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    a[\"x\"] = 2;\n    return 0;\n}\n",
         # A static call of a method the struct does not declare names the
         # method and the struct, at the method (#411).
         "# expect: main.pep:9:19: error: no static method named 'nope' in 'Point'\nstruct Point {\n    var x: int;\n    static make(): Point {\n        return Point();\n    }\n}\nmain(): int {\n    var p = Point.nope();\n    return 0;\n}\n",
