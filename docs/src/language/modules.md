@@ -259,8 +259,7 @@ geometry = { github = "someone/geometry", version = "1.2" }
 
 `import geometry;` then finds the package's root `module.pep` in the
 project's `.pep/deps`, with no `-I`, and `import geometry.solids;` the module
-in its `solids` folder. `pepper build` with no file builds the project. See
-[Projects: pep.toml](../tools/projects.md).
+in its `solids` folder. `pepper build` with no file builds the project.
 
 - **Each package imports by its own keys.** A dependency's files import the
   packages its own `pep.toml` lists, under its names for them. When two
@@ -278,6 +277,8 @@ in its `solids` folder. `pepper build` with no file builds the project. See
 - **A build script's generated module** is imported as `generated` by the
   package's own files (see
   [Generated modules](../tools/projects.md#generated-modules)).
+
+See [Projects: pep.toml](../tools/projects.md).
 
 ### The runtime prelude and `--import`
 
