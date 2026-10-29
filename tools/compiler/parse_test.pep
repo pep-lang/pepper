@@ -167,6 +167,26 @@ reads_back_a_type_as_the_parser_spells_it() {
     expect_true(parse_type_text("a<b c>", Span()).to_string() != "a<b c>");
 }
 
+# A misplaced `export` or `private` gets its own message, over another
+# reading's error at a later token (#296); a re-export's list keeps its own.
+[Test]
+names_a_misplaced_visibility_modifier() {
+    for (var (
+        source,
+        message,
+        offset
+    ) in [
+        ("export private f(): int {\n    return 0;\n}\n", "a declaration cannot be both 'export' and 'private'", 7),
+        ("export [Target(OS(Windows))] f(): int {\n    return 1;\n}\n", "'export' goes after the attributes", 7),
+        ("export [a b] from \"x\";\n", "expected ']'", 10)
+    ]) {
+        var module = parse.parse(source);
+        expect_true(module.is_err());
+        expect_equal(module.error().message, message);
+        expect_equal(module.error().span.start, offset as ulong);
+    }
+}
+
 # `\x80` to `\xFF` in a string literal are its bytes as written (#298),
 # and the literal shows them as escapes again.
 [Test]

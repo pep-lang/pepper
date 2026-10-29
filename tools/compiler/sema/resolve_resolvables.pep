@@ -214,7 +214,7 @@ struct _CallChecker {
             if (!known_name and !builtin) {
                 var local = _local_type(function);
                 if (local.is_value() and !local.value().is_auto()) {
-                    var ty = local.value().to_string();
+                    var ty = local.value().display();
                     state.report(error_at($"called object type '{ty}' is not a function", call.loc));
                 } else {
                     state.report(error_at($"call to undeclared function '{function}'", call.loc));
