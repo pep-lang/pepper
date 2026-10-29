@@ -332,6 +332,26 @@ _to_json<T>(value: T): JsonValue {
                 }
             }
         } else if (reflect.is_struct<T>()) {
+            # A container the overloads above do not convert is not a
+            # struct to write the properties of (#404).
+            # shortcut: matches by name, so a program's own struct named
+            # `Map<...>` or `Set<...>` is refused too; upgrade with a
+            # reflect query for the runtime's types.
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashMap<")
+                    || reflect.name<T>().starts_with("OrderedMap<")
+                    || reflect.name<T>().starts_with("Map<")),
+                $"'encode' cannot convert type '{reflect.name<T>()}' to JSON: a map's keys must be 'String's"
+            );
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashSet<")
+                    || reflect.name<T>().starts_with("Set<")
+                    || reflect.name<T>().starts_with("Deque<")
+                    || reflect.name<T>().starts_with("PriorityQueue<")
+                    || reflect.name<T>().starts_with("ArrayView<")
+                    || reflect.is_same<T, BitSet>()),
+                $"'encode' cannot convert type '{reflect.name<T>()}' to JSON; convert it to an 'Array' first"
+            );
             out = _json_object_or_null(value);
             for (var field in reflect.properties<T>()) {
                 if (field.has_attribute<serialize.Ignore>()) {
@@ -744,6 +764,22 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                 }
             }
         } else if (reflect.is_struct<T>()) {
+            # As for 'encode' (#404); shortcut: matches by name, as there.
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashMap<")
+                    || reflect.name<T>().starts_with("OrderedMap<")
+                    || reflect.name<T>().starts_with("Map<")),
+                $"'decode' cannot convert type '{reflect.name<T>()}' from JSON: a map's keys must be 'String's"
+            );
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashSet<")
+                    || reflect.name<T>().starts_with("Set<")
+                    || reflect.name<T>().starts_with("Deque<")
+                    || reflect.name<T>().starts_with("PriorityQueue<")
+                    || reflect.name<T>().starts_with("ArrayView<")
+                    || reflect.is_same<T, BitSet>()),
+                $"'decode' cannot convert type '{reflect.name<T>()}' from JSON; decode an 'Array' and build it from that"
+            );
             out = _json_new(out, value.is_null());
             for (var field in reflect.properties<T>()) {
                 if (field.has_attribute<serialize.Ignore>()) {
