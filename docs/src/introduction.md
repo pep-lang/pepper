@@ -116,7 +116,7 @@ the order this book covers them:
   and [leveled, structured logging](language/logging.md) (the `log`
   module).
 
-[pep-fmt](tools/pep-fmt.md), the code formatter, [pep-fmt](tools/pep-fmt.md), the code formatter,
+[pep-fmt](tools/pep-fmt.md), the code formatter,
 [pep-profile](tools/pep-profile.md), which profiles a program and draws a
 flame graph, [pep-test](tools/pep-test.md), which runs unit tests, and
 [`pepper`](tools/pepper.md), the entry point that runs every
