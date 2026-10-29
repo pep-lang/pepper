@@ -1,6 +1,6 @@
 # HashMap and HashSet, and the hash function: inserting, finding, removing,
 # growing and clearing; keys hashed by identity (structs), by content
-# (strings, tuples) or by a struct's own or derived `==` and hash; and
+# (strings, tuples, arrays) or by a struct's own or derived `==` and hash; and
 # releasing what a map holds, nested containers included.
 
 struct Point {
@@ -59,6 +59,28 @@ hash_string_override() {
     expect_equal(hash<String>(a), hash<String>(b));
     var c = "world";
     expect_not_equal(hash<String>(a), hash<String>(c));
+}
+
+# An Array hashes by its elements, as its `==` compares them, so an equal
+# Array finds a key in a HashSet or HashMap, nested or in a tuple (#318).
+[Test]
+array_keys_match_by_content() {
+    expect_equal(hash<int[]>([1, 2]), hash<int[]>([1, 2]));
+    expect_not_equal(hash<int[]>([1, 2]), hash<int[]>([2, 1]));
+    var set = HashSet<int[]>();
+    set.insert([1, 2]);
+    set.insert([1, 2]);
+    expect_equal(set.count, 1);
+    expect_true(set.contains([1, 2]));
+    expect_false(set.contains([1, 2, 3]));
+    var map = HashMap<String[], int>();
+    map[["a", "b"]] = 1;
+    map[["a", "b"]] = 2;
+    expect_equal(map.count, 1);
+    expect_equal(map[["a", "b"]], 2);
+    var nested = HashSet<(int[][], int)>();
+    nested.insert(([[1], [2]], 3));
+    expect_true(nested.contains(([[1], [2]], 3)));
 }
 
 [Test]
@@ -407,8 +429,8 @@ equatable_enum_keys_match_by_case_and_values() {
     expect_false(counts.contains(Token.Number(3)));
 }
 
-# An `Array` compares by its elements but hashes by its address, so a
-# tuple's hash leaves it out: equal tuples hash equally.
+# A tuple's hash takes an `Array` element's content hash, so equal tuples
+# hash equally.
 [Test]
 tuple_keys_holding_arrays_find_equal_arrays() {
     var a: int[] = [1, 2];
