@@ -81,7 +81,12 @@ struct _StructSpecsMemo {
         for (var at in structure..module.structs.count) {
             var st = module.structs[at];
             existing.insert(st.name);
-            existing.insert(st.ty.to_string());
+            # A generic base is spelled with its parameters (`HashSet<K>`),
+            # which a program's own struct `K` spells too (#317): only a
+            # specialization's spelling names a made struct.
+            if (!(st.ty.is_generic() and st.name == st.ty.name)) {
+                existing.insert(st.ty.to_string());
+            }
         }
         var of = module.templates.frozen ? module.templates.structs : module.structs;
         var (base, fresh_bases) = _bases_of.since(of);

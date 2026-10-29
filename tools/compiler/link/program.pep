@@ -616,7 +616,7 @@ export load(
             }
             var message = "";
             if (imp.is_local) {
-                message = $"cannot find {imp.describe()} or the module folder \"{imp.stem()}\" next to this file";
+                message = $"cannot find '{imp.stem()}.pep' or the module folder '{imp.stem()}' next to this file";
             } else {
                 message = $"cannot find module '{imp.name}': no {imp.name.replace(".", "/")}/module.pep in {_describe_paths(search_paths)}";
             }

@@ -17,8 +17,9 @@
 # which builds a program without that package's files; reference chains
 # 100,000 deep, released without overflowing the stack; source nested as
 # deep as the parser allows, and one level deeper; the message a stack
-# overflow prints on the main thread, a `Thread` and a task; and the
-# panic hook, which every other kind of panic runs first. The programs are
+# overflow prints on the main thread, a `Thread` and a task; the panic
+# hook, which every other kind of panic runs first; and structs named like
+# a generic's type parameters as its type arguments. The programs are
 # in `testdata/`.
 
 import [File, Path, glob] from io;
@@ -150,6 +151,15 @@ an_unclosed_brace_notes_the_brace() {
     expect_contains(
         error.value(), "unclosed_brace.pep:1:13: note: to match this '{'\n    1 | main(): int {\n      |             ^"
     );
+}
+
+# ── generics ────────────────────────────────────────────────────────────────
+
+# A struct named like a generic's type parameter (`T`, `K`, `V`) is that
+# generic's type argument, not taken for the generic itself (#317).
+[Test]
+a_struct_named_like_a_type_parameter_is_a_type_argument() {
+    expect_exit(_run("struct_named_like_type_parameter"), 5);
 }
 
 # ── visibility ──────────────────────────────────────────────────────────────
