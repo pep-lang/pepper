@@ -445,12 +445,30 @@ export struct Cache {
     }
 }
 
+## `name`, or `~` and `name` when its part before the first `.` is a
+## name Windows reserves for a device (`nul`, `con`, `com1`, ...), so a
+## file or folder of that name can be made on every system. No other name
+## starts with `~`.
+##
+## @param name a file or folder name
+## @returns the name to make it under
+export safe_file_name(name: String): String {
+    var dot = name.find(".");
+    var base = (dot < 0 ? name : name.substr_bytes(0, dot as ulong)).lower();
+    bool reserved = base == "con" or base == "prn" or base == "aux" or base == "nul";
+    if (base.size == 4 and (base.starts_with("com") or base.starts_with("lpt"))) {
+        var digit = base.byte_at(3);
+        reserved = digit >= '1' and digit <= '9';
+    }
+    return reserved ? $"~{name}" : name;
+}
+
 ## The name of the folder of `unit`'s keys: its name with `/` as `.` and `:`
 ## as `_` (Windows forbids `:`), and when that is longer than `_NAME_SIZE`
 ## characters, its start and a hash of the whole, so no two units share a
 ## folder. A namespace never holds `.`.
 _unit_folder(unit: String): String {
-    var name = unit.replace("/", ".").replace(":", "_");
+    var name = safe_file_name(unit.replace("/", ".").replace(":", "_"));
     if (name.length <= _NAME_SIZE) {
         return name;
     }

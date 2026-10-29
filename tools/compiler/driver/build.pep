@@ -34,6 +34,7 @@ import [
     union_of,
     numbered_objects,
     serve_compilation_units,
+    safe_file_name,
     store_checked,
     warnings_in,
     write_record
@@ -1111,7 +1112,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     var owners = HashMap<String, uint>();
     var stem = name.is_value() ? name.value() : "main";
     # A folder of this build's own, so builds running at once do not meet.
-    var work = options.build_dir.join(Path($"{stem}.{process.id()}"));
+    var work = options.build_dir.join(Path(safe_file_name($"{stem}.{process.id()}")));
     var created = Directory.create_all(work);
     if (created.is_err()) {
         return Result<Built, String>.err($"cannot create {work}: {created.error().message}");
