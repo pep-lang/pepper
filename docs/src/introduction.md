@@ -94,7 +94,8 @@ the order this book covers them:
 - **Standard library:** strings (with a `StringBuilder`, `StringConstant`
   for literals' constant bytes, `to_string` and a `ToString` trait,
   `$"{a + b:>8}"` interpolation with format specifications, and
-  `String.format`), file-system access (see [files](language/files.md)),
+  `String.format`), file-system access (with glob patterns and watching a
+  directory for changes; see [files](language/files.md)),
   text encodings (UTF-16, ASCII; see
   [text](language/encodings.md#text-encodings)), TCP, UDP and Unix domain
   sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies,
@@ -104,9 +105,10 @@ the order this book covers them:
   keep their comments, and converting structs with `json.encode` and
   `json.decode`), [TOML](language/toml.md) (parsing, writing, editing a
   document in place, and converting structs), gzip and zlib compression,
-  tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the
-  `digest` module), [random numbers](language/random.md) (secure bytes from
-  the operating system and a seedable generator), command-line arguments
+  tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3, with HMAC
+  and PBKDF2, in the [`digest`](language/digest.md) module),
+  [random numbers](language/random.md) (secure bytes from the operating
+  system and a seedable generator), command-line arguments
   (`main(args: String[])`, parsed into options with the `cli` module),
   starting child processes, the `os` module (environment variables,
   monotonic and wall clocks with `Duration`, and machine and user
@@ -114,7 +116,8 @@ the order this book covers them:
   system's database, and RFC 3339, HTTP and `strftime` text), the `debug`
   module (stack backtraces, which a panic also prints, and the debugger),
   and [leveled, structured logging](language/logging.md) (the `log`
-  module).
+  module). [YAML](language/yaml.md) and
+  [zip archives](language/compression.md#zip-archives) come as packages.
 
 [pep-fmt](tools/pep-fmt.md), the code formatter, [pep-fmt](tools/pep-fmt.md), the code formatter,
 [pep-profile](tools/pep-profile.md), which profiles a program and draws a

@@ -93,7 +93,9 @@ every case already handles (see [Enums](enums.md#match)); a comparison with
 a build option that is not defined (see
 [Build options](build-options.md#comparing-values)); and an `[Export]` that
 has no effect, or a `--lib` build that exports nothing (see
-[Calling Pepper from C](c-interop.md#calling-pepper-from-c)).
+[Calling Pepper from C](c-interop.md#calling-pepper-from-c)). A package's
+build script can print warnings of its own (see
+[Build scripts](../tools/projects.md#build-scripts)).
 
 ## Deprecations
 
@@ -351,6 +353,18 @@ main.pep:3:9: error: redefinition of 'n'
 main.pep:2:9: note: previous definition is here
     2 |     var n = 1;
       |         ^
+```
+
+A function's parameters share the outermost scope of its body, as in C++,
+so a local of the same name as a parameter is a redefinition too:
+
+```text
+main.pep:2:9: error: redefinition of 'x'
+    2 |     var x = 5;
+      |         ^
+main.pep:1:3: note: previous definition is here
+    1 | f(x: bool): int {
+      |   ^
 ```
 
 The same holds for top-level types: two structs, traits, enums or type

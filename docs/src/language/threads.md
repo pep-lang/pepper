@@ -277,7 +277,8 @@ note: threads change a shared struct's state through a thread-safe member such a
 
 `Thread`, `ThreadLocal<T>` and `Atomic<T>` are `[Shared]` themselves, and so
 are the synchronization types below: `Channel<T>`, `Mutex<T>`,
-`Condition<T>`, `Once` and `Lazy<T>`.
+`Condition<T>`, `RwLock<T>`, `Semaphore`, `Barrier`, `Latch`, `Once` and
+`Lazy<T>`.
 
 ### Module-scope variables
 
@@ -724,11 +725,10 @@ The [Once reference](../reference/async-once.md) has the details.
   declared outside the block: such a variable is an outside value, whatever
   it holds, so it needs `copy`, or `move` when it holds the only reference
   (`list.append(move(job))`).
-- There is no reader-writer lock, and no barrier or semaphore. A Mutex is
-  not re-entrant.
+- A Mutex is not re-entrant, and neither is an `RwLock`.
 - The value a `Select`'s `wait()` returns is not a new value for a lock
   body, since it comes from `wrap`, a function value the `Select` keeps,
   and may share what `wrap` captured; `copy` it to move it into a locked
   value.
 - Deadlocks are not detected, except locking a Mutex twice on one thread,
-  which panics.
+  or asking to write an `RwLock` the thread holds, which panic.

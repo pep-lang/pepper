@@ -171,7 +171,8 @@ main.pep:2:16: error: expected an expression after '{' in interpolated string; w
 ```
 
 An error in the expression itself, such as a name that is not declared
-(`use of undeclared identifier 'x'`), is reported like any other, at the
+(`use of undeclared identifier 'x'`) or a member its type lacks
+(`no member named 'z' in 'Point'`), is reported like any other, at the
 token inside the braces.
 
 A format specification's errors are reported at the character in it that

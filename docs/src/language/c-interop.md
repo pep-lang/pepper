@@ -419,8 +419,10 @@ so pair it with [`[Target(Arch(...))]`](platform-selection.md).
 
 A C function is only callable if the library that defines it is linked into
 your program. The C library is always linked. For anything else, attach
-`[Link("name")]` to the extern or pass `-l name` to the compiler. The
-[Linking](linking.md) chapter covers both.
+`[Link("name")]` to the extern or pass `-l name` to the compiler. A
+package that bundles the C source compiles it with a
+[`[native]`](../tools/projects.md#native) table in its `pep.toml`, or a
+build script. The [Linking](linking.md) chapter covers all of these.
 
 ```pepper
 [Target(OS(Windows))]

@@ -194,9 +194,9 @@ are already private to it. A declaration cannot be both `export` and
 `private`:
 
 ```text
-main.pep:1:8: error: a declaration cannot be both 'export' and 'private'
-    1 | export private f(): int { return 0; }
-      |        ^~~~~~~
+main.pep:1:9: error: a declaration cannot be both 'export' and 'private'
+    1 | private export f(): int { return 0; }
+      |         ^
 ```
 
 ## Members of structs and extensions
@@ -300,9 +300,9 @@ private twice(x: int): int { return x * 2; }
 Writing it before the attributes is a parse error:
 
 ```text
-main.pep:2:8: error: unexpected '['
+main.pep:2:15: error: expected ']'
     2 | export [Target(OS(Windows))] f(): int { return 1; }
-      |        ^
+      |               ^
 ```
 
 `export` controls visibility between Pepper files only. Making a function
