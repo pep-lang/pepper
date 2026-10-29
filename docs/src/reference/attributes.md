@@ -445,3 +445,15 @@ const name: String = ""
 
 The built-in's name, when it differs from the declaration's; empty
 otherwise.
+
+## __Sealed
+
+```pepper
+[Attribute] struct __Sealed
+```
+
+Seals a trait: only the runtime declares which types conform to it, and
+an `extend T with Trait` outside the runtime is an error at the trait's
+name. Errors about a type that does not conform name no `extend` to add.
+The SIMD lane traits are sealed, as a `Vector` holds only the number
+types. Only the runtime may use it.

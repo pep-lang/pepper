@@ -4,9 +4,11 @@
 ## declares, a trait member with a body is the struct's default when it has
 ## none of its own, and a plain field meets a trait's property.
 
+import compiler.ast;
 import [Diagnostic, Edit, Fix, Location] from compiler.diagnostic;
 import [TRAIT_SELF] from "closures";
 import "common";
+import "confinement";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -40,12 +42,61 @@ const _COPYABLE_TRAIT = "Copyable";
 ## The synthesized trait member that copies the struct behind a trait value.
 const _COPY_TRAIT_METHOD = "_pep_copy_trait";
 
+## The attribute that keeps a trait's conformances to the runtime's own
+## declarations (`simd.Lane`).
+export const SEALED_ATTRIBUTE = "__Sealed";
+
+## Whether `required` names a trait marked `[__Sealed]`.
+##
+## @param module the model
+## @param required the trait
+## @returns true for a sealed trait
+export is_sealed(module: Module, required: TypeName): bool {
+    var found = trait_def(module.traits, required);
+    return found.is_value() and ast.has_attribute(found.value().attributes, SEALED_ATTRIBUTE);
+}
+
+# Reports the first extension outside the runtime that conforms a type to
+# a `[__Sealed]` trait, at the trait's name, and returns whether it did.
+_extends_sealed(module: Module, state: PassState): bool {
+    var runtime = Optional<bool[]>.Empty;
+    ulong index = module.checked.extensions;
+    while (index < module.extensions.count) {
+        var ext = module.extensions[index];
+        index += 1;
+        ulong i = 0;
+        while (i < ext.traits.count) {
+            var required = ext.traits[i];
+            i += 1;
+            if (!is_sealed(module, required)) {
+                continue;
+            }
+            if (!runtime.is_value()) {
+                runtime = Optional<bool[]>.Value(_runtime_files(state));
+            }
+            var files = runtime.value();
+            if ((ext.loc.file as ulong) >= files.count or files[ext.loc.file as ulong]) {
+                continue;
+            }
+            var at = i - 1 < ext.trait_locs.count ? ext.trait_locs[i - 1] : ext.loc;
+            state.report(
+                error_at($"'{required.display()}' is sealed: only the runtime declares which types conform to it", at)
+            );
+            return true;
+        }
+    }
+    return false;
+}
+
 ## Applies each resolved extension to the structs it extends, once each: an instance specialized after
 ## an extension first ran gets it too.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state: what was applied, and the first error
 export apply_extensions(module: Module, state: PassState) {
+    if (_extends_sealed(module, state)) {
+        return;
+    }
     var targets = _structs_by_target(module);
     ulong index = 0;
     while (index < module.extensions.count) {

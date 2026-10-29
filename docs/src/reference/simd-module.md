@@ -43,7 +43,7 @@ Source: `runtime/simd/module.pep`
 ## Lane
 
 ```pepper
-trait Lane
+[__Sealed] trait Lane
 ```
 
 The number types a `Vector` holds: every integer and floating-point
@@ -53,7 +53,7 @@ lane.
 ## IntegerLane
 
 ```pepper
-trait IntegerLane
+[__Sealed] trait IntegerLane
 ```
 
 The integer lane types, whose vectors have checked division, the bitwise
@@ -62,7 +62,7 @@ operators, shifts and rotates.
 ## FloatLane
 
 ```pepper
-trait FloatLane
+[__Sealed] trait FloatLane
 ```
 
 The floating-point lane types, whose vectors have floating-point

@@ -485,6 +485,24 @@ calls_a_method_on_an_integer_literal() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A type that is not a lane gets no note to declare it one: `Lane` is
+# sealed (#365).
+[Test]
+suggests_no_extend_for_a_sealed_trait() {
+    var folder = TempFolder("passes_sealed_note");
+    var root = folder.path.join("main.pep");
+    File.write_text(root, "import simd;\nmain(): int {\n    var v = simd.Vector<String, 4>();\n    return 0;\n}\n");
+    var program = link.load_program(root, link.Setup());
+    expect_true(program.is_ok());
+    var built = sema.merge(program.value());
+    expect_true(built.is_ok());
+    var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
+    expect_true(ran.is_err());
+    var rendered = render_all([ran.error()], program.value().sources());
+    expect_true(rendered.contains("error: 'String' does not conform to trait 'Lane'"));
+    expect_false(rendered.contains("declare it with"));
+}
+
 # The hidden local of a `?` or of a `match` over a call lets go of its
 # value once the value is read when the code moves what it gave, so the
 # move is accepted; a value another local or `this` still holds is not
@@ -690,6 +708,9 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # `Lane` is sealed: a program cannot conform a type to it, and the
+        # error for a type that is not a lane suggests no `extend` (#365).
+        "# expect: main.pep:6:19: error: 'Lane' is sealed: only the runtime declares which types conform to it\nimport simd;\nstruct Money {\n    long cents;\n}\nextend Money with simd.Lane {\n}\nmain(): int {\n    return 0;\n}\n",
         # A static call of a method the struct does not declare names the
         # method and the struct, at the method (#411).
         "# expect: main.pep:9:19: error: no static method named 'nope' in 'Point'\nstruct Point {\n    var x: int;\n    static make(): Point {\n        return Point();\n    }\n}\nmain(): int {\n    var p = Point.nope();\n    return 0;\n}\n",

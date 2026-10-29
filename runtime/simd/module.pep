@@ -35,14 +35,17 @@
 ## The number types a `Vector` holds: every integer and floating-point
 ## type. The runtime declares the conformances; another type cannot be a
 ## lane.
+[__Sealed]
 export trait Lane {}
 
 ## The integer lane types, whose vectors have checked division, the bitwise
 ## operators, shifts and rotates.
+[__Sealed]
 export trait IntegerLane {}
 
 ## The floating-point lane types, whose vectors have floating-point
 ## division, `square_root`, `floor` and `ceiling`.
+[__Sealed]
 export trait FloatLane {}
 
 extend byte with Lane;

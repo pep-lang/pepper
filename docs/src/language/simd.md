@@ -24,6 +24,13 @@ Bring them in with `import simd;` and write `simd.Vector<byte, 16>`, or
   main.pep:3:25: error: 'String' does not conform to trait 'Lane', required by 'T' in 'Vector'
   ```
 
+  `Lane` is sealed: only the runtime declares its conformances, so
+  `extend Money with simd.Lane` is an error too:
+
+  ```text
+  main.pep:7:19: error: 'Lane' is sealed: only the runtime declares which types conform to it
+  ```
+
 - `N` is written as a number, a power of two from 1 to 64:
 
   ```text

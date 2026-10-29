@@ -5826,6 +5826,7 @@ export struct ExtensionDef {
     var target: TypeName;
     var resolved: String?;
     var traits: Array<TypeName>;
+    var trait_locs: Array<Loc>;
     var restated: Array<(ulong, Bound)>;
     var methods: Array<FunctionDef>;
     var attributes: Array<ast.Attribute>;
@@ -5837,6 +5838,7 @@ export struct ExtensionDef {
         target: TypeName = TypeName(),
         resolved: String? = Optional<String>.Empty,
         traits: Array<TypeName> = Array<TypeName>(),
+        trait_locs: Array<Loc> = Array<Loc>(),
         restated: Array<(ulong, Bound)> = Array<(ulong, Bound)>(),
         methods: Array<FunctionDef> = Array<FunctionDef>(),
         attributes: Array<ast.Attribute> = Array<ast.Attribute>(),
@@ -5847,6 +5849,7 @@ export struct ExtensionDef {
         this.target = target;
         this.resolved = resolved;
         this.traits = traits;
+        this.trait_locs = trait_locs;
         this.restated = restated;
         this.methods = methods;
         this.attributes = attributes;
@@ -5861,21 +5864,22 @@ export struct ExtensionDef {
         for (var _item427 in this.traits) {
             _c427.append(_item427.copy());
         }
-        var _c429 = Array<(ulong, Bound)>();
-        for (var _item429 in this.restated) {
-            var (_t430_0, _t430_1) = _item429;
-            _c429.append((_t430_0, _t430_1.copy()));
+        var _c431 = Array<(ulong, Bound)>();
+        for (var _item431 in this.restated) {
+            var (_t432_0, _t432_1) = _item431;
+            _c431.append((_t432_0, _t432_1.copy()));
         }
-        var _c433 = Array<FunctionDef>();
-        for (var _item433 in this.methods) {
-            _c433.append(_item433.copy());
+        var _c435 = Array<FunctionDef>();
+        for (var _item435 in this.methods) {
+            _c435.append(_item435.copy());
         }
         return ExtensionDef(
             target = this.target.copy(),
             resolved = this.resolved,
             traits = _c427,
-            restated = _c429,
-            methods = _c433,
+            trait_locs = this.trait_locs.copy(),
+            restated = _c431,
+            methods = _c435,
             attributes = this.attributes.copy(),
             loc = this.loc,
             is_exported = this.is_exported,
@@ -5899,18 +5903,22 @@ export struct ExtensionDef {
         for (var _item427 in this.traits) {
             _item427.fingerprint(into);
         }
+        into.add(this.trait_locs.count);
+        for (var _item429 in this.trait_locs) {
+            _item429.fingerprint(into);
+        }
         into.add(this.restated.count);
-        for (var _item429 in this.restated) {
-            var (_t430_0, _t430_1) = _item429;
-            into.add(_t430_0 as ulong);
-            _t430_1.fingerprint(into);
+        for (var _item431 in this.restated) {
+            var (_t432_0, _t432_1) = _item431;
+            into.add(_t432_0 as ulong);
+            _t432_1.fingerprint(into);
         }
         into.add(this.methods.count);
-        for (var _item433 in this.methods) {
-            _item433.fingerprint(into);
+        for (var _item435 in this.methods) {
+            _item435.fingerprint(into);
         }
         into.add(this.attributes.count);
-        for (var _item435 in this.attributes) {}
+        for (var _item437 in this.attributes) {}
         this.loc.fingerprint(into);
         into.add(this.is_exported ? 1 : 0);
         into.add(this.is_private ? 1 : 0);
@@ -5926,25 +5934,30 @@ export struct ExtensionDef {
         }
         out["traits"] = _v427;
         var _v429 = JsonValue.array();
-        for (var _item429 in this.restated) {
-            var _v430 = JsonValue.array();
-            var _t430 = _item429;
-            var (_t430_0, _t430_1) = _t430;
-            _v430.append(unsigned_json(_t430_0));
-            _v430.append(_t430_1.to_json());
-            _v429.append(_v430);
+        for (var _item429 in this.trait_locs) {
+            _v429.append(_item429.to_json());
         }
-        out["restated"] = _v429;
-        var _v433 = JsonValue.array();
-        for (var _item433 in this.methods) {
-            _v433.append(_item433.to_json());
+        out["trait_locs"] = _v429;
+        var _v431 = JsonValue.array();
+        for (var _item431 in this.restated) {
+            var _v432 = JsonValue.array();
+            var _t432 = _item431;
+            var (_t432_0, _t432_1) = _t432;
+            _v432.append(unsigned_json(_t432_0));
+            _v432.append(_t432_1.to_json());
+            _v431.append(_v432);
         }
-        out["methods"] = _v433;
+        out["restated"] = _v431;
         var _v435 = JsonValue.array();
-        for (var _item435 in this.attributes) {
+        for (var _item435 in this.methods) {
             _v435.append(_item435.to_json());
         }
-        out["attributes"] = _v435;
+        out["methods"] = _v435;
+        var _v437 = JsonValue.array();
+        for (var _item437 in this.attributes) {
+            _v437.append(_item437.to_json());
+        }
+        out["attributes"] = _v437;
         out["loc"] = this.loc.to_json();
         out["is_exported"] = JsonValue.Bool(this.is_exported);
         out["is_private"] = JsonValue.Bool(this.is_private);
@@ -5970,11 +5983,11 @@ export struct ExtensionScopes {
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): ExtensionScopes {
-        var _c442 = Array<HashSet<uint>>();
-        for (var _item442 in this.visible) {
-            _c442.append(_item442.copy());
+        var _c444 = Array<HashSet<uint>>();
+        for (var _item444 in this.visible) {
+            _c444.append(_item444.copy());
         }
-        return ExtensionScopes(prelude = this.prelude.copy(), visible = _c442, module = this.module.copy());
+        return ExtensionScopes(prelude = this.prelude.copy(), visible = _c444, module = this.module.copy());
     }
 
     ## Adds this to `into`: equal values add the same.
@@ -5983,20 +5996,20 @@ export struct ExtensionScopes {
     fingerprint(into: Fingerprint) {
         into.add_text("ExtensionScopes");
         into.add(this.prelude.count);
-        for (var _item440 in this.prelude) {
-            into.add(_item440 as ulong);
+        for (var _item442 in this.prelude) {
+            into.add(_item442 as ulong);
         }
         into.add(this.visible.count);
-        for (var _item442 in this.visible) {
-            into.add(_item442.count);
-            for (var _item443 in _item442) {
-                into.add(_item443 as ulong);
+        for (var _item444 in this.visible) {
+            into.add(_item444.count);
+            for (var _item445 in _item444) {
+                into.add(_item445 as ulong);
             }
         }
         into.add(this.module.count);
-        for (var _item445 in this.module) {
-            if (_item445.is_value()) {
-                into.add(_item445.value() as ulong);
+        for (var _item447 in this.module) {
+            if (_item447.is_value()) {
+                into.add(_item447.value() as ulong);
                 into.add(1);
             } else {
                 into.add(0);
@@ -6006,25 +6019,25 @@ export struct ExtensionScopes {
 
     to_json(): JsonValue {
         var out = JsonValue.object();
-        var _v440 = JsonValue.array();
-        for (var _item440 in this.prelude) {
-            _v440.append(JsonValue.Integer(_item440 as long));
-        }
-        out["prelude"] = _v440;
         var _v442 = JsonValue.array();
-        for (var _item442 in this.visible) {
-            var _v443 = JsonValue.array();
-            for (var _item443 in _item442) {
-                _v443.append(JsonValue.Integer(_item443 as long));
+        for (var _item442 in this.prelude) {
+            _v442.append(JsonValue.Integer(_item442 as long));
+        }
+        out["prelude"] = _v442;
+        var _v444 = JsonValue.array();
+        for (var _item444 in this.visible) {
+            var _v445 = JsonValue.array();
+            for (var _item445 in _item444) {
+                _v445.append(JsonValue.Integer(_item445 as long));
             }
-            _v442.append(_v443);
+            _v444.append(_v445);
         }
-        out["visible"] = _v442;
-        var _v445 = JsonValue.array();
-        for (var _item445 in this.module) {
-            _v445.append((_item445.is_value() ? JsonValue.Integer(_item445.value() as long) : JsonValue.Null));
+        out["visible"] = _v444;
+        var _v447 = JsonValue.array();
+        for (var _item447 in this.module) {
+            _v447.append((_item447.is_value() ? JsonValue.Integer(_item447.value() as long) : JsonValue.Null));
         }
-        out["module"] = _v445;
+        out["module"] = _v447;
         return out;
     }
 }
@@ -6056,14 +6069,14 @@ export struct ExternDef {
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): ExternDef {
-        var _c450 = Array<VariableDef>();
-        for (var _item450 in this.parameters) {
-            _c450.append(_item450.copy());
+        var _c452 = Array<VariableDef>();
+        for (var _item452 in this.parameters) {
+            _c452.append(_item452.copy());
         }
         return ExternDef(
             name = this.name,
             ty = this.ty.copy(),
-            parameters = _c450,
+            parameters = _c452,
             is_variadic = this.is_variadic,
             attributes = this.attributes.copy(),
             loc = this.loc
@@ -6078,12 +6091,12 @@ export struct ExternDef {
         into.add_text(this.name);
         this.ty.fingerprint(into);
         into.add(this.parameters.count);
-        for (var _item450 in this.parameters) {
-            _item450.fingerprint(into);
+        for (var _item452 in this.parameters) {
+            _item452.fingerprint(into);
         }
         into.add(this.is_variadic ? 1 : 0);
         into.add(this.attributes.count);
-        for (var _item453 in this.attributes) {}
+        for (var _item455 in this.attributes) {}
         this.loc.fingerprint(into);
     }
 
@@ -6091,17 +6104,17 @@ export struct ExternDef {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
         out["ty"] = this.ty.to_json();
-        var _v450 = JsonValue.array();
-        for (var _item450 in this.parameters) {
-            _v450.append(_item450.to_json());
+        var _v452 = JsonValue.array();
+        for (var _item452 in this.parameters) {
+            _v452.append(_item452.to_json());
         }
-        out["parameters"] = _v450;
+        out["parameters"] = _v452;
         out["is_variadic"] = JsonValue.Bool(this.is_variadic);
-        var _v453 = JsonValue.array();
-        for (var _item453 in this.attributes) {
-            _v453.append(_item453.to_json());
+        var _v455 = JsonValue.array();
+        for (var _item455 in this.attributes) {
+            _v455.append(_item455.to_json());
         }
-        out["attributes"] = _v453;
+        out["attributes"] = _v455;
         out["loc"] = this.loc.to_json();
         return out;
     }
@@ -6131,13 +6144,13 @@ export struct TypeAliasDef {
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): TypeAliasDef {
-        var _c457 = Array<GenericParam>();
-        for (var _item457 in this.generic_params) {
-            _c457.append(_item457.copy());
+        var _c459 = Array<GenericParam>();
+        for (var _item459 in this.generic_params) {
+            _c459.append(_item459.copy());
         }
         return TypeAliasDef(
             name = this.name,
-            generic_params = _c457,
+            generic_params = _c459,
             target = this.target.copy(),
             attributes = this.attributes.copy(),
             loc = this.loc
@@ -6151,29 +6164,29 @@ export struct TypeAliasDef {
         into.add_text("TypeAliasDef");
         into.add_text(this.name);
         into.add(this.generic_params.count);
-        for (var _item457 in this.generic_params) {
-            _item457.fingerprint(into);
+        for (var _item459 in this.generic_params) {
+            _item459.fingerprint(into);
         }
         this.target.fingerprint(into);
         into.add(this.attributes.count);
-        for (var _item460 in this.attributes) {}
+        for (var _item462 in this.attributes) {}
         this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
-        var _v457 = JsonValue.array();
-        for (var _item457 in this.generic_params) {
-            _v457.append(_item457.to_json());
+        var _v459 = JsonValue.array();
+        for (var _item459 in this.generic_params) {
+            _v459.append(_item459.to_json());
         }
-        out["generic_params"] = _v457;
+        out["generic_params"] = _v459;
         out["target"] = this.target.to_json();
-        var _v460 = JsonValue.array();
-        for (var _item460 in this.attributes) {
-            _v460.append(_item460.to_json());
+        var _v462 = JsonValue.array();
+        for (var _item462 in this.attributes) {
+            _v462.append(_item462.to_json());
         }
-        out["attributes"] = _v460;
+        out["attributes"] = _v462;
         out["loc"] = this.loc.to_json();
         return out;
     }
@@ -6414,169 +6427,169 @@ export struct Module {
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Module {
-        var _c472 = Array<StructDef>();
-        for (var _item472 in this.structs) {
-            _c472.append(_item472.copy());
-        }
-        var _c474 = Array<TraitDef>();
-        for (var _item474 in this.traits) {
+        var _c474 = Array<StructDef>();
+        for (var _item474 in this.structs) {
             _c474.append(_item474.copy());
         }
-        var _c476 = Array<ExtensionDef>();
-        for (var _item476 in this.extensions) {
+        var _c476 = Array<TraitDef>();
+        for (var _item476 in this.traits) {
             _c476.append(_item476.copy());
         }
-        var _c478 = Array<FunctionDef>();
-        for (var _item478 in this.functions) {
+        var _c478 = Array<ExtensionDef>();
+        for (var _item478 in this.extensions) {
             _c478.append(_item478.copy());
         }
-        var _c480 = Array<ExternDef>();
-        for (var _item480 in this.externs) {
+        var _c480 = Array<FunctionDef>();
+        for (var _item480 in this.functions) {
             _c480.append(_item480.copy());
         }
-        var _c482 = Array<VariableDef>();
-        for (var _item482 in this.globals) {
+        var _c482 = Array<ExternDef>();
+        for (var _item482 in this.externs) {
             _c482.append(_item482.copy());
         }
-        var _c484 = Array<ModuleStaticBlock>();
-        for (var _item484 in this.static_blocks) {
+        var _c484 = Array<VariableDef>();
+        for (var _item484 in this.globals) {
             _c484.append(_item484.copy());
         }
-        var _c486 = Array<EnumDef>();
-        for (var _item486 in this.enums) {
+        var _c486 = Array<ModuleStaticBlock>();
+        for (var _item486 in this.static_blocks) {
             _c486.append(_item486.copy());
         }
-        var _c488 = Array<TypeName>();
-        for (var _item488 in this.struct_specs) {
+        var _c488 = Array<EnumDef>();
+        for (var _item488 in this.enums) {
             _c488.append(_item488.copy());
         }
         var _c490 = Array<TypeName>();
-        for (var _item490 in this.func_specs) {
+        for (var _item490 in this.struct_specs) {
             _c490.append(_item490.copy());
         }
-        var _c492 = Array<TypeAliasDef>();
-        for (var _item492 in this.type_aliases) {
+        var _c492 = Array<TypeName>();
+        for (var _item492 in this.func_specs) {
             _c492.append(_item492.copy());
         }
-        var _c494 = Array<Withheld>();
-        for (var _item494 in this.withheld) {
+        var _c494 = Array<TypeAliasDef>();
+        for (var _item494 in this.type_aliases) {
             _c494.append(_item494.copy());
         }
-        var _c496 = Array<PropertyDef>();
-        for (var _item496 in this.properties) {
+        var _c496 = Array<Withheld>();
+        for (var _item496 in this.withheld) {
             _c496.append(_item496.copy());
         }
-        var _c498 = Array<TypeUse>();
-        for (var _item498 in this.type_uses) {
+        var _c498 = Array<PropertyDef>();
+        for (var _item498 in this.properties) {
             _c498.append(_item498.copy());
         }
-        var _c500 = Array<UseContext>();
-        for (var _item500 in this.use_contexts) {
+        var _c500 = Array<TypeUse>();
+        for (var _item500 in this.type_uses) {
             _c500.append(_item500.copy());
         }
-        var _c502 = Array<(Loc, ulong, Loc)>();
-        for (var _item502 in this.literal_args) {
-            var (_t503_0, _t503_1, _t503_2) = _item502;
-            _c502.append((_t503_0, _t503_1, _t503_2));
+        var _c502 = Array<UseContext>();
+        for (var _item502 in this.use_contexts) {
+            _c502.append(_item502.copy());
         }
-        var _c507 = Array<TypeAliasDef>();
-        for (var _item507 in this.constrained_aliases) {
-            _c507.append(_item507.copy());
+        var _c504 = Array<(Loc, ulong, Loc)>();
+        for (var _item504 in this.literal_args) {
+            var (_t505_0, _t505_1, _t505_2) = _item504;
+            _c504.append((_t505_0, _t505_1, _t505_2));
         }
-        var _c509 = Array<TraitType>();
-        for (var _item509 in this.trait_types) {
+        var _c509 = Array<TypeAliasDef>();
+        for (var _item509 in this.constrained_aliases) {
             _c509.append(_item509.copy());
         }
-        var _c511 = Array<Conversion>();
-        for (var _item511 in this.conversions) {
+        var _c511 = Array<TraitType>();
+        for (var _item511 in this.trait_types) {
             _c511.append(_item511.copy());
         }
-        var _c513 = Map<String, Array<String>>();
-        for (var (_key513, _item513) in this.overload_sets) {
-            _c513[_key513] = _item513.copy();
+        var _c513 = Array<Conversion>();
+        for (var _item513 in this.conversions) {
+            _c513.append(_item513.copy());
         }
-        var _c516 = Map<String, Array<Array<String>>>();
-        for (var (_key516, _item516) in this.overload_unions) {
-            var _c517 = Array<Array<String>>();
-            for (var _item517 in _item516) {
-                _c517.append(_item517.copy());
+        var _c515 = Map<String, Array<String>>();
+        for (var (_key515, _item515) in this.overload_sets) {
+            _c515[_key515] = _item515.copy();
+        }
+        var _c518 = Map<String, Array<Array<String>>>();
+        for (var (_key518, _item518) in this.overload_unions) {
+            var _c519 = Array<Array<String>>();
+            for (var _item519 in _item518) {
+                _c519.append(_item519.copy());
             }
-            _c516[_key516] = _c517;
+            _c518[_key518] = _c519;
         }
-        var _c520 = Map<String, Map<String, Array<String>>>();
-        for (var (_key520, _item520) in this.method_overload_sets) {
-            var _c521 = Map<String, Array<String>>();
-            for (var (_key521, _item521) in _item520) {
-                _c521[_key521] = _item521.copy();
+        var _c522 = Map<String, Map<String, Array<String>>>();
+        for (var (_key522, _item522) in this.method_overload_sets) {
+            var _c523 = Map<String, Array<String>>();
+            for (var (_key523, _item523) in _item522) {
+                _c523[_key523] = _item523.copy();
             }
-            _c520[_key520] = _c521;
+            _c522[_key522] = _c523;
         }
-        var _c529 = Array<(Loc, String)>();
-        for (var _item529 in this.call_targets) {
-            var (_t530_0, _t530_1) = _item529;
-            _c529.append((_t530_0, _t530_1));
+        var _c531 = Array<(Loc, String)>();
+        for (var _item531 in this.call_targets) {
+            var (_t532_0, _t532_1) = _item531;
+            _c531.append((_t532_0, _t532_1));
         }
-        var _c533 = Array<(Loc, String)>();
-        for (var _item533 in this.argument_names) {
-            var (_t534_0, _t534_1) = _item533;
-            _c533.append((_t534_0, _t534_1));
+        var _c535 = Array<(Loc, String)>();
+        for (var _item535 in this.argument_names) {
+            var (_t536_0, _t536_1) = _item535;
+            _c535.append((_t536_0, _t536_1));
         }
-        var _c541 = HashMap<Loc, String>();
-        for (var (_key541, _item541) in this.recorded_summaries) {
-            _c541[_key541] = _item541;
+        var _c543 = HashMap<Loc, String>();
+        for (var (_key543, _item543) in this.recorded_summaries) {
+            _c543[_key543] = _item543;
         }
-        var _c547 = HashMap<String, SpecRequest>();
-        for (var (_key547, _item547) in this.spec_requests) {
-            _c547[_key547] = _item547.copy();
+        var _c549 = HashMap<String, SpecRequest>();
+        for (var (_key549, _item549) in this.spec_requests) {
+            _c549[_key549] = _item549.copy();
         }
-        var _c550 = Array<(Loc, String)>();
-        for (var _item550 in this.summaries_to_record) {
-            var (_t551_0, _t551_1) = _item550;
-            _c550.append((_t551_0, _t551_1));
+        var _c552 = Array<(Loc, String)>();
+        for (var _item552 in this.summaries_to_record) {
+            var (_t553_0, _t553_1) = _item552;
+            _c552.append((_t553_0, _t553_1));
         }
-        var _c554 = HashMap<String, Array<bool>>();
-        for (var (_key554, _item554) in this.caller_copies) {
-            _c554[_key554] = _item554.copy();
+        var _c556 = HashMap<String, Array<bool>>();
+        for (var (_key556, _item556) in this.caller_copies) {
+            _c556[_key556] = _item556.copy();
         }
         var _copy = Module(
             imports = this.imports.copy(),
-            structs = _c472,
-            traits = _c474,
-            extensions = _c476,
-            functions = _c478,
-            externs = _c480,
-            globals = _c482,
-            static_blocks = _c484,
-            enums = _c486,
-            struct_specs = _c488,
-            func_specs = _c490,
-            type_aliases = _c492,
-            withheld = _c494,
-            properties = _c496,
-            type_uses = _c498,
-            use_contexts = _c500,
-            literal_args = _c502,
-            constrained_aliases = _c507,
-            trait_types = _c509,
-            conversions = _c511,
-            overload_sets = _c513,
-            overload_unions = _c516,
-            method_overload_sets = _c520,
+            structs = _c474,
+            traits = _c476,
+            extensions = _c478,
+            functions = _c480,
+            externs = _c482,
+            globals = _c484,
+            static_blocks = _c486,
+            enums = _c488,
+            struct_specs = _c490,
+            func_specs = _c492,
+            type_aliases = _c494,
+            withheld = _c496,
+            properties = _c498,
+            type_uses = _c500,
+            use_contexts = _c502,
+            literal_args = _c504,
+            constrained_aliases = _c509,
+            trait_types = _c511,
+            conversions = _c513,
+            overload_sets = _c515,
+            overload_unions = _c518,
+            method_overload_sets = _c522,
             extension_scopes = this.extension_scopes.copy(),
             private_functions = this.private_functions.copy(),
             file_private_functions = this.file_private_functions.copy(),
-            call_targets = _c529,
-            argument_names = _c533,
+            call_targets = _c531,
+            argument_names = _c535,
             namespaces = this.namespaces.copy(),
             cached_files = this.cached_files.copy(),
-            recorded_summaries = _c541,
+            recorded_summaries = _c543,
             stripped = this.stripped.copy(),
             templates = this.templates.copy(),
             checked = this.checked.copy(),
-            spec_requests = _c547,
+            spec_requests = _c549,
             record_summaries = this.record_summaries,
-            summaries_to_record = _c550,
-            caller_copies = _c554,
+            summaries_to_record = _c552,
+            caller_copies = _c556,
             linked = this.linked
         );
         _copy.own_decls = this.own_decls;
@@ -6591,175 +6604,175 @@ export struct Module {
     fingerprint(into: Fingerprint) {
         into.add_text("Module");
         into.add(this.imports.count);
-        for (var _item470 in this.imports) {}
+        for (var _item472 in this.imports) {}
         into.add(this.structs.count);
-        for (var _item472 in this.structs) {
-            _item472.fingerprint(into);
-        }
-        into.add(this.traits.count);
-        for (var _item474 in this.traits) {
+        for (var _item474 in this.structs) {
             _item474.fingerprint(into);
         }
-        into.add(this.extensions.count);
-        for (var _item476 in this.extensions) {
+        into.add(this.traits.count);
+        for (var _item476 in this.traits) {
             _item476.fingerprint(into);
         }
-        into.add(this.functions.count);
-        for (var _item478 in this.functions) {
+        into.add(this.extensions.count);
+        for (var _item478 in this.extensions) {
             _item478.fingerprint(into);
         }
-        into.add(this.externs.count);
-        for (var _item480 in this.externs) {
+        into.add(this.functions.count);
+        for (var _item480 in this.functions) {
             _item480.fingerprint(into);
         }
-        into.add(this.globals.count);
-        for (var _item482 in this.globals) {
+        into.add(this.externs.count);
+        for (var _item482 in this.externs) {
             _item482.fingerprint(into);
         }
-        into.add(this.static_blocks.count);
-        for (var _item484 in this.static_blocks) {
+        into.add(this.globals.count);
+        for (var _item484 in this.globals) {
             _item484.fingerprint(into);
         }
-        into.add(this.enums.count);
-        for (var _item486 in this.enums) {
+        into.add(this.static_blocks.count);
+        for (var _item486 in this.static_blocks) {
             _item486.fingerprint(into);
         }
-        into.add(this.struct_specs.count);
-        for (var _item488 in this.struct_specs) {
+        into.add(this.enums.count);
+        for (var _item488 in this.enums) {
             _item488.fingerprint(into);
         }
-        into.add(this.func_specs.count);
-        for (var _item490 in this.func_specs) {
+        into.add(this.struct_specs.count);
+        for (var _item490 in this.struct_specs) {
             _item490.fingerprint(into);
         }
-        into.add(this.type_aliases.count);
-        for (var _item492 in this.type_aliases) {
+        into.add(this.func_specs.count);
+        for (var _item492 in this.func_specs) {
             _item492.fingerprint(into);
         }
-        into.add(this.withheld.count);
-        for (var _item494 in this.withheld) {
+        into.add(this.type_aliases.count);
+        for (var _item494 in this.type_aliases) {
             _item494.fingerprint(into);
         }
-        into.add(this.properties.count);
-        for (var _item496 in this.properties) {
+        into.add(this.withheld.count);
+        for (var _item496 in this.withheld) {
             _item496.fingerprint(into);
         }
-        into.add(this.type_uses.count);
-        for (var _item498 in this.type_uses) {
+        into.add(this.properties.count);
+        for (var _item498 in this.properties) {
             _item498.fingerprint(into);
         }
-        into.add(this.use_contexts.count);
-        for (var _item500 in this.use_contexts) {
+        into.add(this.type_uses.count);
+        for (var _item500 in this.type_uses) {
             _item500.fingerprint(into);
         }
+        into.add(this.use_contexts.count);
+        for (var _item502 in this.use_contexts) {
+            _item502.fingerprint(into);
+        }
         into.add(this.literal_args.count);
-        for (var _item502 in this.literal_args) {
-            var (_t503_0, _t503_1, _t503_2) = _item502;
-            _t503_0.fingerprint(into);
-            into.add(_t503_1 as ulong);
-            _t503_2.fingerprint(into);
+        for (var _item504 in this.literal_args) {
+            var (_t505_0, _t505_1, _t505_2) = _item504;
+            _t505_0.fingerprint(into);
+            into.add(_t505_1 as ulong);
+            _t505_2.fingerprint(into);
         }
         into.add(this.constrained_aliases.count);
-        for (var _item507 in this.constrained_aliases) {
-            _item507.fingerprint(into);
-        }
-        into.add(this.trait_types.count);
-        for (var _item509 in this.trait_types) {
+        for (var _item509 in this.constrained_aliases) {
             _item509.fingerprint(into);
         }
-        into.add(this.conversions.count);
-        for (var _item511 in this.conversions) {
+        into.add(this.trait_types.count);
+        for (var _item511 in this.trait_types) {
             _item511.fingerprint(into);
         }
+        into.add(this.conversions.count);
+        for (var _item513 in this.conversions) {
+            _item513.fingerprint(into);
+        }
         into.add(this.overload_sets.count);
-        for (var (_key513, _item513) in this.overload_sets) {
-            into.add_text(_key513);
-            into.add(_item513.count);
-            for (var _item515 in _item513) {
-                into.add_text(_item515);
+        for (var (_key515, _item515) in this.overload_sets) {
+            into.add_text(_key515);
+            into.add(_item515.count);
+            for (var _item517 in _item515) {
+                into.add_text(_item517);
             }
         }
         into.add(this.overload_unions.count);
-        for (var (_key517, _item517) in this.overload_unions) {
-            into.add_text(_key517);
-            into.add(_item517.count);
-            for (var _item519 in _item517) {
-                into.add(_item519.count);
-                for (var _item520 in _item519) {
-                    into.add_text(_item520);
+        for (var (_key519, _item519) in this.overload_unions) {
+            into.add_text(_key519);
+            into.add(_item519.count);
+            for (var _item521 in _item519) {
+                into.add(_item521.count);
+                for (var _item522 in _item521) {
+                    into.add_text(_item522);
                 }
             }
         }
         into.add(this.method_overload_sets.count);
-        for (var (_key522, _item522) in this.method_overload_sets) {
-            into.add_text(_key522);
-            into.add(_item522.count);
-            for (var (_key524, _item524) in _item522) {
-                into.add_text(_key524);
-                into.add(_item524.count);
-                for (var _item526 in _item524) {
-                    into.add_text(_item526);
+        for (var (_key524, _item524) in this.method_overload_sets) {
+            into.add_text(_key524);
+            into.add(_item524.count);
+            for (var (_key526, _item526) in _item524) {
+                into.add_text(_key526);
+                into.add(_item526.count);
+                for (var _item528 in _item526) {
+                    into.add_text(_item528);
                 }
             }
         }
         this.extension_scopes.fingerprint(into);
         into.add(this.private_functions.count);
-        for (var _item529 in this.private_functions) {
-            _item529.fingerprint(into);
-        }
-        into.add(this.file_private_functions.count);
-        for (var _item531 in this.file_private_functions) {
+        for (var _item531 in this.private_functions) {
             _item531.fingerprint(into);
         }
+        into.add(this.file_private_functions.count);
+        for (var _item533 in this.file_private_functions) {
+            _item533.fingerprint(into);
+        }
         into.add(this.call_targets.count);
-        for (var _item533 in this.call_targets) {
-            var (_t534_0, _t534_1) = _item533;
-            _t534_0.fingerprint(into);
-            into.add_text(_t534_1);
+        for (var _item535 in this.call_targets) {
+            var (_t536_0, _t536_1) = _item535;
+            _t536_0.fingerprint(into);
+            into.add_text(_t536_1);
         }
         into.add(this.argument_names.count);
-        for (var _item537 in this.argument_names) {
-            var (_t538_0, _t538_1) = _item537;
-            _t538_0.fingerprint(into);
-            into.add_text(_t538_1);
+        for (var _item539 in this.argument_names) {
+            var (_t540_0, _t540_1) = _item539;
+            _t540_0.fingerprint(into);
+            into.add_text(_t540_1);
         }
         into.add(this.namespaces.count);
-        for (var _item541 in this.namespaces) {
-            into.add_text(_item541);
+        for (var _item543 in this.namespaces) {
+            into.add_text(_item543);
         }
         into.add(this.cached_files.count);
-        for (var _item543 in this.cached_files) {
-            into.add(_item543 ? 1 : 0);
+        for (var _item545 in this.cached_files) {
+            into.add(_item545 ? 1 : 0);
         }
         into.add(this.recorded_summaries.count);
-        for (var (_key545, _item545) in this.recorded_summaries) {
-            _key545.fingerprint(into);
-            into.add_text(_item545);
+        for (var (_key547, _item547) in this.recorded_summaries) {
+            _key547.fingerprint(into);
+            into.add_text(_item547);
         }
         into.add(this.stripped.count);
-        for (var _item548 in this.stripped) {
-            _item548.fingerprint(into);
+        for (var _item550 in this.stripped) {
+            _item550.fingerprint(into);
         }
         this.templates.fingerprint(into);
         this.checked.fingerprint(into);
         into.add(this.spec_requests.count);
-        for (var (_key552, _item552) in this.spec_requests) {
-            into.add_text(_key552);
-            _item552.fingerprint(into);
+        for (var (_key554, _item554) in this.spec_requests) {
+            into.add_text(_key554);
+            _item554.fingerprint(into);
         }
         into.add(this.record_summaries ? 1 : 0);
         into.add(this.summaries_to_record.count);
-        for (var _item556 in this.summaries_to_record) {
-            var (_t557_0, _t557_1) = _item556;
-            _t557_0.fingerprint(into);
-            into.add_text(_t557_1);
+        for (var _item558 in this.summaries_to_record) {
+            var (_t559_0, _t559_1) = _item558;
+            _t559_0.fingerprint(into);
+            into.add_text(_t559_1);
         }
         into.add(this.caller_copies.count);
-        for (var (_key560, _item560) in this.caller_copies) {
-            into.add_text(_key560);
-            into.add(_item560.count);
-            for (var _item562 in _item560) {
-                into.add(_item562 ? 1 : 0);
+        for (var (_key562, _item562) in this.caller_copies) {
+            into.add_text(_key562);
+            into.add(_item562.count);
+            for (var _item564 in _item562) {
+                into.add(_item564 ? 1 : 0);
             }
         }
         into.add(this.linked ? 1 : 0);
@@ -6767,225 +6780,225 @@ export struct Module {
 
     to_json(): JsonValue {
         var out = JsonValue.object();
-        var _v470 = JsonValue.array();
-        for (var _item470 in this.imports) {
-            _v470.append(_item470.to_json());
-        }
-        out["imports"] = _v470;
         var _v472 = JsonValue.array();
-        for (var _item472 in this.structs) {
+        for (var _item472 in this.imports) {
             _v472.append(_item472.to_json());
         }
-        out["structs"] = _v472;
+        out["imports"] = _v472;
         var _v474 = JsonValue.array();
-        for (var _item474 in this.traits) {
+        for (var _item474 in this.structs) {
             _v474.append(_item474.to_json());
         }
-        out["traits"] = _v474;
+        out["structs"] = _v474;
         var _v476 = JsonValue.array();
-        for (var _item476 in this.extensions) {
+        for (var _item476 in this.traits) {
             _v476.append(_item476.to_json());
         }
-        out["extensions"] = _v476;
+        out["traits"] = _v476;
         var _v478 = JsonValue.array();
-        for (var _item478 in this.functions) {
+        for (var _item478 in this.extensions) {
             _v478.append(_item478.to_json());
         }
-        out["functions"] = _v478;
+        out["extensions"] = _v478;
         var _v480 = JsonValue.array();
-        for (var _item480 in this.externs) {
+        for (var _item480 in this.functions) {
             _v480.append(_item480.to_json());
         }
-        out["externs"] = _v480;
+        out["functions"] = _v480;
         var _v482 = JsonValue.array();
-        for (var _item482 in this.globals) {
+        for (var _item482 in this.externs) {
             _v482.append(_item482.to_json());
         }
-        out["globals"] = _v482;
+        out["externs"] = _v482;
         var _v484 = JsonValue.array();
-        for (var _item484 in this.static_blocks) {
+        for (var _item484 in this.globals) {
             _v484.append(_item484.to_json());
         }
-        out["static_blocks"] = _v484;
+        out["globals"] = _v484;
         var _v486 = JsonValue.array();
-        for (var _item486 in this.enums) {
+        for (var _item486 in this.static_blocks) {
             _v486.append(_item486.to_json());
         }
-        out["enums"] = _v486;
+        out["static_blocks"] = _v486;
         var _v488 = JsonValue.array();
-        for (var _item488 in this.struct_specs) {
+        for (var _item488 in this.enums) {
             _v488.append(_item488.to_json());
         }
-        out["struct_specs"] = _v488;
+        out["enums"] = _v488;
         var _v490 = JsonValue.array();
-        for (var _item490 in this.func_specs) {
+        for (var _item490 in this.struct_specs) {
             _v490.append(_item490.to_json());
         }
-        out["func_specs"] = _v490;
+        out["struct_specs"] = _v490;
         var _v492 = JsonValue.array();
-        for (var _item492 in this.type_aliases) {
+        for (var _item492 in this.func_specs) {
             _v492.append(_item492.to_json());
         }
-        out["type_aliases"] = _v492;
+        out["func_specs"] = _v492;
         var _v494 = JsonValue.array();
-        for (var _item494 in this.withheld) {
+        for (var _item494 in this.type_aliases) {
             _v494.append(_item494.to_json());
         }
-        out["withheld"] = _v494;
+        out["type_aliases"] = _v494;
         var _v496 = JsonValue.array();
-        for (var _item496 in this.properties) {
+        for (var _item496 in this.withheld) {
             _v496.append(_item496.to_json());
         }
-        out["properties"] = _v496;
+        out["withheld"] = _v496;
         var _v498 = JsonValue.array();
-        for (var _item498 in this.type_uses) {
+        for (var _item498 in this.properties) {
             _v498.append(_item498.to_json());
         }
-        out["type_uses"] = _v498;
+        out["properties"] = _v498;
         var _v500 = JsonValue.array();
-        for (var _item500 in this.use_contexts) {
+        for (var _item500 in this.type_uses) {
             _v500.append(_item500.to_json());
         }
-        out["use_contexts"] = _v500;
+        out["type_uses"] = _v500;
         var _v502 = JsonValue.array();
-        for (var _item502 in this.literal_args) {
-            var _v503 = JsonValue.array();
-            var _t503 = _item502;
-            var (_t503_0, _t503_1, _t503_2) = _t503;
-            _v503.append(_t503_0.to_json());
-            _v503.append(unsigned_json(_t503_1));
-            _v503.append(_t503_2.to_json());
-            _v502.append(_v503);
+        for (var _item502 in this.use_contexts) {
+            _v502.append(_item502.to_json());
         }
-        out["literal_args"] = _v502;
-        var _v507 = JsonValue.array();
-        for (var _item507 in this.constrained_aliases) {
-            _v507.append(_item507.to_json());
+        out["use_contexts"] = _v502;
+        var _v504 = JsonValue.array();
+        for (var _item504 in this.literal_args) {
+            var _v505 = JsonValue.array();
+            var _t505 = _item504;
+            var (_t505_0, _t505_1, _t505_2) = _t505;
+            _v505.append(_t505_0.to_json());
+            _v505.append(unsigned_json(_t505_1));
+            _v505.append(_t505_2.to_json());
+            _v504.append(_v505);
         }
-        out["constrained_aliases"] = _v507;
+        out["literal_args"] = _v504;
         var _v509 = JsonValue.array();
-        for (var _item509 in this.trait_types) {
+        for (var _item509 in this.constrained_aliases) {
             _v509.append(_item509.to_json());
         }
-        out["trait_types"] = _v509;
+        out["constrained_aliases"] = _v509;
         var _v511 = JsonValue.array();
-        for (var _item511 in this.conversions) {
+        for (var _item511 in this.trait_types) {
             _v511.append(_item511.to_json());
         }
-        out["conversions"] = _v511;
-        var _v513 = JsonValue.object();
-        for (var (_key513, _item513) in this.overload_sets) {
-            var _v514 = JsonValue.array();
-            for (var _item514 in _item513) {
-                _v514.append(JsonValue.String(_item514));
-            }
-            _v513[_key513] = _v514;
+        out["trait_types"] = _v511;
+        var _v513 = JsonValue.array();
+        for (var _item513 in this.conversions) {
+            _v513.append(_item513.to_json());
         }
-        out["overload_sets"] = _v513;
-        var _v516 = JsonValue.object();
-        for (var (_key516, _item516) in this.overload_unions) {
-            var _v517 = JsonValue.array();
-            for (var _item517 in _item516) {
-                var _v518 = JsonValue.array();
-                for (var _item518 in _item517) {
-                    _v518.append(JsonValue.String(_item518));
+        out["conversions"] = _v513;
+        var _v515 = JsonValue.object();
+        for (var (_key515, _item515) in this.overload_sets) {
+            var _v516 = JsonValue.array();
+            for (var _item516 in _item515) {
+                _v516.append(JsonValue.String(_item516));
+            }
+            _v515[_key515] = _v516;
+        }
+        out["overload_sets"] = _v515;
+        var _v518 = JsonValue.object();
+        for (var (_key518, _item518) in this.overload_unions) {
+            var _v519 = JsonValue.array();
+            for (var _item519 in _item518) {
+                var _v520 = JsonValue.array();
+                for (var _item520 in _item519) {
+                    _v520.append(JsonValue.String(_item520));
                 }
-                _v517.append(_v518);
+                _v519.append(_v520);
             }
-            _v516[_key516] = _v517;
+            _v518[_key518] = _v519;
         }
-        out["overload_unions"] = _v516;
-        var _v520 = JsonValue.object();
-        for (var (_key520, _item520) in this.method_overload_sets) {
-            var _v521 = JsonValue.object();
-            for (var (_key521, _item521) in _item520) {
-                var _v522 = JsonValue.array();
-                for (var _item522 in _item521) {
-                    _v522.append(JsonValue.String(_item522));
+        out["overload_unions"] = _v518;
+        var _v522 = JsonValue.object();
+        for (var (_key522, _item522) in this.method_overload_sets) {
+            var _v523 = JsonValue.object();
+            for (var (_key523, _item523) in _item522) {
+                var _v524 = JsonValue.array();
+                for (var _item524 in _item523) {
+                    _v524.append(JsonValue.String(_item524));
                 }
-                _v521[_key521] = _v522;
+                _v523[_key523] = _v524;
             }
-            _v520[_key520] = _v521;
+            _v522[_key522] = _v523;
         }
-        out["method_overload_sets"] = _v520;
+        out["method_overload_sets"] = _v522;
         out["extension_scopes"] = this.extension_scopes.to_json();
-        var _v525 = JsonValue.array();
-        for (var _item525 in this.private_functions) {
-            _v525.append(_item525.to_json());
-        }
-        out["private_functions"] = _v525;
         var _v527 = JsonValue.array();
-        for (var _item527 in this.file_private_functions) {
+        for (var _item527 in this.private_functions) {
             _v527.append(_item527.to_json());
         }
-        out["file_private_functions"] = _v527;
+        out["private_functions"] = _v527;
         var _v529 = JsonValue.array();
-        for (var _item529 in this.call_targets) {
-            var _v530 = JsonValue.array();
-            var _t530 = _item529;
-            var (_t530_0, _t530_1) = _t530;
-            _v530.append(_t530_0.to_json());
-            _v530.append(JsonValue.String(_t530_1));
-            _v529.append(_v530);
+        for (var _item529 in this.file_private_functions) {
+            _v529.append(_item529.to_json());
         }
-        out["call_targets"] = _v529;
-        var _v533 = JsonValue.array();
-        for (var _item533 in this.argument_names) {
-            var _v534 = JsonValue.array();
-            var _t534 = _item533;
-            var (_t534_0, _t534_1) = _t534;
-            _v534.append(_t534_0.to_json());
-            _v534.append(JsonValue.String(_t534_1));
-            _v533.append(_v534);
+        out["file_private_functions"] = _v529;
+        var _v531 = JsonValue.array();
+        for (var _item531 in this.call_targets) {
+            var _v532 = JsonValue.array();
+            var _t532 = _item531;
+            var (_t532_0, _t532_1) = _t532;
+            _v532.append(_t532_0.to_json());
+            _v532.append(JsonValue.String(_t532_1));
+            _v531.append(_v532);
         }
-        out["argument_names"] = _v533;
-        var _v537 = JsonValue.array();
-        for (var _item537 in this.namespaces) {
-            _v537.append(JsonValue.String(_item537));
+        out["call_targets"] = _v531;
+        var _v535 = JsonValue.array();
+        for (var _item535 in this.argument_names) {
+            var _v536 = JsonValue.array();
+            var _t536 = _item535;
+            var (_t536_0, _t536_1) = _t536;
+            _v536.append(_t536_0.to_json());
+            _v536.append(JsonValue.String(_t536_1));
+            _v535.append(_v536);
         }
-        out["namespaces"] = _v537;
+        out["argument_names"] = _v535;
         var _v539 = JsonValue.array();
-        for (var _item539 in this.cached_files) {
-            _v539.append(JsonValue.Bool(_item539));
+        for (var _item539 in this.namespaces) {
+            _v539.append(JsonValue.String(_item539));
         }
-        out["cached_files"] = _v539;
-        var _v541 = JsonValue.object();
-        for (var (_key541, _item541) in this.recorded_summaries) {
-            _v541[_key541.to_json().to_string()] = JsonValue.String(_item541);
+        out["namespaces"] = _v539;
+        var _v541 = JsonValue.array();
+        for (var _item541 in this.cached_files) {
+            _v541.append(JsonValue.Bool(_item541));
         }
-        out["recorded_summaries"] = _v541;
-        var _v543 = JsonValue.array();
-        for (var _item543 in this.stripped) {
-            _v543.append(_item543.to_json());
+        out["cached_files"] = _v541;
+        var _v543 = JsonValue.object();
+        for (var (_key543, _item543) in this.recorded_summaries) {
+            _v543[_key543.to_json().to_string()] = JsonValue.String(_item543);
         }
-        out["stripped"] = _v543;
+        out["recorded_summaries"] = _v543;
+        var _v545 = JsonValue.array();
+        for (var _item545 in this.stripped) {
+            _v545.append(_item545.to_json());
+        }
+        out["stripped"] = _v545;
         out["templates"] = this.templates.to_json();
         out["checked"] = this.checked.to_json();
-        var _v547 = JsonValue.object();
-        for (var (_key547, _item547) in this.spec_requests) {
-            _v547[_key547] = _item547.to_json();
+        var _v549 = JsonValue.object();
+        for (var (_key549, _item549) in this.spec_requests) {
+            _v549[_key549] = _item549.to_json();
         }
-        out["spec_requests"] = _v547;
+        out["spec_requests"] = _v549;
         out["record_summaries"] = JsonValue.Bool(this.record_summaries);
-        var _v550 = JsonValue.array();
-        for (var _item550 in this.summaries_to_record) {
-            var _v551 = JsonValue.array();
-            var _t551 = _item550;
-            var (_t551_0, _t551_1) = _t551;
-            _v551.append(_t551_0.to_json());
-            _v551.append(JsonValue.String(_t551_1));
-            _v550.append(_v551);
+        var _v552 = JsonValue.array();
+        for (var _item552 in this.summaries_to_record) {
+            var _v553 = JsonValue.array();
+            var _t553 = _item552;
+            var (_t553_0, _t553_1) = _t553;
+            _v553.append(_t553_0.to_json());
+            _v553.append(JsonValue.String(_t553_1));
+            _v552.append(_v553);
         }
-        out["summaries_to_record"] = _v550;
-        var _v554 = JsonValue.object();
-        for (var (_key554, _item554) in this.caller_copies) {
-            var _v555 = JsonValue.array();
-            for (var _item555 in _item554) {
-                _v555.append(JsonValue.Bool(_item555));
+        out["summaries_to_record"] = _v552;
+        var _v556 = JsonValue.object();
+        for (var (_key556, _item556) in this.caller_copies) {
+            var _v557 = JsonValue.array();
+            for (var _item557 in _item556) {
+                _v557.append(JsonValue.Bool(_item557));
             }
-            _v554[_key554] = _v555;
+            _v556[_key556] = _v557;
         }
-        out["caller_copies"] = _v554;
+        out["caller_copies"] = _v556;
         out["linked"] = JsonValue.Bool(this.linked);
         return out;
     }
@@ -7015,17 +7028,17 @@ export struct Checked {
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Checked {
-        var _c565 = HashMap<String, (Loc, String)>();
-        for (var (_key565, _item565) in this.summaries) {
-            var (_t566_0, _t566_1) = _item565;
-            _c565[_key565] = (_t566_0, _t566_1);
+        var _c567 = HashMap<String, (Loc, String)>();
+        for (var (_key567, _item567) in this.summaries) {
+            var (_t568_0, _t568_1) = _item567;
+            _c567[_key567] = (_t568_0, _t568_1);
         }
         return Checked(
             structs = this.structs.copy(),
             functions = this.functions.copy(),
             globals = this.globals.copy(),
             extensions = this.extensions,
-            summaries = _c565
+            summaries = _c567
         );
     }
 
@@ -7035,55 +7048,55 @@ export struct Checked {
     fingerprint(into: Fingerprint) {
         into.add_text("Checked");
         into.add(this.structs.count);
-        for (var _item565 in this.structs) {
-            into.add_text(_item565);
-        }
-        into.add(this.functions.count);
-        for (var _item567 in this.functions) {
+        for (var _item567 in this.structs) {
             into.add_text(_item567);
         }
-        into.add(this.globals.count);
-        for (var _item569 in this.globals) {
+        into.add(this.functions.count);
+        for (var _item569 in this.functions) {
             into.add_text(_item569);
+        }
+        into.add(this.globals.count);
+        for (var _item571 in this.globals) {
+            into.add_text(_item571);
         }
         into.add(this.extensions as ulong);
         into.add(this.summaries.count);
-        for (var (_key572, _item572) in this.summaries) {
-            into.add_text(_key572);
-            var (_t574_0, _t574_1) = _item572;
-            _t574_0.fingerprint(into);
-            into.add_text(_t574_1);
+        for (var (_key574, _item574) in this.summaries) {
+            into.add_text(_key574);
+            var (_t576_0, _t576_1) = _item574;
+            _t576_0.fingerprint(into);
+            into.add_text(_t576_1);
         }
     }
 
     to_json(): JsonValue {
         var out = JsonValue.object();
-        var _v558 = JsonValue.array();
-        for (var _item558 in this.structs) {
-            _v558.append(JsonValue.String(_item558));
-        }
-        out["structs"] = _v558;
         var _v560 = JsonValue.array();
-        for (var _item560 in this.functions) {
+        for (var _item560 in this.structs) {
             _v560.append(JsonValue.String(_item560));
         }
-        out["functions"] = _v560;
+        out["structs"] = _v560;
         var _v562 = JsonValue.array();
-        for (var _item562 in this.globals) {
+        for (var _item562 in this.functions) {
             _v562.append(JsonValue.String(_item562));
         }
-        out["globals"] = _v562;
-        out["extensions"] = unsigned_json(this.extensions);
-        var _v565 = JsonValue.object();
-        for (var (_key565, _item565) in this.summaries) {
-            var _v566 = JsonValue.array();
-            var _t566 = _item565;
-            var (_t566_0, _t566_1) = _t566;
-            _v566.append(_t566_0.to_json());
-            _v566.append(JsonValue.String(_t566_1));
-            _v565[_key565] = _v566;
+        out["functions"] = _v562;
+        var _v564 = JsonValue.array();
+        for (var _item564 in this.globals) {
+            _v564.append(JsonValue.String(_item564));
         }
-        out["summaries"] = _v565;
+        out["globals"] = _v564;
+        out["extensions"] = unsigned_json(this.extensions);
+        var _v567 = JsonValue.object();
+        for (var (_key567, _item567) in this.summaries) {
+            var _v568 = JsonValue.array();
+            var _t568 = _item567;
+            var (_t568_0, _t568_1) = _t568;
+            _v568.append(_t568_0.to_json());
+            _v568.append(JsonValue.String(_t568_1));
+            _v567[_key567] = _v568;
+        }
+        out["summaries"] = _v567;
         return out;
     }
 }
@@ -7138,15 +7151,15 @@ export struct Templates {
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Templates {
-        var _c572 = Array<StructDef>();
-        for (var _item572 in this.structs) {
-            _c572.append(_item572.copy());
-        }
-        var _c574 = Array<FunctionDef>();
-        for (var _item574 in this.functions) {
+        var _c574 = Array<StructDef>();
+        for (var _item574 in this.structs) {
             _c574.append(_item574.copy());
         }
-        return Templates(frozen = this.frozen, structs = _c572, functions = _c574);
+        var _c576 = Array<FunctionDef>();
+        for (var _item576 in this.functions) {
+            _c576.append(_item576.copy());
+        }
+        return Templates(frozen = this.frozen, structs = _c574, functions = _c576);
     }
 
     ## Adds this to `into`: equal values add the same.
@@ -7156,28 +7169,28 @@ export struct Templates {
         into.add_text("Templates");
         into.add(this.frozen ? 1 : 0);
         into.add(this.structs.count);
-        for (var _item580 in this.structs) {
-            _item580.fingerprint(into);
+        for (var _item582 in this.structs) {
+            _item582.fingerprint(into);
         }
         into.add(this.functions.count);
-        for (var _item582 in this.functions) {
-            _item582.fingerprint(into);
+        for (var _item584 in this.functions) {
+            _item584.fingerprint(into);
         }
     }
 
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["frozen"] = JsonValue.Bool(this.frozen);
-        var _v572 = JsonValue.array();
-        for (var _item572 in this.structs) {
-            _v572.append(_item572.to_json());
-        }
-        out["structs"] = _v572;
         var _v574 = JsonValue.array();
-        for (var _item574 in this.functions) {
+        for (var _item574 in this.structs) {
             _v574.append(_item574.to_json());
         }
-        out["functions"] = _v574;
+        out["structs"] = _v574;
+        var _v576 = JsonValue.array();
+        for (var _item576 in this.functions) {
+            _v576.append(_item576.to_json());
+        }
+        out["functions"] = _v576;
         return out;
     }
 }
@@ -7254,17 +7267,17 @@ export struct TypeName {
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
-        var _v577 = JsonValue.array();
-        for (var _item577 in this.sub_types) {
-            _v577.append(_item577.to_json());
+        var _v579 = JsonValue.array();
+        for (var _item579 in this.sub_types) {
+            _v579.append(_item579.to_json());
         }
-        out["sub_types"] = _v577;
+        out["sub_types"] = _v579;
         out["flags"] = this.flags.to_json();
-        var _v580 = JsonValue.array();
-        for (var _item580 in this.labels) {
-            _v580.append(JsonValue.String(_item580));
+        var _v582 = JsonValue.array();
+        for (var _item582 in this.labels) {
+            _v582.append(JsonValue.String(_item582));
         }
-        out["labels"] = _v580;
+        out["labels"] = _v582;
         return out;
     }
 }
