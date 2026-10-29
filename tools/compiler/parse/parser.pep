@@ -469,6 +469,9 @@ struct Parser {
     var _joins: ulong[] = Array<ulong>();
     var _build_option_tests: Attribute[] = Array<Attribute>();
     var _warnings: SyntaxWarning[] = Array<SyntaxWarning>();
+    # Where each binary operator written in parentheses starts, to warn on
+    # bitwise operators mixed without them (`_warn_mixed`).
+    var _parenthesized: HashSet<ulong> = HashSet<ulong>();
     # The names that qualify a type in an interpolated string's braces, as
     # the compiler binds them: `_qualifiers`, but for the names bound in a
     # reading later abandoned. Holds a name more than once when bound more
@@ -1383,7 +1386,8 @@ struct Parser {
     }
 
     # The byte length of the binary operator at the input for precedence
-    # `level` (1 is `||`, 9 is `*`), or 0 when there is none.
+    # `level` (1 is `||`, 10 is `*`), or 0 when there is none. The bitwise
+    # operators bind as in C: `&`, then `^`, then `|`.
     _binary_operator(level: int): ulong {
         var op = _operator_size();
         if (level == 1) {
@@ -1395,33 +1399,37 @@ struct Parser {
                 return _operator_size_or_word(op);
             }
         } else if (level == 3) {
-            if (_operator_is(op, "|") or _operator_is(op, "^")) {
+            if (_operator_is(op, "|")) {
                 return op;
             }
         } else if (level == 4) {
-            if (_operator_is(op, "&")) {
+            if (_operator_is(op, "^")) {
                 return op;
             }
         } else if (level == 5) {
+            if (_operator_is(op, "&")) {
+                return op;
+            }
+        } else if (level == 6) {
             if (_operator_is(op, "===")
                 or _operator_is(op, "!==")
                 or _operator_is(op, "==")
                 or _operator_is(op, "!=")) {
                 return op;
             }
-        } else if (level == 6) {
+        } else if (level == 7) {
             if (_operator_is(op, "<=") or _operator_is(op, ">=") or _operator_is(op, "<") or _operator_is(op, ">")) {
                 return op;
             }
-        } else if (level == 7) {
+        } else if (level == 8) {
             if (_operator_is(op, "<<") or _operator_is(op, ">>")) {
                 return op;
             }
-        } else if (level == 8) {
+        } else if (level == 9) {
             if (_operator_is(op, "+") or _operator_is(op, "-")) {
                 return op;
             }
-        } else if (level == 9) {
+        } else if (level == 10) {
             if (_operator_is(op, "*") or _operator_is(op, "/") or _operator_is(op, "%")) {
                 return op;
             }
@@ -1441,10 +1449,10 @@ struct Parser {
         if (level == 1) {
             return _binary_level(2);
         }
-        if (level == 6) {
+        if (level == 7) {
             return _is_test();
         }
-        if (level < 9) {
+        if (level < 10) {
             return _binary_level(level + 1);
         }
         return _prefix_increment();
@@ -1452,13 +1460,13 @@ struct Parser {
 
     # `a..b` or `a..>b`, between the shift and `is` levels. Not associative.
     _range(): Expression {
-        var lhs = _binary_level(7);
+        var lhs = _binary_level(8);
         if (_failed or !(_at("..>") or _at(".."))) {
             return lhs;
         }
         ulong op = _position;
         _advance();
-        var rhs = _binary_level(7);
+        var rhs = _binary_level(8);
         if (_failed) {
             return rhs;
         }
@@ -1514,9 +1522,28 @@ struct Parser {
             if (_failed) {
                 return rhs;
             }
+            _warn_mixed(text, lhs, op_start, op);
+            _warn_mixed(text, rhs, op_start, op);
             lhs = Expression.Binary(lhs, text, rhs, Span(op_start, _last_end()));
         }
         return lhs;
+    }
+
+    # Warns at operator `op` (`size` bytes at `at`) when `operand` is a `^`
+    # under `|`, or a `&` under `^`, written without parentheses: `|` and
+    # `^` shared a level before 0.12, and C's order is easy to misread.
+    # shortcut: for one release (#316); drop it in 0.13.
+    _warn_mixed(op: String, operand: Expression, at: ulong, size: ulong) {
+        if (operand is Binary(_, inner, _, span)) {
+            var tighter = op == "|" ? "^" : (op == "^" ? "&" : "");
+            if (tighter.is_empty or inner != tighter or _parenthesized.contains(span.start)) {
+                return;
+            }
+            var since = op == "|" ? " since 0.12" : "";
+            var warning = SyntaxWarning(Span(at, at + size), $"'{op}'", "", "");
+            warning.message = $"'{tighter}' binds tighter than '{op}'{since}; add parentheses to make the order explicit";
+            _warnings.append(warning);
+        }
     }
 
     _logical_or(): Expression {
@@ -1997,6 +2024,9 @@ struct Parser {
             var span = Span(_start(open), _last_end());
             if (tuple) {
                 return Expression.Tuple(elements, labels, span);
+            }
+            if (elements[0] is Binary(_, _, _, inner)) {
+                _parenthesized.insert(inner.start);
             }
             if (desugared) {
                 return elements[0];

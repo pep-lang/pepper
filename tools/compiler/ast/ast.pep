@@ -2758,6 +2758,9 @@ export struct SyntaxWarning {
     var instead: String = "";
     ## The text that replaces it.
     var replacement: String = "";
+    ## A warning that is not a deprecation: its whole message, which
+    ## `what`, `instead` and `replacement` then do not make.
+    var message: String = "";
 
     ## Creates a warning.
     ##

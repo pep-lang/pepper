@@ -256,6 +256,10 @@ export struct Program {
         while (i < files.count) {
             for (var w in files[i].module.warnings) {
                 var at = Location(i, w.span);
+                if (!w.message.is_empty) {
+                    out.append(Diagnostic.warning(w.message).at(at));
+                    continue;
+                }
                 out.append(
                     Diagnostic.deprecated(
                         w.what, w.instead, at, Fix($"Replace {w.what} with `{w.replacement}`", at, w.replacement)

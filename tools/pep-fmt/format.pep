@@ -47,7 +47,7 @@ import "doc";
 ## The maximum line width, in columns.
 export const LINE_WIDTH = 120;
 
-# The precedence of a binary operator, 1 (`or`) to 9 (`*`), or 0 for an
+# The precedence of a binary operator, 1 (`or`) to 10 (`*`), or 0 for an
 # assignment or `**`, which are never flattened into a chain.
 precedence(op: String): int {
     if (op == "or" or op == "||") {
@@ -56,26 +56,29 @@ precedence(op: String): int {
     if (op == "and" or op == "&&") {
         return 2;
     }
-    if (op == "|" or op == "^") {
+    if (op == "|") {
         return 3;
     }
-    if (op == "&") {
+    if (op == "^") {
         return 4;
     }
-    if (op == "==" or op == "!=" or op == "===" or op == "!==") {
+    if (op == "&") {
         return 5;
     }
-    if (op == "<" or op == "<=" or op == ">" or op == ">=") {
+    if (op == "==" or op == "!=" or op == "===" or op == "!==") {
         return 6;
     }
-    if (op == "<<" or op == ">>") {
+    if (op == "<" or op == "<=" or op == ">" or op == ">=") {
         return 7;
     }
-    if (op == "+" or op == "-") {
+    if (op == "<<" or op == ">>") {
         return 8;
     }
-    if (op == "*" or op == "/" or op == "%") {
+    if (op == "+" or op == "-") {
         return 9;
+    }
+    if (op == "*" or op == "/" or op == "%") {
+        return 10;
     }
     return 0;
 }

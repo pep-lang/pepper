@@ -62,21 +62,47 @@ return_type_of(source: String): (String, ulong) {
     return ("", 0 as ulong);
 }
 
-# `&` binds tighter than `|` and `^`, which share a level and group left to
-# right, as the book's precedence list says; unlike C, `1 | 2 ^ 3` is
-# `(1 | 2) ^ 3` (#316).
+# The bitwise operators bind as in C: `&`, then `^`, then `|` (#316).
 [Test]
 groups_the_bitwise_operators_by_their_precedence() {
     for (var (
         written,
         grouped
     ) in [
-        ("1 | 2 ^ 3", "((1 | 2) ^ 3)"),
+        ("1 | 2 ^ 3", "(1 | (2 ^ 3))"),
         ("1 ^ 2 | 3", "((1 ^ 2) | 3)"),
         ("1 | 2 & 3", "(1 | (2 & 3))"),
-        ("1 & 2 ^ 3", "((1 & 2) ^ 3)")
+        ("1 & 2 ^ 3", "((1 & 2) ^ 3)"),
+        ("1 ^ 2 & 3", "(1 ^ (2 & 3))"),
+        ("1 | 2 | 3", "((1 | 2) | 3)")
     ]) {
         expect_equal(returned_text(written), grouped);
+    }
+}
+
+# For one release, `^` under `|` and `&` under `^` without parentheses
+# warn at the looser operator; with them, they do not (#316).
+[Test]
+warns_on_bitwise_operators_mixed_without_parentheses() {
+    for (var (
+        written,
+        warned
+    ) in [
+        ("1 | 2 ^ 3", "'^' binds tighter than '|' since 0.12; add parentheses to make the order explicit"),
+        ("1 ^ 2 | 3", "'^' binds tighter than '|' since 0.12; add parentheses to make the order explicit"),
+        ("1 ^ 2 & 3", "'&' binds tighter than '^'; add parentheses to make the order explicit"),
+        ("1 | (2 ^ 3)", ""),
+        ("(1 ^ 2) | 3", ""),
+        ("1 ^ (2 & 3)", ""),
+        ("1 | 2 & 3", "")
+    ]) {
+        var module = parse.parse($"f(): int {{\n    return {written};\n}}\n");
+        expect_true(module.is_ok());
+        var warnings = module.value().warnings;
+        expect_equal(warnings.count, warned.is_empty ? 0 as ulong : 1 as ulong);
+        if (!warned.is_empty) {
+            expect_equal(warnings[0].message, warned);
+        }
     }
 }
 
