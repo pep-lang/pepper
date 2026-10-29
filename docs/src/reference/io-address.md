@@ -332,6 +332,21 @@ Returns whether two addresses differ.
 **Returns**
 - true when the family, any byte or the scope id differs
 
+## hash
+
+```pepper
+hash<IpAddress>(value: IpAddress): u64
+```
+
+Returns a hash of an address's family, bytes and scope id, what `==`
+compares, so an `IpAddress` keys a `HashMap` or `HashSet` by its value.
+
+**Parameters**
+- `value` — the address to hash
+
+**Returns**
+- the 64-bit hash of the address
+
 ## SocketAddress
 
 ```pepper
@@ -493,6 +508,21 @@ Returns whether two socket addresses differ.
 
 **Returns**
 - true when the address or the port differs
+
+## hash
+
+```pepper
+hash<SocketAddress>(value: SocketAddress): u64
+```
+
+Returns a hash of a socket address's IP address and port, what `==`
+compares, so a `SocketAddress` keys a `HashMap` or `HashSet` by its value.
+
+**Parameters**
+- `value` — the socket address to hash
+
+**Returns**
+- the 64-bit hash of the socket address
 
 ## resolve
 

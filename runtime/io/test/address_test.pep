@@ -1,6 +1,6 @@
 # IP and socket addresses: parsing, the RFC 5952 text form, construction,
-# equality and predicates, scope ids, and resolving a literal host. Pure
-# Pepper, the same on every platform, except interface names in scopes.
+# equality, hashing and predicates, scope ids, and resolving a literal host.
+# Pure Pepper, the same on every platform, except interface names in scopes.
 
 import io;
 
@@ -173,4 +173,17 @@ a_literal_host_resolves_to_itself() {
     expect_equal(io.resolve("::1", 7).value()[0].to_string(), "[::1]:7");
     expect_equal(io.resolve("fe80::1%4000000000", 7).value()[0].address().scope_id(), 4000000000);
     expect_true(io.resolve("", 80).error().is_invalid_input());
+}
+
+# Equal addresses hash equally, so they key a HashSet by value (#416).
+[Test]
+addresses_key_a_hash_set_by_value() {
+    var ips = HashSet<io.IpAddress>();
+    ips.insert(io.IpAddress.parse("10.0.0.1").value());
+    expect_true(ips.contains(io.IpAddress.parse("10.0.0.1").value()));
+    expect_false(ips.contains(io.IpAddress.parse("10.0.0.2").value()));
+    var sockets = HashSet<io.SocketAddress>();
+    sockets.insert(io.SocketAddress.parse("[::1]:443").value());
+    expect_true(sockets.contains(io.SocketAddress.parse("[::1]:443").value()));
+    expect_false(sockets.contains(io.SocketAddress.parse("[::1]:80").value()));
 }

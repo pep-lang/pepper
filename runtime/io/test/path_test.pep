@@ -1,4 +1,4 @@
-# io.Path: joining, parent, file name, stem and extension, components,
+# io.Path: joining, parent, file name, stem and extension, components, hashing,
 # normalizing, and the POSIX and Windows rules for absolute paths and
 # separators, in pure Pepper.
 
@@ -154,4 +154,13 @@ windows_rules() {
         expect_equal(io.Path("a").join("C:/x").to_string(), "C:/x");
         expect_equal(io.Path(native("C:/a")).join("b").to_string(), native("C:/a/b"));
     }
+}
+
+# Equal paths hash equally, so a Path keys a HashSet by its text (#416).
+[Test]
+paths_key_a_hash_set_by_text() {
+    var paths = HashSet<io.Path>();
+    paths.insert(io.Path("a/b"));
+    expect_true(paths.contains(io.Path("a/b")));
+    expect_false(paths.contains(io.Path("a/c")));
 }
