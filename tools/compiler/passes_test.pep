@@ -959,12 +959,14 @@ error_programs(): String[] {
         "# expect: main.pep:19:12: error: cannot call mutating method 'grow' on a temporary 'Span'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmake(): Span {\n    return Span(1, 2);\n}\n\nmain(): int {\n    make().grow(1);\n    return 0;\n}\n",
         "# expect: main.pep:16:7: error: cannot call mutating method 'grow' on const variable 's'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.grow(1);\n    return 0;\n}\n",
         "# expect: main.pep:8:24: error: cannot change 'this' in a closure: the closure holds a copy of 'Span'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    later(): () => void {\n        return () => { end = 5; };\n    }\n}\n\nmain(): int {\n    return 0;\n}\n",
+        # An unknown predicate, at its name (#329).
+        "# expect: main.pep:2:9: error: unknown predicate 'Foo'; expected 'OS', 'Arch' or 'BuildOption'\n[Target(Foo(Linux))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A misspelled OS, in code that would be dropped anyway.
-        "# expect: main.pep:2:1: error: unknown OS value `Windoze` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Windoze))]\n[Target(OS(Windoze))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        "# expect: main.pep:2:12: error: unknown OS 'Windoze'; expected 'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'\n[Target(OS(Windoze))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A build option comparison with no literal.
         "# expect: main.pep:2:24: error: '==' cannot compare two build options; compare a 'BuildOption(...)' with a literal\n[Target(BuildOption(A) == BuildOption(B))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A malformed predicate inside a dropped block.
-        "# expect: main.pep:4:9: error: unknown Arch value `z80` (expected x64, aarch64, wasm32) in [Target(Arch(z80))]\nmain(): int {\n    [Target(OS(Windows))] {\n        [Target(Arch(z80))] {\n            return 1;\n        }\n    }\n    return 0;\n}\n",
+        "# expect: main.pep:4:22: error: unknown Arch 'z80'; expected 'x64', 'aarch64' or 'wasm32'\nmain(): int {\n    [Target(OS(Windows))] {\n        [Target(Arch(z80))] {\n            return 1;\n        }\n    }\n    return 0;\n}\n",
         # A test that takes a parameter, and one that returns a value.
         "# expect: main.pep:3:3: error: test 't' must take no parameters\n[Test]\nt(x: int) {}\nmain(): int { return 0; }\n",
         "# expect: main.pep:3:1: error: test 't' must return nothing, not 'int'\n[Test]\nt(): int { return 1; }\nmain(): int { return 0; }\n",
