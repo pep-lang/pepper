@@ -1294,6 +1294,11 @@ returning it from the block, is an error; take a copy
     8 |         first = list[0];
       |                 ^~~~~~~
 </code></pre>
+<p>A value that <a href="memory.html#copying-a-value-with-copy">cannot be copied</a>
+cannot leave the block at all. The note then says why instead of
+suggesting <code>copy(...)</code>, naming the field that blocks the copy:</p>
+<pre><code class="language-text">note: 'Reply' cannot be copied: field 'callback' of 'Reply' holds '() =&gt; void', which is a plain function value
+</code></pre>
 </li>
 <li>
 <p><strong>Closures.</strong> A closure written in the block cannot capture part of the
