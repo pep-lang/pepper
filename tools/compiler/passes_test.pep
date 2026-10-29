@@ -498,6 +498,24 @@ calls_a_method_on_an_integer_literal() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A type that is not a lane gets no note to declare it one: `Lane` is
+# sealed (#365).
+[Test]
+suggests_no_extend_for_a_sealed_trait() {
+    var folder = TempFolder("passes_sealed_note");
+    var root = folder.path.join("main.pep");
+    File.write_text(root, "import simd;\nmain(): int {\n    var v = simd.Vector<String, 4>();\n    return 0;\n}\n");
+    var program = link.load_program(root, link.Setup());
+    expect_true(program.is_ok());
+    var built = sema.merge(program.value());
+    expect_true(built.is_ok());
+    var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
+    expect_true(ran.is_err());
+    var rendered = render_all([ran.error()], program.value().sources());
+    expect_true(rendered.contains("error: 'String' does not conform to trait 'Lane'"));
+    expect_false(rendered.contains("declare it with"));
+}
+
 # An error a static block of the runtime's raises for a program's type is
 # reported at the program's call that asked for it (#330).
 [Test]
@@ -714,6 +732,8 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # `Lane` is sealed: a program cannot conform a type to it (#365).
+        "# expect: main.pep:6:19: error: 'Lane' is sealed: only the runtime declares which types conform to it\nimport simd;\nstruct Money {\n    long cents;\n}\nextend Money with simd.Lane {\n}\nmain(): int {\n    return 0;\n}\n",
         # An index of the wrong type names `[]`'s operand, not the indexer
         # method; a range asks for `slice` (#312).
         "# expect: main.pep:4:16: error: cannot index 'Array<int>' with a value of type 'Range<int>'; write 'slice(start, end)' for part of it\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    var s = a[1..4];\n    return 0;\n}\n",
