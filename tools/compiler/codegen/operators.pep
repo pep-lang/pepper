@@ -171,7 +171,14 @@ extend Generator {
             if (checked.is_value()) {
                 result = checked.value();
             } else {
-                result = apply_op(base_op, lhs_c, rhs_c, result_ty, Optional<llvm.Type>.Empty, Optional<String>.Empty)?;
+                var applied = apply_op(
+                    base_op, lhs_c, rhs_c, result_ty, Optional<llvm.Type>.Empty, Optional<String>.Empty
+                );
+                if (applied.is_err() and applied.error().message.starts_with("unsupported op")) {
+                    var lhs_display = sema.parse_type_string(lhs_name).display();
+                    applied = fail<llvm.Value>($"no '{sema.op_name(op)}' operator for '{lhs_display}'");
+                }
+                result = applied?;
             }
             # The result converts back to the lhs's type for the store.
             var lhs_sema = operand_sema_name(lhs, lhs_val);
