@@ -5,7 +5,7 @@
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
-import [deprecation_of, is_deprecation] from compiler.link;
+import [contains_platform_predicate, deprecation_of, is_deprecation] from compiler.link;
 import [make_unsigned_literal] from "literals";
 import [Loc] from "loc";
 import [
@@ -2285,6 +2285,17 @@ struct _Builder {
         reject_implicit(decl.attributes)?;
         if (kind == Kind.Field) {
             reject_thread_local(decl.attributes, "a field")?;
+            # A struct's layout is the same on every platform (#294).
+            for (var a in decl.attributes) {
+                if (contains_platform_predicate(a.body)) {
+                    return Built<VariableDef>.Err(
+                        _error(
+                            "a struct field cannot carry a platform selection; select the whole struct instead",
+                            loc(a.span)
+                        )
+                    );
+                }
+            }
         } else if (kind == Kind.Param) {
             reject_thread_local(decl.attributes, "a parameter")?;
         }

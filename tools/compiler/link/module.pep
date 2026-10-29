@@ -7,6 +7,7 @@ export [
     declared_deprecation, deprecation_of, deprecation_warning, is_deprecation, Deprecation, DeprecationError
 ] from "deprecation";
 export [
+    contains_platform_predicate,
     DEFAULT_ANDROID_API,
     BUILD_OPTION_NAME_RULE,
     ENTRY_BUILD_OPTION,
