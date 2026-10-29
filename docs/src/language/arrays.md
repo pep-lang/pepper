@@ -12,7 +12,7 @@
 
 - `binary_search(item)` returns the index of the first element equal to
   `item` as a `ulong?`, in O(log count). The element type must be
-  [`Comparable`](ordering.md) (every number, `char` and `String` is), and
+  [`Comparable`](hashing.md#ordering-with-comparable) (every number, `char` and `String` is), and
   the array sorted in its `compare` order.
 - `binary_search_by(order)` searches with a function that says whether an
   element sorts before (negative), at (0) or after (positive) the target.

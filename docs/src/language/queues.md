@@ -41,7 +41,7 @@ run queue, or the k largest values of a stream.
 ```
 
 Elements are ordered by `compare<T>`, so numbers, `String`, and any
-[`Comparable`](ordering.md) type need nothing more. To order by something
+[`Comparable`](hashing.md#ordering-with-comparable) type need nothing more. To order by something
 else, pass a comparer to the constructor: a function that returns a
 negative number, zero or a positive number as its first argument sorts
 before, with or after its second. For the smallest first, reverse the

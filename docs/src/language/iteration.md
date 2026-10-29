@@ -176,7 +176,7 @@ The consumers run an iterator (as far as they need to) and return a value:
   optional, Empty when none does; `position(test)` returns its position.
 - `sum()` adds the elements with `+` and returns 0 (the type's default
   value) for none; `sum<long>()` adds them as `long`s. `min()` and `max()` return the smallest and largest by
-  [`compare`](ordering.md), as an optional that is Empty for none; among
+  [`compare`](hashing.md#ordering-with-comparable), as an optional that is Empty for none; among
   equal elements they return the first. They need element types that have
   `+` or are `Comparable`, such as the numbers and `String`. `min_by(compare)`
   and `max_by(compare)` order by a function instead, as `Array.sort` does.

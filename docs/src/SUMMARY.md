@@ -7,70 +7,90 @@
 - [Getting started](tutorial/getting-started.md)
 - [A tour of Pepper](tutorial/tour.md)
 
-# Language guide
+# Language basics
 
 - [Types and variables](language/types-and-variables.md)
+- [Statements and semicolons](language/statements.md)
+- [Control flow](language/control-flow.md)
+- [Functions](language/functions.md)
 - [String interpolation](language/interpolation.md)
-- [Text encodings](language/text.md)
+- [Tuples and multiple return values](language/tuples.md)
+- [Enums and `match`](language/enums.md)
+- [Optional values](language/optionals.md)
+- [Error handling with Result](language/results.md)
+
+# Collections and iteration
+
+- [Collection literals](language/collection-literals.md)
+- [Arrays and slices](language/arrays.md)
+- [Maps and sets](language/maps.md)
+- [Queues: Deque and PriorityQueue](language/queues.md)
+- [Iteration](language/iteration.md)
+
+# Types of your own
+
+- [Structs](language/structs.md)
+- [Properties](language/properties.md)
+- [Value structs](language/value-structs.md)
+- [Equality, hashing and ordering](language/hashing.md)
+- [Traits and extensions](language/traits-and-extensions.md)
+- [Generics](language/generics.md)
+- [Type aliases](language/type-aliases.md)
+- [Overloading](language/overloading.md)
+- [Function types and closures](language/function-types.md)
+
+# Memory and resources
+
+- [Memory and reference counting](language/memory.md)
+- [Scoped blocks with `with`](language/scopes.md)
+
+# Concurrency
+
+- [Threads and shared data](language/threads.md)
+- [Atomics](language/atomics.md)
+- [Tasks](language/tasks.md)
+
+# Organizing a program
+
+- [Modules and imports](language/modules.md)
+- [Visibility](language/visibility.md)
+- [Naming conventions](language/naming.md)
+- [Documentation comments](language/doc-comments.md)
+- [Unit tests](language/testing.md)
+- [Deprecation](language/deprecation.md)
+- [Compiler errors](language/compiler-errors.md)
+
+# Compile time, platforms and C
+
+- [Attributes](language/attributes.md)
+- [Reflection and attributes](language/reflection.md)
+- [Build options](language/build-options.md)
+- [Platform selection](language/platform-selection.md)
+- [Calling C](language/c-interop.md)
+- [Linking](language/linking.md)
+- [iOS and Android](language/mobile.md)
+- [Optimizer hints](language/hints.md)
+- [SIMD vectors](language/simd.md)
+- [Backtraces and the debugger](language/debug.md)
+
+# Standard library guide
+
+- [Files and directories](language/files.md)
+- [Processes](language/processes.md)
+- [The operating system](language/os.md)
+- [Command-line options](language/cli.md)
+- [Logging](language/logging.md)
+- [Dates, times and time zones](language/time.md)
+- [Encodings: text, base64 and UUIDs](language/encodings.md)
 - [Regular expressions](language/regex.md)
 - [JSON](language/json.md)
 - [TOML](language/toml.md)
 - [YAML](language/yaml.md)
 - [Compression and archives](language/compression.md)
-- [Statements and semicolons](language/statements.md)
-- [Control flow](language/control-flow.md)
-- [Functions](language/functions.md)
-- [Tuples and multiple return values](language/tuples.md)
-- [Collection literals](language/collection-literals.md)
-- [Arrays and slices](language/arrays.md)
-- [Function types and closures](language/function-types.md)
-- [Overloading](language/overloading.md)
-- [Structs](language/structs.md)
-- [Properties](language/properties.md)
-- [Value structs](language/value-structs.md)
-- [Hashing and equality](language/hashing.md)
-- [Ordering with Comparable](language/ordering.md)
-- [Maps and sets](language/maps.md)
-- [Queues: Deque and PriorityQueue](language/queues.md)
-- [Enums and `match`](language/enums.md)
-- [Memory and reference counting](language/memory.md)
-- [Generics](language/generics.md)
-- [Reflection and attributes](language/reflection.md)
-- [Type aliases](language/type-aliases.md)
-- [Traits and extensions](language/traits-and-extensions.md)
-- [Iteration](language/iteration.md)
-- [Scoped blocks with `with`](language/scopes.md)
-- [Error handling with Result](language/results.md)
-- [Optional values](language/optionals.md)
-- [Visibility](language/visibility.md)
-- [Modules and imports](language/modules.md)
-- [Atomics](language/atomics.md)
-- [Threads and shared data](language/threads.md)
-- [Tasks](language/tasks.md)
-- [Files and directories](language/files.md)
-- [Networking](language/networking.md)
-- [HTTP](language/http.md)
-- [Processes](language/processes.md)
-- [The operating system](language/os.md)
-- [Dates, times and time zones](language/time.md)
-- [Command-line options](language/cli.md)
 - [Cryptographic hashes](language/digest.md)
 - [Random numbers](language/random.md)
-- [Encodings and UUIDs](language/encodings.md)
-- [Optimizer hints](language/hints.md)
-- [SIMD vectors](language/simd.md)
-- [Logging](language/logging.md)
-- [Backtraces and the debugger](language/debug.md)
-- [Unit tests](language/testing.md)
-- [Calling C](language/c-interop.md)
-- [Platform selection](language/platform-selection.md)
-- [iOS and Android](language/mobile.md)
-- [Build options](language/build-options.md)
-- [Linking](language/linking.md)
-- [Compiler errors](language/compiler-errors.md)
-- [Deprecation](language/deprecation.md)
-- [Documentation comments](language/doc-comments.md)
-- [Naming conventions](language/naming.md)
+- [Networking](language/networking.md)
+- [HTTP](language/http.md)
 
 # Tools
 
