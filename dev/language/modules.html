@@ -267,7 +267,9 @@ sees the declarations of the module's files it imports, exported or not,
 except those marked <code>private</code>
 (see <a href="visibility.html#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a>).
 Loading any file of a module loads its <code>module.pep</code>, and with it every file
-the module imports.</p>
+the module imports. A file belongs to the module of the nearest folder at or
+above it that has a <code>module.pep</code>, looking no further up than a folder with a
+<code>pep.toml</code>: a project's folder is the top of its modules.</p>
 <p>This example has a <code>geometry</code> module next to <code>main.pep</code>:</p>
 <pre><code class="language-text">modules-folders/
     main.pep
