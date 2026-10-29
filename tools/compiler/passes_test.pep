@@ -680,6 +680,12 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # A number as the type argument of a struct or a function that takes
+        # no lane count, at the number (#308); a struct that passes its
+        # parameter on as a `Vector`'s lane count takes one.
+        "# expect: main.pep:6:20: error: '4' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector<float, 4>'\nstruct Buffer<N> {\n    var size: int;\n}\nmain(): int {\n    var b = Buffer<4>();\n    return b.size;\n}\n",
+        "# expect: main.pep:6:18: error: '7' is not a type; a number is a type argument only as a SIMD type's lane count, as in 'simd.Vector<float, 4>'\nshow<T>(value: T): int {\n    return 1;\n}\nmain(): int {\n    var c = show<7>(3);\n    return c;\n}\n",
+        "# expect: accepted\nimport simd;\nstruct Wrap<T: simd.Lane, N> {\n    var v: simd.Vector<T, N>;\n}\nmain(): int {\n    var w = Wrap<int, 8>();\n    return w.v.count as int - 8;\n}\n",
         # A member a constrained extension withholds from a specialization.
         "# expect: main.pep:5:15: error: no member named 'square_root' in 'Vector<int, 4>'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 4>(4);\n    var r = v.square_root();\n    return 0;\n}\n",
         "# expect: main.pep:21:9: error: no member named 'label' in 'Box<Circle>'\ntrait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Named> {\n    label(): String { return item.name(); }\n}\nmain(): int {\n    var box = Box<Circle>(Circle());\n    box.label();\n    return 0;\n}\n"
