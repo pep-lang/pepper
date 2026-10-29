@@ -148,6 +148,22 @@ reports_a_hex_escape_cut_short() {
     expect_true(parse.parse("f() { var s = \"\\x41\"; var c = '\\x41'; }").is_ok(), "two hex digits parse");
 }
 
+# `\x80` to `\xFF` are raw bytes in a plain string literal (#298), but an
+# interpolated string is a `String`, so its `\x` stops at `\x7F`, an error
+# at the escape.
+[Test]
+reports_a_high_hex_escape_in_an_interpolated_string() {
+    expect_true(parse.parse("f() { var s = \"\\x80\\xFF\"; }").is_ok(), "a plain literal takes any byte");
+    var source = "f() { var s = $\"x\\x80\"; }";
+    var parsed = parse.parse(source);
+    expect_true(parsed.is_err(), "an interpolated string takes only ASCII");
+    expect_equal(
+        parsed.error().message,
+        "'\\x' escape in an interpolated or format string must be ASCII (at most \\x7F); use '\\u{...}' for other characters"
+    );
+    expect_equal(source.byte_at(parsed.error().span.start), '\\');
+}
+
 [Test]
 skips_a_broken_declaration_with_its_body() {
     var source = "f(x: int = ) {\n    return;\n}\n\ng() {}\n";

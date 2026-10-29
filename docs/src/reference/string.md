@@ -1027,6 +1027,12 @@ is expected, as if `String` had an `[Implicit]` constructor from it: the
 conversion, like `String(text)`, copies the bytes. Where C expects a
 `char*`, it passes its own bytes, as `c_str()` does.
 
+Unlike a `String`, a `StringConstant` may hold bytes that are not UTF-8:
+a literal's `\x80` to `\xFF` escapes write raw bytes, so a static byte
+table can be a string constant. Read such bytes with `size` and
+`byte_at`; `length` is 0 for them, and the code-point API (the indexer,
+iteration) and a conversion to `String` need UTF-8.
+
 **Example**
 ```pepper
 StringConstant name = "pepper";
@@ -1044,7 +1050,7 @@ copy.append("!");
 var length: ulong { get; }
 ```
 
-The number of Unicode code points. O(1).
+The number of Unicode code points, or 0 when the bytes are not UTF-8. O(1).
 
 **See also**
 - `size`
@@ -1055,7 +1061,7 @@ The number of Unicode code points. O(1).
 var size: ulong { get; }
 ```
 
-The number of bytes of UTF-8, not counting the NUL terminator. O(1).
+The number of bytes, not counting the NUL terminator. O(1).
 
 **See also**
 - `length`
@@ -1066,7 +1072,7 @@ The number of bytes of UTF-8, not counting the NUL terminator. O(1).
 var is_empty: bool { get; }
 ```
 
-Whether the text has no code points. O(1).
+Whether the text has no bytes, and so no code points. O(1).
 
 ### Constructor
 

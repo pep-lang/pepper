@@ -111,6 +111,31 @@ reads_back_a_type_as_the_parser_spells_it() {
     expect_true(parse_type_text("a<b c>", Span()).to_string() != "a<b c>");
 }
 
+# `\x80` to `\xFF` in a string literal are its bytes as written (#298),
+# and the literal shows them as escapes again.
+[Test]
+keeps_the_raw_bytes_of_a_string_literal() {
+    var module = parse.parse("f() {\n    var s = \"\\x80\\xFFa\";\n}\n");
+    expect_true(module.is_ok(), "the literal parses");
+    if (module.value().declarations[0] is Function(function)) {
+        if (function.body.value().statements[0] is Declaration(local)) {
+            if (local is Variable(variable)) {
+                var value = variable.default_value.value();
+                if (value is Literal(literal, _)) {
+                    if (literal is String(text)) {
+                        expect_equal(text.size, 3 as ulong);
+                        expect_equal(text.byte_at(0) as int, 0x80);
+                        expect_equal(text.byte_at(1) as int, 0xFF);
+                        expect_equal(literal.to_string(), "\"\\x80\\xFF\\x61\"");
+                        return;
+                    }
+                }
+            }
+        }
+    }
+    panic("no string literal");
+}
+
 # Each statement of `source`'s first function: the type and name a local
 # declaration writes (`type name`), else `expression`.
 statements_of(source: String): String[] {

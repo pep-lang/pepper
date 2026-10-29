@@ -715,6 +715,24 @@ reports_literals_too_large_for_their_type() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# `\x80` to `\xFF` write raw bytes (#298): a literal whose bytes are not
+# UTF-8 is a `StringConstant` or a C string, never a `String`
+# (`recovering_test` has the interpolated string's error).
+[Test]
+reports_string_literal_bytes_that_are_not_utf8() {
+    var folder = TempFolder("passes_string_bytes");
+    var programs = [
+        "# expect: main.pep:3:13: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'\nmain(): int {\n    var s = \"a\\xFFb\";\n    return 0;\n}\n",
+        "# expect: main.pep:6:17: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'\ntake(text: String): ulong {\n    return text.size;\n}\nmain(): int {\n    return take(\"\\x80\") as int;\n}\n",
+        # A parameter default, and a generic function's specialization.
+        "# expect: main.pep:2:21: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'\ntake(text: String = \"a\\xFF\"): ulong {\n    return text.size;\n}\nmain(): int {\n    return take() as int;\n}\n",
+        "# expect: main.pep:3:13: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'\npick<T>(value: T): ulong {\n    var s = \"a\\xFF\";\n    return s.size;\n}\nmain(): int {\n    return pick(1) as int;\n}\n",
+        "# expect: accepted\nconstant(text: StringConstant = \"\\x80\\x81\"): ulong {\n    return text.size;\n}\nmain(): int {\n    return constant() as int;\n}\n",
+        "# expect: accepted\nconst TABLE = \"\\x00\\x80\\xFF\";\nshow(bytes: StringConstant): ulong {\n    return bytes.size;\n}\nmain(): int {\n    StringConstant local = \"\\x90\";\n    String accent = \"caf\\xC3\\xA9\";\n    __ptr<char> c = \"\\xFE\";\n    return (TABLE.size + show(\"\\x81\") + local.size + accent.size) as int;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # rewrite: function values converted between plain, `shared` and C slots.
 [Test]
 rewrites_function_values() {

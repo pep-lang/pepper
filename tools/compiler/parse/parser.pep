@@ -4649,19 +4649,23 @@ struct Parser {
         while (offset + 1 < text.size) {
             var c = text.byte_at(offset);
             if (c == '\\') {
-                offset = _escape(text, offset, _start(index), bytes);
+                offset = _escape(text, offset, _start(index), bytes, true);
                 continue;
             }
             bytes.append(c as u8);
             offset += 1;
         }
-        return Utf8.decode_lossy(bytes);
+        # The bytes as they are: `\x80` to `\xFF` may make them not UTF-8,
+        # which sema allows only in a `StringConstant` or a C string
+        # (`check_string_bytes`).
+        return bytes.count == 0 ? String() : String(unsafe_cast<__ptr<char>>(bytes.data()), bytes.count);
     }
 
     # Decodes the escape sequence at `offset` of `text` (at its backslash)
     # into `bytes`, returning the offset after it. `at` is the file offset
-    # of `text`, for errors.
-    _escape(text: String, offset: ulong, at: ulong, bytes: u8[]): ulong {
+    # of `text`, for errors. With `any_byte`, `\x80` to `\xFF` write that
+    # byte; otherwise `\x` stops at `\x7F`.
+    _escape(text: String, offset: ulong, at: ulong, bytes: u8[], any_byte: bool = false): ulong {
         var c = text.byte_at(offset + 1);
         if (c == 'n') {
             bytes.append('\n' as u8);
@@ -4683,9 +4687,9 @@ struct Parser {
                 _problem("expected two hex digits after '\\x'", Span(at + offset, at + end));
                 return end;
             }
-            if (value.value() >= 0x80) {
+            if (value.value() >= 0x80 and !any_byte) {
                 _problem(
-                    "'\\x' escape must be ASCII (at most \\x7F); use '\\u{...}' for other characters",
+                    "'\\x' escape in an interpolated or format string must be ASCII (at most \\x7F); use '\\u{...}' for other characters",
                     Span(at + offset, at + offset + 4)
                 );
                 return offset + 4;

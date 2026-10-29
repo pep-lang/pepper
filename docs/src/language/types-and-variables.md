@@ -192,6 +192,17 @@ picks a `String` parameter last, as an implicit conversion.
   module-scope text constant allocates nothing and any thread may read it.
   Everywhere else, `var s = "x"` included, a literal is a `String`, as
   before.
+- **Raw bytes**: a `StringConstant` may hold bytes that are not UTF-8,
+  written with `\x80` to `\xFF`, so a byte table can be a constant in
+  static data, read with `size` and `byte_at`. Its `length` is 0, and the
+  code-point API and a conversion to `String` need UTF-8. The same literal
+  where a `String` is expected is an error:
+
+  ```text
+  main.pep:3:13: error: string literal is not valid UTF-8, so it cannot be a 'String'; store it in a 'StringConstant'
+      3 |     var s = "a\xFFb";
+        |             ^~~~~~~~
+  ```
 - **Converting chains once**: a literal reaches a type that converts from
   `String` (`io.Path`, `Error`) directly, but a `StringConstant` variable
   does not, since conversions never chain. Write `String(text)` or pass a
@@ -241,7 +252,7 @@ A backslash in a string literal starts an escape sequence, as in C and Rust:
 | `\\` | a backslash |
 | `\"` | a double quote |
 | `\'` | a single quote |
-| `\xHH` | the ASCII character with hexadecimal code `HH`, at most `\x7F` (any byte in a [character literal](#characters)); always two digits, so `"\x4"` is an error |
+| `\xHH` | the byte with hexadecimal code `HH`; always two digits, so `"\x4"` is an error. Up to `\x7F` it is that ASCII character. `\x80` to `\xFF` write raw bytes, which must make valid UTF-8 in a `String` (`"caf\xC3\xA9"` is `"café"`); any bytes are allowed in a [`StringConstant`](#string-constants) or a C string. An interpolated string stops at `\x7F` |
 | `\u{H...}` | the Unicode code point with hexadecimal code `H...` (1 to 6 digits) |
 
 ```pepper

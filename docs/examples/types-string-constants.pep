@@ -5,6 +5,10 @@ extern ulong strlen(char* text);
 # A `const` initialized from a literal is a StringConstant.
 const GREETING = "hello";
 
+# `\x80` to `\xFF` write raw bytes, which only a StringConstant holds: a
+# byte table kept in static data.
+const TABLE = "\x01\x80\xFF";
+
 shout(text: String): String {
     return text.upper() + "!";
 }
@@ -26,6 +30,8 @@ main(): int {
     # Compared with a String either way round, with no copy.
     String typed = "pepper";
     assert(name == typed && typed == name && GREETING < typed, "mixed comparisons");
+
+    assert(TABLE.size == 3 && TABLE.byte_at(2) == 0xFF, "raw bytes");
 
     # Copying a StringConstant copies a pointer.
     var also = name;
