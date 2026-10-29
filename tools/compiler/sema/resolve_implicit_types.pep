@@ -9,7 +9,7 @@
 ## so the pass repeats while anything changes (at most eight times).
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
-import [enum_method_name, getter_name] from "builder";
+import [enum_method_name, FOR_ITERATOR, getter_name] from "builder";
 import [has_body, is_checked_function, unit_decls] from "checked";
 import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
@@ -74,6 +74,9 @@ import [GenericSignature, record_conformances, specialization] from "type_argume
 import [FUNCTION, parse_type_string, replace_map, VOID, without_pointer_names] from "type_name";
 import [is_value_type, method_is_static, value_type_key] from "value_types";
 import [Rewriter, rewrite_expression] from "walk";
+
+## The intrinsic that is the location of the call it is written in.
+const _CALLER_LOCATION = "__caller_location";
 
 ## The keys of the number types and `bool`.
 _number_keys(): String[] {
@@ -2315,6 +2318,28 @@ struct _ImplicitResolver {
         var receiver = scopes.type_of(node.this_value, current);
         if (receiver.is_empty() or receiver.contains_auto() or !scopes.overloads.is_method_set(receiver, node.method)) {
             return;
+        }
+        # A `for` loop's `next()` passes the loop's location to an overload
+        # `next(location: __ptr<char>)` when the iterator declares one, so its
+        # checks report the loop, not the runtime (#319).
+        bool hidden = false;
+        if (node.this_value is SymbolRef(iterator)) {
+            hidden = iterator.id.starts_with(FOR_ITERATOR);
+        }
+        if (node.method == "next" and node.args.is_empty) {
+            if (hidden) {
+                var located = [
+                    Expression.FunctionCall(FunctionCallExpression(_CALLER_LOCATION, Array<Expression>(), node.loc))
+                ];
+                var at_loop = scopes.select_method_overload(receiver, node.method, located, node.loc, current);
+                if (at_loop.is_value()) {
+                    node.args = located;
+                    node.method = apply_choice(node.args, at_loop.value());
+                    scopes.resolved.append((node.loc, method_target(receiver, at_loop.value().callee)));
+                    scopes.edits += 1;
+                    return;
+                }
+            }
         }
         var choice = scopes.select_method_overload(receiver, node.method, node.args, node.loc, current);
         if (choice.is_value()) {

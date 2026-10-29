@@ -82,6 +82,9 @@ type Built<T> = Result<T, Diagnostic>;
 
 ## The call a range `a..b` lowers to (runtime/range.pep).
 export const RANGE_FUNCTION = "_range";
+
+## What the hidden iterator of each `for` loop is named, before its number.
+export const FOR_ITERATOR = "__for_iterator_";
 ## The type of a `const` initialized with a string literal.
 export const STRING_CONSTANT = "StringConstant";
 ## The name `e as? T` binds the converted value to.
@@ -2566,7 +2569,7 @@ struct _Builder {
         body: ast.Block,
         span: ast.Span
     ): Built<Statement> {
-        var iterator = $"__for_iterator_{for_loops}";
+        var iterator = $"{FOR_ITERATOR}{for_loops}";
         for_loops += 1;
         # The hidden code is located at the iterable, its calls at `for`.
         var at = loc(iterable.span());
