@@ -234,20 +234,69 @@ Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
 and macOS (arm64 and x64), and installs with one command: see
 <a href="tools/install.html">Installing Pepper</a>.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
-<p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors, methods and <a href="language/properties.html">properties</a>, <a href="language/value-structs.html">value structs and enums</a> (<code>[Value]</code>), derived <code>==</code> and <code>hash</code> (<a href="language/hashing.html"><code>[Equatable]</code></a>), enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
-and multiple return values, array and map literals, generics (with type
-arguments inferred at calls, and generic methods), type aliases,
-traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
-closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with adapters such as <code>map</code>,
-<code>filter</code>, <code>take</code> and <code>chain</code>, and consumers such as <code>fold</code>, <code>any</code> and <code>sum</code>),
-<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>, <code>StringConstant</code> for literals' constant bytes,
-<code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), a <code>Comparable</code> trait for ordered types, sortable, searchable arrays with read-only slices, hash
-maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, a <code>BitSet</code> of small integers, a double-ended <code>Deque</code> and a <code>PriorityQueue</code>, atomics, threads, channels and mutexes, tasks (green threads
-that take turns on a few worker threads, parking on sockets and timeouts), file-system access (see <a href="language/files.html">files</a>), text encodings (UTF-16, ASCII; see <a href="language/text.html">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies, redirects, connection reuse, ALPN), URI parsing and percent-encoding, <a href="language/encodings.html">base64, form data and UUIDs</a>, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), <a href="language/toml.html">TOML</a> (parsing, writing, editing a document in place, and converting structs), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="language/random.html">random numbers</a> (secure bytes from the operating system and a seedable generator), <a href="language/simd.html">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system's database, and RFC 3339, HTTP and <code>strftime</code> text), the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger), and <a href="language/logging.html">leveled, structured logging</a> (the <code>log</code> module). <a href="language/testing.html">Unit tests</a> are <code>[Test]</code> functions that
-<code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
-programs, but expect gaps. <a href="tools/pep-fmt.html">pep-fmt</a>, the code formatter,
+<p>Pepper is young. The core language works and is tested, and so does a
+standard library large enough to write real programs, but expect gaps. In
+the order this book covers them:</p>
+<ul>
+<li><strong>Basics:</strong> variables, functions, tuples and multiple return values,
+<a href="language/enums.html">enums</a> (with cases that carry values, methods and
+computed properties) and <code>match</code> (as a statement or a value, on enums,
+integers, characters, strings and trait values, with <code>is</code> tests, nested
+and tuple patterns, guards, ranges and constants), <code>Optional</code> values, and
+<code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates
+errors).</li>
+<li><strong>Collections and iteration:</strong> array and map literals, sortable,
+searchable arrays with read-only slices, hash maps and sets, sorted maps
+and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, a <code>BitSet</code>
+of small integers, a double-ended <code>Deque</code> and a <code>PriorityQueue</code>, and
+iteration (with adapters such as <code>map</code>, <code>filter</code>, <code>take</code> and <code>chain</code>, and
+consumers such as <code>fold</code>, <code>any</code> and <code>sum</code>).</li>
+<li><strong>Types of your own:</strong> structs with constructors, destructors, methods
+and <a href="language/properties.html">properties</a>,
+<a href="language/value-structs.html">value structs and enums</a> (<code>[Value]</code>), derived
+<code>==</code> and <code>hash</code> (<a href="language/hashing.html"><code>[Equatable]</code></a>), a <code>Comparable</code>
+trait for ordered types, traits (with default methods, and usable as
+types that convert back with <code>as?</code>), generics (with type arguments
+inferred at calls, and generic methods), type aliases, and function types
+and closures.</li>
+<li><strong>Memory and resources:</strong> <code>with</code> blocks, and weak references (to structs
+and trait values).</li>
+<li><strong>Concurrency:</strong> atomics, threads, channels and mutexes, and tasks (green
+threads that take turns on a few worker threads, parking on sockets and
+timeouts).</li>
+<li><strong>Organizing a program:</strong> modules (with <code>export * from</code> re-exports), and
+<a href="language/testing.html">unit tests</a>: <code>[Test]</code> functions that <code>pepper test</code>
+runs in parallel, each in a process of its own.</li>
+<li><strong>Compile time, platforms and C:</strong> calling C (including C callbacks), and
+being called from C (<code>[Export]</code>ed functions in a static or shared
+library, with a generated header), and <a href="language/simd.html">SIMD vectors</a>
+(<code>simd.Vector&lt;T, N&gt;</code>).</li>
+<li><strong>Standard library:</strong> strings (with a <code>StringBuilder</code>, <code>StringConstant</code>
+for literals' constant bytes, <code>to_string</code> and a <code>ToString</code> trait,
+<code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and
+<code>String.format</code>), file-system access (see <a href="language/files.html">files</a>),
+text encodings (UTF-16, ASCII; see
+<a href="language/encodings.html#text-encodings">text</a>), TCP, UDP and Unix domain
+sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies,
+redirects, connection reuse, ALPN), URI parsing and percent-encoding,
+<a href="language/encodings.html">base64, form data and UUIDs</a>, regular
+expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that
+keep their comments, and converting structs with <code>json.encode</code> and
+<code>json.decode</code>), <a href="language/toml.html">TOML</a> (parsing, writing, editing a
+document in place, and converting structs), gzip and zlib compression,
+tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the
+<code>digest</code> module), <a href="language/random.html">random numbers</a> (secure bytes from
+the operating system and a seedable generator), command-line arguments
+(<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module),
+starting child processes, the <code>os</code> module (environment variables,
+monotonic and wall clocks with <code>Duration</code>, and machine and user
+information), the <code>time</code> module (dates, times of day, time zones from the
+system's database, and RFC 3339, HTTP and <code>strftime</code> text), the <code>debug</code>
+module (stack backtraces, which a panic also prints, and the debugger),
+and <a href="language/logging.html">leveled, structured logging</a> (the <code>log</code>
+module).</li>
+</ul>
+<p><a href="tools/pep-fmt.html">pep-fmt</a>, the code formatter,
 <a href="tools/pep-profile.html">pep-profile</a>, which profiles a program and draws a
 flame graph, <a href="tools/pep-test.html">pep-test</a>, which runs unit tests, and
 <a href="tools/pepper.html"><code>pepper</code></a>, the entry point that runs every
@@ -315,10 +364,16 @@ chapter shows a feature, the example was compiled and run to check it.</p>
 compiler and runs your first program. <a href="tutorial/tour.html">A tour of Pepper</a>
 then walks through the main features by building a small word-counting
 program.</li>
-<li><strong>Language guide.</strong> One chapter per part of the language, from
+<li><strong>Language guide.</strong> One chapter per part of the language, in an order to
+learn it by: the basics, from
 <a href="language/types-and-variables.html">types and variables</a> to
-<a href="language/naming.html">naming conventions</a>. Read it in order, or jump to the
+<a href="language/results.html">error handling</a>; collections and iteration; types
+of your own; memory; concurrency; organizing a program into modules and
+tests; and then compile time, platforms and C, starting at
+<a href="language/attributes.html">attributes</a>. Read it in order, or jump to the
 topic you need.</li>
+<li><strong>Standard library guide.</strong> A chapter for each area of the library, from
+<a href="language/files.html">files</a> to <a href="language/http.html">HTTP</a>.</li>
 <li><strong>Tools.</strong> <a href="tools/pepper.html">The pepper command</a>,
 <a href="tools/pep-new.html">pep-new</a>, <a href="tools/pep-run.html">pep-run</a>,
 <a href="tools/pep-fmt.html">pep-fmt</a>, <a href="tools/pep-profile.html">pep-profile</a>,

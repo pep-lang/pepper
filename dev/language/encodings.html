@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Encodings and UUIDs - The Pepper Programming Language</title>
+        <title>Encodings: text, base64 and UUIDs - The Pepper Programming Language</title>
 
 
         <!-- Custom HTML head -->
@@ -182,11 +182,13 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="encodings-and-uuids"><a class="header" href="#encodings-and-uuids">Encodings and UUIDs</a></h1>
+                        <h1 id="encodings-text-base64-and-uuids"><a class="header" href="#encodings-text-base64-and-uuids">Encodings: text, base64 and UUIDs</a></h1>
 <p>Networked programs keep writing bytes as text and back: credentials in an
 HTTP header, a token in a URL, a value in a query string, an identifier in a
-database. These live in a few places:</p>
+database. Files, protocols and C libraries also hand over text in encodings
+other than UTF-8. These live in a few places:</p>
 <div class="table-wrapper"><table><thead><tr><th>What</th><th>Where</th><th>Functions</th></tr></thead><tbody>
+<tr><td><a href="#text-encodings">Text encodings</a> (UTF-16, ASCII, ...)</td><td><code>import text</code></td><td><code>text.Utf16.encode</code>, <code>text.Utf16.decode</code>, ...</td></tr>
 <tr><td>Base64</td><td><code>import base64</code></td><td><code>base64.encode</code>, <code>base64.decode</code></td></tr>
 <tr><td>Hexadecimal</td><td><code>import digest</code></td><td><code>digest.to_hex</code>, <code>digest.from_hex</code></td></tr>
 <tr><td>Percent-escapes</td><td><code>Uri</code>, in the prelude</td><td><code>Uri.encode</code>, <code>Uri.decode</code></td></tr>
@@ -226,6 +228,67 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="text-encodings"><a class="header" href="#text-encodings">Text encodings</a></h2>
+<p>A <code>String</code> always holds UTF-8. The <code>text</code> module converts text to and from
+the bytes of an encoding (<code>u8[]</code>), for files, network protocols and C
+libraries that use another one:</p>
+<pre><code class="language-pepper"># Text in other encodings: encode a String to bytes, decode bytes back.
+import text;
+
+main(): int {
+    var greeting = "héllo 🙂";
+
+    # UTF-8 is what a String holds; decode checks the bytes.
+    var utf8 = text.Utf8.encode(greeting);
+    assert(utf8.count == 11, "é takes two bytes, 🙂 four");
+    assert(text.Utf8.decode(utf8).value() == greeting, "round trip");
+
+    # UTF-16: two bytes per unit, little-endian unless asked otherwise.
+    var utf16 = text.Utf16.encode(greeting);
+    assert(utf16.count == 16, "🙂 takes a surrogate pair");
+    assert(text.Utf16.decode(utf16).value() == greeting, "round trip");
+
+    # ASCII has no é: strict gives none, lossy writes '?'.
+    assert(text.Ascii.encode(greeting).is_empty(), "not ASCII");
+    assert(text.Ascii.encode_lossy("é").count == 1, "one '?'");
+
+    # Code page 437, as old zip archives name entries: é is 0x82, and every
+    # byte decodes, so decode gives a String.
+    var dos = text.CodePage437.encode("café").value();
+    assert(dos.count == 4 &amp;&amp; dos[3] == 0x82, "one byte each");
+    assert(text.CodePage437.decode(dos) == "café", "round trip");
+    assert(text.CodePage437.encode(greeting).is_empty(), "no 🙂 in code page 437");
+
+    # Strict decoding rejects invalid bytes; lossy decoding replaces them.
+    var bad = Array&lt;u8&gt;();
+    bad.append(104);
+    bad.append(255);
+    assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
+    assert(text.Utf8.decode_lossy(bad) == "h\u{FFFD}", "replaced");
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Type</th><th>Encoding</th></tr></thead><tbody>
+<tr><td><code>text.Utf8</code></td><td>UTF-8. <code>encode</code> copies the String's bytes; <code>decode</code> checks them. <code>is_valid</code> checks bytes without decoding, and <code>find_invalid</code> gives the offset of a String's first invalid byte. <code>code_point_at</code> reads one code point and <code>append_code_point</code> writes one.</td></tr>
+<tr><td><code>text.Utf16</code></td><td>UTF-16, two bytes per code unit, little-endian by default (<code>encode(s, true)</code> and <code>decode(bytes, true)</code> for big-endian). A code point past U+FFFF takes a surrogate pair.</td></tr>
+<tr><td><code>text.Ascii</code></td><td>ASCII: code points below 128, one byte each. <code>is_ascii</code> checks a String.</td></tr>
+<tr><td><code>text.CodePage437</code></td><td>Code page 437, the IBM PC character set that old zip archives use for entry names: ASCII below 128, and one accented letter, Greek letter or box-drawing symbol for each byte above. Every byte decodes, so <code>decode</code> gives a String, not an Optional.</td></tr>
+</tbody></table>
+</div>
+<ul>
+<li><strong><code>decode</code></strong> is strict: it gives Empty when the bytes are not valid in the
+encoding (a stray UTF-8 continuation byte, an unpaired UTF-16 surrogate,
+an odd UTF-16 byte count, an ASCII byte of 128 or more).</li>
+<li><strong><code>decode_lossy</code></strong> always succeeds: whatever is invalid becomes U+FFFD,
+the replacement character.</li>
+<li><strong><code>Ascii.encode</code></strong> gives Empty for text with a code point past 127, and
+<strong><code>CodePage437.encode</code></strong> for a character the code page lacks;
+<strong><code>encode_lossy</code></strong> writes <code>?</code> for each instead.</li>
+<li>No byte-order mark is written, and one that is read stays in the text.</li>
+<li><code>io.File.read_string</code> decodes with <code>text.Utf8.decode</code>, and an HTTP body's
+<code>text()</code> with <code>decode_lossy</code>.</li>
+</ul>
+<p>The <a href="../reference/text-module.html">reference</a> lists every function.</p>
 <h2 id="base64"><a class="header" href="#base64">Base64</a></h2>
 <p><code>base64.encode(bytes)</code> writes RFC 4648 base64 with the standard alphabet
 (<code>A-Z a-z 0-9 + /</code>) and <code>=</code> padding. Two optional arguments change that:
@@ -277,11 +340,11 @@ and <a href="../reference/uri.html"><code>Uri</code></a>.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../language/random.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../language/time.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../language/hints.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/regex.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -291,11 +354,11 @@ and <a href="../reference/uri.html"><code>Uri</code></a>.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../language/random.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../language/time.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../language/hints.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/regex.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

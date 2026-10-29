@@ -729,7 +729,7 @@ commit holds one, naming the package and the link:</p>
 </code></pre>
 <p>A link found in a package's folder later fails the build and <code>fetch</code> the
 same way an edited file does; <code>vendor</code> again removes it.</p>
-<p>In a <a href="projects.html#workspaces">workspace</a>, run from the root or any member,
+<p>In a <a href="projects.html#workspaces-workspace">workspace</a>, run from the root or any member,
 <code>vendor</code> writes one folder at the workspace's root, holding every
 member's locked packages, and sets <code>[fetch] vendor</code> in the root's
 <code>pep.toml</code>; every member's build reads it.</p>
@@ -748,7 +748,7 @@ pepper package uninstall tool
 </code></pre>
 <ul>
 <li><strong>Which version:</strong> the newest release the range allows (any, without
-one) that this toolchain builds, as <a href="#add-ownernamerange"><code>add</code></a> picks
+one) that this toolchain builds, as <a href="#add-ownernamerange-add-namerange"><code>add</code></a> picks
 it; a package with no version tags is installed from its default
 branch. Installing it again upgrades it, or moves it to another range.
 With <code>--package &lt;name&gt;</code>, it is the workspace member <code>&lt;name&gt;</code>, by its

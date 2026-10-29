@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Hashing and equality - The Pepper Programming Language</title>
+        <title>Equality, hashing and ordering - The Pepper Programming Language</title>
 
 
         <!-- Custom HTML head -->
@@ -182,12 +182,13 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="hashing-and-equality"><a class="header" href="#hashing-and-equality">Hashing and equality</a></h1>
+                        <h1 id="equality-hashing-and-ordering"><a class="header" href="#equality-hashing-and-ordering">Equality, hashing and ordering</a></h1>
 <p><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> find a key by hashing it with <code>hash&lt;K&gt;</code>
 and comparing it with <code>==</code>. What those two mean for a type decides which keys
 count as the same.
 <code>OrderedMap&lt;K, V&gt;</code> finds keys the same way. For maps that keep their keys
-in order, see <a href="maps.html">Maps and sets</a>.</p>
+in order, see <a href="maps.html">Maps and sets</a>; what <code>&lt;</code> and sorting mean for a
+type is <a href="#ordering-with-comparable">Ordering with Comparable</a>, below.</p>
 <div class="table-wrapper"><table><thead><tr><th>Key type</th><th><code>==</code></th><th><code>hash&lt;K&gt;</code></th></tr></thead><tbody>
 <tr><td>Numbers, <code>bool</code>, <code>char</code>, pointers</td><td>the value</td><td>the value's bits</td></tr>
 <tr><td><code>String</code></td><td>the content</td><td>the content</td></tr>
@@ -429,6 +430,100 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="ordering-with-comparable"><a class="header" href="#ordering-with-comparable">Ordering with Comparable</a></h2>
+<p>A type whose values sort in one order declares the <code>Comparable</code> trait. It
+asks for one method, <code>compare(other)</code>, which returns a negative number, zero
+or a positive number as the value sorts before, with or after <code>other</code>, and
+gives the type the rest:</p>
+<ul>
+<li>the operators <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>;</li>
+<li><code>min(other)</code>, <code>max(other)</code> and <code>clamp(low, high)</code> (which panics when <code>low</code>
+sorts after <code>high</code>);</li>
+<li>a place as a <a href="maps.html#how-keys-are-ordered"><code>Map</code> key or <code>Set</code> element</a>,
+in that order;</li>
+<li>the constraint <code>T: Comparable</code> in a <a href="generics.html#constraints">generic</a>
+function, whose body can then use all of the above on a <code>T</code>.</li>
+</ul>
+<pre><code class="language-pepper">struct Version {
+    var major: int;
+    var minor: int;
+
+    construct(this.major = 0, this.minor = 0) {}
+
+    # The one method Comparable asks for.
+    compare(other: Version): int {
+        var order = major.compare(other.major);
+        if (order != 0) {
+            return order;
+        }
+        return minor.compare(other.minor);
+    }
+}
+
+extend Version with Comparable;
+
+# A generic function asks for an order with `T: Comparable`.
+largest&lt;T: Comparable&gt;(items: Array&lt;T&gt;): T {
+    var best = items[0];
+    for (var item in items) {
+        best = best.max(item);
+    }
+    return best;
+}
+
+main(): int {
+    # `&lt;`, `&lt;=`, `&gt;` and `&gt;=` come from `compare`.
+    assert(Version(1, 2) &lt; Version(1, 10), "1.2 sorts before 1.10");
+    assert(Version(2, 0).min(Version(1, 9)).major == 1, "min");
+    assert(Version(3, 0).clamp(Version(1, 0), Version(2, 0)).major == 2, "clamp");
+
+    # Numbers and strings are Comparable too.
+    assert(largest([3, 9, 2]) == 9, "numbers");
+    assert(largest(["pear", "apple"]) == "pear", "strings");
+    assert((15).clamp(0, 10) == 10, "clamp a number");
+
+    # A Comparable struct is a Map key, in its order.
+    var releases = Map&lt;Version, String&gt;();
+    releases[Version(2, 0)] = "second";
+    releases[Version(1, 5)] = "first";
+    assert(releases.first().value().1 == "first", "sorted by compare");
+
+    # An array of a Comparable type sorts in its order; a comparer gives
+    # any other.
+    var versions = [Version(2, 1), Version(1, 5)];
+    versions.sort();
+    assert(versions[0].major == 1, "sorted");
+    versions.sort((a, b) =&gt; b.compare(a));
+    assert(versions[0].major == 2, "sorted in reverse");
+    return 0;
+}
+</code></pre>
+<p>A type that declares its own <code>&lt;</code> (or <code>min</code>, or any of the others) keeps it;
+the trait's version fills in only what the type leaves out.</p>
+<p><code>compare</code> must give a total, consistent order: the same two values always
+compare the same way, <code>a.compare(b)</code> has the opposite sign of
+<code>b.compare(a)</code>, and if <code>a</code> sorts before <code>b</code> and <code>b</code> before <code>c</code>, <code>a</code> sorts
+before <code>c</code>. <code>Map</code>, <code>Set</code> and sorting depend on it.</p>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<p>An array of <code>Comparable</code> elements sorts in their own order with <code>sort()</code>,
+stably, as <code>sort((a, b) =&gt; a.compare(b))</code> would. Floats sort in the total
+order, NaN last. Any other order still takes a comparer:
+<code>items.sort((a, b) =&gt; b.compare(a))</code> sorts in reverse.</p>
+<h3 id="numbers-char-and-string"><a class="header" href="#numbers-char-and-string">Numbers, <code>char</code> and <code>String</code></a></h3>
+<p>Every number type and <code>char</code> is <code>Comparable</code> by value, and <code>String</code> by
+content, the order of <code>String.compare</code>. Their <code>compare</code> returns -1, 0 or 1
+(<code>String.compare</code> any negative or positive number).</p>
+<p><code>float</code> and <code>double</code> compare in a total order: NaN sorts after every number
+and with every other NaN, and <code>-0.0</code> sorts with <code>0.0</code>. Their <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>
+and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, while
+<code>compare</code>, <code>clamp</code> and <code>Map</code> keys follow the total order, so a NaN key
+cannot break a map.</p>
+<h3 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h3>
+<ul>
+<li>Tuples and <code>Optional</code> are not <code>Comparable</code>, and <code>Comparable</code> is not
+derived from a struct's fields: a struct writes its <code>compare</code>, as
+<code>Version</code> does above.</li>
+</ul>
 
                     </main>
 
@@ -438,7 +533,7 @@ main(): int {
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../language/ordering.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/traits-and-extensions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -452,7 +547,7 @@ main(): int {
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../language/ordering.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/traits-and-extensions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

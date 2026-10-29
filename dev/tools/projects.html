@@ -579,7 +579,7 @@ versions instead of failing to build them. <code>pepper package publish</code>
 checks it (see <a href="pep-package.html#publish">pep-package</a>).</li>
 </ul>
 <p><code>pepper package add --dev</code> adds one, and <code>pepper package remove</code> removes one
-from either table (see <a href="pep-package.html#add-ownernamerange">pep-package</a>). A
+from either table (see <a href="pep-package.html#add-ownernamerange-add-namerange">pep-package</a>). A
 name may be in only one of the two tables.</p>
 <pre><code class="language-text">main.pep:1:8: error: 'fixtures' is a dev-dependency, which only tests and the files in examples/ import; move it to '[dependencies]' to import it here
     1 | import fixtures;
@@ -615,7 +615,7 @@ package's features from <code>PEP_FEATURES</code>.</li>
 holds those a script needs only on some machines; see
 <a href="#targetconditionbuild-dependencies">below</a>.</li>
 <li><strong>Added with</strong> <code>pepper package add --build</code> (see
-<a href="pep-package.html#add-ownernamerange">pep-package</a>).</li>
+<a href="pep-package.html#add-ownernamerange-add-namerange">pep-package</a>).</li>
 <li><strong>Needs toolchain 0.11.0</strong>, as <code>[dev-dependencies]</code> does.</li>
 </ul>
 <pre><code class="language-text">main.pep:1:8: error: 'codegen' is a build-dependency, which only the package's build script imports; add it to '[dependencies]' to import it here
@@ -672,7 +672,7 @@ a <code>[target]</code> table as an unknown table, so a package that has one set
 checks it.</p>
 </li>
 </ul>
-<p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="pep-package.html#add-ownernamerange">pep-package</a>).
+<p><code>pepper package add --target 'OS(Windows)'</code> adds one, and <code>pepper package remove</code> removes one (see <a href="pep-package.html#add-ownernamerange-add-namerange">pep-package</a>).
 A name may be in only one of the dependency tables, and a <code>[target]</code> table
 holds only <code>dependencies</code> and
 <a href="#targetconditionbuild-dependencies"><code>build-dependencies</code></a>.</p>
@@ -782,7 +782,7 @@ as for <a href="#dev-dependencies"><code>[dev-dependencies]</code></a>; <code>pe
 </ul>
 <p><code>pepper package add --optional</code>, <code>--features</code> and <code>--no-default-features</code>
 write a dependency's <code>optional</code>, <code>features</code> and <code>default-features</code> (see
-<a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<a href="pep-package.html#add-ownernamerange-add-namerange">pep-package</a>).</p>
 <h2 id="workspaces-workspace"><a class="header" href="#workspaces-workspace">Workspaces: <code>[workspace]</code></a></h2>
 <p>A repository holding several related packages, such as a library with its
 examples or a client and a server, makes them one workspace: a <code>pep.toml</code>
@@ -864,7 +864,7 @@ with a package inside a Git repository's workspace:</p>
 geo = { github = "someone/shapes", package = "geo", version = "0.3" }
 </code></pre>
 <p><code>pepper package add someone/shapes --package geo</code> writes that entry (see
-<a href="pep-package.html#add-ownernamerange">pep-package</a>).</p>
+<a href="pep-package.html#add-ownernamerange-add-namerange">pep-package</a>).</p>
 <ul>
 <li><strong>Found through the root's <code>members</code>:</strong> the member is the package of
 that name among the folders the root's <code>[workspace]</code> <code>members</code> lists, so
