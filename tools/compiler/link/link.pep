@@ -2500,7 +2500,7 @@ struct _Rewriter {
     _qualified(target_file: ulong, q: String, name: String, span: Span, value: bool): String? {
         var c = linker.exports[target_file].try_get(name);
         if (!c.is_value()) {
-            _error(span, $"'{name}' is not exported by '{q}' ({linker.file_names[target_file]})");
+            _error(span, $"'{name}' is not exported by '{q}' ({shown_path(linker.file_names[target_file])})");
             return Optional<String>.Empty;
         }
         return _denote($"{q}.{name}", c.value(), span, value, true);
