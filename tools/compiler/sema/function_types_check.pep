@@ -226,6 +226,8 @@ enum _SlotKind {
     Assignment,
     Return,
     Variable,
+    ## The index of `[]`, whose indexer method is the compiler's.
+    Index,
     Silent,
 }
 
@@ -270,11 +272,24 @@ struct _FlowSlot {
             Variable => {
                 return $"cannot initialize variable '{name}' of type '{expected}' with a value of type '{actual}'";
             }
+            Index => {
+                # `name` is the indexed type; a range asks for a slice.
+                var advice = actual.starts_with("Range<") ?
+                    "; write 'slice(start, end)' for part of it" :
+                    $", which takes '{expected}'";
+                return $"cannot index '{name}' with a value of type '{actual}'{advice}";
+            }
             Silent => {
                 return "";
             }
         }
     }
+}
+
+## Whether `method` is the indexer `a[i]` and `a[i] = v` call.
+_is_indexer(method: String): bool {
+    var name = set_name(method);
+    return name == "__index_get" or name == "__index_set";
 }
 
 ## Collects the calls, operators and ternaries of an expression, in order.
@@ -843,7 +858,14 @@ struct _FunctionTypes {
                 var this_type = static_type_of(node.this_value, table, current, state);
                 if (this_type.is_value()) {
                     var params = parameters_of_method(this_type.value(), node.method);
-                    if (params.is_value()) {
+                    if (params.is_value()
+                        and _is_indexer(node.method)
+                        and node.args.count > 0
+                        and params.value().count > 0) {
+                        # `a[i]` and `a[i] = v`: the index, by the operator.
+                        var slot = _FlowSlot(_SlotKind.Index, "", this_type.value().display(), node.loc);
+                        flows_into(node.args[0], params.value()[0], slot);
+                    } else if (params.is_value()) {
                         check_arguments(
                             $"argument {{}} of '{node.method}'", params.value(), node.args, node.loc, false
                         );
