@@ -140,11 +140,9 @@ export check_string_bytes(module: Module, state: PassState) {
     # A checked declaration was walked with its unit (its body is stashed).
     var own = unit_decls(module);
     var checker = _StringBytes(state);
+    # The declarations `convert_to_traits` walked, as it walks them.
     for (var f in own.functions) {
-        # A generic function's literals are checked in its specializations.
-        if (f.generic_params.count == 0) {
-            checker.visit(f);
-        }
+        checker.visit(f);
     }
     for (var st in own.structs) {
         if (_is_generic_base(st)) {
@@ -156,7 +154,6 @@ export check_string_bytes(module: Module, state: PassState) {
         for (var m in st.method_members) {
             checker.visit(m);
         }
-        checker.visit(st.destructor);
     }
     for (var g in module.globals) {
         if (g.default.is_value() and !module.checked.globals.contains(g.name)) {
@@ -173,6 +170,15 @@ struct _StringBytes {
     }
 
     visit(f: FunctionDef) {
+        # A generic function's literals are checked in its specializations.
+        if (f.is_generic_func) {
+            return;
+        }
+        for (var p in f.parameters) {
+            if (p.default.is_value()) {
+                rewrite_expression(p.default.value(), this);
+            }
+        }
         if (f.body.is_value()) {
             rewrite_block(f.body.value(), this);
         }

@@ -4655,13 +4655,10 @@ struct Parser {
             bytes.append(c as u8);
             offset += 1;
         }
-        if (Utf8.is_valid(bytes)) {
-            return Utf8.decode_lossy(bytes);
-        }
-        # `\x80` to `\xFF` wrote bytes that are not UTF-8: the text keeps
-        # them as they are, and sema allows them only in a `StringConstant`
-        # or a C string (`check_string_bytes`).
-        return String(unsafe_cast<__ptr<char>>(bytes.data()), bytes.count);
+        # The bytes as they are: `\x80` to `\xFF` may make them not UTF-8,
+        # which sema allows only in a `StringConstant` or a C string
+        # (`check_string_bytes`).
+        return bytes.count == 0 ? String() : String(unsafe_cast<__ptr<char>>(bytes.data()), bytes.count);
     }
 
     # Decodes the escape sequence at `offset` of `text` (at its backslash)
