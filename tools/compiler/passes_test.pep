@@ -475,6 +475,16 @@ reports_confinement_error(index: ulong) {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A method called on an integer literal is the literal's type's (#315).
+[Test]
+calls_a_method_on_an_integer_literal() {
+    var folder = TempFolder("passes_literal_method");
+    var programs = [
+        "# expect: accepted\nmain(): int {\n    var y = 200.checked_add(100);\n    var z = 7.to_string();\n    return y.value() - 300 + z.size as int - 1;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # The hidden local of a `?` or of a `match` over a call lets go of its
 # value once the value is read when the code moves what it gave, so the
 # move is accepted; a value another local or `this` still holds is not
