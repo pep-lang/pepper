@@ -6,6 +6,7 @@
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
+import [demangle_name] from compiler.link;
 import [is_numeric_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE] from "builder";
 import [unit_decls] from "checked";
@@ -275,6 +276,16 @@ struct _FlowSlot {
             }
         }
     }
+}
+
+## Whether `st` declares a method, static or not, named `method`.
+_declares_method(st: StructDef, method: String): bool {
+    for (var m in st.method_members) {
+        if (set_name(m.name) == method) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ## Collects the calls, operators and ternaries of an expression, in order.
@@ -840,6 +851,23 @@ struct _FunctionTypes {
                 }
             }
             MethodCall(node) => {
+                # `S.m()` on a struct the receiver names, with no `m`: code
+                # generation would take `S` for a variable (#411).
+                if (node.this_value is SymbolRef(receiver)) {
+                    var found = named_structs.try_get(receiver.id);
+                    var method = set_name(node.method);
+                    # A struct's name, as a static call's receiver, has the
+                    # struct as its type.
+                    bool type_name = receiver.ty.is_empty()
+                        or receiver.ty.is_auto()
+                        or receiver.ty.to_string() == receiver.id;
+                    if (type_name and found.is_value() and !_declares_method(found.value(), method)) {
+                        state.report(
+                            error_at($"no static method named '{method}' in '{demangle_name(receiver.id)}'", node.loc)
+                        );
+                        return;
+                    }
+                }
                 var this_type = static_type_of(node.this_value, table, current, state);
                 if (this_type.is_value()) {
                     var params = parameters_of_method(this_type.value(), node.method);

@@ -690,6 +690,10 @@ specialized_error_programs(): String[] {
         # A lane count that is not a power of two, and one past 64.
         "# expect: main.pep:4:30: error: lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'\nimport simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
         "# expect: main.pep:4:23: error: lane count of 'Mask<128>' must be a power of two from 1 to 64, not '128'\nimport simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # A static call of a method the struct does not declare names the
+        # method and the struct, at the method (#411).
+        "# expect: main.pep:9:19: error: no static method named 'nope' in 'Point'\nstruct Point {\n    var x: int;\n    static make(): Point {\n        return Point();\n    }\n}\nmain(): int {\n    var p = Point.nope();\n    return 0;\n}\n",
+        "# expect: main.pep:6:52: error: no static method named 'millis' in 'Duration'\nimport async;\nimport os;\n\nmain(): int {\n    with (var deadline = async.timeout(os.Duration.millis(50))) {\n    }\n    return 0;\n}\n",
         # A number as the type argument of a struct or a function that takes
         # no lane count, at the number (#308); a struct that passes its
         # parameter on as a `Vector`'s lane count takes one.
