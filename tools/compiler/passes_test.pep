@@ -482,8 +482,8 @@ reports_confinement_error(index: ulong) {
 refuses_json_for_an_unsupported_container() {
     var folder = TempFolder("passes_json_containers");
     var programs = [
-        "# expect: runtime/json/convert.pep:341:17: error: 'encode' cannot convert type 'HashMap<int, int>' to JSON: a map's keys must be 'String's\nimport json;\nmain(): int {\n    var m = HashMap<int, int>();\n    m[1] = 2;\n    print(json.encode(m));\n    return 0;\n}\n",
-        "# expect: runtime/json/convert.pep:775:17: error: 'decode' cannot convert type 'HashSet<int>' from JSON; decode an 'Array' and build it from that\nimport json;\nmain(): int {\n    var s = json.decode<HashSet<int>>(\"[1]\");\n    return 0;\n}\n"
+        "# expect: main.pep:6:11: error: 'encode' cannot convert type 'HashMap<int, int>' to JSON: a map's keys must be 'String's\nimport json;\nmain(): int {\n    var m = HashMap<int, int>();\n    m[1] = 2;\n    print(json.encode(m));\n    return 0;\n}\n",
+        "# expect: main.pep:4:13: error: 'decode' cannot convert type 'HashSet<int>' from JSON; decode an 'Array' and build it from that\nimport json;\nmain(): int {\n    var s = json.decode<HashSet<int>>(\"[1]\");\n    return 0;\n}\n"
     ];
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
@@ -494,6 +494,17 @@ calls_a_method_on_an_integer_literal() {
     var folder = TempFolder("passes_literal_method");
     var programs = [
         "# expect: accepted\nmain(): int {\n    var y = 200.checked_add(100);\n    var z = 7.to_string();\n    return y.value() - 300 + z.size as int - 1;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
+# An error a static block of the runtime's raises for a program's type is
+# reported at the program's call that asked for it (#330).
+[Test]
+reports_a_runtime_static_error_in_program_code() {
+    var folder = TempFolder("passes_runtime_static_error");
+    var programs = [
+        "# expect: main.pep:15:11: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON\nimport json;\n\nstruct Job {\n    var name: String;\n    var outcome: Result<int>;\n    construct(name: String, outcome: Result<int>) {\n        this.name = name;\n        this.outcome = outcome;\n    }\n}\n\nmain(): int {\n    var job = Job(\"a\", Result<int>.Ok(1));\n    print(json.encode(job));\n    return 0;\n}\n"
     ];
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
