@@ -359,6 +359,21 @@ d_checks_the_build_option_name() {
     _succeeds(folder.path, ["-D", "_FAST2=a=b", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
 }
 
+# With no `-o`, the executable is named for the entry file, with `.exe` on
+# Windows, which runs nothing without it (#314); `-o` names it as given.
+[Test]
+names_the_executable_for_the_entry_file() {
+    var folder = _program("options_default_output", _PROGRAM);
+    _succeeds(folder.path, ["main.pep", "--build", "build", "--no-cache"]);
+    bool windows = os.system_os() == os.OperatingSystem.Windows;
+    var named = folder.path.join(Path(windows ? "main.exe" : "main"));
+    expect_true(named.is_file());
+    var ran = process.Command(named.to_string()).run();
+    expect_true(ran.is_ok() and ran.value().status.success());
+    _succeeds(folder.path, ["main.pep", "-o", "given", "--build", "build", "--no-cache"]);
+    expect_true(folder.path.join(Path("given")).is_file());
+}
+
 # `--lib swift-package`: a Swift package of the Swift wrappers over an iOS
 # `.xcframework`, built on any system, whose simulator library is a
 # universal file of two archives; and the output names and options it and

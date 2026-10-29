@@ -171,9 +171,9 @@ succeeds.
 
 ## Output files
 
-With no `-o`, the executable is named after the first source file, without an
-extension, in the directory where you run the compiler. Windows will not run a
-file without `.exe`, so pass `-o main.exe` there. The object files and other
+With no `-o`, the executable is named after the first source file, in the
+directory where you run the compiler: `main` for `main.pep`, and `main.exe`
+when building for Windows, which will not run a file without `.exe`. The object files and other
 intermediate files go in `.pep/build/` under the current directory, or in the
 directory you pass to `--build`: one object per file of the program in
 `<name>.units/`, and `<name>.o`, which runs the program's global
