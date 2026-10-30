@@ -431,6 +431,12 @@ main(): int {
     assert(word.size == 6, "6 bytes: 'é' takes 2");
     assert(word[1] == "é", "indexing yields a one-code-point String");
 
+    # A literal may span lines, and each line break in it is "\n",
+    # whether the file ends its lines "\n" or "\r\n".
+    var lines = "one
+two";
+    assert(lines == "one\ntwo", "a line break is a newline");
+
     # A String is a reference: both names see an append.
     var alias = message;
     message.append("!");
@@ -650,6 +656,10 @@ print("caf\u{e9}");            # café
     2 |     print("a\qb");
       |             ^~
 </code></pre>
+<p>A string literal may span lines. Each line break in it is a <code>\n</code>, whether
+the file ends its lines with <code>\n</code> or with <code>\r\n</code> (as a Windows checkout
+may), so a literal means the same on every system; write <code>\r</code> for a
+carriage return.</p>
 <h3 id="other-built-in-types"><a class="header" href="#other-built-in-types">Other built-in types</a></h3>
 <ul>
 <li><code>void</code> means "no value". It is the return type of a function that returns

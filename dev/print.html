@@ -1214,6 +1214,12 @@ main(): int {
     assert(word.size == 6, "6 bytes: 'é' takes 2");
     assert(word[1] == "é", "indexing yields a one-code-point String");
 
+    # A literal may span lines, and each line break in it is "\n",
+    # whether the file ends its lines "\n" or "\r\n".
+    var lines = "one
+two";
+    assert(lines == "one\ntwo", "a line break is a newline");
+
     # A String is a reference: both names see an append.
     var alias = message;
     message.append("!");
@@ -1433,6 +1439,10 @@ print("caf\u{e9}");            # café
     2 |     print("a\qb");
       |             ^~
 </code></pre>
+<p>A string literal may span lines. Each line break in it is a <code>\n</code>, whether
+the file ends its lines with <code>\n</code> or with <code>\r\n</code> (as a Windows checkout
+may), so a literal means the same on every system; write <code>\r</code> for a
+carriage return.</p>
 <h3 id="other-built-in-types"><a class="header" href="#other-built-in-types">Other built-in types</a></h3>
 <ul>
 <li><code>void</code> means "no value". It is the return type of a function that returns
@@ -7580,8 +7590,11 @@ when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</
       |     ^~
 note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
 </code></pre>
-<p>The runtime's own structs are not checked. An <code>Array</code> key matches an
-equal <code>Array</code>: both its <code>==</code> and its hash go by its elements.</p>
+<p>The runtime's own structs are not reported in your program; the
+compiler's own tests hold them to the same rule. An <code>Array</code> key matches
+an equal <code>Array</code>: both its <code>==</code> and its hash go by its elements. So does
+a slice (<code>ArrayView</code>), wherever its elements are, and a <code>simd.Vector</code> by
+its lanes.</p>
 </li>
 <li>
 <p><strong>Don't change a key's fields while it is in a map or set.</strong> The entry
@@ -36757,8 +36770,9 @@ chosen to collide.</p>
 <ul>
 <li><code>String</code> hashes by content through the concrete <code>hash&lt;String&gt;</code>
 override, so equal strings at different addresses collide.</li>
-<li><code>Array&lt;T&gt;</code> hashes by its elements' hashes, in order, as its <code>==</code>
-compares them, in O(count).</li>
+<li><code>Array&lt;T&gt;</code> and <code>ArrayView&lt;T&gt;</code> hash by their elements' hashes, in
+order, as their <code>==</code> compares them, in O(count); a slice hashes as an
+Array of the same elements.</li>
 </ul>
 <p>A struct whose keys should match by content is marked <code>[Equatable]</code>,
 which derives its <code>==</code> and its hash from its fields, or declares an <code>==</code>

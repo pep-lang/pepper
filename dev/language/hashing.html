@@ -372,8 +372,11 @@ when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</
       |     ^~
 note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
 </code></pre>
-<p>The runtime's own structs are not checked. An <code>Array</code> key matches an
-equal <code>Array</code>: both its <code>==</code> and its hash go by its elements.</p>
+<p>The runtime's own structs are not reported in your program; the
+compiler's own tests hold them to the same rule. An <code>Array</code> key matches
+an equal <code>Array</code>: both its <code>==</code> and its hash go by its elements. So does
+a slice (<code>ArrayView</code>), wherever its elements are, and a <code>simd.Vector</code> by
+its lanes.</p>
 </li>
 <li>
 <p><strong>Don't change a key's fields while it is in a map or set.</strong> The entry
