@@ -13,6 +13,14 @@ struct Temperature {
 [Deprecated("use 'boiling' instead", "boiling")]
 boiling_point(): Temperature { return boiling(); }
 
+# An enum case can be deprecated too: each use and each pattern naming it
+# warns.
+enum Scale {
+    Celsius,
+    [Deprecated("use 'Celsius' instead", "Celsius")]
+    Centigrade,
+}
+
 boiling(): Temperature {
     var t = Temperature();
     t.celsius = 100;
@@ -26,5 +34,8 @@ main(): int {
 
     var t = boiling();
     assert(t.fahrenheit() == 212, "100 C is 212 F");
+
+    var scale = Scale.Centigrade;
+    assert(scale is Centigrade, "an old case still matches");
     return 0;
 }

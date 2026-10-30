@@ -539,14 +539,16 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     if (steps.stepped("lower_with_blocks(module)")) {
         return;
     }
+    # Warnings only: uses of deprecated fields, methods and enum cases, by
+    # final type; before `lower_matches`, which turns the patterns that
+    # name cases into tests.
+    check_deprecated_members(module, state);
+    if (steps.stepped("check_deprecated_members::check_deprecated_members(module)")) {
+        return;
+    }
     # `match` arms need the final type of the value matched.
     lower_matches(module, state);
     if (steps.stepped("crate::enums::lower_matches(module)")) {
-        return;
-    }
-    # Warnings only: uses of deprecated fields and methods, by final type.
-    check_deprecated_members(module, state);
-    if (steps.stepped("check_deprecated_members::check_deprecated_members(module)")) {
         return;
     }
     # Struct keys whose `==` and `hash<T>` disagree.

@@ -1,9 +1,11 @@
 ## Uses of deprecated members: `check_deprecated_members`. A field or method
-## (an extension's included) marked `[Deprecated(...)]`, reached as
-## `x.name`, `x.name(...)`, a static `S.name(...)`, or a bare `name` inside
-## a method. Which struct a member belongs to depends on the type of `x`, so
-## this runs once every type is final; uses of top-level names are found
-## when linking. Each warning goes to `state.notes`.
+## (an extension's included), or an enum case, marked `[Deprecated(...)]`,
+## reached as `x.name`, `x.name(...)`, a static `S.name(...)`, a bare `name`
+## inside a method, or a case pattern (`match` arm or `is`). Which struct a
+## member belongs to depends on the type of `x`, so this runs once every
+## type is final, and before `lower_matches` turns patterns into tests;
+## uses of top-level names are found when linking. Each warning goes to
+## `state.notes`.
 ##
 ## A use is reported only where the source spells the member's name at the
 ## use's location. The calls sema writes are located at the token that
@@ -21,7 +23,7 @@ import [unit_decls] from "checked";
 import [location_of] from "common";
 import [method_of] from "enums";
 import [Loc] from "loc";
-import [Expression, FunctionDef, Module, SymbolRefExpression, TypeName] from "model";
+import [CastKind, Expression, FunctionDef, Module, SymbolRefExpression, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
@@ -47,6 +49,18 @@ export check_deprecated_members(module: Module, state: PassState) {
         }
         for (var m in st.generic_methods) {
             members.add(st.name, m.name, m.attributes, m.loc);
+        }
+        # An enum's cases are its members too: `E.Case`, `E.Case(...)`,
+        # and the patterns that name them.
+        if (st.enum_cases.is_value()) {
+            for (var c in st.enum_cases.value()) {
+                members.add(st.name, c.name, c.attributes, c.loc);
+            }
+        }
+    }
+    for (var e in module.enums) {
+        for (var c in e.cases) {
+            members.add(e.name, c.name, c.attributes, c.loc);
         }
     }
     for (var t in module.traits) {
@@ -174,6 +188,23 @@ struct _DeprecatedUses {
             }
             MemberRef(node) => {
                 member(node.lhs, node.name, node.loc);
+            }
+            Cast(node) => {
+                # A value enum's `E.Case` is already its value, cast to `E`
+                # at the case's name.
+                if (node.kind == CastKind.Synthesized and node.expr is IntLiteral(_) and !node.loc.is_none()) {
+                    var owner = Expression.SymbolRef(
+                        SymbolRefExpression(node.ty.to_string(), TypeName.auto(), Loc.none())
+                    );
+                    member(owner, spelled(node.loc), node.loc);
+                }
+            }
+            MatchArm(node) => {
+                for (var pattern in node.patterns) {
+                    if (!pattern.case.is_empty) {
+                        member(node.subject, pattern.case, pattern.loc);
+                    }
+                }
             }
             FunctionCall(node) => {
                 constructor(node.function, node.loc);
