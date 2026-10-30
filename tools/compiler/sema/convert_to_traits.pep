@@ -15,6 +15,7 @@
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
+import [is_sealed] from "apply_extensions";
 import [bit_width, is_float_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
 import [checked_decls, unit_decls] from "checked";
@@ -454,7 +455,7 @@ struct _TraitConversions {
                 if (condition.is_value()) {
                     var (note, at) = condition.value();
                     error = error.with_note(note, Optional<Location>.Value(location_of(at)));
-                } else {
+                } else if (!is_sealed(module, expected)) {
                     error = error.with_note(
                         $"declare it with 'extend {actual.display()} with {expected.display()}'",
                         Optional<Location>.Value(location_of(facts.value().loc))

@@ -3523,8 +3523,10 @@ struct _Builder {
         reject_implicit(e.attributes)?;
         var target = type_name_from(e.target);
         var traits = Array<TypeName>();
+        var trait_locs = Array<Loc>();
         for (var t in e.traits) {
             traits.append(type_name_from(t));
+            trait_locs.append(loc(t.span));
         }
         var restated = Array<(ulong, Bound)>();
         ulong i = 0;
@@ -3551,6 +3553,7 @@ struct _Builder {
             ExtensionDef(
                 target = target,
                 traits = traits,
+                trait_locs = trait_locs,
                 restated = restated,
                 methods = methods,
                 attributes = e.attributes,

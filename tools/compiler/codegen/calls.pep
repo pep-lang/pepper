@@ -957,7 +957,8 @@ extend Generator {
         if (!found.is_value()) {
             var dot = name.find(".");
             if (dot >= 0) {
-                var owner = name.substr_bytes(0, dot as ulong);
+                # The owner as the program spells it (`Array<int>`, `(int, int)`).
+                var owner = sema.parse_type_string(name.substr_bytes(0, dot as ulong)).display();
                 var member = name.substr_bytes(dot as ulong + 1, name.size - dot as ulong - 1);
                 return fail<llvm.Value?>($"no member named '{member}' in '{owner}'");
             }

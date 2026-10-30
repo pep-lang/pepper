@@ -168,6 +168,24 @@ finds_line_and_column() {
     expect_equal(first_column, 1);
 }
 
+# A `module.pep` in the folder above a project's is no part of the project's
+# module (#420).
+[Test]
+stops_a_projects_module_at_its_folder() {
+    var folder = TempFolder("project_module_above");
+    var root = folder.path.join(Path("p"));
+    Directory.create_all(root);
+    File.write_text(folder.path.join(Path("module.pep")), "import nowhere;\n");
+    File.write_text(root.join(Path("pep.toml")), "[package]\nname = \"p\"\n");
+    File.write_text(root.join(Path("main.pep")), "main(): int {\n    return 0;\n}\n");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    expect_false(program.value().check().is_value());
+    expect_equal(program.value().files.count, 1 as ulong);
+}
+
 [Test]
 resolves_imports_of_a_projects_dependencies() {
     var folder = TempFolder("project_dependencies");

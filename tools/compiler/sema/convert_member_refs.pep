@@ -168,7 +168,10 @@ struct _MemberRefs {
             return e;
         }
         if (node.ty.is_empty() or node.ty.is_auto()) {
-            state.report(error_at($"use of undeclared identifier '{id}' in a method of '{struct_name}'", node.loc));
+            # A closure's body is a method of a struct the program never
+            # names: say only what is undeclared (#296).
+            var where = struct_name.starts_with("__closure") ? "" : $" in a method of '{struct_name}'";
+            state.report(error_at($"use of undeclared identifier '{id}'{where}", node.loc));
         }
         return e;
     }

@@ -10,6 +10,7 @@
 import compiler.ast;
 import [demangle, Diagnostic, Fix, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
+import [is_sealed] from "apply_extensions";
 import "common";
 import [Loc] from "loc";
 import [
@@ -541,6 +542,10 @@ export struct Conformance {
         if (note.is_value()) {
             var (text, loc) = note.value();
             return error.with_note(text, Optional<Location>.Value(location_of(loc)));
+        }
+        # A sealed trait takes no conformance a program declares.
+        if (is_sealed(module, unmet.required)) {
+            return error;
         }
         # A number, `bool` or enum conforms by an extension too.
         if (is_value_type(_state, unmet.arg)) {

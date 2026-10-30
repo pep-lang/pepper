@@ -99,7 +99,10 @@ modules](#generated-modules)) and define build options its code reads.
 Every build of a program that uses the package (a dependency, or the
 project itself) compiles the script for the machine it runs on and runs it
 before it loads the program, even when it builds for another platform with
-`--target`. The script imports the runtime and its package's
+`--target`. A package found only on the import path (`-I`) runs no script,
+so its `import generated` is an error that says to make it a dependency;
+a package's tests that need its generated code build as a project that
+depends on it (a `tests/pep.toml` with `name = { path = ".." }`). The script imports the runtime and its package's
 [`[build-dependencies]`](#build-dependencies), and stands apart from the
 code it builds: building it does not load its package's root module,
 which may import what the script generates, though it may import a file
