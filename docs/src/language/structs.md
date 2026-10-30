@@ -25,7 +25,8 @@ Things to notice:
   `int x = 0;`. The initializer is optional.
 - A field without an initializer starts at its type's default: zero for
   numbers, `false` for `bool`, and null for a struct type such as `String` or
-  another struct. Reading a field through a null reference crashes the
+  another struct (an `Array` field starts out empty: an `Array` is never
+  null). Reading a field through a null reference crashes the
   program, so give struct-typed fields a value before you use them.
 - A struct with no constructor can be created with its name and empty
   parentheses, `Point()`. There is no `new` keyword at the call site.
@@ -66,6 +67,9 @@ name like a function.
   `float fahrenheit = 32.0`, is accepted too.
 - Inside the body, fields are in scope by name. Use `this.name` when a
   parameter has the same name as a field.
+- A bare `return;` leaves the constructor early, as in C++, Java and C#.
+  The call still gives the new object, as set so far; fields the body has
+  not reached keep their defaults.
 - A struct may declare several constructors with different parameter
   lists; a call picks one by its arguments, as for any
   [overloaded](overloading.md#constructors) function. At most one of them

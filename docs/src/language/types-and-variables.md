@@ -326,8 +326,9 @@ The three forms are:
 - `var name: Type = value;` puts the type after the name.
 
 A variable declared without a value starts out as zero: `0` for numbers,
-`false` for `bool`, and null for a struct type such as `String`. Give struct
-variables a value before you use them.
+`false` for `bool`, and null for a struct type such as `String`, except an
+`Array`, which starts out empty and is never null. Give struct variables a
+value before you use them.
 
 When `var` infers the type of an arithmetic expression, it takes the type the
 arithmetic produces under C's rules (see [Arithmetic follows C](#arithmetic-follows-c)):

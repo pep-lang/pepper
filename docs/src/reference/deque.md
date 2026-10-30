@@ -306,6 +306,24 @@ Advances to the next element.
 **Panics**
 - if the deque changed since the iterator was created ("Deque modified during iteration")
 
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
+
+**Returns**
+- true when there is a current element, false once past the
+
+**Panics**
+- if the deque changed since the iterator was created ("Deque
+
 #### current
 
 ```pepper

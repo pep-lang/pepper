@@ -2274,6 +2274,24 @@ bytes, as one final "code point".
 **Panics**
 - if the String was modified since the iterator was created
 
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
+
+**Returns**
+- true when positioned on a code point, false at the end
+
+**Panics**
+- if the String was modified since the
+
 #### current
 
 ```pepper

@@ -282,7 +282,23 @@ export struct DequeIterator<T> {
     ## @panics if the deque changed since the iterator was created ("Deque
     ##   modified during iteration")
     next(): bool {
-        assert(_source._version == _version, "Deque modified during iteration");
+        return _next_at(__caller_location());
+    }
+
+    ## `next()` for a `for` loop, which passes its own location so that
+    ## the panic names the loop.
+    ##
+    ## @param location the loop's location, which a panic reports
+    ## @returns true when there is a current element, false once past the
+    ## @panics if the deque changed since the iterator was created ("Deque
+    next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
+        assert(_source._version == _version, "Deque modified during iteration", location);
         if (_next > _source._count) {
             return false;
         }

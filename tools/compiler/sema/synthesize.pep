@@ -350,8 +350,13 @@ export finish(state: PassState, st: StructDef): String? {
                 items.append(_init_assignment(field, ty));
             }
         }
-        items.append_all(user_ctor);
         var this_ref = Expression.SymbolRef(SymbolRefExpression("this", st.ty.copy(), Loc.none()));
+        # A bare `return;` leaves the constructor with the object as set so
+        # far (#306).
+        for (var statement in user_ctor) {
+            _return_this(statement, this_ref);
+        }
+        items.append_all(user_ctor);
         items.append(Statement.Return(ReturnStatement(Optional<Expression>.Value(this_ref), Loc.none())));
         ctor.body = Optional<Block>.Value(Block(ctor.name, items));
     }
@@ -363,6 +368,39 @@ export finish(state: PassState, st: StructDef): String? {
     st.method_members.append(st.acquire.copy());
     st.method_members.append(st.destructor.copy());
     return Optional<String>.Empty;
+}
+
+# Gives each bare `return;` in `statement` the value `this_ref`, outside
+# closures (expressions) and static blocks, whose returns are their own.
+_return_this(statement: Statement, this_ref: Expression) {
+    match (statement) {
+        Return(value) => {
+            if (value.expr.is_empty()) {
+                value.expr = Optional<Expression>.Value(this_ref.copy());
+            }
+        }
+        Block(value) => {
+            for (var item in value.items) {
+                _return_this(item, this_ref);
+            }
+        }
+        Branch(value) => {
+            for (var item in value.if_block.items) {
+                _return_this(item, this_ref);
+            }
+            if (value.else_block.is_value()) {
+                for (var item in value.else_block.value().items) {
+                    _return_this(item, this_ref);
+                }
+            }
+        }
+        While(value) => {
+            for (var item in value.block.items) {
+                _return_this(item, this_ref);
+            }
+        }
+        else => {}
+    }
 }
 
 # `this.<field> = __init_<field>`.

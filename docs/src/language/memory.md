@@ -43,7 +43,8 @@ null (`next === __null`). A struct is not a condition by itself, so
 `if (next)` is an error unless the struct declares the truth test `!!` (see
 [Truth tests and conditions](structs.md#truth-tests-and-conditions)). For a
 value that may be absent, prefer [`Optional<T>`](optionals.md), whose type
-says so.
+says so. An `Array` is the exception: it is never null, and one that was not
+given a value is empty (see [An Array is never null](arrays.md#an-array-is-never-null)).
 
 ## When objects are destroyed
 

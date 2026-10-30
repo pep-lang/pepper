@@ -22,3 +22,20 @@ passes_the_loop_location_to_a_located_next() {
     var ran = run(process.Command(program.to_string()));
     expect_contains(ran.stderr, "main.pep:24:5: panic: stopped");
 }
+
+# Changing an `Array` in a `for` loop over it panics at the loop, in the
+# program's file, not inside the runtime's `ArrayIterator` (#319).
+[Test]
+reports_an_array_changed_in_its_loop_at_the_loop() {
+    var folder = TempFolder("for_loop_array_changed");
+    var source = folder.path.join("main.pep");
+    write_file(
+        source,
+        "main(): int {\n    var nums = [1, 2];\n    for (var x in nums) {\n        nums[0] = 5;\n    }\n    return 0;\n}\n"
+    );
+    var program = folder.path.join(Path("main" + toolchain.executable_suffix()));
+    var error = build_program(source, program, folder.path.join("build"));
+    expect_equal(error.value_or(""), "");
+    var ran = run(process.Command(program.to_string()));
+    expect_contains(ran.stderr, "main.pep:3:5: panic: Array modified during iteration");
+}
