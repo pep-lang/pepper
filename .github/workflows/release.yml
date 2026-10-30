@@ -187,7 +187,10 @@ jobs:
 
       # Install the archive just built with the install script, which then
       # builds and runs a program with it. Without a terminal to ask on,
-      # the script installs no prerequisites.
+      # the script installs no prerequisites. Not into stage 0's home,
+      # `pepper-home`: when stage 0 is a build of the same version, the
+      # uninstall would remove stage 0 too, which Windows refuses while
+      # its files are in use.
       - name: Test install.sh
         if: matrix.target != 'windows-x64'
         shell: bash
@@ -196,9 +199,9 @@ jobs:
         run: |
           set -euxo pipefail
           sh scripts/install.sh --archive "dist/pepper-$PEPPER_VERSION-$TARGET.tar.gz" \
-            --prefix "$RUNNER_TEMP/pepper-home" --no-modify-path < /dev/null
-          sh scripts/install.sh --uninstall --prefix "$RUNNER_TEMP/pepper-home"
-          test ! -e "$RUNNER_TEMP/pepper-home"
+            --prefix "$RUNNER_TEMP/install-test" --no-modify-path < /dev/null
+          sh scripts/install.sh --uninstall --prefix "$RUNNER_TEMP/install-test"
+          test ! -e "$RUNNER_TEMP/install-test"
 
       # Under Windows PowerShell 5.1, which `irm ... | iex` runs in on most
       # machines. This runner is a person's computer, so the script installs
@@ -208,7 +211,7 @@ jobs:
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          $prefix = Join-Path $env:RUNNER_TEMP 'pepper-home'
+          $prefix = Join-Path $env:RUNNER_TEMP 'install-test'
           .\scripts\install.ps1 -Archive "dist\pepper-$env:PEPPER_VERSION-windows-x64.zip" -Prefix $prefix -NoModifyPath -NoPrerequisites
           .\scripts\install.ps1 -Uninstall -Prefix $prefix
           if (Test-Path $prefix) { throw "$prefix is still there after -Uninstall" }
