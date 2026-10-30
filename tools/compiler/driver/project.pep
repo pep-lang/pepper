@@ -1,6 +1,7 @@
 ## Projects: what building in a folder with a `pep.toml` takes from it, and
 ## fetching its dependencies.
 
+import compiler.incremental;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -558,4 +559,32 @@ _git(arguments: String[], dir: Path?): Result<void, String> {
         return Result<void, String>.ok();
     }
     return Result<void, String>.err($"git {" ".join(arguments)} failed: {ran.value().stderr.trim()}");
+}
+
+## Returns the most bytes the shared cache of the runtime's checked units
+## keeps (`incremental.evict_shared`): `[cache]`'s `shared-size` in the
+## `pep.toml` of the project `entry` is in, else in the Pepper home's
+## `pep.toml`, else 5 GB. A problem in the home's file is printed, and the
+## default used.
+##
+## @param entry the file built
+## @returns the size in bytes
+export shared_cache_limit(entry: Path): ulong {
+    var project = link.find_project(entry);
+    if (project.is_value()) {
+        var manifest = link.load_manifest(project.value().join(Path(link.MANIFEST_FILE)), Array<Path>());
+        if (manifest.is_ok() and manifest.value().shared_cache_size.is_value()) {
+            return manifest.value().shared_cache_size.value();
+        }
+    }
+    var home = toolchain.find_home().root.join(Path(link.MANIFEST_FILE));
+    if (home.is_file()) {
+        var settings = link.read_home_settings(home);
+        if (settings.is_err()) {
+            File.stderr().write_all(settings.error() + "\n");
+        } else if (settings.value().is_value()) {
+            return settings.value().value();
+        }
+    }
+    return incremental.SHARED_CACHE_SIZE;
 }

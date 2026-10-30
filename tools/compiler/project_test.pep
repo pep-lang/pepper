@@ -971,3 +971,23 @@ a_workspace_shares_its_root_and_unifies_features() {
         )
     );
 }
+
+# `[cache]`'s `shared-size` (#419): a size with a unit, or bytes.
+[Test]
+reads_the_shared_cache_size() {
+    for (var (
+        written, bytes
+    ) in [("\"5GB\"", 5000000000 as ulong), ("\"500 mb\"", 500000000 as ulong), ("1024", 1024 as ulong)]) {
+        var parsed = link.parse_manifest(
+            Path("pep.toml"), $"[package]\nname = \"a\"\n[cache]\nshared-size = {written}\n"
+        );
+        expect_true(parsed.is_ok());
+        expect_equal(parsed.value().shared_cache_size.value(), bytes);
+    }
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[cache]\nshared-size = \"lots\"\n"),
+        "\"lots\": 'shared-size' must be a size, such as \"5GB\", \"500MB\" or a number of bytes"
+    );
+    expect_false(link.parse_size("5PB").is_value());
+    expect_false(link.parse_size("99999999999999999999GB").is_value());
+}

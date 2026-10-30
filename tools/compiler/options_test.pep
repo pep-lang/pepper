@@ -867,3 +867,71 @@ output_into_a_missing_folder_makes_the_folder() {
     expect_exit(failed, 1);
     expect_contains(failed.stderr, $"cannot create output folder {blocked}");
 }
+
+# The runtime's units go to the shared cache, `PEPPER_SHARED_CACHE`
+# (#419): a build in another folder, with a cache of its own, finds them
+# there and keeps none of them itself. A build that stores in the shared
+# cache keeps it within `[cache]`'s `shared-size`, removing the least
+# recently used keys (here every key of the `-O` build) unless one was
+# used in the last ten minutes.
+[Test]
+shares_the_runtimes_units_between_projects() {
+    var folder = TempFolder("options_shared_cache");
+    var shared = folder.path.join(Path("shared"));
+    for (var name in ["first", "second"]) {
+        Directory.create_all(folder.path.join(Path(name)));
+        File.write_text(folder.path.join(Path(name)).join(Path("main.pep")), _PROGRAM);
+    }
+    var arguments = ["-O", "-T", "cache", "main.pep", "-o", "main", "--build", "build", "--cache", "cache"];
+    _shared_build(folder.path.join(Path("first")), arguments, shared);
+    var second = _shared_build(folder.path.join(Path("second")), arguments, shared);
+    expect_contains(second.stderr, "cache: compilation unit runtime checked already");
+    var own = folder.path.join(Path("second")).join(Path("cache")).join(Path("v3"));
+    expect_false(own.join(Path("u")).join(Path("array")).is_directory());
+    expect_false(own.join(Path("c16")).join(Path("runtime")).is_directory());
+    var array = shared.join(Path("v3")).join(Path("u")).join(Path("array"));
+    expect_equal(_children_count(array), 1 as ulong);
+
+    # Past the size: every key is older than ten minutes, and a build at
+    # another level stores new ones, which stay.
+    _age(shared, os.SystemTime.now().unix_nanoseconds() - 3600000000000);
+    File.write_text(
+        folder.path.join(Path("second")).join(Path("pep.toml")),
+        "[package]\nname = \"second\"\nversion = \"0.1.0\"\n\n[cache]\nshared-size = \"1KB\"\n"
+    );
+    var arguments_o0 = ["-O0", "main.pep", "-o", "main", "--build", "build", "--cache", "cache"];
+    _shared_build(folder.path.join(Path("second")), arguments_o0, shared);
+    expect_equal(_children_count(array), 1 as ulong);
+    var third = _shared_build(folder.path.join(Path("first")), arguments, shared);
+    expect_false(third.stderr.contains("cache: compilation unit runtime checked already"));
+}
+
+# Builds in `folder` with `arguments` and the shared cache `shared`.
+_shared_build(folder: Path, arguments: String[], shared: Path): process.Output {
+    var command = process.Command(_compiler().to_string());
+    command.arguments(arguments).working_directory(folder).environment("PEPPER_SHARED_CACHE", shared.to_string());
+    command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    var ran = command.run();
+    expect_true(ran.is_ok() and ran.value().status.success());
+    if (ran.is_ok() and !ran.value().status.success()) {
+        print(ran.value().stdout + ran.value().stderr);
+    }
+    return ran.value();
+}
+
+# How many entries `folder` holds.
+_children_count(folder: Path): ulong {
+    var listing = Directory.open(folder);
+    return listing.is_ok() ? listing.value().entries().value().count : 0;
+}
+
+# Sets the time of `path` and of everything in it to `time`.
+_age(path: Path, time: long) {
+    var listing = Directory.open(path);
+    if (listing.is_ok()) {
+        for (var entry in listing.value().entries().value()) {
+            _age(entry.path, time);
+        }
+    }
+    path.set_modified(time);
+}

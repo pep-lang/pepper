@@ -119,7 +119,10 @@ export compile_parts(
     var plan = StringBuilder();
     plan.append($"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{trace_time}\n{mode}\n");
     if (cached.is_value()) {
-        plan.append($"{cached.value().cache.dir.parent().value()}\n{cached.value().unit}\n");
+        # A worker's cache holds the unit's keys: the shared cache for the
+        # runtime's.
+        var holding = cached.value().cache.dir_of(cached.value().unit);
+        plan.append($"{holding.parent().value()}\n{cached.value().unit}\n");
     } else {
         plan.append("\n\n");
     }

@@ -2093,6 +2093,24 @@ changed.
   folder holds only its own keys: nested, the folder of unit `process`
   held the folders of units `process/...`, and its pruning removed them
   whole, objects a build was about to link among them.
+- **The shared cache** (#419). `_share_runtime` (`driver/build.pep`)
+  hands `Cache.share` the runtime's units: the translation units and the
+  compilation units (`+<name>`) whose files are all `in_runtime`. Their
+  keys, objects and records then live in the shared cache's `v3`
+  (`shared_cache_dir`: `PEPPER_SHARED_CACHE`, else the user's cache
+  folder) instead: `Cache.dir_of(unit)` picks the folder for every path
+  (`objects`, `part`, `steered`, `record_path`), a worker's plan names
+  the folder holding its unit, and a parts list is relative to its
+  unit's folder (`dir_of`, `dir_holding`). The keys need nothing more,
+  since they already take the compiler, target and options. A `shared`
+  file marks that folder, and `_prune` and `_prune_records` keep every
+  key there; instead `evict_shared`, after the build (`main.pep`),
+  removes the least recently used keys past `[cache]`'s `shared-size`
+  (`shared_cache_limit`), skipping those used within `_GRACE`, when this
+  build stored there (`Cache.stored_shared`) or a day after its last run
+  (the `evicted` file's time). A record found there is marked used
+  (`find_checked`). `--verify-cache` keeps it off, comparing its own
+  cache's objects with a fresh one's.
 - **Steering.** A recursive struct's last release steers into the
   conformers of a trait it holds and the closures of a function type
   (`find_chains`), which are the whole program's, so a unit's code can name

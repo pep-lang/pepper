@@ -31,6 +31,8 @@ export [
     load_manifest,
     package_directory,
     parse_manifest,
+    parse_size,
+    read_home_settings,
     read_lock,
     render_manifest_errors,
     Dependency,

@@ -41,6 +41,11 @@ import "interface";
 
 ## The cache layout's version: a new layout gets a new folder.
 const _VERSION = "v3";
+## The folder of compilation units' records, named for the record
+## format's version: a new format gets a new folder.
+const _RECORDS_FOLDER = "c16";
+## The file that marks a layout's folder as the shared cache's (`Cache.share`).
+const _SHARED_MARKER = "shared";
 ## How many hexadecimal digits of a key name its folder: 80 bits, so two
 ## keys of one unit never share one.
 const _KEY_SIZE: ulong = 20;
@@ -62,9 +67,68 @@ const _REUSE_WAIT = 50;
 export struct Cache {
     ## The folder holding this layout's files (`<cache>/v3`).
     var dir: Path;
+    ## The shared cache's folder of this layout (`<shared>/v3`), which
+    ## holds the units `shared_units` names instead (`share`).
+    var shared: Path? = Optional<Path>.Empty;
+    ## The units the shared cache holds: translation units by name,
+    ## compilation units as `+<name>`.
+    var shared_units: HashSet<String> = HashSet<String>();
+    ## Whether this build put a key in the shared cache, which then may
+    ## have outgrown its size (`evict_shared`).
+    var stored_shared: bool = false;
 
     construct(dir: Path) {
         this.dir = dir.join(Path(_VERSION));
+    }
+
+    ## Keeps the keys of `units`, the runtime's, in the shared cache
+    ## `shared` (`shared_cache_dir`), which every project's builds with
+    ## this toolchain read, rather than in this one. Their keys take the
+    ## compiler, target and options, so a build reads only what it would
+    ## have made.
+    ##
+    ## @param shared the shared cache's folder
+    ## @param units the units it holds: translation units by name,
+    ##   compilation units as `+<name>`
+    share(shared: Path, units: HashSet<String>) {
+        var root = shared.join(Path(_VERSION));
+        if (Directory.create_all(root).is_err()) {
+            return;
+        }
+        # Marks the folder as shared: a prune keeps every key there
+        # (`_prune`), and `evict_shared` removes the least recently used.
+        var marker = root.join(Path(_SHARED_MARKER));
+        if (!marker.is_file() and File.write_text(marker, "").is_err()) {
+            return;
+        }
+        this.shared = Optional<Path>.Value(root);
+        shared_units = units;
+    }
+
+    ## Returns the folder of this layout that holds `unit`'s keys: the
+    ## shared cache's for a unit it holds (`share`), else this one's.
+    ##
+    ## @param unit the unit's name, a part's (`<unit>#<n>`) included
+    ## @returns the folder
+    dir_of(unit: String): Path {
+        if (!shared.is_value()) {
+            return dir;
+        }
+        var hash = unit.rfind("#");
+        var name = hash < 0 ? unit : unit.substr_bytes(0, hash as ulong);
+        return shared_units.contains(name) ? shared.value() : dir;
+    }
+
+    ## Returns the folder of this layout that holds `path`: the shared
+    ## cache's when `path` is in it, else this one's.
+    ##
+    ## @param path a path in the cache
+    ## @returns the folder
+    dir_holding(path: Path): Path {
+        if (shared.is_value() and path.to_string().starts_with(shared.value().to_string())) {
+            return shared.value();
+        }
+        return dir;
     }
 
     ## Returns the folder of the objects of `unit` built under `key`.
@@ -73,7 +137,7 @@ export struct Cache {
     ## @param key its key
     ## @returns the folder, which need not exist
     objects(unit: String, key: String): Path {
-        return dir.join(Path("u")).join(Path(_unit_folder(unit))).join(Path(_key_name(key)));
+        return dir_of(unit).join(Path("u")).join(Path(_unit_folder(unit))).join(Path(_key_name(key)));
     }
 
     ## Returns the folder of the object of part `n` of `unit` built under
@@ -218,10 +282,9 @@ export struct Cache {
     ## @returns the objects to link, or why the cache no longer holds one
     pin(objects: Path[], folder: Path): Result<Path[], String> {
         Directory.create_all(folder);
-        var root = dir.to_string();
         var pinned = Array<Path>();
         for (var object in objects) {
-            if (!object.to_string().starts_with(root)) {
+            if (!object.to_string().starts_with(dir_holding(object).to_string())) {
                 pinned.append(object);
                 continue;
             }
@@ -363,6 +426,7 @@ export struct Cache {
             }
             return Result<bool, String>.ok(false);
         }
+        stored_shared = stored_shared or dir_holding(target).to_string() != dir.to_string();
         return Result<bool, String>.ok(true);
     }
 
@@ -661,6 +725,9 @@ export default_cache(work: Path): Cache {
 ## the objects (`Cache.pin`), which a prune that stalled between its
 ## check and its rename cannot move.
 _prune(folder: Path) {
+    if (is_shared_folder(folder)) {
+        return;
+    }
     var entries = Directory.open(folder);
     if (entries.is_err()) {
         return;
@@ -1193,7 +1260,7 @@ _objects_in(cache: Cache, folder: Path, extension: String): Path[] {
             if (line.is_empty) {
                 continue;
             }
-            var object = cache.dir.join(Path(line));
+            var object = cache.dir_holding(folder).join(Path(line));
             # A part's folder is pruned on its own age: mark each as reused
             # too, or a build storing a newer key of that part removes it
             # while this one links it.
@@ -1277,7 +1344,7 @@ export write_record(
     cache: Cache
 ) {
     var listed = StringBuilder();
-    var root = cache.dir.to_string();
+    var root = cache.dir_of(unit.name).to_string();
     for (var object in parts) {
         # Relative to the cache's folder, so the cache can move.
         var path = object.to_string();
@@ -1400,4 +1467,209 @@ export numbered_objects(folder: Path, extension: String): Path[] {
         objects.append(folder.join(Path($"{objects.count}.{extension}")));
     }
     return objects;
+}
+
+## Whether `folder`, a unit's folder of keys (`<v3>/u/<unit>`, or of
+## records), is in the shared cache, whose keys `evict_shared` removes
+## rather than each unit's pruning.
+##
+## @param folder the folder
+## @returns whether its layout's folder is marked shared
+export is_shared_folder(folder: Path): bool {
+    var kind = folder.parent();
+    if (!kind.is_value()) {
+        return false;
+    }
+    var root = kind.value().parent();
+    return root.is_value() and root.value().join(Path(_SHARED_MARKER)).is_file();
+}
+
+## The environment variable naming the shared cache's folder; empty or
+## `off` turns the shared cache off.
+export const SHARED_CACHE_ENV = "PEPPER_SHARED_CACHE";
+
+## Returns the shared cache's folder, which keeps the runtime's checked
+## compilation units and objects for every project: `PEPPER_SHARED_CACHE`
+## when set (none when it is empty or `off`), else
+## `%LOCALAPPDATA%\pepper\cache` on Windows and `$XDG_CACHE_HOME/pepper`,
+## else `~/.cache/pepper`, elsewhere.
+##
+## @param windows whether the host is Windows
+## @returns the folder, or none when the shared cache is off or has no home
+export shared_cache_dir(windows: bool): Path? {
+    var named = os.environment(SHARED_CACHE_ENV);
+    if (named.is_value()) {
+        var value = named.value();
+        return value.is_empty or value == "off" ? Optional<Path>.Empty : Optional<Path>.Value(Path(value));
+    }
+    if (windows) {
+        var local = os.environment("LOCALAPPDATA");
+        return local.is_value() and !local.value().is_empty ?
+            Optional<Path>.Value(Path(local.value()).join("pepper").join("cache")) :
+            Optional<Path>.Empty;
+    }
+    var xdg = os.environment("XDG_CACHE_HOME");
+    if (xdg.is_value() and !xdg.value().is_empty) {
+        return Optional<Path>.Value(Path(xdg.value()).join("pepper"));
+    }
+    var home = os.home_directory();
+    return home.is_value() ? Optional<Path>.Value(home.value().join(".cache").join("pepper")) : Optional<Path>.Empty;
+}
+
+## The shared cache's size limit when no `pep.toml` sets one: 5 GB.
+export const SHARED_CACHE_SIZE: ulong = 5000000000;
+
+## The file in the shared cache whose time is when `evict_shared` last ran.
+const _EVICTED_MARKER = "evicted";
+## How long the shared cache goes without a check of its size when no
+## build stored in it, in nanoseconds: a day. A build that checks
+## compilation units in workers stores there without knowing.
+const _EVICT_EVERY: long = 86400000000000;
+
+## Removes the least recently used keys of the shared cache `cache.shared`
+## until it holds at most `limit` bytes: a key's folder of objects, or a
+## compilation unit's record with the files beside it. A key stored or
+## reused within the last ten minutes stays, since a build may be linking
+## it. Runs when this build stored in the shared cache, or a day after the
+## last run; else it costs one look at a file.
+##
+## @param cache the build cache
+## @param limit the most bytes the shared cache keeps, asked only when it
+##   runs
+export evict_shared(cache: Cache, limit: () => ulong) {
+    if (!cache.shared.is_value()) {
+        return;
+    }
+    var root = cache.shared.value();
+    var marker = root.join(Path(_EVICTED_MARKER));
+    var now = os.SystemTime.now().unix_nanoseconds();
+    var last = marker.metadata();
+    if (!cache.stored_shared and last.is_ok() and now - last.value().modified < _EVICT_EVERY) {
+        return;
+    }
+    File.write_text(marker, "");
+    var keys = Array<_SharedKey>();
+    ulong total = 0;
+    for (var unit in _children(root.join(Path("u")))) {
+        for (var key in _children(unit)) {
+            var metadata = key.metadata();
+            if (metadata.is_ok() and metadata.value().is_directory) {
+                var size = _size_of(key);
+                keys.append(_SharedKey(key, metadata.value().modified, size, false));
+                total += size;
+            }
+        }
+    }
+    for (var unit in _children(root.join(Path(_RECORDS_FOLDER)))) {
+        for (var file in _children(unit)) {
+            var metadata = file.metadata();
+            if (metadata.is_ok() and file.to_string().ends_with(".rec")) {
+                var size = _size_of_record(file);
+                keys.append(_SharedKey(file, metadata.value().modified, size, true));
+                total += size;
+            }
+        }
+    }
+    var most = limit();
+    if (total <= most) {
+        return;
+    }
+    keys.sort((a, b) => a.modified < b.modified ? -1 : (a.modified > b.modified ? 1 : 0));
+    for (var key in keys) {
+        if (total <= most) {
+            break;
+        }
+        # Reused since the listing, or lately: a build may be linking it.
+        var current = key.path.metadata();
+        if (!current.is_ok() or now - current.value().modified < _GRACE) {
+            continue;
+        }
+        if (key.record) {
+            _remove_record(key.path);
+        } else {
+            # Leaves whole, as `_prune` removes a key.
+            var removing = Path($"{key.path}.removing.{process.id()}");
+            if (File.rename(key.path, removing).is_err()) {
+                continue;
+            }
+            Directory.remove_all(removing);
+        }
+        total -= key.size;
+    }
+}
+
+## A key of the shared cache: its folder of objects, or its record.
+struct _SharedKey {
+    var path: Path;
+    var modified: long;
+    var size: ulong;
+    var record: bool;
+
+    construct(path: Path, modified: long, size: ulong, record: bool) {
+        this.path = path;
+        this.modified = modified;
+        this.size = size;
+        this.record = record;
+    }
+}
+
+## The entries of `folder`, or none when it cannot be listed.
+_children(folder: Path): Path[] {
+    var out = Array<Path>();
+    var listing = Directory.open(folder);
+    if (listing.is_err()) {
+        return out;
+    }
+    var entries = listing.value().entries();
+    if (entries.is_ok()) {
+        for (var entry in entries.value()) {
+            out.append(entry.path);
+        }
+    }
+    return out;
+}
+
+## The bytes of the files in `folder` and its folders.
+_size_of(folder: Path): ulong {
+    ulong total = 0;
+    for (var child in _children(folder)) {
+        var metadata = child.metadata();
+        if (!metadata.is_ok()) {
+            continue;
+        }
+        total += metadata.value().is_directory ? _size_of(child) : metadata.value().size;
+    }
+    return total;
+}
+
+## The files of the record at `path`: its own interface first, which a
+## build reads first (`find_checked`), the record last, as
+## `store_checked` writes them in reverse.
+_record_files(path: Path): Path[] {
+    var out = Array<Path>();
+    for (var suffix in [".own", ".warn", ".src", ".fields"]) {
+        out.append(Path($"{path}{suffix}"));
+    }
+    out.append(path);
+    return out;
+}
+
+## The bytes of the record at `path` and the files beside it.
+_size_of_record(path: Path): ulong {
+    ulong total = 0;
+    for (var file in _record_files(path)) {
+        var metadata = file.metadata();
+        if (metadata.is_ok()) {
+            total += metadata.value().size;
+        }
+    }
+    return total;
+}
+
+## Removes the record at `path` and the files beside it, its own
+## interface first, so a build finds all of them or no record.
+_remove_record(path: Path) {
+    for (var file in _record_files(path)) {
+        File.remove(file);
+    }
 }

@@ -35,6 +35,7 @@ import [
     numbered_objects,
     serve_compilation_units,
     safe_file_name,
+    shared_cache_dir,
     store_checked,
     warnings_in,
     write_record
@@ -46,6 +47,7 @@ import llvm;
 import os;
 import process;
 import compiler.sema;
+import toolchain;
 import "bindings";
 import "emit_static";
 import "library";
@@ -793,6 +795,7 @@ export compilation_unit_worker(program: link.Program, options: BuildOptions, dir
     var reused = Optional<Reused>.Value(nothing_reused(program, translation_units));
     clock.lap("worker reuse");
     var units = compilation_units(program, keys.base());
+    _share_runtime(options, program, translation_units, units);
     clock.lap("worker compilation units");
     var sources = program.sources();
     return serve_compilation_units(program, units, dir, clock, (k, records) => {
@@ -897,6 +900,45 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
 }
 
+# Keeps the keys of the runtime's units, those whose files are all the
+# runtime's, in the shared cache, where every project's builds find them
+# (#419); not when verifying the cache, which compares this build's
+# cache with a fresh one.
+_share_runtime(
+    options: BuildOptions, program: link.Program, translation_units: link.TranslationUnit[], units: CompilationUnit[]
+) {
+    if (!options.cache.is_value() or options.verify_cutoff or options.cache.value().shared.is_value()) {
+        return;
+    }
+    var shared = shared_cache_dir(toolchain.is_windows());
+    if (!shared.is_value()) {
+        return;
+    }
+    var in_runtime = program.in_runtime();
+    var names = HashSet<String>();
+    for (var unit in translation_units) {
+        if (_all_in(unit.files, in_runtime)) {
+            names.insert(unit.name);
+        }
+    }
+    for (var unit in units) {
+        if (_all_in(unit.files, in_runtime)) {
+            names.insert($"+{unit.name}");
+        }
+    }
+    options.cache.value().share(shared.value(), names);
+}
+
+# Whether every file of `files` is one `flags` sets.
+_all_in(files: ulong[], flags: bool[]): bool {
+    for (var file in files) {
+        if (!flags[file]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 # One try of `build`, reusing no cached objects of the units `excluded`
 # names, and printing no warnings when it names any (the try before did).
 _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): Result<Built, String> {
@@ -943,6 +985,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
         units = compilation_units(program, keys.value().base());
     }
+    _share_runtime(options, program, translation_units, units);
     # The units whose objects the cache has: sema skips their bodies. A build
     # in workers links only compilation units' objects, so it skips none.
     var reused = Optional<Reused>.Empty;
