@@ -896,6 +896,19 @@ reports_deprecated_methods_the_compiler_calls() {
     expect_equal(check_expected(folder, programs, (path: Path): String => warnings_of(path)), 0 as ulong);
 }
 
+# A deprecated enum case warns at each use: `E.Case`, `E.Case(...)`, a
+# `match` arm and an `is` test, qualified or not, and in a generic enum
+# (#295).
+[Test]
+reports_deprecated_enum_cases() {
+    var folder = TempFolder("passes_deprecated_cases");
+    var programs = [
+        "# expect: main.pep:26:19: warning: 'Crimson' is deprecated: use 'Red' instead [deprecated]\n# expect: main.pep:16:5: note: 'Crimson' declared here\n# expect: main.pep:27:19: warning: 'Tint' is deprecated: old [deprecated]\n# expect: main.pep:18:5: note: 'Tint' declared here\n# expect: main.pep:29:9: warning: 'Crimson' is deprecated: use 'Red' instead [deprecated]\n# expect: main.pep:16:5: note: 'Crimson' declared here\n# expect: main.pep:30:15: warning: 'Tint' is deprecated: old [deprecated]\n# expect: main.pep:18:5: note: 'Tint' declared here\n# expect: main.pep:33:22: warning: 'Full' is deprecated: old [deprecated]\n# expect: main.pep:23:5: note: 'Full' declared here\n# expect: main.pep:34:14: warning: 'Full' is deprecated: old [deprecated]\n# expect: main.pep:23:5: note: 'Full' declared here\nenum Color {\n    Red,\n    [Deprecated(\"use 'Red' instead\", \"Red\")]\n    Crimson,\n    [Deprecated(\"old\")]\n    Tint(level: int),\n}\nenum Box<T> {\n    Empty,\n    [Deprecated(\"old\")]\n    Full(item: T),\n}\nmain(): int {\n    var c = Color.Crimson;\n    var t = Color.Tint(3);\n    match (c) {\n        Crimson => { return 1; }\n        Color.Tint(level) => { return level; }\n        else => {}\n    }\n    var b = Box<int>.Full(1);\n    if (b is Full(x)) { return x; }\n    return 0;\n}\n",
+        "# expect: main.pep:11:19: warning: 'Centigrade' is deprecated: old [deprecated]\n# expect: main.pep:8:5: note: 'Centigrade' declared here\n# expect: main.pep:13:9: warning: 'Centigrade' is deprecated: old [deprecated]\n# expect: main.pep:8:5: note: 'Centigrade' declared here\nenum Scale {\n    Celsius,\n    [Deprecated(\"old\")]\n    Centigrade,\n}\nmain(): int {\n    var s = Scale.Centigrade;\n    match (s) {\n        Centigrade => { return 1; }\n        Celsius => { return 0; }\n    }\n}\n"
+    ];
+    expect_equal(check_expected(folder, programs, (path: Path): String => warnings_of(path)), 0 as ulong);
+}
+
 # The warnings the passes give the program rooted at `root`, with the
 # runtime, as `headlines` lists them.
 warnings_of(root: Path): String {
