@@ -2384,7 +2384,7 @@ export struct StringIterator {
     ## @panics if the String was modified since the
     ##   iterator was created
     next(): bool {
-        return next(__caller_location());
+        return _next_at(__caller_location());
     }
 
     ## `next()` for a `for` loop, which passes its own location so that
@@ -2394,6 +2394,12 @@ export struct StringIterator {
     ## @returns true when positioned on a code point, false at the end
     ## @panics if the String was modified since the
     next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
         assert(_source._version == _version, "String modified during iteration", location);
         if (_started) {
             _offset = _next_offset;

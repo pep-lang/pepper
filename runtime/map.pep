@@ -785,7 +785,7 @@ export struct SortedMapIterator<K, V> {
     ## @returns true when there is a current entry, false once every entry was visited
     ## @panics if an entry was added or removed since the iterator was created ("Map modified during iteration")
     next(): bool {
-        return next(__caller_location());
+        return _next_at(__caller_location());
     }
 
     ## `next()` for a `for` loop, which passes its own location so that
@@ -795,6 +795,12 @@ export struct SortedMapIterator<K, V> {
     ## @returns true when there is a current entry, false once every entry was visited
     ## @panics if an entry was added or removed since the iterator was created ("Map modified during iteration")
     next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
         assert(_source._tree._version == _version, "Map modified during iteration", location);
         if (!_started) {
             _started = true;
@@ -1042,7 +1048,7 @@ export struct SortedSetIterator<K> {
     ## @returns true when there is a current member, false once every member was visited
     ## @panics if a member was added or removed since the iterator was created ("Set modified during iteration")
     next(): bool {
-        return next(__caller_location());
+        return _next_at(__caller_location());
     }
 
     ## `next()` for a `for` loop, which passes its own location so that
@@ -1052,6 +1058,12 @@ export struct SortedSetIterator<K> {
     ## @returns true when there is a current member, false once every member was visited
     ## @panics if a member was added or removed since the iterator was created ("Set modified during iteration")
     next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
         assert(_source._tree._version == _version, "Set modified during iteration", location);
         if (!_started) {
             _started = true;

@@ -1478,7 +1478,7 @@ export struct ArrayIterator<T> {
     ## @returns true when there is a current element, false once past the end
     ## @panics if the Array was modified since the iterator was created ("Array modified during iteration")
     next(): bool {
-        return next(__caller_location());
+        return _next_at(__caller_location());
     }
 
     ## `next()` for a `for` loop, which passes its own location so that
@@ -1488,6 +1488,12 @@ export struct ArrayIterator<T> {
     ## @returns true when there is a current element, false once past the end
     ## @panics if the Array was modified since the iterator was created ("Array modified during iteration")
     next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
         assert(_source._version == _version, "Array modified during iteration", location);
         if (_started) {
             if (_index < _source._size) {
@@ -1873,7 +1879,7 @@ export struct ArrayViewIterator<T> {
     ## @returns true when there is a current element, false once past the end
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     next(): bool {
-        return next(__caller_location());
+        return _next_at(__caller_location());
     }
 
     ## `next()` for a `for` loop, which passes its own location so that
@@ -1883,6 +1889,12 @@ export struct ArrayViewIterator<T> {
     ## @returns true when there is a current element, false once past the end
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
         _slice._check(location);
         if (!_started) {
             _started = true;
@@ -2294,7 +2306,7 @@ export struct ArrayChunks<T> {
     ## @returns true when there is a current run, false once past the end
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     next(): bool {
-        return next(__caller_location());
+        return _next_at(__caller_location());
     }
 
     ## `next()` for a `for` loop, which passes its own location so that
@@ -2304,6 +2316,12 @@ export struct ArrayChunks<T> {
     ## @returns true when there is a current run, false once past the end
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
         _slice._check(location);
         if (!_started) {
             _started = true;
