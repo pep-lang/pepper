@@ -747,8 +747,9 @@ first, a tuple type too: <code>(String, int)[] sizes = [];</code>.</li>
 <li><code>var name: Type = value;</code> puts the type after the name.</li>
 </ul>
 <p>A variable declared without a value starts out as zero: <code>0</code> for numbers,
-<code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code>. Give struct
-variables a value before you use them.</p>
+<code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code>, except an
+<code>Array</code>, which starts out empty and is never null. Give struct variables a
+value before you use them.</p>
 <p>When <code>var</code> infers the type of an arithmetic expression, it takes the type the
 arithmetic produces under C's rules (see <a href="#arithmetic-follows-c">Arithmetic follows C</a>):
 <code>var m = 1 + 0.5;</code> is a <code>double</code> holding 1.5, and with <code>u8 small = 250;</code>,

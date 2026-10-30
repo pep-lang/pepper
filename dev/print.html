@@ -1530,8 +1530,9 @@ first, a tuple type too: <code>(String, int)[] sizes = [];</code>.</li>
 <li><code>var name: Type = value;</code> puts the type after the name.</li>
 </ul>
 <p>A variable declared without a value starts out as zero: <code>0</code> for numbers,
-<code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code>. Give struct
-variables a value before you use them.</p>
+<code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code>, except an
+<code>Array</code>, which starts out empty and is never null. Give struct variables a
+value before you use them.</p>
 <p>When <code>var</code> infers the type of an arithmetic expression, it takes the type the
 arithmetic produces under C's rules (see <a href="language/types-and-variables.html#arithmetic-follows-c">Arithmetic follows C</a>):
 <code>var m = 1 + 0.5;</code> is a <code>double</code> holding 1.5, and with <code>u8 small = 250;</code>,
@@ -5281,6 +5282,18 @@ range, so even growing the array (which moves the buffer) cannot leave
 it pointing at freed memory. The runs <code>chunks</code> and <code>windows</code> give are
 slices too, and follow the same rules.</li>
 </ul>
+<h2 id="an-array-is-never-null"><a class="header" href="#an-array-is-never-null">An Array is never null</a></h2>
+<p>Unlike other struct types, an <code>Array</code> is never null. A variable, field or
+element of an array type that was not given a value holds an empty array,
+and so does <code>__default&lt;u8[]&gt;()</code>. Storing one (<code>append</code>, <code>resize</code>, an
+assignment) stores an array, so comparing with <code>__null</code> says nothing
+useful:</p>
+<pre><code class="language-pepper">u8[] none;
+var buckets = Array&lt;u8[]&gt;();
+buckets.resize(4, none);   # one empty array, four times; no nulls
+</code></pre>
+<p>When "no array" must differ from "an empty array", say so in the type with
+<a href="language/optionals.html"><code>Optional</code></a>: <code>u8[]?</code>, empty until it is given an array.</p>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
@@ -6269,7 +6282,8 @@ main(): int {
 <code>int x = 0;</code>. The initializer is optional.</li>
 <li>A field without an initializer starts at its type's default: zero for
 numbers, <code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code> or
-another struct. Reading a field through a null reference crashes the
+another struct (an <code>Array</code> field starts out empty: an <code>Array</code> is never
+null). Reading a field through a null reference crashes the
 program, so give struct-typed fields a value before you use them.</li>
 <li>A struct with no constructor can be created with its name and empty
 parentheses, <code>Point()</code>. There is no <code>new</code> keyword at the call site.</li>
@@ -10482,7 +10496,8 @@ null (<code>next === __null</code>). A struct is not a condition by itself, so
 <code>if (next)</code> is an error unless the struct declares the truth test <code>!!</code> (see
 <a href="language/structs.html#truth-tests-and-conditions">Truth tests and conditions</a>). For a
 value that may be absent, prefer <a href="language/optionals.html"><code>Optional&lt;T&gt;</code></a>, whose type
-says so.</p>
+says so. An <code>Array</code> is the exception: it is never null, and one that was not
+given a value is empty (see <a href="language/arrays.html#an-array-is-never-null">An Array is never null</a>).</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an

@@ -254,7 +254,8 @@ null (<code>next === __null</code>). A struct is not a condition by itself, so
 <code>if (next)</code> is an error unless the struct declares the truth test <code>!!</code> (see
 <a href="structs.html#truth-tests-and-conditions">Truth tests and conditions</a>). For a
 value that may be absent, prefer <a href="optionals.html"><code>Optional&lt;T&gt;</code></a>, whose type
-says so.</p>
+says so. An <code>Array</code> is the exception: it is never null, and one that was not
+given a value is empty (see <a href="arrays.html#an-array-is-never-null">An Array is never null</a>).</p>
 <h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
 <p>A reference is held by whatever stores it: a local variable, a parameter, a
 field, an element of a container, or a temporary value in the middle of an

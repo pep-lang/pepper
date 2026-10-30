@@ -343,6 +343,18 @@ range, so even growing the array (which moves the buffer) cannot leave
 it pointing at freed memory. The runs <code>chunks</code> and <code>windows</code> give are
 slices too, and follow the same rules.</li>
 </ul>
+<h2 id="an-array-is-never-null"><a class="header" href="#an-array-is-never-null">An Array is never null</a></h2>
+<p>Unlike other struct types, an <code>Array</code> is never null. A variable, field or
+element of an array type that was not given a value holds an empty array,
+and so does <code>__default&lt;u8[]&gt;()</code>. Storing one (<code>append</code>, <code>resize</code>, an
+assignment) stores an array, so comparing with <code>__null</code> says nothing
+useful:</p>
+<pre><code class="language-pepper">u8[] none;
+var buckets = Array&lt;u8[]&gt;();
+buckets.resize(4, none);   # one empty array, four times; no nulls
+</code></pre>
+<p>When "no array" must differ from "an empty array", say so in the type with
+<a href="optionals.html"><code>Optional</code></a>: <code>u8[]?</code>, empty until it is given an array.</p>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its

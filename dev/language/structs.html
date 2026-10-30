@@ -235,7 +235,8 @@ main(): int {
 <code>int x = 0;</code>. The initializer is optional.</li>
 <li>A field without an initializer starts at its type's default: zero for
 numbers, <code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code> or
-another struct. Reading a field through a null reference crashes the
+another struct (an <code>Array</code> field starts out empty: an <code>Array</code> is never
+null). Reading a field through a null reference crashes the
 program, so give struct-typed fields a value before you use them.</li>
 <li>A struct with no constructor can be created with its name and empty
 parentheses, <code>Point()</code>. There is no <code>new</code> keyword at the call site.</li>
