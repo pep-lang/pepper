@@ -24,7 +24,7 @@ import compiler.ast;
 import [
     Attribute, Declaration, Expression, FunctionDecl, Module, parse_type_text, Pattern, Span, TypeName
 ] from compiler.ast;
-import [Diagnostic, Location] from compiler.diagnostic;
+import [Diagnostic, Location, shown_path] from compiler.diagnostic;
 import io;
 import [Path] from io;
 import "names" as names;
@@ -712,7 +712,7 @@ struct _Linker {
         _error(
             file,
             span,
-            $"'{name}' is declared in {file_names[from.value()[0]]}, another file of this module, which this file does not import; add an import for it"
+            $"'{name}' is declared in {shown_path(file_names[from.value()[0]])}, another file of this module, which this file does not import; add an import for it"
         );
         return true;
     }
@@ -2500,7 +2500,7 @@ struct _Rewriter {
     _qualified(target_file: ulong, q: String, name: String, span: Span, value: bool): String? {
         var c = linker.exports[target_file].try_get(name);
         if (!c.is_value()) {
-            _error(span, $"'{name}' is not exported by '{q}' ({linker.file_names[target_file]})");
+            _error(span, $"'{name}' is not exported by '{q}' ({shown_path(linker.file_names[target_file])})");
             return Optional<String>.Empty;
         }
         return _denote($"{q}.{name}", c.value(), span, value, true);

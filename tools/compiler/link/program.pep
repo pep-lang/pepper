@@ -5,7 +5,7 @@
 
 import compiler.ast;
 import [BUILT_IN_ATTRIBUTE, Expression, Span] from compiler.ast;
-import [Diagnostic, Fix, Location, render_all, SourceText] from compiler.diagnostic;
+import [Diagnostic, Fix, Location, render_all, shown_path, SourceText] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
 import json;
@@ -729,7 +729,7 @@ _describe_paths(paths: Path[]): String {
     }
     var parts = Array<String>();
     for (var p in paths) {
-        parts.append(p.to_string());
+        parts.append(shown_path(p.to_string()));
     }
     return ", ".join(parts);
 }
