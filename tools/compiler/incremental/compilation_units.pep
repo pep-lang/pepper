@@ -19,13 +19,12 @@ import [Diagnostic] from compiler.diagnostic;
 import digest;
 import [Directory, File, Path] from io;
 import compiler.link;
+import os;
 import process;
 import compiler.sema;
 import "cache";
 import [file_names] from "interface";
 
-## The record format's version: a new format gets a new folder.
-const _RECORDS_FOLDER = "c16";
 ## How many keys' records each compilation unit keeps.
 const _KEEP_RECORDS = 4;
 
@@ -656,7 +655,7 @@ _compare(a: String, b: String): int {
 ## @param unit the compilation unit
 ## @returns the record's path, which need not exist
 export record_path(cache: Cache, unit: CompilationUnit): Path {
-    var folder = cache.dir.join(Path(_RECORDS_FOLDER)).join(Path(_unit_folder(unit.name)));
+    var folder = cache.dir_of($"+{unit.name}").join(Path(_RECORDS_FOLDER)).join(Path(_unit_folder(unit.name)));
     return folder.join(Path($"{_key_name(unit.key)}.rec"));
 }
 
@@ -749,6 +748,10 @@ export find_checked(cache: Cache, program: link.Program, unit: CompilationUnit):
     var bytes = File.read_bytes(path);
     if (bytes.is_err()) {
         return Optional<(u8[], String, String)>.Empty;
+    }
+    if (cache.dir_holding(path).to_string() != cache.dir.to_string()) {
+        # The shared cache removes the least recently used records first.
+        path.set_modified(os.SystemTime.now().unix_nanoseconds());
     }
     var found = (bytes.value(), own.value(), warned.value());
     return Optional<(u8[], String, String)>.Value(found);
@@ -881,6 +884,11 @@ _record_slots(program: link.Program): HashMap<String, uint> {
 
 # Keeps the newest `_KEEP_RECORDS` records in `folder`.
 _prune_records(folder: Path) {
+    # The shared cache removes the least recently used instead
+    # (`evict_shared`).
+    if (is_shared_folder(folder)) {
+        return;
+    }
     var listing = Directory.open(folder);
     if (listing.is_err()) {
         return;

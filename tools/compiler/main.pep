@@ -854,6 +854,10 @@ _main(args: String[]): int {
             }
             return 1;
         }
+        if (options.cache.is_value()) {
+            var built_entry = entry;
+            incremental.evict_shared(options.cache.value(), () => driver.shared_cache_limit(built_entry));
+        }
         if (verifying and options.cache.is_value()) {
             # The program again, as the build loaded it.
             var reloaded = link.load_program(entry, setup);

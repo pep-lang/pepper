@@ -777,6 +777,31 @@ project folder can sit deep without the cache passing Windows'
 version (`v3`); a build ignores the others, so an old version's folder can
 be deleted.
 
+### The shared cache
+
+The runtime's compilation units and objects are the same in every project
+built with one toolchain, so a build keeps them in a cache shared by every
+project instead of in its own: the first build of a new checkout reads
+them there rather than checking and compiling the runtime again. A file
+is the runtime's when it is the prelude's, a file the prelude reaches, or
+a file in the runtime's folder.
+
+The shared cache is in `PEPPER_SHARED_CACHE` when that is set, else
+`%LOCALAPPDATA%\pepper\cache` on Windows and `$XDG_CACHE_HOME/pepper`,
+else `~/.cache/pepper`, elsewhere. Setting `PEPPER_SHARED_CACHE` to
+`off` or to nothing turns it off, and the build keeps the runtime's units
+in its own cache, as `--verify-cache` and `--no-cache` builds always do.
+Each key there holds the compiler build (its path, size and time), the
+target, CPU, optimization level, runtime checks and build options, as in
+the build's own cache, so a build reads only what it would have made.
+
+The shared cache keeps at most 5 GB, or what `[cache]`'s `shared-size`
+sets in the project's `pep.toml` or in the Pepper home's (see
+[Projects](projects.md#cache)). A build that stored in it, or that runs a
+day after the last check, removes the least recently used keys until it
+fits; a key used in the last ten minutes stays, since another build may be
+linking it. Deleting the folder is always safe.
+
 ### `--verify-cache`, `--no-verify-cache`
 
 `--verify-cache` checks the cache, for testing the compiler: every file the
@@ -860,6 +885,7 @@ rerun by hand (the build prints it).
 | `ANDROID_HOME`, `ANDROID_SDK_ROOT` | The Android SDK, whose newest `ndk/<version>` links an Android `--target` when nothing above names an NDK | `--sysroot` |
 | `WASI_SDK_PATH` | The wasi-sdk for linking with `--target wasm32-wasip1`, when neither `--sysroot` nor `PEPPER_SYSROOT_WASM32_WASIP1` names one | `--sysroot` |
 | `PEPPER_CACHE_DIR` | The build cache folder | `--cache`, `--no-cache` |
+| `PEPPER_SHARED_CACHE` | The [shared cache](#the-shared-cache) of the runtime's units; empty or `off` turns it off | `--no-cache`, `--verify-cache` |
 | `PEPPER_CACHE_VERIFY` | Anything but empty or `0` checks the build cache | `--no-verify-cache` |
 | `PEPPER_LOCKED` | Anything but empty or `0`: the same as `--locked` | |
 | `PEPPER_OFFLINE` | Anything but empty or `0`: the same as `--offline` | |
