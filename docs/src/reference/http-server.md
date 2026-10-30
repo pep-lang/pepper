@@ -154,8 +154,9 @@ serve_each(make: shared () => (Request) => Response)
 ```
 
 Like `serve`, but builds a handler for each connection: the
-connection's task calls `make` once, when the connection starts, and
-answers every request on that connection with the handler it returns.
+connection's task calls `make` once, when the connection is set up
+(after the TLS handshake, for HTTPS), and answers every request on
+that connection with the handler it returns.
 So the handler can keep per-connection state, or hold something that
 is not thread-safe, since it stays on the connection's worker.
 
