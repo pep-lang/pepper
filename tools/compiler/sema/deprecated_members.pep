@@ -50,10 +50,8 @@ export check_deprecated_members(module: Module, state: PassState) {
         for (var m in st.generic_methods) {
             members.add(st.name, m.name, m.attributes, m.loc);
         }
-    }
-    # An enum's cases are its members too: `E.Case`, `E.Case(...)`, and
-    # the patterns that name them.
-    for (var st in module.structs) {
+        # An enum's cases are its members too: `E.Case`, `E.Case(...)`,
+        # and the patterns that name them.
         if (st.enum_cases.is_value()) {
             for (var c in st.enum_cases.value()) {
                 members.add(st.name, c.name, c.attributes, c.loc);
