@@ -6211,7 +6211,9 @@ for (var x in nums) {
 <p>Every method that changes an <code>Array</code> counts, including storing an element with
 <code>nums[i] = v</code>. For a <code>String</code>, <code>append</code> and <code>grow</code> count, and the message is
 <code>String modified during iteration</code>. The check happens on the iterator's next
-step, so modifying the collection after the loop is finished is fine.</p>
+step, so modifying the collection after the loop is finished is fine. The
+panic names the <code>for</code> loop's line (<code>main.pep:3:5: panic: Array modified during iteration</code>). The maps, sets, <code>Deque</code> and array slices check the same
+way, each with its own message.</p>
 <p>To change elements as you go, loop over an index with <code>while</code> and store through
 it, or collect the changes in a second array and apply them after the loop.</p>
 <h2 id="loop-scope"><a class="header" href="#loop-scope">Loop scope</a></h2>
@@ -30502,6 +30504,23 @@ bytes, as one final "code point".</p>
 <ul>
 <li>if the String was modified since the iterator was created</li>
 </ul>
+<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when positioned on a code point, false at the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the String was modified since the</li>
+</ul>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
 <pre><code class="language-pepper">current(): String
 </code></pre>
@@ -34922,7 +34941,7 @@ reached.</p>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
 <h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
-<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next number: <code>start</code> on the first call, then one
@@ -36101,12 +36120,29 @@ while (it.next()) {
 }
 </code></pre>
 <h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
-<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
 <p>The first call moves to index 0. Once it returns false it keeps
 returning false.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current element, false once past the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the iterator was created ("Array modified during iteration")</li>
+</ul>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current element, false once past the end</li>
@@ -36507,10 +36543,27 @@ by <code>ArrayView.iterate()</code> and driven by <code>for (var x in slice)</co
 <li><code>ArrayView.iterate</code></li>
 </ul>
 <h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
-<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current element, false once past the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current element, false once past the end</li>
@@ -36585,10 +36638,27 @@ the last run may be shorter (chunks); otherwise every run is whole
 <li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
 </ul>
 <h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
-<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next run.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current run, false once past the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current run, false once past the end</li>
@@ -37169,10 +37239,27 @@ entry after the iterator was created makes its next <code>next()</code> or
 <li><code>source</code> — the map to iterate</li>
 </ul>
 <h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
-<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created ("HashMap modified during iteration")</li>
+</ul>
+<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current entry, false once every entry was visited</li>
@@ -37220,10 +37307,27 @@ panic.</p>
 <li><code>source</code> — the set to iterate</li>
 </ul>
 <h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
-<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next member.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current member, false once every member was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created ("HashSet modified during iteration")</li>
+</ul>
+<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current member, false once every member was visited</li>
@@ -37623,10 +37727,27 @@ Internal: call <code>Map.iterate</code>, <code>reversed</code> or <code>range</c
 <li><code>reverse</code> — whether to step in descending key order</li>
 </ul>
 <h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
-<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
+<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created ("Map modified during iteration")</li>
+</ul>
+<h4 id="next-14"><a class="header" href="#next-14">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current entry, false once every entry was visited</li>
@@ -37860,10 +37981,27 @@ Internal: call <code>Set.iterate</code>, <code>reversed</code> or <code>range</c
 <li><code>reverse</code> — whether to step in descending order</li>
 </ul>
 <h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
-<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<h4 id="next-15"><a class="header" href="#next-15">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next member.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current member, false once every member was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a member was added or removed since the iterator was created ("Set modified during iteration")</li>
+</ul>
+<h4 id="next-16"><a class="header" href="#next-16">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current member, false once every member was visited</li>
@@ -38091,10 +38229,27 @@ entry after the iterator was created makes its next <code>next()</code> or
 <li><code>source</code> — the map to iterate</li>
 </ul>
 <h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
-<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
+<h4 id="next-17"><a class="header" href="#next-17">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next entry.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current entry, false once every entry was visited</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an entry was added or removed since the iterator was created ("OrderedMap modified during iteration")</li>
+</ul>
+<h4 id="next-18"><a class="header" href="#next-18">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>true when there is a current entry, false once every entry was visited</li>
@@ -38436,7 +38591,7 @@ returned by <code>BitSet.iterate()</code> and driven by <code>for (var n in set)
 <li><code>source</code> — the set to iterate</li>
 </ul>
 <h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
-<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
+<h4 id="next-19"><a class="header" href="#next-19">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next larger member.</p>
@@ -38681,7 +38836,7 @@ returned by <code>Deque.iterate()</code> and driven by <code>for (var x in d)</c
 <li><code>source</code> — the deque to iterate</li>
 </ul>
 <h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
-<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
+<h4 id="next-20"><a class="header" href="#next-20">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -38692,6 +38847,23 @@ returned by <code>Deque.iterate()</code> and driven by <code>for (var x in d)</c
 <p><strong>Panics</strong></p>
 <ul>
 <li>if the deque changed since the iterator was created ("Deque modified during iteration")</li>
+</ul>
+<h4 id="next-21"><a class="header" href="#next-21">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current element, false once past the</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the deque changed since the iterator was created ("Deque</li>
 </ul>
 <h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
 <pre><code class="language-pepper">current(): T
@@ -38898,7 +39070,7 @@ main(): int {
 }
 </code></pre>
 <h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
-<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
+<h4 id="next-22"><a class="header" href="#next-22">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -39642,7 +39814,7 @@ of the source iterator.</p>
 <li><code>count</code> — the most elements to yield</li>
 </ul>
 <h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
-<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
+<h4 id="next-23"><a class="header" href="#next-23">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, unless <code>count</code> elements were yielded.</p>
@@ -39683,7 +39855,7 @@ after the first <code>count</code>.</p>
 <li><code>count</code> — how many elements to pass over</li>
 </ul>
 <h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
-<h4 id="next-14"><a class="header" href="#next-14">next</a></h4>
+<h4 id="next-24"><a class="header" href="#next-24">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, passing over the first <code>count</code> on the
@@ -39724,7 +39896,7 @@ those of another.</p>
 <li><code>second</code> — the iterator whose elements follow</li>
 </ul>
 <h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
-<h4 id="next-15"><a class="header" href="#next-15">next</a></h4>
+<h4 id="next-25"><a class="header" href="#next-25">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element of the first iterator, or once it has
@@ -39765,7 +39937,7 @@ the transform function returns for each source element, in order.</p>
 <li><code>source</code> — the source iterator, mapped to an iterator per element</li>
 </ul>
 <h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
-<h4 id="next-16"><a class="header" href="#next-16">next</a></h4>
+<h4 id="next-26"><a class="header" href="#next-26">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element of the current inner iterator, moving to
@@ -39811,7 +39983,7 @@ accepts.</p>
 <li><code>keep</code> — the test the leading elements pass</li>
 </ul>
 <h3 id="methods-63"><a class="header" href="#methods-63">Methods</a></h3>
-<h4 id="next-17"><a class="header" href="#next-17">next</a></h4>
+<h4 id="next-27"><a class="header" href="#next-27">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, unless it or an earlier one failed the
@@ -39853,7 +40025,7 @@ iterator from the first one the test function rejects.</p>
 <li><code>skip</code> — the test the leading elements to pass over meet</li>
 </ul>
 <h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
-<h4 id="next-18"><a class="header" href="#next-18">next</a></h4>
+<h4 id="next-28"><a class="header" href="#next-28">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, passing over the leading elements the
@@ -39899,7 +40071,7 @@ iterator, then every <code>step</code>th one after it.</p>
 <li>if <code>step</code> is 0 ("step_by step must be positive")</li>
 </ul>
 <h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
-<h4 id="next-19"><a class="header" href="#next-19">next</a></h4>
+<h4 id="next-29"><a class="header" href="#next-29">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the first element, then <code>step</code> elements at a time.</p>
@@ -39938,7 +40110,7 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <li><code>source</code> — the iterator to yield from</li>
 </ul>
 <h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
-<h4 id="next-20"><a class="header" href="#next-20">next</a></h4>
+<h4 id="next-30"><a class="header" href="#next-30">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element: the one <code>peek()</code> returned, if any.</p>
@@ -39996,7 +40168,7 @@ iterator in arrays of up to <code>size</code>.</p>
 <li>if <code>size</code> is 0 ("chunks size must be positive")</li>
 </ul>
 <h3 id="methods-67"><a class="header" href="#methods-67">Methods</a></h3>
-<h4 id="next-21"><a class="header" href="#next-21">next</a></h4>
+<h4 id="next-31"><a class="header" href="#next-31">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Fills a new array with up to <code>size</code> more elements.</p>
@@ -40041,7 +40213,7 @@ elements of the source iterator.</p>
 <li>if <code>size</code> is 0 ("windows size must be positive")</li>
 </ul>
 <h3 id="methods-68"><a class="header" href="#methods-68">Methods</a></h3>
-<h4 id="next-22"><a class="header" href="#next-22">next</a></h4>
+<h4 id="next-32"><a class="header" href="#next-32">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Makes a new run: the last one's elements after its first, then
@@ -40083,7 +40255,7 @@ passed through the transform function.</p>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
 <h3 id="methods-69"><a class="header" href="#methods-69">Methods</a></h3>
-<h4 id="next-23"><a class="header" href="#next-23">next</a></h4>
+<h4 id="next-33"><a class="header" href="#next-33">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
@@ -40123,7 +40295,7 @@ iterator that the test function accepts.</p>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
 <h3 id="methods-70"><a class="header" href="#methods-70">Methods</a></h3>
-<h4 id="next-24"><a class="header" href="#next-24">next</a></h4>
+<h4 id="next-34"><a class="header" href="#next-34">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element that the test function accepts.</p>
@@ -40163,7 +40335,7 @@ iterator, paired with its position.</p>
 <li><code>source</code> — the iterator to number</li>
 </ul>
 <h3 id="methods-71"><a class="header" href="#methods-71">Methods</a></h3>
-<h4 id="next-25"><a class="header" href="#next-25">next</a></h4>
+<h4 id="next-35"><a class="header" href="#next-35">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -40205,7 +40377,7 @@ paired in step, until either runs out.</p>
 <li><code>second</code> — the iterator giving the second half of each pair</li>
 </ul>
 <h3 id="methods-72"><a class="header" href="#methods-72">Methods</a></h3>
-<h4 id="next-26"><a class="header" href="#next-26">next</a></h4>
+<h4 id="next-36"><a class="header" href="#next-36">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
@@ -42060,7 +42232,7 @@ while (it.next()) {
 <li><code>source</code> — the open stream to read</li>
 </ul>
 <h3 id="methods-84"><a class="header" href="#methods-84">Methods</a></h3>
-<h4 id="next-27"><a class="header" href="#next-27">next</a></h4>
+<h4 id="next-37"><a class="header" href="#next-37">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next line.</p>
@@ -42101,7 +42273,7 @@ while (it.next()) {
 <li><code>size</code> — the most bytes in one chunk</li>
 </ul>
 <h3 id="methods-85"><a class="header" href="#methods-85">Methods</a></h3>
-<h4 id="next-28"><a class="header" href="#next-28">next</a></h4>
+<h4 id="next-38"><a class="header" href="#next-38">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next chunk.</p>
@@ -44416,7 +44588,7 @@ is opened until the first <code>next()</code>.</p>
 <li><code>path</code> — the directory to list</li>
 </ul>
 <h3 id="methods-91"><a class="header" href="#methods-91">Methods</a></h3>
-<h4 id="next-29"><a class="header" href="#next-29">next</a></h4>
+<h4 id="next-39"><a class="header" href="#next-39">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next entry, opening the listing on the first call.</p>
@@ -45216,7 +45388,7 @@ the listener stays open while the iterator lives.</p>
 <li><code>listener</code> — the listener to accept on</li>
 </ul>
 <h3 id="methods-96"><a class="header" href="#methods-96">Methods</a></h3>
-<h4 id="next-30"><a class="header" href="#next-30">next</a></h4>
+<h4 id="next-40"><a class="header" href="#next-40">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next connection.</p>
@@ -48446,7 +48618,7 @@ does the same.</p>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
 <h3 id="methods-124"><a class="header" href="#methods-124">Methods</a></h3>
-<h4 id="next-31"><a class="header" href="#next-31">next</a></h4>
+<h4 id="next-41"><a class="header" href="#next-41">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
@@ -55151,7 +55323,7 @@ when it did not take part.</p>
 <li><code>text</code> — the text to search</li>
 </ul>
 <h3 id="methods-153"><a class="header" href="#methods-153">Methods</a></h3>
-<h4 id="next-32"><a class="header" href="#next-32">next</a></h4>
+<h4 id="next-42"><a class="header" href="#next-42">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next match.</p>

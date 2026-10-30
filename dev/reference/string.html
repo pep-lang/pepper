@@ -2051,6 +2051,23 @@ bytes, as one final "code point".</p>
 <ul>
 <li>if the String was modified since the iterator was created</li>
 </ul>
+<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<pre><code class="language-pepper">next(location: __ptr&lt;char&gt;): bool
+</code></pre>
+<p><code>next()</code> for a <code>for</code> loop, which passes its own location so that
+the panic names the loop.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>location</code> — the loop's location, which a panic reports</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when positioned on a code point, false at the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the String was modified since the</li>
+</ul>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
 <pre><code class="language-pepper">current(): String
 </code></pre>
