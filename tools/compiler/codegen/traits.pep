@@ -343,7 +343,13 @@ extend Generator {
                     return Result<llvm.Value>.ok(as_bool(called));
                 });
             }
-            var result = call_function(method, [a, b])?;
+            var receiver = a;
+            if (values.contains(ty)) {
+                # A value struct's method takes its storage's address.
+                receiver = entry_alloca(a.value_type(), "compared");
+                builder.store(a, receiver);
+            }
+            var result = call_function(method, [receiver, b])?;
             return Result<llvm.Value>.ok(as_bool(result));
         }
         var x = a;
@@ -415,7 +421,12 @@ extend Generator {
             var own_hash = hash_overrides.contains($"hash<{element}>");
             var derived = $"{element}.{sema.HASH_METHOD}";
             llvm.Value element_hash;
-            if (tuples.contains(element) or (values.contains(element) and !own_hash)) {
+            if (values.contains(element) and !own_hash and functions.contains(derived)) {
+                # A value struct's `__hash` takes its storage's address.
+                var slot = entry_alloca(item.value_type(), "hashed");
+                builder.store(item, slot);
+                element_hash = call_function(derived, [slot])?;
+            } else if (tuples.contains(element) or (values.contains(element) and !own_hash)) {
                 element_hash = tuple_hash(element, item)?;
             } else if (functions.contains(derived)) {
                 # An `[Equatable]` struct hashes its fields; null as 0.

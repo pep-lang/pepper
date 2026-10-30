@@ -677,6 +677,17 @@ extend Generator {
         var lowered = types.get(ty_name);
         bool is_reference = (lowered.is_value() and is_object(lowered.value())) or is_trait_name(ty_name);
         var derived = $"{ty_name}.{_HASH_METHOD}";
+        if (functions.contains(derived) and values.contains(ty_name)) {
+            # A value struct's `__hash` takes its storage's address, as any
+            # of its methods does.
+            var arg_temp = owned_temp_type(arg);
+            var (address, temporary) = value_address(arg)?;
+            var h = call_function(derived, [address])?;
+            if (arg_temp.is_value() and temporary.is_value()) {
+                release_temp(arg_temp.value(), builder.load(lowered.value(), temporary.value(), "hashed"))?;
+            }
+            return Result<llvm.Value>.ok(h);
+        }
         if (functions.contains(derived)) {
             # An `[Equatable]` struct hashes its fields; null hashes to the
             # seed, as for any reference.
