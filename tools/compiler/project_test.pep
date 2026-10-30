@@ -105,7 +105,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[cache]', '[workspace]', '[retract]' and '[audit]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
