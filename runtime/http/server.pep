@@ -18,7 +18,8 @@ export const MAX_REQUEST_BODY: ulong = 16777216;
 ## `Server.bind` listens on an address (`Server.bind_tls` serves HTTPS);
 ## `serve` then accepts connections on every worker of the running
 ## `async.run` and serves each connection in a task of its own, calling the
-## handler for every request. Connections are kept open between requests
+## handler for every request (`serve_each` builds a handler for each
+## connection instead). Connections are kept open between requests
 ## unless the client asks to close (or speaks HTTP/1.0).
 ##
 ## The handler gets the `Request` with its body read in full and returns the
@@ -118,6 +119,30 @@ export struct Server {
     ##   connections
     ## @panics outside `async.run`
     serve(handler: shared (Request) => Response) {
+        serve_each((): (Request) => Response => handler);
+    }
+
+    ## Like `serve`, but builds a handler for each connection: the
+    ## connection's task calls `make` once, when the connection is set up
+    ## (after the TLS handshake, for HTTPS), and answers every request on
+    ## that connection with the handler it returns.
+    ## So the handler can keep per-connection state, or hold something that
+    ## is not thread-safe, since it stays on the connection's worker.
+    ##
+    ## Every stream of an HTTP/2 connection shares the connection's handler,
+    ## so it must be safe to call while another stream's call is waiting.
+    ##
+    ## @param make builds one connection's handler; every worker calls it
+    ## @panics outside `async.run`
+    ## @example
+    ##     server.serve_each(() => {
+    ##         var paths = Array<String>();   # one list per connection
+    ##         return (request) => {
+    ##             paths.append(request.path());
+    ##             return http.Response(200).set_text($"request {paths.count} on this connection");
+    ##         };
+    ##     });
+    serve_each(make: shared () => (Request) => Response) {
         var server = this;
         var loops = async.spawn_on_each_worker(() => {
             while (true) {
@@ -127,7 +152,7 @@ export struct Server {
                 }
                 var (tcp, peer) = accepted.value();
                 async.Task<void>.spawn_local(() => {
-                    _http_serve_connection(server, tcp, handler);
+                    _http_serve_connection(server, tcp, make);
                 });
             }
         });
@@ -138,7 +163,7 @@ export struct Server {
 }
 
 # Serves one connection until it closes, fails, or asks to close.
-_http_serve_connection(server: Server, tcp: io.TcpStream, handler: shared (Request) => Response) {
+_http_serve_connection(server: Server, tcp: io.TcpStream, make: shared () => (Request) => Response) {
     var connection = _HttpConnection(tcp);
     if (server._secure) {
         var stream = server._acceptor.accept(tcp);
@@ -148,6 +173,7 @@ _http_serve_connection(server: Server, tcp: io.TcpStream, handler: shared (Reque
         }
         connection._use_tls(stream.value());
     }
+    var handler = make();  # after the handshake, so a failed one builds no handler
     var reader = _HttpReader(connection);
     var chosen = connection._tls.is_value() ? connection._tls.value().protocol() : Optional<String>.Empty;
     if (chosen.is_value() && chosen.value() == "h2") {
@@ -170,7 +196,7 @@ _http_serve_connection(server: Server, tcp: io.TcpStream, handler: shared (Reque
 }
 
 # Reads one request and answers it; whether to keep the connection.
-_http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): bool {
+_http_serve_one(reader: _HttpReader, handler: (Request) => Response): bool {
     var first = reader._line(_HTTP_MAX_LINE);
     if (first.is_err()) {
         _http_refuse(reader, 400);

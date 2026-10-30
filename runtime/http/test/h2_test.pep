@@ -186,6 +186,57 @@ concurrent_streams_interleave() {
 }
 
 [Test]
+streams_share_the_connection_handler() {
+    async.run(
+        () => {
+            var server = http.Server.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
+            var port = server.local_address().value().port();
+            var made = async.Atomic<int>(0);
+            async.spawn<void>(
+                () => {
+                    server.serve_each(
+                        () => {
+                            made.fetch_add(1);
+                            var paths = Array<String>();
+                            return (request) => {
+                                paths.append(request.path());
+                                var count = paths.count;
+                                if (request.path() == "/slow") {
+                                    async.sleep(os.Duration.from_milliseconds(20));  # other streams' calls run meanwhile
+                                }
+                                return http.Response(200).set_text(to_string(count));
+                            };
+                        }
+                    );
+                }
+            );
+            var base = "http://127.0.0.1:" + to_string(port);
+            var connection = connect(port);
+            var tasks = Array<async.Task<String>>();
+            var n = 0;
+            while (n < 6) {
+                var path = n % 2 == 0 ? "/slow" : "/fast";
+                tasks.append(async.Task<String>.spawn_local(() => {
+                    return exchange(connection, http.Request("GET", base + path)).text();
+                }));
+                n += 1;
+            }
+            var counts = Array<String>();
+            for (var task in tasks) {
+                counts.append(task.join().value());
+            }
+            # One handler saw all six streams, each call adding one path.
+            expect_equal(made.load(), 1);
+            var i = 1;
+            while (i <= 6) {
+                expect_true(counts.contains(to_string(i)));
+                i += 1;
+            }
+        }
+    );
+}
+
+[Test]
 closing_a_body_early_resets_only_its_stream() {
     async.run(() => {
         var port = start();
