@@ -6404,6 +6404,9 @@ optional default: <code>fahrenheit: float = 32.0</code>. The C-style form,
 <code>float fahrenheit = 32.0</code>, is accepted too.</li>
 <li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
 parameter has the same name as a field.</li>
+<li>A bare <code>return;</code> leaves the constructor early, as in C++, Java and C#.
+The call still gives the new object, as set so far; fields the body has
+not reached keep their defaults.</li>
 <li>A struct may declare several constructors with different parameter
 lists; a call picks one by its arguments, as for any
 <a href="language/overloading.html#constructors">overloaded</a> function. At most one of them
