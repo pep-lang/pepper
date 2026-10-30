@@ -313,6 +313,26 @@ _to_toml<T>(value: T): TomlValue? {
                 }
             }
         } else if (reflect.is_struct<T>()) {
+            # A container the overloads above do not convert is not a
+            # struct to write the properties of (#426).
+            # shortcut: matches by name, as JSON's check does, so a
+            # program's own struct named `Map<...>` or `Set<...>` is refused
+            # too; upgrade with a reflect query for the runtime's types.
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashMap<")
+                    || reflect.name<T>().starts_with("OrderedMap<")
+                    || reflect.name<T>().starts_with("Map<")),
+                $"'encode' cannot convert type '{reflect.name<T>()}' to TOML: a table's keys must be 'String's"
+            );
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashSet<")
+                    || reflect.name<T>().starts_with("Set<")
+                    || reflect.name<T>().starts_with("Deque<")
+                    || reflect.name<T>().starts_with("PriorityQueue<")
+                    || reflect.name<T>().starts_with("ArrayView<")
+                    || reflect.is_same<T, BitSet>()),
+                $"'encode' cannot convert type '{reflect.name<T>()}' to TOML; convert it to an 'Array' first"
+            );
             present = _toml_holds(value);
             if (present) {
                 out = Optional<TomlValue>.Value(table);
@@ -631,6 +651,22 @@ _from_toml<T>(value: TomlValue, witness: T, path: String, unknown_keys: UnknownK
                 );
             }
         } else if (reflect.is_struct<T>()) {
+            # As for 'encode' (#426); shortcut: matches by name, as there.
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashMap<")
+                    || reflect.name<T>().starts_with("OrderedMap<")
+                    || reflect.name<T>().starts_with("Map<")),
+                $"'decode' cannot convert type '{reflect.name<T>()}' from TOML: a table's keys must be 'String's"
+            );
+            reflect.assert(
+                !(reflect.name<T>().starts_with("HashSet<")
+                    || reflect.name<T>().starts_with("Set<")
+                    || reflect.name<T>().starts_with("Deque<")
+                    || reflect.name<T>().starts_with("PriorityQueue<")
+                    || reflect.name<T>().starts_with("ArrayView<")
+                    || reflect.is_same<T, BitSet>()),
+                $"'decode' cannot convert type '{reflect.name<T>()}' from TOML; decode an 'Array' and build it from that"
+            );
             out = _toml_new(out);
             for (var field in reflect.properties<T>()) {
                 if (field.has_attribute<serialize.Ignore>()) {

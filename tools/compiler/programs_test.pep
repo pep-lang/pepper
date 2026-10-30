@@ -153,6 +153,35 @@ an_unclosed_brace_notes_the_brace() {
     );
 }
 
+# Errors name types and operators as the program writes them, never the
+# compiler's internal names (#296).
+[Test]
+errors_show_no_internal_names() {
+    var folder = TempFolder("programs_internal_names");
+    for (var (
+        body,
+        expected
+    ) in [
+        ("var a = [1];\n    a.nope();", "main.pep:8:7: error: no member named 'nope' in 'Array<int>'"),
+        ("var n = 3;\n    n(1);", "main.pep:8:5: error: called object type 'int' is not a function"),
+        (
+            "var c = 0;\n    c = (1, 2).compare((1, 3));",
+            "main.pep:8:16: error: no member named 'compare' in '(int, int)'"
+        ),
+        ("var f = () => nope;\n    f();", "main.pep:7:19: error: use of undeclared identifier 'nope'\n"),
+        ("var a = V();\n    a += V();", "main.pep:8:7: error: no '+=' operator for 'V'")
+    ]) {
+        var source = folder.path.join("main.pep");
+        write_file(
+            source,
+            $"struct V {{\n    +(o: V): V {{\n        return V();\n    }}\n}}\nmain(): int {{\n    {body}\n    return 0;\n}}\n"
+        );
+        var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+        expect_true(error.is_value(), "the program does not build");
+        expect_contains(error.value(), expected);
+    }
+}
+
 # ── generics ────────────────────────────────────────────────────────────────
 
 # A struct named like a generic's type parameter (`T`, `K`, `V`) is that

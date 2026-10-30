@@ -475,6 +475,17 @@ reports_confinement_error(index: ulong) {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# `toml.encode` and `toml.decode` refuse the same containers (#426).
+[Test]
+refuses_toml_for_an_unsupported_container() {
+    var folder = TempFolder("passes_toml_containers");
+    var programs = [
+        "# expect: main.pep:9:11: error: 'encode' cannot convert type 'HashMap<int, int>' to TOML: a table's keys must be 'String's\nimport toml;\nstruct Config {\n    var ports: HashMap<int, int> = HashMap<int, int>();\n}\nmain(): int {\n    var c = Config();\n    c.ports[1] = 2;\n    print(toml.encode(c));\n    return 0;\n}\n",
+        "# expect: main.pep:7:13: error: 'decode' cannot convert type 'HashSet<int>' from TOML; decode an 'Array' and build it from that\nimport toml;\nstruct Config {\n    var tags: HashSet<int> = HashSet<int>();\n}\nmain(): int {\n    var c = toml.decode<Config>(\"tags = [1]\");\n    return 0;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # `json.encode` and `json.decode` refuse a container they do not convert,
 # a map with keys that are not strings and a set among them, rather than
 # write its properties (#404).

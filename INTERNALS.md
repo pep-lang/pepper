@@ -994,7 +994,9 @@ comparing the tuples of its fields (`(this.a, this.b) == (other.a,
 other.b)`, a lone field paired with `true`) and `__hash(): u64` returning
 `hash` of the same tuple, leaving out a field marked `[Equatable(exclude =
 true)]` or `[Equatable(include = false)]` (`equatable.pep`); codegen's
-`__address<T>` and `tuple_hash` call `T.__hash` for a non-null `T`, and
+`__address<T>` and `tuple_hash` call `T.__hash` for a non-null `T` (a
+value struct's, like its `==` from `value_equal`, with the address of a
+copy, as any of its methods takes `this`), and
 `tuple_hash` leaves out an object element whose `==` is declared but whose
 hash would be its address (an `Array`), since equal elements would hash
 apart (codegen's `hash_overrides` tells a program's `hash<T>` override from

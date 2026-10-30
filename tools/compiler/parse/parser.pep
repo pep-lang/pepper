@@ -556,6 +556,15 @@ struct Parser {
         _failed = true;
     }
 
+    # Fails at the input with `message`, over any other reading's error:
+    # for a mistake a declaration's prefix shows, after every other reading
+    # of the item was tried.
+    _fail_final(message: String) {
+        _error = Optional<SyntaxError>.Value(SyntaxError(message, _peek().offset));
+        _final_error = true;
+        _failed = true;
+    }
+
     _mark(): Mark {
         var mark = Mark();
         mark.position = _position;
@@ -4264,7 +4273,7 @@ struct Parser {
                 return _no_declaration();
             }
             if (prefix.exported or prefix.file_private) {
-                _fail("a declaration cannot be both 'export' and 'private'");
+                _fail_final("a declaration cannot be both 'export' and 'private'");
                 return _no_declaration();
             }
             prefix.exported = is_export;
@@ -4272,7 +4281,7 @@ struct Parser {
             prefix.modifier_start = _start(_position);
             _advance();
             if (_at("[")) {
-                _fail(is_export ? "'export' goes after the attributes" : "'private' goes after the attributes");
+                _fail_final(is_export ? "'export' goes after the attributes" : "'private' goes after the attributes");
                 return _no_declaration();
             }
         }
@@ -4455,6 +4464,31 @@ struct Parser {
         return _at_word("export") and (_peek_at(1).is(_source, "*") or _peek_at(1).is(_source, "["));
     }
 
+    # Whether the item at `mark`, read as `export [...] from` and failed, is
+    # instead `export` before a declaration's attributes: its `[...]` reads
+    # as attributes not followed by `from`. Leaves the position and the
+    # error as they were.
+    _misplaced_export_modifier(mark: Mark): bool {
+        var failed_at = _mark();
+        var error = _error;
+        var final_error = _final_error;
+        var too_deep = _too_deep;
+        _restore(mark);
+        _attributes();
+        bool misplaced = false;
+        if (!_failed and _at_export_from()) {
+            _advance();
+            _attributes();
+            misplaced = !_failed and !_at_word("from");
+        }
+        _restore(failed_at);
+        _failed = true;
+        _error = error;
+        _final_error = final_error;
+        _too_deep = too_deep;
+        return misplaced;
+    }
+
     # `export name[.name] [as alias];`, a re-export. Fails (so the caller
     # reads a declaration instead) unless an `as` or `;` follows the name.
     _export_alias(attributes: Attribute[]): ExportAlias {
@@ -4512,6 +4546,12 @@ struct Parser {
             }
             if (_at_word("import") or _at_export_from()) {
                 var item = _import_declaration(attributes);
+                if (_failed and _misplaced_export_modifier(mark)) {
+                    # `export [Attribute] f()`: the declaration's reading
+                    # names the mistake.
+                    _restore(mark);
+                    _declaration();
+                }
                 if (_failed) {
                     if (!_recovering) {
                         return out;
