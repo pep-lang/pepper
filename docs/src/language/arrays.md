@@ -100,6 +100,23 @@ A slice is safe by construction:
   it pointing at freed memory. The runs `chunks` and `windows` give are
   slices too, and follow the same rules.
 
+## An Array is never null
+
+Unlike other struct types, an `Array` is never null. A variable, field or
+element of an array type that was not given a value holds an empty array,
+and so does `__default<u8[]>()`. Storing one (`append`, `resize`, an
+assignment) stores an array, so comparing with `__null` says nothing
+useful:
+
+```pepper
+u8[] none;
+var buckets = Array<u8[]>();
+buckets.resize(4, none);   # one empty array, four times; no nulls
+```
+
+When "no array" must differ from "an empty array", say so in the type with
+[`Optional`](optionals.md): `u8[]?`, empty until it is given an array.
+
 ## Not yet
 
 - Slices are read-only; there is no slice that writes through to its
