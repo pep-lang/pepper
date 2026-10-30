@@ -1274,7 +1274,7 @@ _h2_exchange(connection: _H2Connection, request: Request, url: _HttpUrl, secure:
 # Serves HTTP/2 on a connection whose client preface `reader` has just
 # read, until the connection ends: each stream is answered in a task of its
 # own on this worker.
-_h2_serve(reader: _HttpReader, handler: shared (Request) => Response) {
+_h2_serve(reader: _HttpReader, handler: (Request) => Response) {
     var connection = _H2Connection(reader, true);
     var out = Array<u8>();
     connection._append_settings(out);
@@ -1297,7 +1297,7 @@ _h2_serve(reader: _HttpReader, handler: shared (Request) => Response) {
 }
 
 # Reads the request on `stream`, calls `handler`, and sends the response.
-_h2_answer(connection: _H2Connection, stream: _H2Stream, handler: shared (Request) => Response) {
+_h2_answer(connection: _H2Connection, stream: _H2Stream, handler: (Request) => Response) {
     # `_on_request_head` checked the head.
     var head = stream.fields.value();
     var method = _h2_pseudo(head, ":method").value();

@@ -92,6 +92,15 @@ as a browser resolves a link (RFC 3986 section 5.2).
   serves each in a task of its own, calling `handler` for each request with
   the body read in full. It returns when `async.run` ends. The handler is a
   `shared (Request) => Response`, since every worker calls it.
+- `serve_each(make)` builds a handler for each connection instead: the
+  connection's task calls `make` once and answers every request on that
+  connection with the plain `(Request) => Response` it returns. The handler
+  stays on its connection's worker, so it may keep per-connection state or
+  hold something that is not thread-safe, such as a router built once per
+  connection rather than once per request. Every stream of an HTTP/2
+  connection shares that handler, so it must be safe to call while another
+  stream's call is waiting. `serve(handler)` is `serve_each` with a `make`
+  that returns `handler`.
 - Connections stay open between requests unless the client asks to close
   or speaks HTTP/1.0. Chunked request bodies and `Expect: 100-continue` are
   understood.

@@ -265,6 +265,39 @@ keep_alive_and_chunked_requests() {
     );
 }
 
+[Test]
+serve_each_makes_one_handler_per_connection() {
+    async.run(
+        () => {
+            var server = http.Server.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
+            var port = server.local_address().value().port();
+            var made = async.Atomic<int>(0);
+            async.spawn<void>(() => {
+                server.serve_each(() => {
+                    var id = made.fetch_add(1);
+                    var paths = Array<String>();
+                    return (request) => {
+                        paths.append(request.path());
+                        return http.Response(200).set_text($"handler {id} request {paths.count}");
+                    };
+                });
+            });
+            # Two requests on one kept-alive connection: one handler.
+            var both = raw(
+                port,
+                "GET /a HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                    + "GET /b HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+            );
+            expect_true(both.contains("handler 0 request 1"));
+            expect_true(both.contains("handler 0 request 2"));
+            # A new connection gets a new handler.
+            var again = raw(port, "GET /c HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+            expect_true(again.contains("handler 1 request 1"));
+            expect_equal(made.load(), 2);
+        }
+    );
+}
+
 # Upgrades the connection `reader` and `writer` reach with `/upgrade`, and
 # checks the 101 head and the echo of bytes sent with the request head and
 # after the 101.

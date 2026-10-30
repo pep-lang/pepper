@@ -28,7 +28,8 @@ An HTTP/1.1 and HTTP/2 server.
 `Server.bind` listens on an address (`Server.bind_tls` serves HTTPS);
 `serve` then accepts connections on every worker of the running
 `async.run` and serves each connection in a task of its own, calling the
-handler for every request. Connections are kept open between requests
+handler for every request (`serve_each` builds a handler for each
+connection instead). Connections are kept open between requests
 unless the client asks to close (or speaks HTTP/1.0).
 
 The handler gets the `Request` with its body read in full and returns the
@@ -145,6 +146,38 @@ on the worker that accepted it.
 
 **Panics**
 - outside `async.run`
+
+#### serve_each
+
+```pepper
+serve_each(make: shared () => (Request) => Response)
+```
+
+Like `serve`, but builds a handler for each connection: the
+connection's task calls `make` once, when the connection starts, and
+answers every request on that connection with the handler it returns.
+So the handler can keep per-connection state, or hold something that
+is not thread-safe, since it stays on the connection's worker.
+
+Every stream of an HTTP/2 connection shares the connection's handler,
+so it must be safe to call while another stream's call is waiting.
+
+**Parameters**
+- `make` — builds one connection's handler; every worker calls it
+
+**Panics**
+- outside `async.run`
+
+**Example**
+```pepper
+server.serve_each(() => {
+    var paths = Array<String>();   # one list per connection
+    return (request) => {
+        paths.append(request.path());
+        return http.Response(200).set_text($"request {paths.count} on this connection");
+    };
+});
+```
 
 ## Connection
 
