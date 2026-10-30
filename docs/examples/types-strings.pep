@@ -14,6 +14,12 @@ main(): int {
     assert(word.size == 6, "6 bytes: 'é' takes 2");
     assert(word[1] == "é", "indexing yields a one-code-point String");
 
+    # A literal may span lines, and each line break in it is "\n",
+    # whether the file ends its lines "\n" or "\r\n".
+    var lines = "one
+two";
+    assert(lines == "one\ntwo", "a line break is a newline");
+
     # A String is a reference: both names see an append.
     var alias = message;
     message.append("!");

@@ -83,6 +83,24 @@ array_keys_match_by_content() {
     expect_true(nested.contains(([[1], [2]], 3)));
 }
 
+# A slice hashes by its elements wherever it is, as its `==` compares
+# them, and as an Array of the same elements does (#416).
+[Test]
+array_view_keys_match_by_content() {
+    var a = [1, 2, 3, 1, 2];
+    expect_equal(hash<ArrayView<int>>(a.slice(0, 2)), hash<ArrayView<int>>(a.slice(3, 5)));
+    expect_equal(hash<ArrayView<int>>(a.slice(0, 2)), hash<int[]>([1, 2]));
+    expect_equal(hash<ArrayView<int>>(Array<int>().slice(0, 0)), hash<int[]>(Array<int>()));
+    var set = HashSet<ArrayView<int>>();
+    set.insert(a.slice(0, 2));
+    expect_true(set.contains(a.slice(3, 5)));
+    expect_false(set.contains(a.slice(1, 3)));
+    var words = ["x", "y", "x"];
+    var map = HashMap<ArrayView<String>, int>();
+    map[words.slice(0, 1)] = 7;
+    expect_equal(map[words.slice(2, 3)], 7);
+}
+
 [Test]
 empty_map() {
     var m = HashMap<int, int>();

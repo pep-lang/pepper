@@ -692,6 +692,20 @@ specialized_error_programs(): String[] {
         # Hash keys whose `==` and hash disagree, and an override of an
         # `[Equatable]` struct's derived hash.
         "# expect: main.pep:5:5: error: 'K' declares '==' but no 'hash<K>', so as a HashMap or HashSet key, equal values will not find each other\nstruct K {\n    var x: int;\n    construct(this.x = 0) {}\n    ==(other: K): bool { return x == other.x; }\n}\nmain(): int {\n    var m = HashMap<K, int>();\n    m[K(1)] = 2;\n    return 0;\n}\n",
+        # An overloaded `==` is found by its set name (`==$1`).
+        "# expect: main.pep:5:5: error: 'K' declares '==' but no 'hash<K>', so as a HashMap or HashSet key, equal values will not find each other
+struct K {
+    var x: int;
+    construct(this.x = 0) {}
+    ==(other: K): bool { return x == other.x; }
+    ==(other: int): bool { return x == other; }
+}
+main(): int {
+    var m = HashMap<K, int>();
+    m[K(1)] = 2;
+    return 0;
+}
+",
         "# expect: main.pep:6:1: error: 'hash<K>' is overridden but 'K' declares no '==', so HashMap and HashSet keys still compare by identity\nstruct K {\n    var x: int;\n    construct(this.x = 0) {}\n}\nhash<K>(value: K): u64 { return value.x as u64; }\nmain(): int {\n    var s = HashSet<K>();\n    s.insert(K(1));\n    return 0;\n}\n",
         "# expect: main.pep:7:1: error: 'K' is '[Equatable]', so its hash is derived and 'hash<K>' cannot be overridden\n[Equatable]\nstruct K {\n    var x: int;\n    construct(this.x = 0) {}\n}\nhash<K>(value: K): u64 { return value.x as u64; }\nmain(): int {\n    return 0;\n}\n",
         # A closure parameter whose type nothing inferred.
@@ -895,6 +909,47 @@ reports_deprecated_methods_the_compiler_calls() {
         "# expect: main.pep:36:5: warning: 'next' is deprecated: use 'advance' instead [deprecated]\n# expect: main.pep:17:5: note: 'next' declared here\n# expect: main.pep:36:5: warning: 'current' is deprecated: old [deprecated]\n# expect: main.pep:20:5: note: 'current' declared here\n# expect: main.pep:39:5: warning: 'enter' is deprecated: old [deprecated]\n# expect: main.pep:24:5: note: 'enter' declared here\n# expect: main.pep:43:15: warning: '+' is deprecated: old [deprecated]\n# expect: main.pep:30:5: note: '+' declared here\n# expect: main.pep:44:11: warning: '==' is deprecated: old [deprecated]\n# expect: main.pep:32:5: note: '==' declared here\n# expect: main.pep:44:21: warning: '==' is deprecated: old [deprecated]\n# expect: main.pep:32:5: note: '==' declared here\nstruct Steps {\n    var n: int;\n    iterate(): Steps { return this; }\n    [Deprecated(\"use 'advance' instead\", \"advance\")]\n    next(): bool { n += 1; return n < 3; }\n    advance(): bool { n += 1; return n < 3; }\n    [Deprecated(\"old\")]\n    current(): int { return n; }\n}\nstruct Session {\n    [Deprecated(\"old\")]\n    enter(): Session { return this; }\n    exit() {}\n}\nstruct V {\n    var x: int;\n    [Deprecated(\"old\")]\n    +(other: V): V { return this; }\n    [Deprecated(\"old\")]\n    ==(other: V): bool { return true; }\n}\nmain(): int {\n    var total = 0;\n    for (var i in Steps()) {\n        total += i;\n    }\n    with (var s = Session()) {\n        total += 1;\n    }\n    var a = V();\n    var b = a + a;\n    if (a != b or a == b) {\n        total += 1;\n    }\n    return total;\n}\n"
     ];
     expect_equal(check_expected(folder, programs, (path: Path): String => warnings_of(path)), 0 as ulong);
+}
+
+# The runtime's own structs hash as their `==` compares, which a
+# program's check skips (#416): a program importing every runtime module,
+# with each generic struct that declares `==` specialized, passes
+# `check_runtime_hash_keys`.
+[Test]
+runtime_structs_hash_as_they_compare() {
+    var source = StringBuilder();
+    var entries = Directory.open(Path("../runtime")).value().entries().value();
+    for (var entry in entries) {
+        if (entry.is_directory and entry.path.join("module.pep").is_file()) {
+            source.append($"import {entry.name};
+");
+        }
+    }
+    source.append(
+        "main(): int {
+    var a = [1];
+    var v = a.slice(0, 1);
+    var i = simd.Vector<int, 4>();
+    var f = simd.Vector<float, 4>();
+    return 0;
+}
+"
+    );
+    var root = Path("_runtime_hash_keys_main.pep");
+    var setup = link.Setup();
+    setup.sources[link.path_key(root)] = source.to_string();
+    var program = link.load_program(root, setup);
+    expect_true(program.is_ok());
+    var module = sema.merge(program.value());
+    expect_true(module.is_ok());
+    var state = sema.run_passes(module.value(), program.value().target, program.value().sources());
+    expect_true(state.is_ok());
+    sema.check_runtime_hash_keys(module.value(), state.value());
+    var error = state.value().take_error();
+    if (error.is_value()) {
+        print(render_all([error.value()], program.value().sources()));
+    }
+    expect_false(error.is_value());
 }
 
 # A deprecated enum case warns at each use: `E.Case`, `E.Case(...)`, a

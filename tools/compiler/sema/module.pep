@@ -21,6 +21,7 @@ export [called_without_naming] from "lazy_methods";
 export [COLD_ATTRIBUTE] from "platform";
 export [is_enum, is_trait, method_of] from "enums";
 export [HASH_METHOD] from "equatable";
+export [check_runtime_hash_keys] from "hash_keys";
 export [Export, Exports, Handle, STRING_FREE, is_export_string] from "export_table";
 export [c_type, declarator, header, header_declarations] from "exports";
 export [defaulted_params, fill_defaults] from "function_types_check";

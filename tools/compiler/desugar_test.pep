@@ -118,3 +118,39 @@ desugar_of_the_written_tree_is_what_parse_returns() {
     expect_true(rewritten.is_ok(), "the formats match their arguments");
     expect_equal(rewritten.value().to_json().to_string(), parse.parse(source).value().to_json().to_string());
 }
+
+# The text of `e`'s first string literal or text part: a plain literal's,
+# an interpolated string's, or the format's of a call; empty for any
+# other expression.
+first_text(e: Expression): String {
+    var parts = Array<StringPart>();
+    if (e is Literal(literal, _)) {
+        if (literal is String(text)) {
+            return text;
+        }
+    } else if (e is Interpolated(interpolated, _)) {
+        parts = interpolated;
+    } else if (e is FunctionCall(_, arguments, _)) {
+        if (arguments[0] is FormatString(format, _, _, _)) {
+            parts = format;
+        }
+    }
+    if (!parts.is_empty) {
+        if (parts[0] is Text(text, _)) {
+            return text;
+        }
+    }
+    return "";
+}
+
+# A line break in a string literal reads as `\n` when the file ends its
+# lines `\r\n`, as a Windows checkout does, so a literal means the same on
+# every system.
+[Test]
+parse_reads_a_crlf_line_break_in_a_string_as_a_newline() {
+    for (var literal in ["\"a\r\nb\"", "$\"a\r\nb{x}\"", "print(\"a\r\nb{0}\", x)"]) {
+        var source = "f() {\r\n    var s = " + literal + ";\r\n}\r\n";
+        var e = first_expression(parse.parse_written(source).value());
+        expect_equal(first_text(e), "a\nb");
+    }
+}
