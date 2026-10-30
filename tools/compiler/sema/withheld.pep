@@ -144,7 +144,7 @@ struct _WithheldCalls {
             var w = chosen.value();
             found = Optional<Diagnostic>.Value(
                 error_at(
-                    $"no member named '{member}' in '{owner}'",
+                    $"no member named '{member}' in '{parse_type_string(owner).display()}'",
                     loc
                 ).with_note(
                     $"'{member}' requires '{w.arg.display()}' to conform to '{w.bound.display()}'",
