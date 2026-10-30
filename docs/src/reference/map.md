@@ -486,6 +486,24 @@ Advances to the next entry.
 **Panics**
 - if an entry was added or removed since the iterator was created ("Map modified during iteration")
 
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
+
+**Returns**
+- true when there is a current entry, false once every entry was visited
+
+**Panics**
+- if an entry was added or removed since the iterator was created ("Map modified during iteration")
+
 #### current
 
 ```pepper
@@ -788,6 +806,24 @@ next(): bool
 ```
 
 Advances to the next member.
+
+**Returns**
+- true when there is a current member, false once every member was visited
+
+**Panics**
+- if a member was added or removed since the iterator was created ("Set modified during iteration")
+
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
 
 **Returns**
 - true when there is a current member, false once every member was visited

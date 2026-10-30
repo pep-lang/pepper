@@ -872,7 +872,23 @@ export struct HashMapIterator<K, V> {
     ## @returns true when there is a current entry, false once every entry was visited
     ## @panics if an entry was added or removed since the iterator was created ("HashMap modified during iteration")
     next(): bool {
-        assert(_source._table._version == _version, "HashMap modified during iteration");
+        return _next_at(__caller_location());
+    }
+
+    ## `next()` for a `for` loop, which passes its own location so that
+    ## the panic names the loop.
+    ##
+    ## @param location the loop's location, which a panic reports
+    ## @returns true when there is a current entry, false once every entry was visited
+    ## @panics if an entry was added or removed since the iterator was created ("HashMap modified during iteration")
+    next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
+        assert(_source._table._version == _version, "HashMap modified during iteration", location);
         if (_started) {
             if (_index < _source._table._capacity) {
                 _index = _index + 1;
@@ -929,7 +945,23 @@ export struct HashSetIterator<K> {
     ## @returns true when there is a current member, false once every member was visited
     ## @panics if a member was added or removed since the iterator was created ("HashSet modified during iteration")
     next(): bool {
-        assert(_source._table._version == _version, "HashSet modified during iteration");
+        return _next_at(__caller_location());
+    }
+
+    ## `next()` for a `for` loop, which passes its own location so that
+    ## the panic names the loop.
+    ##
+    ## @param location the loop's location, which a panic reports
+    ## @returns true when there is a current member, false once every member was visited
+    ## @panics if a member was added or removed since the iterator was created ("HashSet modified during iteration")
+    next(location: __ptr<char>): bool {
+        return _next_at(location);
+    }
+
+    # The step both `next` overloads take, checking with `location`: one
+    # body, and no overload to choose from inside the runtime.
+    _next_at(location: __ptr<char>): bool {
+        assert(_source._table._version == _version, "HashSet modified during iteration", location);
         if (_started) {
             if (_index < _source._table._capacity) {
                 _index = _index + 1;

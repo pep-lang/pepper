@@ -1429,6 +1429,24 @@ returning false.
 **Panics**
 - if the Array was modified since the iterator was created ("Array modified during iteration")
 
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
+
+**Returns**
+- true when there is a current element, false once past the end
+
+**Panics**
+- if the Array was modified since the iterator was created ("Array modified during iteration")
+
 #### current
 
 ```pepper
@@ -1888,6 +1906,24 @@ Advances to the next element.
 **Panics**
 - if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
 
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
+
+**Returns**
+- true when there is a current element, false once past the end
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
 #### current
 
 ```pepper
@@ -1976,6 +2012,24 @@ next(): bool
 ```
 
 Advances to the next run.
+
+**Returns**
+- true when there is a current run, false once past the end
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### next
+
+```pepper
+next(location: __ptr<char>): bool
+```
+
+`next()` for a `for` loop, which passes its own location so that
+the panic names the loop.
+
+**Parameters**
+- `location` — the loop's location, which a panic reports
 
 **Returns**
 - true when there is a current run, false once past the end

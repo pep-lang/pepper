@@ -854,9 +854,10 @@ nested_array_literals_keep_few_methods_per_level() {
     var at_24 = _bodies_at_depth(folder, 24);
     # As many more per level at any depth: linear.
     expect_equal(at_24 - at_16, at_16 - at_8);
-    # 67 a level now, 128 before.
+    # 72 a level now (67 before the iterators' `next(location)`, #319),
+    # 128 before that.
     var per_level = (at_16 - at_8) / 8;
-    if (per_level > 70) {
+    if (per_level > 75) {
         panic($"a level of a nested array literal keeps {per_level} method bodies");
     }
 }
