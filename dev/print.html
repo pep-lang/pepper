@@ -23135,6 +23135,27 @@ project folder can sit deep without the cache passing Windows'
 260-character path limit. The folder holds one subfolder per layout
 version (<code>v3</code>); a build ignores the others, so an old version's folder can
 be deleted.</p>
+<h3 id="the-shared-cache"><a class="header" href="#the-shared-cache">The shared cache</a></h3>
+<p>The runtime's compilation units and objects are the same in every project
+built with one toolchain, so a build keeps them in a cache shared by every
+project instead of in its own: the first build of a new checkout reads
+them there rather than checking and compiling the runtime again. A file
+is the runtime's when it is the prelude's, a file the prelude reaches, or
+a file in the runtime's folder.</p>
+<p>The shared cache is in <code>PEPPER_SHARED_CACHE</code> when that is set, else
+<code>%LOCALAPPDATA%\pepper\cache</code> on Windows and <code>$XDG_CACHE_HOME/pepper</code>,
+else <code>~/.cache/pepper</code>, elsewhere. Setting <code>PEPPER_SHARED_CACHE</code> to
+<code>off</code> or to nothing turns it off, and the build keeps the runtime's units
+in its own cache, as <code>--verify-cache</code> and <code>--no-cache</code> builds always do.
+Each key there holds the compiler build (its path, size and time), the
+target, CPU, optimization level, runtime checks and build options, as in
+the build's own cache, so a build reads only what it would have made.</p>
+<p>The shared cache keeps at most 5 GB, or what <code>[cache]</code>'s <code>shared-size</code>
+sets in the project's <code>pep.toml</code> or in the Pepper home's (see
+<a href="tools/projects.html#cache">Projects</a>). A build that stored in it, or that runs a
+day after the last check, removes the least recently used keys until it
+fits; a key used in the last ten minutes stays, since another build may be
+linking it. Deleting the folder is always safe.</p>
 <h3 id="--verify-cache---no-verify-cache"><a class="header" href="#--verify-cache---no-verify-cache"><code>--verify-cache</code>, <code>--no-verify-cache</code></a></h3>
 <p><code>--verify-cache</code> checks the cache, for testing the compiler: every file the
 cache would reuse is compiled anyway, and the build fails if its code
@@ -23206,6 +23227,7 @@ nothing; <code>pep-test --all</code> and <code>-p</code> run it.</li>
 <tr><td><code>ANDROID_HOME</code>, <code>ANDROID_SDK_ROOT</code></td><td>The Android SDK, whose newest <code>ndk/&lt;version&gt;</code> links an Android <code>--target</code> when nothing above names an NDK</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
+<tr><td><code>PEPPER_SHARED_CACHE</code></td><td>The <a href="tools/pep-build.html#the-shared-cache">shared cache</a> of the runtime's units; empty or <code>off</code> turns it off</td><td><code>--no-cache</code>, <code>--verify-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
 <tr><td><code>PEPPER_LOCKED</code></td><td>Anything but empty or <code>0</code>: the same as <code>--locked</code></td><td></td></tr>
 <tr><td><code>PEPPER_OFFLINE</code></td><td>Anything but empty or <code>0</code>: the same as <code>--offline</code></td><td></td></tr>
@@ -24022,6 +24044,18 @@ vendor = "vendor"
 <tr><td><code>vendor</code></td><td>The folder, relative to the project, that <a href="tools/pep-package.html#vendor-dir"><code>pepper package vendor</code></a> copied every locked package into, which sets it. Builds then read each dependency from <code>&lt;vendor&gt;/&lt;host&gt;/&lt;owner&gt;/&lt;name&gt;</code> instead of <code>.pep/deps</code>, fetch nothing, and fail when a package is missing, at another commit than <code>pep.lock</code>'s, or edited. A package that sets it needs <code>minimum_toolchain = "0.11.0"</code> or later</td><td>none: dependencies are fetched into <code>.pep/deps</code></td></tr>
 </tbody></table>
 </div>
+<h2 id="cache"><a class="header" href="#cache"><code>[cache]</code></a></h2>
+<pre><code class="language-toml">[cache]
+shared-size = "10GB"
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Key</th><th>What it is</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>shared-size</code></td><td>The most the <a href="tools/pep-build.html#the-shared-cache">shared cache</a> keeps, as a number of bytes or a string with <code>B</code>, <code>KB</code>, <code>MB</code>, <code>GB</code> or <code>TB</code> (powers of 1000)</td><td>the Pepper home's <code>pep.toml</code>'s, else <code>"5GB"</code></td></tr>
+</tbody></table>
+</div>
+<p>The shared cache serves every project on the machine, so the limit can
+also be set once in a <code>pep.toml</code> in the Pepper home (<code>PEPPER_HOME</code>, else
+<code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere), which holds
+only <code>[cache]</code>. A project's own setting wins over the home's.</p>
 <h2 id="retract"><a class="header" href="#retract"><code>[retract]</code></a></h2>
 <p>A package withdraws its own broken releases, as Go's <code>retract</code> does: each
 key is a version, or a range as dependencies write it, and its value says
