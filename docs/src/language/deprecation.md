@@ -50,7 +50,8 @@ Put `[Deprecated(...)]` before any declaration other code refers to by name:
 - a function or an `extern`
 - a struct, an enum, a trait, or a type alias
 - a module-scope variable
-- a field, a method, or a constructor of a struct, or a method of an enum
+- a field, a method, or a constructor of a struct, or a method or a case of
+  an enum
 - a method in a trait or in an extension (put it on each method, not on the
   `extend` block)
 
@@ -69,6 +70,9 @@ Every use of the declaration warns, at the name you wrote:
 - a type name, anywhere a type is written
 - a member access `x.name`, a method call `x.name()`, a static call
   `S.name()`, and a bare field or method name inside the struct's own methods
+- an enum case, as a value `Color.Crimson` or `Color.Tint(3)`, and as a
+  pattern that names it in a `match` arm or an `is` test (`Crimson =>`,
+  `c is Tint(level)`)
 - an entry in an import list, `import [name] from m`, and a qualified use
   `m.name`, where the warning points at `name`
 - a call the compiler writes for you, at the token that stands for it: a
