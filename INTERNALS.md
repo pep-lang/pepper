@@ -1060,7 +1060,8 @@ for each struct:
   real ABI size in codegen by `Generator.patched_ctors`. The constructor calls `this =
   _pep_malloc(size)` (`patched_ctor` makes the size a literal), initializes each field (explicit default or zero),
   assigns `this.field` constructor parameters (renamed `__init_<field>`),
-  runs the user body, and ends with `return this`. The destructor does not
+  runs the user body, and ends with `return this`; a bare `return;` in the
+  user body becomes `return this` too (`_return_this`). The destructor does not
   free the object; `__release` does. The pass appends `__release`, `__acquire`, and `__dtor`
   to `method_members`.
 
