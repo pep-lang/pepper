@@ -284,6 +284,9 @@ attributes <a href="json.html">JSON</a> uses: <code>[Name("key")]</code>, <code>
 <code>[Required]</code>. <code>unknown_keys = toml.UnknownKeys.Reject</code> makes an unknown key
 an error. See the <a href="../reference/toml-module.html">reference</a> for every
 function.</p>
+<p>A table's keys are strings, so a map with other keys is a compile-time
+error, as is a set, <code>Deque</code>, <code>PriorityQueue</code>, <code>ArrayView</code> or <code>BitSet</code>
+(convert it to an <code>Array</code> first), as for <a href="json.html#current-limits">JSON</a>.</p>
 
                     </main>
 
