@@ -15022,6 +15022,14 @@ on the API time to move before you remove it.</p>
 [Deprecated("use 'boiling' instead", "boiling")]
 boiling_point(): Temperature { return boiling(); }
 
+# An enum case can be deprecated too: each use and each pattern naming it
+# warns.
+enum Scale {
+    Celsius,
+    [Deprecated("use 'Celsius' instead", "Celsius")]
+    Centigrade,
+}
+
 boiling(): Temperature {
     var t = Temperature();
     t.celsius = 100;
@@ -15035,6 +15043,9 @@ main(): int {
 
     var t = boiling();
     assert(t.fahrenheit() == 212, "100 C is 212 F");
+
+    var scale = Scale.Centigrade;
+    assert(scale is Centigrade, "an old case still matches");
     return 0;
 }
 </code></pre>
@@ -15067,7 +15078,8 @@ Otherwise leave it out and explain the change in the message.</p>
 <li>a function or an <code>extern</code></li>
 <li>a struct, an enum, a trait, or a type alias</li>
 <li>a module-scope variable</li>
-<li>a field, a method, or a constructor of a struct, or a method of an enum</li>
+<li>a field, a method, or a constructor of a struct, or a method or a case of
+an enum</li>
 <li>a method in a trait or in an extension (put it on each method, not on the
 <code>extend</code> block)</li>
 </ul>
@@ -15083,6 +15095,9 @@ function instead (see <a href="language/functions.html#other-names-for-a-paramet
 <li>a type name, anywhere a type is written</li>
 <li>a member access <code>x.name</code>, a method call <code>x.name()</code>, a static call
 <code>S.name()</code>, and a bare field or method name inside the struct's own methods</li>
+<li>an enum case, as a value <code>Color.Crimson</code> or <code>Color.Tint(3)</code>, and as a
+pattern that names it in a <code>match</code> arm or an <code>is</code> test (<code>Crimson =&gt;</code>,
+<code>c is Tint(level)</code>)</li>
 <li>an entry in an import list, <code>import [name] from m</code>, and a qualified use
 <code>m.name</code>, where the warning points at <code>name</code></li>
 <li>a call the compiler writes for you, at the token that stands for it: a
