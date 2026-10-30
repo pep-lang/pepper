@@ -1263,11 +1263,18 @@ export struct Array<T> {
     # more code for each `T`.
     [__Reads]
     __hash(): u64 {
+        return _hash_range(0, _size);
+    }
+
+    # The hash of the elements from `from` up to `to`, as `__hash` folds
+    # them; a slice of them hashes as an Array of them does.
+    [__Reads]
+    _hash_range(from: ulong, to: ulong): u64 {
         u64 result = 0xcbf29ce484222325;
-        ulong idx = 0;
-        while (idx < _size) {
-            result = (result ^ hash<T>(_data[idx])).wrapping_mul(0x100000001b3);
-            idx = idx + 1;
+        ulong index = from;
+        while (index < to) {
+            result = (result ^ hash<T>(_data[index])).wrapping_mul(0x100000001b3);
+            index = index + 1;
         }
         return hash<u64>(result);
     }
@@ -1700,6 +1707,14 @@ export struct ArrayView<T> {
     ## @panics if either Array was modified since its slice was made ("Array modified while a slice of it is in use")
     !=(rhs: ArrayView<T>): bool {
         return !(this == rhs);
+    }
+
+    # What `hash<ArrayView<T>>` calls: the elements' hashes, as `==`
+    # compares them, so equal slices key a `HashMap` alike wherever they
+    # are. O(count).
+    __hash(): u64 {
+        _check(__caller_location());
+        return _source._hash_range(_start, _end);
     }
 
     ## Returns a new Array holding a copy of the slice's elements, in order.

@@ -105,8 +105,11 @@ Keep these rules in mind:
   note: declare 'hash<Point>(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
   ```
 
-  The runtime's own structs are not checked. An `Array` key matches an
-  equal `Array`: both its `==` and its hash go by its elements.
+  The runtime's own structs are not reported in your program; the
+  compiler's own tests hold them to the same rule. An `Array` key matches
+  an equal `Array`: both its `==` and its hash go by its elements. So does
+  a slice (`ArrayView`), wherever its elements are, and a `simd.Vector` by
+  its lanes.
 - **Don't change a key's fields while it is in a map or set.** The entry
   stays where its old hash put it, so lookups by its new or its old fields
   both miss it. Remove it, change it, then insert it again. The same goes

@@ -171,6 +171,9 @@ values() {
     copied[1] = 7;
     assert(b[1] == 1 && copied[1] == 7, "copy");
     assert(ONES.sum() == 4 && Table().scale.sum() == 8.0, "shared");
+    var keys = HashSet<simd.Vector<int, 4>>();
+    keys.insert(a);
+    assert(keys.contains(simd.Vector<int, 4>(1)) && !keys.contains(b), "a key, by its lanes");
 }
 
 main(): int {

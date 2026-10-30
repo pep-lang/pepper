@@ -287,6 +287,18 @@ export struct Vector<T: Lane, N> {
         return not_equal(other).any();
     }
 
+    # What `hash<Vector<T, N>>` calls: the lanes' hashes, as `==` compares
+    # them lane by lane.
+    __hash(): u64 {
+        u64 result = 0xcbf29ce484222325;
+        ulong index = 0;
+        while (index < count as ulong) {
+            result = (result ^ hash<T>(__simd_extract<__simd<T, N>>(_lanes, index))).wrapping_mul(0x100000001b3);
+            index += 1;
+        }
+        return hash<u64>(result);
+    }
+
     ## Compares each lane with the same lane of `other` for equality.
     ##
     ## @param other the vector to compare with
