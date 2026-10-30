@@ -330,6 +330,15 @@ picks.</li>
 serves each in a task of its own, calling <code>handler</code> for each request with
 the body read in full. It returns when <code>async.run</code> ends. The handler is a
 <code>shared (Request) =&gt; Response</code>, since every worker calls it.</li>
+<li><code>serve_each(make)</code> builds a handler for each connection instead: the
+connection's task calls <code>make</code> once and answers every request on that
+connection with the plain <code>(Request) =&gt; Response</code> it returns. The handler
+stays on its connection's worker, so it may keep per-connection state or
+hold something that is not thread-safe, such as a router built once per
+connection rather than once per request. Every stream of an HTTP/2
+connection shares that handler, so it must be safe to call while another
+stream's call is waiting. <code>serve(handler)</code> is <code>serve_each</code> with a <code>make</code>
+that returns <code>handler</code>.</li>
 <li>Connections stay open between requests unless the client asks to close
 or speaks HTTP/1.0. Chunked request bodies and <code>Expect: 100-continue</code> are
 understood.</li>

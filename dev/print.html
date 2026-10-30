@@ -21794,6 +21794,15 @@ picks.</li>
 serves each in a task of its own, calling <code>handler</code> for each request with
 the body read in full. It returns when <code>async.run</code> ends. The handler is a
 <code>shared (Request) =&gt; Response</code>, since every worker calls it.</li>
+<li><code>serve_each(make)</code> builds a handler for each connection instead: the
+connection's task calls <code>make</code> once and answers every request on that
+connection with the plain <code>(Request) =&gt; Response</code> it returns. The handler
+stays on its connection's worker, so it may keep per-connection state or
+hold something that is not thread-safe, such as a router built once per
+connection rather than once per request. Every stream of an HTTP/2
+connection shares that handler, so it must be safe to call while another
+stream's call is waiting. <code>serve(handler)</code> is <code>serve_each</code> with a <code>make</code>
+that returns <code>handler</code>.</li>
 <li>Connections stay open between requests unless the client asks to close
 or speaks HTTP/1.0. Chunked request bodies and <code>Expect: 100-continue</code> are
 understood.</li>
@@ -60639,7 +60648,8 @@ function.</p>
 <p><code>Server.bind</code> listens on an address (<code>Server.bind_tls</code> serves HTTPS);
 <code>serve</code> then accepts connections on every worker of the running
 <code>async.run</code> and serves each connection in a task of its own, calling the
-handler for every request. Connections are kept open between requests
+handler for every request (<code>serve_each</code> builds a handler for each
+connection instead). Connections are kept open between requests
 unless the client asks to close (or speaks HTTP/1.0).</p>
 <p>The handler gets the <code>Request</code> with its body read in full and returns the
 <code>Response</code>; the server adds <code>Content-Length</code> (and <code>Connection: close</code>
@@ -60734,6 +60744,34 @@ on the worker that accepted it.</p>
 <ul>
 <li>outside <code>async.run</code></li>
 </ul>
+<h4 id="serve_each"><a class="header" href="#serve_each">serve_each</a></h4>
+<pre><code class="language-pepper">serve_each(make: shared () =&gt; (Request) =&gt; Response)
+</code></pre>
+<p>Like <code>serve</code>, but builds a handler for each connection: the
+connection's task calls <code>make</code> once, when the connection is set up
+(after the TLS handshake, for HTTPS), and answers every request on
+that connection with the handler it returns.
+So the handler can keep per-connection state, or hold something that
+is not thread-safe, since it stays on the connection's worker.</p>
+<p>Every stream of an HTTP/2 connection shares the connection's handler,
+so it must be safe to call while another stream's call is waiting.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>make</code> — builds one connection's handler; every worker calls it</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>async.run</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">server.serve_each(() =&gt; {
+    var paths = Array&lt;String&gt;();   # one list per connection
+    return (request) =&gt; {
+        paths.append(request.path());
+        return http.Response(200).set_text($"request {paths.count} on this connection");
+    };
+});
+</code></pre>
 <h2 id="connection"><a class="header" href="#connection">Connection</a></h2>
 <pre><code class="language-pepper">struct Connection
 </code></pre>
