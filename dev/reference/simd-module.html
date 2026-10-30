@@ -216,18 +216,18 @@ main(): int {
 </code></pre>
 <p>Source: <code>runtime/simd/module.pep</code></p>
 <h2 id="lane"><a class="header" href="#lane">Lane</a></h2>
-<pre><code class="language-pepper">trait Lane
+<pre><code class="language-pepper">[__Sealed] trait Lane
 </code></pre>
 <p>The number types a <code>Vector</code> holds: every integer and floating-point
 type. The runtime declares the conformances; another type cannot be a
 lane.</p>
 <h2 id="integerlane"><a class="header" href="#integerlane">IntegerLane</a></h2>
-<pre><code class="language-pepper">trait IntegerLane
+<pre><code class="language-pepper">[__Sealed] trait IntegerLane
 </code></pre>
 <p>The integer lane types, whose vectors have checked division, the bitwise
 operators, shifts and rotates.</p>
 <h2 id="floatlane"><a class="header" href="#floatlane">FloatLane</a></h2>
-<pre><code class="language-pepper">trait FloatLane
+<pre><code class="language-pepper">[__Sealed] trait FloatLane
 </code></pre>
 <p>The floating-point lane types, whose vectors have floating-point
 division, <code>square_root</code>, <code>floor</code> and <code>ceiling</code>.</p>

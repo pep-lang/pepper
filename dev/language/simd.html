@@ -242,6 +242,10 @@ conform to the module's <code>Lane</code> trait; any other type is an error at t
 type argument:</p>
 <pre><code class="language-text">main.pep:3:25: error: 'String' does not conform to trait 'Lane', required by 'T' in 'Vector'
 </code></pre>
+<p><code>Lane</code> is sealed: only the runtime declares its conformances, so
+<code>extend Money with simd.Lane</code> is an error too:</p>
+<pre><code class="language-text">main.pep:7:19: error: 'Lane' is sealed: only the runtime declares which types conform to it
+</code></pre>
 </li>
 <li>
 <p><code>N</code> is written as a number, a power of two from 1 to 64:</p>

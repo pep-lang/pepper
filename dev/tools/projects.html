@@ -270,7 +270,10 @@ modules</a>) and define build options its code reads.
 Every build of a program that uses the package (a dependency, or the
 project itself) compiles the script for the machine it runs on and runs it
 before it loads the program, even when it builds for another platform with
-<code>--target</code>. The script imports the runtime and its package's
+<code>--target</code>. A package found only on the import path (<code>-I</code>) runs no script,
+so its <code>import generated</code> is an error that says to make it a dependency;
+a package's tests that need its generated code build as a project that
+depends on it (a <code>tests/pep.toml</code> with <code>name = { path = ".." }</code>). The script imports the runtime and its package's
 <a href="#build-dependencies"><code>[build-dependencies]</code></a>, and stands apart from the
 code it builds: building it does not load its package's root module,
 which may import what the script generates, though it may import a file

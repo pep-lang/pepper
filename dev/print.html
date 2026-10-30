@@ -18204,6 +18204,10 @@ conform to the module's <code>Lane</code> trait; any other type is an error at t
 type argument:</p>
 <pre><code class="language-text">main.pep:3:25: error: 'String' does not conform to trait 'Lane', required by 'T' in 'Vector'
 </code></pre>
+<p><code>Lane</code> is sealed: only the runtime declares its conformances, so
+<code>extend Money with simd.Lane</code> is an error too:</p>
+<pre><code class="language-text">main.pep:7:19: error: 'Lane' is sealed: only the runtime declares which types conform to it
+</code></pre>
 </li>
 <li>
 <p><code>N</code> is written as a number, a power of two from 1 to 64:</p>
@@ -23266,7 +23270,10 @@ modules</a>) and define build options its code reads.
 Every build of a program that uses the package (a dependency, or the
 project itself) compiles the script for the machine it runs on and runs it
 before it loads the program, even when it builds for another platform with
-<code>--target</code>. The script imports the runtime and its package's
+<code>--target</code>. A package found only on the import path (<code>-I</code>) runs no script,
+so its <code>import generated</code> is an error that says to make it a dependency;
+a package's tests that need its generated code build as a project that
+depends on it (a <code>tests/pep.toml</code> with <code>name = { path = ".." }</code>). The script imports the runtime and its package's
 <a href="tools/projects.html#build-dependencies"><code>[build-dependencies]</code></a>, and stands apart from the
 code it builds: building it does not load its package's root module,
 which may import what the script generates, though it may import a file
@@ -26617,6 +26624,14 @@ declaration's own name. Only the runtime may use it.</p>
 </code></pre>
 <p>The built-in's name, when it differs from the declaration's; empty
 otherwise.</p>
+<h2 id="__sealed"><a class="header" href="#__sealed">__Sealed</a></h2>
+<pre><code class="language-pepper">[Attribute] struct __Sealed
+</code></pre>
+<p>Seals a trait: only the runtime declares which types conform to it, and
+an <code>extend T with Trait</code> outside the runtime is an error at the trait's
+name. Errors about a type that does not conform name no <code>extend</code> to add.
+The SIMD lane traits are sealed, as a <code>Vector</code> holds only the number
+types. Only the runtime may use it.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/reflect.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="the-reflect-module-compile-time"><a class="header" href="#the-reflect-module-compile-time">The reflect module (compile time)</a></h1>
 <p><code>reflect</code> exists only inside a <a href="reference/../language/reflection.html"><code>static</code> block</a>,
@@ -52762,18 +52777,18 @@ main(): int {
 </code></pre>
 <p>Source: <code>runtime/simd/module.pep</code></p>
 <h2 id="lane"><a class="header" href="#lane">Lane</a></h2>
-<pre><code class="language-pepper">trait Lane
+<pre><code class="language-pepper">[__Sealed] trait Lane
 </code></pre>
 <p>The number types a <code>Vector</code> holds: every integer and floating-point
 type. The runtime declares the conformances; another type cannot be a
 lane.</p>
 <h2 id="integerlane"><a class="header" href="#integerlane">IntegerLane</a></h2>
-<pre><code class="language-pepper">trait IntegerLane
+<pre><code class="language-pepper">[__Sealed] trait IntegerLane
 </code></pre>
 <p>The integer lane types, whose vectors have checked division, the bitwise
 operators, shifts and rotates.</p>
 <h2 id="floatlane"><a class="header" href="#floatlane">FloatLane</a></h2>
-<pre><code class="language-pepper">trait FloatLane
+<pre><code class="language-pepper">[__Sealed] trait FloatLane
 </code></pre>
 <p>The floating-point lane types, whose vectors have floating-point
 division, <code>square_root</code>, <code>floor</code> and <code>ceiling</code>.</p>

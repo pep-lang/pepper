@@ -437,6 +437,14 @@ declaration's own name. Only the runtime may use it.</p>
 </code></pre>
 <p>The built-in's name, when it differs from the declaration's; empty
 otherwise.</p>
+<h2 id="__sealed"><a class="header" href="#__sealed">__Sealed</a></h2>
+<pre><code class="language-pepper">[Attribute] struct __Sealed
+</code></pre>
+<p>Seals a trait: only the runtime declares which types conform to it, and
+an <code>extend T with Trait</code> outside the runtime is an error at the trait's
+name. Errors about a type that does not conform name no <code>extend</code> to add.
+The SIMD lane traits are sealed, as a <code>Vector</code> holds only the number
+types. Only the runtime may use it.</p>
 
                     </main>
 
