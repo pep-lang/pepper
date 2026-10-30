@@ -891,6 +891,22 @@ vendor = "vendor"
 | `hosts` | The hosts `pepper package add owner/name` looks a repository up on, in order, when the argument names none; it adds the first that has it | `["github", "gitlab", "codeberg"]` |
 | `vendor` | The folder, relative to the project, that [`pepper package vendor`](pep-package.md#vendor-dir) copied every locked package into, which sets it. Builds then read each dependency from `<vendor>/<host>/<owner>/<name>` instead of `.pep/deps`, fetch nothing, and fail when a package is missing, at another commit than `pep.lock`'s, or edited. A package that sets it needs `minimum_toolchain = "0.11.0"` or later | none: dependencies are fetched into `.pep/deps` |
 
+## `[cache]`
+
+```toml
+[cache]
+shared-size = "10GB"
+```
+
+| Key | What it is | Default |
+| --- | --- | --- |
+| `shared-size` | The most the [shared cache](pep-build.md#the-shared-cache) keeps, as a number of bytes or a string with `B`, `KB`, `MB`, `GB` or `TB` (powers of 1000) | the Pepper home's `pep.toml`'s, else `"5GB"` |
+
+The shared cache serves every project on the machine, so the limit can
+also be set once in a `pep.toml` in the Pepper home (`PEPPER_HOME`, else
+`%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere), which holds
+only `[cache]`. A project's own setting wins over the home's.
+
 ## `[retract]`
 
 A package withdraws its own broken releases, as Go's `retract` does: each

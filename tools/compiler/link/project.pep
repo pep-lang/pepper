@@ -465,6 +465,9 @@ export struct Manifest {
     ## `pepper package vendor` copied every locked package into, which
     ## builds read instead of `.pep/deps`; empty when not vendored.
     var vendor: String = "";
+    ## `[cache]`'s `shared-size`: the most bytes the shared cache of the
+    ## runtime's checked units keeps, if given.
+    var shared_cache_size: ulong? = Optional<ulong>.Empty;
     ## In the order they are written.
     var dependencies: Dependency[] = Array<Dependency>();
     ## `[dev-dependencies]`, in the order they are written: seen only by a
@@ -1167,6 +1170,30 @@ struct _Reader {
         }
     }
 
+    # `[cache]`: its `shared-size`, if given.
+    cache(members: OrderedMap<String, TomlValue>): ulong? {
+        ulong? size = Optional<ulong>.Empty;
+        for (var (key, value) in members) {
+            var path = ["cache", key];
+            if (key != "shared-size") {
+                unknown_key(["cache"], key, "cache", ["shared-size"]);
+                continue;
+            }
+            size = Optional<ulong>.Empty;
+            if (value is String(text)) {
+                size = parse_size(text);
+            } else if (value is Integer(bytes)) {
+                size = bytes >= 0 ? Optional<ulong>.Value(bytes as ulong) : Optional<ulong>.Empty;
+            }
+            if (!size.is_value()) {
+                error(
+                    "'shared-size' must be a size, such as \"5GB\", \"500MB\" or a number of bytes", value_span(path)
+                );
+            }
+        }
+        return size;
+    }
+
     fetch(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
         for (var (key, value) in members) {
             var path = ["fetch", key];
@@ -1678,6 +1705,11 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.fetch(manifest, table.value());
             }
+        } else if (key == "cache") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                manifest.shared_cache_size = reader.cache(table.value());
+            }
         } else if (key == "features") {
             var table = reader.table(at, key, value);
             if (table.is_value()) {
@@ -1701,7 +1733,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[workspace]', '[retract]' and '[audit]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[cache]', '[workspace]', '[retract]' and '[audit]'",
                 reader.key_span(at)
             );
         }
@@ -2658,4 +2690,67 @@ export find_manifest(dir: Path): Path? {
         at = parent;
     }
     return Optional<Path>.Empty;
+}
+
+## Returns the bytes `text` names: a number, then optionally `B`, `KB`,
+## `MB`, `GB` or `TB` (powers of 1000, in any case, after optional
+## spaces): `"5GB"` is 5000000000.
+##
+## @param text the size
+## @returns the bytes, or none when `text` is not a size
+export parse_size(text: String): ulong? {
+    var trimmed = text.trim();
+    ulong digits = 0;
+    while (digits < trimmed.size and trimmed.byte_at(digits) >= '0' and trimmed.byte_at(digits) <= '9') {
+        digits += 1;
+    }
+    var number = ulong.parse(trimmed.substr_bytes(0, digits));
+    if (digits == 0 or !number.is_value()) {
+        return Optional<ulong>.Empty;
+    }
+    var unit = trimmed.substr_bytes(digits, trimmed.size - digits).trim().upper();
+    var units = ["", "B", "KB", "MB", "GB", "TB"];
+    var scales: ulong[] = [1, 1, 1000, 1000000, 1000000000, 1000000000000];
+    for (var i in 0..units.count) {
+        if (unit == units[i]) {
+            return number.value().checked_mul(scales[i]);
+        }
+    }
+    return Optional<ulong>.Empty;
+}
+
+## Returns `[cache]`'s `shared-size` of the `pep.toml` at `path` in the
+## Pepper home, which holds only `[cache]`.
+##
+## @param path the file
+## @returns the size, if it gives one, or its problems, rendered clang-style
+export read_home_settings(path: Path): Result<ulong?, String> {
+    var text = File.read_to_string(path);
+    if (text.is_err()) {
+        return Result<ulong?, String>.err($"cannot read {path}: {text.error().message}");
+    }
+    var root = toml.parse(text.value());
+    if (root.is_err()) {
+        var e = root.error();
+        return Result<ulong?, String>.err(
+            render_manifest_errors(path, text.value(), [ManifestError(e.message, Span(e.offset, e.offset))])
+        );
+    }
+    var reader = _Reader(text.value());
+    ulong? size = Optional<ulong>.Empty;
+    var members = root.value().as_table();
+    for (var (key, value) in members.value()) {
+        var table = key == "cache" ? reader.table([key], key, value) : Optional<OrderedMap<String, TomlValue>>.Empty;
+        if (key != "cache") {
+            reader.error(
+                $"unknown table '{key}'; the Pepper home's pep.toml has only '[cache]'", reader.key_span([key])
+            );
+        } else if (table.is_value()) {
+            size = reader.cache(table.value());
+        }
+    }
+    if (!reader.errors.is_empty) {
+        return Result<ulong?, String>.err(render_manifest_errors(path, text.value(), reader.errors));
+    }
+    return Result<ulong?, String>.ok(size);
 }
