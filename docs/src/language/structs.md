@@ -67,6 +67,9 @@ name like a function.
   `float fahrenheit = 32.0`, is accepted too.
 - Inside the body, fields are in scope by name. Use `this.name` when a
   parameter has the same name as a field.
+- A bare `return;` leaves the constructor early, as in C++, Java and C#.
+  The call still gives the new object, as set so far; fields the body has
+  not reached keep their defaults.
 - A struct may declare several constructors with different parameter
   lists; a call picks one by its arguments, as for any
   [overloaded](overloading.md#constructors) function. At most one of them
