@@ -4728,6 +4728,12 @@ struct Parser {
                 offset = _escape(text, offset, _start(index), bytes, true);
                 continue;
             }
+            if (c == '\r' and text.byte_at(offset + 1) == '\n') {
+                # A line break is `\n` however the file ends its lines (a
+                # Windows checkout ends them `\r\n`).
+                offset += 1;
+                continue;
+            }
             bytes.append(c as u8);
             offset += 1;
         }
@@ -4811,6 +4817,11 @@ struct Parser {
             var c = text.byte_at(offset);
             if (c == '\\') {
                 offset = _escape(text, offset, literal_start, bytes);
+                continue;
+            }
+            if (c == '\r' and text.byte_at(offset + 1) == '\n') {
+                # As in `_string_text`.
+                offset += 1;
                 continue;
             }
             if (c == '{' and text.byte_at(offset + 1) == '{') {
@@ -5002,6 +5013,11 @@ struct Parser {
             var c = text.byte_at(offset);
             if (c == '\\') {
                 offset = _escape(text, offset, literal_start, bytes);
+                continue;
+            }
+            if (c == '\r' and text.byte_at(offset + 1) == '\n') {
+                # As in `_string_text`.
+                offset += 1;
                 continue;
             }
             if (c == '{' and text.byte_at(offset + 1) == '{') {

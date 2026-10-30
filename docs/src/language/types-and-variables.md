@@ -268,6 +268,11 @@ main.pep:2:13: error: unknown escape sequence '\q'
       |             ^~
 ```
 
+A string literal may span lines. Each line break in it is a `\n`, whether
+the file ends its lines with `\n` or with `\r\n` (as a Windows checkout
+may), so a literal means the same on every system; write `\r` for a
+carriage return.
+
 ### Other built-in types
 
 - `void` means "no value". It is the return type of a function that returns
