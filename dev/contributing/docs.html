@@ -225,6 +225,11 @@ a pull request's macOS and Windows jobs run (see
 with <code>[Target(OS(...))]</code> or <code>[Target(Arch(...))]</code>. A sample of the examples is
 also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
+<p>The same test builds and runs every <code>@example</code> in the runtime's doc
+comments that is a whole program (it declares <code>main</code>), and reports a
+failure at its <code>@example</code> line. Its names start with <code>runtime-</code>, so
+<code>PEPPER_DOCS_EXAMPLE=runtime-</code> runs only those. One that must not run, such
+as a server or a program that needs arguments, is written <code>@example no-run</code>: it is built but not run.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
 <p>Documentation is versioned with the compiler's <a href="https://semver.org">semantic version</a>
 (the one line of the root <code>VERSION</code> file). <code>pep-doc build --version X.Y.Z</code>

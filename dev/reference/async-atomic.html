@@ -208,7 +208,9 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <li><code>T</code> — the type of the stored value, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">main(): int {
+<pre><code class="language-pepper">import async;
+
+main(): int {
     var counter = async.Atomic&lt;long&gt;(0);
     var before = counter.fetch_add(5);   # before == 0
     if (counter.load() != 5) { return 1; }

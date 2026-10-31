@@ -229,7 +229,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import async;
 
-const total = Atomic&lt;long&gt;(0);
+const total = async.Atomic&lt;long&gt;(0);
 
 add_ten() {
     total.fetch_add(10);

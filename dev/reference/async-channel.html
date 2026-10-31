@@ -216,7 +216,7 @@ threads.</p>
 <pre><code class="language-pepper">import async;
 
 const jobs = async.Channel&lt;long&gt;(64);
-const total = Atomic&lt;long&gt;(0);
+const total = async.Atomic&lt;long&gt;(0);
 
 worker() {
     for (var job in jobs) {

@@ -755,7 +755,8 @@ rules with <code>TimeZone.at_local</code>, to name an instant.</p>
 comparisons, and never allocated. Its text is ISO 8601's
 <code>2024-03-01T09:00:00</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">import time;
+<pre><code class="language-pepper">import os;
+import time;
 
 main(): int {
     var start = time.DateTime(2024, 3, 1, 9, 0);

@@ -238,6 +238,10 @@ WASI has no signals: the channel never receives.</p>
 <pre><code class="language-pepper">import process;
 import [Signal] from process;
 
+start_serving() {}
+
+stop_serving() {}
+
 main(): int {
     var stop = process.signals([Signal.Interrupt, Signal.Terminate]);
     start_serving();

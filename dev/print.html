@@ -14758,7 +14758,7 @@ text runs until the next tag.</p>
 <tr><td><code>@param name description</code></td><td>each parameter of a function, method or constructor</td></tr>
 <tr><td><code>@returns description</code></td><td>what the function returns, whenever it returns a value</td></tr>
 <tr><td><code>@panics description</code></td><td>each way a caller can make the function panic (a failed <code>assert</code>, a call to <code>panic</code>)</td></tr>
-<tr><td><code>@example</code></td><td>sample code, indented on the lines that follow; line breaks are kept</td></tr>
+<tr><td><code>@example</code></td><td>sample code, indented on the lines that follow; line breaks are kept. In the runtime, an example that declares <code>main</code> is built and run by the tests; write <code>@example no-run</code> for one that must not run, such as a server</td></tr>
 <tr><td><code>@see name</code></td><td>a related declaration</td></tr>
 <tr><td><code>@note text</code></td><td>a remark that does not fit elsewhere</td></tr>
 </tbody></table>
@@ -35231,7 +35231,8 @@ during iteration".</p>
     for (var x in a) {
         total = total + x;
     }
-    return total;   # 7
+    assert(total == 7, "5 + 2");
+    return 0;
 }
 </code></pre>
 <h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
@@ -39270,7 +39271,8 @@ main(): int {
     for (int n in Countdown(3)) {
         total = total + n;   # visits 3, 2, 1
     }
-    return total;
+    assert(total == 6, "3 + 2 + 1");
+    return 0;
 }
 </code></pre>
 <h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
@@ -40663,11 +40665,13 @@ has nothing to bind.</p>
 <li><code>T</code> — the type <code>enter()</code> returns</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">var open = 0;
+<pre><code class="language-pepper">import async;
+
+const open = async.Atomic&lt;int&gt;(0);
 
 struct Session {
     construct() {
-        open = open + 1;
+        open.fetch_add(1);
     }
 
     destruct {
@@ -40679,7 +40683,7 @@ struct Session {
     }
 
     exit() {
-        open = open - 1;
+        open.fetch_sub(1);
     }
 }
 
@@ -40689,7 +40693,7 @@ main(): int {
     with (var session = Session()) {
         # open == 1 here
     }
-    return open;   # 0: the session was destroyed at the end of the block
+    return open.load();   # 0: the session was destroyed at the end of the block
 }
 </code></pre>
 <h3 id="methods-74"><a class="header" href="#methods-74">Methods</a></h3>
@@ -47133,7 +47137,9 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <li><code>T</code> — the type of the stored value, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">main(): int {
+<pre><code class="language-pepper">import async;
+
+main(): int {
     var counter = async.Atomic&lt;long&gt;(0);
     var before = counter.fetch_add(5);   # before == 0
     if (counter.load() != 5) { return 1; }
@@ -47364,7 +47370,7 @@ outside. A <code>panic</code> or failed <code>assert</code> on any thread ends t
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import async;
 
-const total = Atomic&lt;long&gt;(0);
+const total = async.Atomic&lt;long&gt;(0);
 
 add_ten() {
     total.fetch_add(10);
@@ -48652,7 +48658,7 @@ threads.</p>
 <pre><code class="language-pepper">import async;
 
 const jobs = async.Channel&lt;long&gt;(64);
-const total = Atomic&lt;long&gt;(0);
+const total = async.Atomic&lt;long&gt;(0);
 
 worker() {
     for (var job in jobs) {
@@ -49008,7 +49014,7 @@ as Go and the JVM do: a quota of 1.5 processors counts as 2.</p>
 <pre><code class="language-pepper">import async;
 
 main(): int {
-    print(async.logical_cpus(), " logical processors\n");
+    print($"{async.logical_cpus()} logical processors");
     return 0;
 }
 </code></pre>
@@ -50486,6 +50492,10 @@ WASI has no signals: the channel never receives.</p>
 <pre><code class="language-pepper">import process;
 import [Signal] from process;
 
+start_serving() {}
+
+stop_serving() {}
+
 main(): int {
     var stop = process.signals([Signal.Interrupt, Signal.Terminate]);
     start_serving();
@@ -50943,9 +50953,9 @@ processes or reboots. Use <code>SystemTime</code> for the date and time.</p>
 
 main(): int {
     var start = os.Instant.now();
-    var total = 0;
+    ulong total = 0;
     for (var i in 0..1000000) {
-        total = total + i;
+        total += i as ulong;
     }
     var elapsed = os.Instant.now() - start;
     print($"summed in {elapsed.milliseconds()} ms");
@@ -52127,7 +52137,8 @@ rules with <code>TimeZone.at_local</code>, to name an instant.</p>
 comparisons, and never allocated. Its text is ISO 8601's
 <code>2024-03-01T09:00:00</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">import time;
+<pre><code class="language-pepper">import os;
+import time;
 
 main(): int {
     var start = time.DateTime(2024, 3, 1, 9, 0);
@@ -54636,8 +54647,7 @@ write is ignored. Colors are off.</p>
 import log;
 
 main(): int {
-    var path = io.Directory.temp().join("app.log");
-    var file = io.File.create(path).value();
+    var file = io.File.create(io.Directory.temp().join("app.log")).value();
     log.set_output(move(file), log.Format.Json);
     log.info("started");
     return 0;
@@ -54663,7 +54673,8 @@ caller can skip building a costly message or field.</p>
 
 main(): int {
     if (log.enabled(log.Level.Debug)) {
-        log.debug($"state: {[1, 2, 3]}");
+        var queue = [1, 2, 3];
+        log.debug($"queue: {queue.count} jobs");
     }
     return 0;
 }
@@ -62121,6 +62132,11 @@ a pull request's macOS and Windows jobs run (see
 with <code>[Target(OS(...))]</code> or <code>[Target(Arch(...))]</code>. A sample of the examples is
 also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
+<p>The same test builds and runs every <code>@example</code> in the runtime's doc
+comments that is a whole program (it declares <code>main</code>), and reports a
+failure at its <code>@example</code> line. Its names start with <code>runtime-</code>, so
+<code>PEPPER_DOCS_EXAMPLE=runtime-</code> runs only those. One that must not run, such
+as a server or a program that needs arguments, is written <code>@example no-run</code>: it is built but not run.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
 <p>Documentation is versioned with the compiler's <a href="https://semver.org">semantic version</a>
 (the one line of the root <code>VERSION</code> file). <code>pep-doc build --version X.Y.Z</code>

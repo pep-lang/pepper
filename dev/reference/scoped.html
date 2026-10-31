@@ -210,11 +210,13 @@ has nothing to bind.</p>
 <li><code>T</code> — the type <code>enter()</code> returns</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">var open = 0;
+<pre><code class="language-pepper">import async;
+
+const open = async.Atomic&lt;int&gt;(0);
 
 struct Session {
     construct() {
-        open = open + 1;
+        open.fetch_add(1);
     }
 
     destruct {
@@ -226,7 +228,7 @@ struct Session {
     }
 
     exit() {
-        open = open - 1;
+        open.fetch_sub(1);
     }
 }
 
@@ -236,7 +238,7 @@ main(): int {
     with (var session = Session()) {
         # open == 1 here
     }
-    return open;   # 0: the session was destroyed at the end of the block
+    return open.load();   # 0: the session was destroyed at the end of the block
 }
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>

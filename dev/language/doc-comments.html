@@ -236,7 +236,7 @@ text runs until the next tag.</p>
 <tr><td><code>@param name description</code></td><td>each parameter of a function, method or constructor</td></tr>
 <tr><td><code>@returns description</code></td><td>what the function returns, whenever it returns a value</td></tr>
 <tr><td><code>@panics description</code></td><td>each way a caller can make the function panic (a failed <code>assert</code>, a call to <code>panic</code>)</td></tr>
-<tr><td><code>@example</code></td><td>sample code, indented on the lines that follow; line breaks are kept</td></tr>
+<tr><td><code>@example</code></td><td>sample code, indented on the lines that follow; line breaks are kept. In the runtime, an example that declares <code>main</code> is built and run by the tests; write <code>@example no-run</code> for one that must not run, such as a server</td></tr>
 <tr><td><code>@see name</code></td><td>a related declaration</td></tr>
 <tr><td><code>@note text</code></td><td>a remark that does not fit elsewhere</td></tr>
 </tbody></table>
