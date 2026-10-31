@@ -2630,7 +2630,10 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bind
             and (!module.extended_checked.contains(st.name) or !_has_body(st))) {
             continue;
         }
-        var place = $"s{st.ty.to_string()}";
+        # By name: a specialization whose arguments spell its parameters
+        # (`Walk<K>` of `Walk<K>`) has the base's type, and would take the
+        # base's walk as its own (#451).
+        var place = $"s{st.name}";
         var struct_read = _type_read(st.ty.to_string());
         var struct_base = _base_read(st.ty.to_string());
         var current = Optional<TypeName>.Value(st.ty);
