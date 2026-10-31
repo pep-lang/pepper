@@ -204,8 +204,8 @@ works there unchanged. Write <code>OS(Mac) &amp;&amp; !OS(IOS)</code> for macOS 
 <li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code>,
 <code>aarch64</code>, or <code>wasm32</code>.</li>
 <li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
-can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>) or with
-another build option; see
+can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>), with
+another build option, or after arithmetic (<code>BuildOption(LEVEL) % 2 == 0</code>); see
 <a href="build-options.html">Build options</a>.</li>
 </ul>
 <p>Values are matched case-insensitively, so <code>OS(windows)</code> works too. Combine

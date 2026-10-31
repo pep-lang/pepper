@@ -244,6 +244,15 @@ verbose(): bool {
     return false;
 }
 
+# Either side of a comparison computes with `+ - * / %` on options and
+# numbers.
+even_level(): bool {
+    [Target(BuildOption(LOG_LEVEL) % 2 == 0)] {
+        return true;
+    }
+    return false;
+}
+
 main(): int {
     if (scale(21) != 42) {
         return 1;
@@ -254,6 +263,9 @@ main(): int {
     }
     if (verbose() and level != 2) {
         return 3;
+    }
+    if (even_level() != (level == 2)) {
+        return 4;
     }
     return 0;
 }
@@ -318,11 +330,52 @@ the operator:</p>
     1 | [Target(BuildOption(MODE) &lt; BuildOption(LEVEL))]
       |                           ^~~~~~~~~~~~~~~~~~~~
 </code></pre>
+<h2 id="arithmetic-on-options"><a class="header" href="#arithmetic-on-options">Arithmetic on options</a></h2>
+<p>Either side of a comparison may compute with <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code> and <code>%</code> on
+build options and number literals, with the precedence and parentheses of
+Pepper expressions:</p>
+<pre><code class="language-pepper">[Target(BuildOption(LEVEL) % 2 == 0)]
+_even_level() { ... }
+
+[Target((BuildOption(MAJOR) * 100 + BuildOption(MINOR)) &gt;= 203)]
+import "new_api";
+</code></pre>
+<ul>
+<li>
+<p>Each value is read as an integer, decimal or <code>0x</code> hex, that fits in 64
+bits, else as a <code>double</code>. Arithmetic is on signed 64-bit integers when every value in it
+is one, and on <code>double</code>s otherwise, so <code>BuildOption(TEN) / 4</code> is <code>2</code> and
+<code>BuildOption(TEN) / 4.0</code> is <code>2.5</code>. <code>/</code> and <code>%</code> on integers round toward
+zero, as in Pepper.</p>
+</li>
+<li>
+<p>A value that is not a number is an error at the operator:</p>
+<pre><code class="language-text">main.pep:1:28: error: build option 'LEVEL' is 'high', which is not a number; '%' takes only numbers
+    1 | [Target(BuildOption(LEVEL) % 2 == 0)]
+      |                            ^~~
+</code></pre>
+</li>
+<li>
+<p>Integer division or remainder by zero is an error at the operator
+(<code>division by zero in a 'Target' condition</code>), and so is an integer
+result that does not fit in 64 bits (`integer overflow: '9223372036854775807</p>
+<ul>
+<li>2' does not fit in a 'long'<code>). On </code>double<code>s both follow IEEE 754: </code>1.5 / 0` is infinity, and a NaN compares unequal to everything.</li>
+</ul>
+</li>
+<li>
+<p>Arithmetic must end in a comparison: <code>[Target(BuildOption(A) + 1)]</code> is an
+error.</p>
+</li>
+</ul>
+<h2 id="options-the-build-does-not-define"><a class="header" href="#options-the-build-does-not-define">Options the build does not define</a></h2>
 <p>A comparison with an option the build does not define is false, whatever
 the operator, and the compiler warns at it, since a missing option there is
 usually a mistake. With two options, it is false when either is not
-defined, <code>BuildOption(A) == BuildOption(B)</code> included when neither is, and
-the compiler warns at each one missing:</p>
+defined, <code>BuildOption(A) == BuildOption(B)</code> included when neither is; with
+arithmetic, when any option in it is not, before anything is computed (so
+<code>BuildOption(A) / 0 &gt; 1</code> is false, not an error, without <code>-D A</code>). The
+compiler warns at each one missing:</p>
 <pre><code class="language-text">main.pep:3:13: warning: build option 'LOG_LEVEL' is not defined; the comparison is false
     3 |     [Target(BuildOption(LOG_LEVEL) &gt;= 2)] {
       |             ^~~~~~~~~~~~~~~~~~~~~~
@@ -349,7 +402,6 @@ setting names them.</p>
 <ul>
 <li>A <code>pep.toml</code> table declaring the options a package takes, with their
 types and defaults.</li>
-<li>Arithmetic on options.</li>
 </ul>
 
                     </main>
