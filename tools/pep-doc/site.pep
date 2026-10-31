@@ -2,7 +2,7 @@
 # own folder (`<site>/0.1.0/`, `<site>/dev/`), and nothing ever removes
 # one, so the docs of every release stay available. `versions.json` lists
 # the folders, newest first, for the version picker on every page;
-# `index.html` sends visitors to the newest release.
+# `index.html` and `latest/` send visitors to the newest release.
 
 import [Directory, File, Path] from io;
 import json;
@@ -170,8 +170,11 @@ _write(site: Path, name: String, text: String): Result<void> {
     return Result<void>.ok();
 }
 
-# Rewrites `versions.json` and `index.html` in `site` from its folders;
-# `index.html` is titled `title`.
+# Rewrites `versions.json`, `index.html`, `latest/index.html` and
+# `404.html` in `site` from its folders; the redirects are titled `title`.
+# `index.html` and `latest/` open the newest release, and `404.html` sends
+# any other path under `latest/` to the same page there (GitHub Pages
+# serves the root `404.html` for every missing path).
 export write_index(site: Path, title: String): Result<void> {
     var versions = versions_in(site);
     var latest = default_version(versions);
@@ -184,12 +187,24 @@ export write_index(site: Path, title: String): Result<void> {
     index["versions"] = list;
     _write(site, "versions.json", index.to_pretty_string() + "\n")?;
     var target = latest.is_value() ? latest.value() : DEV;
+    _write(site, "index.html", _redirect(title, target, $"{target}/"))?;
+    var latest_dir = site.join("latest");
+    var created = Directory.create_all(latest_dir);
+    if (created.is_err()) {
+        return Result<void>.Err($"cannot create {latest_dir.to_string()}: {created.error().message}");
+    }
+    _write(latest_dir, "index.html", _redirect(title, target, $"../{target}/"))?;
     _write(
         site,
-        "index.html",
-        $"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>{title}</title>\n<meta http-equiv=\"refresh\" content=\"0; url={target}/\">\n<link rel=\"canonical\" href=\"{target}/\">\n</head>\n<body><p><a href=\"{target}/\">{title} {target}</a></p></body>\n</html>\n"
+        "404.html",
+        $"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Page not found</title>\n<script>\nvar p = location.pathname, m = p.match(/\\/latest(\\/|$)/);\nif (m) location.replace(p.slice(0, m.index) + \"/{target}/\" + p.slice(m.index + m[0].length) + location.search + location.hash);\n</script>\n</head>\n<body><h1>Page not found</h1></body>\n</html>\n"
     )?;
     # GitHub Pages would otherwise run Jekyll, which drops mdBook's
     # underscore-prefixed files.
     return _write(site, ".nojekyll", "");
+}
+
+# A page titled `title` that opens `url`, the docs of `version`, at once.
+_redirect(title: String, version: String, url: String): String {
+    return $"<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>{title}</title>\n<meta http-equiv=\"refresh\" content=\"0; url={url}\">\n<link rel=\"canonical\" href=\"{url}\">\n</head>\n<body><p><a href=\"{url}\">{title} {version}</a></p></body>\n</html>\n";
 }

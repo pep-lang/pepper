@@ -252,7 +252,11 @@ the_index_keeps_every_version_and_opens_the_newest_release() {
         "{\n  \"latest\": \"0.2.0\",\n  \"versions\": [\n    \"0.3.0-beta.1\",\n    \"0.2.0\",\n    \"0.1.0\",\n    \"dev\"\n  ]\n}\n"
     );
     expect_true(File.read_to_string(folder.path.join("index.html")).value().contains("url=0.2.0/"));
+    expect_true(File.read_to_string(folder.path.join("latest").join("index.html")).value().contains("url=../0.2.0/"));
+    expect_true(File.read_to_string(folder.path.join("404.html")).value().contains("\"/0.2.0/\""));
     expect_true(folder.path.join(".nojekyll").is_file());
+    # `latest/` is not a version.
+    expect_equal(", ".join(versions_in(folder.path)), "0.3.0-beta.1, 0.2.0, 0.1.0, dev");
 }
 
 [Test]

@@ -61,7 +61,16 @@ Documentation is versioned with the compiler's [semantic version](https://semver
 (the one line of the root `VERSION` file). `pep-doc build --version X.Y.Z`
 renders the book into `<site>/X.Y.Z/` and leaves every other version in the
 site alone; `versions.json` lists them for the version picker, and the site's
-`index.html` opens the newest release. Builds from `main` publish as `dev`.
+`index.html` and `latest/` open the newest release. On GitHub Pages a
+deeper `latest/` link, such as `latest/tools/pep-doc.html`, opens that page
+in the newest release too, through the site's `404.html`. Builds from `main`
+publish as `dev`.
+
+The version picker at the top of every page opens the chosen version as
+soon as it is picked with the mouse. Chosen with the arrow keys, it waits
+for Enter, so a keyboard user can look through the versions without
+leaving the page. It opens the same page in the chosen version, or that
+version's introduction when it has no such page.
 
 The `Docs` workflow (`.github/workflows/docs.yml`) publishes to the
 `gh-pages` branch: pushing to `main` updates `dev`, and pushing a tag
