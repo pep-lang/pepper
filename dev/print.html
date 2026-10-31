@@ -22375,7 +22375,7 @@ pepper --version [-v]
 <tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="tools/pepper.html#how-it-finds-a-command">How it finds a command</a>)</td></tr>
 <tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.3.0</code> or <code>+0.3</code> (see <a href="tools/pepper.html#toolchains">Toolchains</a>)</td></tr>
 <tr><td><code>-C &lt;dir&gt;</code></td><td>Changes to <code>&lt;dir&gt;</code> before running the command (see <a href="tools/pepper.html#running-in-another-folder">Running in another folder</a>)</td></tr>
-<tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find</td></tr>
+<tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find, each with what it does when it is one of <a href="tools/pepper.html#the-commands-in-this-repository">the commands in this repository</a> (another <code>pep-&lt;name&gt;</code> shows its name only)</td></tr>
 <tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
 <tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version, and in a Pepper home the toolchain the folder uses and why</td></tr>
 <tr><td><code>--version -v</code>, <code>--version --verbose</code></td><td>Also prints the version each command reports (its <code>--version</code>'s first line, or <code>(no version)</code>)</td></tr>
@@ -22432,8 +22432,8 @@ the ones <code>pepper</code> found:</p>
 pepper: error: 'buidl' is not a pepper command; did you mean 'build'?
 
 Commands:
-  build
-  fmt
+  build  Compiles a program, or with no file the project
+  fmt    Formats source
 </code></pre>
 <h2 id="running-in-another-folder"><a class="header" href="#running-in-another-folder">Running in another folder</a></h2>
 <p><code>-C &lt;dir&gt;</code> runs the command as if <code>pepper</code> had been started in <code>&lt;dir&gt;</code>, like
@@ -24328,6 +24328,14 @@ the package's folder on the import path under that name, so they run with
 for the build's target and links it, so <code>add.pep</code> can call it. A package
 without C code deletes <code>native/</code>, the table, <code>add.pep</code>,
 <code>tests/add_test.pep</code> and <code>add</code> in <code>module.pep</code>.</p>
+<p><code>minimum_toolchain = "0.11.0"</code> is the template's choice: 0.11.0 is the
+first release that reads <code>[native]</code>, so it is the oldest toolchain that
+builds the package as written, and CI tests with it as well as with the
+newest. Raise it when the package starts to use something a later
+release added, such as a runtime function, a language feature or a
+<code>pep.toml</code> table: <a href="tools/pep-package.html#the-toolchain-a-package-needs"><code>pepper package</code></a>
+then skips that version of the package for users of an older toolchain
+instead of handing them one that does not build.</p>
 <p>The files come from the template repository word for word, so a package
 started either way is the same; the template's CI checks that what
 <code>pepper new mypkg --lib --license Apache-2.0</code> writes matches it. To
@@ -25786,7 +25794,12 @@ does for a project (see <a href="tools/pep-build.html">pep-build</a>); <code>pep
 <code>PEPPER_LOCKED</code> and <code>PEPPER_OFFLINE</code> itself.</p>
 <p>The exit status is 0 when every test program builds and every test
 passes, 1 when a test fails or a program does not build, and 2 for a usage
-error.</p>
+error. A run in which no test runs, because <code>--filter</code> matches none or the
+<code>--shard</code> gets none, passes and exits with 0 (<code>running 0 tests</code>, then
+<code>0 passed, 0 failed, 5 filtered out</code>), as <code>cargo test</code> does, so one
+filter can go to runs over several folders and those that hold none of
+its tests still pass. A misspelt filter therefore passes too; the summary
+shows it.</p>
 <h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
 <ol>
 <li><strong>Finds the files.</strong> A file named on the command line is tested as it

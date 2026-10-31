@@ -235,7 +235,12 @@ does for a project (see <a href="pep-build.html">pep-build</a>); <code>pep-build
 <code>PEPPER_LOCKED</code> and <code>PEPPER_OFFLINE</code> itself.</p>
 <p>The exit status is 0 when every test program builds and every test
 passes, 1 when a test fails or a program does not build, and 2 for a usage
-error.</p>
+error. A run in which no test runs, because <code>--filter</code> matches none or the
+<code>--shard</code> gets none, passes and exits with 0 (<code>running 0 tests</code>, then
+<code>0 passed, 0 failed, 5 filtered out</code>), as <code>cargo test</code> does, so one
+filter can go to runs over several folders and those that hold none of
+its tests still pass. A misspelt filter therefore passes too; the summary
+shows it.</p>
 <h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
 <ol>
 <li><strong>Finds the files.</strong> A file named on the command line is tested as it

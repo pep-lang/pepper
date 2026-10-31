@@ -249,6 +249,14 @@ the package's folder on the import path under that name, so they run with
 for the build's target and links it, so <code>add.pep</code> can call it. A package
 without C code deletes <code>native/</code>, the table, <code>add.pep</code>,
 <code>tests/add_test.pep</code> and <code>add</code> in <code>module.pep</code>.</p>
+<p><code>minimum_toolchain = "0.11.0"</code> is the template's choice: 0.11.0 is the
+first release that reads <code>[native]</code>, so it is the oldest toolchain that
+builds the package as written, and CI tests with it as well as with the
+newest. Raise it when the package starts to use something a later
+release added, such as a runtime function, a language feature or a
+<code>pep.toml</code> table: <a href="pep-package.html#the-toolchain-a-package-needs"><code>pepper package</code></a>
+then skips that version of the package for users of an older toolchain
+instead of handing them one that does not build.</p>
 <p>The files come from the template repository word for word, so a package
 started either way is the same; the template's CI checks that what
 <code>pepper new mypkg --lib --license Apache-2.0</code> writes matches it. To

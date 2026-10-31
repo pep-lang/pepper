@@ -208,7 +208,7 @@ pepper --version [-v]
 <tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="#how-it-finds-a-command">How it finds a command</a>)</td></tr>
 <tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.3.0</code> or <code>+0.3</code> (see <a href="#toolchains">Toolchains</a>)</td></tr>
 <tr><td><code>-C &lt;dir&gt;</code></td><td>Changes to <code>&lt;dir&gt;</code> before running the command (see <a href="#running-in-another-folder">Running in another folder</a>)</td></tr>
-<tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find</td></tr>
+<tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find, each with what it does when it is one of <a href="#the-commands-in-this-repository">the commands in this repository</a> (another <code>pep-&lt;name&gt;</code> shows its name only)</td></tr>
 <tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
 <tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version, and in a Pepper home the toolchain the folder uses and why</td></tr>
 <tr><td><code>--version -v</code>, <code>--version --verbose</code></td><td>Also prints the version each command reports (its <code>--version</code>'s first line, or <code>(no version)</code>)</td></tr>
@@ -265,8 +265,8 @@ the ones <code>pepper</code> found:</p>
 pepper: error: 'buidl' is not a pepper command; did you mean 'build'?
 
 Commands:
-  build
-  fmt
+  build  Compiles a program, or with no file the project
+  fmt    Formats source
 </code></pre>
 <h2 id="running-in-another-folder"><a class="header" href="#running-in-another-folder">Running in another folder</a></h2>
 <p><code>-C &lt;dir&gt;</code> runs the command as if <code>pepper</code> had been started in <code>&lt;dir&gt;</code>, like
