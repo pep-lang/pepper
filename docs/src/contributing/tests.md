@@ -236,9 +236,8 @@ It installs stage 0 with
 `scripts/ci-install-toolchain.sh` into `target/pepper-home`, builds
 `tools/compiler` with it (`scripts/ci-build-compiler.sh`, into
 `target/compiler`), then runs the runtime's tests with stage 0's own
-`pepper test`. Further arguments go to that `pepper test`. It needs
-`GH_TOKEN` while the repository is private, and on macOS and Windows
-LLVM's prefix, as `scripts/pepper-tests.sh` does (`PEPPER_LLVM_PREFIX`,
+`pepper test`. Further arguments go to that `pepper test`. On macOS and
+Windows it needs LLVM's prefix, as `scripts/pepper-tests.sh` does (`PEPPER_LLVM_PREFIX`,
 or this checkout's `.pep/llvm-prefix`).
 
 ## Tests that run the tools

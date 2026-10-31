@@ -18,7 +18,7 @@
 
     Piped into PowerShell (irm ... | iex) it takes no parameters; set
     PEPPER_VERSION and PEPPER_HOME instead. GITHUB_TOKEN or GH_TOKEN, when
-    set, is the token to download with while the repository is private.
+    set, is sent to GitHub's API, which raises its limit on requests an hour.
 
 .PARAMETER Version
     Install this release (x.y.z) instead of the newest.
@@ -115,7 +115,6 @@ function Get-Api([string]$Uri, [string]$OutFile, [string]$Key, [int[]]$Delays = 
 
 # Fails with what the last Get-Api got.
 function Stop-Api {
-    if (-not $Token -and $script:ApiStatus -eq 404) { Warn 'while the repository is private, set GITHUB_TOKEN to a token that can read it' }
     Fail "GET $script:ApiUri answered HTTP ${script:ApiStatus}: $script:ApiMessage"
 }
 

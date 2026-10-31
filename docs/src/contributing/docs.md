@@ -13,7 +13,7 @@ Install mdBook once, from [its releases](https://github.com/rust-lang/mdBook/rel
 pep-doc serve                                 # live preview while writing
 pep-doc reference                             # regenerate the reference after changing runtime docs
 pep-doc build                                 # render into target/docs-site/dev/
-pep-doc build --version 0.2.0 --site <dir>
+pep-doc build --version 0.11.1 --site <dir>
 ```
 
 Run it as `target/pepper-tests/bin/pep-doc` after `scripts/pepper-tests.sh`,

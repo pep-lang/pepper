@@ -79,7 +79,7 @@ is the command when none is given.
 - `--site <DIR>`: the site folder (default: `target/docs-site`).
 
 ```bash
-pep-doc build --version 0.3.0 --site site     # renders into site/0.3.0/
+pep-doc build --version 0.11.1 --site site   # renders into site/0.11.1/
 ```
 
 ### `pep-doc serve`

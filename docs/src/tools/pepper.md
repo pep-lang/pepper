@@ -10,7 +10,7 @@ pepper build                      # builds the project pep.toml describes
 pepper run hello.pep a b          # builds hello.pep and runs it with a b
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper -C my_app build            # runs pep-build in my_app
-pepper +0.2 build                 # runs the installed 0.2.x toolchain's pep-build
+pepper +0.10 build                # runs the installed 0.10.x toolchain's pep-build
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -31,7 +31,7 @@ pepper --version [-v]
 | Form | What it does |
 | --- | --- |
 | `pepper <command> [arguments]` | Runs `pep-<command>` with the arguments (see [How it finds a command](#how-it-finds-a-command)) |
-| `+<version>` | Runs the command with that installed toolchain, such as `+0.3.0` or `+0.3` (see [Toolchains](#toolchains)) |
+| `+<version>` | Runs the command with that installed toolchain, such as `+0.11.1` or `+0.11` (see [Toolchains](#toolchains)) |
 | `-C <dir>` | Changes to `<dir>` before running the command (see [Running in another folder](#running-in-another-folder)) |
 | `pepper help`, `-h`, `--help` | Prints the usage, these options, and the commands it can find, each with what it does when it is one of [the commands in this repository](#the-commands-in-this-repository) (another `pep-<name>` shows its name only) |
 | `pepper help <command>` | Runs `pep-<command> --help` |
@@ -130,15 +130,15 @@ Windows), beside the installed toolchains, and runs the tools of one of
 them, or of a toolchain in a folder `PEPPER_TOOLCHAIN_PATH` lists (see
 [More toolchain folders](pep-install.md#more-toolchain-folders)). The first of these that names a toolchain picks it:
 
-1. `+<version>` before the command: `pepper +0.3.0 build`;
+1. `+<version>` before the command: `pepper +0.11.1 build`;
 2. the `PEPPER_TOOLCHAIN` environment variable;
-3. `toolchain = "0.3"` in `[package]` of the nearest `pep.toml` at or above
+3. `toolchain = "0.11"` in `[package]` of the nearest `pep.toml` at or above
    the folder the command runs in (after `-C`), so a project pins the
    compiler it builds with (see [Projects: pep.toml](projects.md#package));
 4. the default, which `pepper install use` sets.
 
-A version is exact (`0.3.0`), or a prefix that picks the newest installed
-toolchain that starts so (`0.3`, `0`), or `latest` for the newest installed.
+A version is exact (`0.11.1`), or a prefix that picks the newest installed
+toolchain that starts so (`0.11`, `0`), or `latest` for the newest installed.
 `pepper` then looks for `pep-<command>` in that toolchain's `bin` folder
 first, then beside `pepper`, then on the `PATH`, and runs it with
 `PEPPER_TOOLCHAIN` set to the exact version, so a `pepper` that command runs
@@ -150,7 +150,7 @@ says so and how to install it, and exits with status 1:
 
 ```text
 $ pepper build
-pepper: error: toolchain 0.4 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.4'
+pepper: error: toolchain 0.10 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.10'
 ```
 
 `pepper install which` shows which toolchain a folder uses and why.

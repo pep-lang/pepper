@@ -16,7 +16,7 @@
 # stage 0's own tools. Further arguments go to that `pepper test`.
 #
 # Environment: those of the two scripts (PEPPER_TARGET_DIR, PEPPER_LLVM_PREFIX,
-# GH_TOKEN while the repository is private).
+# GH_TOKEN for GitHub's API).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

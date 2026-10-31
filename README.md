@@ -47,24 +47,19 @@ the links below open. Its source is [`docs/`](docs/src/SUMMARY.md).
 
 ## Install
 
-Each release has the toolchain prebuilt for Linux (x64), macOS (arm64, x64)
+Each release has the toolchain prebuilt for Linux (x64), macOS (arm64)
 and Windows (x64), and an install script that downloads it, puts `pepper`
 on the `PATH` and offers to install what linking needs (clang, Xcode's
-command line tools, or the Visual Studio Build Tools). While the repository
-is private the script needs a GitHub token, which the
-[GitHub CLI](https://cli.github.com) provides:
+command line tools, or the Visual Studio Build Tools):
 
 ```sh
 # Linux, macOS
-gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
-GITHUB_TOKEN=$(gh auth token) sh install.sh
+curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-gh api repos/pep-lang/pepper/contents/scripts/install.ps1 -H "Accept: application/vnd.github.raw" > install.ps1
-$env:GITHUB_TOKEN = gh auth token
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 ```
 
 Then open a new terminal and check it with `pepper --version`. Toolchains
@@ -72,12 +67,12 @@ install side by side:
 
 ```sh
 pepper install update             # the newest release, made the default
-pepper install add 0.9.1          # another, kept beside it
+pepper install add 0.11.0         # another, kept beside it
 pepper install list --available   # every release, and the x.y.z-dev build of main
-pepper +0.9.1 build hello.pep     # one command with another toolchain
+pepper +0.11.0 build hello.pep    # one command with another toolchain
 ```
 
-A project pins its toolchain with `toolchain = "0.9"` in its `pep.toml`.
+A project pins its toolchain with `toolchain = "0.11"` in its `pep.toml`.
 See [Installing Pepper](https://docs.pepper-lang.dev/dev/tools/install.html)
 and [Toolchains](https://docs.pepper-lang.dev/dev/tools/pep-install.html).
 
