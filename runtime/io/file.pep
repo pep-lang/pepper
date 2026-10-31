@@ -474,7 +474,9 @@ export struct File {
         }
         var f = File();
         f._handle = h.value();
-        f.path = path;
+        # Its own copy: the caller's `Path` stays theirs, so the File can be
+        # moved to another thread while the caller keeps using it (#471).
+        f.path = copy(path);
         return IoResult<File>.ok(f);
     }
 

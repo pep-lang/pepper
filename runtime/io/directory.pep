@@ -117,7 +117,7 @@ export struct Directory {
             return IoResult<Directory>.err(IoError(_io_sys_code_not_a_directory(), "not a directory"));
         }
         var d = Directory();
-        d.path = path;
+        d.path = copy(path);  # its own: see File.open_with
         return IoResult<Directory>.ok(d);
     }
 
@@ -425,7 +425,7 @@ export struct DirectoryIterator {
     ##
     ## @param path the directory to list
     construct(path: Path) {
-        _path = path;
+        _path = copy(path);  # its own: see File.open_with
         _value = IoResult<DirEntry>.ok(DirEntry());
     }
 
