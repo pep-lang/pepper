@@ -1,0 +1,578 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>BitSet - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/bitset.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/bitset.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="bitset"><a class="header" href="#bitset">BitSet</a></h1>
+<p><code>BitSet</code>: a set of small non-negative integers, stored one bit each.</p>
+<p>Source: <code>runtime/bitset.pep</code></p>
+<h2 id="bitset-1"><a class="header" href="#bitset-1">BitSet</a></h2>
+<pre><code class="language-pepper">struct BitSet
+</code></pre>
+<p>A growable set of non-negative integers, one bit per possible member.</p>
+<p>Member <code>n</code> is bit <code>n % 64</code> of word <code>n / 64</code>, so a set whose largest
+member is <code>m</code> takes about <code>m / 8</code> bytes whatever its count: a good fit for
+visited flags, masks, and sieve or liveness tables over small integers.
+For sparse or large integers use a <code>HashSet&lt;int&gt;</code>.</p>
+<p><code>insert</code> grows the set as needed and <code>reserve</code> grows it ahead of time;
+the set never shrinks. <code>contains</code> and <code>remove</code> take O(1); <code>count</code>,
+<code>is_empty</code>, <code>==</code>, <code>hash</code>, iteration and the set operations take
+O(capacity / 64).</p>
+<p>Two sets are <code>==</code> when they hold the same members, whatever their
+capacity, and equal sets hash equally, so a <code>BitSet</code> works as a
+<code>HashMap</code> or <code>HashSet</code> key. A <code>BitSet</code> is not <code>[Shared]</code>: keep each one
+on one thread.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">BitSet primes = [2, 3, 5, 7];
+primes.insert(11);
+assert(primes.contains(5), "a member");
+assert(primes.count == 5, "five members");
+for (var p in primes) {
+    print($"{p}");   # 2, 3, 5, 7, 11
+}
+</code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="capacity"><a class="header" href="#capacity">capacity</a></h4>
+<pre><code class="language-pepper">var capacity: int { get; }
+</code></pre>
+<p>The number of members the set holds without growing, a multiple of 64.</p>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of members in the set. O(capacity / 64).</p>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the set has no members. O(capacity / 64).</p>
+<h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
+<h4 id="bitset-2"><a class="header" href="#bitset-2">BitSet()</a></h4>
+<pre><code class="language-pepper">construct(capacity: int = 0)
+</code></pre>
+<p>Creates an empty set with room for the members <code>0</code> up to (not
+including) <code>capacity</code> before it grows.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>capacity</code> — the number of members to make room for; rounded up to a multiple of 64</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>capacity</code> is negative</li>
+</ul>
+<h4 id="bitset-3"><a class="header" href="#bitset-3">BitSet()</a></h4>
+<pre><code class="language-pepper">[Implicit] construct(items: int[])
+</code></pre>
+<p>Creates a set holding each element of <code>items</code>.</p>
+<p>The constructor is <code>[Implicit]</code>: an array converts to a set wherever
+a set is expected, so an array literal can initialize one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the members to insert; duplicates are kept once</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if an element of <code>items</code> is negative</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">BitSet flags = [1, 4, 4];
+assert(flags.count == 2, "4 is kept once");
+</code></pre>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="reserve"><a class="header" href="#reserve">reserve</a></h4>
+<pre><code class="language-pepper">reserve(capacity: int)
+</code></pre>
+<p>Makes room for the members <code>0</code> up to (not including) <code>capacity</code>, so
+inserting them does not grow the set. Never shrinks it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>capacity</code> — the number of members to make room for</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>capacity</code> is negative</li>
+</ul>
+<h4 id="clear"><a class="header" href="#clear">clear</a></h4>
+<pre><code class="language-pepper">clear()
+</code></pre>
+<p>Removes every member. The set keeps its capacity.</p>
+<h4 id="contains"><a class="header" href="#contains">contains</a></h4>
+<pre><code class="language-pepper">contains(n: int): bool
+</code></pre>
+<p>Returns whether <code>n</code> is a member. O(1).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>n</code> — the integer to look up; a negative one is never a member</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>n</code> is a member</li>
+</ul>
+<h4 id="insert"><a class="header" href="#insert">insert</a></h4>
+<pre><code class="language-pepper">insert(n: int): bool
+</code></pre>
+<p>Adds <code>n</code> to the set, growing it when <code>n</code> is past its capacity.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>n</code> — the integer to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>n</code> was added, false when it was already a member</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>n</code> is negative</li>
+</ul>
+<h4 id="remove"><a class="header" href="#remove">remove</a></h4>
+<pre><code class="language-pepper">remove(n: int): bool
+</code></pre>
+<p>Removes <code>n</code> from the set. Does nothing when <code>n</code> is not a member.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>n</code> — the integer to remove</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>n</code> was a member and was removed, false otherwise</li>
+</ul>
+<h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): BitSetIterator
+</code></pre>
+<p>Returns an iterator over the members in ascending order;
+<code>for (var n in set)</code> drives it.</p>
+<p>The iterator holds a reference to the set. Changing the set while
+iterating is safe: the iterator sees the members above its position
+as they are when it reaches them.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an iterator positioned before the smallest member</li>
+</ul>
+<h4 id="union_with"><a class="header" href="#union_with">union_with</a></h4>
+<pre><code class="language-pepper">union_with(other: BitSet)
+</code></pre>
+<p>Adds every member of <code>other</code> to this set.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set whose members to add</li>
+</ul>
+<h4 id="intersect_with"><a class="header" href="#intersect_with">intersect_with</a></h4>
+<pre><code class="language-pepper">intersect_with(other: BitSet)
+</code></pre>
+<p>Keeps only the members that <code>other</code> also holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set to intersect with</li>
+</ul>
+<h4 id="difference_with"><a class="header" href="#difference_with">difference_with</a></h4>
+<pre><code class="language-pepper">difference_with(other: BitSet)
+</code></pre>
+<p>Removes every member that <code>other</code> holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set whose members to remove</li>
+</ul>
+<h4 id="symmetric_difference_with"><a class="header" href="#symmetric_difference_with">symmetric_difference_with</a></h4>
+<pre><code class="language-pepper">symmetric_difference_with(other: BitSet)
+</code></pre>
+<p>Keeps the members that exactly one of the two sets holds: removes
+the members <code>other</code> also holds and adds those only <code>other</code> holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set to compare with</li>
+</ul>
+<h4 id="union"><a class="header" href="#union">union</a></h4>
+<pre><code class="language-pepper">union(other: BitSet): BitSet
+</code></pre>
+<p>Returns a new set holding the members of either set.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the other set</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the union of the two sets</li>
+</ul>
+<h4 id="intersection"><a class="header" href="#intersection">intersection</a></h4>
+<pre><code class="language-pepper">intersection(other: BitSet): BitSet
+</code></pre>
+<p>Returns a new set holding the members both sets hold.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the other set</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the intersection of the two sets</li>
+</ul>
+<h4 id="difference"><a class="header" href="#difference">difference</a></h4>
+<pre><code class="language-pepper">difference(other: BitSet): BitSet
+</code></pre>
+<p>Returns a new set holding the members of this set that <code>other</code> does
+not hold.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set whose members to leave out</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this set minus <code>other</code></li>
+</ul>
+<h4 id="symmetric_difference"><a class="header" href="#symmetric_difference">symmetric_difference</a></h4>
+<pre><code class="language-pepper">symmetric_difference(other: BitSet): BitSet
+</code></pre>
+<p>Returns a new set holding the members that exactly one of the two
+sets holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the other set</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the symmetric difference of the two sets</li>
+</ul>
+<h4 id="is_subset"><a class="header" href="#is_subset">is_subset</a></h4>
+<pre><code class="language-pepper">is_subset(other: BitSet): bool
+</code></pre>
+<p>Returns whether every member of this set is also a member of <code>other</code>.
+The empty set is a subset of every set.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this set holds no member that <code>other</code> lacks</li>
+</ul>
+<h4 id="is_disjoint"><a class="header" href="#is_disjoint">is_disjoint</a></h4>
+<pre><code class="language-pepper">is_disjoint(other: BitSet): bool
+</code></pre>
+<p>Returns whether the two sets have no member in common.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the set to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when no integer is a member of both sets</li>
+</ul>
+<h4 id="operator-"><a class="header" href="#operator-">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: BitSet): bool
+</code></pre>
+<p>Reports whether both sets hold the same members. Capacity is not
+compared.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the set to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the sets have the same members</li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: BitSet): bool
+</code></pre>
+<p>Reports whether the sets differ in any member; the negation of <code>==</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the set to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when one set holds a member the other lacks</li>
+</ul>
+<h4 id="copy"><a class="header" href="#copy">copy</a></h4>
+<pre><code class="language-pepper">copy(): BitSet
+</code></pre>
+<p>Returns a new set with the same members and capacity. This is how
+<code>copy(value)</code> copies a BitSet (the <code>Copyable&lt;BitSet&gt;</code>
+implementation).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="hash"><a class="header" href="#hash">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;BitSet&gt;(value: BitSet): u64
+</code></pre>
+<p>Returns a hash of the members of <code>value</code>, so equal sets hash equally
+whatever their capacity and a <code>BitSet</code> works as a <code>HashMap</code> or <code>HashSet</code>
+key. O(capacity / 64).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the set to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the set's members</li>
+</ul>
+<h2 id="bitsetiterator"><a class="header" href="#bitsetiterator">BitSetIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct BitSetIterator
+</code></pre>
+<p>An <code>Iterator&lt;int&gt;</code> over the members of a <code>BitSet</code> in ascending order;
+returned by <code>BitSet.iterate()</code> and driven by <code>for (var n in set)</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>BitSet.iterate</code></li>
+</ul>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="bitsetiterator-1"><a class="header" href="#bitsetiterator-1">BitSetIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: BitSet)
+</code></pre>
+<p>Creates an iterator positioned before the smallest member of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the set to iterate</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="next"><a class="header" href="#next">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next larger member.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current member, false once every member was visited</li>
+</ul>
+<h4 id="current"><a class="header" href="#current">current</a></h4>
+<pre><code class="language-pepper">current(): int
+</code></pre>
+<p>Returns the member the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current member</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> was never called or already returned false ("BitSetIterator.current() without a member")</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/ordered_map.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/deque.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/ordered_map.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/deque.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

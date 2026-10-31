@@ -1,0 +1,423 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Thread - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/async-thread.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/async/thread.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="thread"><a class="header" href="#thread">Thread</a></h1>
+<p>Threads: starting, naming, identifying and joining operating-system
+threads.</p>
+<p>Source: <code>runtime/async/thread.pep</code></p>
+<h2 id="threadid"><a class="header" href="#threadid">ThreadId</a></h2>
+<pre><code class="language-pepper">type ThreadId = ulong
+</code></pre>
+<p>Identifies a thread for as long as the program runs: every thread,
+whether started with <code>Thread.spawn</code> or not, gets a distinct id the first
+time it is asked for one, and ids are never reused.</p>
+<p>Ids are assigned by the runtime in the order threads ask for them, starting
+at 1; they are not the operating system's thread ids. A <code>ThreadId</code> is a
+number, so it can be compared, hashed and used as a <code>HashMap</code> key.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Thread.id</code></li>
+</ul>
+<h2 id="threadbody"><a class="header" href="#threadbody">ThreadBody</a></h2>
+<pre><code class="language-pepper">type ThreadBody = shared () =&gt; void
+</code></pre>
+<p>The type of a thread's body: a function that takes no arguments and
+returns nothing. <code>Thread.spawn</code> runs one on a new thread.</p>
+<p>It is a <code>shared</code> function type, because the body runs on another thread:
+a named function, or a closure that captures only thread-safe values
+(numbers, <code>Atomic&lt;T&gt;</code>, <code>[Shared]</code> structs, other <code>shared</code> function
+values). A closure capturing a <code>String</code>, say, is a compile error.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Thread.spawn</code></li>
+</ul>
+<h2 id="thread-1"><a class="header" href="#thread-1">Thread</a></h2>
+<pre><code class="language-pepper">[Shared] struct Thread
+</code></pre>
+<p>An operating-system thread.</p>
+<p>Start one with <code>Thread.spawn</code>, which runs a function on a new thread and
+returns its <code>Thread</code>, and wait for it to finish with <code>join()</code>. Every
+thread, including the main thread, can get its own <code>Thread</code> with
+<code>Thread.current()</code>.</p>
+<p>A <code>Thread</code> is <code>[Shared]</code>: the thread that started it and the thread itself
+can both hold it. Dropping every reference without joining detaches the
+thread: it keeps running, and its resources are freed when it finishes.</p>
+<p>The body runs until it returns; there is no way to stop a thread from the
+outside. A <code>panic</code> or failed <code>assert</code> on any thread ends the whole program.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+const total = Atomic&lt;long&gt;(0);
+
+add_ten() {
+    total.fetch_add(10);
+}
+
+main(): int {
+    var a = async.Thread.spawn(add_ten, "adder a");
+    var b = async.Thread.spawn(add_ten, "adder b");
+    a.join();
+    b.join();
+    assert(total.load() == 20, "both threads ran");
+    return 0;
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
+<pre><code class="language-pepper">construct(name: String, body: ThreadBody)
+</code></pre>
+<p>Creates a <code>Thread</code> value for a thread that is already running. Programs
+get threads from <code>spawn</code> and <code>current()</code> instead; a <code>Thread</code> made
+directly is not attached to any thread and cannot be joined.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the thread's name; empty for an unnamed thread</li>
+<li><code>body</code> — the function the thread runs</li>
+</ul>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="spawn"><a class="header" href="#spawn">spawn</a></h4>
+<pre><code class="language-pepper">static spawn(body: ThreadBody, name: String = "", stack_size: ulong = 0): Thread
+</code></pre>
+<p>Starts a new thread that runs <code>body</code>.</p>
+<p>The new thread starts right away and runs until <code>body</code> returns. Its
+<code>Thread.current()</code> is the <code>Thread</code> returned here.</p>
+<p>The stack the operating system gives a thread by default differs:
+usually 8 MiB on Linux (<code>ulimit -s</code>), 1 MiB on Windows, and 512 KiB
+on macOS. A thread that recurses deeply, such as one walking a
+deeply nested tree, passes <code>stack_size</code> to get the same stack
+everywhere. The stack is reserved address space; memory is used
+only as the thread reaches it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the function to run on the new thread</li>
+<li><code>name</code> — a name for the thread, returned by <code>name()</code>; empty by default</li>
+<li><code>stack_size</code> — the bytes of stack the thread gets, rounded up to 64 KiB; 0, the default, for the system's default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new thread, to <code>join()</code> or query</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot create another thread, or refuses <code>stack_size</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var worker = Thread.spawn(do_work, "worker");
+worker.join();
+var deep = Thread.spawn(walk_tree, "walker", 8388608);   # 8 MiB
+deep.join();
+</code></pre>
+<h4 id="current"><a class="header" href="#current">current</a></h4>
+<pre><code class="language-pepper">static current(): Thread
+</code></pre>
+<p>Returns the <code>Thread</code> of the thread that calls it.</p>
+<p>For a thread started with <code>spawn</code> this is the <code>Thread</code> that <code>spawn</code>
+returned. Any other thread (the main thread, or one started by C code)
+gets a <code>Thread</code> the first time it asks and the same one afterwards; the
+main thread's is named <code>main</code>, the others are unnamed. Such a <code>Thread</code>
+cannot be joined.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the calling thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var me = Thread.current();
+print(me.name(), "\n");   # "main" on the main thread
+</code></pre>
+<h4 id="sleep"><a class="header" href="#sleep">sleep</a></h4>
+<pre><code class="language-pepper">static sleep(milliseconds: ulong)
+</code></pre>
+<p>Pauses the calling thread for at least <code>milliseconds</code> milliseconds.</p>
+<p>The operating system may sleep longer, but never shorter. In a task
+(see <code>run</code>), it is <code>async.sleep</code>: the task waits and its worker thread
+runs other tasks, and a cancel or the task's <code>timeout</code> ends the wait
+early.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="id"><a class="header" href="#id">id</a></h4>
+<pre><code class="language-pepper">id(): ThreadId
+</code></pre>
+<p>Returns the thread's id, which no other thread in the program has.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the thread's id</li>
+</ul>
+<h4 id="name"><a class="header" href="#name">name</a></h4>
+<pre><code class="language-pepper">name(): String
+</code></pre>
+<p>Returns the name the thread was given.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the name passed to <code>spawn</code>, <code>main</code> for the main thread, or an empty String for an unnamed thread</li>
+</ul>
+<h4 id="is_finished"><a class="header" href="#is_finished">is_finished</a></h4>
+<pre><code class="language-pepper">is_finished(): bool
+</code></pre>
+<p>Reports whether the thread's body has returned.</p>
+<p>A thread that is not finished may finish at any moment, so a <code>false</code>
+result can be out of date by the time it is used. Always false for a
+<code>Thread</code> that was not started by <code>spawn</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once the body has returned</li>
+</ul>
+<h4 id="is_joinable"><a class="header" href="#is_joinable">is_joinable</a></h4>
+<pre><code class="language-pepper">is_joinable(): bool
+</code></pre>
+<p>Reports whether <code>join()</code> can be called: the thread was started by
+<code>spawn</code> and has not been joined yet.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if the thread can be joined</li>
+</ul>
+<h4 id="join"><a class="header" href="#join">join</a></h4>
+<pre><code class="language-pepper">join()
+</code></pre>
+<p>Waits for the thread's body to return.</p>
+<p>Returns right away if it already has. A thread can be joined once; a
+<code>Thread</code> from <code>current()</code> for a thread not started by <code>spawn</code> cannot be
+joined at all. Everything the thread did before it finished is visible
+to the caller after <code>join()</code> returns.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the thread cannot be joined (see <code>is_joinable()</code>), or if a thread tries to join itself</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/async-atomic.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/async-thread_local.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/async-atomic.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/async-thread_local.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

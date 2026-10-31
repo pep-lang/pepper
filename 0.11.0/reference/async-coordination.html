@@ -1,0 +1,462 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Semaphore, Barrier and Latch - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/async-coordination.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/async/coordination.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="semaphore-barrier-and-latch"><a class="header" href="#semaphore-barrier-and-latch">Semaphore, Barrier and Latch</a></h1>
+<p>Coordination between threads: <code>Semaphore</code> bounds how many threads do
+something at once, <code>Barrier</code> makes a group of threads meet before any
+goes on, and <code>Latch</code> lets threads wait until a count of events has
+happened.</p>
+<p>Source: <code>runtime/async/coordination.pep</code></p>
+<h2 id="semaphore"><a class="header" href="#semaphore">Semaphore</a></h2>
+<pre><code class="language-pepper">[Shared] struct Semaphore
+</code></pre>
+<p>A count of permits that threads take and give back, like Java's
+<code>Semaphore</code> or C++20 <code>std::counting_semaphore</code>: at most <code>permits</code> threads
+hold one at a time.</p>
+<p><code>acquire()</code> waits until a permit is free and takes it; <code>release()</code> gives
+one back. The usual form is a <code>with</code> block, which gives the permit back
+on every path out: <code>with (semaphore.permit()) { ... }</code>.</p>
+<p>A Semaphore is <code>[Shared]</code>: keep it in a module-scope variable or pass it
+to threads. Permits are not tied to a thread: any thread may release a
+permit that another acquired, and <code>release()</code> may raise the count above
+where it started.</p>
+<p>In a task (see <code>run</code>), waiting for a permit parks the task, not its worker
+thread.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+# At most two downloads at once.
+const downloads = async.Semaphore(2);
+
+download(url: String) {
+    with (downloads.permit()) {
+        # ... fetch url ...
+    }
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="semaphore-1"><a class="header" href="#semaphore-1">Semaphore()</a></h4>
+<pre><code class="language-pepper">construct(permits: ulong)
+</code></pre>
+<p>Creates a Semaphore with <code>permits</code> free permits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>permits</code> — how many permits are free at first; 0 makes every <code>acquire()</code> wait for a <code>release()</code></li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="acquire"><a class="header" href="#acquire">acquire</a></h4>
+<pre><code class="language-pepper">acquire()
+</code></pre>
+<p>Waits until a permit is free, and takes it.</p>
+<p>Give it back with <code>release()</code>, or use <code>permit()</code> in a <code>with</code> block,
+which gives it back for you.</p>
+<h4 id="try_acquire"><a class="header" href="#try_acquire">try_acquire</a></h4>
+<pre><code class="language-pepper">try_acquire(): bool
+</code></pre>
+<p>Takes a permit only if one is free right now, without waiting.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if the caller now holds a permit, false if none was free</li>
+</ul>
+<h4 id="release"><a class="header" href="#release">release</a></h4>
+<pre><code class="language-pepper">release()
+</code></pre>
+<p>Gives a permit back, waking one thread waiting in <code>acquire()</code> if any.</p>
+<h4 id="permit"><a class="header" href="#permit">permit</a></h4>
+<pre><code class="language-pepper">permit(): SemaphorePermit
+</code></pre>
+<p>Waits until a permit is free, takes it, and returns a guard that gives
+it back when destroyed: at the end of <code>with (semaphore.permit()) { ... }</code>
+by any path.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard holding the permit</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (connections.permit()) {
+    serve(client);
+}   # the permit is given back here
+</code></pre>
+<h2 id="semaphorepermit"><a class="header" href="#semaphorepermit">SemaphorePermit</a></h2>
+<pre><code class="language-pepper">struct SemaphorePermit
+</code></pre>
+<p>A permit taken from a <code>Semaphore</code>, given back when the guard is destroyed.
+Get one from <code>Semaphore.permit()</code> in a <code>with</code> header.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var permit = pool.permit()) {
+    # holds one of the pool's permits
+}
+</code></pre>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="semaphorepermit-1"><a class="header" href="#semaphorepermit-1">SemaphorePermit()</a></h4>
+<pre><code class="language-pepper">construct(semaphore: Semaphore)
+</code></pre>
+<p>Waits for a permit from <code>semaphore</code> and holds it; the same as
+<code>semaphore.permit()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>semaphore</code> — the Semaphore to take a permit from</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="enter"><a class="header" href="#enter">enter</a></h4>
+<pre><code class="language-pepper">enter(): SemaphorePermit
+</code></pre>
+<p>Returns this guard, for the <code>with</code> header.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this permit</li>
+</ul>
+<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Gives the permit back if it is still held. The destructor calls it;
+calling it again does nothing.</p>
+<h2 id="barrier"><a class="header" href="#barrier">Barrier</a></h2>
+<pre><code class="language-pepper">[Shared] struct Barrier
+</code></pre>
+<p>A meeting point for a fixed number of threads, like Rust's
+<code>std::sync::Barrier</code>: each thread that calls <code>wait()</code> sleeps until <code>count</code>
+threads have called it, then all of them go on together.</p>
+<p>Exactly one thread of each group, the leader, gets true from <code>wait()</code>, so
+it can do the work that must happen once per round. The barrier then
+resets, and the next <code>count</code> calls make the next round.</p>
+<p>A Barrier is <code>[Shared]</code>. In a task (see <code>run</code>), <code>wait()</code> parks the task,
+not its worker thread; the other tasks of a round must then run on other
+workers or later on the same one.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+const step_done = async.Barrier(4);
+
+work(id: long) {
+    var step = 0;
+    while (step &lt; 10) {
+        # ... this thread's share of the step ...
+        if (step_done.wait()) {
+            print($"step {step} done\n");   # once per step
+        }
+        step = step + 1;
+    }
+}
+</code></pre>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="barrier-1"><a class="header" href="#barrier-1">Barrier()</a></h4>
+<pre><code class="language-pepper">construct(count: ulong)
+</code></pre>
+<p>Creates a barrier for groups of <code>count</code> threads.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many threads each round waits for; 0 counts as 1, so every <code>wait()</code> returns at once as the leader</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="wait"><a class="header" href="#wait">wait</a></h4>
+<pre><code class="language-pepper">wait(): bool
+</code></pre>
+<p>Waits until <code>count</code> threads, this one included, have called <code>wait()</code>
+in this round.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true on exactly one thread of each round, the last to arrive; false on the others</li>
+</ul>
+<h2 id="latch"><a class="header" href="#latch">Latch</a></h2>
+<pre><code class="language-pepper">[Shared] struct Latch
+</code></pre>
+<p>A one-shot countdown, like C++20 <code>std::latch</code>: threads wait until
+<code>count_down()</code> has been called <code>count</code> times. Once open it stays open.</p>
+<p>Unlike a <code>Barrier</code>, the threads that count down need not wait, and the
+threads that wait need not count down: a typical use is a thread that
+starts workers and waits for each to report that it is ready.</p>
+<p>A Latch is <code>[Shared]</code>. In a task (see <code>run</code>), <code>wait()</code> parks the task, not
+its worker thread.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+const ready = async.Latch(3);
+
+worker() {
+    # ... set up ...
+    ready.count_down();
+    # ... work ...
+}
+
+main(): int {
+    var threads = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 3) {
+        threads.append(async.Thread.spawn(worker));
+        i = i + 1;
+    }
+    ready.wait();   # every worker has set up
+    for (var t in threads) {
+        t.join();
+    }
+    return 0;
+}
+</code></pre>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="latch-1"><a class="header" href="#latch-1">Latch()</a></h4>
+<pre><code class="language-pepper">construct(count: ulong)
+</code></pre>
+<p>Creates a latch that opens after <code>count</code> calls to <code>count_down()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many calls open it; 0 makes a latch that is open from the start</li>
+</ul>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="count_down"><a class="header" href="#count_down">count_down</a></h4>
+<pre><code class="language-pepper">count_down()
+</code></pre>
+<p>Counts one event, and opens the latch, waking every waiter, if it was
+the last one.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the latch is already open</li>
+</ul>
+<h4 id="wait-1"><a class="header" href="#wait-1">wait</a></h4>
+<pre><code class="language-pepper">wait()
+</code></pre>
+<p>Waits until the latch is open. Returns at once if it already is.</p>
+<h4 id="is_ready"><a class="header" href="#is_ready">is_ready</a></h4>
+<pre><code class="language-pepper">is_ready(): bool
+</code></pre>
+<p>Reports whether the latch is open, without waiting.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once <code>count_down()</code> has been called <code>count</code> times</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/async-mutex.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/async-rwlock.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/async-mutex.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/async-rwlock.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

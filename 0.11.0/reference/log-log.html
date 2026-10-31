@@ -1,0 +1,478 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Logging - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/log-log.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/log/log.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="logging"><a class="header" href="#logging">Logging</a></h1>
+<p>Levels, fields, the output, and the functions that write a line.</p>
+<p>Source: <code>runtime/log/log.pep</code></p>
+<h2 id="level"><a class="header" href="#level">Level</a></h2>
+<pre><code class="language-pepper">enum Level
+</code></pre>
+<p>How much a line matters, most important first.</p>
+<p>As the level a target shows (<code>set_level</code>, <code>PEPPER_LOG</code>), each level also
+shows the ones above it: <code>Info</code> shows errors, warnings and info lines.</p>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="off"><a class="header" href="#off">Off</a></h4>
+<pre><code class="language-pepper">Off
+</code></pre>
+<p>Nothing: as the level a target shows, turns its lines off.</p>
+<h4 id="error"><a class="header" href="#error">Error</a></h4>
+<pre><code class="language-pepper">Error
+</code></pre>
+<p>Something failed (<code>error</code>).</p>
+<h4 id="warning"><a class="header" href="#warning">Warning</a></h4>
+<pre><code class="language-pepper">Warning
+</code></pre>
+<p>Something looks wrong but the program carries on (<code>warning</code>).</p>
+<h4 id="info"><a class="header" href="#info">Info</a></h4>
+<pre><code class="language-pepper">Info
+</code></pre>
+<p>What the program is doing, at the level of whole operations (<code>info</code>).</p>
+<h4 id="debug"><a class="header" href="#debug">Debug</a></h4>
+<pre><code class="language-pepper">Debug
+</code></pre>
+<p>Detail for finding a bug (<code>debug</code>).</p>
+<h4 id="trace"><a class="header" href="#trace">Trace</a></h4>
+<pre><code class="language-pepper">Trace
+</code></pre>
+<p>Step-by-step detail (<code>trace</code>).</p>
+<h2 id="format"><a class="header" href="#format">Format</a></h2>
+<pre><code class="language-pepper">enum Format
+</code></pre>
+<p>How each line is written.</p>
+<h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
+<h4 id="text"><a class="header" href="#text">Text</a></h4>
+<pre><code class="language-pepper">Text
+</code></pre>
+<p>One readable line: the UTC time, the level, the target in brackets,
+the message, <code>key=value</code> fields, and the call's location in
+parentheses.</p>
+<h4 id="json"><a class="header" href="#json">Json</a></h4>
+<pre><code class="language-pepper">Json
+</code></pre>
+<p>One JSON object per line (JSON Lines), with the keys <code>time</code>,
+<code>level</code>, <code>target</code> (when there is one), <code>message</code> and <code>location</code>, then
+each field.</p>
+<h2 id="field"><a class="header" href="#field">Field</a></h2>
+<pre><code class="language-pepper">struct Field
+</code></pre>
+<p>A key and value attached to a line. Make one with <code>field</code>.</p>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="key"><a class="header" href="#key">key</a></h4>
+<pre><code class="language-pepper">var key: String = ""
+</code></pre>
+<p>The key.</p>
+<h4 id="value"><a class="header" href="#value">value</a></h4>
+<pre><code class="language-pepper">var value: String = ""
+</code></pre>
+<p>The value as JSON text: <code>200</code>, <code>"ann"</code>, <code>true</code>.</p>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="field-1"><a class="header" href="#field-1">Field()</a></h4>
+<pre><code class="language-pepper">construct(key: String, value: String)
+</code></pre>
+<p>Creates a field from a key and the JSON text of its value; <code>field</code>
+makes the text from any value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key</li>
+<li><code>value</code> — the value's JSON text</li>
+</ul>
+<h2 id="field-2"><a class="header" href="#field-2">field</a></h2>
+<pre><code class="language-pepper">field&lt;T&gt;(key: String, value: T): Field
+</code></pre>
+<p>Makes a field for a line: <code>log.info("done", [log.field("ms", 12)])</code>.</p>
+<p>The value is turned into JSON (see <code>json.encode</code>) when the field is
+made, whether or not the line is written; guard costly fields with
+<code>enabled</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key</li>
+<li><code>value</code> — the value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the field</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import log;
+
+main(): int {
+    log.info("request done", [log.field("status", 200), log.field("path", "/")]);
+    return 0;
+}
+</code></pre>
+<h2 id="set_level"><a class="header" href="#set_level">set_level</a></h2>
+<pre><code class="language-pepper">set_level(level: Level, target: String = "")
+</code></pre>
+<p>Sets the level a target shows, or with no target the level every target
+without its own shows. The default is <code>Level.Info</code>, unless the
+<code>PEPPER_LOG</code> environment variable says otherwise.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>level</code> — the least important level to show; <code>Level.Off</code> shows nothing</li>
+<li><code>target</code> — the target, as the logging functions' <code>target</code>; empty for the global level</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import log;
+
+main(): int {
+    log.set_level(log.Level.Debug);
+    log.set_level(log.Level.Warning, "http");
+    log.debug("shown");
+    log.info("not shown", target = "http");
+    return 0;
+}
+</code></pre>
+<h2 id="set_output"><a class="header" href="#set_output">set_output</a></h2>
+<pre><code class="language-pepper">set_output([Move] writer: io.Writer, format: Format = Format.Text)
+</code></pre>
+<p>Sends every line from now on to <code>writer</code> in <code>format</code>, instead of to
+standard error. Lines are written whole, one <code>write_all</code> each, under a
+lock, so lines from many threads and tasks never interleave. A failed
+write is ignored. Colors are off.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>writer</code> — where lines go: a new value, or one handed over with <code>move(x)</code>, since the log keeps it</li>
+<li><code>format</code> — how each line is written</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+import log;
+
+main(): int {
+    var path = io.Directory.temp().join("app.log");
+    var file = io.File.create(path).value();
+    log.set_output(move(file), log.Format.Json);
+    log.info("started");
+    return 0;
+}
+</code></pre>
+<h2 id="enabled"><a class="header" href="#enabled">enabled</a></h2>
+<pre><code class="language-pepper">enabled(level: Level, target: String = ""): bool
+</code></pre>
+<p>Reports whether a line at <code>level</code> for <code>target</code> would be written, so a
+caller can skip building a costly message or field.</p>
+<p>Cheap when no target shows <code>level</code>: two atomic loads, with no lock.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>level</code> — the line's level</li>
+<li><code>target</code> — the line's target; empty for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>target</code> shows <code>level</code>; false for <code>Level.Off</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import log;
+
+main(): int {
+    if (log.enabled(log.Level.Debug)) {
+        log.debug($"state: {[1, 2, 3]}");
+    }
+    return 0;
+}
+</code></pre>
+<h2 id="error-1"><a class="header" href="#error-1">error</a></h2>
+<pre><code class="language-pepper">error( message: String, fields: Array&lt;Field&gt; = Array&lt;Field&gt;(), target: String = "" )
+</code></pre>
+<p>Writes an error line: something failed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the message</li>
+<li><code>fields</code> — keys and values to add to the line (see <code>field</code>)</li>
+<li><code>target</code> — the part of the program the line is about, which <code>set_level</code> and <code>PEPPER_LOG</code> can show or hide on its own; empty for none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">log.error("cannot open the database", [log.field("path", path)]);
+</code></pre>
+<h2 id="warning-1"><a class="header" href="#warning-1">warning</a></h2>
+<pre><code class="language-pepper">warning( message: String, fields: Array&lt;Field&gt; = Array&lt;Field&gt;(), target: String = "" )
+</code></pre>
+<p>Writes a warning line: something looks wrong but the program carries on.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the message</li>
+<li><code>fields</code> — keys and values to add to the line (see <code>field</code>)</li>
+<li><code>target</code> — the part of the program the line is about; empty for none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">log.warning("retrying", [log.field("attempt", 2)], target = "http");
+</code></pre>
+<h2 id="info-1"><a class="header" href="#info-1">info</a></h2>
+<pre><code class="language-pepper">info( message: String, fields: Array&lt;Field&gt; = Array&lt;Field&gt;(), target: String = "" )
+</code></pre>
+<p>Writes an info line: what the program is doing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the message</li>
+<li><code>fields</code> — keys and values to add to the line (see <code>field</code>)</li>
+<li><code>target</code> — the part of the program the line is about; empty for none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">log.info("listening", [log.field("port", 8080)]);
+</code></pre>
+<h2 id="debug-1"><a class="header" href="#debug-1">debug</a></h2>
+<pre><code class="language-pepper">debug( message: String, fields: Array&lt;Field&gt; = Array&lt;Field&gt;(), target: String = "" )
+</code></pre>
+<p>Writes a debug line: detail for finding a bug. Not shown by default.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the message</li>
+<li><code>fields</code> — keys and values to add to the line (see <code>field</code>)</li>
+<li><code>target</code> — the part of the program the line is about; empty for none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">log.debug("cache miss", [log.field("key", key)], target = "cache");
+</code></pre>
+<h2 id="trace-1"><a class="header" href="#trace-1">trace</a></h2>
+<pre><code class="language-pepper">trace( message: String, fields: Array&lt;Field&gt; = Array&lt;Field&gt;(), target: String = "" )
+</code></pre>
+<p>Writes a trace line: step-by-step detail. Not shown by default.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the message</li>
+<li><code>fields</code> — keys and values to add to the line (see <code>field</code>)</li>
+<li><code>target</code> — the part of the program the line is about; empty for none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">log.trace("read a frame", [log.field("bytes", 512)], target = "http");
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/log-module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/text-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/log-module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/text-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

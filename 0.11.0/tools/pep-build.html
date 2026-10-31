@@ -1,0 +1,950 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The compiler: pep-build - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/tools/pep-build.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="the-compiler-pep-build"><a class="header" href="#the-compiler-pep-build">The compiler: pep-build</a></h1>
+<p><code>pep-build</code> compiles a Pepper program into an executable, or into a library
+for C code to link. <code>pepper build</code> runs it with the same arguments, so
+everything on this page applies to both spellings:</p>
+<pre><code class="language-bash">pepper build main.pep -o main          # the same as: pep-build main.pep -o main
+</code></pre>
+<pre><code class="language-text">pep-build [OPTIONS] [&lt;entry.pep&gt;]
+</code></pre>
+<p>This page lists every option. <code>pep-build --help</code> prints the same list in
+short, and <code>pepper help build</code> runs it.</p>
+<h2 id="all-options-at-a-glance"><a class="header" href="#all-options-at-a-glance">All options at a glance</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>What it does</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>&lt;entry.pep&gt;</code></td><td>The program's entry file</td><td>the project's, from <code>pep.toml</code></td></tr>
+<tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime's folder only</td></tr>
+<tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
+<tr><td><code>--entry &lt;name&gt;</code></td><td>The function the program starts in, instead of <code>main</code>; it takes no parameters or one <code>String[]</code>, and every <code>main</code> is left out (not with <code>--test</code> or <code>--lib</code>)</td><td><code>main</code></td></tr>
+<tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
+<tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
+<tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
+<tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
+<tr><td><code>--bindings swift</code>, <code>--bindings java</code></td><td>With <code>--lib static</code> or <code>--lib shared</code> (<code>java</code>: <code>--lib shared</code>), also write Swift or Java bindings of the <code>[Export]</code>ed functions beside the header</td><td>none</td></tr>
+<tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
+<tr><td><code>--locked</code></td><td>Fail, rather than fetch, when <code>pep.lock</code> is out of date with <code>pep.toml</code></td><td>off, or <code>PEPPER_LOCKED</code></td></tr>
+<tr><td><code>--offline</code></td><td>Fetch no dependency over the network; fail on one neither <code>.pep/deps</code> nor the download cache holds</td><td>off, or <code>PEPPER_OFFLINE</code></td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td>off</td></tr>
+<tr><td><code>--no-build-scripts</code></td><td>Fail, rather than run it, when a dependency has a build script; a <code>[native]</code> table still compiles, unless it has <code>flags</code></td><td>off, or <code>PEPPER_NO_BUILD_SCRIPTS</code></td></tr>
+<tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project's folder when building it)</td></tr>
+<tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
+<tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-ast[=text|json]</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-linked</code></td><td>Print every file's syntax tree after linking, as JSON, instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-checked</code></td><td>Print what the checks after linking report, instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-model</code></td><td>Print the program's sema model before any sema pass, as JSON, instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-model-step &lt;N&gt;</code></td><td>With <code>--emit-model</code>, print the model after the first N sema steps</td><td>0</td></tr>
+<tr><td><code>--emit-steps</code></td><td>Print the names of the sema steps, one per line, instead of compiling</td><td>off</td></tr>
+<tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
+<tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>off</code></td></tr>
+<tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code> (<code>-m &lt;option&gt;</code>)</td><td>The CPU to generate code for</td><td>clang's default for the target</td></tr>
+<tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
+<tr><td><code>--debug-static=source</code>, <code>--debug-static=expanded</code></td><td>With <code>-g</code>, step through <code>static</code> blocks as written or expanded</td><td><code>source</code></td></tr>
+<tr><td><code>--frame-pointers</code></td><td>Keep every function's frame pointer, for profilers</td><td>off</td></tr>
+<tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
+<tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target's system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
+<tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library</td><td>the platform's defaults</td></tr>
+<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
+<tr><td><code>--MSVC</code></td><td>Use the MSVC linker (not ported)</td><td>off</td></tr>
+<tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
+<tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
+<tr><td><code>--no-default-features</code></td><td>Leave the project's package's <code>default</code> feature off</td><td>off</td></tr>
+<tr><td><code>--all</code></td><td>Build every member of the project's workspace</td><td>the project alone, or every member in a root with no <code>[package]</code></td></tr>
+<tr><td><code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></td><td>Build this workspace member; repeatable</td><td></td></tr>
+<tr><td><code>--no-runtime-checks=&lt;list&gt;</code></td><td>Remove kinds of runtime check</td><td>every check on</td></tr>
+<tr><td><code>--no-cache</code></td><td>Do not use the build cache</td><td>the cache is used</td></tr>
+<tr><td><code>--cache &lt;dir&gt;</code></td><td>Folder for the build cache</td><td><code>PEPPER_CACHE_DIR</code>, else <code>.pep/cache</code> (in a project's folder when building it)</td></tr>
+<tr><td><code>--verify-cache</code></td><td>Check cache hits against fresh code</td><td>off, or <code>PEPPER_CACHE_VERIFY</code></td></tr>
+<tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
+<tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
+<tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--build-script &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
+</tbody></table>
+</div>
+<p>An option that takes a value accepts it as the next argument or attached:
+<code>-I lib</code>, <code>-Ilib</code>, <code>--target aarch64-apple-darwin</code> and
+<code>--target=aarch64-apple-darwin</code> are all the same. <code>-O</code>, <code>--emit-ast</code> and
+<code>--emit-static</code> take a value only attached (<code>-O3</code>, <code>--emit-ast=json</code>), so
+the argument after them is never read as their value. Short options that
+take no value combine (<code>-gv</code> is <code>-g -v</code>). Options may come before or after
+the entry file, and every argument after <code>--</code> is a file. An unknown option is
+an error, and the compiler exits with status 2 after a short usage message.</p>
+<h2 id="inputs-and-imports"><a class="header" href="#inputs-and-imports">Inputs and imports</a></h2>
+<h3 id="the-entry-file"><a class="header" href="#the-entry-file">The entry file</a></h3>
+<pre><code class="language-bash">pepper build main.pep
+</code></pre>
+<p>The file that holds <code>main</code>. The compiler finds the files it imports on its
+own (see <a href="../language/modules.html">Modules and imports</a>), so a program of many
+files is compiled by naming its entry file alone. Only the first file named
+is compiled; any others are ignored.</p>
+<p>With no file, the compiler builds the project whose <code>pep.toml</code> is in the
+current folder or the nearest folder above it: its <code>[build]</code> table names the
+entry file and the output, and the build goes in the project's <code>.pep</code> (see
+<a href="projects.html">Projects: pep.toml</a>). With no file and no <code>pep.toml</code>, it stops
+with <code>error: no source files provided, and no pep.toml in &lt;folder&gt; or a folder above it</code>.</p>
+<pre><code class="language-bash">cd my_app/src
+pepper build              # builds my_app/pep.toml's program into my_app/
+</code></pre>
+<p>An entry file inside a project (under a folder with a <code>pep.toml</code>) imports the
+project's dependencies, and its <code>[build]</code> table's <code>include</code> folders and
+<code>link</code> libraries apply to it as well.</p>
+<p>Before compiling a program in a project, the compiler fetches whatever
+<code>pep.lock</code> lists and the project's <code>.pep/deps</code> lacks or holds at another
+commit, and the Git dependencies that <code>pep.toml</code>, or the <code>pep.toml</code> of a
+<code>path</code> dependency it reaches, names and <code>pep.lock</code> does not list yet, by
+running <code>pep-package fetch</code> (beside <code>pep-build</code>, else on the
+<code>PATH</code>). Without
+<code>pep-package</code>, it checks the missing commits out with <code>git</code> itself, and
+asks for <code>pepper package fetch</code> to move a checkout at another commit. A
+dependency checked out on a branch is left as it is. See
+<a href="pep-package.html">The package manager: pep-package</a>.</p>
+<h3 id="--locked---offline---frozen"><a class="header" href="#--locked---offline---frozen"><code>--locked</code>, <code>--offline</code>, <code>--frozen</code></a></h3>
+<p>These make the fetch reproducible, for CI (see
+<a href="pep-package.html#reproducible-builds">Reproducible builds</a>):</p>
+<ul>
+<li><code>--locked</code> (or <code>PEPPER_LOCKED=1</code>) fails when <code>pep.lock</code> is out of date
+with <code>pep.toml</code>, instead of updating it. A Git dependency <code>pep.toml</code>
+names that <code>pep.lock</code> does not list is an error before anything is
+fetched; otherwise the build runs <code>pep-package fetch --locked</code>, even when
+nothing is missing, so a changed range is caught too.</li>
+<li><code>--offline</code> (or <code>PEPPER_OFFLINE=1</code>) fetches nothing over the network:
+<code>pep-package</code> runs with <code>--offline</code>, taking a locked package <code>.pep/deps</code>
+lacks from the <a href="pep-package.html#the-download-cache">download cache</a>, and
+failing on one the cache lacks too. Without <code>pep-package</code>, a locked
+package <code>.pep/deps</code> lacks is an error that names it.</li>
+<li><code>--frozen</code> is both.</li>
+</ul>
+<pre><code class="language-text">$ pepper build --offline
+fetching the dependencies of app/pep.toml failed (pep-package -C app fetch --offline exited with 1):
+pep-package: error: cannot fetch github:someone/geometry: --offline, and neither app/.pep/deps/github.com/someone/geometry nor the package cache holds the commit 0582024b9cd7; run 'pepper package fetch' without --offline (or PEPPER_OFFLINE) first
+</code></pre>
+<h3 id="build-scripts-and---no-build-scripts"><a class="header" href="#build-scripts-and---no-build-scripts">Build scripts and <code>--no-build-scripts</code></a></h3>
+<p>Once the dependencies are fetched, and before it loads the program, the
+compiler runs the <a href="projects.html#build-scripts">build script</a> of each package
+the build turns on (the project's first): it builds the script for the
+machine it runs on, with itself and <code>--build-script</code>, into
+<code>.pep/build/&lt;package&gt;-&lt;hash&gt;/</code>, where the script's package sees only its
+<a href="projects.html#build-dependencies"><code>[build-dependencies]</code></a> and their own
+scripts run; then it runs the script in the package's folder, links what
+it says to, defines the build options it names, and resolves the
+package's <code>import generated</code> to the <a href="projects.html#generated-modules">modules</a>
+it wrote. A script whose inputs, the Pepper files it imports among them,
+have not changed since its last run is not run again. The script builds in
+the program's <a href="#the-build-cache">build cache</a>, even under <code>--no-cache</code>,
+whose record of the script's build names the files it imports. The <code>--emit-*</code> modes run them too, since the program they load
+may import what a script generates.</p>
+<p>After a package's script, if it has one, the compiler compiles the C its
+<a href="projects.html#native"><code>[native]</code></a> table and the
+<code>[target.'&lt;condition&gt;'.native]</code> tables that hold for the target name,
+with its own clang for the target, the system root and the <code>-O</code> level,
+into <code>.pep/build/&lt;package&gt;-&lt;hash&gt;/native/&lt;target&gt;/</code>, and links the objects. An
+object whose source, included headers (from clang's <code>-MD</code> list) and flags
+have not changed is not compiled again.</p>
+<p><code>--no-build-scripts</code> (or <code>PEPPER_NO_BUILD_SCRIPTS=1</code>) fails instead of
+running a dependency's script, which runs that package's code on this
+machine; the project's own script still runs, and so does every
+<code>[native]</code> table, which runs no package code, except a dependency's table with
+<code>flags</code>, which could load a clang plugin from the package and is refused:</p>
+<pre><code class="language-text">error: the dependency 'native' has a build script, app/.pep/deps/github.com/someone/native/build.pep, which '--no-build-scripts' (or PEPPER_NO_BUILD_SCRIPTS) refuses to run; read it, and build without that option to run it
+</code></pre>
+<h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
+<p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
+looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
+given, then a project's <code>[build]</code> <code>include</code> folders, then the runtime's
+folder. A project's dependencies are found through its <code>pep.toml</code> instead.
+See
+<a href="../language/modules.html#dependencies-and-search-paths">Dependencies and search paths</a>.</p>
+<pre><code class="language-bash">pepper build tools/pep-fmt/main.pep -o pep-fmt
+</code></pre>
+<h3 id="--import-name"><a class="header" href="#--import-name"><code>--import &lt;name&gt;</code></a></h3>
+<p>Loads a module (<code>&lt;name&gt;/module.pep</code>) or a file (<code>&lt;name&gt;.pep</code>), found on the
+search paths, into every file of the program, the way the standard library's
+prelude is loaded. Its definitions come ahead of the runtime's, so one that
+redefines a runtime export wins. Repeat it for more modules. A name that
+cannot be found is an error that lists the folders searched. See
+<a href="../language/modules.html#the-runtime-prelude-and---import">The runtime prelude and <code>--import</code></a>.</p>
+<h3 id="--no-runtime"><a class="header" href="#--no-runtime"><code>--no-runtime</code></a></h3>
+<p>Compiles without the standard library: the runtime is neither looked for
+nor loaded, so only the program's own files and what <code>-I</code> reaches are
+compiled. For testing the compiler; ordinary programs need the runtime
+(<code>print</code>, <code>String</code> and <code>Array</code> all live there).</p>
+<p>Without this option the compiler finds the runtime as
+<a href="../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Getting started</a>
+describes, and <code>PEPPER_RUNTIME</code> names its folder outright.</p>
+<h2 id="output"><a class="header" href="#output">Output</a></h2>
+<h3 id="-o-file"><a class="header" href="#-o-file"><code>-o &lt;file&gt;</code></a></h3>
+<p>The path of the executable, or with <code>--lib</code> of the library. Without it, the
+output goes to the current folder, named after the entry file with no
+extension (<code>main</code> for <code>main.pep</code>); with <code>--lib</code>, the library's usual file
+name for that stem (<code>libmain.a</code>). Building a project with no file, it is the
+<code>[build]</code> table's <code>output</code>, else the package's <code>name</code> in the project's
+folder (<code>libname.a</code> with <code>--lib</code>), with <code>.exe</code> added when building for
+Windows and the name has no extension. Windows runs only files ending in
+<code>.exe</code>, so otherwise name the output there: <code>-o main.exe</code>. The folders
+the path names are made when they do not exist.</p>
+<p>With <code>--emit-static</code>, it is the folder the expanded source goes into.</p>
+<h3 id="--lib-static---lib-shared"><a class="header" href="#--lib-static---lib-shared"><code>--lib static</code>, <code>--lib shared</code></a></h3>
+<p>Builds a library for C code to link instead of an executable, with a C
+header beside it that declares the program's <code>[Export]</code>ed functions. No
+<code>main</code> is needed.</p>
+<ul>
+<li><code>--lib static</code> writes an archive: <code>libname.a</code> (<code>name.lib</code> on Windows),
+holding the objects of the whole program, the runtime's included, with the
+index of their symbols that linkers search. The compiler writes it itself
+in the target's format (GNU's for Linux and Android, the BSD format
+Apple's linkers read for macOS and iOS, the COFF archive for Windows), so
+no archiver needs to be installed, and building one for another platform
+needs no system root: nothing is linked. A program linking it also links
+the libraries the program does, which the header names in a comment
+(<code>/* Link the static library with: -lm */</code>).</li>
+<li><code>--lib shared</code> links a shared library: <code>libname.so</code>, <code>libname.dylib</code> on
+macOS, <code>name.dll</code> (and its import library <code>name.lib</code>) on Windows. Its
+<code>soname</code> is its file name; on macOS and iOS its install name is
+<code>@rpath/&lt;file name&gt;</code>, so a program that links it finds it on its run
+path. Linking one for another platform needs its system root, as an
+executable does (<code>--sysroot</code>). For Android, when the program imports
+<code>tls</code>, the <code>.so</code> holds the toolchain's static OpenSSL, and its license
+goes beside it as <code>LICENSE-OpenSSL.txt</code>.</li>
+</ul>
+<p>The header goes beside the library, named for it without the <code>lib</code> prefix
+(<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
+warning. See
+<a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
+<p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
+header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed
+functions with its own values (a <code>String</code> in and out, an object for each
+struct handle), named in camel case:</p>
+<ul>
+<li><code>--bindings swift</code> writes <code>name.swift</code>, a Swift function for each export
+and a class for each struct handle, and the <code>module.modulemap</code> of the C
+module they import, <code>Cname</code> (the header). Compile <code>name.swift</code> with the
+app's Swift code and <code>-I</code> its folder.</li>
+<li><code>--bindings java</code> (only with <code>--lib shared</code>) writes <code>name.jar</code>, the class
+<code>pepper.name.Name</code> (in Pascal case) of a <code>static native</code> method for each
+export, which loads <code>libname.so</code>, and a class for each struct handle
+(<code>AutoCloseable</code>); and <code>name_jni.c</code>, the JNI functions of those methods,
+which the link compiles into the library. The class files are written
+by the compiler, so this needs no JDK, but the link needs a clang that
+finds <code>jni.h</code>, as the Android NDK's does. An export that passes a C
+function pointer, or whose name Java cannot use, is an error.</li>
+</ul>
+<p><code>--lib swift-package</code> and <code>--lib aar</code> write them themselves; with those,
+or without <code>--lib</code>, <code>--bindings</code> is a usage error. See
+<a href="../language/mobile.html#bindings">iOS and Android</a>.</p>
+<h3 id="--lib-xcframework---lib-swift-package"><a class="header" href="#--lib-xcframework---lib-swift-package"><code>--lib xcframework</code>, <code>--lib swift-package</code></a></h3>
+<p>Builds the static library of an iOS app's Pepper code for every iOS target
+at once, packaged as Xcode and SwiftPM take it. Each is named for its
+output, which must be a Swift module name (letters, digits and <code>_</code>):</p>
+<ul>
+<li><code>--lib xcframework</code> writes <code>Name.xcframework</code> (<code>-o Name.xcframework</code>;
+the output must end in <code>.xcframework</code>, since it is replaced whole):
+<code>ios-arm64/</code> for devices and <code>ios-arm64_x86_64-simulator/</code> for the
+simulator on Apple silicon and Intel Macs, each with <code>libName.a</code>, the
+header <code>Name.h</code> and a <code>module.modulemap</code>, so Swift can <code>import Name</code>, and
+the <code>Info.plist</code> listing them. The compiler builds the three static
+libraries by running itself with <code>--lib static --target &lt;triple&gt;</code>, side
+by side, each in a folder of the build folder's <code>xcframework/</code>, and
+writes the simulator's two archives into one universal file itself, as
+<code>lipo</code> would, so this needs no Xcode and works on any system.</li>
+<li><code>--lib swift-package</code> writes the folder <code>Name</code> (<code>-o Name</code>) holding
+<code>CName.xcframework</code> (as above, its module named <code>CName</code>), the Swift
+bindings of <code>--bindings swift</code> as <code>Sources/Name/Name.swift</code>, and a
+<code>Package.swift</code> whose library product <code>Name</code> is that Swift target over
+the binary target, for iOS 15 and later. An app adds it as a local
+package (<code>.package(path: "Name")</code>), or from the repository it is
+committed to.</li>
+</ul>
+<p>They cannot be combined with <code>--target</code> or the <code>--emit</code> options. See
+<a href="../language/mobile.html#packaging-for-xcode-and-swiftpm">iOS and Android</a>.</p>
+<h3 id="--lib-aar"><a class="header" href="#--lib-aar"><code>--lib aar</code></a></h3>
+<p>Builds the shared library of an Android app's Pepper code for every
+Android ABI at once (<code>arm64-v8a</code> and <code>x86_64</code>), packaged as an Android
+library a Gradle build adds: <code>name.aar</code> (<code>-o name.aar</code>), named for its
+output, which takes letters, digits and <code>_</code>. It holds
+<code>jni/&lt;abi&gt;/libname.so</code> for each ABI, the header as <code>include/name.h</code>, an
+<code>AndroidManifest.xml</code> for the package <code>pepper.name</code> and API level 30, the
+Java bindings of <code>--bindings java</code> as <code>classes.jar</code> (each <code>.so</code> holds their
+JNI functions), the empty <code>R.txt</code> and <code>res/</code> an <code>.aar</code> must have, and,
+when the program imports <code>tls</code>, OpenSSL's license as
+<code>LICENSE-OpenSSL.txt</code>. The compiler builds each library by running itself
+with <code>--lib shared --bindings java --target &lt;triple&gt;</code>, side by side, each in a folder of the build folder's
+<code>aar/</code>, and writes the zip itself, so this needs the Android NDK (found as
+for any Android link: <code>--sysroot</code>, <code>ANDROID_NDK_HOME</code> or <code>ANDROID_HOME</code>)
+but no Gradle or JDK. It cannot be combined with <code>--target</code> or the
+<code>--emit</code> options. See
+<a href="../language/mobile.html#packaging-for-gradle">iOS and Android</a>.</p>
+<h3 id="--test"><a class="header" href="#--test"><code>--test</code></a></h3>
+<p>Builds the entry file's tests into a test program, which
+<a href="pep-test.html">pep-test</a> runs. A build without it leaves every <code>[Test]</code>
+function out. With it:</p>
+<ul>
+<li>the <code>[Test]</code> functions are kept, and the build option <code>TEST</code> is defined
+(as by <code>-D TEST</code>), for code only tests use (<code>[BuildOption("TEST")]</code>);</li>
+<li>the runtime's <code>testing</code> module is loaded into every file (as by
+<code>--import testing</code>);</li>
+<li>the entry file's <code>main</code> is replaced by one that answers <code>--list</code> (one
+line per test: name, <code>file:line</code>, <code>returns</code> or <code>panics</code>, and the text a
+<code>[ShouldPanic]</code> panic must contain, separated by tabs) and
+<code>--run NAME [--timeout SECONDS]</code> (run that test; a test still running
+after the timeout ends the program with exit status 124).</li>
+</ul>
+<p>Only the entry file's <code>[Test]</code> functions become tests. Given several files
+of one folder (<code>pep-build --test a_test.pep b_test.pep</code>), it builds the
+tests of them all into one program: a generated entry file in that folder
+(<code>_pep_test_main.pep</code>, never written to disk) imports each file and
+registers its tests, and each file keeps the scope it has in any program.
+<code>--list</code> then gives each test's own file, and <code>--run</code> also takes
+<code>FILE::NAME</code>, as <code>--list</code> spells the file, to tell apart tests of one name
+in two files. It cannot be combined with <code>--lib</code>. See <a href="../language/testing.html">Unit tests</a>.</p>
+<h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
+<p>The folder for intermediate files: the program's objects and, with
+<code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder, or
+in the project's folder when building a project with no file.</p>
+<h3 id="--emit-llvm"><a class="header" href="#--emit-llvm"><code>--emit-llvm</code></a></h3>
+<p>Writes the whole program's LLVM IR to <code>&lt;build&gt;/&lt;name&gt;.ll</code> (<code>.pep/build/main.ll</code>
+for <code>main.pep</code>), optimized at the <code>-O</code> level, and stops there: nothing is
+linked and no executable is written.</p>
+<pre><code class="language-bash">pepper build main.pep -O --emit-llvm      # .pep/build/main.ll
+</code></pre>
+<h3 id="--emit-static---emit-statickeep"><a class="header" href="#--emit-static---emit-statickeep"><code>--emit-static</code>, <code>--emit-static=keep</code></a></h3>
+<p>Writes a copy of the program's source with each <code>static</code> block replaced by
+the code it emits, like a C compiler's <code>-E</code>, and stops there: nothing is
+compiled to code. Use it to see what a reflection loop, a serializer or a
+library's block does to the program (see
+<a href="../language/reflection.html#seeing-what-a-static-block-emits">Seeing what a static block emits</a>).</p>
+<pre><code class="language-bash">pepper build main.pep --emit-static              # main.static/main.pep
+pepper build main.pep --emit-static -o expanded  # expanded/main.pep
+pepper build expanded/main.pep -o main           # the same program
+</code></pre>
+<ul>
+<li>Every file of the program in the entry file's folder (and the folders
+under it) is written into the output folder at the same relative path,
+so the folder builds as a whole program; files with no block are copied
+unchanged. The runtime and libraries found elsewhere are not copied. The
+originals are never overwritten.</li>
+<li>The folder is <code>-o</code>'s, else <code>&lt;entry stem&gt;.static</code> in the current folder.</li>
+<li>Each expansion is a <code>{ ... }</code> block between
+<code># static (out, value) expanded from main.pep:12:5</code> and <code># end static</code>.
+<code>--emit-static=keep</code> also keeps the block as written, as <code>#</code> comments
+above it; <code>--emit-static=expand</code> is the default, the same as
+<code>--emit-static</code>.</li>
+<li>A block in a generic function expands once per specialization. The
+generic function stays as written, and after it comes a
+<a href="../language/generics.html#overriding-a-generic-function-for-one-type">concrete override</a>
+for each type the program uses it with (<code>describe&lt;Point&gt;(value: Point)</code>),
+its blocks expanded, so the copy still builds into the same program. A
+block in a method of a generic struct, or in a generic method, stays,
+with each specialization's expansion above it as <code>#</code> comments.</li>
+<li>When <code>pep-fmt</code> is next to the compiler or on <code>PATH</code>, it formats the
+copies, wrapping long lines.</li>
+<li>Errors a block reports stop it, as they stop a build. Errors in the code
+a block emits are found when the copy is built, at the copy's line.</li>
+</ul>
+<h3 id="--emit-ast"><a class="header" href="#--emit-ast"><code>--emit-ast</code></a></h3>
+<p>Parses the entry file only and prints its syntax tree to standard output,
+instead of compiling. Imports are not followed and nothing is checked.</p>
+<p><code>--emit-ast</code> and <code>--emit-ast=text</code> print the tree as source-like text.
+<code>--emit-ast=json</code> prints it as one line of JSON: each node an object with
+its fields in declaration order, each enum case an object with the case's
+name as its one key, and each span <code>{"start": ..., "end": ...}</code> in bytes.
+The compiler's parser written in Pepper (<code>tools/compiler</code>) prints the same
+JSON, and its test compares the two over every source file in the
+repository.</p>
+<h3 id="--emit-linked"><a class="header" href="#--emit-linked"><code>--emit-linked</code></a></h3>
+<p>Loads the program as a build does (the entry file, every file its imports
+reach, and the runtime), links it, and prints it to standard output as one
+line of JSON instead of compiling. Nothing after linking is checked, so a
+program with type errors prints too; a file that cannot be read or parsed
+stops it, as it stops a build.</p>
+<p>The JSON is an object with three keys:</p>
+<ul>
+<li><code>files</code>: every file in load order (the entry file first), each with its
+<code>name</code> as the program reached it, its <code>namespace</code>, its <code>module_root</code>
+folder (or <code>null</code>), whether it is part of the <code>prelude</code> (the runtime and
+<code>--import</code> files) or a <code>prelude_part</code> (another file of a forced module),
+the index of the file each of its <code>imports</code> names (or <code>null</code> when one did
+not resolve), which of them are <code>folder_imports</code> (a local import of a
+module folder), and its <code>module</code>, the syntax tree as <code>--emit-ast=json</code>
+prints it after linking renamed what the file imports and gave its
+private declarations their program-wide names (<code>helper@io/file</code>).</li>
+<li><code>errors</code>: the linking errors, by file and position, each with its <code>file</code>
+index, <code>span</code>, <code>message</code>, whether it is an <code>unresolved</code> import, and its
+<code>note</code> (<code>[span, message]</code>, or <code>null</code>).</li>
+<li><code>overload_unions</code>: each overload set that spans files, by name, with its
+functions grouped by module.</li>
+</ul>
+<p><code>-I</code>, <code>--import</code>, <code>--no-runtime</code>, <code>-D</code> and <code>--test</code> apply as for a build.
+The compiler's linker written in Pepper (<code>tools/compiler</code>) prints the same
+JSON, and its test compares the two.</p>
+<h3 id="--emit-checked"><a class="header" href="#--emit-checked"><code>--emit-checked</code></a></h3>
+<p>Loads and links the program as <code>--emit-linked</code> does, runs the checks that
+come before type checking, and prints what they report instead of
+compiling: the errors, rendered as a build reports them, then the warnings.
+The errors are the linking errors; when there are none, a <code>[__BuiltIn]</code>
+declaration outside the runtime; when there is none of those either, every
+use of a declaration another file keeps private or this file does not
+import. The warnings are deprecated syntax, comparisons with a build option
+<code>-D</code> does not define, and uses of declarations marked <code>[Deprecated]</code>. A
+program with neither prints an empty line.</p>
+<p><code>-I</code>, <code>--import</code>, <code>--no-runtime</code>, <code>-D</code> and <code>--test</code> apply as for a build.
+The compiler written in Pepper (<code>tools/compiler</code>) prints the same text, and
+its test compares the two.</p>
+<h3 id="--emit-model"><a class="header" href="#--emit-model"><code>--emit-model</code></a></h3>
+<p>Loads, links and checks the program as <code>--emit-checked</code> does, builds the
+sema model of each file and joins them, and prints the model as one line of
+JSON instead of compiling: what the sema builder made of the syntax trees
+(<code>for</code>, <code>with</code>, <code>match</code>, <code>?</code>, destructuring, ranges, collection literals and
+properties lowered), before any sema pass runs. Object keys are sorted, and
+so are the sets (<code>private_functions</code> and the <code>extension_scopes</code>). When the
+checks or the builder reject the program, it prints the rendered error and
+fails.</p>
+<p><code>-I</code>, <code>--import</code>, <code>--no-runtime</code>, <code>-D</code> and <code>--test</code> apply as for a build.
+The compiler written in Pepper (<code>tools/compiler</code>) prints the same JSON, and
+its test compares the two.</p>
+<h3 id="--emit-model-step-n"><a class="header" href="#--emit-model-step-n"><code>--emit-model-step &lt;N&gt;</code></a></h3>
+<p>With <code>--emit-model</code>, runs the first N steps of the sema passes before
+printing the model. A step is one pass run, in the order the compiler runs
+them (platform filters first, then <code>[Equatable]</code>, closure lifting and the
+rest); <code>--emit-steps</code> lists them. When a step rejects the program, it prints
+the rendered error and fails. The compiler written in Pepper runs the same
+steps, and its test compares the model after each.</p>
+<h3 id="--emit-steps"><a class="header" href="#--emit-steps"><code>--emit-steps</code></a></h3>
+<p>Loads, links, checks and builds the program as <code>--emit-model</code> does, runs
+every sema pass, and prints the name of each step run, one per line,
+instead of compiling: the numbering <code>--emit-model-step</code> uses.</p>
+<h2 id="optimization-and-code-generation"><a class="header" href="#optimization-and-code-generation">Optimization and code generation</a></h2>
+<h3 id="-o--olevel"><a class="header" href="#-o--olevel"><code>-O</code>, <code>-O&lt;level&gt;</code></a></h3>
+<p>The optimization level: <code>-O0</code> (no optimization, the default), <code>-O1</code>, <code>-O2</code>
+or <code>-O3</code>. <code>-O</code> alone is <code>-O2</code>, and it does not take the next argument as its
+level, so <code>pepper build -O main.pep</code> works. Each level runs the pipeline
+clang runs at that level. Without the option, the level is
+<code>PEPPER_OPT_LEVEL</code> (<code>0</code> to <code>3</code>) when that is set and not empty.</p>
+<p>At <code>-O0</code> a panic prints a backtrace after its message; at any other level it
+prints the message alone, unless the program runs with <code>PEPPER_BACKTRACE=1</code>
+(see <a href="../language/debug.html#backtraces-on-panic">Backtraces on panic</a>).</p>
+<h3 id="--ltofull---ltooff"><a class="header" href="#--ltofull---ltooff"><code>--lto=full</code>, <code>--lto=off</code></a></h3>
+<p>Link-time optimization. With <code>--lto=full</code>, once every file is compiled the
+whole program is optimized again as one module, so a call into another file
+(the runtime included) can be inlined. <code>--lto=off</code> optimizes each file
+alone, which links sooner. The default is <code>off</code>: <code>full</code> optimizes the whole
+program again on every build, an edit's too, so it suits a release build.
+<code>--lto=full</code> at <code>-O0</code> is an error that asks for <code>-O</code>.</p>
+<p>With it, each file is optimized by LLVM's pre-link pipeline and kept as
+bitcode (in the build cache, as an object is), then the compiler links
+them into one module, makes every symbol internal but <code>main</code> and the C
+exports of <code>[Export]</code> functions, runs LLVM's link-time pipeline over the
+whole program, and writes its objects, one per logical CPU in parallel,
+which link as usual. No linker
+plugin is involved, so it works on every target. It applies to a library
+too (<code>--lib</code>).</p>
+<h3 id="-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><a class="header" href="#-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></a></h3>
+<p>The <code>-m</code> options choose the CPU the code is generated for, with clang's
+names and meanings (<code>-m &lt;option&gt;</code>, with a space, is the same as
+<code>-m&lt;option&gt;</code>):</p>
+<ul>
+<li>On x86-64, <code>-march=&lt;cpu&gt;</code> names the CPU: <code>x86-64-v3</code>, <code>znver4</code>, or
+<code>native</code> for the machine compiling.</li>
+<li>On AArch64, <code>-mcpu=&lt;cpu&gt;</code> names the CPU (<code>apple-m2</code>, <code>native</code>) and
+<code>-march=&lt;arch&gt;</code> the architecture (<code>armv8.2-a+crypto</code>).</li>
+<li><code>-mtune=&lt;cpu&gt;</code> changes only how instructions are scheduled.</li>
+<li><code>-m&lt;feature&gt;</code> adds a CPU feature (<code>-mavx2</code>), and <code>-mno-&lt;feature&gt;</code> removes
+one (<code>-mno-avx2</code>).</li>
+</ul>
+<p>Without them the program runs on any machine of its kind: clang's default
+CPU for the target (<code>x86-64</code>; <code>apple-m1</code> on Apple arm64). An option the
+target's architecture does not take is an error worded as clang words it:
+<code>-mcpu=</code> on x86-64 (<code>unsupported option '-mcpu=' for target ...; use '-march' or '-mtune'</code>), <code>-march=</code> on WebAssembly, an AArch64 <code>-march=</code>
+that is not <code>armv&lt;version&gt;-a</code> (<code>invalid arch name</code>), <code>native</code> for another
+platform's target, or an empty value. A CPU or feature name LLVM does not
+know is passed on, and LLVM warns about it. The last of each option wins;
+the features come after those the CPU implies. The chosen CPU, its
+features and its tuning are part of the build cache's key.</p>
+<h3 id="-g---emit-debug"><a class="header" href="#-g---emit-debug"><code>-g</code>, <code>--emit-debug</code></a></h3>
+<p>Emits debug info for gdb, lldb, Visual Studio and WinDbg: DWARF 4 in the
+executable on Linux and macOS, and CodeView on Windows, where the linker
+writes <code>&lt;output&gt;.pdb</code> beside the executable. On macOS it also runs
+<code>dsymutil</code> to write <code>&lt;output&gt;.dSYM</code> beside the executable, when the
+program is built for the Mac it runs on. It works with <code>-O</code>. See
+<a href="debugging.html">Debugging</a>.</p>
+<p>A Windows build without <code>-g</code> also writes <code>&lt;output&gt;.pdb</code>, holding only the
+program's function names, which is where <a href="../language/debug.html">backtraces</a>
+read them.</p>
+<p>Every link leaves out the functions and data nothing uses, except a Windows
+build with <code>-g</code>: its linker keeps them all, so the program is larger.</p>
+<h3 id="--debug-staticsource---debug-staticexpanded"><a class="header" href="#--debug-staticsource---debug-staticexpanded"><code>--debug-static=source</code>, <code>--debug-static=expanded</code></a></h3>
+<p>With <code>-g</code>, chooses which source the debugger shows for the code a <code>static</code>
+block emits (see
+<a href="debugging.html#stepping-through-a-static-block">Stepping through a <code>static</code> block</a>):</p>
+<ul>
+<li><code>source</code>, the default: the block as written. Stepping stops on a
+compile-time loop's header once per pass, then on its body.</li>
+<li><code>expanded</code>: a copy of each file with its blocks expanded, as
+<code>--emit-static</code> writes it (unformatted), saved beside the output as
+<code>&lt;name&gt;.static.pep</code> (<code>main.static.pep</code> for <code>main.pep</code>; a file in a folder
+under the entry's keeps that folder). The debugger steps through the
+expanded statements, <code>sum = sum + p.y;</code>, and a breakpoint on one of its
+lines stops in that pass. The rest of the program stays in its own
+files. A build with it does not use the build cache.</li>
+</ul>
+<pre><code class="language-bash">pepper build -g --debug-static=expanded main.pep -o main   # main, main.static.pep
+</code></pre>
+<h3 id="--frame-pointers"><a class="header" href="#--frame-pointers"><code>--frame-pointers</code></a></h3>
+<p>Keeps the frame pointer in every function, even when optimizing, as clang's
+<code>-fno-omit-frame-pointer</code> does. A sampling profiler then walks the stack of
+each sample by following frame pointers, which is fast and finds every
+frame of Pepper code; without them, optimized code reuses the register and
+a profiler loses the callers of whatever was running. It costs a register
+and a few instructions per call. <a href="pep-profile.html">pep-profile</a> builds with
+it, <code>-O</code> and <code>-g</code>. It is part of the build cache's key.</p>
+<h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
+<h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
+<p>Compiles for another platform, named by an LLVM target triple:
+<code>x86_64-unknown-linux-gnu</code>, <code>aarch64-unknown-linux-gnu</code>,
+<code>aarch64-apple-darwin</code>, <code>x86_64-apple-darwin</code>, <code>x86_64-pc-windows-msvc</code>,
+<code>aarch64-pc-windows-msvc</code>, <code>wasm32-wasip1</code>, <code>aarch64-apple-ios</code>,
+<code>aarch64-apple-ios-simulator</code>, <code>x86_64-apple-ios-simulator</code>,
+<code>aarch64-linux-android</code> or <code>x86_64-linux-android</code>, with a version allowed
+where clang allows one (<code>arm64-apple-macosx14.0</code>, <code>aarch64-apple-ios17.0</code>,
+<code>aarch64-linux-android33</code>). An unsupported triple is an error that lists the
+supported ones. <code>[Target(...)]</code> selects code for the target. The default is
+the machine the compiler runs on. See
+<a href="../language/platform-selection.html#cross-compiling">Cross-compiling</a> and
+<a href="../language/mobile.html">iOS and Android</a>.</p>
+<h3 id="--sysroot-dir"><a class="header" href="#--sysroot-dir"><code>--sysroot &lt;dir&gt;</code></a></h3>
+<p>The folder that holds the target's system headers and libraries, passed to
+the link driver, for linking with <code>--target</code>. Without it, the folder named by
+<code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> when that is set: the triple in capitals, with <code>_</code>
+for each character that is not a letter or digit
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code> for <code>aarch64-apple-darwin</code>). An iOS
+or Android triple's variable leaves out the OS version
+(<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code> for
+<code>aarch64-apple-ios17.0-simulator</code>). For iOS it is an iOS SDK, which on a Mac
+defaults to the one <code>xcrun</code> names; for Android it is the NDK (see
+<code>ANDROID_NDK_HOME</code> below).</p>
+<h2 id="linking"><a class="header" href="#linking">Linking</a></h2>
+<h3 id="-l-lib"><a class="header" href="#-l-lib"><code>-l &lt;lib&gt;</code></a></h3>
+<p>Links a C library, as <code>-l</code> does for clang: <code>-l m</code> links <code>libm</code>. Repeat it
+for more libraries. A project's <code>[build]</code> table adds its <code>link</code> libraries. A program's <code>[Link]</code> attributes name libraries from the
+source instead. See <a href="../language/linking.html">Linking</a>.</p>
+<h3 id="-l-dir"><a class="header" href="#-l-dir"><code>-L &lt;dir&gt;</code></a></h3>
+<p>Adds a folder the linker searches for libraries. Folders given with <code>-L</code>
+come first, then those of <code>[Link(path = ...)]</code>, then those in
+<code>PEPPER_LIBRARY_PATH</code> (separated like <code>PATH</code>: <code>:</code>, or <code>;</code> on Windows). See
+<a href="../language/linking.html#library-search-directories-in-the-source-and-the-environment">Library search directories</a>.</p>
+<pre><code class="language-bash">pepper build main.pep -L libs -l foo        # links libs/libfoo
+</code></pre>
+<h3 id="--msvc"><a class="header" href="#--msvc"><code>--MSVC</code></a></h3>
+<p>Reserved for linking with Microsoft's linker. It is not ported, so it is an
+error on every platform; Windows executables link with clang and lld.</p>
+<p>The link driver is clang. When <code>PEPPER_LLVM_PREFIX</code>, else
+<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the compiler was built with, such
+as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20), names an LLVM install, its
+<code>bin/clang</code> and <code>lld</code> are used; else a <code>clang</code> beside
+<code>pep-build</code>, then one on the <code>PATH</code> (<code>clang</code>, then <code>clang-&lt;major&gt;</code>), then one
+where LLVM's packages install it off the <code>PATH</code>. With none, the link fails
+with an error naming what to install. <a href="install.html#what-linking-needs">Installing Pepper</a>
+lists the folders searched.</p>
+<h2 id="build-options"><a class="header" href="#build-options">Build options</a></h2>
+<h3 id="-d-name--d-namevalue"><a class="header" href="#-d-name--d-namevalue"><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></a></h3>
+<p>Defines a build option. A bare name is <code>name=1</code>, as in C. <code>[BuildOption]</code>
+and <code>[Target(BuildOption(...))]</code> select code by it, and <code>static</code> blocks read
+it with <code>reflect.build_option</code>. Repeat it for more options; of two that name
+the same option, the later wins. A name must be an identifier
+(<code>-D 2FAST</code> is an error). Build options are part of the build cache's key.
+See <a href="../language/build-options.html">Build options</a>.</p>
+<pre><code class="language-bash">pepper build main.pep -D USE_ZLIB -D LOG_LEVEL=2
+</code></pre>
+<h3 id="-f-names---features-names---no-default-features"><a class="header" href="#-f-names---features-names---no-default-features"><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code>, <code>--no-default-features</code></a></h3>
+<p><code>--features</code> turns on features of the project's package, from the
+<code>[features]</code> of its <code>pep.toml</code>: a comma-separated list (<code>--features tls,gzip</code>), or the option repeated. Its <code>default</code> feature is on unless
+<code>--no-default-features</code> is given. Each feature on defines the build option
+<code>&lt;package&gt;_&lt;feature&gt;</code> (<code>http_tls</code>), and turns on what it lists, across the
+whole dependency graph; see <a href="projects.html#features">Features</a>. A feature
+the package does not have is an error that lists those it has:</p>
+<pre><code class="language-text">unknown feature 'tsl' in '--features': package 'http' has 'default', 'tls', 'gzip'
+</code></pre>
+<h3 id="--all--p-name---package-name"><a class="header" href="#--all--p-name---package-name"><code>--all</code>, <code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></a></h3>
+<p>In a <a href="projects.html#workspaces-workspace">workspace</a>, <code>--all</code> builds every
+member and <code>-p</code> (repeated for more) the members it names by package
+name, from the root or any member. Each member builds into its own
+output, as <code>pepper build</code> in its folder would, one after another, and
+the first that fails stops the rest; a member with no <code>[build]</code> entry
+and no <code>main.pep</code>, a library, is skipped. Their features are unified:
+the build of each turns on what every selected member turns on in a
+package they share, and <code>--features</code> turns a feature on in each member
+that has it. In a workspace's root with no <code>[package]</code> of its own,
+<code>pepper build</code> builds every member. <code>-o</code> names one output, so it takes
+one member.</p>
+<pre><code class="language-bash">pepper build --all          # every member
+pepper build -p app -O      # the member named app, optimized
+</code></pre>
+<h2 id="runtime-checks"><a class="header" href="#runtime-checks">Runtime checks</a></h2>
+<h3 id="--no-runtime-checkslist"><a class="header" href="#--no-runtime-checkslist"><code>--no-runtime-checks=&lt;list&gt;</code></a></h3>
+<p>Integer overflow, division by zero, an oversized shift, an index out of
+range and a call through a null reference panic at run time, at every
+optimization level. This option removes the kinds of check it names, as a
+comma-separated list, from an optimized build:</p>
+<div class="table-wrapper"><table><thead><tr><th>Kind</th><th>What is no longer checked</th><th>What happens instead</th></tr></thead><tbody>
+<tr><td><code>overflow</code></td><td>Integer overflow</td><td>Arithmetic wraps</td></tr>
+<tr><td><code>divide</code></td><td>Division by zero and <code>MIN / -1</code></td><td>Undefined behavior</td></tr>
+<tr><td><code>shift</code></td><td>A shift count of at least the width</td><td>The count is masked</td></tr>
+<tr><td><code>bounds</code></td><td>Array and string indexing</td><td>Undefined behavior</td></tr>
+<tr><td><code>null</code></td><td>Calls and matches through a null reference</td><td>Undefined behavior</td></tr>
+<tr><td><code>all</code></td><td>All of the above</td><td></td></tr>
+</tbody></table>
+</div>
+<p>Removing <code>bounds</code> or <code>null</code> gives up memory safety. At <code>-O0</code> the option has
+no effect and prints <code>warning: '--no-runtime-checks' has no effect at -O0</code>.
+To remove checks from one function at every level, mark it
+<code>[Unsafe("overflow,bounds")]</code> instead.
+See <a href="../language/types-and-variables.html#integer-overflow">Integer overflow</a>.</p>
+<pre><code class="language-bash">pepper build -O main.pep --no-runtime-checks=overflow,shift
+</code></pre>
+<h2 id="the-build-cache"><a class="header" href="#the-build-cache">The build cache</a></h2>
+<p>The compiler checks a program one <strong>compilation unit</strong> at a time: a file,
+or the files that import each other in a cycle, with the runtime as one.
+The build cache keeps each compilation unit's checked result and object,
+and each file's own object: a file whose sources, and whose imports'
+declarations, did not change is not compiled or checked again.
+<code>PEPC_COMPILATION_UNIT_JOBS</code> sets how many compilation units are checked at
+once (one per processor by default; <code>PEPC_LAYER_JOBS</code>, its old name, still
+works). The optimization level, link-time optimization, debug info,
+CPU, removed runtime checks and build options are part of each object's
+key. Deleting the cache folder is always safe.</p>
+<h3 id="--no-cache"><a class="header" href="#--no-cache"><code>--no-cache</code></a></h3>
+<p>Compiles every file without reading or writing the build cache.</p>
+<h3 id="--cache-dir"><a class="header" href="#--cache-dir"><code>--cache &lt;dir&gt;</code></a></h3>
+<p>Keeps the build cache in <code>&lt;dir&gt;</code>. Without it, the folder named by
+<code>PEPPER_CACHE_DIR</code> when that is set and not empty, else <code>.pep/cache</code> in the
+current folder, or in the project's folder when building a project with no
+file.</p>
+<p>No path in the cache adds more than 72 characters to <code>&lt;dir&gt;</code>'s, so a
+project folder can sit deep without the cache passing Windows'
+260-character path limit. The folder holds one subfolder per layout
+version (<code>v3</code>); a build ignores the others, so an old version's folder can
+be deleted.</p>
+<h3 id="--verify-cache---no-verify-cache"><a class="header" href="#--verify-cache---no-verify-cache"><code>--verify-cache</code>, <code>--no-verify-cache</code></a></h3>
+<p><code>--verify-cache</code> checks the cache, for testing the compiler: every file the
+cache would reuse is compiled anyway, and the build fails if its code
+differs from the cached object's, or if skipping the reused files' bodies
+changes another file's code. Setting <code>PEPPER_CACHE_VERIFY</code> to anything but
+empty or <code>0</code> does the same. <code>--no-verify-cache</code> turns it off even when
+<code>PEPPER_CACHE_VERIFY</code> is set. The two options cannot be combined.
+It builds the program a second time, with an empty cache of its own in the
+build folder, and compares each object that build makes with the one the
+cache holds under the same key, so a check costs about a build from
+scratch. A failure names the cached objects that differ.</p>
+<h2 id="tracing-and-diagnostics"><a class="header" href="#tracing-and-diagnostics">Tracing and diagnostics</a></h2>
+<h3 id="-t-channel---tall"><a class="header" href="#-t-channel---tall"><code>-T &lt;channel&gt;</code>, <code>--Tall</code></a></h3>
+<p><code>-T</code> turns on a trace channel, which prints to standard error. Repeat it for
+more channels; <code>--Tall</code> turns on every one.</p>
+<ul>
+<li><code>-T time</code> prints how long each stage of the compile took, and the
+compiler's peak memory once it ended (<code>time: link bodies 1395 ms, peak 400 MB</code>). A build in compilation units keeps its workers' timings in
+<code>compilation-units.&lt;pid&gt;/&lt;k&gt;.stages</code> in the build folder, each ending
+with that worker's peak memory.</li>
+<li><code>-T passes</code> prints how long each pass of the checker took, summed over its
+runs, slowest first (<code>pass:  3116.171 ms   16x resolve_implicit_types</code>),
+the passes run checking the runtime and each module included.</li>
+<li><code>-T cache</code> prints how the build cache supplied each object: <code>hit</code> (its
+sources, and its imports' declarations, are unchanged), <code>hit (same code)</code>
+(compiled again, to the same code), or <code>miss</code>; and whether linking was
+skipped.</li>
+</ul>
+<p>Any other channel name is accepted and ignored.</p>
+<h3 id="-v---verbose"><a class="header" href="#-v---verbose"><code>-v</code>, <code>--verbose</code></a></h3>
+<p>Accepted for compatibility with other compilers; it prints nothing more yet.</p>
+<p>Errors and warnings are printed like clang's, colored when standard error is
+a terminal; set <code>NO_COLOR</code> to turn color off. See
+<a href="../language/compiler-errors.html">Compiler errors</a>.</p>
+<h2 id="internal-options"><a class="header" href="#internal-options">Internal options</a></h2>
+<p>A build starts copies of the compiler to work side by side, and gives them
+these options; they are listed so a failed child's command line can be
+rerun by hand (the build prints it).</p>
+<ul>
+<li><code>--compile-part &lt;dir&gt; --part &lt;N&gt;=&lt;object&gt;...</code> compiles parts of the
+program a build split into <code>&lt;dir&gt;</code>: each <code>--part</code> names a part by its
+number and the object to write it to. Nothing else is read.</li>
+<li><code>--compilation-unit-worker &lt;dir&gt;</code>, after the build's own arguments, checks
+the compilation units the build passes through <code>&lt;dir&gt;</code> and compiles their
+objects.</li>
+<li><code>--members &lt;names&gt;</code> names, comma-separated, the workspace members a
+build of several (<code>--all</code>, <code>-p</code>) builds together, so each child unifies
+its features with theirs. With a file, <code>--all</code> and <code>-p</code> do the same.</li>
+<li><code>--member &lt;dir&gt;</code>, with no file, builds the project in <code>&lt;dir&gt;</code> rather
+than the one around the current folder; a build of several members
+starts each child with it, in its own folder, so relative paths such
+as <code>-o</code> keep their meaning.</li>
+<li><code>--print-members</code> prints the package name and folder of each member
+<code>--all</code> or <code>-p</code> selects, a tab between them, a line each, and builds
+nothing; <code>pep-test --all</code> and <code>-p</code> run it.</li>
+</ul>
+<h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
+<ul>
+<li><code>-h</code>, <code>--help</code> prints every option with a line of description.</li>
+<li><code>-V</code>, <code>--version</code> prints <code>pep-build</code> and its version.</li>
+</ul>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th><th>Option that overrides it</th></tr></thead><tbody>
+<tr><td><code>PEPPER_RUNTIME</code></td><td>The folder holding the standard library; nothing else is searched</td><td><code>--no-runtime</code> skips the runtime</td></tr>
+<tr><td><code>PEPPER_OPT_LEVEL</code></td><td>The optimization level (<code>0</code> to <code>3</code>) without <code>-O</code>; also the level the test suite's JIT uses</td><td><code>-O&lt;level&gt;</code></td></tr>
+<tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code></td><td><code>-L</code> comes first</td></tr>
+<tr><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td><td>The system libraries for linking with <code>--target &lt;triple&gt;</code></td><td><code>--sysroot</code></td></tr>
+<tr><td><code>ANDROID_NDK_HOME</code>, <code>ANDROID_NDK_ROOT</code></td><td>The Android NDK for linking with an Android <code>--target</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> names one</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>ANDROID_HOME</code>, <code>ANDROID_SDK_ROOT</code></td><td>The Android SDK, whose newest <code>ndk/&lt;version&gt;</code> links an Android <code>--target</code> when nothing above names an NDK</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
+<tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
+<tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
+<tr><td><code>PEPPER_LOCKED</code></td><td>Anything but empty or <code>0</code>: the same as <code>--locked</code></td><td></td></tr>
+<tr><td><code>PEPPER_OFFLINE</code></td><td>Anything but empty or <code>0</code>: the same as <code>--offline</code></td><td></td></tr>
+<tr><td><code>PEPPER_LLVM_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program</td><td></td></tr>
+<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The same, when <code>PEPPER_LLVM_PREFIX</code> is not set (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20)</td><td></td></tr>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project's locked dependencies clones that host's repositories from, when <code>pep-package</code> is not installed (see <a href="pep-package.html#environment-variables">pep-package</a>)</td><td></td></tr>
+<tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
+</tbody></table>
+</div>
+<h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
+<p><code>pep-build</code> exits with 0 when the program compiled, 1 when it did not (the
+errors are on standard error), and 2 for a command line it cannot parse. A
+crash of the compiler itself exits with 101 after printing what went wrong;
+please report it.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tools/pep-install.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tools/projects.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tools/pep-install.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tools/projects.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

@@ -1,0 +1,831 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Path - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/io-path.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/io/path.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="path"><a class="header" href="#path">Path</a></h1>
+<p>Source: <code>runtime/io/path.pep</code></p>
+<h2 id="path-1"><a class="header" href="#path-1">Path</a></h2>
+<pre><code class="language-pepper">struct Path
+</code></pre>
+<p>An owned file-system path: the text of the path plus operations on it
+(Rust's <code>Path</code> and <code>PathBuf</code> in one type).</p>
+<p>Every method except <code>exists</code>, <code>is_file</code>, <code>is_dir</code>, <code>metadata</code>,
+<code>symlink_metadata</code> and <code>canonicalize</code> is pure text manipulation: it never
+touches the file system, so <code>..</code> is not resolved against symlinks and
+nothing needs to exist. A part that may be missing comes back as an
+optional, as in Rust: <code>parent()</code> of a root is none.</p>
+<p>Breaking change: <code>parent()</code>, <code>file_name()</code>, <code>file_stem()</code>, <code>extension()</code>
+and <code>dot_index()</code> used to return an empty Path or String (or
+<code>name.size</code>) for "none"; they now return <code>Path?</code>, <code>String?</code> and
+<code>ulong?</code>.</p>
+<p>Separators: on POSIX only <code>/</code> separates components (<code>\</code> is an ordinary
+byte of a name). On Windows both <code>/</code> and <code>\</code> separate, and a path may
+start with a prefix: a drive (<code>C:</code>) or a UNC share (<code>\\server\share</code>).
+Methods that build a path (<code>join</code>, <code>normalize</code>, <code>with_extension</code>) insert
+the platform separator (<code>separator()</code>), but the rest of the text is kept
+as written. Paths are UTF-8 Strings, scanned byte by byte; separators and
+dots are ASCII, so splitting at them never cuts a character in two.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
+var name = p.file_name().value();               # "guide.md"
+var ext = p.extension().value_or("");           # "md"
+var dir = p.parent();                           # some io.Path("docs")
+if (p.is_file()) {
+    print(p.to_string());
+}
+</code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the path has no text at all. File-system operations
+on the empty path fail.</p>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="path-2"><a class="header" href="#path-2">Path()</a></h4>
+<pre><code class="language-pepper">[Implicit] construct(value: String = "")
+</code></pre>
+<p>Creates a path holding <code>value</code> as is: no validation, normalization or
+separator conversion.</p>
+<p>The constructor is <code>[Implicit]</code>: a <code>String</code> (or a string literal)
+converts to a <code>Path</code> wherever a <code>Path</code> is expected, so every API that
+takes a <code>Path</code> also accepts text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the path's text; the default, <code>""</code>, is the empty path</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var p = io.Path("/usr/lib");
+var empty = io.Path();   # is_empty is true
+var q: io.Path = "docs";   # converted implicitly
+</code></pre>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="separator"><a class="header" href="#separator">separator</a></h4>
+<pre><code class="language-pepper">static separator(): String
+</code></pre>
+<p>Returns the separator this platform inserts when it builds a path.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>"/"</code> on POSIX, <code>"\"</code> on Windows (where <code>/</code> is also accepted as a separator on input)</li>
+</ul>
+<h4 id="dot_index"><a class="header" href="#dot_index">dot_index</a></h4>
+<pre><code class="language-pepper">static dot_index(name: String): ulong?
+</code></pre>
+<p>Returns the byte offset of the dot that starts the extension in the
+file name <code>name</code>: the last <code>.</code> that is not the first byte. A leading
+dot (<code>.bashrc</code>) starts the name, not an extension.</p>
+<p>Breaking change: this used to return <code>name.size</code> for "no
+extension"; it now returns none.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — a file name (one component, as <code>file_name()</code> returns)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the extension's dot, or none when the name has no such dot (<code>noext</code>, <code>.bashrc</code>, the empty name)</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the path's text, the same String the Path holds, not a copy.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the path as a String</li>
+</ul>
+<h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
+<pre><code class="language-pepper">is_absolute(): bool
+</code></pre>
+<p>Returns whether the path is absolute, meaning it does not depend on
+the current directory. Pure text: the path need not exist.</p>
+<p>On POSIX a path is absolute when it starts with <code>/</code>. On Windows it is
+absolute when it has a drive followed by a root separator (<code>C:\x</code>,
+<code>C:/x</code>) or is a UNC path (<code>\\server\share\x</code>); a root without a drive
+(<code>\x</code>) and a drive without a root (<code>C:x</code>) are both relative. The empty
+path is relative.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the path is absolute</li>
+</ul>
+<h4 id="is_relative"><a class="header" href="#is_relative">is_relative</a></h4>
+<pre><code class="language-pepper">is_relative(): bool
+</code></pre>
+<p>Returns whether the path is relative: the opposite of
+<code>is_absolute()</code>. The empty path is relative.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the path is not absolute</li>
+</ul>
+<h4 id="join"><a class="header" href="#join">join</a></h4>
+<pre><code class="language-pepper">join(other: Path): Path
+</code></pre>
+<p>Returns this path with <code>other</code> appended as further components.</p>
+<p>A platform separator is inserted between the two unless this path
+already ends in one. If <code>other</code> is absolute, or (on Windows) starts
+with a root separator or a drive or UNC prefix, it replaces this path
+instead, as in Rust. Joining an empty <code>other</code> returns a copy of this
+path; joining onto the empty path returns <code>other</code>. Nothing is
+normalized: <code>a</code> joined with <code>../b</code> is <code>a/../b</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the path to append</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Path; this path is not changed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
+var q = io.Path("a/").join(io.Path("b"));      # "a/b"
+var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
+var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
+</code></pre>
+<h4 id="join_str"><a class="header" href="#join_str">join_str</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'join', which accepts a String", "join")] join_str(other: String): Path
+</code></pre>
+<p>Returns this path with the String <code>other</code> appended, exactly like
+<code>join(Path(other))</code>. Deprecated: <code>join</code> accepts a <code>String</code> directly,
+since a <code>String</code> converts to a <code>Path</code> implicitly.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the path text to append</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Path; this path is not changed</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>join</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
+</code></pre>
+<h4 id="has_root_or_prefix"><a class="header" href="#has_root_or_prefix">has_root_or_prefix</a></h4>
+<pre><code class="language-pepper">has_root_or_prefix(): bool
+</code></pre>
+<p>Returns whether the path starts with a root separator or, on Windows,
+a drive or UNC prefix. This is what makes <code>join</code> replace instead of
+append; unlike <code>is_absolute()</code> it is also true for Windows paths such
+as <code>\x</code> and <code>C:x</code>. On POSIX it equals <code>is_absolute()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the path has a root separator or a prefix</li>
+</ul>
+<h4 id="parent"><a class="header" href="#parent">parent</a></h4>
+<pre><code class="language-pepper">parent(): Path?
+</code></pre>
+<p>Returns the path without its last component. Pure text: <code>..</code> is not
+resolved, so the parent of <code>a/..</code> is <code>a</code>.</p>
+<p>Trailing and repeated separators before the last component are
+dropped (<code>a/b/</code> and <code>a//b</code> both give <code>a</code>). The parent of a top-level
+name keeps the root and prefix (<code>/a</code> gives <code>/</code>, <code>C:\x</code> gives <code>C:\</code>,
+<code>C:x</code> gives <code>C:</code>).</p>
+<p>Breaking change: this used to return the empty path for "no parent";
+it now returns none.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the parent path, or none for a root (<code>/</code>, <code>C:\</code>, a bare prefix such as <code>C:</code>), a bare name with no root (<code>a</code>, <code>.</code>, <code>..</code>), or the empty path</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
+var root = io.Path("/a").parent().value();        # "/"
+var none = io.Path("/").parent();                 # none
+</code></pre>
+<h4 id="file_name"><a class="header" href="#file_name">file_name</a></h4>
+<pre><code class="language-pepper">file_name(): String?
+</code></pre>
+<p>Returns the last component of the path, ignoring trailing separators
+(<code>a/b/</code> gives <code>b</code>).</p>
+<p>Breaking change: this used to return <code>""</code> for "no file name"; it now
+returns none.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the last component, or none for a root (<code>/</code>, <code>C:\</code>), the empty path, or a path whose last component is <code>.</code> or <code>..</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
+var none = io.Path("a/..").file_name();                 # none
+</code></pre>
+<h4 id="file_stem"><a class="header" href="#file_stem">file_stem</a></h4>
+<pre><code class="language-pepper">file_stem(): String?
+</code></pre>
+<p>Returns the file name without its extension: everything before the
+last dot, unless that dot is the first character.</p>
+<p>Breaking change: this used to return <code>""</code> for "no file name"; it now
+returns none.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stem (<code>c.tar</code> for <code>c.tar.gz</code>, <code>.bashrc</code> for <code>.bashrc</code>, <code>foo</code> for <code>foo.</code>, <code>noext</code> for <code>noext</code>), or none when there is no file name (see <code>file_name()</code>)</li>
+</ul>
+<h4 id="extension"><a class="header" href="#extension">extension</a></h4>
+<pre><code class="language-pepper">extension(): String?
+</code></pre>
+<p>Returns the file name's extension, without its dot: the text after
+the last dot, unless that dot is the first character. Only the file
+name counts; a dot in a directory name (<code>a.b/c</code>) is not an extension.</p>
+<p>Breaking change: this used to return <code>""</code> for "no extension"; it now
+returns none. As in Rust, a name ending in a dot (<code>foo.</code>) has the
+empty extension, which is not none.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the extension (<code>gz</code> for <code>c.tar.gz</code>, <code>""</code> for <code>foo.</code>), or none when the file name has no dot after its first character (<code>noext</code>, <code>.bashrc</code>) or there is no file name</li>
+</ul>
+<h4 id="with_extension"><a class="header" href="#with_extension">with_extension</a></h4>
+<pre><code class="language-pepper">with_extension(ext: String): Path
+</code></pre>
+<p>Returns this path with its file name's extension replaced by <code>ext</code>,
+added when it has none, or removed when <code>ext</code> is empty. Trailing
+separators after the file name are dropped.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>ext</code> — the new extension without a leading dot (a dot is inserted; <code>".md"</code> would give <code>b..md</code>), or <code>""</code> to remove the extension</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the new path, or a copy of this path unchanged when it has no file name (a root, <code>.</code>, <code>..</code>, or the empty path)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var md = io.Path("a/b.txt").with_extension("md");   # "a/b.md"
+var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
+var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
+</code></pre>
+<h4 id="components"><a class="header" href="#components">components</a></h4>
+<pre><code class="language-pepper">components(): Array&lt;String&gt;
+</code></pre>
+<p>Returns the path split into its components: the prefix (Windows drive
+or UNC share, such as <code>C:</code>), then the root separator (one character,
+as written), then each non-empty part between separators.</p>
+<p>Repeated and trailing separators produce no empty parts. <code>.</code> parts
+are dropped, except a leading one in a path with no prefix or root
+(<code>./a</code> gives <code>.</code> and <code>a</code>). <code>..</code> parts are kept as they are.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the components in order; empty for the empty path</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var c = io.Path("/usr//lib/./x/").components();   # ["/", "usr", "lib", "x"]
+var d = io.Path("./a/b").components();            # [".", "a", "b"]
+</code></pre>
+<h4 id="normalize"><a class="header" href="#normalize">normalize</a></h4>
+<pre><code class="language-pepper">normalize(): Path
+</code></pre>
+<p>Returns the path cleaned up lexically, without touching the file
+system: <code>.</code> parts and repeated or trailing separators are dropped, and
+each <code>..</code> removes the part before it.</p>
+<p>A <code>..</code> cannot climb above a root (<code>/../x</code> gives <code>/x</code>) and is kept at
+the start of a relative path (<code>../a/..</code> gives <code>..</code>). The prefix is
+kept, and every separator becomes the platform separator. Because
+symlinks are not consulted, <code>link/..</code> becomes <code>.</code> even when <code>link</code>
+points elsewhere; use <code>canonicalize()</code> for the path the file system
+resolves.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the normalized path; <code>.</code> when the path cleans to nothing (<code>a/..</code>, <code>./</code>), and the empty path for the empty path</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>canonicalize</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var p = io.Path("a/./b/../c").normalize();   # "a/c" ("a\c" on Windows)
+var q = io.Path("a/..").normalize();         # "."
+</code></pre>
+<h4 id="exists"><a class="header" href="#exists">exists</a></h4>
+<pre><code class="language-pepper">exists(): bool
+</code></pre>
+<p>Returns whether something exists at this path, following symlinks. A
+relative path is resolved against the current directory.</p>
+<p>Any error counts as not existing: a dangling symlink, a path under a
+directory that cannot be read, and the empty path all give false. Use
+<code>metadata()</code> to tell those apart.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the path (or a symlink's target) can be stat'ed</li>
+</ul>
+<h4 id="is_file"><a class="header" href="#is_file">is_file</a></h4>
+<pre><code class="language-pepper">is_file(): bool
+</code></pre>
+<p>Returns whether the path names a regular file, following symlinks.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a regular file or a symlink to one; false for anything else, and on any error (including a missing path)</li>
+</ul>
+<h4 id="is_directory"><a class="header" href="#is_directory">is_directory</a></h4>
+<pre><code class="language-pepper">is_directory(): bool
+</code></pre>
+<p>Returns whether the path names a directory, following symlinks.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a directory or a symlink to one; false for anything else, and on any error (including a missing path)</li>
+</ul>
+<h4 id="is_dir"><a class="header" href="#is_dir">is_dir</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'is_directory' instead", "is_directory")] is_dir(): bool
+</code></pre>
+<p>Deprecated: use <code>is_directory</code> instead. Returns whether the path
+names a directory, following symlinks.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same as <code>is_directory()</code></li>
+</ul>
+<h4 id="metadata"><a class="header" href="#metadata">metadata</a></h4>
+<pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
+</code></pre>
+<p>Returns the metadata of the file or directory at this path, following
+symlinks: the result describes the target (so on POSIX <code>is_symlink</code> is
+always false). <code>stat</code> / <code>statx</code> on POSIX; on Windows the path is
+opened for attributes only.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the <code>Metadata</code> of the path (or of a symlink's target); an error when the path cannot be stat'ed: <code>is_not_found()</code> when it (or a symlink's target) is missing or the path is empty, <code>is_permission_denied()</code> when a directory on the way cannot be searched, and on POSIX <code>is_not_a_directory()</code> when a file is used as a directory in the middle of the path</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>symlink_metadata</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var m = io.Path("data.bin").metadata();
+if (m.is_ok()) {
+    var size = m.value().size;
+}
+</code></pre>
+<h4 id="symlink_metadata"><a class="header" href="#symlink_metadata">symlink_metadata</a></h4>
+<pre><code class="language-pepper">symlink_metadata(): IoResult&lt;Metadata&gt;
+</code></pre>
+<p>Returns the metadata of the path itself without following a symlink
+at the end of it, so for a symlink <code>is_symlink</code> is true and the rest
+describes the link rather than its target. <code>lstat</code> / <code>statx</code> with
+<code>AT_SYMLINK_NOFOLLOW</code> on POSIX; on Windows the path is opened with
+<code>FILE_FLAG_OPEN_REPARSE_POINT</code>, and any reparse point (junctions
+included) reports <code>is_symlink</code>, together with <code>is_directory</code> for a directory
+link. For anything that is not a symlink it equals <code>metadata()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the <code>Metadata</code> of the path itself; an error as for <code>metadata()</code>, except that a dangling symlink succeeds</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>metadata</code></li>
+</ul>
+<h4 id="canonicalize"><a class="header" href="#canonicalize">canonicalize</a></h4>
+<pre><code class="language-pepper">canonicalize(): IoResult&lt;Path&gt;
+</code></pre>
+<p>Returns the absolute path the file system resolves this path to:
+relative to the current directory, with every symlink, <code>.</code> and <code>..</code>
+resolved. Unlike <code>normalize()</code>, the path must exist.</p>
+<p>POSIX uses <code>realpath</code>. Windows opens the path and asks for its final
+name; the result uses <code>\</code>, and the <code>\\?\</code> prefix Windows reports is
+removed (<code>\\?\UNC\server\share</code> becomes <code>\\server\share</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the canonical absolute path; an error when the path cannot be resolved: <code>is_not_found()</code> when it (or a symlink's target) is missing or the path is empty, <code>is_permission_denied()</code> when a directory on the way cannot be searched</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>normalize</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var real = io.Path("a/../b.txt").canonicalize();
+if (real.is_ok()) {
+    print(real.value().to_string());
+}
+</code></pre>
+<h4 id="read_link"><a class="header" href="#read_link">read_link</a></h4>
+<pre><code class="language-pepper">read_link(): IoResult&lt;Path&gt;
+</code></pre>
+<p>Returns the target a symbolic link points to, as stored in the link
+(<code>readlink</code> on POSIX; on Windows the reparse point's target, junctions
+included). Only the link itself is read: a relative target stays
+relative to the directory holding the link, and the target need not
+exist.</p>
+<p>On Windows the <code>\??\</code> prefix of an absolute target is removed
+(<code>\??\UNC\server\share</code> becomes <code>\\server\share</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the link's target; an error with <code>is_invalid_input()</code> when the path is not a symlink, <code>is_not_found()</code> when it is missing or empty, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.symlink</code></li>
+<li><code>Directory.symlink</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var target = io.Path("current").read_link();
+if (target.is_ok()) {
+    print(target.value().to_string());
+}
+</code></pre>
+<h4 id="set_permissions"><a class="header" href="#set_permissions">set_permissions</a></h4>
+<pre><code class="language-pepper">set_permissions(mode: Mode): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the permission bits of the file or directory at this path,
+following symlinks (<code>chmod</code> on POSIX).</p>
+<p><code>mode</code> holds the raw platform bits, as <code>Metadata.permissions</code> reports
+them: on POSIX the <code>mode_t</code> bits <code>mode &amp; 07777</code> (493, octal 755, for
+<code>rwxr-xr-x</code>). A directory's bits control listing it (r), creating and
+removing entries in it (w) and reaching anything inside it (x). On
+Windows <code>mode</code> is the <code>FILE_ATTRIBUTE_*</code> word, and only
+<code>FILE_ATTRIBUTE_READONLY</code> (1) is applied. WASI has no permission
+bits, and this fails. <code>set_read_only</code> and <code>set_executable</code> change one
+property portably.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the new permission bits</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once they are set; an error with <code>is_not_found()</code> when the path is missing or empty, <code>is_permission_denied()</code> when the caller does not own it, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+io.Path("deploy.sh").set_permissions(493);   # octal 755: rwxr-xr-x
+</code></pre>
+<h4 id="set_read_only"><a class="header" href="#set_read_only">set_read_only</a></h4>
+<pre><code class="language-pepper">set_read_only(read_only: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the file or directory at this path read-only, or writable
+again, following symlinks: the portable part of <code>set_permissions</code>.</p>
+<p>On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner's (octal 200), so nothing becomes writable by
+group or others this way. On Windows it sets or clears
+<code>FILE_ATTRIBUTE_READONLY</code>, which Windows ignores on a directory. Fails
+on WASI, which has no permission bits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>read_only</code> — true to make it read-only, false to make it writable by its owner</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once it is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata.read_only</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var config = io.Path("settings.toml");
+config.set_read_only(true);
+var ro = config.metadata().value().read_only;   # true
+</code></pre>
+<h4 id="set_executable"><a class="header" href="#set_executable">set_executable</a></h4>
+<pre><code class="language-pepper">set_executable(executable: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the file at this path executable, or not, following symlinks,
+without raw permission bits.</p>
+<p>On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as <code>chmod +x</code> does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as <code>.exe</code> decides) and WASI no permission bits, so
+there this does nothing and succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>executable</code> — true to make the file executable, false to stop it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once it is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+io.File.write_text(io.Path("hello.sh"), "#!/bin/sh\necho hello\n");
+io.Path("hello.sh").set_executable(true);
+</code></pre>
+<h4 id="set_modified"><a class="header" href="#set_modified">set_modified</a></h4>
+<pre><code class="language-pepper">set_modified(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the modification time of the file or directory at this path,
+following symlinks and leaving its access time alone (<code>utimensat</code> on
+POSIX, <code>SetFileTime</code> on Windows, where the time is kept to 100 ns).</p>
+<p>A directory's modification time changes whenever an entry is added or
+removed, so set it after its contents are final.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.modified</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error with <code>is_not_found()</code> when the path is missing or empty, <code>is_permission_denied()</code> when the caller may not change it, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.set_modified</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var source = io.Path("a.txt").metadata().value();
+io.Path("b.txt").set_modified(source.modified);
+</code></pre>
+<h4 id="set_accessed"><a class="header" href="#set_accessed">set_accessed</a></h4>
+<pre><code class="language-pepper">set_accessed(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the access time of the file or directory at this path, following
+symlinks and leaving its modification time alone (<code>utimensat</code> on
+POSIX, <code>SetFileTime</code> on Windows, where the time is kept to 100 ns).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.accessed</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error as for <code>set_modified</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.set_accessed</code></li>
+</ul>
+<h4 id="operator-"><a class="header" href="#operator-">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: Path): bool
+</code></pre>
+<p>Returns whether two paths have exactly the same text. The comparison
+is byte by byte, with no normalization and case-sensitive on every
+platform: <code>a/b</code> differs from <code>a//b</code>, from <code>a/b/</code>, and (on Windows)
+from <code>a\b</code> and <code>A/b</code>. Compare <code>normalize()</code> or <code>canonicalize()</code>
+results to ignore spelling differences.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the path to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both paths' texts are equal</li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: Path): bool
+</code></pre>
+<p>Returns whether two paths differ in their text: the opposite of <code>==</code>,
+with the same byte-by-byte comparison.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the path to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the paths' texts differ</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/io-stream.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/io-file.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/io-stream.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/io-file.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

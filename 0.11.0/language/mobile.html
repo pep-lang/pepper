@@ -1,0 +1,618 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>iOS and Android - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/mobile.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="ios-and-android"><a class="header" href="#ios-and-android">iOS and Android</a></h1>
+<p>Pepper compiles natively for iOS and Android through the same LLVM backend
+it uses everywhere else: <code>--target</code> picks the platform, and the result is
+ordinary machine code for an iPhone, an iPad, the iOS simulator, or an
+Android phone. An app calls the Pepper code through C, as any C library is
+called: mark the functions <code>[Export]</code>, build a library with <code>--lib static</code>
+(see <a href="c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>), or on iOS
+an <code>.xcframework</code> or a Swift package (<code>--lib xcframework</code>, <code>--lib swift-package</code>) and on Android an <code>.aar</code> (<code>--lib aar</code>), and call it from
+Swift directly, or from Kotlin and Java through JNI.</p>
+<h2 id="targets"><a class="header" href="#targets">Targets</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Triple</th><th>Runs on</th></tr></thead><tbody>
+<tr><td><code>aarch64-apple-ios</code></td><td>iPhone and iPad</td></tr>
+<tr><td><code>aarch64-apple-ios-simulator</code></td><td>the iOS simulator on an Apple silicon Mac</td></tr>
+<tr><td><code>x86_64-apple-ios-simulator</code></td><td>the iOS simulator on an Intel Mac</td></tr>
+<tr><td><code>aarch64-linux-android</code></td><td>Android phones and tablets (<code>arm64-v8a</code>)</td></tr>
+<tr><td><code>x86_64-linux-android</code></td><td>the Android emulator on x64 (<code>x86_64</code>)</td></tr>
+</tbody></table>
+</div>
+<ul>
+<li>
+<p><strong>Versions.</strong> A triple can name the oldest OS version the code runs on:
+<code>aarch64-apple-ios17.0</code>, <code>aarch64-apple-ios17.0-simulator</code>,
+<code>aarch64-linux-android33</code>. Without one, iOS code runs on iOS 15 and later
+and Android code on API level 30 (Android 11) and later. Pepper's runtime
+needs API level 30, so an older one is an error:</p>
+<pre><code class="language-text">error: unsupported target 'aarch64-linux-android24': Pepper's runtime needs Android API level 30 or later (write 'android30')
+</code></pre>
+</li>
+<li>
+<p><strong>Spellings.</strong> <code>arm64</code> works for <code>aarch64</code>, as do Rust's <code>-sim</code> for
+<code>-simulator</code> and any vendor (<code>aarch64-unknown-linux-android</code>).
+<code>x86_64-apple-ios</code> means the simulator, since no iPhone is x64.</p>
+</li>
+<li>
+<p><strong>CPU.</strong> Code for an iPhone runs on every arm64 iPhone (clang's
+<code>apple-a7</code>); add <code>-mcpu=apple-a14</code> to use what newer ones have. Android
+x64 code uses SSE4.2 and POPCNT, which the Android x86_64 ABI requires.</p>
+</li>
+</ul>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<p>A library for an app needs no SDK, only the compiler:</p>
+<pre><code class="language-sh">pepper build --target aarch64-apple-ios --lib static greeter.pep -o ios/libgreeter.a
+pepper build --target aarch64-linux-android --lib static greeter.pep -o android/libgreeter.a
+</code></pre>
+<p>The compiler writes each archive itself, in the format the platform's
+linkers read (BSD's for iOS, GNU's for Android), so nothing from Xcode or
+the NDK is needed to make it. Each writes <code>greeter.h</code> beside the library.
+Build the library once for each
+target the app ships: the device and the simulator on iOS, and each
+Android ABI.</p>
+<p>Linking, for a shared library or an executable to run in the simulator or
+an emulator, needs the platform's SDK:</p>
+<ul>
+<li><strong>iOS</strong> links with LLVM's <code>ld64.lld</code> against an iOS SDK. On a Mac with
+Xcode the compiler asks <code>xcrun</code> for it (<code>iphoneos</code>, or <code>iphonesimulator</code>
+for the simulator). Elsewhere name it with <code>--sysroot</code>, or set
+<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS</code> (and
+<code>PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR</code>, and so on): the variable is
+named for the triple without its version. Homebrew's <code>llvm@20</code> does not
+ship <code>ld64.lld</code>: <code>brew install lld@20</code> (or <code>scripts/setup-llvm.sh</code>)
+installs it, and the link needs that <code>bin</code> folder and <code>llvm@20</code>'s on the
+PATH (see <a href="../contributing/setup.html">Setting up LLVM</a>).</li>
+<li><strong>Android</strong> links with the NDK's own clang, which brings the NDK's
+linker, compiler-rt and unwinder. Name the NDK with <code>--sysroot &lt;ndk&gt;</code> or
+<code>PEPPER_SYSROOT_AARCH64_LINUX_ANDROID</code>, or set <code>ANDROID_NDK_HOME</code> or
+<code>ANDROID_NDK_ROOT</code>; otherwise the newest NDK in the Android SDK
+(<code>$ANDROID_HOME/ndk/&lt;version&gt;</code>, as Android Studio installs it) is used.
+NDK r27 is the version tested.</li>
+</ul>
+<p>When the SDK is missing, the link error says where to point the compiler:</p>
+<pre><code class="language-text">note: linking for 'aarch64-linux-android30' needs the Android NDK (https://developer.android.com/ndk/downloads): pass '--sysroot &lt;ndk&gt;' or set PEPPER_SYSROOT_AARCH64_LINUX_ANDROID, ANDROID_NDK_HOME or ANDROID_HOME
+</code></pre>
+<h2 id="selecting-code-for-a-platform"><a class="header" href="#selecting-code-for-a-platform">Selecting code for a platform</a></h2>
+<p><code>[Target(OS(IOS))]</code> and <code>[Target(OS(Android))]</code> select code for one of
+them. Most code needs neither: iOS is Darwin, like macOS, and Android runs
+the Linux kernel, so <code>OS(Mac)</code> is true on iOS and <code>OS(Linux)</code> on Android,
+as <code>TARGET_OS_MAC</code> and <code>__linux__</code> are in C (see
+<a href="platform-selection.html#writing-a-condition">Platform selection</a>). The
+runtime's macOS and Linux code serves them, with a few declarations
+narrowed where they differ. At run time, <code>os.system_os()</code> returns
+<code>OperatingSystem.IOS</code> or <code>OperatingSystem.Android</code>.</p>
+<h2 id="bindings"><a class="header" href="#bindings">Bindings</a></h2>
+<p>Swift, Kotlin and Java call the library's <code>[Export]</code>ed functions (see
+<a href="c-interop.html">Calling Pepper from C</a>) through bindings the compiler
+generates beside the C header, so the app passes its own values and
+writes no glue: <code>--bindings swift</code> or <code>--bindings java</code> with <code>--lib</code>, and
+<code>--lib swift-package</code> and <code>--lib aar</code> (below) write them themselves.
+Names are camel case (<code>count_words</code> is <code>countWords</code>), and each export
+crosses as:</p>
+<div class="table-wrapper"><table><thead><tr><th>Pepper</th><th>Swift</th><th>Java and Kotlin</th></tr></thead><tbody>
+<tr><td><code>bool</code></td><td><code>Bool</code></td><td><code>boolean</code></td></tr>
+<tr><td><code>i8</code>, <code>u8</code>, <code>char</code></td><td><code>Int8</code>, <code>UInt8</code>, <code>CChar</code></td><td><code>byte</code></td></tr>
+<tr><td><code>short</code>, <code>ushort</code></td><td><code>Int16</code>, <code>UInt16</code></td><td><code>short</code></td></tr>
+<tr><td><code>int</code>, <code>uint</code></td><td><code>Int32</code>, <code>UInt32</code></td><td><code>int</code></td></tr>
+<tr><td><code>long</code>, <code>ulong</code></td><td><code>Int64</code>, <code>UInt64</code></td><td><code>long</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td><code>Float</code>, <code>Double</code></td><td><code>float</code>, <code>double</code></td></tr>
+<tr><td>an enum</td><td>its stored integer</td><td>its stored integer</td></tr>
+<tr><td><code>String</code></td><td><code>String</code></td><td><code>String</code></td></tr>
+<tr><td>a struct</td><td>a class owning one reference</td><td>a class owning one reference, <code>AutoCloseable</code></td></tr>
+<tr><td><code>__ptr&lt;T&gt;</code></td><td><code>UnsafeMutablePointer&lt;T&gt;?</code> (<code>UnsafeMutableRawPointer?</code> for <code>void</code>)</td><td><code>long</code></td></tr>
+<tr><td><code>extern (A) =&gt; R</code></td><td><code>@convention(c)</code> function</td><td>none: an error</td></tr>
+</tbody></table>
+</div>
+<p>Java has no unsigned types: <code>u8</code> through <code>ulong</code> keep their bits in the
+signed type of their size. A <code>String</code> crosses as UTF-8 both ways (a Java
+string's own bytes, not JNI's modified UTF-8), and a string Pepper returns
+ends at its first NUL. JNI cannot pass a C function pointer, so an export
+that takes or returns one is an error at its type when Java bindings are
+built, as are an export whose camel-case name is a Java keyword or
+another's, and a struct named as the library's own class.</p>
+<p>A struct handle is an object that owns one reference to the Pepper value:
+Swift's class releases it in <code>deinit</code>, and Java's in <code>close()</code>, which
+<code>try</code>-with-resources and Kotlin's <code>use</code> call (a handle never closed leaks
+its value; there is no finalizer, which would release it on another
+thread). Its reference count is a plain one unless the struct is
+<code>[Shared]</code>, so a handle stays on one thread, as the Pepper value would.</p>
+<h2 id="calling-pepper-from-swift"><a class="header" href="#calling-pepper-from-swift">Calling Pepper from Swift</a></h2>
+<p><code>--bindings swift</code> writes, beside the header, <code>greeter.swift</code>: a Swift
+function for each export, over the C module <code>Cgreeter</code> that the
+<code>module.modulemap</code> it also writes declares. Compile it with the app's
+Swift code, find the module map with <code>-I</code>, and link the library:</p>
+<pre><code class="language-sh">pepper build --target aarch64-apple-ios-simulator --lib static --bindings swift greeter.pep -o libgreeter.a
+xcrun --sdk iphonesimulator swiftc -target arm64-apple-ios15.0-simulator -parse-as-library \
+  -I . App.swift greeter.swift -L . -lgreeter -o App.app/App
+</code></pre>
+<pre><code class="language-swift">print(greet("iOS"))         // String in, String out: the C copy is freed
+let tally = tallyNew()      // a Pepper struct, released when `tally` goes
+print(tallyAdd(tally, 3))
+</code></pre>
+<p>Without the bindings, Swift calls the C functions directly through the
+header as a bridging header (<code>-import-objc-header greeter.h</code>): a <code>String</code>
+crosses as a pointer and a size, and a returned string is freed with
+<code>pepper_string_free</code>.</p>
+<h2 id="packaging-for-xcode-and-swiftpm"><a class="header" href="#packaging-for-xcode-and-swiftpm">Packaging for Xcode and SwiftPM</a></h2>
+<p><code>--lib xcframework</code> builds the library for every iOS target at once, as one
+<code>.xcframework</code> Xcode adds as a single dependency: a device slice and a
+simulator slice holding both simulator architectures, each with the header
+and a module map, so Swift imports its C functions by name with no bridging
+header. <code>--lib swift-package</code> puts it in a Swift package with the Swift
+bindings. Neither needs Xcode or an SDK: the compiler builds each static
+library and writes the rest itself.</p>
+<pre><code class="language-sh">pepper build --lib xcframework greeter.pep -o Greeter.xcframework
+pepper build --lib swift-package greeter.pep -o Greeter
+</code></pre>
+<p>The name comes from the output (<code>Greeter</code>): the module (<code>import Greeter</code>),
+the library (<code>libGreeter.a</code>) and its header (<code>Greeter.h</code>). In the Swift
+package the module <code>Greeter</code> is the Swift bindings, over the C module
+<code>CGreeter</code>, which code that calls the C functions directly imports
+instead:</p>
+<pre><code class="language-text">Greeter/
+  Package.swift
+  Sources/Greeter/Greeter.swift   the bindings
+  CGreeter.xcframework/
+    Info.plist
+    ios-arm64/                    libGreeter.a, Headers/Greeter.h, Headers/module.modulemap
+    ios-arm64_x86_64-simulator/   the same, its libGreeter.a holding arm64 and x86_64
+</code></pre>
+<p>In Xcode, drag <code>Greeter.xcframework</code> into the target's <em>Frameworks,
+Libraries, and Embedded Content</em> (<em>Do Not Embed</em>: it is static), or add the
+package with <em>Add Package Dependencies…</em> › <em>Add Local…</em>. A package depends
+on it by path:</p>
+<pre><code class="language-swift">dependencies: [.package(path: "../Greeter")],
+targets: [
+    .target(name: "App", dependencies: [.product(name: "Greeter", package: "Greeter")]),
+]
+</code></pre>
+<pre><code class="language-swift">import Greeter
+
+print(greet("iOS"))
+</code></pre>
+<p>The slices are built for iOS 15 and later. A library that links others
+(<code>[Link]</code>, <code>-l</code>) names them in its header, as <code>--lib static</code> does; the app
+links them itself.</p>
+<h2 id="calling-pepper-from-kotlin-or-java"><a class="header" href="#calling-pepper-from-kotlin-or-java">Calling Pepper from Kotlin or Java</a></h2>
+<p><code>--bindings java</code> (with <code>--lib shared</code>) writes, beside the header,
+<code>greeter.jar</code>: the class <code>pepper.greeter.Greeter</code>, a <code>static native</code>
+method for each export, which loads <code>libgreeter.so</code> when first used, and a
+class for each struct. Their JNI functions, which convert Java's values,
+are compiled into the library from <code>greeter_jni.c</code>, also written there.
+The jar's class files are written by the compiler, so it needs no JDK.</p>
+<pre><code class="language-sh">pepper build --target aarch64-linux-android --lib shared --bindings java greeter.pep \
+  -o jniLibs/arm64-v8a/libgreeter.so
+</code></pre>
+<pre><code class="language-kotlin">import pepper.greeter.Greeter
+
+println(Greeter.greet("Android"))
+Greeter.tallyNew().use { tally -&gt; println(Greeter.tallyAdd(tally, 3)) }
+</code></pre>
+<p>With Gradle, put each ABI's <code>.so</code> in <code>src/main/jniLibs/&lt;abi&gt;/</code>
+(<code>arm64-v8a</code>, <code>x86_64</code>) and the jar in the module's dependencies, or add
+the <code>.aar</code> below, which holds both.</p>
+<h2 id="packaging-for-gradle"><a class="header" href="#packaging-for-gradle">Packaging for Gradle</a></h2>
+<p><code>--lib aar</code> builds the library as a shared library for every Android ABI
+at once, with the Java bindings, as one Android library (<code>.aar</code>) a Gradle
+build adds as a single dependency. It needs no Gradle and no JDK: the
+compiler builds each <code>.so</code> with the NDK (found as for any Android link,
+above) and writes the archive itself.</p>
+<pre><code class="language-sh">pepper build --lib aar greeter.pep -o greeter.aar
+</code></pre>
+<p>The name comes from the output (<code>greeter</code>, which takes letters, digits and
+<code>_</code>): the library <code>libgreeter.so</code>, its header <code>greeter.h</code>, and the Java
+package, <code>pepper.greeter</code>, also the manifest's. It holds:</p>
+<pre><code class="language-text">greeter.aar
+  AndroidManifest.xml       minSdkVersion 30
+  classes.jar               the Java bindings: pepper.greeter.Greeter, and a class per struct
+  R.txt, res/               empty: the library has no resources
+  include/greeter.h
+  jni/arm64-v8a/libgreeter.so
+  jni/x86_64/libgreeter.so
+  LICENSE-OpenSSL.txt       only when the library imports tls (see Shipping)
+</code></pre>
+<p>Add it to the app module, and Gradle puts each ABI's <code>.so</code> in the APK and
+the classes on the app's class path:</p>
+<pre><code class="language-kotlin">dependencies {
+    implementation(files("libs/greeter.aar"))
+}
+</code></pre>
+<p>Each <code>.so</code> holds the Pepper code and the JNI functions, so the app calls
+<code>Greeter.greet("x")</code> with no C of its own.</p>
+<h2 id="threads"><a class="header" href="#threads">Threads</a></h2>
+<p>Exported functions may be called from any thread (see
+<a href="c-interop.html#initialization-panics-and-threads">Initialization, panics and threads</a>),
+so the app decides where Pepper code runs. Keep long work off the main
+thread (iOS's main queue, Android's UI thread): call it from a background
+queue, a coroutine on <code>Dispatchers.Default</code>, or a Pepper thread or task the
+library starts itself. Pepper code never calls back into UIKit or Android's
+views on its own; hand results back to the main thread on the app's side.</p>
+<h2 id="what-works-differently"><a class="header" href="#what-works-differently">What works differently</a></h2>
+<p>The runtime runs the documentation's examples on both platforms, with these
+differences:</p>
+<ul>
+<li><strong>Starting processes.</strong> An iOS app cannot start other programs, and the
+<code>process</code> module's <code>Command.spawn</code> returns an <code>IoError</code> there. On Android
+it works, but an app has few programs to start.</li>
+<li><strong>TLS on iOS.</strong> The <code>tls</code> module uses the system's Security.framework
+(Secure Transport), so <code>TlsConnector</code> and <code>http.Client</code>'s <code>https://</code> URLs
+work with nothing bundled: the server's certificate is checked against
+the system's roots and any added with <code>add_root_certificate</code>, and ALPN
+works. Secure Transport speaks TLS 1.2 at most, so a server that accepts
+only TLS 1.3 fails the handshake. A TLS server (<code>TlsAcceptor.create</code>) and
+a client certificate (<code>TlsConnector.set_identity</code>) return an <code>IoError</code>
+there for now. iOS checks a server's certificate more strictly than
+OpenSSL: it must name the host in its subject alternative names, carry the
+<code>serverAuth</code> extended key usage and, when issued after June 2019, be valid
+for at most 825 days, even from a private certificate authority.</li>
+<li><strong>TLS on Android.</strong> Android ships no OpenSSL a program may load, so the
+toolchain carries a static OpenSSL 3 for each ABI
+(<code>runtime/tls/android/&lt;triple&gt;/libssl.a</code> and <code>libcrypto.a</code>), and a
+program that imports <code>tls</code> (or <code>http</code>) links it: <code>TlsConnector</code>,
+<code>TlsAcceptor</code> and <code>http.Client</code>'s <code>https://</code> URLs work as on Linux, TLS
+1.3 included. A connector trusts the system's certificate store (the
+Conscrypt module's, <code>/apex/com.android.conscrypt/cacerts</code>, on Android 14
+and later; <code>/system/etc/security/cacerts</code> before), less the certificates
+the user turned off in Settings, plus those the user installed
+(<code>/data/misc/user/0/cacerts-added</code>) where the process may read them, and
+any added with <code>add_root_certificate</code>. Unlike an app's Java networking,
+this ignores the app's network security configuration. OpenSSL adds
+about 4 MB to a stripped binary. An app linking a Pepper static
+library adds the libraries its header names (<code>-lssl -lcrypto</code>) from that
+folder: <code>-L &lt;toolchain&gt;/runtime/tls/android/aarch64-linux-android</code>.</li>
+<li><strong>Files.</strong> An app reads and writes inside its own container: pass the
+path the platform gives (<code>FileManager</code>'s documents directory,
+<code>Context.getFilesDir()</code>) to the Pepper code. <code>os.home_directory()</code> and
+the temporary directory point into the container on iOS. Android has no
+<code>/tmp</code>: without <code>TMPDIR</code>, <code>io.Directory.temp()</code> is <code>/data/local/tmp</code>,
+which an app cannot write, so an app passes its cache directory. A Unix
+socket's path is at most 104 bytes there, and the container's own path
+takes most of them, so give a socket there a short name. On Android, an
+app creates Unix socket files in its own data folder
+(<code>Context.getFilesDir()</code>); SELinux refuses them elsewhere, and from an
+<code>adb shell</code> program everywhere, with a permission error.</li>
+<li><strong>Backtraces.</strong> Android's backtraces come from the NDK's unwinder
+(bionic's <code>backtrace</code> needs API level 33), and both platforms name
+functions from the binary's own symbols, so strip a release build only
+after keeping a copy for symbolication.</li>
+<li><strong>Standard output</strong> goes to the Xcode console and the simulator's
+<code>--stdout</code> file on iOS. On Android it goes nowhere in an app: log with the
+platform's logger instead (<code>__android_log_write</code> through an <code>extern</code>).</li>
+</ul>
+<h2 id="shipping"><a class="header" href="#shipping">Shipping</a></h2>
+<ul>
+<li>Pepper compiles ahead of time, so iOS's ban on JIT compilation does not
+apply. Bitcode is no longer required by the App Store.</li>
+<li>A static library is linked into the app's own binary, so its code is
+covered by the app's signature; strip the release build's symbols as
+usual (Xcode's <em>Strip Linked Product</em>, the Android Gradle plugin's
+<code>strip</code> of <code>jniLibs</code>). A Pepper library adds the runtime parts the
+program uses: the prototype app's library below is about 1 MB unstripped.</li>
+<li>Each Android ABI needs its own <code>.so</code>; Google Play requires <code>arm64-v8a</code>.</li>
+<li>An Android library's thread-locals (its own and the runtime's) use the
+general-dynamic TLS model, since the app loads its <code>.so</code> with <code>dlopen</code>
+and bionic refuses initial-exec there; each access costs a call. A
+library for desktop Linux keeps initial-exec, which is faster but needs
+static TLS, so a <code>dlopen</code> of its <code>.so</code> may fail (see
+<a href="c-interop.html#building-the-library">Building the library</a>).</li>
+<li><strong>OpenSSL's license.</strong> An Android program or app that imports <code>tls</code> (or
+<code>http</code>) contains OpenSSL, which is under the Apache License 2.0, so it
+must give its users a copy of that license: ship
+<code>runtime/tls/android/LICENSE.txt</code> from the toolchain with it (a <code>--lib shared</code> build for Android writes it beside the <code>.so</code> as
+<code>LICENSE-OpenSSL.txt</code>, and <code>--lib aar</code> puts that in the <code>.aar</code>), as an app
+does in its open-source licenses screen (Google Play Services'
+<code>oss-licenses</code> plugin, or a page of the app's own), and say that the app
+includes OpenSSL. The iOS build bundles nothing.</li>
+</ul>
+<h2 id="debugging"><a class="header" href="#debugging">Debugging</a></h2>
+<p><code>-g</code> writes DWARF, which LLDB reads in both Xcode and Android Studio. Build
+the library with <code>-g</code> and the app in its debug configuration, and set
+breakpoints in the <code>.pep</code> files by path.</p>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p><code>pepper test --target</code> builds a package's <code>[Test]</code> functions for the
+simulator or Android and runs them there, reporting as on the desktop (see
+<a href="../tools/pep-test.html#testing-on-ios-and-android">Testing on iOS and Android</a>):</p>
+<pre><code class="language-sh">pepper test --target aarch64-apple-ios-simulator   # in the booted simulator
+pepper test --target x86_64-linux-android          # on the running emulator
+</code></pre>
+<p>An Android test runs as an <code>adb shell</code> program, which SELinux allows less
+than an app: it cannot make a Unix socket file or a hard link in the
+folders it can write, such as <code>/data/local/tmp</code>.
+Mark a test that needs them <code>[Target(!OS(Android))]</code>, or leave the part
+that does out, as the runtime's own tests do.</p>
+<h2 id="the-prototype-apps"><a class="header" href="#the-prototype-apps">The prototype apps</a></h2>
+<p><code>docs/examples/mobile/</code> holds a small app for each platform that calls the
+same Pepper library, <a href="../../examples/mobile/greeter.pep"><code>greeter.pep</code></a>:</p>
+<ul>
+<li><code>ios/</code>: a SwiftUI app (<code>PepperDemo.swift</code>), and <code>build.sh</code>, which builds
+it with <code>swiftc</code> and the library's <code>--bindings swift</code> for the simulator
+and for devices, installs it in a booted simulator, launches it and
+checks its output; and <code>package/</code>, a Swift package whose tests <code>import Greeter</code> from the package <code>--lib swift-package</code> writes and call its
+bindings, which <code>package.sh</code> builds and runs in the simulator with
+<code>xcodebuild test</code>.</li>
+<li><code>android/</code>: an activity in Java that calls the bindings of the library's
+<code>--lib aar</code> (<code>pepper.greeter.Greeter</code>), and <code>build.sh</code>, which builds the
+<code>.aar</code>, checks its layout, and builds the APK with the Android SDK's own
+tools (<code>javac</code>, <code>d8</code>, <code>aapt2</code>, <code>apksigner</code>; Gradle is not needed),
+installs it in the emulator, starts it and checks its log.</li>
+</ul>
+<p><code>scripts/mobile-test.sh</code> runs both on a Mac with Xcode and the Android SDK:
+it runs the runtime's <code>[Test]</code>s in the simulator and in the emulator with
+<code>pep-test --target</code>, builds every documentation example for the iOS simulator and for Android,
+runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
+(<code>adb shell</code>), then builds and runs the two apps and the Swift package's
+tests. On iOS it also runs <code>scripts/mobile/tls_check.pep</code> in the simulator against <code>openssl s_server</code>
+on the Mac, with a certificate authority made for the run: it trusts that
+authority, connects to <code>localhost</code> and <code>127.0.0.1</code>, checks that ALPN chose
+<code>http/1.1</code>, sends <code>GET /</code>, checks that a connector without the authority is
+refused, and fetches the server through <code>http.Client</code>. It needs no internet
+access. Set <code>PEPPER_MOBILE_TLS_URL</code> to an <code>https://</code> URL to also fetch that
+public host through the system's roots. On Android the same check runs in
+the emulator against the same kind of server, which <code>adb reverse</code> makes the
+emulator's <code>localhost</code>, with the same opt-in public fetch. The Android run
+also works on Linux, for the host's ABI (x86_64 there), as CI runs it:
+<code>scripts/ci-provision-android.sh</code> sets up an emulator on a
+GitHub-hosted Linux runner, since Apple silicon runners cannot run one.
+CI's <code>mobile</code> workflow (<code>.github/workflows/mobile.yml</code>) runs the script on
+both, with the commit's own compiler (see
+<a href="../contributing/tests.html#on-ios-and-android">Testing the runtime and the compiler</a>).</p>
+<pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
+</code></pre>
+<p>From a checkout, programs for Android that import <code>tls</code> need the static
+OpenSSL in the runtime first, which the toolchain already carries:</p>
+<pre><code class="language-sh">bash scripts/openssl-android.sh fetch runtime
+</code></pre>
+<p><code>scripts/openssl-android.sh build &lt;ndk&gt; &lt;output-dir&gt;</code> builds that archive
+(OpenSSL 3.5, for each ABI, with the NDK's clang), and the
+<code>openssl-android</code> workflow publishes it on the <code>openssl-&lt;version&gt;</code> release
+whenever the version the script pins has not been published.</p>
+<h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
+<ul>
+<li><strong>TLS on iOS</strong>: servers, client certificates and TLS 1.3 (which need a
+SecIdentity and Network.framework).</li>
+<li><strong>Bindings</strong>: <code>[T]</code> and <code>Data</code> (an export takes no array), <code>Result</code> as
+<code>throws</code> (an export returns no <code>Result</code>), callbacks (a C function
+pointer is Swift-only), and a struct's exports as methods of its class.</li>
+<li><strong>Packaging</strong>: <code>pep.toml</code> keys for <code>--lib xcframework</code> and <code>--lib aar</code>,
+an <code>.aar</code> for an API level other than 30, Mac Catalyst and macOS slices
+in the <code>.xcframework</code>, and <code>--lib jnilibs</code> (each ABI's <code>.so</code> laid out
+for Gradle's <code>jniLibs</code>).</li>
+<li><strong>Other targets</strong>: 32-bit Android (<code>armeabi-v7a</code>, <code>x86</code>), Mac Catalyst,
+tvOS, watchOS and visionOS.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/platform-selection.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/build-options.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/platform-selection.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/build-options.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

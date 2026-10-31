@@ -1,0 +1,637 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Connectors and streams - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/tls-stream.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/tls/stream.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="connectors-and-streams"><a class="header" href="#connectors-and-streams">Connectors and streams</a></h1>
+<p>TLS connections: <code>TlsConnector</code> opens client connections, <code>TlsAcceptor</code>
+accepts server connections, and <code>TlsStream</code> is one encrypted connection
+over a <code>TcpStream</code>.</p>
+<p>Source: <code>runtime/tls/stream.pep</code></p>
+<h2 id="tlsconnector"><a class="header" href="#tlsconnector">TlsConnector</a></h2>
+<pre><code class="language-pepper">[Shared] struct TlsConnector
+</code></pre>
+<p>Opens TLS client connections, checking each server's certificate.</p>
+<p>A connector trusts the system's root certificates; <code>add_root_certificate</code>
+trusts more, such as a test certificate authority. Each <code>connect</code> runs
+the TLS handshake over a connected <code>TcpStream</code> and checks that the
+server's certificate is valid and issued for the host name given. Only
+TLS 1.2 and 1.3 are offered (on iOS, only TLS 1.2).</p>
+<p>A server that asks for a client certificate (mutual TLS) gets the one
+set with <code>set_identity</code>; without one, the connector presents none.</p>
+<p>A connector is <code>[Shared]</code>: make one and use it from every thread and
+task. Configure it (<code>add_root_certificate</code>, <code>set_identity</code>) before the
+first <code>connect</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TlsStream</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import tls;
+
+var connector = tls.TlsConnector.create().value();
+var stream = connector.connect_host("localhost", 8443).value();
+stream.write_all("ping");
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
+<pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
+</code></pre>
+<p>Wraps a platform context. Use <code>TlsConnector.create</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>context</code> — the platform's client context, or null for none</li>
+</ul>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="create"><a class="header" href="#create">create</a></h4>
+<pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
+</code></pre>
+<p>Creates a connector that trusts the system's root certificates (on
+Android, the system's certificate store less those the user turned
+off, plus those the user installed where the process may read them).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework; on Android the program links its own OpenSSL)</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
+<pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Also trusts the certificates in the PEM file at <code>path</code>, for servers
+whose certificates the system does not trust, such as a private or
+test certificate authority.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — a file of one or more PEM certificates</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the file cannot be read or holds no certificate</li>
+</ul>
+<h4 id="set_identity"><a class="header" href="#set_identity">set_identity</a></h4>
+<pre><code class="language-pepper">set_identity(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Presents the certificate chain in <code>certificate_chain</code>, with the
+private key in <code>private_key</code>, to servers that ask for a client
+certificate (mutual TLS, as a <code>TlsAcceptor</code> does after
+<code>require_client_certificate</code>). A later call replaces the identity.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>certificate_chain</code> — a PEM file: the client's certificate first, then any intermediate certificates</li>
+<li><code>private_key</code> — a PEM file with the certificate's private key (on Windows, PKCS #8: <code>BEGIN PRIVATE KEY</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when a file cannot be read or the key does not match the certificate, and always on iOS, which does not support client certificates yet</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var connector = tls.TlsConnector.create().value();
+connector.set_identity(io.Path("client.pem"), io.Path("client-key.pem")).value();
+var stream = connector.connect_host("internal.example.com", 443).value();
+</code></pre>
+<h4 id="set_protocols"><a class="header" href="#set_protocols">set_protocols</a></h4>
+<pre><code class="language-pepper">set_protocols(protocols: String[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Offers <code>protocols</code> to every server through ALPN (RFC 7301), most
+preferred first, such as <code>["h2", "http/1.1"]</code>. After <code>connect</code>,
+<code>TlsStream.protocol</code> names the one the server chose, if it chose one.
+Call it before the first <code>connect</code>; a later call replaces the list.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocols</code> — the protocol names, each 1 to 255 bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the list is empty or a name is empty or longer than 255 bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var connector = tls.TlsConnector.create().value();
+connector.set_protocols(["h2", "http/1.1"]).value();
+var stream = connector.connect_host("example.com", 443).value();
+var http2 = stream.protocol() == Optional&lt;String&gt;.Value("h2");
+</code></pre>
+<h4 id="connect"><a class="header" href="#connect">connect</a></h4>
+<pre><code class="language-pepper">connect(stream: io.TcpStream, host: String): io.IoResult&lt;TlsStream&gt;
+</code></pre>
+<p>Runs the TLS handshake as the client over <code>stream</code> and checks the
+server's certificate.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>stream</code> — a connected TCP stream; the <code>TlsStream</code> keeps it, and nothing else should read or write it afterwards</li>
+<li><code>host</code> — the name the certificate must be for, also sent to the server as the requested name (SNI); an IP address is checked against the certificate's addresses instead</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the encrypted stream; an error when the handshake fails or the certificate is not trusted ("certificate verify failed: ..."), or an io error from the socket</li>
+</ul>
+<h4 id="connect_host"><a class="header" href="#connect_host">connect_host</a></h4>
+<pre><code class="language-pepper">connect_host(host: String, port: u16): io.IoResult&lt;TlsStream&gt;
+</code></pre>
+<p>Connects to <code>host</code> on <code>port</code> with <code>TcpStream.connect_host</code>, then runs
+the handshake as <code>connect</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>host</code> — a host name or an IP address</li>
+<li><code>port</code> — the port, usually 443</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the encrypted stream; the errors of <code>TcpStream.connect_host</code> and of <code>connect</code></li>
+</ul>
+<h2 id="tlsacceptor"><a class="header" href="#tlsacceptor">TlsAcceptor</a></h2>
+<pre><code class="language-pepper">[Shared] struct TlsAcceptor
+</code></pre>
+<p>Accepts TLS server connections with one certificate.</p>
+<p>An acceptor presents a certificate chain and its private key, read from
+PEM files. Each <code>accept</code> runs the TLS handshake over a <code>TcpStream</code> that a
+<code>TcpListener</code> accepted. Clients are not asked for certificates unless
+<code>require_client_certificate</code> is called (mutual TLS).</p>
+<p>An acceptor is <code>[Shared]</code>, so the accept loops of every worker can share
+one.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TlsStream</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+import tls;
+
+var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
+var listener = io.TcpListener.bind(io.SocketAddress.parse("0.0.0.0:8443").value()).value();
+while (true) {
+    var (tcp, peer) = listener.accept().value();
+    var accepted = acceptor.accept(tcp);
+    if (accepted.is_ok()) {
+        accepted.value().write_all("hello over TLS");
+    }
+}
+</code></pre>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
+<pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
+</code></pre>
+<p>Wraps a platform context. Use <code>TlsAcceptor.create</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>context</code> — the platform's server context, or null for none</li>
+</ul>
+<h3 id="static-methods-1"><a class="header" href="#static-methods-1">Static methods</a></h3>
+<h4 id="create-1"><a class="header" href="#create-1">create</a></h4>
+<pre><code class="language-pepper">static create(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;TlsAcceptor&gt;
+</code></pre>
+<p>Creates an acceptor that presents the certificate chain in
+<code>certificate_chain</code> with the private key in <code>private_key</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>certificate_chain</code> — a PEM file: the server's certificate first, then any intermediate certificates</li>
+<li><code>private_key</code> — a PEM file with the certificate's private key (on Windows, PKCS #8: <code>BEGIN PRIVATE KEY</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>), and always on iOS, which does not support TLS servers yet</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="require_client_certificate"><a class="header" href="#require_client_certificate">require_client_certificate</a></h4>
+<pre><code class="language-pepper">require_client_certificate(roots: io.Path): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Asks every client for a certificate and accepts only clients whose
+certificate is issued by one of the certificates in the PEM file at
+<code>roots</code> (directly or through intermediates the client sends) and is
+valid for client authentication. A handshake with a client that sends
+no certificate, or an untrusted one, fails. Call it before the first
+<code>accept</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>roots</code> — a file of one or more PEM certificates: the authorities that issue client certificates</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the file cannot be read or holds no certificate</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
+acceptor.require_client_certificate(io.Path("clients-ca.pem")).value();
+</code></pre>
+<h4 id="set_protocols-1"><a class="header" href="#set_protocols-1">set_protocols</a></h4>
+<pre><code class="language-pepper">set_protocols(protocols: String[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Accepts <code>protocols</code> through ALPN (RFC 7301), most preferred first:
+the handshake chooses the first of them that the client offers, and
+<code>TlsStream.protocol</code> names it. A client that offers no protocols
+connects with none chosen; one that offers only protocols not in the
+list fails the handshake with the <code>no_application_protocol</code> alert
+(RFC 7301). Call it before the first <code>accept</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocols</code> — the protocol names, each 1 to 255 bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the list is empty or a name is empty or longer than 255 bytes</li>
+</ul>
+<h4 id="accept"><a class="header" href="#accept">accept</a></h4>
+<pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
+</code></pre>
+<p>Runs the TLS handshake as the server over <code>stream</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>stream</code> — a connection a <code>TcpListener</code> accepted; the <code>TlsStream</code> keeps it, and nothing else should read or write it afterwards</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the encrypted stream; an error when the handshake fails (including, after <code>require_client_certificate</code>, a client with no trusted certificate), or an io error from the socket</li>
+</ul>
+<h2 id="tlsstream"><a class="header" href="#tlsstream">TlsStream</a></h2>
+<pre><code class="language-pepper">[NotCopyable("owns a TLS connection and cannot be copied")] struct TlsStream
+</code></pre>
+<p>An encrypted connection: TLS over a <code>TcpStream</code>.</p>
+<p>Get one from <code>TlsConnector.connect</code> or <code>TlsAcceptor.accept</code>. Reading and
+writing work as on a <code>TcpStream</code>, on the decrypted bytes: <code>read</code> appends
+what has arrived and returns 0 once the peer has closed the connection,
+<code>write</code> may send part of the data, and <code>read_exact</code> and <code>write_all</code> loop
+until done. In a task, a call that has to wait parks only the task.</p>
+<p><code>shutdown()</code> tells the peer that nothing more is coming (a TLS
+close_notify). A peer that closes the TCP connection without one also
+ends the stream: <code>read</code> returns 0.</p>
+<p>Closing: the destructor closes the connection when the last reference
+goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
+<code>shutdown()</code> first for that.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>TlsConnector</code></li>
+<li><code>TlsAcceptor</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var stream = connector.connect_host("localhost", 8443).value();
+stream.write_all("ping");
+var reply = Array&lt;u8&gt;();
+while (stream.read(reply, 4096).value() &gt; 0) {
+}
+</code></pre>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
+<pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
+</code></pre>
+<p>Wraps a finished handshake. Use <code>TlsConnector.connect</code> or
+<code>TlsAcceptor.accept</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>tcp</code> — the TCP connection</li>
+<li><code>session</code> — the platform's session, or null for a closed stream</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="is_open"><a class="header" href="#is_open">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the stream is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code></li>
+</ul>
+<h4 id="protocol"><a class="header" href="#protocol">protocol</a></h4>
+<pre><code class="language-pepper">protocol(): String?
+</code></pre>
+<p>Returns the protocol the handshake chose through ALPN, from the
+lists <code>TlsConnector.set_protocols</code> and <code>TlsAcceptor.set_protocols</code>
+set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the protocol name, such as <code>h2</code>; none when no protocol was chosen or the stream is closed</li>
+</ul>
+<h4 id="read"><a class="header" href="#read">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until data arrives, then appends up to <code>max</code> decrypted bytes of
+it to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read; 0 reads nothing and returns 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 once the peer has closed the connection; an error when the stream is closed, a TLS error, or an io error from the socket</li>
+</ul>
+<h4 id="read_exact"><a class="header" href="#read_exact">read_exact</a></h4>
+<pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Reads until exactly <code>count</code> more bytes are appended to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>count</code> — the number of bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once <code>count</code> bytes are appended; an error when the connection ends first, or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
+</ul>
+<h4 id="write"><a class="header" href="#write">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Encrypts and sends bytes from <code>data</code>. The send may be partial; use
+<code>write_all</code> to send everything.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent; an error when the stream is closed, a TLS error, or an io error from the socket</li>
+</ul>
+<h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of <code>data</code>, repeating the send until every byte is sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<h4 id="write_all-1"><a class="header" href="#write_all-1">write_all</a></h4>
+<pre><code class="language-pepper">write_all(text: String): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Sends all of the UTF-8 bytes of <code>text</code>, as <code>write_all(u8[])</code> does.
+No newline or terminator is added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">stream.write_all("ping");
+</code></pre>
+<h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
+<pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Deprecated: use <code>write_all</code> instead. Sends all of the UTF-8 bytes of
+<code>text</code>, exactly like <code>write_all(text)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to send</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is sent; an error as for <code>write_all</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>write_all</code></li>
+</ul>
+<h4 id="shutdown"><a class="header" href="#shutdown">shutdown</a></h4>
+<pre><code class="language-pepper">shutdown(): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Tells the peer that nothing more is coming (sends a TLS
+close_notify). The peer's reads return 0 after the data sent before.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error when the stream is closed, or an io error from the socket</li>
+</ul>
+<h4 id="close"><a class="header" href="#close">close</a></h4>
+<pre><code class="language-pepper">close(): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the connection now, without a close_notify (see <code>shutdown</code>).
+Closing a closed stream does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing the socket fails</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/tls-module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/testing-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/tls-module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/testing-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

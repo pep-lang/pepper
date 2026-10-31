@@ -1,0 +1,410 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The operating system - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/os.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="the-operating-system"><a class="header" href="#the-operating-system">The operating system</a></h1>
+<p>The <code>os</code> module reports what the operating system provides beyond the
+running process: environment variables, clocks, and facts about the
+machine and the user. Bring it in with <code>import os</code>. The full API is in the
+<a href="../reference/os-module.html">reference</a>.</p>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
+<p><code>os.environment(name)</code> returns a variable's value as a <code>String?</code>: none when
+it is not set, and an empty String when it is set to nothing.
+<code>os.environment_variables()</code> returns them all as a <code>HashMap&lt;String, String&gt;</code>
+from name to value.</p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    # An optional: none when the variable is not set.
+    var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
+    assert(!runtime.is_empty, "a fallback when unset");
+    assert(os.environment("PEPPER_SURELY_NOT_SET").is_empty(), "unset");
+
+    var count = 0;
+    for (var (name, value) in os.environment_variables()) {
+        if (name.starts_with("PEPPER_")) {
+            print($"{name}={value}");
+        }
+        count = count + 1;
+    }
+    assert(count &gt; 0, "a process has an environment");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>On Windows, names ignore case (<code>Path</code> finds <code>PATH</code>), and values are read
+as UTF-16, so text outside the ANSI code page survives.</li>
+<li>On POSIX a value is whatever bytes the parent passed; one that is not
+valid UTF-8 is returned as it is.</li>
+</ul>
+<h2 id="changing-the-environment"><a class="header" href="#changing-the-environment">Changing the environment</a></h2>
+<p><code>os.set_environment(name, value)</code> sets a variable for the running process,
+and <code>os.remove_environment(name)</code> removes one. Later reads see the change,
+and so do the children the process starts afterwards.</p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    var name = "PEPPER_EXAMPLE_GREETING";
+    os.set_environment(name, "hello");
+    assert(os.environment(name).value() == "hello", "set");
+
+    os.set_environment(name, "");
+    assert(os.environment(name).value() == "", "set to nothing");
+
+    os.remove_environment(name);
+    assert(os.environment(name).is_empty(), "removed");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Every read and change the runtime makes goes through one lock, so Pepper
+code never races with itself over the environment, from any thread.</li>
+<li>C code that calls <code>getenv</code> itself is outside that lock. On POSIX,
+<code>setenv</code> races with such a call on another thread (Rust 2024 marks its
+<code>set_var</code> <code>unsafe</code> for this reason), so set variables before starting
+threads that run C code reading them.</li>
+<li>A name that is empty or contains <code>=</code> or a NUL byte, or a value that
+contains a NUL byte, panics.</li>
+<li>On Windows names ignore case, and the C runtime's own <code>getenv</code> copy does
+not see the change. On WASI the change stays inside the program.</li>
+<li>To give only a child a different environment, use <code>process.Command</code>'s
+<code>environment</code>, <code>remove_environment</code> and <code>clear_environment</code> (see
+<a href="processes.html#environment-and-working-directory">Processes</a>).</li>
+</ul>
+<h2 id="time"><a class="header" href="#time">Time</a></h2>
+<p>Three value types cover time. Each is a <a href="value-structs.html">value struct</a>:
+copied, compared with <code>==</code>, <code>&lt;</code> and the other comparisons, and never
+allocated.</p>
+<ul>
+<li><code>Duration</code> is a span of time in nanoseconds, never negative. Make one
+with <code>from_seconds</code>, <code>from_milliseconds</code>, <code>from_microseconds</code> or
+<code>from_nanoseconds</code>, read it back with <code>seconds()</code>, <code>milliseconds()</code> and
+the others (rounded down), and add, subtract, multiply or divide it.
+Printing one shows it in the largest unit it reaches: <code>2.5s</code>, <code>15ms</code>,
+<code>40ns</code>.</li>
+<li><code>Instant</code> reads a monotonic clock, for measuring how long something
+takes. It only moves forward, whatever the system's date is set to.
+<code>later - earlier</code> is the <code>Duration</code> between two instants, and
+<code>start.elapsed()</code> the time since one.</li>
+<li><code>SystemTime</code> reads the wall clock: nanoseconds since the Unix epoch
+(1970-01-01 00:00:00 UTC). <code>unix_seconds()</code> is what file systems and most
+protocols record. Since the wall clock can be set back,
+<code>duration_since(earlier)</code> is an optional: none when <code>earlier</code> is later.
+The <a href="time.html"><code>time</code> module</a> turns it into a date and time, in UTC or a
+time zone, and back.</li>
+</ul>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    # Measure with the monotonic clock: subtracting two instants gives a
+    # Duration.
+    var start = os.Instant.now();
+    long total = 0;
+    for (var i in 0..100000) {
+        total = total + i;
+    }
+    var elapsed = os.Instant.now() - start;
+    print($"summed in {elapsed}");   # such as "1.234ms"
+
+    var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
+    assert(timeout.milliseconds() == 2500, "whole milliseconds");
+    assert(timeout.to_string() == "2.5s", "the largest unit it reaches");
+    assert(elapsed &lt; timeout, "durations compare");
+
+    # The wall clock counts from the Unix epoch.
+    var now = os.SystemTime.now();
+    assert(now.unix_seconds() &gt; 1700000000, "after November 2023");
+    var tomorrow = now + os.Duration.from_seconds(86400);
+    assert(tomorrow.duration_since(now).value() == os.Duration.from_seconds(86400), "a day later");
+    assert(now.duration_since(tomorrow).is_empty(), "no negative durations");
+    return 0;
+}
+</code></pre>
+<p>Subtracting a longer <code>Duration</code>, or a later <code>Instant</code>, panics: neither can
+be negative.</p>
+<h2 id="the-machine-and-the-user"><a class="header" href="#the-machine-and-the-user">The machine and the user</a></h2>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    print($"{os.system_name()} {os.system_version()} on {os.architecture()}");
+    print($"host {os.hostname()}: {os.logical_cpus()} logical processors, {os.physical_cpus()} cores");
+    print($"{os.total_memory() / 1048576} MiB of memory in {os.page_size()}-byte pages");
+
+    var user = os.user_name().value_or("unknown");
+    var home = os.home_directory();
+    print($"user {user}, home {home.is_value() ? home.value().to_string() : "unknown"}");
+    print($"temporary files go in {os.temp_directory()}");
+
+    var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
+    assert(executable.starts_with("tool"), "picked a name");
+    return 0;
+}
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Function</th><th>Returns</th></tr></thead><tbody>
+<tr><td><code>system_os()</code></td><td>the <code>OperatingSystem</code> the program was built for: <code>Linux</code>, <code>Mac</code>, <code>Windows</code> or <code>Wasi</code></td></tr>
+<tr><td><code>system_name()</code></td><td>the same as text: <code>"linux"</code>, <code>"macos"</code> or <code>"windows"</code></td></tr>
+<tr><td><code>system_version()</code></td><td>the kernel release on Linux, the product version on macOS (<code>14.5</code>), <code>major.minor.build</code> on Windows</td></tr>
+<tr><td><code>architecture()</code></td><td><code>"x64"</code>, <code>"aarch64"</code> or <code>"wasm32"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
+<tr><td><code>hostname()</code></td><td>the machine's host name</td></tr>
+<tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>'s, capped by a Linux container's CPU quota</td></tr>
+<tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory, or a Linux container's lower memory limit, and the virtual memory page size, in bytes</td></tr>
+<tr><td><code>peak_memory()</code></td><td>the most physical memory the process has held at once (its peak resident set), in bytes; 0 on WASI</td></tr>
+<tr><td><code>user_name()</code></td><td>the user the program runs as, or none</td></tr>
+<tr><td><code>home_directory()</code></td><td><code>HOME</code> (on Windows <code>USERPROFILE</code>), or the user database's entry, or none</td></tr>
+<tr><td><code>temp_directory()</code></td><td>the directory for temporary files, the same as <code>io.Directory.temp()</code></td></tr>
+<tr><td><code>is_elevated()</code></td><td>whether the program runs as root, or elevated ("Run as administrator") on Windows; never on WASI</td></tr>
+</tbody></table>
+</div>
+<h2 id="containers"><a class="header" href="#containers">Containers</a></h2>
+<p>On Linux, <code>total_memory()</code> and <code>logical_cpus()</code> report what a container
+lets the program use, as the JVM and Go do, so a pool or a cache sized from
+them fits inside it. Both read the process's cgroup and each cgroup above
+it, under <code>/sys/fs/cgroup</code>, with cgroup v2 or v1:</p>
+<ul>
+<li><code>total_memory()</code> returns the smallest of the physical memory and every
+memory limit found (<code>memory.max</code>, or v1's <code>memory.limit_in_bytes</code>), as
+<code>docker run --memory</code> sets it.</li>
+<li><code>logical_cpus()</code> returns the smaller of the online processors and the
+smallest CPU quota (<code>cpu.max</code>, or v1's <code>cpu.cfs_quota_us</code> over
+<code>cpu.cfs_period_us</code>), rounded up to whole processors: <code>docker run --cpus=1.5</code> counts as 2. <code>physical_cpus()</code> is never more than that.</li>
+</ul>
+<p>Where no limit is set, or the files cannot be read, they report the
+machine.</p>
+<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
+<ul>
+<li><code>async.timeout</code> still takes milliseconds, not a <code>Duration</code>.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/processes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/time.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/processes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/time.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

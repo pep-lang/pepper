@@ -1,0 +1,429 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Struct conversion - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/json-convert.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/json/convert.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="struct-conversion"><a class="header" href="#struct-conversion">Struct conversion</a></h1>
+<p>Struct conversion: <code>encode</code> and <code>decode</code> turn Pepper values into JSON text
+and back, through reflection, with no per-type code to write.</p>
+<p>Source: <code>runtime/json/convert.pep</code></p>
+<h2 id="unknownkeys"><a class="header" href="#unknownkeys">UnknownKeys</a></h2>
+<pre><code class="language-pepper">enum UnknownKeys
+</code></pre>
+<p>What <code>decode</code> does with an object key that names no property of the
+struct it is read into.</p>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="ignore"><a class="header" href="#ignore">Ignore</a></h4>
+<pre><code class="language-pepper">Ignore
+</code></pre>
+<p>Skips the key and its value.</p>
+<h4 id="reject"><a class="header" href="#reject">Reject</a></h4>
+<pre><code class="language-pepper">Reject
+</code></pre>
+<p>Fails with an error naming the key and its path.</p>
+<h2 id="to_json"><a class="header" href="#to_json">to_json</a></h2>
+<pre><code class="language-pepper">to_json&lt;T&gt;(value: T): JsonValue
+</code></pre>
+<p>Converts <code>value</code> to a <code>JsonValue</code>.</p>
+<p><code>T</code> may be a number type, <code>bool</code>, <code>String</code>, an enum (a case that carries
+no values as its name, <code>"Point"</code>; one that carries values as
+<code>{"Circle": {"radius": 2}}</code>; <code>[Tag]</code> and <code>[Untagged]</code> choose other forms), <code>Optional&lt;U&gt;</code> (the value, or <code>null</code>), <code>Array&lt;U&gt;</code>, a map with <code>String</code> keys (<code>HashMap</code>, <code>OrderedMap</code> or
+<code>Map</code>) as an object, <code>JsonValue</code> itself, or a struct, whose public
+properties become an object's members in declaration order. Element and
+property types follow the same rules, so structs nest.</p>
+<p>A struct property takes its key from <code>[Name("key")]</code> when it has one,
+and is left out when marked <code>[Ignore]</code> (the attributes of the <code>serialize</code>
+module, which <code>json</code> exports). A property of a struct type that holds no
+object (a struct field never assigned) is written as <code>null</code>. An empty
+<code>Array</code>, even one never assigned, is written as <code>[]</code>.</p>
+<p>The conversion is generated while compiling, by a <code>static</code> block per
+type. A type it cannot convert, such as a <code>Result</code> or an <code>io.File</code>, is a
+compile error naming the property:
+<code>'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value as JSON</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import json;
+
+struct Point {
+    var x: int;
+    var y: int;
+}
+
+main(): int {
+    var p = Point();
+    p.x = 1;
+    p.y = 2;
+    assert(json.to_json(p)["y"].as_int().value() == 2, "a member");
+    return 0;
+}
+</code></pre>
+<h2 id="encode"><a class="header" href="#encode">encode</a></h2>
+<pre><code class="language-pepper">encode&lt;T&gt;(value: T, indent: int = 0, ascii_only: bool = false): String
+</code></pre>
+<p>Writes <code>value</code> as JSON text, converting it as <code>to_json</code> does.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to write</li>
+<li><code>indent</code> — spaces per nesting level; 0, the default, writes compact text on one line</li>
+<li><code>ascii_only</code> — whether to escape every character outside ASCII as <code>\u</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the JSON text</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import json;
+
+struct ServerConfig {
+    var host: String;
+    var port: int;
+    [Name("max-connections")]
+    var max_connections: int;
+    [Ignore]
+    var started_at: long;
+}
+
+main(): int {
+    var config = ServerConfig();
+    config.host = "localhost";
+    config.port = 8080;
+    config.max_connections = 16;
+    var text = json.encode(config);
+    assert(text == "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":16}", "compact");
+    return 0;
+}
+</code></pre>
+<h2 id="from_json"><a class="header" href="#from_json">from_json</a></h2>
+<pre><code class="language-pepper">from_json&lt;T&gt;(value: JsonValue, unknown_keys: UnknownKeys = UnknownKeys.Ignore): Result&lt;T, JsonError&gt;
+</code></pre>
+<p>Converts a <code>JsonValue</code> to a <code>T</code>, the reverse of <code>to_json</code>.</p>
+<p>A struct is made with its constructor that takes no arguments, then each
+property found in the object is read in. A missing key leaves its
+property at its default, unless the property is marked <code>[Required]</code>,
+which makes it an error; a property marked <code>[Ignore]</code> is never read. A
+key that names no property is skipped, or with
+<code>unknown_keys = UnknownKeys.Reject</code> is an error.</p>
+<p>A number converts to an integer type when it has no fraction and fits
+the type, and to <code>float</code> or <code>double</code> always. <code>null</code> converts only to an
+<code>Optional</code> (as none) and to <code>JsonValue</code>.</p>
+<p>An error names where in the document it is, as a path from the root <code>$</code>
+in its <code>value_path</code> and at the start of its message, and has no line or
+column, since there is no text: <code>$.server.port: expected a number, found a string</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to convert to</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the JSON value</li>
+<li><code>unknown_keys</code> — what to do with an object key that names no property</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the converted value, or the first error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import json;
+
+struct Point {
+    var x: int;
+    var y: int;
+}
+
+main(): int {
+    var parsed = json.parse("{\"x\": 1, \"y\": 2}");
+    var p = json.from_json&lt;Point&gt;(parsed.value());
+    assert(p.value().y == 2, "a property");
+    return 0;
+}
+</code></pre>
+<h2 id="decode"><a class="header" href="#decode">decode</a></h2>
+<pre><code class="language-pepper">decode&lt;T&gt;( text: String, unknown_keys: UnknownKeys = UnknownKeys.Ignore, comments: bool = false, path: String = "" ): Result&lt;T, JsonError&gt;
+</code></pre>
+<p>Parses JSON text and converts it to a <code>T</code>: <code>parse</code>, then <code>from_json</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to convert to</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the JSON text</li>
+<li><code>unknown_keys</code> — what to do with an object key that names no property</li>
+<li><code>comments</code> — whether to accept JSONC: comments and trailing commas</li>
+<li><code>path</code> — the name of the text (a file name, say), which the error's <code>to_string()</code> puts first</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or the first error: a syntax error, or a conversion error with its path in the document; either has its line and column</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import json;
+
+struct ServerConfig {
+    var host: String;
+    [Required]
+    var port: int;
+    var tags: Array&lt;String&gt;;
+    var timeout: int?;
+}
+
+main(): int {
+    var config = json.decode&lt;ServerConfig&gt;("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
+    assert(config.value().port == 80, "a number");
+    assert(config.value().tags[0] == "x", "an array");
+    assert(config.value().timeout.is_empty(), "a missing optional");
+
+    var bad = json.decode&lt;ServerConfig&gt;("{\"port\": \"80\"}", path = "server.json");
+    assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
+    return 0;
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/json-document.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/serialize-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/json-document.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/serialize-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

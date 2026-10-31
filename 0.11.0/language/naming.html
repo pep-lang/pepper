@@ -1,0 +1,377 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Naming conventions - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/naming.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="naming-conventions"><a class="header" href="#naming-conventions">Naming conventions</a></h1>
+<p>Pepper code, including the standard library, follows one set of naming rules.
+The compiler does not enforce them, but every example in this book, the
+runtime, and the tools in this repository follow them, and code you
+contribute should too.</p>
+<div class="table-wrapper"><table><thead><tr><th>What</th><th>Style</th><th>Examples</th></tr></thead><tbody>
+<tr><td>Structs, traits, type aliases</td><td><code>PascalCase</code></td><td><code>String</code>, <code>HashMap</code>, <code>IoResult</code></td></tr>
+<tr><td>Generic parameters</td><td>one capital letter, or <code>PascalCase</code></td><td><code>T</code>, <code>K</code>, <code>V</code>, <code>TValue</code>, <code>TError</code></td></tr>
+<tr><td>Data members (fields)</td><td><code>snake_case</code></td><td><code>unit_name</code>, <code>is_file</code></td></tr>
+<tr><td>Methods and free functions</td><td><code>snake_case</code></td><td><code>append</code>, <code>remove_at</code>, <code>read_to_string</code></td></tr>
+<tr><td>Parameters and local variables</td><td><code>snake_case</code></td><td><code>capacity</code>, <code>best_so_far</code></td></tr>
+<tr><td>Constants (a <code>const</code> holding a fixed value)</td><td><code>SCREAMING_CASE</code></td><td><code>MAX_REQUESTS</code>, <code>LINE_WIDTH</code></td></tr>
+<tr><td>Other module-scope variables</td><td><code>snake_case</code></td><td><code>request_count</code></td></tr>
+<tr><td>Private data members and methods</td><td><code>_</code> then <code>snake_case</code></td><td><code>_readings</code>, <code>_is_empty</code></td></tr>
+</tbody></table>
+</div>
+<pre><code class="language-pepper"># Types are PascalCase; acronyms are written as words (`HttpClient`, not `HTTPClient`).
+struct TemperatureLog {
+    # Public data members are snake_case.
+    var unit_name: String = "celsius";
+    # Private data members start with `_`.
+    var _readings: Array&lt;int&gt; = Array&lt;int&gt;();
+    var _total: int = 0;
+
+    # Methods and their parameters are snake_case.
+    add_reading(degrees: int) {
+        _readings.append(degrees);
+        _total = _total + degrees;
+    }
+
+    average(): int {
+        return _is_empty() ? 0 : _total / (_readings.count as int);
+    }
+
+    # A private method starts with `_` too.
+    _is_empty(): bool {
+        return _readings.count == 0;
+    }
+}
+
+# Generic parameters are a single capital letter or PascalCase.
+struct Pair&lt;TFirst, TSecond&gt; {
+    var first: TFirst;
+    var second: TSecond;
+
+    construct(TFirst first, TSecond second) {
+        this.first = first;
+        this.second = second;
+    }
+}
+
+# Free functions and local variables are snake_case.
+largest_of&lt;T&gt;(values: Array&lt;T&gt;): T {
+    var best_so_far = values[0];
+    for (var value in values) {
+        if (value &gt; best_so_far) {
+            best_so_far = value;
+        }
+    }
+    return best_so_far;
+}
+
+main(): int {
+    var log = TemperatureLog();
+    log.add_reading(20);
+    log.add_reading(24);
+    assert(log.average() == 22, "average of the readings");
+    assert(log.unit_name == "celsius", "public member");
+
+    var pair = Pair&lt;String, int&gt;("answer", 42);
+    assert(pair.second == 42, "generic struct");
+
+    var numbers = Array&lt;int&gt;();
+    numbers.append(3);
+    numbers.append(9);
+    numbers.append(4);
+    assert(largest_of&lt;int&gt;(numbers) == 9, "generic function");
+    return 0;
+}
+</code></pre>
+<h2 id="types"><a class="header" href="#types">Types</a></h2>
+<p>A type name is <code>PascalCase</code>: each word starts with a capital letter, and there
+are no underscores. Write an acronym as a word, so <code>IoError</code> and <code>HttpClient</code>,
+not <code>IOError</code> or <code>HTTPClient</code>.</p>
+<p>An enum's cases are <code>PascalCase</code> too (<code>Color.Red</code>, <code>Status.NotFound</code>).</p>
+<p>A generic parameter is either a single capital letter (<code>T</code>, <code>U</code>, <code>K</code>, <code>V</code>) or
+a <code>PascalCase</code> name, which by convention starts with <code>T</code> (<code>TValue</code>,
+<code>TError</code>). Use a single letter when the parameter's role is obvious, and a
+name when a declaration has several parameters that a reader has to tell
+apart.</p>
+<h2 id="members-functions-and-variables"><a class="header" href="#members-functions-and-variables">Members, functions, and variables</a></h2>
+<p>Everything else a program names is <code>snake_case</code>: lowercase words joined by
+underscores. That covers a struct's data members, its methods, free
+functions, parameters, local variables, and module-scope variables.</p>
+<p>The exception is a constant: a <code>const</code>, at module scope or in a function,
+whose value is fixed, such as a number, string, or character. Its name is
+<code>SCREAMING_CASE</code>, uppercase words joined by underscores (<code>MAX_REQUESTS</code>,
+<code>LINE_WIDTH</code>). A module-scope <code>const</code> that holds an object, such as
+<code>const request_count = async.Atomic&lt;int&gt;(0);</code>, is a variable and stays
+<code>snake_case</code>.</p>
+<p>Spell words out. A name is read far more often than it is typed, so prefer
+<code>iterate</code>, <code>index</code>, and <code>directory</code> to <code>iter</code>, <code>idx</code>, and <code>dir</code>. Keep an
+abbreviation only when it is the usual name for the thing, such as <code>io</code> or
+<code>c_str</code>.</p>
+<p>An <code>extern</code> declaration keeps the name the C library gives the function,
+whatever its style (<code>GetCurrentProcessId</code>), because that name is what the
+linker looks up. The same goes for the fields of a struct that mirrors a C
+struct.</p>
+<h2 id="built-in-type-names"><a class="header" href="#built-in-type-names">Built-in type names</a></h2>
+<p>Unlike the conventions above, this rule is enforced. No top-level
+declaration may take the name of a built-in type: <code>void</code>, <code>bool</code>,
+<code>char</code>, <code>byte</code>, <code>short</code>, <code>ushort</code>, <code>int</code>, <code>uint</code>, <code>long</code>, <code>ulong</code>, <code>float</code>,
+<code>double</code>, and their sized spellings (<code>i8</code>, <code>u8</code>, <code>i16</code>, <code>u16</code>, <code>i32</code>, <code>u32</code>,
+<code>i64</code>, <code>u64</code>, <code>f32</code>, <code>f64</code>). Names resolve by spelling across the whole
+program, so such a declaration would take the type's place in every file,
+the runtime's included. The compiler reports it at the name:</p>
+<pre><code class="language-text">main.pep:1:7: error: 'double' is the name of a built-in type; choose another name
+    1 | const double = (x: int): int =&gt; x * 2;
+      |       ^~~~~~
+</code></pre>
+<p>Locals, parameters and members may still use these names, since they are
+visible only where they are declared.</p>
+<h2 id="private-members"><a class="header" href="#private-members">Private members</a></h2>
+<p>Pepper's <code>private</code> keyword applies only to top-level declarations (see
+<a href="visibility.html">Visibility</a>); any code that can reach an object can name all
+of its members. A leading <code>_</code> marks a data member or
+method as private to its struct instead: code outside the struct, and its
+extensions, should not use it. The rest of the name is <code>snake_case</code>, as for a
+public member (<code>_readings</code>, <code>_is_empty</code>).</p>
+<p>The standard library relies on this convention: its generated reference
+leaves <code>_</code> members out, and <a href="doc-comments.html">doc comments</a> are required only
+on members without the prefix.</p>
+<p>A top-level declaration does not need the prefix to be private: it is
+internal to its module (or, outside any module, private to its file) unless
+it is exported, and <code>private</code> keeps it to its file (see
+<a href="visibility.html">Visibility</a>). The runtime also uses the
+prefix on top-level helpers it exports but that are not part of its public
+API, such as <code>_pep_malloc</code>, which the compiler calls by name, or a helper
+one runtime module shares with another: the reference leaves them out too.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/doc-comments.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tools/install.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/doc-comments.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tools/install.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
