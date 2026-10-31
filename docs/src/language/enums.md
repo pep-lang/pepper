@@ -70,8 +70,9 @@ arrays and module-scope constants, and passed to and returned from functions.
   when no case is 0.
 - `sizeof<Name>()` is the size of the representation.
 - An enum works wherever an integer does: as a `HashMap` key or `HashSet`
-  element, in an `Atomic<Name>`, and in an `extern` function's signature,
-  where C sees the representation (an `int` unless the enum names another).
+  element, in an `Atomic<Name>`, and in the signature of an `extern` or
+  [`[Export]`](c-interop.md#what-crosses-to-c) function, where C sees the
+  representation (an `int` unless the enum names another).
 
 ## Cases that carry values
 

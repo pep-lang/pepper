@@ -460,6 +460,7 @@ int32_t apply(int32_t (*f)(int32_t), int32_t x);
 int32_t counter_increment(Counter* counter);
 Counter* counter_new(int32_t start);
 char* greet(const char* name, size_t name_size);
+uint8_t light_next(uint8_t light);
 ```
 
 and a C program calls them like any C function:
@@ -478,6 +479,7 @@ int main(void) {
     char* greeting = greet("C", 1);
     printf("%s\n", greeting);                       /* hello, C */
     pepper_string_free(greeting);
+    printf("%d\n", light_next(0));                /* 1: Light.Green */
     return 0;
 }
 ```
@@ -510,6 +512,7 @@ Each parameter and the result must be a type C can hold:
 | `float`, `double` | `float`, `double` |
 | `__ptr<T>` | `T*` for a number type, else `void*` |
 | `extern (P...) => R` | a C function pointer, `R (*name)(P...)` |
+| an enum whose cases carry nothing | the integer it is stored as: `int32_t`, or its representation's (`enum Mode: u8` is `uint8_t`) |
 | `String` | a parameter: `const char* name, size_t name_size`; a result: `char*` (see [Strings](#strings)) |
 | a struct | an opaque handle, `Name*` |
 
@@ -522,10 +525,10 @@ main.pep:2:15: error: cannot export 'total': C cannot hold 'Array<int>'
 note: only a non-generic struct passes to C, as a handle
 ```
 
-A generic struct (`Array<int>`), a value struct, an enum, a trait, a tuple,
-`Optional` and a Pepper function type cannot cross. Pass an array as a
-pointer to its elements and a count, or wrap it in a struct of your own and
-pass a handle.
+A generic struct (`Array<int>`), a value struct, an enum whose cases carry
+values, a trait, a tuple, `Optional` and a Pepper function type cannot
+cross. Pass an array as a pointer to its elements and a count, or wrap it
+in a struct of your own and pass a handle.
 
 ### Strings
 
