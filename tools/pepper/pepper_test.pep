@@ -128,7 +128,8 @@ streams_the_tools_output_and_input_while_it_runs() {
 reports_unknown_commands_and_lists_the_ones_it_finds() {
     var layout = Layout("pepper_commands", ["ask", "build", "echo"], stand_ins = true);
     copy_executable(tool("pepper"), executable(layout.elsewhere, "pep-elsewhere"));
-    var commands = "Commands:\n  ask\n  build\n  echo\n  elsewhere\n";
+    # A command of this repository shows what it does; another shows its name only.
+    var commands = "Commands:\n  ask\n  build      Compiles a program, or with no file the project\n  echo\n  elsewhere\n";
     # The closest command to an unknown one.
     var unknown = run(layout.pepper(["ecoh"]));
     expect_exit(unknown, 1);

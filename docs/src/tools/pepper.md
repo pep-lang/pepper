@@ -33,7 +33,7 @@ pepper --version [-v]
 | `pepper <command> [arguments]` | Runs `pep-<command>` with the arguments (see [How it finds a command](#how-it-finds-a-command)) |
 | `+<version>` | Runs the command with that installed toolchain, such as `+0.3.0` or `+0.3` (see [Toolchains](#toolchains)) |
 | `-C <dir>` | Changes to `<dir>` before running the command (see [Running in another folder](#running-in-another-folder)) |
-| `pepper help`, `-h`, `--help` | Prints the usage, these options, and the commands it can find |
+| `pepper help`, `-h`, `--help` | Prints the usage, these options, and the commands it can find, each with what it does when it is one of [the commands in this repository](#the-commands-in-this-repository) (another `pep-<name>` shows its name only) |
 | `pepper help <command>` | Runs `pep-<command> --help` |
 | `--version` | Prints `pepper` and its version, and in a Pepper home the toolchain the folder uses and why |
 | `--version -v`, `--version --verbose` | Also prints the version each command reports (its `--version`'s first line, or `(no version)`) |
@@ -102,8 +102,8 @@ $ pepper buidl main.pep
 pepper: error: 'buidl' is not a pepper command; did you mean 'build'?
 
 Commands:
-  build
-  fmt
+  build  Compiles a program, or with no file the project
+  fmt    Formats source
 ```
 
 ## Running in another folder
