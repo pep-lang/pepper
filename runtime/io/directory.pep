@@ -425,7 +425,7 @@ export struct DirectoryIterator {
     ##
     ## @param path the directory to list
     construct(path: Path) {
-        _path = path;
+        _path = copy(path);  # its own: see File.open_with
         _value = IoResult<DirEntry>.ok(DirEntry());
     }
 

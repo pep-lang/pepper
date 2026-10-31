@@ -298,6 +298,10 @@ tcp_between_threads() {
     expect_equal(errors, 0);  # in order
 }
 
+closed([Move] listener: io.UnixListener): bool {
+    return listener.close().is_ok();
+}
+
 # Android's SELinux refuses socket files to an `adb shell` program, which
 # is how pep-test runs the tests there; so do the unix tests below.
 [Test]
@@ -338,7 +342,8 @@ unix_socket_listener_and_stream() {
     var missing = io.UnixStream.connect(folder.path.join("missing.sock"));
     expect_true(missing.is_err());
     expect_true(missing.error().is_not_found());
-    expect_true(listener.close().is_ok());
+    # Moves while `path` is kept: the listener holds its own copy (#471).
+    expect_true(closed(move(listener)));
     var refused = io.UnixStream.connect(path);
     expect_true(refused.is_err());
     expect_true(refused.error().is_connection_refused());
