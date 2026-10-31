@@ -1160,7 +1160,8 @@ export comparison_literal(e: Expression): Literal? {
 }
 
 # A build option's value as an integer: decimal, or hexadecimal after
-# `0x`, with an optional sign.
+# `0x`, with an optional sign; empty when it is not one or does not fit in
+# a `long`.
 _parse_integer(text: String): long? {
     var digits = text.trim();
     bool negative = false;
@@ -1178,7 +1179,8 @@ _parse_integer(text: String): long? {
     if (digits.is_empty) {
         return Optional<long>.Empty;
     }
-    long value = 0;
+    # Counted down, so the lowest `long` fits; empty when it does not fit.
+    var value = Optional<long>.Value(0);
     ulong i = 0;
     while (i < digits.size) {
         var b = digits.byte_at(i);
@@ -1192,10 +1194,16 @@ _parse_integer(text: String): long? {
         } else {
             return Optional<long>.Empty;
         }
-        value = value * radix as long + digit;
+        value = value.value().checked_mul(radix as long);
+        if (value.is_value()) {
+            value = value.value().checked_sub(digit);
+        }
+        if (!value.is_value()) {
+            return value;
+        }
         i += 1;
     }
-    return Optional<long>.Value(negative ? -value : value);
+    return negative ? value : (0 as long).checked_sub(value.value());
 }
 
 # A build option's value as a bool: `true`/`false`, `1`/`0`, `on`/`off` or

@@ -400,6 +400,9 @@ computes_with_build_options() {
     target.build_options["HALF"] = "2.5";
     target.build_options["WORD"] = "high";
     target.build_options["BIG"] = "9223372036854775807";
+    target.build_options["LOWEST"] = "-9223372036854775808";
+    # Too big for a `long`, so a `double`.
+    target.build_options["HUGE"] = "99999999999999999999";
     for (var (
         condition,
         kept
@@ -418,6 +421,9 @@ computes_with_build_options() {
         ("BuildOption(TWO) - 3 < -0.5", true),
         ("BuildOption(BIG) / -1 == -9223372036854775807", true),
         ("BuildOption(HALF) / 0 > 1", true),
+        ("BuildOption(LOWEST) % -1 == 0", true),
+        ("BuildOption(LOWEST) + 1 < 0", true),
+        ("BuildOption(HUGE) + 1 > 9.9e19", true),
         ("BuildOption(UNSET) + 1 > 0", false),
         ("BuildOption(UNSET) + 1 != 0", false),
         ("BuildOption(UNSET) / 0 == 1", false)
@@ -448,6 +454,11 @@ computes_with_build_options() {
             "BuildOption(BIG) * 2 > 0",
             "integer overflow: '9223372036854775807 * 2' does not fit in a 'long'",
             25 as ulong
+        ),
+        (
+            "BuildOption(LOWEST) / -1 > 0",
+            "integer overflow: '-9223372036854775808 / -1' does not fit in a 'long'",
+            28 as ulong
         ),
         ("BuildOption(TWO) + \"x\" > 1", "'+' in a 'Target' takes only build options and numbers", 27 as ulong),
         (
