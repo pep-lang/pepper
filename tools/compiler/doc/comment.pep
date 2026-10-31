@@ -685,6 +685,11 @@ struct _Checker {
             # The comment's first `##`.
             error($"doc comment for '{what}' has no description", Span(comment.span.start, comment.span.start + 2));
         }
+        for (var tag in comment.tags_of("example")) {
+            if (!tag.name.is_empty and tag.name != "no-run") {
+                error($"unknown '@example' marker '{tag.name}'; expected 'no-run' or nothing", tag.span);
+            }
+        }
         return true;
     }
 
