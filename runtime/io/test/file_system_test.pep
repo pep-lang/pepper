@@ -71,6 +71,21 @@ a_file_moves_to_another_thread() {
     expect_true(File.adopt(File().into_transfer()).is_err());
 }
 
+opened_path([Move] file: File, [Move] dir: Directory): String {
+    return $"{file.path}|{dir.path}";
+}
+
+# A File or Directory keeps its own copy of the Path it was opened with, so
+# it can be moved while the caller keeps the Path (#471).
+[Test]
+a_handle_moves_while_its_path_is_kept() {
+    var folder = TempFolder("a_handle_moves_while_its_path_is_kept");
+    var path = folder.path.join("kept.txt");
+    var file = File.create(path).value();
+    var dir = Directory.open(folder.path).value();
+    expect_equal(opened_path(move(file), move(dir)), $"{path}|{folder.path}");
+}
+
 [Test]
 bytes_and_text_round_trip() {
     var folder = TempFolder("bytes_and_text_round_trip");

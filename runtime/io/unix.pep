@@ -149,7 +149,7 @@ export struct UnixListener {
         if (listening.is_err()) {
             return IoResult<UnixListener>.err(listening.error());
         }
-        listener._path = path;
+        listener._path = copy(path);  # its own: see File.open_with
         return IoResult<UnixListener>.ok(listener);
     }
 
@@ -597,7 +597,7 @@ export struct UnixDatagram {
         if (bound.is_err()) {
             return IoResult<UnixDatagram>.err(bound.error());
         }
-        socket._path = path;
+        socket._path = copy(path);  # its own: see File.open_with
         return IoResult<UnixDatagram>.ok(socket);
     }
 
