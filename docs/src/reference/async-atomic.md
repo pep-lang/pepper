@@ -33,6 +33,8 @@ another thread-safe type. `async.Atomic<String>` is a compile error at
 
 **Example**
 ```pepper
+import async;
+
 main(): int {
     var counter = async.Atomic<long>(0);
     var before = counter.fetch_add(5);   # before == 0

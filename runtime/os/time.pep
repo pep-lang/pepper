@@ -251,9 +251,9 @@ export struct Duration {
 ##
 ##     main(): int {
 ##         var start = os.Instant.now();
-##         var total = 0;
+##         ulong total = 0;
 ##         for (var i in 0..1000000) {
-##             total = total + i;
+##             total += i as ulong;
 ##         }
 ##         var elapsed = os.Instant.now() - start;
 ##         print($"summed in {elapsed.milliseconds()} ms");

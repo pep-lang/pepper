@@ -65,7 +65,7 @@ outside. A `panic` or failed `assert` on any thread ends the whole program.
 ```pepper
 import async;
 
-const total = Atomic<long>(0);
+const total = async.Atomic<long>(0);
 
 add_ten() {
     total.fetch_add(10);

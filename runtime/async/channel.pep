@@ -73,7 +73,7 @@ import "task";
 ##     import async;
 ##
 ##     const jobs = async.Channel<long>(64);
-##     const total = Atomic<long>(0);
+##     const total = async.Atomic<long>(0);
 ##
 ##     worker() {
 ##         for (var job in jobs) {

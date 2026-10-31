@@ -237,8 +237,7 @@ export set_level(level: Level, target: String = "") {
 ##     import log;
 ##
 ##     main(): int {
-##         var path = io.Directory.temp().join("app.log");
-##         var file = io.File.create(path).value();
+##         var file = io.File.create(io.Directory.temp().join("app.log")).value();
 ##         log.set_output(move(file), log.Format.Json);
 ##         log.info("started");
 ##         return 0;
@@ -265,7 +264,8 @@ export set_output([Move] writer: io.Writer, format: Format = Format.Text) {
 ##
 ##     main(): int {
 ##         if (log.enabled(log.Level.Debug)) {
-##             log.debug($"state: {[1, 2, 3]}");
+##             var queue = [1, 2, 3];
+##             log.debug($"queue: {queue.count} jobs");
 ##         }
 ##         return 0;
 ##     }

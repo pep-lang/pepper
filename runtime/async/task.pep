@@ -1458,7 +1458,7 @@ _async_push(worker: _Worker, proxy: _TaskCore, run: shared () => void, worker_pl
 ## @param body the code each worker runs
 ## @returns one task per worker, the first on the first worker
 ## @panics outside `run`
-## @example
+## @example no-run
 ##     import async;
 ##     import io;
 ##

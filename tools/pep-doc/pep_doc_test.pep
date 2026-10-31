@@ -3,7 +3,7 @@
 # tool-option check, the chapter lint, and the site's versions. `pep-doc
 # check` itself runs in CI on the whole repository.
 
-import [DocComment, check_documented, doc_comment_of, file_doc] from compiler.doc;
+import [DocComment, check_documented, doc_comment_of, doc_comments, file_doc] from compiler.doc;
 import [Directory, File, Path] from io;
 import [TempFolder] from testing;
 import "book";
@@ -42,6 +42,19 @@ parses_the_description_and_the_tags() {
         doc.to_markdown(),
         "Adds two numbers.\n\nMore text.\n\n**Parameters**\n- `a` — the first continued\n\n**Returns**\n- the sum\n\n**Example**\n```pepper\nadd(1, 2);\n```"
     );
+}
+
+[Test]
+reads_an_example_marker_and_rejects_an_unknown_one() {
+    var doc = first_doc(
+        "## Serves.\n## @example no-run\n##     main(): int { return 0; }\nexport f(): void {}\n"
+    ).value();
+    expect_equal(doc.tags[0].name, "no-run");
+    expect_equal(doc.tags[0].text, "    main(): int { return 0; }");
+    expect_equal(doc_comments("## a\n## b\nx\n  ## c\n").count, 2 as ulong);
+    var found = errors("## Serves.\n## @example norun\n##     f();\nexport f(): void {}\n");
+    expect_equal(found.count, 1 as ulong);
+    expect_true(found[0].contains("unknown '@example' marker 'norun'"));
 }
 
 [Test]

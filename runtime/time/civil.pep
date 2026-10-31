@@ -483,6 +483,7 @@ extend Time with ToString;
 ## `2024-03-01T09:00:00`.
 ##
 ## @example
+##     import os;
 ##     import time;
 ##
 ##     main(): int {

@@ -33,11 +33,13 @@
 ##
 ## @typeParam T the type `enter()` returns
 ## @example
-##     var open = 0;
+##     import async;
+##
+##     const open = async.Atomic<int>(0);
 ##
 ##     struct Session {
 ##         construct() {
-##             open = open + 1;
+##             open.fetch_add(1);
 ##         }
 ##
 ##         destruct {
@@ -49,7 +51,7 @@
 ##         }
 ##
 ##         exit() {
-##             open = open - 1;
+##             open.fetch_sub(1);
 ##         }
 ##     }
 ##
@@ -59,7 +61,7 @@
 ##         with (var session = Session()) {
 ##             # open == 1 here
 ##         }
-##         return open;   # 0: the session was destroyed at the end of the block
+##         return open.load();   # 0: the session was destroyed at the end of the block
 ##     }
 export trait Scoped<T> {
     ## Enters the scope.

@@ -59,7 +59,8 @@ main(): int {
     for (var x in a) {
         total = total + x;
     }
-    return total;   # 7
+    assert(total == 7, "5 + 2");
+    return 0;
 }
 ```
 

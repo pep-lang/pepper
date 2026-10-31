@@ -197,7 +197,7 @@ export struct UnixListener {
 ## thread may be waiting on it: the socket closes when the last reference
 ## goes. The socket file stays.
 ##
-## @example
+## @example no-run
 ##     import async;
 ##     import io;
 ##

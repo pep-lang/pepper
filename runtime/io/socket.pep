@@ -338,7 +338,7 @@ extend Incoming with Iterator<IoResult<TcpStream>>;
 ## goes, which, for accept loops in tasks, is once `async.run` has cancelled
 ## them (`accept` then fails and the loop returns).
 ##
-## @example
+## @example no-run
 ##     import async;
 ##     import io;
 ##

@@ -26,6 +26,8 @@
 ## @typeParam T the type of the stored value, which must be thread-safe
 ##   (`T: Shared`)
 ## @example
+##     import async;
+##
 ##     main(): int {
 ##         var counter = async.Atomic<long>(0);
 ##         var before = counter.fetch_add(5);   # before == 0

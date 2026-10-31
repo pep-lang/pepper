@@ -286,7 +286,7 @@ export struct Command {
     ## @returns only when the program cannot be started: why, as for
     ##   `spawn()`, or an error with `is_invalid_input()` when a standard
     ##   stream was set to something other than `Stream.Inherit`
-    ## @example
+    ## @example no-run
     ##     import process;
     ##
     ##     main(args: String[]): int {
