@@ -230,7 +230,15 @@ chapter.</p>
 (the one line of the root <code>VERSION</code> file). <code>pep-doc build --version X.Y.Z</code>
 renders the book into <code>&lt;site&gt;/X.Y.Z/</code> and leaves every other version in the
 site alone; <code>versions.json</code> lists them for the version picker, and the site's
-<code>index.html</code> opens the newest release. Builds from <code>main</code> publish as <code>dev</code>.</p>
+<code>index.html</code> and <code>latest/</code> open the newest release. On GitHub Pages a
+deeper <code>latest/</code> link, such as <code>latest/tools/pep-doc.html</code>, opens that page
+in the newest release too, through the site's <code>404.html</code>. Builds from <code>main</code>
+publish as <code>dev</code>.</p>
+<p>The version picker at the top of every page opens the chosen version as
+soon as it is picked with the mouse. Chosen with the arrow keys, it waits
+for Enter, so a keyboard user can look through the versions without
+leaving the page. It opens the same page in the chosen version, or that
+version's introduction when it has no such page.</p>
 <p>The <code>Docs</code> workflow (<code>.github/workflows/docs.yml</code>) publishes to the
 <code>gh-pages</code> branch: pushing to <code>main</code> updates <code>dev</code>, and pushing a tag
 <code>vX.Y.Z</code> adds the <code>X.Y.Z</code> docs. Published versions are never deleted.</p>

@@ -237,7 +237,10 @@ first.</p>
 <p>CI runs it, after the tests.</p>
 <h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>
 <p>Regenerates the reference, renders the book into <code>&lt;site&gt;/&lt;version&gt;/</code>, and
-refreshes the site's <code>versions.json</code> and <code>index.html</code>. Other versions in the
+refreshes the site's <code>versions.json</code>, <code>index.html</code>, <code>latest/index.html</code> and
+<code>404.html</code>: <code>index.html</code> and <code>latest/</code> open the newest release, and
+<code>404.html</code> sends any deeper <code>latest/</code> path to the same page there (GitHub
+Pages serves it for every missing page). Other versions in the
 site are left as they are, so every published version stays available. This
 is the command when none is given.</p>
 <ul>
@@ -293,8 +296,8 @@ the <a href="../contributing/docs.html">documentation standard</a> requires, as
 <code>pep-doc check</code> does for the runtime: a clang-style error at each.</li>
 <li><code>--site &lt;DIR&gt;</code>: renders into <code>&lt;DIR&gt;/&lt;version&gt;/</code> instead, the version
 being <code>pep.toml</code>'s (<code>dev</code> without one), and refreshes <code>&lt;DIR&gt;</code>'s
-<code>versions.json</code> and <code>index.html</code>, which opens the newest release, as
-<code>build</code> does for this book. Earlier versions stay.</li>
+<code>versions.json</code>, <code>index.html</code>, <code>latest/</code> and <code>404.html</code>, which open the
+newest release, as <code>build</code> does for this book. Earlier versions stay.</li>
 </ul>
 <h4 id="hosting-a-packages-docs"><a class="header" href="#hosting-a-packages-docs">Hosting a package's docs</a></h4>
 <p>The package template (<code>pepper new --lib</code>, and

@@ -189,6 +189,57 @@ Android, macOS, iOS and WASI, and <code>BCryptGenRandom</code> on Windows. They 
 unpredictable, so they suit keys, tokens and identifiers, but each call
 asks the kernel; a <code>Generator</code> is much faster for everything else.</p>
 <p>Source: <code>runtime/random/entropy.pep</code></p>
+<h2 id="fill"><a class="header" href="#fill">fill</a></h2>
+<pre><code class="language-pepper">fill(bytes: u8[])
+</code></pre>
+<p>Overwrites every element of <code>bytes</code> with secure random bytes from the
+operating system.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the array to overwrite; its <code>count</code> does not change</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var nonce = random.bytes(12);
+random.fill(nonce);   # a fresh 12 bytes in the same array
+</code></pre>
+<h2 id="bytes"><a class="header" href="#bytes">bytes</a></h2>
+<pre><code class="language-pepper">bytes(count: ulong): u8[]
+</code></pre>
+<p>Returns <code>count</code> secure random bytes from the operating system.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of <code>count</code> random bytes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var key = random.bytes(32);   # a 256-bit key
+</code></pre>
+<h2 id="secure_ulong"><a class="header" href="#secure_ulong">secure_ulong</a></h2>
+<pre><code class="language-pepper">secure_ulong(): ulong
+</code></pre>
+<p>Returns a secure random <code>ulong</code> from the operating system.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a number from 0 to 2^64 - 1, every value equally likely</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var token = random.secure_ulong();
+</code></pre>
 
                     </main>
 

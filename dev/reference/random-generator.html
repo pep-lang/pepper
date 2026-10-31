@@ -192,6 +192,203 @@ a period of 2^256 - 1, and statistically strong output. It is not secure:
 anyone who sees enough output can predict the rest, so keys and tokens
 come from <code>random.bytes</code> instead.</p>
 <p>Source: <code>runtime/random/generator.pep</code></p>
+<h2 id="generator"><a class="header" href="#generator">Generator</a></h2>
+<pre><code class="language-pepper">[Value] struct Generator
+</code></pre>
+<p>A seedable pseudo-random number generator (xoshiro256**).</p>
+<p><code>Generator()</code> seeds itself from the operating system, so each one gives
+different numbers; <code>Generator(seed)</code> gives the same numbers for the same
+seed on every platform, for reproducible tests and simulations.</p>
+<p>A generator is a <a href="../language/value-structs.html">value struct</a>: copying
+one copies its state, and the copy then gives the same numbers as the
+original. Pass it to a function that draws from it as a <code>var</code> you return,
+or keep it in a field. A generator belongs to one thread.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var g = random.Generator(7);
+var roll = g.next_int(1..&gt;6);
+var again = random.Generator(7);
+assert(again.next_int(1..&gt;6) == roll, "same seed, same numbers");
+</code></pre>
+<h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
+<h4 id="generator-1"><a class="header" href="#generator-1">Generator()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a generator seeded with 256 bits from the operating system.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<h4 id="generator-2"><a class="header" href="#generator-2">Generator()</a></h4>
+<pre><code class="language-pepper">construct(seed: ulong)
+</code></pre>
+<p>Makes a generator that always gives the same numbers for <code>seed</code>.</p>
+<p>The seed is spread over the state with SplitMix64, as xoshiro's
+authors recommend, so nearby seeds give unrelated numbers.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>seed</code> — any number; each gives its own sequence</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="next_ulong"><a class="header" href="#next_ulong">next_ulong</a></h4>
+<pre><code class="language-pepper">next_ulong(): ulong
+</code></pre>
+<p>Returns the next number, from 0 to 2^64 - 1, every value equally likely.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the next 64 random bits</li>
+</ul>
+<h4 id="next_int"><a class="header" href="#next_int">next_int</a></h4>
+<pre><code class="language-pepper">next_int(range: Range&lt;int&gt;): int
+</code></pre>
+<p>Returns a number in <code>range</code>, every number in it equally likely.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>range</code> — the numbers to choose from: <code>0..10</code> is 0 to 9, <code>1..&gt;6</code> is 1 to 6</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a number in <code>range</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>range</code> is empty ("random: empty range")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var g = random.Generator();
+var die = g.next_int(1..&gt;6);
+</code></pre>
+<h4 id="next_double"><a class="header" href="#next_double">next_double</a></h4>
+<pre><code class="language-pepper">next_double(): double
+</code></pre>
+<p>Returns a number from 0 up to but not including 1, evenly spread.</p>
+<p>It is one of the 2^53 multiples of 2^-53 below 1, every one equally likely.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>double</code> with 0 &lt;= result &lt; 1</li>
+</ul>
+<h4 id="next_bool"><a class="header" href="#next_bool">next_bool</a></h4>
+<pre><code class="language-pepper">next_bool(): bool
+</code></pre>
+<p>Returns true or false, each half the time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random bool</li>
+</ul>
+<h4 id="choose"><a class="header" href="#choose">choose</a></h4>
+<pre><code class="language-pepper">choose&lt;T&gt;(items: T[]): T
+</code></pre>
+<p>Returns one element of <code>items</code>, each equally likely.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to choose from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random element of <code>items</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>items</code> is empty ("random: choose from an empty array")</li>
+</ul>
+<h4 id="shuffle"><a class="header" href="#shuffle">shuffle</a></h4>
+<pre><code class="language-pepper">shuffle&lt;T&gt;(items: T[])
+</code></pre>
+<p>Puts the elements of <code>items</code> in a random order, every order equally
+likely (the Fisher–Yates shuffle).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the array to shuffle in place</li>
+</ul>
+<h2 id="next_ulong-1"><a class="header" href="#next_ulong-1">next_ulong</a></h2>
+<pre><code class="language-pepper">next_ulong(): ulong
+</code></pre>
+<p>Returns the next number from this thread's generator, from 0 to 2^64 - 1.</p>
+<p>Each thread has its own generator, seeded from the operating system the
+first time it is used.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the next 64 random bits</li>
+</ul>
+<h2 id="next_int-1"><a class="header" href="#next_int-1">next_int</a></h2>
+<pre><code class="language-pepper">next_int(range: Range&lt;int&gt;): int
+</code></pre>
+<p>Returns a number in <code>range</code> from this thread's generator, every number
+in it equally likely.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>range</code> — the numbers to choose from: <code>0..10</code> is 0 to 9, <code>1..&gt;6</code> is 1 to 6</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a number in <code>range</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>range</code> is empty ("random: empty range")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var die = random.next_int(1..&gt;6);
+</code></pre>
+<h2 id="next_double-1"><a class="header" href="#next_double-1">next_double</a></h2>
+<pre><code class="language-pepper">next_double(): double
+</code></pre>
+<p>Returns a number from 0 up to but not including 1 from this thread's generator.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>double</code> with 0 &lt;= result &lt; 1</li>
+</ul>
+<h2 id="next_bool-1"><a class="header" href="#next_bool-1">next_bool</a></h2>
+<pre><code class="language-pepper">next_bool(): bool
+</code></pre>
+<p>Returns true or false from this thread's generator, each half the time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random bool</li>
+</ul>
+<h2 id="choose-1"><a class="header" href="#choose-1">choose</a></h2>
+<pre><code class="language-pepper">choose&lt;T&gt;(items: T[]): T
+</code></pre>
+<p>Returns one element of <code>items</code>, chosen by this thread's generator.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to choose from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random element of <code>items</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>items</code> is empty ("random: choose from an empty array")</li>
+</ul>
+<h2 id="shuffle-1"><a class="header" href="#shuffle-1">shuffle</a></h2>
+<pre><code class="language-pepper">shuffle&lt;T&gt;(items: T[])
+</code></pre>
+<p>Puts the elements of <code>items</code> in a random order with this thread's generator.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the array to shuffle in place</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var deck = [1, 2, 3, 4, 5];
+random.shuffle(deck);
+</code></pre>
 
                     </main>
 

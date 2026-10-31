@@ -332,7 +332,10 @@ reports its undocumented declarations the way the runtime's check does
 <p>Every public declaration in the runtime must have a doc comment: every
 exported declaration whose name does not start with <code>_</code>, and every field,
 constructor and method of such a struct, trait or extension whose name does
-not start with <code>_</code>. Names starting with <code>_</code> are internals shared between
+not start with <code>_</code>. A declaration is exported when it is marked <code>export</code>, or
+when a file of its module re-exports it by name (<code>export fill;</code> in
+<code>random/module.pep</code> exports <code>entropy.pep</code>'s <code>fill</code>); either way its entry is
+on its own file's page. Names starting with <code>_</code> are internals shared between
 runtime files and are exempt.</p>
 <p>A test enforces this, and reports a clang-style error for each gap: a missing
 doc comment, a comment with no description, a missing <code>@param</code>, <code>@typeParam</code>

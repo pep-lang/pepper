@@ -14854,7 +14854,10 @@ reports its undocumented declarations the way the runtime's check does
 <p>Every public declaration in the runtime must have a doc comment: every
 exported declaration whose name does not start with <code>_</code>, and every field,
 constructor and method of such a struct, trait or extension whose name does
-not start with <code>_</code>. Names starting with <code>_</code> are internals shared between
+not start with <code>_</code>. A declaration is exported when it is marked <code>export</code>, or
+when a file of its module re-exports it by name (<code>export fill;</code> in
+<code>random/module.pep</code> exports <code>entropy.pep</code>'s <code>fill</code>); either way its entry is
+on its own file's page. Names starting with <code>_</code> are internals shared between
 runtime files and are exempt.</p>
 <p>A test enforces this, and reports a clang-style error for each gap: a missing
 doc comment, a comment with no description, a missing <code>@param</code>, <code>@typeParam</code>
@@ -26066,7 +26069,10 @@ first.</p>
 <p>CI runs it, after the tests.</p>
 <h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>
 <p>Regenerates the reference, renders the book into <code>&lt;site&gt;/&lt;version&gt;/</code>, and
-refreshes the site's <code>versions.json</code> and <code>index.html</code>. Other versions in the
+refreshes the site's <code>versions.json</code>, <code>index.html</code>, <code>latest/index.html</code> and
+<code>404.html</code>: <code>index.html</code> and <code>latest/</code> open the newest release, and
+<code>404.html</code> sends any deeper <code>latest/</code> path to the same page there (GitHub
+Pages serves it for every missing page). Other versions in the
 site are left as they are, so every published version stays available. This
 is the command when none is given.</p>
 <ul>
@@ -26122,8 +26128,8 @@ the <a href="tools/../contributing/docs.html">documentation standard</a> require
 <code>pep-doc check</code> does for the runtime: a clang-style error at each.</li>
 <li><code>--site &lt;DIR&gt;</code>: renders into <code>&lt;DIR&gt;/&lt;version&gt;/</code> instead, the version
 being <code>pep.toml</code>'s (<code>dev</code> without one), and refreshes <code>&lt;DIR&gt;</code>'s
-<code>versions.json</code> and <code>index.html</code>, which opens the newest release, as
-<code>build</code> does for this book. Earlier versions stay.</li>
+<code>versions.json</code>, <code>index.html</code>, <code>latest/</code> and <code>404.html</code>, which open the
+newest release, as <code>build</code> does for this book. Earlier versions stay.</li>
 </ul>
 <h4 id="hosting-a-packages-docs"><a class="header" href="#hosting-a-packages-docs">Hosting a package's docs</a></h4>
 <p>The package template (<code>pepper new --lib</code>, and
@@ -59025,6 +59031,57 @@ Android, macOS, iOS and WASI, and <code>BCryptGenRandom</code> on Windows. They 
 unpredictable, so they suit keys, tokens and identifiers, but each call
 asks the kernel; a <code>Generator</code> is much faster for everything else.</p>
 <p>Source: <code>runtime/random/entropy.pep</code></p>
+<h2 id="fill-1"><a class="header" href="#fill-1">fill</a></h2>
+<pre><code class="language-pepper">fill(bytes: u8[])
+</code></pre>
+<p>Overwrites every element of <code>bytes</code> with secure random bytes from the
+operating system.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the array to overwrite; its <code>count</code> does not change</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var nonce = random.bytes(12);
+random.fill(nonce);   # a fresh 12 bytes in the same array
+</code></pre>
+<h2 id="bytes-3"><a class="header" href="#bytes-3">bytes</a></h2>
+<pre><code class="language-pepper">bytes(count: ulong): u8[]
+</code></pre>
+<p>Returns <code>count</code> secure random bytes from the operating system.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of <code>count</code> random bytes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var key = random.bytes(32);   # a 256-bit key
+</code></pre>
+<h2 id="secure_ulong"><a class="header" href="#secure_ulong">secure_ulong</a></h2>
+<pre><code class="language-pepper">secure_ulong(): ulong
+</code></pre>
+<p>Returns a secure random <code>ulong</code> from the operating system.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a number from 0 to 2^64 - 1, every value equally likely</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var token = random.secure_ulong();
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/random/generator.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="generators-1"><a class="header" href="#generators-1">Generators</a></h1>
 <p><code>Generator</code>, a fast pseudo-random generator, and functions that use this
@@ -59035,6 +59092,203 @@ a period of 2^256 - 1, and statistically strong output. It is not secure:
 anyone who sees enough output can predict the rest, so keys and tokens
 come from <code>random.bytes</code> instead.</p>
 <p>Source: <code>runtime/random/generator.pep</code></p>
+<h2 id="generator"><a class="header" href="#generator">Generator</a></h2>
+<pre><code class="language-pepper">[Value] struct Generator
+</code></pre>
+<p>A seedable pseudo-random number generator (xoshiro256**).</p>
+<p><code>Generator()</code> seeds itself from the operating system, so each one gives
+different numbers; <code>Generator(seed)</code> gives the same numbers for the same
+seed on every platform, for reproducible tests and simulations.</p>
+<p>A generator is a <a href="reference/../language/value-structs.html">value struct</a>: copying
+one copies its state, and the copy then gives the same numbers as the
+original. Pass it to a function that draws from it as a <code>var</code> you return,
+or keep it in a field. A generator belongs to one thread.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var g = random.Generator(7);
+var roll = g.next_int(1..&gt;6);
+var again = random.Generator(7);
+assert(again.next_int(1..&gt;6) == roll, "same seed, same numbers");
+</code></pre>
+<h3 id="constructors-14"><a class="header" href="#constructors-14">Constructors</a></h3>
+<h4 id="generator-1"><a class="header" href="#generator-1">Generator()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a generator seeded with 256 bits from the operating system.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system cannot give random bytes, which only a broken system does</li>
+</ul>
+<h4 id="generator-2"><a class="header" href="#generator-2">Generator()</a></h4>
+<pre><code class="language-pepper">construct(seed: ulong)
+</code></pre>
+<p>Makes a generator that always gives the same numbers for <code>seed</code>.</p>
+<p>The seed is spread over the state with SplitMix64, as xoshiro's
+authors recommend, so nearby seeds give unrelated numbers.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>seed</code> — any number; each gives its own sequence</li>
+</ul>
+<h3 id="methods-171"><a class="header" href="#methods-171">Methods</a></h3>
+<h4 id="next_ulong"><a class="header" href="#next_ulong">next_ulong</a></h4>
+<pre><code class="language-pepper">next_ulong(): ulong
+</code></pre>
+<p>Returns the next number, from 0 to 2^64 - 1, every value equally likely.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the next 64 random bits</li>
+</ul>
+<h4 id="next_int"><a class="header" href="#next_int">next_int</a></h4>
+<pre><code class="language-pepper">next_int(range: Range&lt;int&gt;): int
+</code></pre>
+<p>Returns a number in <code>range</code>, every number in it equally likely.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>range</code> — the numbers to choose from: <code>0..10</code> is 0 to 9, <code>1..&gt;6</code> is 1 to 6</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a number in <code>range</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>range</code> is empty ("random: empty range")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var g = random.Generator();
+var die = g.next_int(1..&gt;6);
+</code></pre>
+<h4 id="next_double"><a class="header" href="#next_double">next_double</a></h4>
+<pre><code class="language-pepper">next_double(): double
+</code></pre>
+<p>Returns a number from 0 up to but not including 1, evenly spread.</p>
+<p>It is one of the 2^53 multiples of 2^-53 below 1, every one equally likely.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>double</code> with 0 &lt;= result &lt; 1</li>
+</ul>
+<h4 id="next_bool"><a class="header" href="#next_bool">next_bool</a></h4>
+<pre><code class="language-pepper">next_bool(): bool
+</code></pre>
+<p>Returns true or false, each half the time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random bool</li>
+</ul>
+<h4 id="choose"><a class="header" href="#choose">choose</a></h4>
+<pre><code class="language-pepper">choose&lt;T&gt;(items: T[]): T
+</code></pre>
+<p>Returns one element of <code>items</code>, each equally likely.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to choose from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random element of <code>items</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>items</code> is empty ("random: choose from an empty array")</li>
+</ul>
+<h4 id="shuffle-1"><a class="header" href="#shuffle-1">shuffle</a></h4>
+<pre><code class="language-pepper">shuffle&lt;T&gt;(items: T[])
+</code></pre>
+<p>Puts the elements of <code>items</code> in a random order, every order equally
+likely (the Fisher–Yates shuffle).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the array to shuffle in place</li>
+</ul>
+<h2 id="next_ulong-1"><a class="header" href="#next_ulong-1">next_ulong</a></h2>
+<pre><code class="language-pepper">next_ulong(): ulong
+</code></pre>
+<p>Returns the next number from this thread's generator, from 0 to 2^64 - 1.</p>
+<p>Each thread has its own generator, seeded from the operating system the
+first time it is used.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the next 64 random bits</li>
+</ul>
+<h2 id="next_int-1"><a class="header" href="#next_int-1">next_int</a></h2>
+<pre><code class="language-pepper">next_int(range: Range&lt;int&gt;): int
+</code></pre>
+<p>Returns a number in <code>range</code> from this thread's generator, every number
+in it equally likely.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>range</code> — the numbers to choose from: <code>0..10</code> is 0 to 9, <code>1..&gt;6</code> is 1 to 6</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a number in <code>range</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>range</code> is empty ("random: empty range")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var die = random.next_int(1..&gt;6);
+</code></pre>
+<h2 id="next_double-1"><a class="header" href="#next_double-1">next_double</a></h2>
+<pre><code class="language-pepper">next_double(): double
+</code></pre>
+<p>Returns a number from 0 up to but not including 1 from this thread's generator.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>double</code> with 0 &lt;= result &lt; 1</li>
+</ul>
+<h2 id="next_bool-1"><a class="header" href="#next_bool-1">next_bool</a></h2>
+<pre><code class="language-pepper">next_bool(): bool
+</code></pre>
+<p>Returns true or false from this thread's generator, each half the time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random bool</li>
+</ul>
+<h2 id="choose-1"><a class="header" href="#choose-1">choose</a></h2>
+<pre><code class="language-pepper">choose&lt;T&gt;(items: T[]): T
+</code></pre>
+<p>Returns one element of <code>items</code>, chosen by this thread's generator.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements to choose from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a random element of <code>items</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>items</code> is empty ("random: choose from an empty array")</li>
+</ul>
+<h2 id="shuffle-2"><a class="header" href="#shuffle-2">shuffle</a></h2>
+<pre><code class="language-pepper">shuffle&lt;T&gt;(items: T[])
+</code></pre>
+<p>Puts the elements of <code>items</code> in a random order with this thread's generator.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the array to shuffle in place</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var deck = [1, 2, 3, 4, 5];
+random.shuffle(deck);
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/base64/module.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="the-base64-module"><a class="header" href="#the-base64-module">The base64 module</a></h1>
 <p>Base64 (RFC 4648): bytes written as text, for HTTP basic authentication,
@@ -59189,7 +59443,7 @@ case, in groups of 8, 4, 4, 4 and 12 separated by <code>-</code>.</p>
 <ul>
 <li>the UUID, or an error when <code>text</code> is not in that form</li>
 </ul>
-<h3 id="methods-171"><a class="header" href="#methods-171">Methods</a></h3>
+<h3 id="methods-172"><a class="header" href="#methods-172">Methods</a></h3>
 <h4 id="version"><a class="header" href="#version">version</a></h4>
 <pre><code class="language-pepper">version(): int
 </code></pre>
@@ -59198,7 +59452,7 @@ case, in groups of 8, 4, 4, 4 and 12 separated by <code>-</code>.</p>
 <ul>
 <li>the version digit, from 0 to 15</li>
 </ul>
-<h4 id="bytes-3"><a class="header" href="#bytes-3">bytes</a></h4>
+<h4 id="bytes-4"><a class="header" href="#bytes-4">bytes</a></h4>
 <pre><code class="language-pepper">bytes(): u8[]
 </code></pre>
 <p>Returns the UUID's 16 bytes, <code>high</code> first, as databases and binary
@@ -59307,7 +59561,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help's first line</li>
 <li><code>version</code> — the program's version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-172"><a class="header" href="#methods-172">Methods</a></h3>
+<h3 id="methods-173"><a class="header" href="#methods-173">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag
 </code></pre>
@@ -59771,7 +60025,7 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-173"><a class="header" href="#methods-173">Methods</a></h3>
+<h3 id="methods-174"><a class="header" href="#methods-174">Methods</a></h3>
 <h4 id="value-10"><a class="header" href="#value-10">value</a></h4>
 <pre><code class="language-pepper">value(): T
 </code></pre>
@@ -59821,7 +60075,7 @@ argument lists; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-174"><a class="header" href="#methods-174">Methods</a></h3>
+<h3 id="methods-175"><a class="header" href="#methods-175">Methods</a></h3>
 <h4 id="values-3"><a class="header" href="#values-3">values</a></h4>
 <pre><code class="language-pepper">values(): Array&lt;T&gt;
 </code></pre>
@@ -60003,7 +60257,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-175"><a class="header" href="#methods-175">Methods</a></h3>
+<h3 id="methods-176"><a class="header" href="#methods-176">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -60139,7 +60393,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-176"><a class="header" href="#methods-176">Methods</a></h3>
+<h3 id="methods-177"><a class="header" href="#methods-177">Methods</a></h3>
 <h4 id="can_upgrade"><a class="header" href="#can_upgrade">can_upgrade</a></h4>
 <pre><code class="language-pepper">can_upgrade(): bool
 </code></pre>
@@ -60291,7 +60545,7 @@ request's, or after redirects the last one's. Empty otherwise.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-177"><a class="header" href="#methods-177">Methods</a></h3>
+<h3 id="methods-178"><a class="header" href="#methods-178">Methods</a></h3>
 <h4 id="upgrade"><a class="header" href="#upgrade">upgrade</a></h4>
 <pre><code class="language-pepper">upgrade(protocol: String, takeover: (Connection) =&gt; void): Response
 </code></pre>
@@ -60466,7 +60720,7 @@ main(): int {
 <pre><code class="language-pepper">const max_redirects: int
 </code></pre>
 <p>The most redirects one request follows; 0 follows none.</p>
-<h3 id="constructors-14"><a class="header" href="#constructors-14">Constructors</a></h3>
+<h3 id="constructors-15"><a class="header" href="#constructors-15">Constructors</a></h3>
 <h4 id="client-3"><a class="header" href="#client-3">Client()</a></h4>
 <pre><code class="language-pepper">construct(max_redirects: int = 10)
 </code></pre>
@@ -60488,7 +60742,7 @@ sets the connector's ALPN protocols to <code>h2</code> and <code>http/1.1</code>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 <li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
 </ul>
-<h3 id="methods-178"><a class="header" href="#methods-178">Methods</a></h3>
+<h3 id="methods-179"><a class="header" href="#methods-179">Methods</a></h3>
 <h4 id="get-10"><a class="header" href="#get-10">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -60629,7 +60883,7 @@ the same.</p>
 <ul>
 <li><code>client</code> — the client whose settings the session uses</li>
 </ul>
-<h3 id="methods-179"><a class="header" href="#methods-179">Methods</a></h3>
+<h3 id="methods-180"><a class="header" href="#methods-180">Methods</a></h3>
 <h4 id="get-11"><a class="header" href="#get-11">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -60719,7 +60973,7 @@ closed.</p>
 <li><code>length</code> — the body's length, for a <code>Content-Length</code> body</li>
 <li><code>reusable</code> — whether the server keeps the connection open after the body</li>
 </ul>
-<h3 id="methods-180"><a class="header" href="#methods-180">Methods</a></h3>
+<h3 id="methods-181"><a class="header" href="#methods-181">Methods</a></h3>
 <h4 id="read-9"><a class="header" href="#read-9">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -60830,7 +61084,7 @@ certificate. It sets the acceptor's ALPN protocols to <code>h2</code> and
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-181"><a class="header" href="#methods-181">Methods</a></h3>
+<h3 id="methods-182"><a class="header" href="#methods-182">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -60913,7 +61167,7 @@ then what arrives. Like the handler, it belongs to the connection's task.</p>
 <ul>
 <li><code>reader</code> — the connection and the bytes it buffered</li>
 </ul>
-<h3 id="methods-182"><a class="header" href="#methods-182">Methods</a></h3>
+<h3 id="methods-183"><a class="header" href="#methods-183">Methods</a></h3>
 <h4 id="read-10"><a class="header" href="#read-10">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -61054,7 +61308,7 @@ off, plus those the user installed where the process may read them).</p>
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew's or MacPorts' <code>libssl.3.dylib</code>; on iOS, Security.framework; on Android the program links its own OpenSSL)</li>
 </ul>
-<h3 id="methods-183"><a class="header" href="#methods-183">Methods</a></h3>
+<h3 id="methods-184"><a class="header" href="#methods-184">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -61191,7 +61445,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>), and always on iOS, which does not support TLS servers yet</li>
 </ul>
-<h3 id="methods-184"><a class="header" href="#methods-184">Methods</a></h3>
+<h3 id="methods-185"><a class="header" href="#methods-185">Methods</a></h3>
 <h4 id="require_client_certificate"><a class="header" href="#require_client_certificate">require_client_certificate</a></h4>
 <pre><code class="language-pepper">require_client_certificate(roots: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -61280,7 +61534,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform's session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-185"><a class="header" href="#methods-185">Methods</a></h3>
+<h3 id="methods-186"><a class="header" href="#methods-186">Methods</a></h3>
 <h4 id="is_open-8"><a class="header" href="#is_open-8">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -61484,7 +61738,7 @@ start in the folder the tests run from (the iOS simulator).</p>
 <ul>
 <li><code>file</code> — the entry file's path, as <code>pep-build</code> was given it, or the folder of the files of a test program built from several</li>
 </ul>
-<h3 id="methods-186"><a class="header" href="#methods-186">Methods</a></h3>
+<h3 id="methods-187"><a class="header" href="#methods-187">Methods</a></h3>
 <h4 id="from_file"><a class="header" href="#from_file">from_file</a></h4>
 <pre><code class="language-pepper">from_file(file: String)
 </code></pre>
@@ -61859,7 +62113,15 @@ chapter.</p>
 (the one line of the root <code>VERSION</code> file). <code>pep-doc build --version X.Y.Z</code>
 renders the book into <code>&lt;site&gt;/X.Y.Z/</code> and leaves every other version in the
 site alone; <code>versions.json</code> lists them for the version picker, and the site's
-<code>index.html</code> opens the newest release. Builds from <code>main</code> publish as <code>dev</code>.</p>
+<code>index.html</code> and <code>latest/</code> open the newest release. On GitHub Pages a
+deeper <code>latest/</code> link, such as <code>latest/tools/pep-doc.html</code>, opens that page
+in the newest release too, through the site's <code>404.html</code>. Builds from <code>main</code>
+publish as <code>dev</code>.</p>
+<p>The version picker at the top of every page opens the chosen version as
+soon as it is picked with the mouse. Chosen with the arrow keys, it waits
+for Enter, so a keyboard user can look through the versions without
+leaving the page. It opens the same page in the chosen version, or that
+version's introduction when it has no such page.</p>
 <p>The <code>Docs</code> workflow (<code>.github/workflows/docs.yml</code>) publishes to the
 <code>gh-pages</code> branch: pushing to <code>main</code> updates <code>dev</code>, and pushing a tag
 <code>vX.Y.Z</code> adds the <code>X.Y.Z</code> docs. Published versions are never deleted.</p>
