@@ -221,7 +221,10 @@ flow-controlled so that one large transfer does not hold up the rest.
 - A server handler gets the request body read into memory in full, up to
   `MAX_REQUEST_BODY` (16 MiB).
 - HTTP/2 server push, stream priorities and the `Upgrade: h2c` handshake
-  are not supported; a client speaks HTTP/2 only over TLS.
+  are left out on purpose: RFC 9113 deprecates the priority scheme and the
+  `h2c` upgrade, and browsers have dropped push. h2c with prior knowledge
+  is supported (the server takes it on plain TCP).
+- A client speaks HTTP/2 only over TLS.
 - A server handler can take over only an HTTP/1.1 connection; WebSocket
   over HTTP/2 (RFC 8441) is not supported.
 
