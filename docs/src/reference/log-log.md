@@ -218,7 +218,8 @@ import io;
 import log;
 
 main(): int {
-    var file = io.File.create(io.Directory.temp().join("app.log")).value();
+    var path = io.Directory.temp().join("app.log");
+    var file = io.File.create(path).value();
     log.set_output(move(file), log.Format.Json);
     log.info("started");
     return 0;
