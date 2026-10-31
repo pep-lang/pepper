@@ -1374,7 +1374,8 @@ specialization its arguments select (`inferred_type_arguments`, which
 (`[[1]]`, `id(id(1))`) resolve in one walk, not one per run or round. `specialize_methods` builds its `StructTable` only once a call
 names a generic method. Between its runs it keeps, in
 `PassState.implicit` (`ImplicitMemo`), what each callable looked up and its
-fingerprint (`_Worklist`), so a run walks only the callables whose code or
+fingerprint (`_Worklist`, keyed by the struct's name, since a
+specialization `Walk<K>` of `Walk<K>` has its base's type), so a run walks only the callables whose code or
 lookups changed since; the declarations as the last round that took them
 saw them, so the next run announces what changed since, this run's own
 changes included, without taking them again at the end; and which
