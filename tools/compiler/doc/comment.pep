@@ -24,9 +24,10 @@
 # line may not.
 #
 # `check_documented` is the standard every runtime library file meets:
-# each public declaration (exported, and not `_`-prefixed) and each public
-# member of one carries a doc comment that describes it and tags every
-# parameter, generic parameter, and returned value.
+# each public declaration (exported, by `export` or by a bare `export
+# name;` in its module, and not `_`-prefixed) and each public member of
+# one carries a doc comment that describes it and tags every parameter,
+# generic parameter, and returned value.
 
 import compiler.ast;
 import [
@@ -470,20 +471,41 @@ _string_literal(argument: Expression): String? {
     return Optional<String>.Empty;
 }
 
+# Whether `decl` is exported: declared `export`, or named in
+# `reexported`, the names a bare `export name;` in its module makes
+# public. That export names neither an extension of the type it names
+# nor an `extern`, which keeps the C library's name beside the module's
+# function (`process`'s `fork`).
+export is_exported(decl: Declaration, reexported: String[]): bool {
+    if (decl.is_exported()) {
+        return true;
+    }
+    if (_is_extension(decl)) {
+        return false;
+    }
+    if (decl is Function(f)) {
+        if (f.external) {
+            return false;
+        }
+    }
+    return reexported.contains(decl.declared_name());
+}
+
 # Errors for every public declaration of `module` (parsed from `source`,
 # the file `name`) that does not meet the documentation standard (see the
 # top of this file), rendered as clang renders them: exported, non-`_` (or
 # `[__BuiltIn]`) declarations and their non-`_` members need a doc comment
 # with a description, `@typeParam` for each generic parameter, `@param`
 # for each parameter, and `@returns` when they return a value; and no tag
-# may name a parameter that does not exist.
-export check_documented(module: Module, source: String, name: String): String[] {
+# may name a parameter that does not exist. A declaration named in
+# `reexported` counts as exported (see `is_exported`).
+export check_documented(module: Module, source: String, name: String, reexported: String[]): String[] {
     var checker = _Checker(source);
     ulong index = 0;
     for (var decl in module.declarations) {
         var position = index;
         index += 1;
-        if (!decl.is_exported()) {
+        if (!is_exported(decl, reexported)) {
             continue;
         }
         var doc = doc_comment_of(source, decl);

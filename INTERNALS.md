@@ -2715,7 +2715,10 @@ diagnostics"). The mechanics:
   book's C chapter).
 - **Documentation.** The standard is in AGENTS.md (the library documentation
   section): `##` doc comments with the tags listed above.
-  `pep-doc check` enforces it (`tools/pep-doc/checks.pep`). The
+  `pep-doc check` enforces it (`tools/pep-doc/checks.pep`). A declaration
+  a bare `export name;` in its module's files re-exports counts as public
+  like an `export` one (`compiler.doc`'s `is_exported`, with the names
+  `read_library` in `tools/pep-doc/reference.pep` collects per folder). The
   reference pages in `docs/src/reference/` and the reference part of
   `docs/src/SUMMARY.md` are **generated** by `pep-doc reference`. CI fails
   if they are stale (`pep-doc check`). A page's title and place in the

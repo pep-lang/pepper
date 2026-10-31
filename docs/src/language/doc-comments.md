@@ -105,7 +105,10 @@ Here is a small documented library:
 Every public declaration in the runtime must have a doc comment: every
 exported declaration whose name does not start with `_`, and every field,
 constructor and method of such a struct, trait or extension whose name does
-not start with `_`. Names starting with `_` are internals shared between
+not start with `_`. A declaration is exported when it is marked `export`, or
+when a file of its module re-exports it by name (`export fill;` in
+`random/module.pep` exports `entropy.pep`'s `fill`); either way its entry is
+on its own file's page. Names starting with `_` are internals shared between
 runtime files and are exempt.
 
 A test enforces this, and reports a clang-style error for each gap: a missing

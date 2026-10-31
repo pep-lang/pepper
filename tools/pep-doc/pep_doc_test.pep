@@ -19,7 +19,7 @@ errors(source: String): String[] {
     if (module.is_err()) {
         return Array<String>();
     }
-    return check_documented(module.value(), source, "t.pep");
+    return check_documented(module.value(), source, "t.pep", Array<String>());
 }
 
 # The doc comment of the first declaration in `source`.
@@ -290,4 +290,40 @@ tool_versions_are_held_to_the_version_file() {
         stale[1],
         "tools/d/arguments.pep: version() returns '1.2.1', but VERSION holds '1.2.3'; run scripts/set-version.sh"
     );
+}
+
+[Test]
+a_bare_export_in_the_module_makes_a_declaration_public() {
+    var folder = TempFolder("pep_doc_reexport");
+    var shapes = folder.path.join("shapes");
+    Directory.create_all(shapes);
+    File.write_text(
+        shapes.join("area.pep"),
+        "## Returns one.\n##\n## @returns 1\narea(): int { return 1; }\nvolume(): int { return 2; }\nhidden(): int { return 3; }\n"
+    );
+    File.write_text(
+        shapes.join("module.pep"), "import \"area\";\nimport \"sys\";\n\nexport area;\nexport volume;\nexport Box;\n"
+    );
+    # Neither an extern of an exported name nor an extension of an
+    # exported type is what the export names.
+    File.write_text(shapes.join("sys.pep"), "extern int volume();\nstruct Box {}\nextend Box with Copy;\n");
+    # A file of another folder is not part of the module.
+    File.write_text(folder.path.join("other.pep"), "volume(): int { return 4; }\n");
+    var files = read_library(
+        folder.path, ["shapes/area.pep", "shapes/module.pep", "shapes/sys.pep", "other.pep"], ""
+    ).value();
+    var area = files[0];
+    var body = page_body(area.module, area.source, Array<(String, String)>(), area.reexported);
+    expect_true(body.contains("area(): int"));
+    expect_true(body.contains("volume(): int"));
+    expect_false(body.contains("hidden"));
+    var found = check_documented(area.module, area.source, area.name, area.reexported);
+    expect_equal(found.count, 1 as ulong);
+    expect_true(found[0].starts_with("shapes/area.pep:5:1: error: missing doc comment for 'volume'"));
+    var sys = files[2];
+    var sys_body = page_body(sys.module, sys.source, Array<(String, String)>(), sys.reexported);
+    expect_true(sys_body.contains("## Box"));
+    expect_false(sys_body.contains("extend"));
+    expect_false(sys_body.contains("volume"));
+    expect_true(files[3].reexported.is_empty);
 }

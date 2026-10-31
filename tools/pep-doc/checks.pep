@@ -88,14 +88,8 @@ export undocumented_declarations(root: Path): Result<String[]> {
     }
     files.sort((a, b) => _compare_paths(a, b));
     var errors = Array<String>();
-    for (var name in files) {
-        var path = root.join(name);
-        var source = File.read_to_string(path);
-        if (source.is_err()) {
-            return Result<String[]>.Err($"cannot read {path.to_string()}: {source.error().message}");
-        }
-        var module = parse_file(name, source.value())?;
-        errors.append_all(check_documented(module, source.value(), name));
+    for (var library in read_library(root, files, "")?) {
+        errors.append_all(check_documented(library.module, library.source, library.name, library.reexported));
     }
     return Result<String[]>.ok(errors);
 }

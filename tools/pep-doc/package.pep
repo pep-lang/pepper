@@ -92,15 +92,15 @@ export package_pages(manifest: Manifest): Result<Page[]> {
     var root = manifest.dir();
     var features = feature_options(manifest);
     var out = Array<Page>();
-    for (var file in package_files(root)?) {
-        var path = root.join(file);
-        var read = File.read_to_string(path);
-        if (read.is_err()) {
-            return Result<Page[]>.Err($"cannot read {path.to_string()}: {read.error().message}");
-        }
-        var source = read.value();
-        var module = parse_file(file, source)?;
-        var body = "".join([reexports(module, file, manifest.name), page_body(module, source, features)]);
+    for (var library in read_library(root, package_files(root)?, "")?) {
+        var file = library.name;
+        var source = library.source;
+        var body = "".join(
+            [
+                reexports(library.module, file, manifest.name),
+                page_body(library.module, source, features, library.reexported)
+            ]
+        );
         var intro = file_doc(source);
         if (body.is_empty and intro.is_empty()) {
             continue;
@@ -218,14 +218,8 @@ _write_file(path: Path, text: String): Result<void> {
 # comment the documentation standard asks for, as clang-style errors.
 export package_undocumented(root: Path): Result<String[]> {
     var errors = Array<String>();
-    for (var file in package_files(root)?) {
-        var path = root.join(file);
-        var source = File.read_to_string(path);
-        if (source.is_err()) {
-            return Result<String[]>.Err($"cannot read {path.to_string()}: {source.error().message}");
-        }
-        var module = parse_file(file, source.value())?;
-        errors.append_all(check_documented(module, source.value(), file));
+    for (var library in read_library(root, package_files(root)?, "")?) {
+        errors.append_all(check_documented(library.module, library.source, library.name, library.reexported));
     }
     return Result<String[]>.ok(errors);
 }
