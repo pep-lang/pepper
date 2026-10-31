@@ -261,6 +261,9 @@ apt_get() {
         fi
         if (( status == 124 || status == 137 )); then
             echo "apt-get $1 took more than 10 minutes (a stalled mirror?); retrying in 15s" >&2
+            # A kill during dpkg leaves it half done, which every later
+            # install refuses until it is finished.
+            $sudo dpkg --configure -a || true
         else
             echo "apt-get $1 failed (another apt-get may hold its lock); retrying in 15s" >&2
         fi
