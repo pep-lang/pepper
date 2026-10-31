@@ -136,6 +136,17 @@ made(l: Log, fail: bool): Result<int> {
     return Result<int>.ok(l.box("made", 2).value + Box((fail ? l.bad("arg") : l.ok("arg", 3))?).value);
 }
 
+# A branch's `?` in generic code, typed once it is specialized.
+chosen<T>(c: bool, value: Result<T>, otherwise: T): Result<T> {
+    return Result<T>.ok(c ? value? : otherwise);
+}
+
+# A `?:` inside a `?:` branch, and one in a closure.
+nested(l: Log, c: bool, d: bool): Result<int> {
+    var pick = (e: bool): Result<int> => Result<int>.ok(e ? l.ok("inner", 1)? : 2);
+    return Result<int>.ok(c ? (d ? l.ok("d", 3)? : pick(true)?) : pick(false)?);
+}
+
 # A `while` condition with a `?` on the right of `&&`.
 count_up(l: Log, limit: int): Result<int> {
     var i = 0;
@@ -197,6 +208,15 @@ cases(): int {
     failures += check("receiver, err", trace((l) => made(l, true).is_err()), "made,arg:ok");
     failures += check("while", trace((l) => count_up(l, 9).value() == 5), "step,step,step,step,step:ok");
     failures += check("while, err", trace((l) => count_up(l, 2).is_err()), "step,step,stop:ok");
+    failures += check("generic", trace((l) => chosen<int>(true, l.ok("v", 4), 1).value() == 4), "v:ok");
+    failures += check(
+        "generic, skipped",
+        trace((l) => chosen<Box>(false, Result<Box>.err(Error("e")), l.box("b", 2)).value().value == 2),
+        "b:ok"
+    );
+    failures += check("nested", trace((l) => nested(l, true, true).value() == 3), "d:ok");
+    failures += check("nested, closure", trace((l) => nested(l, true, false).value() == 1), "inner:ok");
+    failures += check("nested, other", trace((l) => nested(l, false, false).value() == 2), ":ok");
     return failures;
 }
 
