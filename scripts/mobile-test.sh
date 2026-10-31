@@ -18,6 +18,11 @@
 # as a Swift package (`--lib swift-package`), tested through SwiftPM with
 # `xcodebuild test` in the simulator.
 #
+# On each, scripts/mobile/log_check.pep checks the platform's log (logcat,
+# or the unified log through `log show`): a panic reaches it while standard
+# error is a pipe, and printed lines do when standard output and error are
+# /dev/null, as in an app.
+#
 # On iOS, scripts/mobile/tls_check.pep also checks the tls module and HTTPS:
 # against `openssl s_server` on this Mac (Homebrew's openssl@3, else the
 # system's), with a test CA made for the run (its header lists the checks).
@@ -139,6 +144,37 @@ report() {
   failures=$((failures + 1))
 }
 
+# The platform's log (scripts/mobile/log_check.pep) on `$1` (ios or
+# android), built with the triple `$2` into `$3`. `$4` runs a command line
+# on the phone, given the program's path there (`$5`), and with `deploy`
+# puts the program there; `$6` prints the log
+# lines holding a text. A panic must reach the log while standard error is
+# attached, and printed lines must when standard output and error are
+# /dev/null, as in an app.
+check_log() {
+  local platform=$1 triple=$2 dir=$3 run=$4 program=$5 search=$6 marker
+  echo "=== $platform: the platform's log"
+  if ! "$compiler" --target "$triple" "$repo_root/scripts/mobile/log_check.pep" -o "$dir/log_check" \
+    --build "$dir/build-log_check" > "$dir/log_check.log" 2>&1; then
+    report "$platform log_check (build)"
+    sed 's/^/    /' "$dir/log_check.log" | head -20
+    return
+  fi
+  "$run" deploy || { report "$platform log_check (deploy)"; return; }
+  marker="pepper-log-$platform-$$"
+  # The panic aborts, so its exit status is not 0.
+  "$run" "$program $marker-attached panic" > "$dir/log_check.out" 2>&1 || true
+  grep -q "$marker-attached panic" "$dir/log_check.out" || report "$platform log_check (panic on stderr)"
+  "$run" "$program $marker-detached > /dev/null 2>&1" || report "$platform log_check (run)"
+  sleep 2
+  local wanted
+  for wanted in "$marker-attached panic" "$marker-detached stdout" "$marker-detached stderr"; do
+    if ! "$search" "$wanted" | grep -q "$wanted"; then
+      report "$platform log_check (log lacks '$wanted')"
+    fi
+  done
+}
+
 # The runtime's `[Test]`s for the triple `$1`, run in the simulator or
 # emulator by `pep-test --target` (built from this checkout), from runtime/
 # as scripts/pepper-tests.sh runs them. `$2` names the platform.
@@ -154,6 +190,18 @@ run_tests() {
   # pep-test finds pep-build on the PATH.
   (cd "$repo_root/runtime" && PATH="$(dirname "$compiler"):$PATH" "$out/bin/pep-test" --target "$triple" \
     --build-environment PEPC_NO_COMPILATION_UNITS=1) || report "$platform runtime tests"
+}
+
+# check_log's commands for the booted simulator `$device` (run_ios's): a
+# command line, run by `simctl spawn` (its redirections apply to simctl,
+# whose standard streams the program gets), and the unified log's lines
+# holding `$1`.
+ios_run() {
+  [ "$1" != deploy ] || return 0
+  eval "xcrun simctl spawn \"\$device\" $1" < /dev/null
+}
+ios_log() {
+  xcrun simctl spawn "$device" log show --last 5m --style compact --predicate "eventMessage CONTAINS \"$1\""
 }
 
 run_ios() {
@@ -213,6 +261,8 @@ run_ios() {
   "$compiler" --target aarch64-apple-ios "$repo_root/docs/examples/hello.pep" -o "$dir/hello-device" \
     --sysroot "$(xcrun --sdk iphoneos --show-sdk-path)" --build "$dir/build-device" || report "ios device link"
 
+  check_log ios aarch64-apple-ios-simulator "$dir" ios_run "$dir/log_check" ios_log
+
   if [ -d "$repo_root/docs/examples/mobile/ios" ]; then
     bash "$repo_root/docs/examples/mobile/ios/build.sh" "$compiler" "$out/ios-app" "$device" || report "ios app"
     # The same library through SwiftPM: `--lib swift-package`'s
@@ -223,6 +273,21 @@ run_ios() {
   if [ "$booted_here" = 1 ]; then
     xcrun simctl shutdown "$device" || true
   fi
+}
+
+# check_log's commands for the emulator `$serial` (run_android's): a command
+# line, run by `adb shell` (its redirections apply on the phone), and
+# logcat's lines holding `$1`.
+android_run() {
+  if [ "$1" = deploy ]; then
+    "$adb" -s "$serial" push "$dir/log_check" "$remote/" < /dev/null > /dev/null
+    "$adb" -s "$serial" shell chmod 755 "$remote/log_check" < /dev/null
+    return
+  fi
+  "$adb" -s "$serial" shell "$1" < /dev/null
+}
+android_log() {
+  "$adb" -s "$serial" logcat -d -e "$1" < /dev/null
 }
 
 run_android() {
@@ -299,6 +364,8 @@ run_android() {
     report "android tls server"
   fi
   kill "${tls_pid:-}" 2>/dev/null || true
+
+  check_log android "$triple" "$dir" android_run "$remote/log_check" android_log
 
   if [ -d "$repo_root/docs/examples/mobile/android" ]; then
     bash "$repo_root/docs/examples/mobile/android/build.sh" "$compiler" "$out/android-app" "$serial" || report "android app"

@@ -365,8 +365,10 @@ export struct Directory {
     ## checked, so it may not exist.
     ##
     ## On POSIX it is `$TMPDIR` with any trailing `/` removed, or `/tmp`
-    ## when `TMPDIR` is unset or empty (`/data/local/tmp` on Android, which
-    ## has no `/tmp`; an app should use its cache directory instead). On Windows it is what
+    ## when `TMPDIR` is unset or empty. Android has no `/tmp`: there it is
+    ## the app's cache folder once the app passes it to
+    ## `pepper_set_app_directories`, and `/data/local/tmp` until then, which
+    ## a shell program may write but an app may not. On Windows it is what
     ## `GetTempPathW` reports (from `TMP`, `TEMP`, `USERPROFILE`, or the
     ## Windows directory) with its trailing separator removed unless it is
     ## a root, or `.` if that call fails.
