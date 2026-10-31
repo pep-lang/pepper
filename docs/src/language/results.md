@@ -121,16 +121,20 @@ The rules:
 - The early return is an ordinary `return`: locals are released and
   `with` blocks are exited as for any other.
 
-Each `?` in a statement runs before the rest of the statement, so two
-placements are errors:
+A `?` can go anywhere in an expression, and runs where it is written, in
+the order the expression is evaluated:
 
-- After a call in the same statement, as in `f() + g()?`, where `g()`
-  would run before `f()`: `'?' cannot follow a call in the same
-  statement`. Call `f()` in a statement of its own first. Reading
-  variables and fields before a `?` is fine, and several `?`s run in the
-  order written: `add(parse(a)?, parse(b)?)`.
-- Where it might not run: the right operand of `&&` or `||`, a branch of
-  `?:`, or a `match` arm. Use an `if` or `match` statement there.
+- What comes before it runs first, and what comes after it runs only when
+  it does not return: in `f() + g()? + h()`, `f()` runs, then `g()`, and
+  `h()` only if `g()` returned a value. Several `?`s run in the order
+  written: `add(parse(a)?, parse(b)?)`. Reading a variable or field is not
+  a call: `x.count + g()?` reads `x.count` once `g()` has returned.
+- A `?` that is not reached does nothing: on the right of `&&` or `||` when
+  the left operand decides, in the branch of `?:` not taken, or in a
+  `match` arm that does not match. `ready && load()?` calls `load()` only
+  when `ready` holds.
+- The early return releases what the statement made before the `?`, like
+  any other `return`.
 
 A `?` in a `while` condition runs on every iteration, before the condition
 is tested.

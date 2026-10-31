@@ -658,7 +658,8 @@ _is_converted_literal(call: FunctionCallExpression): bool {
     return false;
 }
 
-_is_assignment(op: BinaryOp): bool {
+## Whether `op` assigns: `=` or a compound assignment such as `+=`.
+export _is_assignment(op: BinaryOp): bool {
     match (op) {
         Assign, AddAssign, SubAssign, MulAssign, DivAssign, ModAssign, LShiftAssign, RShiftAssign, BitAndAssign, BitOrAssign, BitXorAssign => {
             return true;

@@ -6,6 +6,7 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [contains_platform_predicate, deprecation_of, is_deprecation] from compiler.link;
+import [_is_assignment] from "closures";
 import [make_unsigned_literal] from "literals";
 import [Loc] from "loc";
 import [
@@ -91,6 +92,12 @@ export const STRING_CONSTANT = "StringConstant";
 export const CAST_VALUE = "__cast_value";
 ## The hidden local that holds a `?` operand: `__try_0`, `__try_1`, ...
 export const TRY_LOCAL = "__try_";
+## A hidden local holding an operand evaluated before a later `?`, or the
+## value of an `&&` or `||` whose right operand uses `?`.
+export const VALUE_LOCAL = "__value_";
+## The hidden local holding the value of a `?:` or `match` with a `?` in a
+## branch; its initializer only gives it a type.
+export const BRANCH_LOCAL = "__branch_";
 ## The compile-time API's name inside a `static` block.
 export const REFLECT = "reflect";
 ## The function an interpolated string (`$"{x}"`) calls on each value.
@@ -1275,28 +1282,124 @@ _ast_method_call(receiver: ast.Expression, method: String, arguments: ast.Expres
     return ast.Expression.FunctionCall(ast.Expression.MemberAccess(receiver, method, at, at), arguments, at);
 }
 
-## What a `?` lifts out of its statement: its hidden local, its operand, and
-## the `?` token.
-struct _Try {
-    var name: String;
-    var operand: ast.Expression;
-    var at: ast.Span;
+## Whether `e` is a `?:` or `match` with a `?` in a branch, outside a
+## closure body.
+_branch_has_try(e: ast.Expression): bool {
+    if (e is Ternary(_, true_expr, false_expr, _)) {
+        return _has_try(true_expr) or _has_try(false_expr);
+    }
+    if (e is Match(m)) {
+        for (var arm in m.arms) {
+            if (_has_try(arm.value)) {
+                return true;
+            }
+        }
+        return m.else_value.is_value() and _has_try(m.else_value.value());
+    }
+    return false;
+}
 
-    construct(name: String, operand: ast.Expression, at: ast.Span) {
-        this.name = name;
-        this.operand = operand;
-        this.at = at;
+## Whether an operand of `operands` uses `?`.
+_any_has_try(operands: ast.Expression[]): bool {
+    for (var operand in operands) {
+        if (_has_try(operand)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+## Whether evaluating `e`, its `?`s already lifted, can do something a
+## later `?` must not run before: a call (other than a `?`'s read of its
+## hidden local), `++`, `--` or an assignment.
+_has_effect(e: ast.Expression): bool {
+    match (e) {
+        Unary(op, _, operand, _) => {
+            return op == "++" or op == "--" or _has_effect(operand);
+        }
+        Binary(lhs, op, rhs, _) => {
+            var binary = _binary_op(op);
+            return (binary.is_value() and _is_assignment(binary.value())) or _has_effect(lhs) or _has_effect(rhs);
+        }
+        Index(lhs, rhs, _) => {
+            return _has_effect(lhs) or _has_effect(rhs);
+        }
+        Ternary(condition, true_expr, false_expr, _) => {
+            return _has_effect(condition) or _has_effect(true_expr) or _has_effect(false_expr);
+        }
+        MemberAccess(lhs, _, _, _) => {
+            return _has_effect(lhs);
+        }
+        Cast(inner, _, _, _, _) => {
+            return _has_effect(inner);
+        }
+        FunctionCall(function, arguments, _) => {
+            if (function is MemberAccess(lhs, name, _, _)) {
+                if (lhs is SymbolRef(id, _)) {
+                    return !(name == "value" and id.starts_with(TRY_LOCAL) and arguments.count == 0);
+                }
+            }
+            return true;
+        }
+        NamedArgument(_, _, value, _) => {
+            return _has_effect(value);
+        }
+        Is(value, _, _, _) => {
+            return _has_effect(value);
+        }
+        Tuple(elements, _, _) => {
+            return _any_has_effect(elements);
+        }
+        ArrayLiteral(elements, _) => {
+            return _any_has_effect(elements);
+        }
+        MapLiteral(entries, _) => {
+            for (var entry in entries) {
+                if (_has_effect(entry.key) or _has_effect(entry.value)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        Match(m) => {
+            if (_has_effect(m.value)) {
+                return true;
+            }
+            for (var arm in m.arms) {
+                if (_has_effect(arm.value) or (arm.guard.is_value() and _has_effect(arm.guard.value()))) {
+                    return true;
+                }
+            }
+            return m.else_value.is_value() and _has_effect(m.else_value.value());
+        }
+        else => {
+            return false;
+        }
     }
 }
 
-## What a `?` lifting walk has seen of its statement so far.
-struct _Lifter {
-    ## Each `?`, in evaluation order.
-    var tries: _Try[] = Array<_Try>();
-    ## The last call (or `++`/`--`) outside a `?` operand.
-    var effect: ast.Span?;
+## Whether evaluating an element of `elements` can have an effect
+## (`_has_effect`).
+_any_has_effect(elements: ast.Expression[]): bool {
+    for (var element in elements) {
+        if (_has_effect(element)) {
+            return true;
+        }
+    }
+    return false;
+}
 
-    construct() {}
+## A block that assigns `value` to `target`, or evaluates it when there is
+## none, located at `value`.
+_branch_block(target: String?, value: ast.Expression): ast.Block {
+    var at = value.span();
+    var out = ast.Block(at);
+    var statement = value;
+    if (target.is_value()) {
+        statement = ast.Expression.Binary(ast.Expression.SymbolRef(target.value(), at), "=", value, at);
+    }
+    out.statements = [ast.Statement.Expression(statement)];
+    return out;
 }
 
 ## Who declares a property, for `property_members`.
@@ -1545,6 +1648,9 @@ struct _Builder {
     var with_blocks: ulong = 0;
     var matches: ulong = 0;
     var tries: ulong = 0;
+    ## Whether the expression being built only gives a hidden local its
+    ## type (`branches`), so a `?` reads its operand's value.
+    var typing_only = false;
     ## The compile-time names where a `static` block's emitted statement is
     ## being built; empty outside a `static` block.
     var compile_time: HashSet<String>? = Optional<HashSet<String>>.Empty;
@@ -1896,6 +2002,10 @@ struct _Builder {
             }
             Unary(op, prefix, operand, span) => {
                 if (op == "?" and !prefix) {
+                    if (typing_only) {
+                        var read_at = ast.Span(span.end - 1, span.end);
+                        return expression(_ast_method_call(operand, "value", Array<ast.Expression>(), read_at));
+                    }
                     # A `?` that `lift` left: not in a statement of a function body.
                     var at = loc(ast.Span(span.end - 1, span.end));
                     return Built<Expression>.Err(_error("'?' can be used only in a statement of a function body", at));
@@ -4586,9 +4696,12 @@ struct _Builder {
         return built;
     }
 
-    ## The statements `s` lowers to when an expression it evaluates first
-    ## uses `?`: one hidden local and one early return per `?`, in
-    ## evaluation order, then the statement, each `?` reading its local.
+    ## The statements `s` lowers to when an expression it evaluates uses
+    ## `?`: what runs before the rest of the statement, in evaluation order
+    ## (each `?`'s hidden local and early return, each earlier operand a
+    ## `?` must not overtake, held in a hidden local, and each `&&`, `||`,
+    ## `?:` or `match` with a `?` that may not run, as an `if` or `match`
+    ## statement), then the statement, each `?` reading its local.
     lift(s: ast.Statement): Built<Statement[]?> {
         if (s is While(condition, body, _)) {
             if (_has_try(condition)) {
@@ -4601,14 +4714,14 @@ struct _Builder {
         if (head.is_empty() or !_has_try(head.value())) {
             return Built<Statement[]?>.Ok(Optional<Statement[]>.Empty);
         }
-        var lifter = _Lifter();
-        var lifted_head = lift_walk(head.value(), Optional<String>.Empty, lifter)?;
-        var lifted = _with_head(s, lifted_head);
-        var items = Array<Statement>();
-        for (var t in lifter.tries) {
-            var checked = try_check(t.name, t.operand, t.at)?;
-            items.append_all(checked);
+        if (s is Expression(_) and _branch_has_try(head.value())) {
+            # Its value is unused: each branch is a statement of its own.
+            var branched = lowered(branch_statement(head.value(), Optional<String>.Empty))?;
+            return Built<Statement[]?>.Ok(Optional<Statement[]>.Value(branched));
         }
+        var items = Array<Statement>();
+        var lifted_head = lift_walk(head.value(), items)?;
+        var lifted = _with_head(s, lifted_head);
         var declares = false;
         if (lifted is Destructure(bindings, value, is_const, _)) {
             declares = true;
@@ -4623,6 +4736,16 @@ struct _Builder {
             return Built<Statement[]?>.Ok(Optional<Statement[]>.Value(items));
         }
         return Built<Statement[]?>.Ok(Optional<Statement[]>.Value([Statement.Block(_block_of(items))]));
+    }
+
+    ## The statements `s` lowers to.
+    lowered(s: ast.Statement): Built<Statement[]> {
+        var lifted = lift(s)?;
+        if (lifted.is_value()) {
+            return Built<Statement[]>.Ok(lifted.value());
+        }
+        var built = statement(s)?;
+        return Built<Statement[]>.Ok([built]);
     }
 
     ## `while (c) { body }` with a `?` in `c`: `while (true) { if (c) { body }
@@ -4641,148 +4764,246 @@ struct _Builder {
         return Built<Statement[]>.Ok([Statement.While(While(Expression.BoolLiteral(true), block = built))]);
     }
 
-    ## `e` with each `?` replaced by a read of its hidden local, the `?`s
-    ## collected in evaluation order. `conditional` names the construct when
-    ## `e` may not be evaluated at all.
-    lift_walk(e: ast.Expression, conditional: String?, lifter: _Lifter): Built<ast.Expression> {
+    ## `e` with each `?` replaced by a read of its hidden local, and what
+    ## runs before it appended to `items` in evaluation order.
+    lift_walk(e: ast.Expression, items: Statement[]): Built<ast.Expression> {
         match (e) {
             Unary(op, prefix, operand, span) => {
+                var lifted = lift_walk(operand, items)?;
                 if (op == "?") {
                     var at = ast.Span(span.end - 1, span.end);
-                    if (conditional.is_value()) {
-                        var error = _error($"'?' cannot be used in {conditional.value()}", loc(at));
-                        return Built<ast.Expression>.Err(
-                            _noted_nowhere(error, "it may not run; check the value with 'if' or 'match' instead")
-                        );
-                    }
-                    if (lifter.effect.is_value()) {
-                        var error = _error("'?' cannot follow a call in the same statement", loc(at));
-                        var note = "the '?' would run before this call; call it in a statement of its own";
-                        return Built<ast.Expression>.Err(_noted(error, note, loc(lifter.effect.value())));
-                    }
-                    var lifted = lift_walk(operand, Optional<String>.Empty, lifter)?;
-                    # The operand's calls run first, with it, so they do not
-                    # count as earlier calls for what follows.
-                    lifter.effect = Optional<ast.Span>.Empty;
                     var name = $"{TRY_LOCAL}{tries}";
                     tries += 1;
-                    lifter.tries.append(_Try(name, lifted, at));
+                    var checked = try_check(name, lifted, at)?;
+                    items.append_all(checked);
                     return Built<ast.Expression>.Ok(
                         _ast_method_call(ast.Expression.SymbolRef(name, at), "value", Array<ast.Expression>(), at)
                     );
                 }
-                var lifted = lift_walk(operand, conditional, lifter)?;
-                if (op == "++" or op == "--") {
-                    lifter.effect = Optional<ast.Span>.Value(span);
-                }
                 return Built<ast.Expression>.Ok(ast.Expression.Unary(op, prefix, lifted, span));
             }
             Binary(lhs, op, rhs, span) => {
-                var left = lift_walk(lhs, conditional, lifter)?;
-                var inner = conditional;
-                if (inner.is_empty() and (op == "&&" or op == "||" or op == "and" or op == "or")) {
-                    inner = Optional<String>.Value($"the right operand of '{op}'");
+                if (_has_try(rhs) and (op == "&&" or op == "||" or op == "and" or op == "or")) {
+                    return logical(lhs, op, rhs, span, items);
                 }
-                var right = lift_walk(rhs, inner, lifter)?;
+                var left = lift_walk(lhs, items)?;
+                if (_has_try(rhs)) {
+                    left = settle(left, items)?;
+                }
+                var right = lift_walk(rhs, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.Binary(left, op, right, span));
             }
             Ternary(condition, true_expr, false_expr, span) => {
-                var c = lift_walk(condition, conditional, lifter)?;
-                var branch = conditional.is_value() ? conditional : Optional<String>.Value("a branch of '?:'");
-                var t = lift_walk(true_expr, branch, lifter)?;
-                var f = lift_walk(false_expr, branch, lifter)?;
-                return Built<ast.Expression>.Ok(ast.Expression.Ternary(c, t, f, span));
+                if (_branch_has_try(e)) {
+                    return branches(e, items);
+                }
+                var c = lift_walk(condition, items)?;
+                return Built<ast.Expression>.Ok(ast.Expression.Ternary(c, true_expr, false_expr, span));
             }
             Match(m) => {
-                var value = lift_walk(m.value, conditional, lifter)?;
-                var arm_construct = conditional.is_value() ? conditional : Optional<String>.Value("a 'match' arm");
+                if (_branch_has_try(e)) {
+                    return branches(e, items);
+                }
+                var value = lift_walk(m.value, items)?;
                 var copy = ast.MatchExpression(value);
-                for (var arm in m.arms) {
-                    var lifted = lift_walk(arm.value, arm_construct, lifter)?;
-                    var new_arm = ast.MatchValueArm();
-                    new_arm.value = lifted;
-                    new_arm.patterns = arm.patterns;
-                    new_arm.guard = arm.guard;
-                    new_arm.span = arm.span;
-                    copy.arms.append(new_arm);
-                }
-                if (m.else_value.is_value()) {
-                    var lifted = lift_walk(m.else_value.value(), arm_construct, lifter)?;
-                    copy.else_value = Optional<ast.Expression>.Value(lifted);
-                }
+                copy.arms = m.arms;
+                copy.else_value = m.else_value;
                 copy.else_span = m.else_span;
                 copy.keyword_span = m.keyword_span;
                 copy.span = m.span;
                 return Built<ast.Expression>.Ok(ast.Expression.Match(copy));
             }
             FunctionCall(function, arguments, span) => {
+                var later = _any_has_try(arguments);
                 var callee = function;
-                var callee_span = function.span();
                 if (function is MemberAccess(lhs, name, name_span, member_span)) {
-                    var receiver = lift_walk(lhs, conditional, lifter)?;
+                    var receiver = lift_walk(lhs, items)?;
+                    if (later) {
+                        receiver = settle(receiver, items)?;
+                    }
                     callee = ast.Expression.MemberAccess(receiver, name, name_span, member_span);
-                    callee_span = name_span;
                 } else {
-                    callee = lift_walk(function, conditional, lifter)?;
-                    callee_span = callee.span();
+                    callee = lift_walk(function, items)?;
+                    if (later) {
+                        callee = settle(callee, items)?;
+                    }
                 }
-                var args = Array<ast.Expression>();
-                for (var argument in arguments) {
-                    var lifted = lift_walk(argument, conditional, lifter)?;
-                    args.append(lifted);
-                }
-                lifter.effect = Optional<ast.Span>.Value(callee_span);
+                var args = lift_all(arguments, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.FunctionCall(callee, args, span));
             }
             Index(lhs, rhs, span) => {
-                var left = lift_walk(lhs, conditional, lifter)?;
-                var right = lift_walk(rhs, conditional, lifter)?;
+                var left = lift_walk(lhs, items)?;
+                if (_has_try(rhs)) {
+                    left = settle(left, items)?;
+                }
+                var right = lift_walk(rhs, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.Index(left, right, span));
             }
             MemberAccess(lhs, name, name_span, span) => {
-                var left = lift_walk(lhs, conditional, lifter)?;
+                var left = lift_walk(lhs, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.MemberAccess(left, name, name_span, span));
             }
             Cast(inner, type_name, span, keyword_span, optional) => {
-                var lifted = lift_walk(inner, conditional, lifter)?;
+                var lifted = lift_walk(inner, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.Cast(lifted, type_name, span, keyword_span, optional));
             }
             NamedArgument(name, name_span, value, span) => {
-                var lifted = lift_walk(value, conditional, lifter)?;
+                var lifted = lift_walk(value, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.NamedArgument(name, name_span, lifted, span));
             }
             Is(value, pattern, keyword_span, span) => {
-                var lifted = lift_walk(value, conditional, lifter)?;
+                var lifted = lift_walk(value, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.Is(lifted, pattern, keyword_span, span));
             }
             Tuple(elements, labels, span) => {
-                var lifted = Array<ast.Expression>();
-                for (var element in elements) {
-                    var built = lift_walk(element, conditional, lifter)?;
-                    lifted.append(built);
-                }
+                var lifted = lift_all(elements, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.Tuple(lifted, labels, span));
             }
             ArrayLiteral(elements, span) => {
-                var lifted = Array<ast.Expression>();
-                for (var element in elements) {
-                    var built = lift_walk(element, conditional, lifter)?;
-                    lifted.append(built);
-                }
+                var lifted = lift_all(elements, items)?;
                 return Built<ast.Expression>.Ok(ast.Expression.ArrayLiteral(lifted, span));
             }
             MapLiteral(entries, span) => {
-                var lifted = Array<ast.MapEntry>();
+                var flat = Array<ast.Expression>();
                 for (var entry in entries) {
-                    var key = lift_walk(entry.key, conditional, lifter)?;
-                    var value = lift_walk(entry.value, conditional, lifter)?;
-                    lifted.append(ast.MapEntry(key, value));
+                    flat.append(entry.key);
+                    flat.append(entry.value);
                 }
-                return Built<ast.Expression>.Ok(ast.Expression.MapLiteral(lifted, span));
+                var lifted = lift_all(flat, items)?;
+                var out = Array<ast.MapEntry>();
+                for (var i in 0..entries.count) {
+                    out.append(ast.MapEntry(lifted[2 * i], lifted[2 * i + 1]));
+                }
+                return Built<ast.Expression>.Ok(ast.Expression.MapLiteral(out, span));
             }
             else => {}
         }
         return Built<ast.Expression>.Ok(e);
+    }
+
+    ## `operands`, evaluated in order, each lifted by `lift_walk`; one that
+    ## a later operand's `?` must not overtake is settled first.
+    lift_all(operands: ast.Expression[], items: Statement[]): Built<ast.Expression[]> {
+        # The operands before the last one that uses `?` are settled.
+        ulong last = operands.count;
+        while (last > 0 and !_has_try(operands[last - 1])) {
+            last -= 1;
+        }
+        var out = Array<ast.Expression>();
+        for (var i in 0..operands.count) {
+            var lifted = lift_walk(operands[i], items)?;
+            if (i + 1 < last) {
+                lifted = settle(lifted, items)?;
+            }
+            out.append(lifted);
+        }
+        return Built<ast.Expression[]>.Ok(out);
+    }
+
+    ## `e`, an operand already lifted, evaluated now because a `?` after it
+    ## would otherwise run first: each call (or `++`, `--`, assignment) it
+    ## still makes runs into a hidden local, which `e` then reads. A place
+    ## (`a.b`, `a[i]`) stays a place: only the values its receiver and
+    ## index need are held.
+    settle(e: ast.Expression, items: Statement[]): Built<ast.Expression> {
+        if (!_has_effect(e)) {
+            return Built<ast.Expression>.Ok(e);
+        }
+        match (e) {
+            MemberAccess(lhs, name, name_span, span) => {
+                var held = settle(lhs, items)?;
+                return Built<ast.Expression>.Ok(ast.Expression.MemberAccess(held, name, name_span, span));
+            }
+            Index(lhs, rhs, span) => {
+                var held = settle(lhs, items)?;
+                var index = settle(rhs, items)?;
+                return Built<ast.Expression>.Ok(ast.Expression.Index(held, index, span));
+            }
+            NamedArgument(name, name_span, value, span) => {
+                var held = settle(value, items)?;
+                return Built<ast.Expression>.Ok(ast.Expression.NamedArgument(name, name_span, held, span));
+            }
+            else => {}
+        }
+        var span = e.span();
+        var name = $"{VALUE_LOCAL}{tries}";
+        tries += 1;
+        var value = expression(e)?;
+        items.append(_declare(_hidden(name, value, loc(span))));
+        return Built<ast.Expression>.Ok(ast.Expression.SymbolRef(name, span));
+    }
+
+    ## `lhs op rhs` (`&&`, `||`, `and`, `or`) whose `rhs` uses `?`, which
+    ## runs only when `lhs` does not decide: a hidden `bool`, set by `if
+    ## (lhs) { if (rhs) { b = true; } }` for `&&` and by `if (lhs) { b =
+    ## true; } else { if (rhs) { b = true; } }` for `||`.
+    logical(
+        lhs: ast.Expression, op: String, rhs: ast.Expression, span: ast.Span, items: Statement[]
+    ): Built<ast.Expression> {
+        var name = $"{VALUE_LOCAL}{tries}";
+        tries += 1;
+        items.append(_declare(_hidden(name, Expression.BoolLiteral(false), loc(span))));
+        var holds = _branch_block(
+            Optional<String>.Value(name), ast.Expression.Literal(ast.Literal.Bool(true), rhs.span())
+        );
+        var nested = ast.Block();
+        nested.statements = [ast.Statement.Branch(rhs, holds, Optional<ast.Block>.Empty, rhs.span())];
+        nested.span = rhs.span();
+        var outer = ast.Statement.Branch(lhs, holds, Optional<ast.Block>.Value(nested), span);
+        if (op == "&&" or op == "and") {
+            outer = ast.Statement.Branch(lhs, nested, Optional<ast.Block>.Empty, span);
+        }
+        var built = lowered(outer)?;
+        items.append_all(built);
+        return Built<ast.Expression>.Ok(ast.Expression.SymbolRef(name, span));
+    }
+
+    ## `e`, a `?:` or `match` with a `?` in a branch, which runs only when
+    ## that branch is taken: a hidden local, set by an `if` or `match`
+    ## statement with a block per branch. Its initializer, `e` with each `?`
+    ## read as its operand's value, only gives it `e`'s type:
+    ## `resolve_implicit_types` drops it.
+    branches(e: ast.Expression, items: Statement[]): Built<ast.Expression> {
+        var span = e.span();
+        var name = $"{BRANCH_LOCAL}{tries}";
+        tries += 1;
+        var saved = typing_only;
+        typing_only = true;
+        var typed = expression(e);
+        typing_only = saved;
+        items.append(_declare(_hidden(name, typed?, loc(span))));
+        var built = lowered(branch_statement(e, Optional<String>.Value(name)))?;
+        items.append_all(built);
+        return Built<ast.Expression>.Ok(ast.Expression.SymbolRef(name, span));
+    }
+
+    ## The `if` statement for `?:` `e`, or the `match` statement for `match`
+    ## `e`, whose branches assign their values to `target`, or evaluate
+    ## them when there is none.
+    branch_statement(e: ast.Expression, target: String?): ast.Statement {
+        if (e is Ternary(condition, true_expr, false_expr, span)) {
+            var otherwise = Optional<ast.Block>.Value(_branch_block(target, false_expr));
+            return ast.Statement.Branch(condition, _branch_block(target, true_expr), otherwise, span);
+        }
+        if (e is Match(m)) {
+            var copy = ast.Match(m.value);
+            for (var arm in m.arms) {
+                var lowered_arm = ast.MatchArm();
+                lowered_arm.patterns = arm.patterns;
+                lowered_arm.guard = arm.guard;
+                lowered_arm.body = _branch_block(target, arm.value);
+                lowered_arm.span = arm.span;
+                copy.arms.append(lowered_arm);
+            }
+            if (m.else_value.is_value()) {
+                copy.else_block = Optional<ast.Block>.Value(_branch_block(target, m.else_value.value()));
+            }
+            copy.else_span = m.else_span;
+            copy.keyword_span = m.keyword_span;
+            copy.span = m.span;
+            return ast.Statement.Match(copy);
+        }
+        return ast.Statement.Expression(e);
     }
 
     ## `var name = operand;` and `if (name._propagates()) { return
