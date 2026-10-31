@@ -34,7 +34,7 @@ needs no `##` comments.
 `scripts/pepper-tests.sh` runs them all:
 
 ```bash
-sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
+sh scripts/install.sh --version 0.12.0-dev       # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
 scripts/pepper-tests.sh target/bin               # with a pep-build you built
@@ -44,9 +44,11 @@ The tests build with the installed toolchain's `pep-build`, the one
 `pepper install which` names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
 prerelease named `x.y.z-dev` (`pepper install list --available` shows it),
-replacing the one before; CI and the workers install it with the install scripts
-rather than building the compiler, and so can you (run the install again to
-refresh it). The compiler's own tests (`tools/compiler/*_test.pep`) build
+replacing the one before. Install it with the install scripts (run the
+install again to refresh it). CI does the same when a change leaves the
+compiler alone, and otherwise builds the compiler with
+[stage 0](#stage-0), the pinned build of main, which may be older. The
+compiler's own tests (`tools/compiler/*_test.pep`) build
 the compiler's sources into their test programs, so they test a change to
 it. To run the whole suite with the changed compiler too, build it from
 `tools/compiler` (see

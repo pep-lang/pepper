@@ -3,9 +3,10 @@
 Pepper is written in Pepper. The compiler, `pep-build`, is the Pepper
 program in `tools/compiler` (also called pepc), and every other tool is a
 Pepper program under `tools/`. Building them takes a Pepper compiler, so
-the first one comes from a published toolchain, the build of main (stage
-0), the same way CI and the release build get theirs. The Rust compiler
-that once bootstrapped Pepper plays no part.
+the first one comes from a published toolchain. CI and the release build
+use [stage 0](tests.md#stage-0), the build of main that `.github/stage0`
+pins; for working on Pepper the newest build of main does as well. The Rust
+compiler that once bootstrapped Pepper plays no part.
 
 You need this to work on Pepper itself, or on a platform with no prebuilt
 binaries. To use Pepper, [install it](../tools/install.md) instead.
@@ -16,18 +17,24 @@ Four steps, on every platform:
 
 1. **The build of main.** Every merge into main that changes the compiler,
    the runtime or the tools publishes it as a prerelease named
-   `x.y.z-dev`, which `pepper install list --available` lists. Install it
-   and make it the default, with the
-   [install script](../tools/install.md) on a new machine or with
-   `pepper install`:
+   `x.y.z-dev` (the version in `VERSION`), which
+   `pepper install list --available` lists. Install it and make it the
+   default, with the [install script](../tools/install.md) on a new machine
+   or with `pepper install`:
 
    ```bash
-   sh scripts/install.sh --version 0.4.0-dev    # the -dev version listed
-   pepper install add 0.4.0-dev && pepper install use 0.4.0-dev
+   sh scripts/install.sh --version 0.12.0-dev    # the -dev version listed
+   pepper install add 0.12.0-dev && pepper install use 0.12.0-dev
    ```
 
    A prerelease is picked only by its exact name, never by `update` or
    `latest`. `pepper install add --force <version>` refreshes it.
+
+   This is the newest build of main, which may be newer than stage 0, the
+   build CI and the release build the compiler with
+   ([Stage 0](tests.md#stage-0)). Runtime code must build with stage 0
+   too, so before a change to `runtime/` or `tools/compiler/` merges,
+   `scripts/stage0-check.sh` installs stage 0 and checks it.
 
 2. **Platform prerequisites**, for linking:
 
@@ -153,10 +160,23 @@ done
 ```
 
 (`.exe` names on Windows.) The release build (`scripts/release-build.sh`)
-does the same, then builds the compiler once more with itself, and ships
-that one. A cold build of the compiler takes several minutes; the
+does the same with stage 0, then builds the compiler once more with itself,
+and ships that one. A cold build of the compiler takes several minutes; the
 [build cache](../tools/pep-build.md#the-build-cache) makes a rebuild after
 an edit take seconds.
+
+CI builds the compiler with `scripts/ci-build-compiler.sh`, which
+`scripts/stage0-check.sh` also runs. It reads two environment variables:
+
+- `PEPPER_COMPILER_DIR`: the folder of the `pep-build` to build with, which
+  `scripts/ci-install-toolchain.sh` names after installing stage 0. The
+  script then sets it to the new compiler's folder (through `$GITHUB_ENV`
+  in a workflow, else on standard output), so later steps test with it.
+- `PEPPER_TARGET_DIR`: the folder that stands for `target/`; the compiler
+  goes in its `compiler/` folder, with a build cache of its own.
+
+On macOS and Windows it finds LLVM as `scripts/pepper-tests.sh` does
+(`PEPPER_LLVM_PREFIX`, else `.pep/llvm-prefix`).
 
 ## Testing
 
