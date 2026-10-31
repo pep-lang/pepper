@@ -97,12 +97,26 @@ main.pep:1:28: error: build option 'LEVEL' is 'high', which is not an integer
       |                            ^~~~
 ```
 
-Comparing two build options, or a build option with anything but a
-literal, is an error too.
+Comparing a build option with anything but a literal or another build
+option is an error too.
+
+Two build options compare with each other, `BuildOption(A) <= BuildOption(B)`,
+by their values: as integers when both read as integers, else as `double`s
+when both read as numbers, else as text, byte for byte. Text compares only
+with `==` and `!=`; ordering a value that is not a number is an error at
+the operator:
+
+```text
+main.pep:1:27: error: build option 'MODE' is 'fast', which is not a number; '<' compares two build options only as numbers
+    1 | [Target(BuildOption(MODE) < BuildOption(LEVEL))]
+      |                           ^~~~~~~~~~~~~~~~~~~~
+```
 
 A comparison with an option the build does not define is false, whatever
 the operator, and the compiler warns at it, since a missing option there is
-usually a mistake:
+usually a mistake. With two options, it is false when either is not
+defined, `BuildOption(A) == BuildOption(B)` included when neither is, and
+the compiler warns at each one missing:
 
 ```text
 main.pep:3:13: warning: build option 'LOG_LEVEL' is not defined; the comparison is false
@@ -136,4 +150,4 @@ setting names them.
 
 - A `pep.toml` table declaring the options a package takes, with their
   types and defaults.
-- Arithmetic on options, and comparing two options.
+- Arithmetic on options.

@@ -575,17 +575,18 @@ struct _Evaluator {
     }
 
     # `lhs op rhs`: a `BuildOption(NAME)` compared with a literal, either
-    # way round. False when the option is not defined.
+    # way round, or with another. False when an option is not defined.
     _compare(lhs: Expression, op: String, rhs: Expression, span: Span): bool {
         bool left = _is_build_option_call(lhs);
         bool right = _is_build_option_call(rhs);
         if (left and right) {
-            return _fail_at(
-                $"'{op}' cannot compare two build options; compare a 'BuildOption(...)' with a literal", span
-            );
+            return _compare_options(lhs, op, rhs, span);
         }
         if (!left and !right) {
-            return _fail_at($"'{op}' in a 'Target' must compare a 'BuildOption(...)' with a literal", span);
+            return _fail_at(
+                $"'{op}' in a 'Target' must compare a 'BuildOption(...)' with a literal or another 'BuildOption(...)'",
+                span
+            );
         }
         var option = left ? lhs : rhs;
         var literal = left ? rhs : lhs;
@@ -608,23 +609,7 @@ struct _Evaluator {
                 else => {}
             }
         }
-        var id = "";
-        var arguments = Array<Expression>();
-        var call_span = Span();
-        match (option) {
-            FunctionCall(function, call_arguments, option_span) => {
-                match (function) {
-                    SymbolRef(name, _) => {
-                        id = name;
-                    }
-                    else => {}
-                }
-                arguments = call_arguments;
-                call_span = option_span;
-            }
-            else => {}
-        }
-        var name = _build_option_name(id, arguments, call_span);
+        var name = _option_name(option);
         if (!name.is_value()) {
             return false;
         }
@@ -705,26 +690,63 @@ struct _Evaluator {
             }
             else => {}
         }
-        match (compared) {
-            "==" => {
-                return ordering == 0;
-            }
-            "!=" => {
-                return ordering != 0;
-            }
-            "<" => {
-                return ordering < 0;
-            }
-            "<=" => {
-                return ordering <= 0;
-            }
-            ">" => {
-                return ordering > 0;
-            }
-            else => {
-                return ordering >= 0;
-            }
+        return _ordered(compared, ordering);
+    }
+
+    # `BuildOption(A) op BuildOption(B)`: as integers when both values are,
+    # else as numbers when both are, else as text, which only `==` and `!=`
+    # compare. False when either option is not defined, as with a literal.
+    _compare_options(lhs: Expression, op: String, rhs: Expression, span: Span): bool {
+        var left = _option_name(lhs);
+        var right = _option_name(rhs);
+        if (!left.is_value() or !right.is_value()) {
+            return false;
         }
+        var a = target.build_options.try_get(left.value());
+        var b = target.build_options.try_get(right.value());
+        if (!a.is_value() or !b.is_value()) {
+            return false;
+        }
+        var m = _parse_integer(a.value());
+        var n = _parse_integer(b.value());
+        if (m.is_value() and n.is_value()) {
+            return _ordered(op, m.value() < n.value() ? -1 : (m.value() > n.value() ? 1 : 0));
+        }
+        var x = double.parse(a.value().trim());
+        var y = double.parse(b.value().trim());
+        if (x.is_value() and y.is_value()) {
+            var d = x.value();
+            var e = y.value();
+            if (d != d or e != e) {
+                return op == "!=";
+            }
+            return _ordered(op, d < e ? -1 : (d > e ? 1 : 0));
+        }
+        if (op != "==" and op != "!=") {
+            var name = x.is_value() ? right.value() : left.value();
+            var text = x.is_value() ? b.value() : a.value();
+            return _fail_at(
+                $"build option '{name}' is '{text}', which is not a number; '{op}' compares two build options only as numbers",
+                span
+            );
+        }
+        return (a.value() == b.value()) == (op == "==");
+    }
+
+    # The name `option`, a `BuildOption(...)` call, tests.
+    _option_name(option: Expression): String? {
+        match (option) {
+            FunctionCall(function, arguments, span) => {
+                match (function) {
+                    SymbolRef(id, _) => {
+                        return _build_option_name(id, arguments, span);
+                    }
+                    else => {}
+                }
+            }
+            else => {}
+        }
+        return Optional<String>.Empty;
     }
 
     _os_matches(name: String, arguments: Expression[], call_span: Span): bool {
@@ -852,30 +874,23 @@ _undefined_options(evaluator: _Evaluator, e: Expression, out: UndefinedOption[])
     match (e) {
         Binary(lhs, op, rhs, _) => {
             if (op == "==" or op == "!=" or op == "<" or op == "<=" or op == ">" or op == ">=") {
-                # Only a well-formed comparison: a malformed one is an
-                # error.
-                bool left = _is_build_option_call(lhs)
-                    and !_is_build_option_call(rhs)
-                    and comparison_literal(rhs).is_value();
-                bool right = _is_build_option_call(rhs)
-                    and !_is_build_option_call(lhs)
-                    and comparison_literal(lhs).is_value();
-                if (!left and !right) {
+                # Only a well-formed comparison, of an option with a
+                # literal or another option: a malformed one is an error.
+                bool left = _is_build_option_call(lhs);
+                bool right = _is_build_option_call(rhs);
+                if (!(left and right)
+                    and !(left and comparison_literal(rhs).is_value())
+                    and !(right and comparison_literal(lhs).is_value())) {
                     return;
                 }
-                match (left ? lhs : rhs) {
-                    FunctionCall(function, arguments, span) => {
-                        match (function) {
-                            SymbolRef(id, _) => {
-                                var name = evaluator._build_option_name(id, arguments, span);
-                                if (name.is_value() and !evaluator.target.build_options.contains(name.value())) {
-                                    out.append(UndefinedOption(name.value(), span));
-                                }
-                            }
-                            else => {}
-                        }
+                for (var option in [lhs, rhs]) {
+                    if (!_is_build_option_call(option)) {
+                        continue;
                     }
-                    else => {}
+                    var name = evaluator._option_name(option);
+                    if (name.is_value() and !evaluator.target.build_options.contains(name.value())) {
+                        out.append(UndefinedOption(name.value(), option.span()));
+                    }
                 }
                 return;
             }
@@ -994,6 +1009,30 @@ _parse_bool(text: String): bool? {
         }
         else => {
             return Optional<bool>.Empty;
+        }
+    }
+}
+
+# Whether `ordering` (-1, 0 or 1, left against right) satisfies `op`.
+_ordered(op: String, ordering: int): bool {
+    match (op) {
+        "==" => {
+            return ordering == 0;
+        }
+        "!=" => {
+            return ordering != 0;
+        }
+        "<" => {
+            return ordering < 0;
+        }
+        "<=" => {
+            return ordering <= 0;
+        }
+        ">" => {
+            return ordering > 0;
+        }
+        else => {
+            return ordering >= 0;
         }
     }
 }

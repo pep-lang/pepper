@@ -942,11 +942,12 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
 `apply_platform_filters` evaluates every `[Target(<bool expr>)]` against the
 **target**: the host, or the platform `--target <triple>` names, with the
 build options `-D` defines (`Target.build_options`). The grammar is `OS(Windows|Mac|MacOS|Linux|Wasi|IOS|Android)`, `Arch(x64|aarch64|wasm32)`,
-`BuildOption(NAME)`, a `BuildOption(NAME)` compared with a literal (`compare`:
-the literal's type says how the value is read), `!`, `&&`/`and`, and
+`BuildOption(NAME)`, a `BuildOption(NAME)` compared with a literal (`_compare`:
+the literal's type says how the value is read) or with another
+(`_compare_options`: as numbers when both values are, else as text), `!`, `&&`/`and`, and
 `||`/`or`. `[BuildOption("NAME")]` is `[Target(BuildOption(NAME))]`. Errors
 are `Invalid { message, span }`, located at the token (older ones at the
-attribute). A comparison with an undefined option is false; the parser
+attribute). A comparison with an undefined option, either one of two, is false; the parser
 lists every attribute that tests an option in `ast.Module.build_option_tests`,
 and `Program.warnings` warns at each such comparison
 (`undefined_build_option_comparisons`), once per site. The options are in

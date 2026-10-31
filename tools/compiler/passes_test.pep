@@ -1097,8 +1097,8 @@ error_programs(): String[] {
         "# expect: main.pep:2:9: error: unknown predicate 'Foo'; expected 'OS', 'Arch' or 'BuildOption'\n[Target(Foo(Linux))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A misspelled OS, in code that would be dropped anyway.
         "# expect: main.pep:2:12: error: unknown OS 'Windoze'; expected 'Windows', 'Mac', 'MacOS', 'Linux', 'Wasi', 'IOS' or 'Android'\n[Target(OS(Windoze))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
-        # A build option comparison with no literal.
-        "# expect: main.pep:2:24: error: '==' cannot compare two build options; compare a 'BuildOption(...)' with a literal\n[Target(BuildOption(A) == BuildOption(B))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        # A comparison with no build option.
+        "# expect: main.pep:2:19: error: '==' in a 'Target' must compare a 'BuildOption(...)' with a literal or another 'BuildOption(...)'\n[Target(OS(Linux) == 1)]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A malformed predicate inside a dropped block.
         "# expect: main.pep:4:22: error: unknown Arch 'z80'; expected 'x64', 'aarch64' or 'wasm32'\nmain(): int {\n    [Target(OS(Windows))] {\n        [Target(Arch(z80))] {\n            return 1;\n        }\n    }\n    return 0;\n}\n",
         # A test that takes a parameter, and one that returns a value.

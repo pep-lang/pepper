@@ -2,9 +2,11 @@
 # without an error, and reports on each of the curated programs below the
 # errors and warnings its first lines expect (`expected_outcomes`).
 
+import compiler.ast;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
+import compiler.parse;
 import [TempFolder] from testing;
 import [check_trees, headline, headlines] from "expected_outcomes";
 
@@ -222,6 +224,11 @@ reports_check_errors_and_warnings() {
             "main.pep",
             "# expect: main.pep:7:5: warning: `new` is deprecated; constructors are spelled `construct`, matching `destruct` [deprecated]\n# expect: main.pep:9:9: warning: build option 'FAST' is not defined; the comparison is false\n# expect: main.pep:11:9: warning: build option 'FAST' is not defined; the comparison is false\n# expect: main.pep:11:35: warning: build option 'SLOW' is not defined; the comparison is false\nstruct S {\n    var x: int;\n    new(v: int) { x = v; }\n}\n[Target(BuildOption(FAST) == 1)]\nfast(): int { return 1; }\n[Target(BuildOption(FAST) == 1 or BuildOption(\"SLOW\") >= 2)]\nslow(): int { return 2; }\nmain(): int { var s = S(1); return s.x; }\n"
         ],
+        # A comparison of two undefined build options warns at each (#374).
+        [
+            "main.pep",
+            "# expect: main.pep:3:9: warning: build option 'FAST' is not defined; the comparison is false\n# expect: main.pep:3:29: warning: build option 'SLOW' is not defined; the comparison is false\n[Target(BuildOption(FAST) < BuildOption(\"SLOW\"))]\nboth(): int { return 3; }\nmain(): int { return 0; }\n"
+        ],
         # `[__BuiltIn]` outside the runtime.
         [
             "main.pep",
@@ -316,6 +323,64 @@ outcome(root: Path): String {
         return headline(program.error(), root);
     }
     return headlines(program.value().check_report(), root);
+}
+
+# The `[Target]` attribute of `f` in `[Target(condition)] f() {}`.
+_target_attribute(condition: String): ast.Attribute {
+    return parse.parse("[Target(" + condition + ")]\nf() {}\n").value().build_option_tests[0];
+}
+
+# A `[Target]` compares two build options (#374): as integers when both
+# values are, else as numbers when both are, else as text, which `<` and
+# the other orderings refuse; and it is false when either is not defined.
+[Test]
+compares_two_build_options() {
+    var target = link.Target();
+    target.build_options["TWO"] = "2";
+    target.build_options["TEN"] = "10";
+    target.build_options["HEX"] = "0xa";
+    target.build_options["HALF"] = "2.5";
+    target.build_options["WORD"] = "high";
+    target.build_options["SAME"] = "high";
+    # The first is 2 < 10, though "2" > "10" as text.
+    for (var (
+        condition,
+        kept
+    ) in [
+        ("BuildOption(TWO) < BuildOption(TEN)", true),
+        ("BuildOption(TEN) == BuildOption(HEX)", true),
+        ("BuildOption(HALF) > BuildOption(TWO)", true),
+        ("BuildOption(TWO) >= BuildOption(HALF)", false),
+        ("BuildOption(WORD) == BuildOption(SAME)", true),
+        ("BuildOption(WORD) != BuildOption(TWO)", true),
+        ("BuildOption(WORD) == BuildOption(TWO)", false),
+        ("BuildOption(TWO) == BuildOption(UNSET)", false),
+        ("BuildOption(UNSET) != BuildOption(TWO)", false),
+        ("BuildOption(UNSET) == BuildOption(\"UNSET\")", false),
+        ("BuildOption(UNSET) < BuildOption(WORD)", false)
+    ]) {
+        var attribute = _target_attribute(condition);
+        expect_false(target.check(attribute).is_value());
+        expect_equal(target.keep([attribute]).value(), kept);
+    }
+    # At the operator, naming the value that is not a number.
+    for (var (
+        condition,
+        message
+    ) in [
+        (
+            "BuildOption(WORD) < BuildOption(TWO)",
+            "build option 'WORD' is 'high', which is not a number; '<' compares two build options only as numbers"
+        ),
+        (
+            "BuildOption(HALF) >= BuildOption(SAME)",
+            "build option 'SAME' is 'high', which is not a number; '>=' compares two build options only as numbers"
+        )
+    ]) {
+        var error = target.check(_target_attribute(condition));
+        expect_equal(error.value().0, message);
+        expect_equal(error.value().1.start, 26 as ulong);
+    }
 }
 
 [Test]
