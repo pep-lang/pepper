@@ -271,8 +271,9 @@ declared without one) holds the case whose value is 0, or the first case
 when no case is 0.</li>
 <li><code>sizeof&lt;Name&gt;()</code> is the size of the representation.</li>
 <li>An enum works wherever an integer does: as a <code>HashMap</code> key or <code>HashSet</code>
-element, in an <code>Atomic&lt;Name&gt;</code>, and in an <code>extern</code> function's signature,
-where C sees the representation (an <code>int</code> unless the enum names another).</li>
+element, in an <code>Atomic&lt;Name&gt;</code>, and in the signature of an <code>extern</code> or
+<a href="c-interop.html#what-crosses-to-c"><code>[Export]</code></a> function, where C sees the
+representation (an <code>int</code> unless the enum names another).</li>
 </ul>
 <h2 id="cases-that-carry-values"><a class="header" href="#cases-that-carry-values">Cases that carry values</a></h2>
 <p>A case can carry values, declared like parameters: <code>Circle(radius: int)</code>.

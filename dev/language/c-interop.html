@@ -919,6 +919,18 @@ apply(f: extern (int) =&gt; int, x: int): int {
     return f(x);
 }
 
+# An enum whose cases carry nothing crosses as the integer it is stored
+# as, here `uint8_t`.
+enum Light: u8 {
+    Red,
+    Green,
+}
+
+[Export]
+light_next(light: Light): Light {
+    return light == Light.Red ? Light.Green : Light.Red;
+}
+
 # A String arrives as UTF-8 bytes and their size, and leaves as a
 # NUL-terminated copy that C frees with `pepper_string_free`.
 [Export]
@@ -931,6 +943,7 @@ main(): int {
     assert(counter_increment(counter) == 42, "the counter counts");
     assert(add(2, 3) == 5, "add adds");
     assert(greet("C") == "hello, C", "greet greets");
+    assert(light_next(Light.Red) == Light.Green, "the light turns");
     return 0;
 }
 </code></pre>
@@ -950,6 +963,7 @@ int32_t apply(int32_t (*f)(int32_t), int32_t x);
 int32_t counter_increment(Counter* counter);
 Counter* counter_new(int32_t start);
 char* greet(const char* name, size_t name_size);
+uint8_t light_next(uint8_t light);
 </code></pre>
 <p>and a C program calls them like any C function:</p>
 <pre><code class="language-c">#include &lt;stdio.h&gt;
@@ -965,6 +979,7 @@ int main(void) {
     char* greeting = greet("C", 1);
     printf("%s\n", greeting);                       /* hello, C */
     pepper_string_free(greeting);
+    printf("%d\n", light_next(0));                /* 1: Light.Green */
     return 0;
 }
 </code></pre>
@@ -991,6 +1006,7 @@ declaration visible to other Pepper files (see
 <tr><td><code>float</code>, <code>double</code></td><td><code>float</code>, <code>double</code></td></tr>
 <tr><td><code>__ptr&lt;T&gt;</code></td><td><code>T*</code> for a number type, else <code>void*</code></td></tr>
 <tr><td><code>extern (P...) =&gt; R</code></td><td>a C function pointer, <code>R (*name)(P...)</code></td></tr>
+<tr><td>an enum whose cases carry nothing</td><td>the integer it is stored as: <code>int32_t</code>, or its representation's (<code>enum Mode: u8</code> is <code>uint8_t</code>)</td></tr>
 <tr><td><code>String</code></td><td>a parameter: <code>const char* name, size_t name_size</code>; a result: <code>char*</code> (see <a href="#strings">Strings</a>)</td></tr>
 <tr><td>a struct</td><td>an opaque handle, <code>Name*</code></td></tr>
 </tbody></table>
@@ -1001,10 +1017,10 @@ declaration visible to other Pepper files (see
       |               ^~~~~~~~~~
 note: only a non-generic struct passes to C, as a handle
 </code></pre>
-<p>A generic struct (<code>Array&lt;int&gt;</code>), a value struct, an enum, a trait, a tuple,
-<code>Optional</code> and a Pepper function type cannot cross. Pass an array as a
-pointer to its elements and a count, or wrap it in a struct of your own and
-pass a handle.</p>
+<p>A generic struct (<code>Array&lt;int&gt;</code>), a value struct, an enum whose cases carry
+values, a trait, a tuple, <code>Optional</code> and a Pepper function type cannot
+cross. Pass an array as a pointer to its elements and a count, or wrap it
+in a struct of your own and pass a handle.</p>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p>A <code>String</code> crosses as UTF-8 bytes, copied each way, so neither side keeps a
 pointer into the other's memory:</p>

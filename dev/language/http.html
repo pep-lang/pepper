@@ -559,7 +559,10 @@ a response's reader early resets only its stream.</li>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
 <li>HTTP/2 server push, stream priorities and the <code>Upgrade: h2c</code> handshake
-are not supported; a client speaks HTTP/2 only over TLS.</li>
+are left out on purpose: RFC 9113 deprecates the priority scheme and the
+<code>h2c</code> upgrade, and browsers have dropped push. h2c with prior knowledge
+is supported (the server takes it on plain TCP).</li>
+<li>A client speaks HTTP/2 only over TLS.</li>
 <li>A server handler can take over only an HTTP/1.1 connection; WebSocket
 over HTTP/2 (RFC 8441) is not supported.</li>
 </ul>
