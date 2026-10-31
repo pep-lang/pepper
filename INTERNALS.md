@@ -15,8 +15,9 @@ The language itself is described in the book under [`docs/src/`](docs/src/introd
 (tutorials, language guide, and the generated standard library reference).
 
 Pepper is self-hosted. The compiler, `pep-build`, is the Pepper program in
-`tools/compiler` (called pepc in code and commit messages), built by the
-previous release's `pep-build` and then by itself (`scripts/release-build.sh`).
+`tools/compiler` (called pepc in code and commit messages), built by stage 0
+(the build of main that `.github/stage0` pins) and then by itself
+(`scripts/release-build.sh`).
 A note on history: pepc is a port, stage by stage, of an earlier compiler
 written in Rust, which was itself a port of a C++ implementation.
 Both are deleted. The pass names and the pass order come from the C++

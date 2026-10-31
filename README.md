@@ -112,7 +112,8 @@ completion and go to definition.
 
 The compiler (`tools/compiler`, also called pepc), the standard library
 (`runtime/`) and every tool (`tools/`) are Pepper programs, built with the
-`x.y.z-dev` build of main and tested with `scripts/pepper-tests.sh`.
+`x.y.z-dev` build of main (CI and the release use stage 0, the build that
+`.github/stage0` pins) and tested with `scripts/pepper-tests.sh`.
 [Building Pepper from source](https://docs.pepper-lang.dev/dev/contributing/building.html)
 ([source](docs/src/contributing/building.md)) walks through the setup,
 including LLVM 20, the build and the tests.

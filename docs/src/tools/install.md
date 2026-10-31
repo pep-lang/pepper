@@ -138,7 +138,7 @@ install.sh --uninstall [--prefix <dir>]
 
 | `install.sh` | `install.ps1` | What it does |
 | --- | --- | --- |
-| `--version <x.y.z>` | `-Version <x.y.z>` | Installs that release instead of the newest, or a prerelease such as `0.4.0-dev`, the build of main (see below), which installing again refreshes |
+| `--version <x.y.z>` | `-Version <x.y.z>` | Installs that release instead of the newest, or a prerelease such as `0.12.0-dev`, the build of main (see below), which installing again refreshes |
 | `--archive <file>` | `-Archive <file>` | Installs an archive already downloaded, checked against `<file>.sha256` beside it, with the installer archive `pepper-install-<version>-<target>` (and its `.sha256`) beside it too. One not named for a release, such as a `dev` build, installs as the version its `pep-build --version` reports |
 | `--prefix <dir>` | `-Prefix <dir>` | Installs into `<dir>` instead of `~/.pepper` (`%LOCALAPPDATA%\pepper`) |
 | `-y`, `--yes` | `-Yes` | Installs missing prerequisites without asking |
@@ -186,8 +186,8 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
 
 - **the build of main**, on each merge into main that changes the compiler,
   the runtime or the tools: main holds the version being developed as a
-  prerelease (`0.4.0-dev` in `VERSION` and each tool's `version()`), and
-  the workflow publishes it on the prerelease `v0.4.0-dev`, moving its tag
+  prerelease (`0.12.0-dev` in `VERSION` and each tool's `version()`), and
+  the workflow publishes it on the prerelease `v0.12.0-dev`, moving its tag
   to the merge and replacing its archives. CI runs it on the merge before
   its tests, which then install that build. CI and the workers install the
   newest published toolchain, that prerelease or a release with a higher
