@@ -18,6 +18,7 @@ import [
     file_doc,
     first_attribute,
     is_caller_location,
+    is_exported,
     is_public,
     is_public_member,
     member_name
@@ -231,6 +232,63 @@ _title_of(titles: Array<(String, String)>, file: String): String? {
     return Optional<String>.Empty;
 }
 
+# A library file `name` (a path under the library's root), its `source`
+# and its parse, with the names a bare `export name;` in any file of its
+# folder makes public: the files of one module see each other's
+# declarations, so `random/module.pep` publishes `entropy.pep`'s `fill`
+# this way.
+export struct LibraryFile {
+    var name: String = "";
+    var source: String = "";
+    var module: Module;
+    var reexported: String[] = Array<String>();
+
+    construct(name: String, source: String, module: Module) {
+        this.name = name;
+        this.source = source;
+        this.module = module;
+    }
+}
+
+# Reads and parses each of `files`, paths under `root`, naming a file
+# `{prefix}{file}` in a parse error.
+export read_library(root: Path, files: String[], prefix: String): Result<LibraryFile[]> {
+    var out = Array<LibraryFile>();
+    # folder -> the names its files' bare `export name;` lines publish.
+    var published = HashMap<String, String[]>();
+    for (var file in files) {
+        var path = root.join(file);
+        var read = File.read_to_string(path);
+        if (read.is_err()) {
+            return Result<LibraryFile[]>.Err($"cannot read {path.to_string()}: {read.error().message}");
+        }
+        var module = parse_file($"{prefix}{file}", read.value())?;
+        var library = LibraryFile(file, read.value(), module);
+        var folder = _folder(file);
+        if (!published.contains(folder)) {
+            published[folder] = Array<String>();
+        }
+        for (var export_ in library.module.exports) {
+            # A qualified symbol (`export io.Path;`) is another module's.
+            if (!export_.symbol.contains(".")) {
+                published[folder].append(export_.symbol);
+            }
+        }
+        out.append(library);
+    }
+    for (var library in out) {
+        library.reexported = published[_folder(library.name)];
+    }
+    return Result<LibraryFile[]>.ok(out);
+}
+
+# The folder part of the `/`-separated path `file`, empty for a file at
+# the root.
+_folder(file: String): String {
+    var slash = file.rfind("/");
+    return slash < 0 ? "" : slice(file, 0, slash as ulong);
+}
+
 # Parses the source file `name`, reporting an error as `name:line:col:
 # error: message`.
 export parse_file(name: String, source: String): Result<Module> {
@@ -258,15 +316,13 @@ export generate(runtime_dir: Path): Result<Page[]> {
         return a.compare(b);
     });
     var out = Array<Page>();
-    for (var file in files) {
-        var path = runtime_dir.join(file);
-        var read = File.read_to_string(path);
-        if (read.is_err()) {
-            return Result<Page[]>.Err($"cannot read {path.to_string()}: {read.error().message}");
-        }
-        var source = read.value();
-        var module = parse_file($"runtime/{file}", source)?;
-        var body = "".join([reexports(module, file, ""), page_body(module, source, Array<(String, String)>())]);
+    for (var library in read_library(runtime_dir, files, "runtime/")?) {
+        var file = library.name;
+        var module = library.module;
+        var source = library.source;
+        var body = "".join(
+            [reexports(module, file, ""), page_body(module, source, Array<(String, String)>(), library.reexported)]
+        );
         var intro = file_doc(source);
         if (body.is_empty and intro.is_empty()) {
             continue;
@@ -725,11 +781,12 @@ _is_word_char(b: byte): bool {
 
 # The entries of every public declaration of `module`, each marked with
 # the package features of `features` (`(option, feature)`, as
-# `needed_features` takes them) it needs.
-export page_body(module: Module, source: String, features: (String, String)[]): String {
+# `needed_features` takes them) it needs. A declaration named in
+# `reexported` counts as exported (see `is_exported`).
+export page_body(module: Module, source: String, features: (String, String)[], reexported: String[]): String {
     var out = StringBuilder();
     for (var decl in module.declarations) {
-        if (!decl.is_exported()) {
+        if (!is_exported(decl, reexported)) {
             continue;
         }
         var doc = doc_comment_of(source, decl);
