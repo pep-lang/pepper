@@ -234,7 +234,8 @@ apt_install() {
     echo "Installing $pkgs (apt) ..."
     local sudo=""
     [[ "$(id -u)" != "0" ]] && sudo="sudo"
-    apt_get update -qq || return 1
+    # Not -qq: a stalled update then shows which index it was fetching.
+    apt_get update || return 1
     # shellcheck disable=SC2086 # deliberate word splitting of the package list
     apt_get install -y $pkgs || return 1
 }
@@ -245,16 +246,24 @@ apt_install() {
 # which no option waits for, by retrying up to 10 times. A download that
 # stalls for 30 seconds is retried, up to 3 times, rather than left to hang
 # on a slow mirror (#194). apt has no low-speed limit, though: a mirror that
-# trickles a byte every few seconds never trips the timeout, and only the CI
-# step's own timeout-minutes ends it.
+# trickles a byte every few seconds never trips that timeout, so each call
+# is also ended after 10 minutes and tried again (#478), well before a CI
+# step's own timeout-minutes.
 apt_get() {
-    local tries=0
-    until $sudo apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Acquire::http::Timeout=30 "$@"; do
+    local tries=0 status=0
+    local bound=()
+    command -v timeout >/dev/null 2>&1 && bound=(timeout --kill-after=30 600)
+    until "${bound[@]+"${bound[@]}"}" $sudo apt-get -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3 -o Acquire::http::Timeout=30 "$@"; do
+        status=$?
         tries=$((tries + 1))
         if (( tries >= 10 )); then
             return 1
         fi
-        echo "apt-get $1 failed (another apt-get may hold its lock); retrying in 15s" >&2
+        if (( status == 124 || status == 137 )); then
+            echo "apt-get $1 took more than 10 minutes (a stalled mirror?); retrying in 15s" >&2
+        else
+            echo "apt-get $1 failed (another apt-get may hold its lock); retrying in 15s" >&2
+        fi
         sleep 15
     done
 }
