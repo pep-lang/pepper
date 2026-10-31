@@ -17,9 +17,15 @@ irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 |
 
 Each release also carries both scripts as assets, beside its archives.
 
+There is no prebuilt Pepper for Intel Macs, Linux on arm64 or musl-based
+Linux yet. On those the script stops with an error saying so, and Pepper
+can be [built from source](../contributing/building.md). A Mac with Apple
+silicon gets the `macos-arm64` archive even from a shell running under
+Rosetta.
+
 The script only bootstraps. It picks this machine's archives
-(`linux-x64`, `macos-arm64`, `macos-x64` or `windows-x64`) from the newest
-release that has them: the toolchain, `pepper-<version>-<target>.tar.gz`
+(`linux-x64`, `macos-arm64` or `windows-x64`) from the newest release that
+has them: the toolchain, `pepper-<version>-<target>.tar.gz`
 (`.zip` on Windows), and the installer, `pepper-install-<version>-<target>.tar.gz`,
 which holds only `pep-install`. It downloads both, checks the installer
 against its `.sha256`, unpacks `pep-install` into a temporary folder and
@@ -66,7 +72,7 @@ Open a new terminal afterwards so the `PATH` change takes effect, then
     pepper              the entry point (The pepper command), which runs a toolchain's tools
     pep-install         installs and removes toolchains (pepper install)
   toolchains/
-    0.4.0/
+    0.11.1/
       bin/
         pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
         pep-fmt  pep-test  pep-package  pep-profile  pep-run  pep-new  pep-init
@@ -147,7 +153,7 @@ install.sh --uninstall [--prefix <dir>]
 | `--uninstall` | `-Uninstall` | Removes the install, every toolchain in it, and the `PATH` entries the script added, with the home's own `pep-install uninstall`, else with the newest release's installer |
 | `-h`, `--help` | `Get-Help .\install.ps1` | Shows the usage |
 
-Piped into a shell, the script still takes options: `curl ... | sh -s -- --version 0.4.0`.
+Piped into a shell, the script still takes options: `curl ... | sh -s -- --version 0.11.1`.
 `irm ... | iex` takes none, so `install.ps1` reads two environment variables
 in their place:
 
@@ -156,15 +162,9 @@ in their place:
 | `PEPPER_HOME` | `--prefix` / `-Prefix` (both scripts) |
 | `PEPPER_VERSION` | `-Version` (`install.ps1`) |
 
-While the repository is private, its releases need a GitHub token to
-download: set `GITHUB_TOKEN` (or `GH_TOKEN`) to one that can read it, for
-example `GITHUB_TOKEN=$(gh auth token)`. The raw script URLs above need it too,
-so download the script with `gh` first:
-
-```sh
-gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
-GITHUB_TOKEN=$(gh auth token) sh install.sh
-```
+Downloading needs no token. When `GITHUB_TOKEN` (or `GH_TOKEN`) is set,
+both scripts send it to GitHub's API, which then allows more requests an
+hour than it does anonymously (60), as on a shared CI runner.
 
 ## Uninstalling
 
@@ -189,22 +189,24 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   prerelease (`0.12.0-dev` in `VERSION` and each tool's `version()`), and
   the workflow publishes it on the prerelease `v0.12.0-dev`, moving its tag
   to the merge and replacing its archives. CI runs it on the merge before
-  its tests, which then install that build. CI and the workers install the
-  newest published toolchain, that prerelease or a release with a higher
-  version, whatever `VERSION` holds, instead of building the compiler. The newest release, the default, never picks a prerelease.
+  its tests, which then install that build. A CI job testing a commit
+  that leaves the compiler alone installs the newest published toolchain,
+  that prerelease or a release with a higher version, whatever `VERSION`
+  holds; one that changes the compiler builds it with
+  [stage 0](../contributing/tests.md#stage-0). The newest release, the default, never picks a prerelease.
 - **a release**, on a `vX.Y.Z` tag, made by hand. Its stage 0, the
   compiler that builds it, is the build of main that `.github/stage0` pins
   (see [Stage 0](../contributing/tests.md#stage-0)), as for every build of
   main, so the release may take any version, not only the one main was
   developing:
-  1. A pull request runs `scripts/set-version.sh 0.9.0`, which sets the
+  1. A pull request runs `scripts/set-version.sh 0.12.0`, which sets the
      version everywhere a tool reads it.
-  2. Tag that merge `v0.9.0` and push the tag. The workflow checks that the
+  2. Tag that merge `v0.12.0` and push the tag. The workflow checks that the
      commit holds that version, builds it and publishes the release; the
      `Docs` workflow publishes the docs from the same tag. The VS Code
      extension is released from its own repository, pep-lang/vscode-pepper.
   3. Once it is published, the workflow pushes the branch
-     `release/start-0.10.0-dev`, which starts the next minor version on
+     `release/start-0.13.0-dev`, which starts the next minor version on
      main, unless main has already moved on or that branch has an open
      pull request (a branch left from an earlier release, as a patch
      release finds, is replaced); a major version is started by
@@ -215,7 +217,7 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
      released version.
 
      ```bash
-     gh pr create --base main --head release/start-0.10.0-dev --fill
+     gh pr create --base main --head release/start-0.13.0-dev --fill
      ```
 
 For each platform, `scripts/release-build.sh` builds the

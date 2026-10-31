@@ -24,8 +24,8 @@
 # (while main holds a release's version, nothing moves the -dev tag).
 # --version names a release.
 #
-# Environment: GH_TOKEN or GITHUB_TOKEN, to list and download the releases
-# while the repository is private; RUNNER_TEMP, where the home goes
+# Environment: GH_TOKEN or GITHUB_TOKEN, sent to GitHub's API to list the
+# releases, which raises its limit on requests an hour; RUNNER_TEMP, where the home goes
 # (default: target/); PEPPER_TARGET_DIR, the folder target/ stands for;
 # PEPPER_EXPECT_COMMIT, the commit a -dev toolchain that --newest or
 # --version installs must be the build of: CI sets it to the merge once

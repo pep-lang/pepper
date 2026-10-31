@@ -63,7 +63,7 @@ module of the package too.
 | `authors` | An array of names |
 | `license` | Its license, such as `MIT` |
 | `repository` | Where its source lives |
-| `toolchain` | The toolchain it builds with: `0.3.0`, `0.3` for the newest installed 0.3.x, or `latest`. A `pepper` installed by [pep-install](pep-install.md) runs that toolchain's tools in the project (see [Toolchains](pepper.md#toolchains)); the compiler itself only checks that it is a version |
+| `toolchain` | The toolchain it builds with: `0.11.1`, `0.11` for the newest installed 0.11.x, or `latest`. A `pepper` installed by [pep-install](pep-install.md) runs that toolchain's tools in the project (see [Toolchains](pepper.md#toolchains)); the compiler itself only checks that it is a version |
 | `minimum_toolchain` | The oldest toolchain release that builds it: `0.11.0`, or a prerelease such as `0.11.0-dev`, which comes before `0.11.0`. Resolving versions, `pepper package` skips a version of a package whose `minimum_toolchain` is newer than its own toolchain (see [Resolving versions](pep-package.md#the-toolchain-a-package-needs)). Unlike `toolchain`, which picks the toolchain the project itself builds with, it says what the package's users need |
 
 ## `[build]`

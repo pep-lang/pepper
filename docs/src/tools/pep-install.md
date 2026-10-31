@@ -7,11 +7,11 @@ arguments:
 ```bash
 pepper install list               # the installed toolchains, marking the default and the one in use here
 pepper install list --available   # the releases with an archive for this machine
-pepper install add 0.3            # installs the newest 0.3.x; the default stays as it is
-pepper install use 0.3.0          # makes it the default
+pepper install add 0.11           # installs the newest 0.11.x; the default stays as it is
+pepper install use 0.11.1         # makes it the default
 pepper install update             # installs the newest release and makes it the default
-pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
-pepper install remove 0.2.1
+pepper install add --force 0.11.1  # installs 0.11.1 again, replacing it
+pepper install remove 0.11.0
 pepper install which              # the toolchain this folder uses, why, and its pep-build
 pepper install setup              # sets this machine up: installs, sets the default and the PATH, checks
 pepper install uninstall          # removes the home and its PATH changes
@@ -25,7 +25,7 @@ A toolchain is one release of the compiler, its runtime and the tools
 (`pep-build`, `pep-fmt`, `pep-test`, ...). The [`pepper` command](pepper.md)
 that `pep-install` sits beside runs the tools of the toolchain a folder
 uses: the one `pepper +<version>` names, else `PEPPER_TOOLCHAIN`'s, else the
-one the project's `pep.toml` pins with `toolchain = "0.3"`, else the default
+one the project's `pep.toml` pins with `toolchain = "0.11"`, else the default
 (see [Toolchains](pepper.md#toolchains)).
 
 To install a command-line tool built from a package, rather than a
@@ -54,7 +54,7 @@ toolchain, use [`pepper package install`](pep-package.md#install).
 | `-h`, `--help` | Prints the commands; after a command, that command's options |
 | `-V`, `--version` | Prints the version |
 
-A `<version>` is exact (`0.3.0`), or a prefix (`0.3`, `0`) for the newest
+A `<version>` is exact (`0.11.1`), or a prefix (`0.11`, `0`) for the newest
 release, or installed toolchain, that starts so, or `latest` for the newest.
 A prerelease such as `0.12.0-dev`, the build of main that each merge
 replaces, is picked only by naming it exactly; prefixes, `latest` and
@@ -71,8 +71,8 @@ The Pepper home holds them:
 ```text
 ~/.pepper/bin/pepper                 the entry point
 ~/.pepper/bin/pep-install
-~/.pepper/toolchains/0.3.0/bin/      a toolchain's pep-build, pep-fmt, ...
-~/.pepper/toolchains/0.3.0/runtime/  and its runtime
+~/.pepper/toolchains/0.11.1/bin/      a toolchain's pep-build, pep-fmt, ...
+~/.pepper/toolchains/0.11.1/runtime/  and its runtime
 ~/.pepper/default-toolchain          the default toolchain's version
 ```
 
@@ -143,13 +143,13 @@ as the home's `toolchains` folder is, a folder per toolchain named by its
 version:
 
 ```text
-/opt/pepper/0.3.0/bin/pep-build
-/opt/pepper/0.3.0/runtime/
+/opt/pepper/0.11.1/bin/pep-build
+/opt/pepper/0.11.1/runtime/
 ```
 
 ```bash
-PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.3.0 build main.pep
-pepper install --path /opt/pepper use 0.3.0
+PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.11.1 build main.pep
+pepper install --path /opt/pepper use 0.11.1
 ```
 
 The home's own `toolchains` folder is searched first, so a toolchain there
@@ -170,8 +170,8 @@ they are missing or old; see [pep-lsp](pep-lsp.md).
 
 ## Downloads
 
-`add` and `update` find this machine's archive (`linux-x64`, `macos-arm64`,
-`macos-x64` or `windows-x64`) among the GitHub releases, as the
+`add` and `update` find this machine's archive (`linux-x64`, `macos-arm64`
+or `windows-x64`) among the GitHub releases, as the
 [install scripts](install.md) do, download it and check it against its
 `.sha256`. The archive is unpacked beside the toolchain's folder first, so
 a download that fails or does not match its checksum leaves nothing behind.
@@ -181,4 +181,4 @@ a download that fails or does not match its checksum leaves nothing behind.
 | `PEPPER_HOME` | Where toolchains go, when `pep-install` does not run from a home |
 | `PEPPER_TOOLCHAIN_PATH` | More folders to find toolchains in (see [More toolchain folders](#more-toolchain-folders)) |
 | `PEPPER_INSTALL_RELEASES_URL` | Lists the releases from this URL instead of GitHub's API, for a mirror; it serves the same JSON |
-| `GITHUB_TOKEN`, `GH_TOKEN` | A token sent to GitHub's API while the repository is private, and to nothing else |
+| `GITHUB_TOKEN`, `GH_TOKEN` | A token sent to GitHub's API, and to nothing else, which raises its limit on requests an hour (60 without one); downloading needs none |

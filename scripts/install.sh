@@ -20,8 +20,8 @@
 #
 # Environment:
 #   PEPPER_HOME             where to install (as --prefix); default ~/.pepper
-#   GITHUB_TOKEN, GH_TOKEN  a token to download with, while the repository
-#                           is private
+#   GITHUB_TOKEN, GH_TOKEN  a token for GitHub's API, which raises its
+#                           limit on requests an hour
 #
 # The whole script is a function called on its last line, so a download cut
 # short runs nothing.
@@ -105,7 +105,6 @@ api_get() {
 
 # Dies with what the last api_get got.
 api_die() {
-  [ -n "$token" ] || [ "$status" != 404 ] || warn "while the repository is private, set GITHUB_TOKEN to a token that can read it"
   die "GET $got answered HTTP $status${message:+: $message}"
 }
 

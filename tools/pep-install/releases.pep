@@ -2,8 +2,8 @@
 #
 # The releases come from GitHub's API, or from `PEPPER_INSTALL_RELEASES_URL`
 # when that is set: a URL serving the same JSON, for a mirror or a test.
-# While the repository is private, `GITHUB_TOKEN` or `GH_TOKEN` is sent to
-# GitHub's API, and to nothing else.
+# `GITHUB_TOKEN` or `GH_TOKEN` is sent to GitHub's API, which raises its
+# limit on requests an hour, and to nothing else.
 
 import digest;
 import http;
