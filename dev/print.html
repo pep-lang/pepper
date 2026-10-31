@@ -4896,6 +4896,12 @@ add_numbers(a: String, b: String): Result&lt;int, ParseError&gt; {
     return Result&lt;int, ParseError&gt;.ok(parse_number(a)? + parse_number(b)?);
 }
 
+# A `?` runs where it is written: in a `?:` branch, only when that branch
+# is taken, so an empty `b` is never parsed.
+add_unless_empty(a: String, b: String): Result&lt;int, ParseError&gt; {
+    return Result&lt;int, ParseError&gt;.ok(parse_number(a)? + (b.is_empty ? 0 : parse_number(b)?));
+}
+
 # A function with a different error type: the `[Implicit]` constructor
 # converts a ParseError on its way out.
 struct ConfigError {
@@ -4931,6 +4937,8 @@ first_length(names: Array&lt;String&gt;): ulong? {
 main(): int {
     assert(add_numbers("40", "2").value() == 42, "40 + 2");
     assert(add_numbers("40", "4x2").error().input == "4x2", "the error is the second number's");
+    assert(add_unless_empty("40", "").value() == 40, "an empty b is not parsed");
+    assert(add_unless_empty("40", "x").error().input == "x", "a b that does not parse");
 
     assert(read_limit("10").value() == 10, "a limit");
     assert(read_limit("ten").error().message == "bad number 'ten'", "converted to a ConfigError");
@@ -4957,15 +4965,20 @@ values</a>).</li>
 <li>The early return is an ordinary <code>return</code>: locals are released and
 <code>with</code> blocks are exited as for any other.</li>
 </ul>
-<p>Each <code>?</code> in a statement runs before the rest of the statement, so two
-placements are errors:</p>
+<p>A <code>?</code> can go anywhere in an expression, and runs where it is written, in
+the order the expression is evaluated:</p>
 <ul>
-<li>After a call in the same statement, as in <code>f() + g()?</code>, where <code>g()</code>
-would run before <code>f()</code>: <code>'?' cannot follow a call in the same statement</code>. Call <code>f()</code> in a statement of its own first. Reading
-variables and fields before a <code>?</code> is fine, and several <code>?</code>s run in the
-order written: <code>add(parse(a)?, parse(b)?)</code>.</li>
-<li>Where it might not run: the right operand of <code>&amp;&amp;</code> or <code>||</code>, a branch of
-<code>?:</code>, or a <code>match</code> arm. Use an <code>if</code> or <code>match</code> statement there.</li>
+<li>What comes before it runs first, and what comes after it runs only when
+it does not return: in <code>f() + g()? + h()</code>, <code>f()</code> runs, then <code>g()</code>, and
+<code>h()</code> only if <code>g()</code> returned a value. Several <code>?</code>s run in the order
+written: <code>add(parse(a)?, parse(b)?)</code>. Reading a variable or field is not
+a call: <code>x.count + g()?</code> reads <code>x.count</code> once <code>g()</code> has returned.</li>
+<li>A <code>?</code> that is not reached does nothing: on the right of <code>&amp;&amp;</code> or <code>||</code> when
+the left operand decides, in the branch of <code>?:</code> not taken, or in a
+<code>match</code> arm that does not match. <code>ready &amp;&amp; load()?</code> calls <code>load()</code> only
+when <code>ready</code> holds.</li>
+<li>The early return releases what the statement made before the <code>?</code>, like
+any other <code>return</code>.</li>
 </ul>
 <p>A <code>?</code> in a <code>while</code> condition runs on every iteration, before the condition
 is tested.</p>
