@@ -64,7 +64,12 @@ does for a project (see [pep-build](pep-build.md)); `pep-build` reads
 
 The exit status is 0 when every test program builds and every test
 passes, 1 when a test fails or a program does not build, and 2 for a usage
-error.
+error. A run in which no test runs, because `--filter` matches none or the
+`--shard` gets none, passes and exits with 0 (`running 0 tests`, then
+`0 passed, 0 failed, 5 filtered out`), as `cargo test` does, so one
+filter can go to runs over several folders and those that hold none of
+its tests still pass. A misspelt filter therefore passes too; the summary
+shows it.
 
 ## What it does
 

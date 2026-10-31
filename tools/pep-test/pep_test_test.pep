@@ -107,6 +107,12 @@ five() {}
     expect_contains(ran.stdout, "test a_test.pep::two ... ok (");
     expect_ends_with(ran.stdout, "1 passed, 0 failed, 2 filtered out, 2 in other shards\n");
 
+    # A filter that matches nothing runs no test, which is not a failure.
+    var none = pep_test(folder.path, ["-f", "nomatch"]);
+    expect_exit(none, 0);
+    expect_starts_with(none.stdout, "running 0 tests\n");
+    expect_ends_with(none.stdout, "0 passed, 0 failed, 5 filtered out\n");
+
     for (var shard in ["0/2", "3/2", "2", "1/0", "a/b"]) {
         var wrong = pep_test(folder.path, ["--shard", shard]);
         expect_exit(wrong, 2);

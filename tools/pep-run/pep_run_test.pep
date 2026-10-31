@@ -81,5 +81,25 @@ refuses_the_options_that_choose_what_pep_build_writes() {
         expect_exit(refused, 2);
         expect_contains(refused.stderr, "is not taken: pep-run runs the executable it builds\n");
     }
-    expect_starts_with(pep_run(folder.path, ["--help"]).stdout, "Builds a Pepper program and runs it.\n");
+}
+
+# The help is in the style of every other tool's.
+[Test]
+prints_help_and_version_like_the_other_tools() {
+    var folder = TempFolder("pep_run_help");
+    var help = pep_run(folder.path, ["--help"]);
+    expect_exit(help, 0);
+    expect_starts_with(
+        help.stdout, "Builds a Pepper program and runs it.\n\nusage: pep-run [OPTIONS] [entry.pep] [arguments]...\n"
+    );
+    for (var line in [
+        "      --entry <NAME>  start the program in the function NAME instead of main\n",
+        "  -h, --help          show this help\n",
+        "  -V, --version       show the version\n"
+    ]) {
+        expect_contains(help.stdout, line);
+    }
+    var version = pep_run(folder.path, ["-V"]);
+    expect_exit(version, 0);
+    expect_starts_with(version.stdout, "pep-run ");
 }

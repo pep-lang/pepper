@@ -342,9 +342,37 @@ command_list(commands: Array<String>): String {
     if (commands.is_empty) {
         return "No commands found: no pep-* program is next to pepper or on the PATH.\n";
     }
+    ulong width = 0;
+    for (var command in commands) {
+        width = command.size > width ? command.size : width;
+    }
+    var descriptions = command_descriptions();
     var text = "Commands:\n";
     for (var command in commands) {
-        text = text + "  " + command + "\n";
+        var description = descriptions.try_get(command);
+        text = text + "  " + command;
+        if (description.is_value()) {
+            text = text + " ".repeat(width - command.size + 2) + description.value();
+        }
+        text = text + "\n";
     }
     return text;
+}
+
+# What each command of this repository does, as the table in
+# docs/src/tools/pepper.md says; another `pep-<name>` on the PATH has none.
+command_descriptions(): HashMap<String, String> {
+    return [
+        "build": "Compiles a program, or with no file the project",
+        "new": "Starts a program or package in a new folder",
+        "init": "Starts a program or package in the current folder",
+        "run": "Builds a program and runs it",
+        "install": "Installs toolchains side by side and picks the default",
+        "package": "Adds, removes, updates and fetches a project's dependencies",
+        "fmt": "Formats source",
+        "profile": "Profiles a program and draws a flame graph",
+        "test": "Builds and runs the [Test] functions",
+        "lsp": "Runs the language server, which editors start",
+        "doc": "Generates the library reference and builds the book, or a package's reference",
+    ];
 }
