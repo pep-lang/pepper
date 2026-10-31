@@ -38,7 +38,7 @@ export const MAX_REQUEST_BODY: ulong = 16777216;
 ## preface (prior knowledge): each stream is a request, answered by the same
 ## handler in a task of its own.
 ##
-## @example
+## @example no-run
 ##     import async;
 ##     import http;
 ##     import io;

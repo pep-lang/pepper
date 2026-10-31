@@ -16,7 +16,8 @@
 # - `@param name description`: a parameter of the function or constructor.
 # - `@returns description`: what a function that returns a value returns.
 # - `@panics description`: when the function panics instead of returning.
-# - `@example`: sample code, shown as a code block.
+# - `@example`: sample code, shown as a code block. `@example no-run`
+#   marks a whole program that is built but not run (a server).
 # - `@see reference`, `@note text`: related declarations, remarks.
 #
 # A tag's text runs until the next tag. Attributes and `export`, `private`
@@ -97,7 +98,7 @@ export struct DocComment {
         out = _section(out, "See also", _see(tags_of("see")));
         out = _section(out, "Note", _plain(tags_of("note")));
         for (var example in tags_of("example")) {
-            out = out + $"\n\n**Example**\n```pepper\n{_dedent(example.text)}\n```";
+            out = out + $"\n\n**Example**\n```pepper\n{dedent(example.text)}\n```";
         }
         return out;
     }
@@ -160,7 +161,7 @@ _see(tags: DocTag[]): String[] {
 
 # `text` with the indentation its non-blank lines share removed, so an
 # `@example` written indented under its tag shows from the left margin.
-_dedent(text: String): String {
+export dedent(text: String): String {
     var lines = text.lines();
     ulong indent = 0;
     bool any = false;
@@ -240,6 +241,11 @@ _tag(text: String, column: ulong): DocTag {
     var kind = text.substr_bytes(1, kind_size);
     var rest_start = skip_spaces(text, 1 + kind_size, text.size);
     var rest = text.substr_bytes(rest_start, text.size - rest_start);
+    if (kind == "example") {
+        # `@example no-run`: its name is how the example is checked; the
+        # code follows on the next lines.
+        return DocTag(kind, rest, "", Span(column, column + 1 + kind_size));
+    }
     if (!_is_named_tag(kind)) {
         return DocTag(kind, "", rest, Span(column, column + 1 + kind_size));
     }
@@ -369,6 +375,34 @@ _keyword_before(source: String, end: ulong): ulong {
 export is_doc_line(trimmed: String): bool {
     var text = trimmed.trim_end();
     return text.starts_with("##") and !text.starts_with("###");
+}
+
+# Every run of `##` lines in `source`, in order, the file's own included.
+export doc_comments(source: String): DocComment[] {
+    var out = Array<DocComment>();
+    ulong offset = 0;
+    ulong start = 0;
+    ulong end = 0;
+    bool inside = false;
+    while (offset < source.size) {
+        var line_end = find_byte(source, '\n', offset, source.size);
+        var first = skip_spaces(source, offset, line_end);
+        if (is_doc_line(source.substr_bytes(first, line_end - first))) {
+            if (!inside) {
+                start = first;
+                inside = true;
+            }
+            end = line_end;
+        } else if (inside) {
+            out.append(parse_doc_comment(source, Span(start, end)));
+            inside = false;
+        }
+        offset = line_end + 1;
+    }
+    if (inside) {
+        out.append(parse_doc_comment(source, Span(start, end)));
+    }
+    return out;
 }
 
 # The `##` block that opens a file, before any code: the file's own

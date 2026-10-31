@@ -67,9 +67,13 @@ const _process_signal_start = async.Once();
 ##
 ## @param wanted the signals the channel receives
 ## @returns the channel
-## @example
+## @example no-run
 ##     import process;
 ##     import [Signal] from process;
+##
+##     start_serving() {}
+##
+##     stop_serving() {}
 ##
 ##     main(): int {
 ##         var stop = process.signals([Signal.Interrupt, Signal.Terminate]);

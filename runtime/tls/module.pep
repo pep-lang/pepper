@@ -16,7 +16,7 @@
 ##
 ## - [Streams](tls-stream.md): `TlsConnector`, `TlsAcceptor`, and `TlsStream`
 ##
-## @example
+## @example no-run
 ##     import tls;
 ##
 ##     main(): int {

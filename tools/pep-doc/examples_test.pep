@@ -12,16 +12,24 @@
 # optimized and with debug info, where LLVM's verifier checks the debug info
 # of each unit, including the inlined-at chains optimization creates.
 #
+# The runtime's doc comments are checked the same way: each `@example` that
+# is a whole program (it declares `main`) is built and run, and a failure
+# is reported at its `@example` tag.
+#
 # `PEPPER_DOCS_EXAMPLE=structs` runs only the examples whose name starts
 # with `structs`. `PEPPER_DOCS_EXAMPLES=platform` runs only the examples
 # that select code per platform (`marked_per_platform`): CI sets it on a
 # pull request's macOS and Windows jobs, where the others would only repeat
 # what Linux shows.
 
+import [Span] from compiler.ast;
+import [Diagnostic, Location, SourceText] from compiler.diagnostic;
+import [dedent, doc_comments] from compiler.doc;
 import [Directory, File, Path] from io;
 import os;
 import process;
 import [TempFolder] from testing;
+import "reference";
 
 # The examples are split in parts, each a test of its own, so they run side
 # by side and each stays within the time a test may take.
@@ -129,6 +137,28 @@ builds_and_runs_the_sample_optimized_with_debug_info_part_4() {
 
 const OPTIMIZED_PARTS = 4;
 
+[Test]
+builds_and_runs_the_runtime_examples_part_1() {
+    builds_and_runs_runtime(0);
+}
+
+[Test]
+builds_and_runs_the_runtime_examples_part_2() {
+    builds_and_runs_runtime(1);
+}
+
+[Test]
+builds_and_runs_the_runtime_examples_part_3() {
+    builds_and_runs_runtime(2);
+}
+
+[Test]
+builds_and_runs_the_runtime_examples_part_4() {
+    builds_and_runs_runtime(3);
+}
+
+const RUNTIME_PARTS = 4;
+
 # The examples that between them reach most of the compiler and the runtime:
 # tasks, threads and their locks, sockets, TLS and HTTP, processes, files
 # and streams, generics, overloads, modules of several files, closures,
@@ -171,9 +201,26 @@ struct Example {
     var name: String = "";
     var entry: Path = Path("");
 
+    # For a runtime `@example`, its file and its tag, where a failure is
+    # reported.
+    var doc: SourceText? = Optional<SourceText>.Empty;
+    var tag: Location = Location(0, Span(0, 0));
+    # False for an `@example no-run`, which is only built.
+    var run: bool = true;
+
     construct(name: String, entry: Path) {
         this.name = name;
         this.entry = entry;
+    }
+
+    # `problem` with this example, in its build that `label` names.
+    failure(label: String, problem: String): String {
+        if (doc.is_empty()) {
+            return $"docs/examples/{label}: {problem}";
+        }
+        var lines = problem.split("\n");
+        lines[0] = Diagnostic.error($"@example {lines[0]}").at(tag).render([doc.value()]);
+        return "\n".join(lines);
     }
 }
 
@@ -214,6 +261,62 @@ builds_and_runs_optimized(part: ulong) {
         index += OPTIMIZED_PARTS;
     }
     report(failures);
+}
+
+# Builds and runs every `RUNTIME_PARTS`th runtime `@example`, from the
+# `part`th, unoptimized.
+builds_and_runs_runtime(part: ulong) {
+    var folder = TempFolder($"runtime_examples_{part}");
+    var examples = runtime_examples(folder.path);
+    expect_true(examples.count > 80 or !only().is_empty or platform_only());
+    var failures = Array<String>();
+    var index = part;
+    while (index < examples.count) {
+        check(examples[index], Array<String>(), failures);
+        index += RUNTIME_PARTS;
+    }
+    report(failures);
+}
+
+# Every `@example` in the runtime's doc comments that is a whole program,
+# each written to a file in `folder`, limited by `only()`; none when
+# `platform_only()`.
+runtime_examples(folder: Path): Array<Example> {
+    var examples = Array<Example>();
+    if (platform_only()) {
+        return examples;
+    }
+    var files = Array<String>();
+    var root = Path("../runtime");
+    expect_true(pep_files(root, "", files).is_ok());
+    for (var file in files) {
+        var text = File.read_to_string(root.join(file));
+        expect_true(text.is_ok());
+        if (text.is_err()) {
+            continue;
+        }
+        var source = SourceText($"runtime/{file}", text.value());
+        for (var doc in doc_comments(source.text)) {
+            for (var tag in doc.tags_of("example")) {
+                var code = dedent(tag.text);
+                if (!code.starts_with("main(") and !code.contains("\nmain(")) {
+                    continue;
+                }
+                var name = $"runtime-{file.replace("/", "-").replace(".pep", "")}-{tag.span.start}";
+                if (!name.starts_with(only())) {
+                    continue;
+                }
+                var entry = folder.join($"{name}.pep");
+                expect_true(File.write_text(entry, code + "\n").is_ok());
+                var example = Example(name, entry);
+                example.doc = Optional<SourceText>.Value(source);
+                example.tag = Location(0, tag.span);
+                example.run = tag.name != "no-run";
+                examples.append(example);
+            }
+        }
+    }
+    return examples;
 }
 
 # Prints `failure` now, so a part that later hangs still shows it, and adds
@@ -363,11 +466,14 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         .stderr(process.Stream.Pipe)
         .run();
     if (build.is_err()) {
-        fail(failures, $"docs/examples/{label}: cannot run pep-build: {build.error().message}");
+        fail(failures, example.failure(label, $"cannot run pep-build: {build.error().message}"));
         return;
     }
     if (!build.value().status.success()) {
-        fail(failures, $"docs/examples/{label}: does not build:\n{build.value().stdout}{build.value().stderr}");
+        fail(failures, example.failure(label, $"does not build:\n{build.value().stdout}{build.value().stderr}"));
+        return;
+    }
+    if (!example.run) {
         return;
     }
     # Its own temporary folder: an example that writes under
@@ -387,14 +493,16 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         .run();
     Directory.remove_all(temp);
     if (ran.is_err()) {
-        fail(failures, $"docs/examples/{label}: cannot run it: {ran.error().message}");
+        fail(failures, example.failure(label, $"cannot run it: {ran.error().message}"));
         return;
     }
     var output = ran.value();
     if (!output.status.success()) {
         fail(
             failures,
-            $"docs/examples/{label}: exited with {output.status.to_string()}\nstdout:\n{output.stdout}\nstderr:\n{output.stderr}"
+            example.failure(
+                label, $"exited with {output.status.to_string()}\nstdout:\n{output.stdout}\nstderr:\n{output.stderr}"
+            )
         );
         return;
     }
@@ -402,7 +510,10 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
     if (expected.is_value() and output.stdout.replace("\r", "") != expected.value()) {
         fail(
             failures,
-            $"docs/examples/{label}: printed what its '# Output:' block does not say\nexpected:\n{expected.value()}\nprinted:\n{output.stdout}"
+            example.failure(
+                label,
+                $"printed what its '# Output:' block does not say\nexpected:\n{expected.value()}\nprinted:\n{output.stdout}"
+            )
         );
     }
 }

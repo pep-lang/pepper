@@ -75,7 +75,7 @@ const _async_main_os_thread = _async_sys_os_thread();
 ## @example
 ##     import async;
 ##
-##     const total = Atomic<long>(0);
+##     const total = async.Atomic<long>(0);
 ##
 ##     add_ten() {
 ##         total.fetch_add(10);

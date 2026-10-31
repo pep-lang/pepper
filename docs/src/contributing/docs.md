@@ -55,6 +55,13 @@ with `[Target(OS(...))]` or `[Target(Arch(...))]`. A sample of the examples is
 also built at `-O2 -g`, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.
 
+The same test builds and runs every `@example` in the runtime's doc
+comments that is a whole program (it declares `main`), and reports a
+failure at its `@example` line. Its names start with `runtime-`, so
+`PEPPER_DOCS_EXAMPLE=runtime-` runs only those. One that must not run, such
+as a server or a program that needs arguments, is written `@example
+no-run`: it is built but not run.
+
 ## Versions
 
 Documentation is versioned with the compiler's [semantic version](https://semver.org)

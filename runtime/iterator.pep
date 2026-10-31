@@ -63,7 +63,8 @@
 ##         for (int n in Countdown(3)) {
 ##             total = total + n;   # visits 3, 2, 1
 ##         }
-##         return total;
+##         assert(total == 6, "3 + 2 + 1");
+##         return 0;
 ##     }
 ## @see Iterable
 export trait Iterator<T> {

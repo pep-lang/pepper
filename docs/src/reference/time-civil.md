@@ -739,6 +739,7 @@ comparisons, and never allocated. Its text is ISO 8601's
 
 **Example**
 ```pepper
+import os;
 import time;
 
 main(): int {

@@ -66,7 +66,7 @@ text runs until the next tag.
 | `@param name description` | each parameter of a function, method or constructor |
 | `@returns description` | what the function returns, whenever it returns a value |
 | `@panics description` | each way a caller can make the function panic (a failed `assert`, a call to `panic`) |
-| `@example` | sample code, indented on the lines that follow; line breaks are kept |
+| `@example` | sample code, indented on the lines that follow; line breaks are kept. In the runtime, an example that declares `main` is built and run by the tests; write `@example no-run` for one that must not run, such as a server |
 | `@see name` | a related declaration |
 | `@note text` | a remark that does not fit elsewhere |
 

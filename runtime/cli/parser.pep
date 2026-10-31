@@ -147,7 +147,7 @@ _cli_join_words(a: String, b: String): String {
 ## made with `command`. Options before the command's name belong to this
 ## parser, and everything after it to the command's.
 ##
-## @example
+## @example no-run
 ##     import cli;
 ##
 ##     main(args: String[]): int {
@@ -481,7 +481,7 @@ export struct Parser {
     ##
     ## @typeParam T the options struct
     ## @param options the struct whose fields to declare and fill in
-    ## @example
+    ## @example no-run
     ##     import cli;
     ##
     ##     struct Options {

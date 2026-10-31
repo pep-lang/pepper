@@ -70,7 +70,7 @@ _process_arguments(): Array<String> {
 ##
 ## @param code the exit status: 0 for success, anything else for failure
 ##   (only its low 8 bits reach a POSIX parent)
-## @example
+## @example no-run
 ##     import process;
 ##
 ##     main(): int {

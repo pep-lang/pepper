@@ -48,7 +48,7 @@ CI enforces what it can: `pep-doc check` fails on an undocumented public
 runtime declaration, on a tool option missing from its page (it reads the
 tools that `scripts/pepper-tests.sh` builds, so run that first), and when
 the reference is stale, and `tools/pep-doc/examples_test.pep` builds and
-runs every example. It
+runs every example, and every runtime `@example` that declares `main`. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
 

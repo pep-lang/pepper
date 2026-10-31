@@ -35,7 +35,7 @@ as Go and the JVM do: a quota of 1.5 processors counts as 2.
 import async;
 
 main(): int {
-    print(async.logical_cpus(), " logical processors\n");
+    print($"{async.logical_cpus()} logical processors");
     return 0;
 }
 ```

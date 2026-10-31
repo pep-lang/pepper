@@ -22,7 +22,7 @@ import "sys_windows";
 ##     import async;
 ##
 ##     main(): int {
-##         print(async.logical_cpus(), " logical processors\n");
+##         print($"{async.logical_cpus()} logical processors");
 ##         return 0;
 ##     }
 export logical_cpus(): ulong {
