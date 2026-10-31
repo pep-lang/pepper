@@ -18,9 +18,9 @@
 # 100,000 deep, released without overflowing the stack; source nested as
 # deep as the parser allows, and one level deeper; the message a stack
 # overflow prints on the main thread, a `Thread` and a task; the panic
-# hook, which every other kind of panic runs first; and structs named like
-# a generic's type parameters as its type arguments. The programs are
-# in `testdata/`.
+# hook, which every other kind of panic runs first; structs named like
+# a generic's type parameters as its type arguments; and `?` anywhere in a
+# statement, run in place. The programs are in `testdata/`.
 
 import [File, Path, glob] from io;
 import os;
@@ -65,6 +65,22 @@ _program(name: String, folder: Path, arguments: Array<String> = Array<String>())
 _run(name: String, arguments: Array<String> = Array<String>()): process.Output {
     var folder = TempFolder("programs_" + name);
     return run(_program(name, folder.path, arguments));
+}
+
+# ── ? ───────────────────────────────────────────────────────────────────────
+
+# A `?` after a call, on the right of `&&` or `||`, in a `?:` branch or a
+# `match` arm runs in place, in source order, and does nothing on a branch
+# that does not run; its early return releases what the statement made
+# before it, and nothing leaks (#322). At -O0 and -O.
+[Test]
+question_marks_run_in_place() {
+    var folder = TempFolder("programs_try_in_place");
+    for (var options in [Array<String>(), ["-O"]]) {
+        var result = run(process.Command(_build("try_in_place", folder.path, options).to_string()));
+        expect_exit(result, 0);
+        expect_equal(result.stdout, "0 failed\n");
+    }
 }
 
 # ── cli ─────────────────────────────────────────────────────────────────────

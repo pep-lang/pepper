@@ -1245,6 +1245,10 @@ error_programs(): String[] {
         # returning another kind.
         "# expect: main.pep:4:16: error: '?' requires a Result or an Optional, not 'int'\nf(): int { return 1; }\ng(): int {\n    var x = f()?;\n    return x;\n}\nmain(): int { return g(); }\n",
         "# expect: main.pep:5:16: error: '?' requires the enclosing function to return an Optional\nstruct Optional<T> {}\nf(): Optional<int> { return Optional<int>(); }\ng(): int {\n    var x = f()?;\n    return 0;\n}\nmain(): int { return g(); }\n",
+        # A `?` after a call, or in a branch that may not run, is checked
+        # like any other, and accepted anywhere in a statement (#322).
+        "# expect: main.pep:4:27: error: '?' requires a Result or an Optional, not 'int'\nf(): int { return 1; }\ng(c: bool): Result<int> {\n    var x = f() + (c ? f()? : 0);\n    return Result<int>.ok(x);\n}\nmain(): int { return g(true).value(); }\n",
+        "# expect: accepted\nenum Shape { Circle(r: int), Point }\nf(): Result<int> { return Result<int>.ok(1); }\ng(c: bool, s: Shape): Result<int> {\n    var a = f().value() + f()?;\n    var b = c && f()? == 1;\n    var d = c ? f()? : 0;\n    var e = match (s) { Circle(r) => r + f()?, Point => 0 };\n    return Result<int>.ok(a + (b ? 1 : 0) + d + e);\n}\nmain(): int { return g(true, Shape.Point).value(); }\n",
         # A trait member an extension leaves out, and one it declares with
         # another type.
         "# expect: main.pep:6:8: error: 'Box' does not implement 'area', required by trait 'Shape'\ntrait Shape {\n    area(): int;\n}\nstruct Box {}\nextend Box with Shape;\nmain(): int { return 0; }\n",

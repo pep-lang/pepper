@@ -9,7 +9,7 @@
 ## so the pass repeats while anything changes (at most eight times).
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
-import [enum_method_name, FOR_ITERATOR, getter_name] from "builder";
+import [BRANCH_LOCAL, enum_method_name, FOR_ITERATOR, getter_name] from "builder";
 import [has_body, is_checked_function, unit_decls] from "checked";
 import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
@@ -2504,6 +2504,11 @@ _resolve_statement(block: Block, index: ulong, scopes: _TypeScopes, current: Typ
                     if (!ty.is_empty() and !ty.is_auto()) {
                         variable.ty = ty.copy();
                         scopes.edits += 1;
+                        # A `?:` or `match` result's initializer only types it;
+                        # its branches assign it.
+                        if (variable.hidden and variable.name.starts_with(BRANCH_LOCAL)) {
+                            variable.default = Optional<Expression>.Empty;
+                        }
                     }
                 }
                 if (variable.default.is_value()) {

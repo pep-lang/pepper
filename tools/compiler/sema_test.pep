@@ -470,8 +470,6 @@ error_programs(): String[] {
         "# expect: main.pep:11:16: error: '?' can be used only in a statement of a function body\nstruct Other {\n    construct() {}\n}\nparse(): Result<int> {\n    return Result<int>.ok(1);\n}\nmaybe(): int? {\n    return Optional<int>.Value(1);\n}\nvar g = parse()?;\ntest(): int {\n    return 0;\n}\n",
         # 'Deprecated' cannot be applied to an extension; deprecate its methods instead
         "# expect: main.pep:3:1: error: 'Deprecated' cannot be applied to an extension; deprecate its methods instead\nstruct S { int x; }\n[Deprecated(\"old\")]\nextend S { m() {} }\nmain(): int { return 0; }\n",
-        # '?' cannot follow a call in the same statement
-        "# expect: main.pep:6:52: error: '?' cannot follow a call in the same statement\nparse(): Result<int> {\n    return Result<int>.ok(1);\n}\nf(): Result<int> {\n    return Result<int>.ok(parse().value() + parse()?);\n}\nmain(): int {\n    return 0;\n}\n",
         # '[Shared]' does not apply to value struct 'S': it is thread-safe when its fields are
         "# expect: main.pep:3:1: error: '[Shared]' does not apply to value struct 'S': it is thread-safe when its fields are\n[Value]\n[Shared]\nstruct S {\n    const x: int;\n}\n\nmain(): int {\n    return 0;\n}\n",
         # empty array literal has no element type; declare the variable's type or write 'Array<T>()'

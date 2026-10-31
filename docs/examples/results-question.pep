@@ -27,6 +27,12 @@ add_numbers(a: String, b: String): Result<int, ParseError> {
     return Result<int, ParseError>.ok(parse_number(a)? + parse_number(b)?);
 }
 
+# A `?` runs where it is written: in a `?:` branch, only when that branch
+# is taken, so an empty `b` is never parsed.
+add_unless_empty(a: String, b: String): Result<int, ParseError> {
+    return Result<int, ParseError>.ok(parse_number(a)? + (b.is_empty ? 0 : parse_number(b)?));
+}
+
 # A function with a different error type: the `[Implicit]` constructor
 # converts a ParseError on its way out.
 struct ConfigError {
@@ -62,6 +68,8 @@ first_length(names: Array<String>): ulong? {
 main(): int {
     assert(add_numbers("40", "2").value() == 42, "40 + 2");
     assert(add_numbers("40", "4x2").error().input == "4x2", "the error is the second number's");
+    assert(add_unless_empty("40", "").value() == 40, "an empty b is not parsed");
+    assert(add_unless_empty("40", "x").error().input == "x", "a b that does not parse");
 
     assert(read_limit("10").value() == 10, "a limit");
     assert(read_limit("ten").error().message == "bad number 'ten'", "converted to a ConfigError");
