@@ -126,8 +126,8 @@ _even_level() { ... }
 import "new_api";
 ```
 
-- Each value is read as an integer, decimal or `0x` hex, else as a
-  `double`. Arithmetic is on signed 64-bit integers when every value in it
+- Each value is read as an integer, decimal or `0x` hex, that fits in 64
+  bits, else as a `double`. Arithmetic is on signed 64-bit integers when every value in it
   is one, and on `double`s otherwise, so `BuildOption(TEN) / 4` is `2` and
   `BuildOption(TEN) / 4.0` is `2.5`. `/` and `%` on integers round toward
   zero, as in Pepper.
