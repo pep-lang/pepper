@@ -191,7 +191,7 @@ pepper build                      # builds the project pep.toml describes
 pepper run hello.pep a b          # builds hello.pep and runs it with a b
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper -C my_app build            # runs pep-build in my_app
-pepper +0.2 build                 # runs the installed 0.2.x toolchain's pep-build
+pepper +0.10 build                # runs the installed 0.10.x toolchain's pep-build
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -206,7 +206,7 @@ pepper --version [-v]
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Form</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="#how-it-finds-a-command">How it finds a command</a>)</td></tr>
-<tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.3.0</code> or <code>+0.3</code> (see <a href="#toolchains">Toolchains</a>)</td></tr>
+<tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.11.1</code> or <code>+0.11</code> (see <a href="#toolchains">Toolchains</a>)</td></tr>
 <tr><td><code>-C &lt;dir&gt;</code></td><td>Changes to <code>&lt;dir&gt;</code> before running the command (see <a href="#running-in-another-folder">Running in another folder</a>)</td></tr>
 <tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find, each with what it does when it is one of <a href="#the-commands-in-this-repository">the commands in this repository</a> (another <code>pep-&lt;name&gt;</code> shows its name only)</td></tr>
 <tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
@@ -286,15 +286,15 @@ Windows), beside the installed toolchains, and runs the tools of one of
 them, or of a toolchain in a folder <code>PEPPER_TOOLCHAIN_PATH</code> lists (see
 <a href="pep-install.html#more-toolchain-folders">More toolchain folders</a>). The first of these that names a toolchain picks it:</p>
 <ol>
-<li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.3.0 build</code>;</li>
+<li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.11.1 build</code>;</li>
 <li>the <code>PEPPER_TOOLCHAIN</code> environment variable;</li>
-<li><code>toolchain = "0.3"</code> in <code>[package]</code> of the nearest <code>pep.toml</code> at or above
+<li><code>toolchain = "0.11"</code> in <code>[package]</code> of the nearest <code>pep.toml</code> at or above
 the folder the command runs in (after <code>-C</code>), so a project pins the
 compiler it builds with (see <a href="projects.html#package">Projects: pep.toml</a>);</li>
 <li>the default, which <code>pepper install use</code> sets.</li>
 </ol>
-<p>A version is exact (<code>0.3.0</code>), or a prefix that picks the newest installed
-toolchain that starts so (<code>0.3</code>, <code>0</code>), or <code>latest</code> for the newest installed.
+<p>A version is exact (<code>0.11.1</code>), or a prefix that picks the newest installed
+toolchain that starts so (<code>0.11</code>, <code>0</code>), or <code>latest</code> for the newest installed.
 <code>pepper</code> then looks for <code>pep-&lt;command&gt;</code> in that toolchain's <code>bin</code> folder
 first, then beside <code>pepper</code>, then on the <code>PATH</code>, and runs it with
 <code>PEPPER_TOOLCHAIN</code> set to the exact version, so a <code>pepper</code> that command runs
@@ -303,7 +303,7 @@ uses the same toolchain. <code>pepper install</code> always runs the home's own
 <p>When the toolchain picked is not installed, or none is installed, <code>pepper</code>
 says so and how to install it, and exits with status 1:</p>
 <pre><code class="language-text">$ pepper build
-pepper: error: toolchain 0.4 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.4'
+pepper: error: toolchain 0.10 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.10'
 </code></pre>
 <p><code>pepper install which</code> shows which toolchain a folder uses and why.
 Outside a Pepper home, as when it is built from this repository, <code>pepper</code>

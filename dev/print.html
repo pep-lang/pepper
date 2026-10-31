@@ -22156,9 +22156,14 @@ curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/instal
 irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 </code></pre>
 <p>Each release also carries both scripts as assets, beside its archives.</p>
+<p>There is no prebuilt Pepper for Intel Macs, Linux on arm64 or musl-based
+Linux yet. On those the script stops with an error saying so, and Pepper
+can be <a href="tools/../contributing/building.html">built from source</a>. A Mac with Apple
+silicon gets the <code>macos-arm64</code> archive even from a shell running under
+Rosetta.</p>
 <p>The script only bootstraps. It picks this machine's archives
-(<code>linux-x64</code>, <code>macos-arm64</code>, <code>macos-x64</code> or <code>windows-x64</code>) from the newest
-release that has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
+(<code>linux-x64</code>, <code>macos-arm64</code> or <code>windows-x64</code>) from the newest release that
+has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
 (<code>.zip</code> on Windows), and the installer, <code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
 which holds only <code>pep-install</code>. It downloads both, checks the installer
 against its <code>.sha256</code>, unpacks <code>pep-install</code> into a temporary folder and
@@ -22200,7 +22205,7 @@ Mac and RHEL 8 do not have.</p>
     pepper              the entry point (The pepper command), which runs a toolchain's tools
     pep-install         installs and removes toolchains (pepper install)
   toolchains/
-    0.4.0/
+    0.11.1/
       bin/
         pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
         pep-fmt  pep-test  pep-package  pep-profile  pep-run  pep-new  pep-init
@@ -22259,7 +22264,7 @@ newest <code>/usr/lib/llvm-*/bin</code>, on Linux.</li>
 install.sh --uninstall [--prefix &lt;dir&gt;]
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th><code>install.sh</code></th><th><code>install.ps1</code></th><th>What it does</th></tr></thead><tbody>
-<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.4.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
+<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.12.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
 <tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it, with the installer archive <code>pepper-install-&lt;version&gt;-&lt;target&gt;</code> (and its <code>.sha256</code>) beside it too. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
 <tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites without asking</td></tr>
@@ -22269,7 +22274,7 @@ install.sh --uninstall [--prefix &lt;dir&gt;]
 <tr><td><code>-h</code>, <code>--help</code></td><td><code>Get-Help .\install.ps1</code></td><td>Shows the usage</td></tr>
 </tbody></table>
 </div>
-<p>Piped into a shell, the script still takes options: <code>curl ... | sh -s -- --version 0.4.0</code>.
+<p>Piped into a shell, the script still takes options: <code>curl ... | sh -s -- --version 0.11.1</code>.
 <code>irm ... | iex</code> takes none, so <code>install.ps1</code> reads two environment variables
 in their place:</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Instead of</th></tr></thead><tbody>
@@ -22277,13 +22282,9 @@ in their place:</p>
 <tr><td><code>PEPPER_VERSION</code></td><td><code>-Version</code> (<code>install.ps1</code>)</td></tr>
 </tbody></table>
 </div>
-<p>While the repository is private, its releases need a GitHub token to
-download: set <code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) to one that can read it, for
-example <code>GITHUB_TOKEN=$(gh auth token)</code>. The raw script URLs above need it too,
-so download the script with <code>gh</code> first:</p>
-<pre><code class="language-sh">gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" &gt; install.sh
-GITHUB_TOKEN=$(gh auth token) sh install.sh
-</code></pre>
+<p>Downloading needs no token. When <code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) is set,
+both scripts send it to GitHub's API, which then allows more requests an
+hour than it does anonymously (60), as on a shared CI runner.</p>
 <h2 id="uninstalling"><a class="header" href="#uninstalling">Uninstalling</a></h2>
 <pre><code class="language-sh">sh install.sh --uninstall           # or: curl ... | sh -s -- --uninstall
 </code></pre>
@@ -22297,12 +22298,14 @@ stay.</p>
 <ul>
 <li><strong>the build of main</strong>, on each merge into main that changes the compiler,
 the runtime or the tools: main holds the version being developed as a
-prerelease (<code>0.4.0-dev</code> in <code>VERSION</code> and each tool's <code>version()</code>), and
-the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
+prerelease (<code>0.12.0-dev</code> in <code>VERSION</code> and each tool's <code>version()</code>), and
+the workflow publishes it on the prerelease <code>v0.12.0-dev</code>, moving its tag
 to the merge and replacing its archives. CI runs it on the merge before
-its tests, which then install that build. CI and the workers install the
-newest published toolchain, that prerelease or a release with a higher
-version, whatever <code>VERSION</code> holds, instead of building the compiler. The newest release, the default, never picks a prerelease.</li>
+its tests, which then install that build. A CI job testing a commit
+that leaves the compiler alone installs the newest published toolchain,
+that prerelease or a release with a higher version, whatever <code>VERSION</code>
+holds; one that changes the compiler builds it with
+<a href="tools/../contributing/tests.html#stage-0">stage 0</a>. The newest release, the default, never picks a prerelease.</li>
 <li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand. Its stage 0, the
 compiler that builds it, is the build of main that <code>.github/stage0</code> pins
 (see <a href="tools/../contributing/tests.html#stage-0">Stage 0</a>), as for every build of
@@ -22310,18 +22313,18 @@ main, so the release may take any version, not only the one main was
 developing:
 <ol>
 <li>
-<p>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
+<p>A pull request runs <code>scripts/set-version.sh 0.12.0</code>, which sets the
 version everywhere a tool reads it.</p>
 </li>
 <li>
-<p>Tag that merge <code>v0.9.0</code> and push the tag. The workflow checks that the
+<p>Tag that merge <code>v0.12.0</code> and push the tag. The workflow checks that the
 commit holds that version, builds it and publishes the release; the
 <code>Docs</code> workflow publishes the docs from the same tag. The VS Code
 extension is released from its own repository, pep-lang/vscode-pepper.</p>
 </li>
 <li>
 <p>Once it is published, the workflow pushes the branch
-<code>release/start-0.10.0-dev</code>, which starts the next minor version on
+<code>release/start-0.13.0-dev</code>, which starts the next minor version on
 main, unless main has already moved on or that branch has an open
 pull request (a branch left from an earlier release, as a patch
 release finds, is replaced); a major version is started by
@@ -22330,7 +22333,7 @@ the run's summary (and a warning) links to open its pull request; open
 it, and it merges once its CI passes, as any pull request does. Until
 it merges, merges to main publish no prerelease, since main holds the
 released version.</p>
-<pre><code class="language-bash">gh pr create --base main --head release/start-0.10.0-dev --fill
+<pre><code class="language-bash">gh pr create --base main --head release/start-0.13.0-dev --fill
 </code></pre>
 </li>
 </ol>
@@ -22358,7 +22361,7 @@ pepper build                      # builds the project pep.toml describes
 pepper run hello.pep a b          # builds hello.pep and runs it with a b
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper -C my_app build            # runs pep-build in my_app
-pepper +0.2 build                 # runs the installed 0.2.x toolchain's pep-build
+pepper +0.10 build                # runs the installed 0.10.x toolchain's pep-build
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -22373,7 +22376,7 @@ pepper --version [-v]
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Form</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="tools/pepper.html#how-it-finds-a-command">How it finds a command</a>)</td></tr>
-<tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.3.0</code> or <code>+0.3</code> (see <a href="tools/pepper.html#toolchains">Toolchains</a>)</td></tr>
+<tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.11.1</code> or <code>+0.11</code> (see <a href="tools/pepper.html#toolchains">Toolchains</a>)</td></tr>
 <tr><td><code>-C &lt;dir&gt;</code></td><td>Changes to <code>&lt;dir&gt;</code> before running the command (see <a href="tools/pepper.html#running-in-another-folder">Running in another folder</a>)</td></tr>
 <tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find, each with what it does when it is one of <a href="tools/pepper.html#the-commands-in-this-repository">the commands in this repository</a> (another <code>pep-&lt;name&gt;</code> shows its name only)</td></tr>
 <tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
@@ -22453,15 +22456,15 @@ Windows), beside the installed toolchains, and runs the tools of one of
 them, or of a toolchain in a folder <code>PEPPER_TOOLCHAIN_PATH</code> lists (see
 <a href="tools/pep-install.html#more-toolchain-folders">More toolchain folders</a>). The first of these that names a toolchain picks it:</p>
 <ol>
-<li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.3.0 build</code>;</li>
+<li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.11.1 build</code>;</li>
 <li>the <code>PEPPER_TOOLCHAIN</code> environment variable;</li>
-<li><code>toolchain = "0.3"</code> in <code>[package]</code> of the nearest <code>pep.toml</code> at or above
+<li><code>toolchain = "0.11"</code> in <code>[package]</code> of the nearest <code>pep.toml</code> at or above
 the folder the command runs in (after <code>-C</code>), so a project pins the
 compiler it builds with (see <a href="tools/projects.html#package">Projects: pep.toml</a>);</li>
 <li>the default, which <code>pepper install use</code> sets.</li>
 </ol>
-<p>A version is exact (<code>0.3.0</code>), or a prefix that picks the newest installed
-toolchain that starts so (<code>0.3</code>, <code>0</code>), or <code>latest</code> for the newest installed.
+<p>A version is exact (<code>0.11.1</code>), or a prefix that picks the newest installed
+toolchain that starts so (<code>0.11</code>, <code>0</code>), or <code>latest</code> for the newest installed.
 <code>pepper</code> then looks for <code>pep-&lt;command&gt;</code> in that toolchain's <code>bin</code> folder
 first, then beside <code>pepper</code>, then on the <code>PATH</code>, and runs it with
 <code>PEPPER_TOOLCHAIN</code> set to the exact version, so a <code>pepper</code> that command runs
@@ -22470,7 +22473,7 @@ uses the same toolchain. <code>pepper install</code> always runs the home's own
 <p>When the toolchain picked is not installed, or none is installed, <code>pepper</code>
 says so and how to install it, and exits with status 1:</p>
 <pre><code class="language-text">$ pepper build
-pepper: error: toolchain 0.4 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.4'
+pepper: error: toolchain 0.10 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.10'
 </code></pre>
 <p><code>pepper install which</code> shows which toolchain a folder uses and why.
 Outside a Pepper home, as when it is built from this repository, <code>pepper</code>
@@ -22489,11 +22492,11 @@ one, the way rustup and nvm do. <code>pepper install</code> runs it with the sam
 arguments:</p>
 <pre><code class="language-bash">pepper install list               # the installed toolchains, marking the default and the one in use here
 pepper install list --available   # the releases with an archive for this machine
-pepper install add 0.3            # installs the newest 0.3.x; the default stays as it is
-pepper install use 0.3.0          # makes it the default
+pepper install add 0.11           # installs the newest 0.11.x; the default stays as it is
+pepper install use 0.11.1         # makes it the default
 pepper install update             # installs the newest release and makes it the default
-pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
-pepper install remove 0.2.1
+pepper install add --force 0.11.1  # installs 0.11.1 again, replacing it
+pepper install remove 0.11.0
 pepper install which              # the toolchain this folder uses, why, and its pep-build
 pepper install setup              # sets this machine up: installs, sets the default and the PATH, checks
 pepper install uninstall          # removes the home and its PATH changes
@@ -22504,7 +22507,7 @@ pepper install uninstall          # removes the home and its PATH changes
 (<code>pep-build</code>, <code>pep-fmt</code>, <code>pep-test</code>, ...). The <a href="tools/pepper.html"><code>pepper</code> command</a>
 that <code>pep-install</code> sits beside runs the tools of the toolchain a folder
 uses: the one <code>pepper +&lt;version&gt;</code> names, else <code>PEPPER_TOOLCHAIN</code>'s, else the
-one the project's <code>pep.toml</code> pins with <code>toolchain = "0.3"</code>, else the default
+one the project's <code>pep.toml</code> pins with <code>toolchain = "0.11"</code>, else the default
 (see <a href="tools/pepper.html#toolchains">Toolchains</a>).</p>
 <p>To install a command-line tool built from a package, rather than a
 toolchain, use <a href="tools/pep-package.html#install"><code>pepper package install</code></a>.</p>
@@ -22530,9 +22533,9 @@ toolchain, use <a href="tools/pep-package.html#install"><code>pepper package ins
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
 </div>
-<p>A <code>&lt;version&gt;</code> is exact (<code>0.3.0</code>), or a prefix (<code>0.3</code>, <code>0</code>) for the newest
+<p>A <code>&lt;version&gt;</code> is exact (<code>0.11.1</code>), or a prefix (<code>0.11</code>, <code>0</code>) for the newest
 release, or installed toolchain, that starts so, or <code>latest</code> for the newest.
-A prerelease such as <code>0.4.0-dev</code>, the build of main that each merge
+A prerelease such as <code>0.12.0-dev</code>, the build of main that each merge
 replaces, is picked only by naming it exactly; prefixes, <code>latest</code> and
 <code>update</code> leave prereleases out.
 Only releases are installed; there is no nightly channel.</p>
@@ -22542,8 +22545,8 @@ mistake on the command line.</p>
 <p>The Pepper home holds them:</p>
 <pre><code class="language-text">~/.pepper/bin/pepper                 the entry point
 ~/.pepper/bin/pep-install
-~/.pepper/toolchains/0.3.0/bin/      a toolchain's pep-build, pep-fmt, ...
-~/.pepper/toolchains/0.3.0/runtime/  and its runtime
+~/.pepper/toolchains/0.11.1/bin/      a toolchain's pep-build, pep-fmt, ...
+~/.pepper/toolchains/0.11.1/runtime/  and its runtime
 ~/.pepper/default-toolchain          the default toolchain's version
 </code></pre>
 <p>The <a href="tools/install.html">install scripts</a> set up the home by running <code>setup</code> (see
@@ -22603,11 +22606,11 @@ separated as <code>PATH</code> separates them (<code>;</code> on Windows, <code>
 <code>pep-install</code> in each <code>--path</code> folder, which come first. Each is laid out
 as the home's <code>toolchains</code> folder is, a folder per toolchain named by its
 version:</p>
-<pre><code class="language-text">/opt/pepper/0.3.0/bin/pep-build
-/opt/pepper/0.3.0/runtime/
+<pre><code class="language-text">/opt/pepper/0.11.1/bin/pep-build
+/opt/pepper/0.11.1/runtime/
 </code></pre>
-<pre><code class="language-bash">PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.3.0 build main.pep
-pepper install --path /opt/pepper use 0.3.0
+<pre><code class="language-bash">PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.11.1 build main.pep
+pepper install --path /opt/pepper use 0.11.1
 </code></pre>
 <p>The home's own <code>toolchains</code> folder is searched first, so a toolchain there
 wins over one of the same version elsewhere. <code>list</code> marks a toolchain found
@@ -22623,8 +22626,8 @@ workspace uses, as <code>pepper install which</code> reports it, and offers to
 install Pepper, the toolchain the workspace needs, or a newer default when
 they are missing or old; see <a href="tools/pep-lsp.html">pep-lsp</a>.</p>
 <h2 id="downloads"><a class="header" href="#downloads">Downloads</a></h2>
-<p><code>add</code> and <code>update</code> find this machine's archive (<code>linux-x64</code>, <code>macos-arm64</code>,
-<code>macos-x64</code> or <code>windows-x64</code>) among the GitHub releases, as the
+<p><code>add</code> and <code>update</code> find this machine's archive (<code>linux-x64</code>, <code>macos-arm64</code>
+or <code>windows-x64</code>) among the GitHub releases, as the
 <a href="tools/install.html">install scripts</a> do, download it and check it against its
 <code>.sha256</code>. The archive is unpacked beside the toolchain's folder first, so
 a download that fails or does not match its checksum leaves nothing behind.</p>
@@ -22632,7 +22635,7 @@ a download that fails or does not match its checksum leaves nothing behind.</p>
 <tr><td><code>PEPPER_HOME</code></td><td>Where toolchains go, when <code>pep-install</code> does not run from a home</td></tr>
 <tr><td><code>PEPPER_TOOLCHAIN_PATH</code></td><td>More folders to find toolchains in (see <a href="tools/pep-install.html#more-toolchain-folders">More toolchain folders</a>)</td></tr>
 <tr><td><code>PEPPER_INSTALL_RELEASES_URL</code></td><td>Lists the releases from this URL instead of GitHub's API, for a mirror; it serves the same JSON</td></tr>
-<tr><td><code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code></td><td>A token sent to GitHub's API while the repository is private, and to nothing else</td></tr>
+<tr><td><code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code></td><td>A token sent to GitHub's API, and to nothing else, which raises its limit on requests an hour (60 without one); downloading needs none</td></tr>
 </tbody></table>
 </div><div style="break-before: page; page-break-before: always;"></div><h1 id="the-compiler-pep-build"><a class="header" href="#the-compiler-pep-build">The compiler: pep-build</a></h1>
 <p><code>pep-build</code> compiles a Pepper program into an executable, or into a library
@@ -23432,7 +23435,7 @@ module of the package too.</p>
 <tr><td><code>authors</code></td><td>An array of names</td></tr>
 <tr><td><code>license</code></td><td>Its license, such as <code>MIT</code></td></tr>
 <tr><td><code>repository</code></td><td>Where its source lives</td></tr>
-<tr><td><code>toolchain</code></td><td>The toolchain it builds with: <code>0.3.0</code>, <code>0.3</code> for the newest installed 0.3.x, or <code>latest</code>. A <code>pepper</code> installed by <a href="tools/pep-install.html">pep-install</a> runs that toolchain's tools in the project (see <a href="tools/pepper.html#toolchains">Toolchains</a>); the compiler itself only checks that it is a version</td></tr>
+<tr><td><code>toolchain</code></td><td>The toolchain it builds with: <code>0.11.1</code>, <code>0.11</code> for the newest installed 0.11.x, or <code>latest</code>. A <code>pepper</code> installed by <a href="tools/pep-install.html">pep-install</a> runs that toolchain's tools in the project (see <a href="tools/pepper.html#toolchains">Toolchains</a>); the compiler itself only checks that it is a version</td></tr>
 <tr><td><code>minimum_toolchain</code></td><td>The oldest toolchain release that builds it: <code>0.11.0</code>, or a prerelease such as <code>0.11.0-dev</code>, which comes before <code>0.11.0</code>. Resolving versions, <code>pepper package</code> skips a version of a package whose <code>minimum_toolchain</code> is newer than its own toolchain (see <a href="tools/pep-package.html#the-toolchain-a-package-needs">Resolving versions</a>). Unlike <code>toolchain</code>, which picks the toolchain the project itself builds with, it says what the package's users need</td></tr>
 </tbody></table>
 </div>
@@ -26093,7 +26096,7 @@ is the command when none is given.</p>
 default). Anything else is an error.</li>
 <li><code>--site &lt;DIR&gt;</code>: the site folder (default: <code>target/docs-site</code>).</li>
 </ul>
-<pre><code class="language-bash">pep-doc build --version 0.3.0 --site site     # renders into site/0.3.0/
+<pre><code class="language-bash">pep-doc build --version 0.11.1 --site site   # renders into site/0.11.1/
 </code></pre>
 <h3 id="pep-doc-serve"><a class="header" href="#pep-doc-serve"><code>pep-doc serve</code></a></h3>
 <p>Regenerates the reference and serves the book locally with <code>mdbook serve</code>,
@@ -61855,9 +61858,10 @@ taking a numbered name when that cannot be removed.</p>
 <p>Pepper is written in Pepper. The compiler, <code>pep-build</code>, is the Pepper
 program in <code>tools/compiler</code> (also called pepc), and every other tool is a
 Pepper program under <code>tools/</code>. Building them takes a Pepper compiler, so
-the first one comes from a published toolchain, the build of main (stage
-0), the same way CI and the release build get theirs. The Rust compiler
-that once bootstrapped Pepper plays no part.</p>
+the first one comes from a published toolchain. CI and the release build
+use <a href="contributing/tests.html#stage-0">stage 0</a>, the build of main that <code>.github/stage0</code>
+pins; for working on Pepper the newest build of main does as well. The Rust
+compiler that once bootstrapped Pepper plays no part.</p>
 <p>You need this to work on Pepper itself, or on a platform with no prebuilt
 binaries. To use Pepper, <a href="contributing/../tools/install.html">install it</a> instead.</p>
 <h2 id="setting-up"><a class="header" href="#setting-up">Setting up</a></h2>
@@ -61866,15 +61870,20 @@ binaries. To use Pepper, <a href="contributing/../tools/install.html">install it
 <li>
 <p><strong>The build of main.</strong> Every merge into main that changes the compiler,
 the runtime or the tools publishes it as a prerelease named
-<code>x.y.z-dev</code>, which <code>pepper install list --available</code> lists. Install it
-and make it the default, with the
-<a href="contributing/../tools/install.html">install script</a> on a new machine or with
-<code>pepper install</code>:</p>
-<pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev    # the -dev version listed
-pepper install add 0.4.0-dev &amp;&amp; pepper install use 0.4.0-dev
+<code>x.y.z-dev</code> (the version in <code>VERSION</code>), which
+<code>pepper install list --available</code> lists. Install it and make it the
+default, with the <a href="contributing/../tools/install.html">install script</a> on a new machine
+or with <code>pepper install</code>:</p>
+<pre><code class="language-bash">sh scripts/install.sh --version 0.12.0-dev    # the -dev version listed
+pepper install add 0.12.0-dev &amp;&amp; pepper install use 0.12.0-dev
 </code></pre>
 <p>A prerelease is picked only by its exact name, never by <code>update</code> or
 <code>latest</code>. <code>pepper install add --force &lt;version&gt;</code> refreshes it.</p>
+<p>This is the newest build of main, which may be newer than stage 0, the
+build CI and the release build the compiler with
+(<a href="contributing/tests.html#stage-0">Stage 0</a>). Runtime code must build with stage 0
+too, so before a change to <code>runtime/</code> or <code>tools/compiler/</code> merges,
+<code>scripts/stage0-check.sh</code> installs stage 0 and checks it.</p>
 </li>
 <li>
 <p><strong>Platform prerequisites</strong>, for linking:</p>
@@ -61985,10 +61994,22 @@ for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-new pep-
 done
 </code></pre>
 <p>(<code>.exe</code> names on Windows.) The release build (<code>scripts/release-build.sh</code>)
-does the same, then builds the compiler once more with itself, and ships
-that one. A cold build of the compiler takes several minutes; the
+does the same with stage 0, then builds the compiler once more with itself,
+and ships that one. A cold build of the compiler takes several minutes; the
 <a href="contributing/../tools/pep-build.html#the-build-cache">build cache</a> makes a rebuild after
 an edit take seconds.</p>
+<p>CI builds the compiler with <code>scripts/ci-build-compiler.sh</code>, which
+<code>scripts/stage0-check.sh</code> also runs. It reads two environment variables:</p>
+<ul>
+<li><code>PEPPER_COMPILER_DIR</code>: the folder of the <code>pep-build</code> to build with, which
+<code>scripts/ci-install-toolchain.sh</code> names after installing stage 0. The
+script then sets it to the new compiler's folder (through <code>$GITHUB_ENV</code>
+in a workflow, else on standard output), so later steps test with it.</li>
+<li><code>PEPPER_TARGET_DIR</code>: the folder that stands for <code>target/</code>; the compiler
+goes in its <code>compiler/</code> folder, with a build cache of its own.</li>
+</ul>
+<p>On macOS and Windows it finds LLVM as <code>scripts/pepper-tests.sh</code> does
+(<code>PEPPER_LLVM_PREFIX</code>, else <code>.pep/llvm-prefix</code>).</p>
 <h2 id="testing-1"><a class="header" href="#testing-1">Testing</a></h2>
 <p>The tests are Pepper <code>[Test]</code> functions, run by <code>scripts/pepper-tests.sh</code>
 as CI runs them; there is no <code>cargo test</code>.</p>
@@ -62101,7 +62122,7 @@ runtime's doc comments by <code>pep-doc</code>, a Pepper tool in this repository
 pep-doc serve                                 # live preview while writing
 pep-doc reference                             # regenerate the reference after changing runtime docs
 pep-doc build                                 # render into target/docs-site/dev/
-pep-doc build --version 0.2.0 --site &lt;dir&gt;
+pep-doc build --version 0.11.1 --site &lt;dir&gt;
 </code></pre>
 <p>Run it as <code>target/pepper-tests/bin/pep-doc</code> after <code>scripts/pepper-tests.sh</code>,
 or as <code>pepper doc</code>.</p>
@@ -62219,7 +62240,7 @@ generator and the doc-comment check skip <code>test/</code> folders, so a test f
 needs no <code>##</code> comments.</p>
 <h2 id="running-them"><a class="header" href="#running-them">Running them</a></h2>
 <p><code>scripts/pepper-tests.sh</code> runs them all:</p>
-<pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
+<pre><code class="language-bash">sh scripts/install.sh --version 0.12.0-dev       # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
 scripts/pepper-tests.sh target/bin               # with a pep-build you built
@@ -62228,9 +62249,11 @@ scripts/pepper-tests.sh target/bin               # with a pep-build you built
 <code>pepper install which</code> names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
 prerelease named <code>x.y.z-dev</code> (<code>pepper install list --available</code> shows it),
-replacing the one before; CI and the workers install it with the install scripts
-rather than building the compiler, and so can you (run the install again to
-refresh it). The compiler's own tests (<code>tools/compiler/*_test.pep</code>) build
+replacing the one before. Install it with the install scripts (run the
+install again to refresh it). CI does the same when a change leaves the
+compiler alone, and otherwise builds the compiler with
+<a href="contributing/tests.html#stage-0">stage 0</a>, the pinned build of main, which may be older. The
+compiler's own tests (<code>tools/compiler/*_test.pep</code>) build
 the compiler's sources into their test programs, so they test a change to
 it. To run the whole suite with the changed compiler too, build it from
 <code>tools/compiler</code> (see
@@ -62381,9 +62404,8 @@ scripts/stage0-check.sh --version 0.10.0   # with a release
 <code>scripts/ci-install-toolchain.sh</code> into <code>target/pepper-home</code>, builds
 <code>tools/compiler</code> with it (<code>scripts/ci-build-compiler.sh</code>, into
 <code>target/compiler</code>), then runs the runtime's tests with stage 0's own
-<code>pepper test</code>. Further arguments go to that <code>pepper test</code>. It needs
-<code>GH_TOKEN</code> while the repository is private, and on macOS and Windows
-LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
+<code>pepper test</code>. Further arguments go to that <code>pepper test</code>. On macOS and
+Windows it needs LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
 or this checkout's <code>.pep/llvm-prefix</code>).</p>
 <h2 id="tests-that-run-the-tools"><a class="header" href="#tests-that-run-the-tools">Tests that run the tools</a></h2>
 <p>Some tests run programs rather than call functions: <code>pep-build</code> on

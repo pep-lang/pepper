@@ -186,9 +186,10 @@
 <p>Pepper is written in Pepper. The compiler, <code>pep-build</code>, is the Pepper
 program in <code>tools/compiler</code> (also called pepc), and every other tool is a
 Pepper program under <code>tools/</code>. Building them takes a Pepper compiler, so
-the first one comes from a published toolchain, the build of main (stage
-0), the same way CI and the release build get theirs. The Rust compiler
-that once bootstrapped Pepper plays no part.</p>
+the first one comes from a published toolchain. CI and the release build
+use <a href="tests.html#stage-0">stage 0</a>, the build of main that <code>.github/stage0</code>
+pins; for working on Pepper the newest build of main does as well. The Rust
+compiler that once bootstrapped Pepper plays no part.</p>
 <p>You need this to work on Pepper itself, or on a platform with no prebuilt
 binaries. To use Pepper, <a href="../tools/install.html">install it</a> instead.</p>
 <h2 id="setting-up"><a class="header" href="#setting-up">Setting up</a></h2>
@@ -197,15 +198,20 @@ binaries. To use Pepper, <a href="../tools/install.html">install it</a> instead.
 <li>
 <p><strong>The build of main.</strong> Every merge into main that changes the compiler,
 the runtime or the tools publishes it as a prerelease named
-<code>x.y.z-dev</code>, which <code>pepper install list --available</code> lists. Install it
-and make it the default, with the
-<a href="../tools/install.html">install script</a> on a new machine or with
-<code>pepper install</code>:</p>
-<pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev    # the -dev version listed
-pepper install add 0.4.0-dev &amp;&amp; pepper install use 0.4.0-dev
+<code>x.y.z-dev</code> (the version in <code>VERSION</code>), which
+<code>pepper install list --available</code> lists. Install it and make it the
+default, with the <a href="../tools/install.html">install script</a> on a new machine
+or with <code>pepper install</code>:</p>
+<pre><code class="language-bash">sh scripts/install.sh --version 0.12.0-dev    # the -dev version listed
+pepper install add 0.12.0-dev &amp;&amp; pepper install use 0.12.0-dev
 </code></pre>
 <p>A prerelease is picked only by its exact name, never by <code>update</code> or
 <code>latest</code>. <code>pepper install add --force &lt;version&gt;</code> refreshes it.</p>
+<p>This is the newest build of main, which may be newer than stage 0, the
+build CI and the release build the compiler with
+(<a href="tests.html#stage-0">Stage 0</a>). Runtime code must build with stage 0
+too, so before a change to <code>runtime/</code> or <code>tools/compiler/</code> merges,
+<code>scripts/stage0-check.sh</code> installs stage 0 and checks it.</p>
 </li>
 <li>
 <p><strong>Platform prerequisites</strong>, for linking:</p>
@@ -316,10 +322,22 @@ for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-new pep-
 done
 </code></pre>
 <p>(<code>.exe</code> names on Windows.) The release build (<code>scripts/release-build.sh</code>)
-does the same, then builds the compiler once more with itself, and ships
-that one. A cold build of the compiler takes several minutes; the
+does the same with stage 0, then builds the compiler once more with itself,
+and ships that one. A cold build of the compiler takes several minutes; the
 <a href="../tools/pep-build.html#the-build-cache">build cache</a> makes a rebuild after
 an edit take seconds.</p>
+<p>CI builds the compiler with <code>scripts/ci-build-compiler.sh</code>, which
+<code>scripts/stage0-check.sh</code> also runs. It reads two environment variables:</p>
+<ul>
+<li><code>PEPPER_COMPILER_DIR</code>: the folder of the <code>pep-build</code> to build with, which
+<code>scripts/ci-install-toolchain.sh</code> names after installing stage 0. The
+script then sets it to the new compiler's folder (through <code>$GITHUB_ENV</code>
+in a workflow, else on standard output), so later steps test with it.</li>
+<li><code>PEPPER_TARGET_DIR</code>: the folder that stands for <code>target/</code>; the compiler
+goes in its <code>compiler/</code> folder, with a build cache of its own.</li>
+</ul>
+<p>On macOS and Windows it finds LLVM as <code>scripts/pepper-tests.sh</code> does
+(<code>PEPPER_LLVM_PREFIX</code>, else <code>.pep/llvm-prefix</code>).</p>
 <h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
 <p>The tests are Pepper <code>[Test]</code> functions, run by <code>scripts/pepper-tests.sh</code>
 as CI runs them; there is no <code>cargo test</code>.</p>

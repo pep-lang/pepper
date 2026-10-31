@@ -210,7 +210,7 @@ generator and the doc-comment check skip <code>test/</code> folders, so a test f
 needs no <code>##</code> comments.</p>
 <h2 id="running-them"><a class="header" href="#running-them">Running them</a></h2>
 <p><code>scripts/pepper-tests.sh</code> runs them all:</p>
-<pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
+<pre><code class="language-bash">sh scripts/install.sh --version 0.12.0-dev       # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
 scripts/pepper-tests.sh target/bin               # with a pep-build you built
@@ -219,9 +219,11 @@ scripts/pepper-tests.sh target/bin               # with a pep-build you built
 <code>pepper install which</code> names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
 prerelease named <code>x.y.z-dev</code> (<code>pepper install list --available</code> shows it),
-replacing the one before; CI and the workers install it with the install scripts
-rather than building the compiler, and so can you (run the install again to
-refresh it). The compiler's own tests (<code>tools/compiler/*_test.pep</code>) build
+replacing the one before. Install it with the install scripts (run the
+install again to refresh it). CI does the same when a change leaves the
+compiler alone, and otherwise builds the compiler with
+<a href="#stage-0">stage 0</a>, the pinned build of main, which may be older. The
+compiler's own tests (<code>tools/compiler/*_test.pep</code>) build
 the compiler's sources into their test programs, so they test a change to
 it. To run the whole suite with the changed compiler too, build it from
 <code>tools/compiler</code> (see
@@ -372,9 +374,8 @@ scripts/stage0-check.sh --version 0.10.0   # with a release
 <code>scripts/ci-install-toolchain.sh</code> into <code>target/pepper-home</code>, builds
 <code>tools/compiler</code> with it (<code>scripts/ci-build-compiler.sh</code>, into
 <code>target/compiler</code>), then runs the runtime's tests with stage 0's own
-<code>pepper test</code>. Further arguments go to that <code>pepper test</code>. It needs
-<code>GH_TOKEN</code> while the repository is private, and on macOS and Windows
-LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
+<code>pepper test</code>. Further arguments go to that <code>pepper test</code>. On macOS and
+Windows it needs LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
 or this checkout's <code>.pep/llvm-prefix</code>).</p>
 <h2 id="tests-that-run-the-tools"><a class="header" href="#tests-that-run-the-tools">Tests that run the tools</a></h2>
 <p>Some tests run programs rather than call functions: <code>pep-build</code> on

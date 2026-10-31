@@ -194,9 +194,14 @@ curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/instal
 irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 </code></pre>
 <p>Each release also carries both scripts as assets, beside its archives.</p>
+<p>There is no prebuilt Pepper for Intel Macs, Linux on arm64 or musl-based
+Linux yet. On those the script stops with an error saying so, and Pepper
+can be <a href="../contributing/building.html">built from source</a>. A Mac with Apple
+silicon gets the <code>macos-arm64</code> archive even from a shell running under
+Rosetta.</p>
 <p>The script only bootstraps. It picks this machine's archives
-(<code>linux-x64</code>, <code>macos-arm64</code>, <code>macos-x64</code> or <code>windows-x64</code>) from the newest
-release that has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
+(<code>linux-x64</code>, <code>macos-arm64</code> or <code>windows-x64</code>) from the newest release that
+has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
 (<code>.zip</code> on Windows), and the installer, <code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
 which holds only <code>pep-install</code>. It downloads both, checks the installer
 against its <code>.sha256</code>, unpacks <code>pep-install</code> into a temporary folder and
@@ -238,7 +243,7 @@ Mac and RHEL 8 do not have.</p>
     pepper              the entry point (The pepper command), which runs a toolchain's tools
     pep-install         installs and removes toolchains (pepper install)
   toolchains/
-    0.4.0/
+    0.11.1/
       bin/
         pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
         pep-fmt  pep-test  pep-package  pep-profile  pep-run  pep-new  pep-init
@@ -297,7 +302,7 @@ newest <code>/usr/lib/llvm-*/bin</code>, on Linux.</li>
 install.sh --uninstall [--prefix &lt;dir&gt;]
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th><code>install.sh</code></th><th><code>install.ps1</code></th><th>What it does</th></tr></thead><tbody>
-<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.4.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
+<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.12.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
 <tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it, with the installer archive <code>pepper-install-&lt;version&gt;-&lt;target&gt;</code> (and its <code>.sha256</code>) beside it too. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
 <tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites without asking</td></tr>
@@ -307,7 +312,7 @@ install.sh --uninstall [--prefix &lt;dir&gt;]
 <tr><td><code>-h</code>, <code>--help</code></td><td><code>Get-Help .\install.ps1</code></td><td>Shows the usage</td></tr>
 </tbody></table>
 </div>
-<p>Piped into a shell, the script still takes options: <code>curl ... | sh -s -- --version 0.4.0</code>.
+<p>Piped into a shell, the script still takes options: <code>curl ... | sh -s -- --version 0.11.1</code>.
 <code>irm ... | iex</code> takes none, so <code>install.ps1</code> reads two environment variables
 in their place:</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>Instead of</th></tr></thead><tbody>
@@ -315,13 +320,9 @@ in their place:</p>
 <tr><td><code>PEPPER_VERSION</code></td><td><code>-Version</code> (<code>install.ps1</code>)</td></tr>
 </tbody></table>
 </div>
-<p>While the repository is private, its releases need a GitHub token to
-download: set <code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) to one that can read it, for
-example <code>GITHUB_TOKEN=$(gh auth token)</code>. The raw script URLs above need it too,
-so download the script with <code>gh</code> first:</p>
-<pre><code class="language-sh">gh api repos/pep-lang/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" &gt; install.sh
-GITHUB_TOKEN=$(gh auth token) sh install.sh
-</code></pre>
+<p>Downloading needs no token. When <code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) is set,
+both scripts send it to GitHub's API, which then allows more requests an
+hour than it does anonymously (60), as on a shared CI runner.</p>
 <h2 id="uninstalling"><a class="header" href="#uninstalling">Uninstalling</a></h2>
 <pre><code class="language-sh">sh install.sh --uninstall           # or: curl ... | sh -s -- --uninstall
 </code></pre>
@@ -335,12 +336,14 @@ stay.</p>
 <ul>
 <li><strong>the build of main</strong>, on each merge into main that changes the compiler,
 the runtime or the tools: main holds the version being developed as a
-prerelease (<code>0.4.0-dev</code> in <code>VERSION</code> and each tool's <code>version()</code>), and
-the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
+prerelease (<code>0.12.0-dev</code> in <code>VERSION</code> and each tool's <code>version()</code>), and
+the workflow publishes it on the prerelease <code>v0.12.0-dev</code>, moving its tag
 to the merge and replacing its archives. CI runs it on the merge before
-its tests, which then install that build. CI and the workers install the
-newest published toolchain, that prerelease or a release with a higher
-version, whatever <code>VERSION</code> holds, instead of building the compiler. The newest release, the default, never picks a prerelease.</li>
+its tests, which then install that build. A CI job testing a commit
+that leaves the compiler alone installs the newest published toolchain,
+that prerelease or a release with a higher version, whatever <code>VERSION</code>
+holds; one that changes the compiler builds it with
+<a href="../contributing/tests.html#stage-0">stage 0</a>. The newest release, the default, never picks a prerelease.</li>
 <li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand. Its stage 0, the
 compiler that builds it, is the build of main that <code>.github/stage0</code> pins
 (see <a href="../contributing/tests.html#stage-0">Stage 0</a>), as for every build of
@@ -348,18 +351,18 @@ main, so the release may take any version, not only the one main was
 developing:
 <ol>
 <li>
-<p>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
+<p>A pull request runs <code>scripts/set-version.sh 0.12.0</code>, which sets the
 version everywhere a tool reads it.</p>
 </li>
 <li>
-<p>Tag that merge <code>v0.9.0</code> and push the tag. The workflow checks that the
+<p>Tag that merge <code>v0.12.0</code> and push the tag. The workflow checks that the
 commit holds that version, builds it and publishes the release; the
 <code>Docs</code> workflow publishes the docs from the same tag. The VS Code
 extension is released from its own repository, pep-lang/vscode-pepper.</p>
 </li>
 <li>
 <p>Once it is published, the workflow pushes the branch
-<code>release/start-0.10.0-dev</code>, which starts the next minor version on
+<code>release/start-0.13.0-dev</code>, which starts the next minor version on
 main, unless main has already moved on or that branch has an open
 pull request (a branch left from an earlier release, as a patch
 release finds, is replaced); a major version is started by
@@ -368,7 +371,7 @@ the run's summary (and a warning) links to open its pull request; open
 it, and it merges once its CI passes, as any pull request does. Until
 it merges, merges to main publish no prerelease, since main holds the
 released version.</p>
-<pre><code class="language-bash">gh pr create --base main --head release/start-0.10.0-dev --fill
+<pre><code class="language-bash">gh pr create --base main --head release/start-0.13.0-dev --fill
 </code></pre>
 </li>
 </ol>

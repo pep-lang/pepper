@@ -188,11 +188,11 @@ one, the way rustup and nvm do. <code>pepper install</code> runs it with the sam
 arguments:</p>
 <pre><code class="language-bash">pepper install list               # the installed toolchains, marking the default and the one in use here
 pepper install list --available   # the releases with an archive for this machine
-pepper install add 0.3            # installs the newest 0.3.x; the default stays as it is
-pepper install use 0.3.0          # makes it the default
+pepper install add 0.11           # installs the newest 0.11.x; the default stays as it is
+pepper install use 0.11.1         # makes it the default
 pepper install update             # installs the newest release and makes it the default
-pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
-pepper install remove 0.2.1
+pepper install add --force 0.11.1  # installs 0.11.1 again, replacing it
+pepper install remove 0.11.0
 pepper install which              # the toolchain this folder uses, why, and its pep-build
 pepper install setup              # sets this machine up: installs, sets the default and the PATH, checks
 pepper install uninstall          # removes the home and its PATH changes
@@ -203,7 +203,7 @@ pepper install uninstall          # removes the home and its PATH changes
 (<code>pep-build</code>, <code>pep-fmt</code>, <code>pep-test</code>, ...). The <a href="pepper.html"><code>pepper</code> command</a>
 that <code>pep-install</code> sits beside runs the tools of the toolchain a folder
 uses: the one <code>pepper +&lt;version&gt;</code> names, else <code>PEPPER_TOOLCHAIN</code>'s, else the
-one the project's <code>pep.toml</code> pins with <code>toolchain = "0.3"</code>, else the default
+one the project's <code>pep.toml</code> pins with <code>toolchain = "0.11"</code>, else the default
 (see <a href="pepper.html#toolchains">Toolchains</a>).</p>
 <p>To install a command-line tool built from a package, rather than a
 toolchain, use <a href="pep-package.html#install"><code>pepper package install</code></a>.</p>
@@ -229,9 +229,9 @@ toolchain, use <a href="pep-package.html#install"><code>pepper package install</
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody></table>
 </div>
-<p>A <code>&lt;version&gt;</code> is exact (<code>0.3.0</code>), or a prefix (<code>0.3</code>, <code>0</code>) for the newest
+<p>A <code>&lt;version&gt;</code> is exact (<code>0.11.1</code>), or a prefix (<code>0.11</code>, <code>0</code>) for the newest
 release, or installed toolchain, that starts so, or <code>latest</code> for the newest.
-A prerelease such as <code>0.4.0-dev</code>, the build of main that each merge
+A prerelease such as <code>0.12.0-dev</code>, the build of main that each merge
 replaces, is picked only by naming it exactly; prefixes, <code>latest</code> and
 <code>update</code> leave prereleases out.
 Only releases are installed; there is no nightly channel.</p>
@@ -241,8 +241,8 @@ mistake on the command line.</p>
 <p>The Pepper home holds them:</p>
 <pre><code class="language-text">~/.pepper/bin/pepper                 the entry point
 ~/.pepper/bin/pep-install
-~/.pepper/toolchains/0.3.0/bin/      a toolchain's pep-build, pep-fmt, ...
-~/.pepper/toolchains/0.3.0/runtime/  and its runtime
+~/.pepper/toolchains/0.11.1/bin/      a toolchain's pep-build, pep-fmt, ...
+~/.pepper/toolchains/0.11.1/runtime/  and its runtime
 ~/.pepper/default-toolchain          the default toolchain's version
 </code></pre>
 <p>The <a href="install.html">install scripts</a> set up the home by running <code>setup</code> (see
@@ -302,11 +302,11 @@ separated as <code>PATH</code> separates them (<code>;</code> on Windows, <code>
 <code>pep-install</code> in each <code>--path</code> folder, which come first. Each is laid out
 as the home's <code>toolchains</code> folder is, a folder per toolchain named by its
 version:</p>
-<pre><code class="language-text">/opt/pepper/0.3.0/bin/pep-build
-/opt/pepper/0.3.0/runtime/
+<pre><code class="language-text">/opt/pepper/0.11.1/bin/pep-build
+/opt/pepper/0.11.1/runtime/
 </code></pre>
-<pre><code class="language-bash">PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.3.0 build main.pep
-pepper install --path /opt/pepper use 0.3.0
+<pre><code class="language-bash">PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.11.1 build main.pep
+pepper install --path /opt/pepper use 0.11.1
 </code></pre>
 <p>The home's own <code>toolchains</code> folder is searched first, so a toolchain there
 wins over one of the same version elsewhere. <code>list</code> marks a toolchain found
@@ -322,8 +322,8 @@ workspace uses, as <code>pepper install which</code> reports it, and offers to
 install Pepper, the toolchain the workspace needs, or a newer default when
 they are missing or old; see <a href="pep-lsp.html">pep-lsp</a>.</p>
 <h2 id="downloads"><a class="header" href="#downloads">Downloads</a></h2>
-<p><code>add</code> and <code>update</code> find this machine's archive (<code>linux-x64</code>, <code>macos-arm64</code>,
-<code>macos-x64</code> or <code>windows-x64</code>) among the GitHub releases, as the
+<p><code>add</code> and <code>update</code> find this machine's archive (<code>linux-x64</code>, <code>macos-arm64</code>
+or <code>windows-x64</code>) among the GitHub releases, as the
 <a href="install.html">install scripts</a> do, download it and check it against its
 <code>.sha256</code>. The archive is unpacked beside the toolchain's folder first, so
 a download that fails or does not match its checksum leaves nothing behind.</p>
@@ -331,7 +331,7 @@ a download that fails or does not match its checksum leaves nothing behind.</p>
 <tr><td><code>PEPPER_HOME</code></td><td>Where toolchains go, when <code>pep-install</code> does not run from a home</td></tr>
 <tr><td><code>PEPPER_TOOLCHAIN_PATH</code></td><td>More folders to find toolchains in (see <a href="#more-toolchain-folders">More toolchain folders</a>)</td></tr>
 <tr><td><code>PEPPER_INSTALL_RELEASES_URL</code></td><td>Lists the releases from this URL instead of GitHub's API, for a mirror; it serves the same JSON</td></tr>
-<tr><td><code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code></td><td>A token sent to GitHub's API while the repository is private, and to nothing else</td></tr>
+<tr><td><code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code></td><td>A token sent to GitHub's API, and to nothing else, which raises its limit on requests an hour (60 without one); downloading needs none</td></tr>
 </tbody></table>
 </div>
                     </main>
