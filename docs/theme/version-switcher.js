@@ -20,7 +20,6 @@
             }
             var select = document.createElement("select");
             select.className = "version-switcher";
-            select.title = "Documentation version";
             select.setAttribute("aria-label", "Documentation version");
             data.versions.forEach(function (version) {
                 var option = document.createElement("option");
@@ -29,10 +28,39 @@
                 option.selected = version === current;
                 select.appendChild(option);
             });
+            // Read as the select's description, since aria-label names it.
+            select.title = "Press Enter to open the chosen version";
+            // The same page in the chosen version, or its introduction when
+            // that version has no such page.
+            function go() {
+                if (select.value === current) {
+                    return;
+                }
+                var target = new URL(select.value + "/" + page, siteRoot).href;
+                var start = new URL(select.value + "/", siteRoot).href;
+                fetch(target, { method: "HEAD" })
+                    .then(function (response) { return response.ok ? target : start; })
+                    .catch(function () { return start; })
+                    .then(function (url) { window.location.href = url; });
+            }
+            // Arrow keys on a closed select fire `change` in Chrome and Edge,
+            // so a keyboard choice waits for Enter (WCAG 3.2.2); a pointer
+            // choice goes at once.
+            var byKeyboard = false;
+            select.addEventListener("pointerdown", function () { byKeyboard = false; });
+            select.addEventListener("keydown", function (event) {
+                byKeyboard = true;
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    go();
+                }
+            });
+            // A keyboard choice left without Enter is dropped.
+            select.addEventListener("blur", function () { select.value = current; });
             select.addEventListener("change", function () {
-                // The same page in the other version, if it has it; its
-                // 404 page otherwise links back to the start.
-                window.location.href = new URL(select.value + "/" + page, siteRoot).href;
+                if (!byKeyboard) {
+                    go();
+                }
             });
             var buttons = document.querySelector(".right-buttons");
             if (buttons) {

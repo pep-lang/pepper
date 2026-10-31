@@ -67,7 +67,10 @@ CI runs it, after the tests.
 ### `pep-doc build`
 
 Regenerates the reference, renders the book into `<site>/<version>/`, and
-refreshes the site's `versions.json` and `index.html`. Other versions in the
+refreshes the site's `versions.json`, `index.html`, `latest/index.html` and
+`404.html`: `index.html` and `latest/` open the newest release, and
+`404.html` sends any deeper `latest/` path to the same page there (GitHub
+Pages serves it for every missing page). Other versions in the
 site are left as they are, so every published version stays available. This
 is the command when none is given.
 
@@ -130,8 +133,8 @@ Options:
   `pep-doc check` does for the runtime: a clang-style error at each.
 - `--site <DIR>`: renders into `<DIR>/<version>/` instead, the version
   being `pep.toml`'s (`dev` without one), and refreshes `<DIR>`'s
-  `versions.json` and `index.html`, which opens the newest release, as
-  `build` does for this book. Earlier versions stay.
+  `versions.json`, `index.html`, `latest/` and `404.html`, which open the
+  newest release, as `build` does for this book. Earlier versions stay.
 
 #### Hosting a package's docs
 
