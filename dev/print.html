@@ -16232,8 +16232,9 @@ A package's <code>[features]</code> that a build turns on define options too, na
 an error:</p>
 <pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'
 </code></pre>
-<pre><code class="language-pepper"># Build options: compile with `pep-build main.pep -D FAST_MATH -D LOG_LEVEL=2`
-# to pick the other versions.
+<pre><code class="language-pepper"># Build options: compile with
+# `pep-build main.pep -D FAST_MATH -D LOG_LEVEL=2 -D QUIET_LEVEL=1` to pick
+# the other versions.
 
 # `[BuildOption("NAME")]` keeps a declaration when `-D NAME` is given, and
 # `!BuildOption(NAME)` inside a `Target` keeps its fallback otherwise.
@@ -16259,6 +16260,15 @@ log_level(): int {
     return level;
 }
 
+# Two options compare with each other too, as numbers when both values are.
+# The comparison is false, with a warning, unless the build defines both.
+verbose(): bool {
+    [Target(BuildOption(LOG_LEVEL) &gt; BuildOption(QUIET_LEVEL))] {
+        return true;
+    }
+    return false;
+}
+
 main(): int {
     if (scale(21) != 42) {
         return 1;
@@ -16266,6 +16276,9 @@ main(): int {
     var level = log_level();
     if (level &lt; 1 || level &gt; 2) {
         return 2;
+    }
+    if (verbose() and level != 2) {
+        return 3;
     }
     return 0;
 }
@@ -16319,11 +16332,22 @@ import "zlib_backend";
     1 | [Target(BuildOption(LEVEL) &gt;= 2)]
       |                            ^~~~
 </code></pre>
-<p>Comparing two build options, or a build option with anything but a
-literal, is an error too.</p>
+<p>Comparing a build option with anything but a literal or another build
+option is an error too.</p>
+<p>Two build options compare with each other, <code>BuildOption(A) &lt;= BuildOption(B)</code>,
+by their values: as integers when both read as integers, else as <code>double</code>s
+when both read as numbers, else as text, byte for byte. Text compares only
+with <code>==</code> and <code>!=</code>; ordering a value that is not a number is an error at
+the operator:</p>
+<pre><code class="language-text">main.pep:1:27: error: build option 'MODE' is 'fast', which is not a number; '&lt;' compares two build options only as numbers
+    1 | [Target(BuildOption(MODE) &lt; BuildOption(LEVEL))]
+      |                           ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
 <p>A comparison with an option the build does not define is false, whatever
 the operator, and the compiler warns at it, since a missing option there is
-usually a mistake:</p>
+usually a mistake. With two options, it is false when either is not
+defined, <code>BuildOption(A) == BuildOption(B)</code> included when neither is, and
+the compiler warns at each one missing:</p>
 <pre><code class="language-text">main.pep:3:13: warning: build option 'LOG_LEVEL' is not defined; the comparison is false
     3 |     [Target(BuildOption(LOG_LEVEL) &gt;= 2)] {
       |             ^~~~~~~~~~~~~~~~~~~~~~
@@ -16350,7 +16374,7 @@ setting names them.</p>
 <ul>
 <li>A <code>pep.toml</code> table declaring the options a package takes, with their
 types and defaults.</li>
-<li>Arithmetic on options, and comparing two options.</li>
+<li>Arithmetic on options.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="platform-selection"><a class="header" href="#platform-selection">Platform selection</a></h1>
 <p>Some code only makes sense on one platform: a Windows API call, a
@@ -16374,7 +16398,8 @@ works there unchanged. Write <code>OS(Mac) &amp;&amp; !OS(IOS)</code> for macOS 
 <li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code>,
 <code>aarch64</code>, or <code>wasm32</code>.</li>
 <li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
-can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>); see
+can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>) or with
+another build option; see
 <a href="language/build-options.html">Build options</a>.</li>
 </ul>
 <p>Values are matched case-insensitively, so <code>OS(windows)</code> works too. Combine
