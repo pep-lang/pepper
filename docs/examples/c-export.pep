@@ -34,6 +34,18 @@ apply(f: extern (int) => int, x: int): int {
     return f(x);
 }
 
+# An enum whose cases carry nothing crosses as the integer it is stored
+# as, here `uint8_t`.
+enum Light: u8 {
+    Red,
+    Green,
+}
+
+[Export]
+light_next(light: Light): Light {
+    return light == Light.Red ? Light.Green : Light.Red;
+}
+
 # A String arrives as UTF-8 bytes and their size, and leaves as a
 # NUL-terminated copy that C frees with `pepper_string_free`.
 [Export]
@@ -46,5 +58,6 @@ main(): int {
     assert(counter_increment(counter) == 42, "the counter counts");
     assert(add(2, 3) == 5, "add adds");
     assert(greet("C") == "hello, C", "greet greets");
+    assert(light_next(Light.Red) == Light.Green, "the light turns");
     return 0;
 }
