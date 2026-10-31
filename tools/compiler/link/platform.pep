@@ -524,6 +524,11 @@ struct _Evaluator {
                 if (op == "==" or op == "!=" or op == "<" or op == "<=" or op == ">" or op == ">=") {
                     return _compare(lhs, op, rhs, span);
                 }
+                if (_is_arithmetic_operator(op)) {
+                    return _fail_at(
+                        $"'{op}' in a 'Target' must be part of a comparison, such as 'BuildOption(A) {op} 2 == 0'", span
+                    );
+                }
                 return _fail(_bad_body());
             }
             SymbolRef(id, span) => {
@@ -575,8 +580,12 @@ struct _Evaluator {
     }
 
     # `lhs op rhs`: a `BuildOption(NAME)` compared with a literal, either
-    # way round, or with another. False when an option is not defined.
+    # way round, or with another, or arithmetic on options. False when an
+    # option is not defined.
     _compare(lhs: Expression, op: String, rhs: Expression, span: Span): bool {
+        if (_is_numeric_comparison(lhs, rhs)) {
+            return _compare_numbers(lhs, op, rhs, span);
+        }
         bool left = _is_build_option_call(lhs);
         bool right = _is_build_option_call(rhs);
         if (left and right) {
@@ -733,6 +742,141 @@ struct _Evaluator {
         return (a.value() == b.value()) == (op == "==");
     }
 
+    # `lhs op rhs` with arithmetic on a side: as integers when every value
+    # in it is one, else as numbers. False when an option is not defined.
+    _compare_numbers(lhs: Expression, op: String, rhs: Expression, span: Span): bool {
+        # Both sides are evaluated, so an error in either is reported.
+        var a = _number(lhs, op, span);
+        var b = _number(rhs, op, span);
+        if (!a.is_value() or !b.is_value()) {
+            return false;
+        }
+        var x = a.value();
+        var y = b.value();
+        if (x.integer.is_value() and y.integer.is_value()) {
+            var m = x.integer.value();
+            var n = y.integer.value();
+            return _ordered(op, m < n ? -1 : (m > n ? 1 : 0));
+        }
+        if (x.real != x.real or y.real != y.real) {
+            return op == "!=";
+        }
+        return _ordered(op, x.real < y.real ? -1 : (x.real > y.real ? 1 : 0));
+    }
+
+    # The value of `e`, an operand of `op` (at `op_span`): a build option, a
+    # number, or `+ - * / %` on them. Empty when an option in it is not
+    # defined, or after reporting an error.
+    _number(e: Expression, op: String, op_span: Span): _Number? {
+        bool arithmetic = _is_arithmetic_operator(op);
+        if (e is Binary(lhs, inner, rhs, span)) {
+            if (_is_arithmetic_operator(inner)) {
+                var a = _number(lhs, inner, span);
+                var b = _number(rhs, inner, span);
+                if (!a.is_value() or !b.is_value()) {
+                    return Optional<_Number>.Empty;
+                }
+                return _arithmetic(a.value(), inner, b.value(), span);
+            }
+        }
+        if (_is_build_option_call(e)) {
+            var name = _option_name(e);
+            if (!name.is_value()) {
+                return Optional<_Number>.Empty;
+            }
+            var text = target.build_options.try_get(name.value());
+            if (!text.is_value()) {
+                return Optional<_Number>.Empty;
+            }
+            var integer = _parse_integer(text.value());
+            if (integer.is_value()) {
+                return Optional<_Number>.Value(_Number.of_integer(integer.value()));
+            }
+            var real = double.parse(text.value().trim());
+            if (real.is_value()) {
+                return Optional<_Number>.Value(_Number.of_real(real.value()));
+            }
+            var rule = arithmetic ? "takes only numbers" : "compares arithmetic only with numbers";
+            _fail_at(
+                $"build option '{name.value()}' is '{text.value()}', which is not a number; '{op}' {rule}", op_span
+            );
+            return Optional<_Number>.Empty;
+        }
+        var literal = comparison_literal(e);
+        if (literal.is_value()) {
+            match (literal.value()) {
+                Integer(n) => {
+                    return Optional<_Number>.Value(_Number.of_integer(n));
+                }
+                Float(f) => {
+                    return Optional<_Number>.Value(_Number.of_real(f));
+                }
+                else => {}
+            }
+        }
+        var rule = arithmetic ? "takes only" : "compares arithmetic only with";
+        _fail_at($"'{op}' in a 'Target' {rule} build options and numbers", e.span());
+        return Optional<_Number>.Empty;
+    }
+
+    # `a op b` (at `span`) for `+ - * / %`: as `long`s when both are
+    # integers, where dividing by zero and overflowing are errors, else as
+    # `double`s.
+    _arithmetic(a: _Number, op: String, b: _Number, span: Span): _Number? {
+        if (!a.integer.is_value() or !b.integer.is_value()) {
+            match (op) {
+                "+" => {
+                    return Optional<_Number>.Value(_Number.of_real(a.real + b.real));
+                }
+                "-" => {
+                    return Optional<_Number>.Value(_Number.of_real(a.real - b.real));
+                }
+                "*" => {
+                    return Optional<_Number>.Value(_Number.of_real(a.real * b.real));
+                }
+                "/" => {
+                    return Optional<_Number>.Value(_Number.of_real(a.real / b.real));
+                }
+                else => {
+                    return Optional<_Number>.Value(_Number.of_real(a.real % b.real));
+                }
+            }
+        }
+        var m = a.integer.value();
+        var n = b.integer.value();
+        var result = Optional<long>.Empty;
+        match (op) {
+            "+" => {
+                result = m.checked_add(n);
+            }
+            "-" => {
+                result = m.checked_sub(n);
+            }
+            "*" => {
+                result = m.checked_mul(n);
+            }
+            else => {
+                if (n == 0) {
+                    var what = op == "/" ? "division" : "remainder";
+                    _fail_at($"{what} by zero in a 'Target' condition", span);
+                    return Optional<_Number>.Empty;
+                }
+                # `m / -1` overflows only for the lowest `long`, and the
+                # machine's `%` traps there.
+                if (n == -1) {
+                    result = op == "/" ? (0 as long).checked_sub(m) : Optional<long>.Value(0);
+                } else {
+                    result = Optional<long>.Value(op == "/" ? m / n : m % n);
+                }
+            }
+        }
+        if (!result.is_value()) {
+            _fail_at($"integer overflow: '{m} {op} {n}' does not fit in a 'long'", span);
+            return Optional<_Number>.Empty;
+        }
+        return Optional<_Number>.Value(_Number.of_integer(result.value()));
+    }
+
     # The name `option`, a `BuildOption(...)` call, tests.
     _option_name(option: Expression): String? {
         match (option) {
@@ -875,23 +1019,18 @@ _undefined_options(evaluator: _Evaluator, e: Expression, out: UndefinedOption[])
         Binary(lhs, op, rhs, _) => {
             if (op == "==" or op == "!=" or op == "<" or op == "<=" or op == ">" or op == ">=") {
                 # Only a well-formed comparison, of an option with a
-                # literal or another option: a malformed one is an error.
+                # literal or another option, or of arithmetic on options:
+                # a malformed one is an error.
                 bool left = _is_build_option_call(lhs);
                 bool right = _is_build_option_call(rhs);
                 if (!(left and right)
                     and !(left and comparison_literal(rhs).is_value())
-                    and !(right and comparison_literal(lhs).is_value())) {
+                    and !(right and comparison_literal(lhs).is_value())
+                    and !_is_numeric_comparison(lhs, rhs)) {
                     return;
                 }
-                for (var option in [lhs, rhs]) {
-                    if (!_is_build_option_call(option)) {
-                        continue;
-                    }
-                    var name = evaluator._option_name(option);
-                    if (name.is_value() and !evaluator.target.build_options.contains(name.value())) {
-                        out.append(UndefinedOption(name.value(), option.span()));
-                    }
-                }
+                _undefined_operands(evaluator, lhs, out);
+                _undefined_operands(evaluator, rhs, out);
                 return;
             }
             _undefined_options(evaluator, lhs, out);
@@ -906,6 +1045,68 @@ _undefined_options(evaluator: _Evaluator, e: Expression, out: UndefinedOption[])
             }
         }
         else => {}
+    }
+}
+
+# The options `e`, a side of a comparison, uses that the target does not
+# define: `e` itself, or those in its arithmetic.
+_undefined_operands(evaluator: _Evaluator, e: Expression, out: UndefinedOption[]) {
+    if (_is_build_option_call(e)) {
+        var name = evaluator._option_name(e);
+        if (name.is_value() and !evaluator.target.build_options.contains(name.value())) {
+            out.append(UndefinedOption(name.value(), e.span()));
+        }
+    } else if (e is Binary(lhs, op, rhs, _)) {
+        if (_is_arithmetic_operator(op)) {
+            _undefined_operands(evaluator, lhs, out);
+            _undefined_operands(evaluator, rhs, out);
+        }
+    }
+}
+
+# Whether `op` is one of `+ - * / %`.
+_is_arithmetic_operator(op: String): bool {
+    return op == "+" or op == "-" or op == "*" or op == "/" or op == "%";
+}
+
+# Whether `e` is `+ - * / %`.
+_is_arithmetic(e: Expression): bool {
+    if (e is Binary(_, op, _, _)) {
+        return _is_arithmetic_operator(op);
+    }
+    return false;
+}
+
+# Whether `e` is a build option or arithmetic with one in it.
+_uses_option(e: Expression): bool {
+    if (e is Binary(lhs, op, rhs, _)) {
+        return _is_arithmetic_operator(op) and (_uses_option(lhs) or _uses_option(rhs));
+    }
+    return _is_build_option_call(e);
+}
+
+# Whether `lhs` compared with `rhs` is arithmetic on build options.
+_is_numeric_comparison(lhs: Expression, rhs: Expression): bool {
+    return (_is_arithmetic(lhs) or _is_arithmetic(rhs)) and (_uses_option(lhs) or _uses_option(rhs));
+}
+
+# A value a `Target` condition computes: a `long` (`integer`) when every
+# value it is made from is an integer, else a `double` (`real`).
+struct _Number {
+    var integer: long?;
+    var real: double;
+
+    construct(integer: long?, real: double) {
+        this.integer = integer;
+        this.real = real;
+    }
+
+    static of_integer(n: long): _Number {
+        return _Number(Optional<long>.Value(n), n as double);
+    }
+
+    static of_real(d: double): _Number {
+        return _Number(Optional<long>.Empty, d);
     }
 }
 
@@ -959,7 +1160,8 @@ export comparison_literal(e: Expression): Literal? {
 }
 
 # A build option's value as an integer: decimal, or hexadecimal after
-# `0x`, with an optional sign.
+# `0x`, with an optional sign; empty when it is not one or does not fit in
+# a `long`.
 _parse_integer(text: String): long? {
     var digits = text.trim();
     bool negative = false;
@@ -977,7 +1179,8 @@ _parse_integer(text: String): long? {
     if (digits.is_empty) {
         return Optional<long>.Empty;
     }
-    long value = 0;
+    # Counted down, so the lowest `long` fits; empty when it does not fit.
+    var value = Optional<long>.Value(0);
     ulong i = 0;
     while (i < digits.size) {
         var b = digits.byte_at(i);
@@ -991,10 +1194,16 @@ _parse_integer(text: String): long? {
         } else {
             return Optional<long>.Empty;
         }
-        value = value * radix as long + digit;
+        value = value.value().checked_mul(radix as long);
+        if (value.is_value()) {
+            value = value.value().checked_sub(digit);
+        }
+        if (!value.is_value()) {
+            return value;
+        }
         i += 1;
     }
-    return Optional<long>.Value(negative ? -value : value);
+    return negative ? value : (0 as long).checked_sub(value.value());
 }
 
 # A build option's value as a bool: `true`/`false`, `1`/`0`, `on`/`off` or

@@ -24,8 +24,8 @@ The target is the platform you compile on, unless you name another with
 - `Arch(...)` is true on the named processor architecture: `x64`,
   `aarch64`, or `wasm32`.
 - `BuildOption(NAME)` is true when the build defines `NAME` with `-D`, and
-  can be compared with a literal (`BuildOption(LOG_LEVEL) >= 2`) or with
-  another build option; see
+  can be compared with a literal (`BuildOption(LOG_LEVEL) >= 2`), with
+  another build option, or after arithmetic (`BuildOption(LEVEL) % 2 == 0`); see
   [Build options](build-options.md).
 
 Values are matched case-insensitively, so `OS(windows)` works too. Combine

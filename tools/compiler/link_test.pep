@@ -229,6 +229,11 @@ reports_check_errors_and_warnings() {
             "main.pep",
             "# expect: main.pep:3:9: warning: build option 'FAST' is not defined; the comparison is false\n# expect: main.pep:3:29: warning: build option 'SLOW' is not defined; the comparison is false\n[Target(BuildOption(FAST) < BuildOption(\"SLOW\"))]\nboth(): int { return 3; }\nmain(): int { return 0; }\n"
         ],
+        # Arithmetic on an undefined build option warns at it (#375).
+        [
+            "main.pep",
+            "# expect: main.pep:2:13: warning: build option 'LEVEL' is not defined; the comparison is false\n[Target(2 * BuildOption(LEVEL) % 3 == 0)]\nthird(): int { return 3; }\nmain(): int { return 0; }\n"
+        ],
         # `[__BuiltIn]` outside the runtime.
         [
             "main.pep",
@@ -380,6 +385,96 @@ compares_two_build_options() {
         var error = target.check(_target_attribute(condition));
         expect_equal(error.value().0, message);
         expect_equal(error.value().1.start, 26 as ulong);
+    }
+}
+
+# A `[Target]` computes with build options (#375): `+ - * / %` on options
+# and numbers, as `long`s when every value is an integer, else as
+# `double`s; false when an option in it is not defined.
+[Test]
+computes_with_build_options() {
+    var target = link.Target();
+    target.build_options["TWO"] = "2";
+    target.build_options["TEN"] = "10";
+    target.build_options["HEX"] = "0xa";
+    target.build_options["HALF"] = "2.5";
+    target.build_options["WORD"] = "high";
+    target.build_options["BIG"] = "9223372036854775807";
+    target.build_options["LOWEST"] = "-9223372036854775808";
+    # Too big for a `long`, so a `double`.
+    target.build_options["HUGE"] = "99999999999999999999";
+    for (var (
+        condition,
+        kept
+    ) in [
+        ("BuildOption(TEN) % 2 == 0", true),
+        ("BuildOption(TWO) + 1 > 2", true),
+        ("BuildOption(TWO) + 1 > 3", false),
+        ("BuildOption(TWO) + BuildOption(TEN) * 2 == 22", true),
+        ("(BuildOption(TWO) + BuildOption(TEN)) * 2 == 24", true),
+        ("2 * BuildOption(HEX) == 20", true),
+        ("1 + 2 > BuildOption(TWO)", true),
+        ("BuildOption(TEN) / 4 == 2", true),
+        ("BuildOption(TEN) / 4.0 == 2.5", true),
+        ("BuildOption(HALF) * 2 == 5", true),
+        ("-7 % BuildOption(TWO) == -1", true),
+        ("BuildOption(TWO) - 3 < -0.5", true),
+        ("BuildOption(BIG) / -1 == -9223372036854775807", true),
+        ("BuildOption(HALF) / 0 > 1", true),
+        ("BuildOption(LOWEST) % -1 == 0", true),
+        ("BuildOption(LOWEST) + 1 < 0", true),
+        ("BuildOption(HUGE) + 1 > 9.9e19", true),
+        ("BuildOption(UNSET) + 1 > 0", false),
+        ("BuildOption(UNSET) + 1 != 0", false),
+        ("BuildOption(UNSET) / 0 == 1", false)
+    ]) {
+        var attribute = _target_attribute(condition);
+        expect_false(target.check(attribute).is_value());
+        expect_equal(target.keep([attribute]).value(), kept);
+    }
+    # At the operator, or at an operand that is not a number.
+    for (var (
+        condition,
+        message,
+        start
+    ) in [
+        (
+            "BuildOption(WORD) % 2 == 0",
+            "build option 'WORD' is 'high', which is not a number; '%' takes only numbers",
+            26 as ulong
+        ),
+        (
+            "BuildOption(TWO) + 1 == BuildOption(WORD)",
+            "build option 'WORD' is 'high', which is not a number; '==' compares arithmetic only with numbers",
+            29 as ulong
+        ),
+        ("BuildOption(TWO) / 0 == 1", "division by zero in a 'Target' condition", 25 as ulong),
+        ("BuildOption(TWO) % (BuildOption(TWO) - 2) == 1", "remainder by zero in a 'Target' condition", 25 as ulong),
+        (
+            "BuildOption(BIG) * 2 > 0",
+            "integer overflow: '9223372036854775807 * 2' does not fit in a 'long'",
+            25 as ulong
+        ),
+        (
+            "BuildOption(LOWEST) / -1 > 0",
+            "integer overflow: '-9223372036854775808 / -1' does not fit in a 'long'",
+            28 as ulong
+        ),
+        ("BuildOption(TWO) + \"x\" > 1", "'+' in a 'Target' takes only build options and numbers", 27 as ulong),
+        (
+            "BuildOption(TWO) + 1 == true",
+            "'==' in a 'Target' compares arithmetic only with build options and numbers",
+            32 as ulong
+        ),
+        (
+            "BuildOption(TWO) + 1",
+            "'+' in a 'Target' must be part of a comparison, such as 'BuildOption(A) + 2 == 0'",
+            25 as ulong
+        )
+    ]) {
+        var error = target.check(_target_attribute(condition));
+        expect_equal(error.value().0, message);
+        expect_equal(error.value().1.start, start);
     }
 }
 
