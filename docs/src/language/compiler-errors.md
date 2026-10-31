@@ -91,7 +91,7 @@ a method whose parameter names differ from its trait's (see
 [Traits](traits-and-extensions.md#traits)); an `else` arm of a `match` that
 every case already handles (see [Enums](enums.md#match)); a comparison with
 a build option that is not defined (see
-[Build options](build-options.md#comparing-values)); and an `[Export]` that
+[Build options](build-options.md#options-the-build-does-not-define)); and an `[Export]` that
 has no effect, or a `--lib` build that exports nothing (see
 [Calling Pepper from C](c-interop.md#calling-pepper-from-c)). A package's
 build script can print warnings of its own (see

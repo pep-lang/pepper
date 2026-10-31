@@ -35,6 +35,15 @@ verbose(): bool {
     return false;
 }
 
+# Either side of a comparison computes with `+ - * / %` on options and
+# numbers.
+even_level(): bool {
+    [Target(BuildOption(LOG_LEVEL) % 2 == 0)] {
+        return true;
+    }
+    return false;
+}
+
 main(): int {
     if (scale(21) != 42) {
         return 1;
@@ -45,6 +54,9 @@ main(): int {
     }
     if (verbose() and level != 2) {
         return 3;
+    }
+    if (even_level() != (level == 2)) {
+        return 4;
     }
     return 0;
 }

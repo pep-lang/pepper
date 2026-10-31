@@ -112,11 +112,50 @@ main.pep:1:27: error: build option 'MODE' is 'fast', which is not a number; '<' 
       |                           ^~~~~~~~~~~~~~~~~~~~
 ```
 
+## Arithmetic on options
+
+Either side of a comparison may compute with `+`, `-`, `*`, `/` and `%` on
+build options and number literals, with the precedence and parentheses of
+Pepper expressions:
+
+```pepper
+[Target(BuildOption(LEVEL) % 2 == 0)]
+_even_level() { ... }
+
+[Target((BuildOption(MAJOR) * 100 + BuildOption(MINOR)) >= 203)]
+import "new_api";
+```
+
+- Each value is read as an integer, decimal or `0x` hex, else as a
+  `double`. Arithmetic is on signed 64-bit integers when every value in it
+  is one, and on `double`s otherwise, so `BuildOption(TEN) / 4` is `2` and
+  `BuildOption(TEN) / 4.0` is `2.5`. `/` and `%` on integers round toward
+  zero, as in Pepper.
+- A value that is not a number is an error at the operator:
+
+  ```text
+  main.pep:1:28: error: build option 'LEVEL' is 'high', which is not a number; '%' takes only numbers
+      1 | [Target(BuildOption(LEVEL) % 2 == 0)]
+        |                            ^~~
+  ```
+
+- Integer division or remainder by zero is an error at the operator
+  (`division by zero in a 'Target' condition`), and so is an integer
+  result that does not fit in 64 bits (`integer overflow: '9223372036854775807
+  * 2' does not fit in a 'long'`). On `double`s both follow IEEE 754:
+  `1.5 / 0` is infinity, and a NaN compares unequal to everything.
+- Arithmetic must end in a comparison: `[Target(BuildOption(A) + 1)]` is an
+  error.
+
+## Options the build does not define
+
 A comparison with an option the build does not define is false, whatever
 the operator, and the compiler warns at it, since a missing option there is
 usually a mistake. With two options, it is false when either is not
-defined, `BuildOption(A) == BuildOption(B)` included when neither is, and
-the compiler warns at each one missing:
+defined, `BuildOption(A) == BuildOption(B)` included when neither is; with
+arithmetic, when any option in it is not, before anything is computed (so
+`BuildOption(A) / 0 > 1` is false, not an error, without `-D A`). The
+compiler warns at each one missing:
 
 ```text
 main.pep:3:13: warning: build option 'LOG_LEVEL' is not defined; the comparison is false
@@ -150,4 +189,3 @@ setting names them.
 
 - A `pep.toml` table declaring the options a package takes, with their
   types and defaults.
-- Arithmetic on options.
