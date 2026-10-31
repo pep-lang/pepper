@@ -1,0 +1,984 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Structs - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-d58342e8.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-c45e05eb.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/structs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="structs"><a class="header" href="#structs">Structs</a></h1>
+<p>A struct groups related values into one named type, and gives that type
+behavior through methods. Pepper has no classes and no inheritance: a struct
+holds data, methods and <a href="traits-and-extensions.html">extensions</a> add behavior,
+and <a href="traits-and-extensions.html#traits">traits</a> describe what a type can do.</p>
+<p>Every struct value is a reference to an object, so assigning a struct or
+passing it to a function shares the object rather than copying it. The
+<a href="memory.html">memory chapter</a> explains exactly when objects are created and
+destroyed.</p>
+<h2 id="declaring-a-struct"><a class="header" href="#declaring-a-struct">Declaring a struct</a></h2>
+<p>Declare a struct with <code>struct</code>, a name, and its fields in braces. Struct
+names are PascalCase by convention.</p>
+<pre><code class="language-pepper"># A struct groups related values into one type.
+struct Point {
+    var x: int = 0;
+    var y: int = 0;
+}
+
+# Fields can also be declared C-style, with the type first.
+struct Counter {
+    int count;          # no initializer: starts at zero
+    String label = "clicks";
+}
+
+main(): int {
+    # Without a constructor, `Point()` makes a Point with every field
+    # at its initial value.
+    var p = Point();
+    assert(p.x == 0 &amp;&amp; p.y == 0, "fields start at their initializers");
+
+    p.x = 3;
+    p.y = 4;
+    assert(p.x * p.x + p.y * p.y == 25, "fields can be read and written");
+
+    var c = Counter();
+    assert(c.count == 0, "a numeric field without an initializer is zero");
+    assert(c.label == "clicks", "a String field can have an initializer");
+
+    # A struct value is a reference: `q` names the same Point as `p`.
+    var q = p;
+    q.x = 10;
+    assert(p.x == 10, "p and q are the same object");
+    assert(p === q, "=== tests whether two references name the same object");
+    assert(!(p === Point()), "a new Point is a different object");
+    return 0;
+}
+</code></pre>
+<p>Things to notice:</p>
+<ul>
+<li>A field is declared like a variable: <code>var x: int = 0;</code> or, C-style,
+<code>int x = 0;</code>. The initializer is optional.</li>
+<li>A field without an initializer starts at its type’s default: zero for
+numbers, <code>false</code> for <code>bool</code>, and null for a struct type such as <code>String</code> or
+another struct. Reading a field through a null reference crashes the
+program, so give struct-typed fields a value before you use them.</li>
+<li>A struct with no constructor can be created with its name and empty
+parentheses, <code>Point()</code>. There is no <code>new</code> keyword at the call site.</li>
+<li><code>p.x</code> reads a field and <code>p.x = 3</code> writes it.</li>
+<li><code>a === b</code> is true when <code>a</code> and <code>b</code> refer to the same object, and <code>a !== b</code>
+when they do not. See
+<a href="#comparing-structs">Comparing structs</a> for <code>==</code>.</li>
+</ul>
+<p>A struct can have a field whose type is a struct declared later in the file,
+a field of its own type, or fields that lead back to it through other
+structs (a <code>Team</code> holding a <code>Player</code> that holds the <code>Team</code>). A struct-typed
+field holds a reference, so a linked list or a tree is just a struct that
+names itself:</p>
+<pre><code class="language-pepper"># A field can hold the struct's own type: each Link points at the next one.
+struct Link {
+    var value: int;
+    var next: Link;
+
+    construct(this.value = 0) {}
+}
+
+# Two structs can refer to each other, in either declaration order.
+struct Team {
+    var name: String;
+    var lead: Player;
+
+    construct(this.name = "") {}
+}
+
+struct Player {
+    var name: String;
+    # A weak back pointer: the team owns its lead, so the player's link
+    # back to the team must not keep the team alive (see the memory chapter).
+    var team: Weak&lt;Team&gt;;
+
+    construct(this.name = "") {}
+}
+
+sum(first: Link): int {
+    var total = 0;
+    var link: Link = first;
+    while (link !== __null) {
+        total = total + link.value;
+        link = link.next;
+    }
+    return total;
+}
+
+main(): int {
+    var list = Link(1);
+    list.next = Link(2);
+    list.next.next = Link(3);
+    assert(sum(list) == 6, "the list holds 1, 2 and 3");
+    assert(list.next.next.next === __null, "the last link has no next");
+
+    var team = Team("Owls");
+    team.lead = Player("Ada");
+    team.lead.team = Weak&lt;Team&gt;(team);
+    with (var t = team.lead.team) {
+        assert(t.name == "Owls", "the player reaches its team");
+    }
+    return 0;
+}
+</code></pre>
+<p>Objects that refer to each other in a loop keep each other alive, so make
+back pointers such as a child’s parent a <code>Weak&lt;T&gt;</code> (see
+<a href="memory.html#cycles-leak">Cycles leak</a>).</p>
+<h2 id="constructors"><a class="header" href="#constructors">Constructors</a></h2>
+<p>A constructor sets up a new object. Declare it with <code>construct</code>, followed by
+its parameters and a body. Callers create the object by calling the struct’s
+name like a function.</p>
+<pre><code class="language-pepper">struct Rect {
+    var width: int;
+    var height: int;
+    var area: int;
+
+    # `this.width = 1` declares a parameter that is stored straight into the
+    # field `width`; `1` is its default when the caller leaves it out.
+    construct(this.width = 1, this.height = 1) {
+        area = width * height;
+    }
+}
+
+struct Temperature {
+    var celsius: float;
+
+    # Ordinary parameters work too, written like a function's: `name: Type`.
+    construct(fahrenheit: float = 32.0) {
+        celsius = (fahrenheit - 32.0) * 5.0 / 9.0;
+    }
+}
+
+main(): int {
+    var r = Rect(3, 4);
+    assert(r.width == 3 &amp;&amp; r.height == 4, "arguments fill the fields");
+    assert(r.area == 12, "the constructor body runs after the fields are set");
+
+    var tall = Rect(2);
+    assert(tall.width == 2 &amp;&amp; tall.height == 1, "omitted arguments use their defaults");
+
+    var unit = Rect();
+    assert(unit.area == 1, "every parameter has a default, so Rect() works");
+
+    var boiling = Temperature(212.0);
+    assert(boiling.celsius == 100.0, "212 F is 100 C");
+    assert(Temperature().celsius == 0.0, "the default is 32 F");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>A parameter written <code>this.width = 1</code> stores its argument directly into the
+field <code>width</code>, before the body runs. The <code>= 1</code> is required: it is the value
+used when the caller omits that argument.</li>
+<li>Ordinary parameters are written as in a function, <code>name: Type</code>, with an
+optional default: <code>fahrenheit: float = 32.0</code>. The C-style form,
+<code>float fahrenheit = 32.0</code>, is accepted too.</li>
+<li>Inside the body, fields are in scope by name. Use <code>this.name</code> when a
+parameter has the same name as a field.</li>
+<li>A struct may declare several constructors with different parameter
+lists; a call picks one by its arguments, as for any
+<a href="overloading.html#constructors">overloaded</a> function. At most one of them
+may be <code>[Implicit]</code>. A struct has at most one destructor.</li>
+</ul>
+<p>A <code>this.field</code> parameter must have a default. Leaving it out is an error:</p>
+<pre><code class="language-pepper">struct Point {
+    var x: int;
+    construct(this.x) {}
+}
+</code></pre>
+<pre><code class="language-text">main.pep:3:21: error: expected '='
+    3 |     construct(this.x) {}
+      |                     ^
+</code></pre>
+<p>A struct without a constructor accepts no arguments:</p>
+<pre><code class="language-text">main.pep:7:13: error: too many arguments to 'Point': expected 0, have 2
+    7 |     var p = Point(1, 2);
+      |             ^~~~~
+</code></pre>
+<blockquote>
+<p><strong>Note:</strong> <code>new</code> is the older, deprecated spelling of <code>construct</code>. It still
+compiles, with a warning that offers the fix (see
+<a href="compiler-errors.html#deprecations">Deprecations</a>).</p>
+</blockquote>
+<h3 id="implicit-conversions"><a class="header" href="#implicit-conversions">Implicit conversions</a></h3>
+<p>A constructor marked <code>[Implicit]</code> also converts. Wherever a value flows into a
+place whose type is the struct, and the value has the constructor’s parameter
+type, the compiler calls the constructor for you:</p>
+<pre><code class="language-pepper">struct Celsius {
+    var degrees: double;
+
+    # `[Implicit]` lets a `double` become a `Celsius` wherever one is expected.
+    [Implicit]
+    construct(double degrees) {
+        this.degrees = degrees;
+    }
+}
+
+struct Label {
+    var text: String;
+
+    # Without `[Implicit]`, callers write `Label("...")` themselves.
+    construct(String text) {
+        this.text = text;
+    }
+}
+
+describe(t: Celsius): String {
+    return (t.degrees &gt; 30.0) ? "hot" : "mild";
+}
+
+main(): int {
+    assert(describe(35.0) == "hot", "an argument converts");
+    var today: Celsius = 21.5;            # a typed variable converts
+    assert(describe(today) == "mild", "already a Celsius");
+
+    var label = Label("kitchen");         # no conversion: call the constructor
+    assert(label.text == "kitchen", "explicit constructor call");
+
+    var n = 12.0;                         # no slot type: stays a double
+    assert(n == 12.0, "untyped local");
+    return 0;
+}
+</code></pre>
+<p>The standard library uses this for <a href="../reference/io-path.html"><code>io.Path</code></a>,
+which converts from a <code>String</code>, so <code>dir.join("logs")</code> and
+<code>io.File.open("notes.txt")</code> work without writing <code>io.Path(...)</code>, and for
+<a href="../reference/result.html"><code>Error</code></a>, so <code>Result&lt;int&gt;.err("bad input")</code> works.</p>
+<ul>
+<li><strong>Where it applies</strong>: a variable’s initializer when the variable’s type is
+written, an assignment, a function, method or constructor argument
+(operators and <code>a[i] = value</code> included), a call through a function value,
+and a <code>return</code> from a function with a declared return type.</li>
+<li><strong>Where it does not</strong>: the receiver of a method call (<code>"docs".join("x")</code>
+does not turn <code>"docs"</code> into a <code>Path</code>), a <code>var</code> whose type is inferred
+(<code>var n = 12.0;</code> stays a <code>double</code>), and <code>__null</code>, which stays a null
+reference.</li>
+<li><strong>One conversion per value.</strong> The value must already have the
+constructor’s parameter type, or reach it by a widening that loses nothing:
+a smaller integer to a larger one, an integer literal that fits, <code>float</code> to
+<code>double</code>, or a struct to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>.
+Conversions never chain: if <code>Tag</code> converts from <code>Name</code> and <code>Name</code> from
+<code>String</code>, a <code>String</code> does not become a <code>Tag</code>.</li>
+<li><strong>Overloads prefer anything else.</strong> Among <a href="overloading.html">overloads</a>,
+a member that takes the value as it is, or by any other conversion, beats
+one that needs an <code>[Implicit]</code> constructor.</li>
+<li><strong>Each conversion is a constructor call</strong>, so it allocates a new object.
+The VS Code extension shows the call as an inlay hint around the converted
+value, and hovering the value names the constructor.
+The converted value is a temporary like any constructor call’s result: it
+is released after the call it was passed to (see
+<a href="memory.html">Memory and reference counting</a>).</li>
+<li>Only a constructor that can be called with one argument may be
+<code>[Implicit]</code>: one parameter, or a first parameter followed by parameters
+that all have defaults. It may not convert from the struct itself or, in a
+generic struct, from a bare type parameter (<code>construct(T value)</code>):</li>
+</ul>
+<pre><code class="language-text">main.pep:2:5: error: 'Implicit' constructor of 'Span' must be callable with one argument
+    2 |     [Implicit]
+      |     ^~~~~~~~~~
+</code></pre>
+<p>Conversions are opt-in: a constructor without <code>[Implicit]</code> never runs on its
+own. When a value would fit such a constructor, the type error says so:</p>
+<pre><code class="language-text">main.pep:6:27: error: cannot pass a value of type 'String' as argument 1 of 'show', which has type 'Label'
+    6 | main(): int { return show("x"); }
+      |                           ^~~
+main.pep:3:5: note: 'Label' has a constructor from 'String': call 'Label(...)', or mark the constructor [Implicit]
+    3 |     construct(String text) { this.text = text; }
+      |     ^~~~~~~~~
+</code></pre>
+<h2 id="destructors"><a class="header" href="#destructors">Destructors</a></h2>
+<p>A destructor runs when an object is destroyed, which happens when the last
+reference to it goes away. Declare it with <code>destruct</code> and a body, with no
+parentheses. Use it to release something the object holds that Pepper does not
+manage for you, such as a file handle from C.</p>
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const closed = async.Atomic&lt;int&gt;(0);
+
+struct Connection {
+    var name: String;
+
+    construct(this.name = "") {}
+
+    # The destructor runs once, when the last reference to the object goes
+    # away. Use it to release whatever the object holds.
+    destruct {
+        closed.fetch_add(1);
+    }
+}
+
+main(): int {
+    {
+        var c = Connection("db");
+        assert(closed.load() == 0, "still in use");
+    }
+    # `c` went out of scope at the closing brace.
+    assert(closed.load() == 1, "the destructor ran at the end of the block");
+    return 0;
+}
+</code></pre>
+<p>You never call a destructor yourself. After it runs, Pepper releases the
+object’s fields, so a destructor can still read them. The
+<a href="memory.html">memory chapter</a> lists every point where an object can be
+destroyed.</p>
+<h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
+<p>A method is a function declared inside a struct. You call it on an object with
+a dot, <code>v.length_squared()</code>, and inside it <code>this</code> refers to that object.</p>
+<pre><code class="language-pepper">struct Vector {
+    var x: int = 0;
+    var y: int = 0;
+
+    construct(this.x = 0, this.y = 0) {}
+
+    # A method: name, parameters, then the return type after `:`.
+    length_squared(): int {
+        # Fields can be named directly inside a method...
+        return x * x + y * y;
+    }
+
+    # ...or through `this`, the object the method was called on.
+    dot(other: Vector): int {
+        return this.x * other.x + this.y * other.y;
+    }
+
+    # Methods can change fields, and can call other methods.
+    scale(factor: int) {
+        x = x * factor;
+        y = y * factor;
+    }
+
+    # The return type can also come first, C-style.
+    bool is_zero() {
+        return length_squared() == 0;
+    }
+
+    # A static method belongs to the type, not to one object: there is
+    # no `this`. Call it on the type name.
+    static unit_x(): Vector {
+        return Vector(1, 0);
+    }
+}
+
+main(): int {
+    var v = Vector(3, 4);
+    assert(v.length_squared() == 25, "method call");
+    assert(v.dot(Vector(1, 1)) == 7, "method with an argument");
+
+    v.scale(2);
+    assert(v.x == 6 &amp;&amp; v.y == 8, "a method can modify its object");
+
+    assert(Vector().is_zero(), "methods can be called on a temporary");
+    assert(Vector.unit_x().x == 1, "static method called on the type");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Methods are written like <a href="functions.html">functions</a>: <code>name(parameters): ReturnType { ... }</code>. Leave out the return type for a method that returns
+nothing. The C-style form, <code>bool is_zero() { ... }</code>, works too.</li>
+<li>Inside a method, the object’s fields and other methods can be named
+directly (<code>x</code>, <code>length_squared()</code>), or through <code>this</code> (<code>this.x</code>). A
+parameter or local with the same name as a field hides the field; use
+<code>this.</code> to reach the field.</li>
+<li>A method can change the fields of its object. Because struct values are
+references, the caller sees the change.</li>
+<li>Calling a method does not copy the object or add a reference to it. The
+result of a method call is a new reference, like any function result.</li>
+<li>Several methods can share a name when their parameters differ; each call
+picks the best fit (see <a href="overloading.html#methods-and-operators">Overloading</a>).</li>
+</ul>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<p>A method marked <code>static</code> belongs to the type rather than to one object. It has
+no <code>this</code>, and you call it on the type name: <code>Vector.unit_x()</code>. Static methods
+are the usual way to offer named constructors, such as the standard library’s
+<code>Result&lt;int&gt;.ok(42)</code>.</p>
+<p>Inside the struct, any method, static or not, can call a static method by
+its bare name: <code>unit_x()</code> in a method of <code>Vector</code> means <code>Vector.unit_x()</code>.</p>
+<pre><code class="language-pepper"># Static methods belong to the type; inside it, they are called by name.
+struct Vector {
+    var x: double = 0.0;
+    var y: double = 0.0;
+    construct(this.x = 0.0, this.y = 0.0) {}
+
+    static unit_x(): Vector {
+        return Vector(1.0, 0.0);
+    }
+
+    # A static method calls another by its bare name.
+    static scaled_unit_x(factor: double): Vector {
+        var unit = unit_x();
+        return Vector(unit.x * factor, unit.y * factor);
+    }
+}
+
+main(): int {
+    var v = Vector.scaled_unit_x(3.0);
+    assert(v.x == 3.0 &amp;&amp; v.y == 0.0, "called on the type name outside it");
+    return 0;
+}
+</code></pre>
+<h2 id="operators"><a class="header" href="#operators">Operators</a></h2>
+<p>A struct can define what the operators do for it. Declare a method whose name
+is the operator, written like any other method: <code>==(other: Money): bool</code>.
+The C-style form with the return type first, <code>bool ==(Money other)</code>, is
+accepted too.</p>
+<pre><code class="language-pepper">struct Money {
+    var cents: int = 0;
+
+    construct(this.cents = 0) {}
+
+    # `a == b` calls `a.==(b)`. Without this method, `==` on two structs
+    # compares identity, like `===`.
+    ==(other: Money): bool {
+        return cents == other.cents;
+    }
+
+    # `!=` is derived from `==` when the struct does not define it.
+
+    # `a &lt; b` calls `a.&lt;(b)`.
+    &lt;(other: Money): bool {
+        return cents &lt; other.cents;
+    }
+
+    # `a + b` calls `a.+(b)` and returns a new Money.
+    +(other: Money): Money {
+        return Money(cents + other.cents);
+    }
+
+    # `-a` calls `a.-()`: a unary operator takes no parameters.
+    -(): Money {
+        return Money(0 - cents);
+    }
+
+    # `a - b` calls `a.-(b)`. The unary and binary `-` overload each other,
+    # told apart by their number of parameters.
+    -(other: Money): Money {
+        return Money(cents - other.cents);
+    }
+
+    # `a += b` needs its own method; it is not rewritten to `a = a + b`.
+    +=(other: Money): Money {
+        cents += other.cents;
+        return this;
+    }
+}
+
+struct Shelf {
+    var slots: Array&lt;String&gt;;
+
+    construct() {
+        slots = Array&lt;String&gt;();
+        slots.append("empty");
+        slots.append("empty");
+    }
+
+    # An indexer with one parameter handles reads: `shelf[i]`.
+    [](index: int): String {
+        return slots[index];
+    }
+
+    # An indexer with two parameters handles writes: `shelf[i] = value`.
+    [](index: int, value: String): String {
+        slots[index] = value;
+        return value;
+    }
+}
+
+main(): int {
+    var price = Money(250);
+    assert(price == Money(250), "== compares cents");
+    assert(price != Money(100), "!= compares cents");
+    # `===` and `!==` always compare identity: equal cents, different objects.
+    assert(price !== Money(250), "!== compares identity");
+    var same = price;
+    assert(same === price, "=== is true for the same object");
+
+    var total = price + Money(50);
+    assert(total.cents == 300, "+ makes a new value");
+    assert(price.cents == 250, "+ left its operands alone");
+
+    assert(price &lt; total, "&lt; compares cents");
+
+    var refund = -price;
+    assert(refund.cents == -250, "unary - calls -()");
+    assert((total - price).cents == 50, "binary - calls -(other)");
+
+    total += Money(25);
+    assert(total.cents == 325, "+= updated total in place");
+
+    var shelf = Shelf();
+    shelf[1] = "books";
+    assert(shelf[1] == "books", "indexer write, then read");
+    assert(shelf[0] == "empty", "the other slot is unchanged");
+    return 0;
+}
+</code></pre>
+<p>When the left operand is a struct that declares the operator, <code>a + b</code> becomes
+the call <code>a.+(b)</code>. The right operand is the method’s single parameter, and it
+can be any type. These binary operators can be defined:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kind</th><th>Operators</th></tr>
+</thead>
+<tbody>
+<tr><td>Arithmetic</td><td><code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>%</code> <code>**</code></td></tr>
+<tr><td>Bitwise</td><td><code>&amp;</code> <code>|</code> <code>^</code> <code>&gt;&gt;</code></td></tr>
+<tr><td>Bitwise shifts</td><td><code>&lt;&lt;</code> <code>&gt;&gt;</code></td></tr>
+<tr><td>Comparison and logical</td><td><code>==</code> <code>!=</code> <code>&lt;</code> <code>&lt;=</code> <code>&gt;</code> <code>&gt;=</code> <code>&amp;&amp;</code> <code>||</code></td></tr>
+<tr><td>Compound assignment</td><td><code>+=</code> <code>-=</code> <code>*=</code> <code>/=</code> <code>%=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>|=</code> <code>^=</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Keep these rules in mind:</p>
+<ul>
+<li>An operator can be declared once per right-operand type (<code>+(Money)</code> and
+<code>+(int)</code>), and <code>a + b</code> picks by <code>b</code>’s type, as for any
+<a href="overloading.html#methods-and-operators">overloaded</a> method.</li>
+<li>Each operator is its own method, with one exception: when a struct defines
+<code>==</code> but not <code>!=</code>, <code>a != b</code> means <code>!(a == b)</code>. A struct that defines <code>==</code>
+and is used as a <code>HashMap</code> or <code>HashSet</code> key also needs a matching
+<code>hash&lt;T&gt;</code> (see <a href="hashing.html">Hashing and equality</a>). <code>+=</code> is not rewritten to
+<code>a = a + b</code>; define each one you want to use.</li>
+<li>Comparison operators must return <code>bool</code>; any other return type is an error
+(<code>comparison operator '==' must return 'bool', not 'String'</code>). Logical
+operators should return <code>bool</code> too. Arithmetic, bitwise and compound
+assignment operators usually return the struct’s own type; a compound
+assignment usually changes <code>this</code> and returns it.</li>
+<li>The left operand decides: <code>a + b</code> uses the method on <code>a</code>’s type. For a
+number on the left, such as <code>2 * v</code>, see
+<a href="#a-number-on-the-left">A number on the left</a>.</li>
+<li>Operators that start with <code>&lt;</code> (<code>&lt;</code>, <code>&lt;=</code>, <code>&lt;&lt;</code>, <code>&lt;&lt;=</code>) can only be declared
+in the <code>name: Type</code> form, <code>&lt;(other: V): bool</code>: in the C-style form the
+parser reads <code>bool &lt;</code> as the start of generic arguments.</li>
+</ul>
+<p>The result of an operator has the type its method returns, so with
+<code>-(other: V): int</code>, <code>var r = a - b;</code> is an <code>int</code>.</p>
+<h3 id="a-number-on-the-left"><a class="header" href="#a-number-on-the-left">A number on the left</a></h3>
+<p><code>2.0 * v</code> uses the operator of the left operand’s type, <code>double</code>, which a
+struct cannot change. Declare it in an
+<a href="traits-and-extensions.html#numbers-bool-and-enums">extension</a> of the
+number type instead, where <code>this</code> is the number:</p>
+<pre><code class="language-pepper"># A number on the left of an operator: `2 * v` with a struct `v`.
+struct Vector {
+    var x: double;
+    var y: double;
+
+    construct(this.x = 0.0, this.y = 0.0) {}
+
+    # `v * 2.0` calls `v.*(2.0)`.
+    *(scale: double): Vector {
+        return Vector(x * scale, y * scale);
+    }
+}
+
+# `2.0 * v` uses the operator of the left operand's type, so `double`
+# declares it in an extension; `this` is the number.
+extend double {
+    *(v: Vector): Vector {
+        return v * this;
+    }
+}
+
+# `2` is an `int`, which needs its own.
+extend int {
+    *(v: Vector): Vector {
+        return v * (this as double);
+    }
+}
+
+main(): int {
+    var v = Vector(1.0, 2.0);
+    var a = v * 2.0;
+    var b = 2.0 * v;
+    var c = 2 * v;
+    assert(a.x == 2.0 &amp;&amp; b.x == 2.0 &amp;&amp; c.y == 4.0, "both orders");
+    # Numbers on both sides still use the built-in operator.
+    assert(2 * 3 == 6, "built-in");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>The number type is the left operand’s own: <code>2</code> is an <code>int</code> and <code>2.0</code> a
+<code>double</code>, so each needs its own extension (<code>extend int</code>, <code>extend double</code>).
+Without one, <code>2 * v</code> is <code>invalid operands to binary expression ('int' and 'Vector')</code>.</p>
+</li>
+<li>
+<p>The operator takes one operand, which may be any type except a number,
+<code>bool</code>, enum or pointer: numbers on both sides always use the built-in
+operator.</p>
+<pre><code class="language-text">main.pep:2:14: error: operator '+' of 'int' cannot take an operand of type 'int': the built-in operator applies
+    2 |     +(other: int): int { return 0; }
+      |              ^~~
+</code></pre>
+</li>
+<li>
+<p>Comparisons work the same way, and <code>2.0 != v</code> means <code>!(2.0 == v)</code> when
+the extension declares only <code>==</code>. Compound assignments (<code>n *= v</code>) do not
+apply, since the number cannot hold the result.</p>
+</li>
+<li>
+<p>The extension is visible like any other: where its file is imported, if it
+is exported.</p>
+</li>
+</ul>
+<h3 id="unary-operators"><a class="header" href="#unary-operators">Unary operators</a></h3>
+<p>A unary operator is a method with no parameters; its operand is <code>this</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operator</th><th>Declaration</th><th><code>op x</code> calls</th></tr>
+</thead>
+<tbody>
+<tr><td>Negation</td><td><code>-(): V</code></td><td><code>x.-()</code></td></tr>
+<tr><td>Bitwise complement</td><td><code>~(): V</code></td><td><code>x.~()</code></td></tr>
+<tr><td>Logical not</td><td><code>!(): bool</code></td><td><code>x.!()</code></td></tr>
+<tr><td>Truth test</td><td><code>!!(): bool</code></td><td><code>x.!!()</code> (see below)</td></tr>
+</tbody>
+</table>
+</div>
+<p>The C-style form works here too: <code>V -()</code>, <code>bool !!()</code>. <code>!</code> and <code>!!</code> must
+return <code>bool</code> (<code>truth-test operator '!!' must return 'bool', not 'int'</code>), and
+<code>!</code>, <code>~</code> and <code>!!</code> take no parameters. <code>-a</code> on a number is unchanged. A struct
+may declare both a unary <code>-()</code> and a binary <code>-(other: V)</code>: they
+<a href="overloading.html">overload</a> each other, told apart by their number of
+parameters.</p>
+<h3 id="truth-tests-and-conditions"><a class="header" href="#truth-tests-and-conditions">Truth tests and conditions</a></h3>
+<p>A condition asks a value “true or false?”. For <code>bool</code> the answer is the value,
+for a number it is “not zero”, and for a raw pointer (<code>__ptr&lt;T&gt;</code>) or a function
+value it is “not null”. A struct answers through its truth-test operator,
+<code>!!(): bool</code>, like C++’s <code>operator bool</code>:</p>
+<pre><code class="language-pepper"># A struct that declares `!!(): bool` can be used as a condition.
+struct Budget {
+    var cents: int = 0;
+
+    construct(this.cents = 0) {}
+
+    # The truth test: `if (budget)` calls `budget.!!()`.
+    !!(): bool {
+        return cents &gt; 0;
+    }
+}
+
+struct Label {
+    var text: String;
+
+    construct(this.text = "") {}
+}
+
+spend(budget: Budget, amount: int): int {
+    var spent = 0;
+    # A condition, an operand of `&amp;&amp;`, and the operand of `!` all call `!!`.
+    while (budget &amp;&amp; amount &gt; 0) {
+        budget.cents -= 1;
+        amount -= 1;
+        spent += 1;
+    }
+    if (!budget) {
+        print("budget used up");
+    }
+    return spent;
+}
+
+main(): int {
+    var budget = Budget(3);
+    assert(spend(budget, 2) == 2, "spent 2 of 3");
+    assert(budget ? true : false, "a ternary condition calls !! too");
+    assert(spend(budget, 5) == 1, "only 1 left");
+    assert(!!budget == false, "!!x calls the truth test");
+
+    # A struct without `!!` is not a condition: `if (label)` is an error.
+    # Compare with `__null` to ask whether a reference is set.
+    var label: Label;
+    assert(label === __null, "no Label yet");
+    label = Label("sale");
+    assert(label !== __null, "now there is one");
+    return 0;
+}
+</code></pre>
+<p>These are the boolean contexts. In each, a struct value <code>x</code> becomes <code>x.!!()</code>:</p>
+<ul>
+<li>the condition of <code>if</code>, <code>else if</code> and <code>while</code>;</li>
+<li>the condition of <code>condition ? a : b</code>;</li>
+<li>each operand of <code>&amp;&amp;</code>, <code>||</code>, <code>and</code> and <code>or</code> (unless the struct declares <code>&amp;&amp;</code>
+or <code>||</code> itself, which then takes the whole operation);</li>
+<li>the operand of <code>!</code>: without its own <code>!</code> method, <code>!x</code> is <code>!(x.!!())</code>.</li>
+</ul>
+<p><code>!!x</code> is the truth test itself: on a struct it calls <code>x.!!()</code>; on a <code>bool</code> or
+a number it is still two negations. <a href="optionals.html"><code>Optional</code></a> declares <code>!!</code>,
+so <code>if (found)</code> asks whether an optional holds a value.</p>
+<p>A struct that does not declare <code>!!</code> cannot be used as a condition at all:</p>
+<pre><code class="language-text">main.pep:6:9: error: 'Node' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'
+    6 |     if (node) {
+      |         ^~~~
+</code></pre>
+<p>A struct value is a reference, but a condition never tests it for null. To ask
+whether a reference is set, compare it with <code>__null</code> (<code>node !== __null</code>), or
+better, use an <a href="optionals.html"><code>Optional</code></a> for a value that may be missing. A trait value is
+treated the same way: it is a condition only when its trait declares <code>!!</code>.</p>
+<h3 id="comparing-structs"><a class="header" href="#comparing-structs">Comparing structs</a></h3>
+<p>Without an <code>==</code> method, <code>a == b</code> on two structs compares identity: it is true
+only when both refer to the same object, exactly like <code>a === b</code>. The same goes
+for <code>!=</code>. Define <code>==</code> when two distinct objects with the same contents should
+count as equal, as <code>String</code> and <code>Array</code> do; <code>!=</code> then follows from it. <code>===</code> and
+<code>!==</code> always compare identity, whatever methods the struct declares, so
+<code>"a" + "b" == "ab"</code> is true while <code>"a" + "b" === "ab"</code> is false.</p>
+<p>A struct never equals a number: unless the struct declares an <code>==</code> (or <code>!=</code>)
+taking one, comparing a struct value such as an <code>Optional</code> with an integer is
+an error (<code>cannot compare 'Optional&lt;ulong&gt;' with an integer</code>), since it could
+only ever compare the object itself. Test an optional with <code>is_none()</code> (or
+<code>if (found)</code>) and read its value with <code>value()</code>.</p>
+<h3 id="indexers"><a class="header" href="#indexers">Indexers</a></h3>
+<p>An indexer lets you write <code>object[index]</code>. Declare it as a method named <code>[]</code>:</p>
+<ul>
+<li>With one parameter, <code>[](index: int): String</code>, it handles reads: <code>shelf[i]</code>.</li>
+<li>With two parameters, <code>[](index: int, value: String): String</code>, it handles
+writes: <code>shelf[i] = value</code>. The second parameter is the value being stored.</li>
+</ul>
+<p>The C-style form, <code>String [](int index)</code>, is accepted too. Only parameters
+without a default count, so either kind can end with a defaulted parameter,
+such as the <code>location: __ptr&lt;char&gt; = __caller_location()</code> that <code>Array</code> uses to
+report an out-of-range index at the caller’s line (see
+<a href="functions.html#assertions-and-panics">Assertions and panics</a>).</p>
+<p>A struct can have both. With both, compound assignment through an index
+(<code>counts[i] += 1</code>) reads with the first and writes with the second.
+<a href="../reference/array.html"><code>Array</code></a> and <a href="../reference/string.html"><code>String</code></a> are
+indexed this way.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/overloading.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/properties.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/overloading.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/properties.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

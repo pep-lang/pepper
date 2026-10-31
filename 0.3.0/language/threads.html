@@ -1,0 +1,1291 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Threads and shared data - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-d58342e8.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-c45e05eb.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/threads.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="threads-and-shared-data"><a class="header" href="#threads-and-shared-data">Threads and shared data</a></h1>
+<p>The <code>async</code> module starts and manages operating-system threads. Pepper keeps
+threads safe by controlling what they can share: only <strong>thread-safe</strong> values
+can be reached from more than one thread, and the compiler checks the types
+that claim to be.</p>
+<h2 id="starting-and-joining-threads"><a class="header" href="#starting-and-joining-threads">Starting and joining threads</a></h2>
+<pre><code class="language-pepper">import async;
+
+const finished = async.Atomic&lt;int&gt;(0);
+
+# A thread body is a function that takes nothing and returns nothing.
+count_to_a_million() {
+    var me = async.Thread.current();
+    assert(me.name() == "counter", "a spawned thread sees its own Thread");
+    var total: long = 0;
+    var i = 0;
+    while (i &lt; 1000000) {
+        total = total + 1;
+        i = i + 1;
+    }
+    finished.fetch_add(1);
+}
+
+main(): int {
+    var main_thread = async.Thread.current();
+    assert(main_thread.name() == "main", "the main thread is named main");
+
+    var first = async.Thread.spawn(count_to_a_million, "counter");
+    var second = async.Thread.spawn(count_to_a_million, "counter");
+    assert(first.id() != second.id(), "every thread has its own id");
+
+    first.join();
+    second.join();
+    assert(first.is_finished(), "join waits for the body to return");
+    assert(finished.load() == 2, "both bodies ran");
+
+    # How many threads can run at once, and on how many cores.
+    assert(async.logical_cpus() &gt;= async.physical_cpus(), "hyperthreads count once in physical_cpus");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>Thread.spawn(body, name)</code> starts a new thread that runs <code>body</code>, a function
+of type <code>ThreadBody</code> (an alias for <code>shared () =&gt; void</code>), and returns its
+<code>Thread</code>. The name is optional.</li>
+<li><code>join()</code> waits for the body to return. After <code>join()</code>, the joining thread
+sees everything the other thread did. A thread can be joined once.</li>
+<li><code>Thread.current()</code> returns the calling thread’s <code>Thread</code>. For a spawned
+thread it is the same object that <code>spawn</code> returned. The main thread’s is
+named <code>main</code>.</li>
+<li><code>id()</code> returns the thread’s <code>ThreadId</code>, a number that no other thread in
+the program has. Ids come from the runtime, starting at 1, and are not the
+operating system’s thread ids. A <code>ThreadId</code> can be compared and used as a
+<code>HashMap</code> key.</li>
+<li><code>is_finished()</code> reports whether the body has returned. <code>is_joinable()</code>
+reports whether <code>join()</code> may be called.</li>
+<li><code>Thread.sleep(milliseconds)</code> pauses the calling thread (in a task, only
+the task: see <a href="tasks.html#waiting">Tasks</a>).</li>
+<li>Dropping every reference to a <code>Thread</code> without joining it <strong>detaches</strong> the
+thread. It keeps running, and its resources are freed when it finishes.</li>
+<li>A <code>panic</code> or failed <code>assert</code> on any thread ends the whole program.</li>
+</ul>
+<p>The body can be a named function or a <a href="function-types.html">closure</a>. A
+closure passes data to the thread through its captures:</p>
+<pre><code class="language-pepper">var total = async.Atomic&lt;long&gt;(0);
+var step: long = 5;
+var worker = async.Thread.spawn(() =&gt; { total.fetch_add(step); });
+worker.join();
+</code></pre>
+<p>The body is a <a href="function-types.html#sharing-function-values-between-threads"><code>shared</code> function value</a>,
+so the closure may capture only thread-safe values (numbers, <code>Atomic&lt;T&gt;</code>,
+<code>[Shared]</code> structs, <code>shared</code> function values). The compiler checks each
+capture and reports one that is not thread-safe where the closure uses it:</p>
+<pre><code class="language-text">main.pep:5:46: error: closure passed as 'shared () =&gt; void' captures 'name' of type 'String', which is not thread-safe
+    5 |     var t = async.Thread.spawn(() =&gt; { print(name); });
+      |                                              ^~~~
+main.pep:4:9: note: capture a thread-safe value instead, such as an 'async.Atomic&lt;T&gt;' or a '[Shared]' struct
+    4 |     var name = "worker";
+      |         ^~~~
+</code></pre>
+<p>Every module-scope variable is <code>const</code> and thread-safe, so any thread may
+use one (see <a href="#module-scope-variables">below</a>).</p>
+<p>The <a href="../reference/async-thread.html">Thread reference</a> documents every method.</p>
+<h2 id="processor-counts"><a class="header" href="#processor-counts">Processor counts</a></h2>
+<ul>
+<li><code>async.logical_cpus()</code> returns how many threads the machine can run at the
+same moment. A core with hyperthreading (SMT) counts two or more times.
+This is a good default size for a pool of CPU-bound worker threads.</li>
+<li><code>async.physical_cpus()</code> counts each physical core once. On Linux it reads
+the kernel’s CPU topology, on macOS <code>hw.physicalcpu</code>, and on Windows
+<code>GetLogicalProcessorInformationEx</code>. Inside a virtual machine it counts the
+cores the hypervisor presents, because the guest cannot see the host’s
+hardware.</li>
+</ul>
+<h2 id="per-thread-values-with-threadlocal"><a class="header" href="#per-thread-values-with-threadlocal">Per-thread values with ThreadLocal</a></h2>
+<p><code>ThreadLocal&lt;T&gt;</code> is a variable with a separate value on every thread:</p>
+<pre><code class="language-pepper">import async;
+
+import [Thread, ThreadLocal] from async;
+
+# One variable, a separate value on every thread.
+const calls = ThreadLocal&lt;int&gt;();
+const totals = async.Atomic&lt;long&gt;(0);
+
+record_call() {
+    calls.set(calls.get() + 1);
+}
+
+work() {
+    record_call();
+    record_call();
+    record_call();
+    totals.fetch_add(calls.get());   # 3 on every thread
+}
+
+main(): int {
+    record_call();
+    var a = Thread.spawn(work);
+    var b = Thread.spawn(work);
+    a.join();
+    b.join();
+    assert(totals.load() == 6, "each thread counted its own calls");
+    assert(calls.get() == 1, "the main thread's value is its own");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>get()</code> returns the calling thread’s value, or the default of <code>T</code> (zero, or
+null for a struct) until that thread calls <code>set</code>.</li>
+<li><code>set(value)</code> replaces only the calling thread’s value.</li>
+<li><code>is_set()</code> and <code>clear()</code> test for and remove the calling thread’s value.</li>
+<li>When a thread exits, its value is released.</li>
+</ul>
+<p>A <code>ThreadLocal</code> is usually a module-scope variable. Its <code>T</code> does not need to
+be thread-safe, because each value stays on the thread that stored it. For a
+<code>T</code> that is not thread-safe, such as a <code>String</code>, the value is reached like a
+Mutex’s (see <a href="#what-a-lock-body-may-do">What a lock body may do</a>):</p>
+<ul>
+<li><code>with (var value = local.enter()) { ... }</code> binds this thread’s value; the
+<code>else</code> block runs when the thread has none;</li>
+<li><code>get()</code> is a compile error;</li>
+<li><code>set(value)</code> takes a new value: a constructor call, a string literal,
+<code>copy(x)</code>, or <code>move(x)</code>.</li>
+</ul>
+<p>Otherwise a function called while a Mutex is locked could keep part of the
+locked value in a thread-local, and a later <code>get()</code> would hand it out after
+the lock was released. The
+<a href="../reference/async-thread_local.html">ThreadLocal reference</a> has the details.</p>
+<p>Tasks that take turns on one worker thread share its <code>ThreadLocal</code> values;
+a <a href="tasks.html#task-local-values"><code>TaskLocal&lt;T&gt;</code></a> gives each task its own.</p>
+<h2 id="what-threads-can-share"><a class="header" href="#what-threads-can-share">What threads can share</a></h2>
+<p>Every struct value is a counted reference (see
+<a href="memory.html">Memory and reference counting</a>). Updating a count from two
+threads at once can free an object too early or never, so by default a
+struct’s counts are plain, fast increments, and its objects must stay on one
+thread.</p>
+<p>A struct declared <code>[Shared]</code> has <strong>atomic</strong> reference counts, so references
+to one object can be copied and dropped on any thread:</p>
+<pre><code class="language-pepper">import async;
+
+# A struct that threads can share: declared [Shared], every field const and
+# thread-safe.
+[Shared]
+struct Settings {
+    const port: int;
+    const retries: int;
+    construct(this.port = 0, this.retries = 0) {}
+}
+
+# async.Atomic&lt;T&gt; of a [Shared] struct: threads read the current settings, and one
+# of them can replace them.
+const current = async.Atomic&lt;Settings&gt;(Settings(8080, 3));
+const seen = async.Atomic&lt;long&gt;(0);
+
+read_settings() {
+    var settings = current.load();
+    seen.fetch_add(settings.port);
+}
+
+main(): int {
+    var readers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 4) {
+        readers.append(async.Thread.spawn(read_settings));
+        i = i + 1;
+    }
+    for (var reader in readers) {
+        reader.join();
+    }
+    assert(seen.load() == 4 * 8080, "every reader saw the settings");
+
+    current.store(Settings(9090, 5));
+    assert(current.load().port == 9090, "replaced");
+    return 0;
+}
+</code></pre>
+<p>The compiler checks every <code>[Shared]</code> struct:</p>
+<ul>
+<li>
+<p><strong>Every field must be <code>const</code>.</strong> It is set once, by the constructor, and
+never assigned again, so threads cannot race on it. To change shared state,
+give the struct a thread-safe member such as an <code>Atomic&lt;T&gt;</code>.</p>
+</li>
+<li>
+<p><strong>Every field must have a thread-safe type.</strong> These are all the
+thread-safe types, the same ones the constraint
+<a href="generics.html#the-shared-constraint"><code>T: Shared</code></a> accepts:</p>
+<ul>
+<li>every number type (<code>int</code>, <code>long</code>, <code>byte</code>, <code>char</code>, <code>short</code>, <code>float</code>,
+<code>double</code> and the rest), <code>bool</code>, and <code>void</code>;</li>
+<li><a href="enums.html">enums</a> whose cases carry no values, which are stored as
+integers;</li>
+<li><code>[Shared]</code> structs, and enums whose cases carry values that are declared
+<code>[Shared]</code>;</li>
+<li>weak references to thread-safe types;</li>
+<li>raw pointers (<code>__ptr&lt;T&gt;</code>, and <code>void*</code>) to thread-safe types;</li>
+<li><code>shared</code> function types, such as <code>shared () =&gt; void</code> (see
+<a href="function-types.html#sharing-function-values-between-threads">Function types</a>),
+and C function pointer types (<code>extern (int) =&gt; int</code>);</li>
+<li><a href="tuples.html">tuples</a> whose elements are all thread-safe;</li>
+<li>inside a generic, a type parameter constrained <code>T: Shared</code>.</li>
+</ul>
+<p>Nothing else is. A struct is never thread-safe on its own, even when all
+its fields are numbers: a struct value is a reference to a
+reference-counted object, and only a <code>[Shared]</code> struct counts those
+references atomically. So <code>String</code>, <code>Array</code> and other structs that are not
+<code>[Shared]</code> are not thread-safe, and neither is a plain function type such
+as <code>() =&gt; void</code>:</p>
+<pre><code class="language-text">main.pep:3:14: error: field 'F' of shared struct 'H' has type '() =&gt; void', which is not thread-safe
+    3 |     const F: () =&gt; void;
+      |              ^~~~~~~~~~
+note: declare the function type 'shared () =&gt; void' to share it between threads
+</code></pre>
+</li>
+</ul>
+<p>A generic <code>[Shared]</code> struct whose parameter has no constraint is checked
+for each set of type arguments, and the error points at the code that asked
+for the specialization:</p>
+<pre><code class="language-pepper">[Shared]
+struct Cell&lt;T&gt; {
+    const value: T;
+}
+
+make&lt;T&gt;(): Cell&lt;T&gt; { return Cell&lt;T&gt;(); }
+
+main(): int {
+    var c = make&lt;String&gt;();
+    return 0;
+}
+</code></pre>
+<pre><code class="language-text">main.pep:9:13: error: 'make&lt;String&gt;' requires thread-safe type arguments; 'String' is not thread-safe
+    9 |     var c = make&lt;String&gt;();
+      |             ^~~~~~~~~~~~
+main.pep:6:29: note: 'Cell&lt;String&gt;' is required here, in 'make&lt;String&gt;'
+    6 | make&lt;T&gt;(): Cell&lt;T&gt; { return Cell&lt;T&gt;(); }
+      |                             ^~~~~~~
+main.pep:3:18: note: required by field 'value' declared here
+    3 |     const value: T;
+      |                  ^
+runtime/string.pep:41:15: note: 'String' is not declared [Shared]
+</code></pre>
+<p>A generic can state the rule up front with the built-in constraint
+<a href="generics.html#the-shared-constraint"><code>T: Shared</code></a>: <code>[Shared] struct Cell&lt;T: Shared&gt;</code> accepts exactly the type arguments above, and a wrong one
+is reported where it is written (<code>'String' does not conform to 'Shared', required by 'T' in 'Cell'</code>). The standard library’s <code>Atomic&lt;T&gt;</code>, <code>spawn</code>,
+<code>run_blocking</code> and <code>Lazy&lt;T&gt;</code> do this, so <code>Atomic&lt;String&gt;</code> is reported at
+<code>String</code>.</p>
+<p>A field that is not <code>const</code>, or that has a type that is not thread-safe, is
+reported at the field:</p>
+<pre><code class="language-text">main.pep:3:9: error: field 'Count' of shared struct 'Counter' must be 'const'
+    3 |     int Count;
+      |         ^~~~~
+note: threads change a shared struct's state through a thread-safe member such as 'async.Atomic&lt;T&gt;' (after 'import async')
+</code></pre>
+<p><code>Thread</code>, <code>ThreadLocal&lt;T&gt;</code> and <code>Atomic&lt;T&gt;</code> are <code>[Shared]</code> themselves, and so
+are the synchronization types below: <code>Channel&lt;T&gt;</code>, <code>Mutex&lt;T&gt;</code>,
+<code>Condition&lt;T&gt;</code>, <code>Once</code> and <code>Lazy&lt;T&gt;</code>.</p>
+<h3 id="module-scope-variables"><a class="header" href="#module-scope-variables">Module-scope variables</a></h3>
+<p>Every module-scope variable is implicitly shared, exported or not: any
+function can use it, and any function can run on any thread. So it follows
+the same two rules as a field of a <code>[Shared]</code> struct:</p>
+<ul>
+<li><strong>It must be <code>const</code>.</strong> To change the value, give it a thread-safe type such
+as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a value per thread.</li>
+<li><strong>It must have a thread-safe type</strong> from the list above. A <code>String</code>, an
+<code>Array</code>, a struct that is not <code>[Shared]</code>, a trait value, or a plain function
+value cannot be a module-scope variable; keep it in a local, or in a
+<code>ThreadLocal&lt;T&gt;</code>.</li>
+</ul>
+<pre><code class="language-pepper">const MAX_WORKERS = 8;                  # a number
+const jobs_done = async.Atomic&lt;long&gt;(0);  # changed with fetch_add
+const settings = Settings(8080, 3);     # a [Shared] struct
+const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
+const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared function
+</code></pre>
+<p>A variable that breaks a rule is reported at its name or type:</p>
+<pre><code class="language-text">main.pep:1:5: error: module-scope variable 'hits' must be 'const'
+    1 | var hits = 0;
+      |     ^~~~
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic&lt;T&gt;' or 'async.ThreadLocal&lt;T&gt;' (after 'import async')
+</code></pre>
+<pre><code class="language-text">main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe
+    2 | const origin: Plain = Plain();
+      |               ^~~~~
+main.pep:1:8: note: 'Plain' is not declared [Shared]
+    1 | struct Plain { var x: int; }
+      |        ^~~~~
+</code></pre>
+<p>Module-scope variables are initialized before <code>main</code> runs, in the order they
+are declared, and each file’s after those of the files it imports and of the
+runtime. So an initializer may use the variables of the files it imports.</p>
+<h2 id="channels"><a class="header" href="#channels">Channels</a></h2>
+<p>A <code>Channel&lt;T&gt;</code> carries values from threads that send to threads that
+receive, with any number of each, like a Go channel. (In a
+<a href="tasks.html#mutexes-channels-and-conditions">task</a>, a wait parks only the
+task, and so do the waits of <code>Mutex</code> and <code>Condition</code> below.)</p>
+<pre><code class="language-pepper">import async;
+
+# The main thread sends numbers to a pool of workers, and the workers send
+# their squares back on a second channel.
+const jobs = async.Channel&lt;long&gt;(16);    # bounded: send waits while 16 are queued
+const results = async.Channel&lt;long&gt;();   # unbounded: send never waits
+
+square_numbers() {
+    # The loop ends once `jobs` is closed and empty.
+    for (var n in jobs) {
+        results.send(n * n);
+    }
+}
+
+# A `shared` function value is thread-safe, so a channel can carry work.
+const tasks = async.Channel&lt;async.ThreadBody&gt;();
+const ran = async.Atomic&lt;long&gt;(0);
+
+run_tasks() {
+    for (var task in tasks) {
+        task();
+    }
+}
+
+main(): int {
+    var workers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 4) {
+        workers.append(async.Thread.spawn(square_numbers));
+        i = i + 1;
+    }
+    var n: long = 1;
+    while (n &lt;= 100) {
+        jobs.send(n);
+        n = n + 1;
+    }
+    jobs.close();   # no more work: each worker's loop ends
+    for (var worker in workers) {
+        worker.join();
+    }
+    results.close();
+
+    var total: long = 0;
+    for (var square in results) {
+        total = total + square;
+    }
+    assert(total == 338350, "the sum of the first 100 squares");
+
+    # receive() returns a Result: an error once the channel is closed and
+    # empty. A closed channel refuses new values.
+    assert(results.receive().is_err(), "nothing left");
+    assert(!results.send(1), "closed");
+
+    var runner = async.Thread.spawn(run_tasks);
+    tasks.send(() =&gt; { ran.fetch_add(1); });
+    tasks.send(() =&gt; { ran.fetch_add(10); });
+    tasks.close();
+    runner.join();
+    assert(ran.load() == 11, "the runner ran both tasks");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>Channel&lt;T&gt;(capacity)</code> makes a channel that holds at most <code>capacity</code>
+values; <code>send</code> waits while it is full. <code>Channel&lt;T&gt;()</code> (capacity 0) is
+unbounded, and <code>send</code> never waits.</li>
+<li><code>send(value)</code> queues a value and returns <code>true</code>, or returns <code>false</code> if the
+channel is closed. <code>try_send(value)</code> does not wait: it also returns
+<code>false</code> when a bounded channel is full.</li>
+<li><code>receive()</code> waits for the next value and returns a <code>Result&lt;T&gt;</code>: the
+value, or an error once the channel is closed and empty.
+<code>try_receive()</code> returns an error right away when nothing is waiting, and
+<code>receive_for(milliseconds)</code> when the time runs out.</li>
+<li><code>close()</code> ends the stream and wakes every waiting sender and receiver.
+Values already queued are still received. Only <code>close()</code> closes a
+channel: dropping it, or ending the threads that use it, does not.</li>
+<li><code>for (var v in channel)</code> receives until the channel is closed and empty.
+Several threads can loop over one channel; each value goes to one of them.</li>
+<li>Values from one sender arrive in the order they were sent.</li>
+<li>The <code>count</code> property and <code>is_closed()</code> report the channel’s state, which other
+threads may change right after.</li>
+</ul>
+<p><code>send</code> and <code>try_send</code> take a <strong>new</strong> value, which nothing on the sending
+thread references, and hand it to the receiver without copying it: a
+constructor call, a literal, a call that returns a fresh value,
+<a href="memory.html#handing-a-reference-over-with-move"><code>move(x)</code></a> (a variable that
+holds the only reference) or <a href="memory.html#copying-a-value-with-copy"><code>copy(x)</code></a>
+(when the sender keeps using <code>x</code>). A <code>String</code>, an <code>Array</code> or a struct of them
+can be sent, and changing the original after sending a copy does not change
+what was sent:</p>
+<pre><code class="language-pepper">import async;
+
+# A plain struct: no destructor and no raw pointer, so `copy` copies it field
+# by field. Its Strings and Array are not thread-safe, but a Channel takes
+# only new values, and a copy is one.
+struct Order {
+    String customer;
+    Array&lt;String&gt; items;
+    Order next;
+
+    construct(this.customer = "") {
+        items = Array&lt;String&gt;();
+    }
+}
+
+const orders = async.Channel&lt;Order&gt;();
+const letters = async.Atomic&lt;long&gt;(0);
+
+count_letters() {
+    for (var order in orders) {
+        for (var item in order.items) {
+            letters.fetch_add(item.length as long);
+        }
+    }
+}
+
+main(): int {
+    # copy() makes a new object for everything that is not thread-safe.
+    var tea = Order("ada");
+    tea.items.append("tea");
+    var copied = copy(tea);
+    copied.items[0].append(" and cake");
+    assert(tea.items[0] == "tea", "the original is unchanged");
+
+    # Objects referenced twice stay shared in the copy, and cycles are kept.
+    var a = Order("a");
+    var b = Order("b");
+    a.next = b;
+    b.next = a;
+    var pair = copy(a);
+    assert(pair.next.next === pair, "the copy has the same cycle");
+    a.next = __null;
+    pair.next = __null;
+
+    # send() takes a new value: send a copy to keep changing the order.
+    var worker = async.Thread.spawn(count_letters);
+    var order = Order("grace");
+    order.items.append("coffee");
+    orders.send(copy(order));
+    order.items.append("biscuits");
+    # Or hand the value itself over with `move`; `last` is null afterwards.
+    var last = Order("hopper");
+    last.items.append("tea");
+    orders.send(move(last));
+    orders.close();
+    worker.join();
+    assert(letters.load() == 9, "the worker saw only what was sent");
+    return 0;
+}
+</code></pre>
+<p>Sending a variable that something else may still reference is an error, and
+the editor offers both fixes:</p>
+<pre><code class="language-text">main.pep:7:16: error: 'line' is not a new value, but parameter 'value' takes a value that nothing else references
+    7 |     lines.send(line);
+      |                ^~~~
+      |                move(line)
+runtime/async/channel.pep:151:27: note: 'value' is declared [Move] here
+  151 |     bool send([Move] T value) {
+      |                           ^~~~~
+note: hand it over with 'move(line)', or pass a new value, such as 'copy(line)'
+</code></pre>
+<p>A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function value
+such as a <code>ThreadBody</code>) passes freely, which makes a channel of <code>ThreadBody</code>
+values a work queue. Since nothing is copied, a channel can carry any type,
+trait values and values that cannot be copied (an <code>io.File</code>) included.</p>
+<p>The <a href="../reference/async-channel.html">Channel reference</a> documents every
+method.</p>
+<h3 id="waiting-on-several-channels-with-select"><a class="header" href="#waiting-on-several-channels-with-select">Waiting on several channels with Select</a></h3>
+<p>A <code>Select&lt;E&gt;</code> waits on several channels at once and takes the first value
+any of them receives, like Go’s <code>select</code>. Each channel is added with a
+function that turns its values into an <code>E</code>, usually a case of an
+<a href="enums.html">enum</a> of your own that carries the value, so the channels may
+carry different types and a <code>match</code> handles the result:</p>
+<pre><code class="language-pepper">import async;
+
+# Every value the select can return: one case per channel.
+enum Event {
+    Line(text: String),
+    Reading(value: long),
+    Stop,
+}
+
+const lines = async.Channel&lt;String&gt;();
+const readings = async.Channel&lt;long&gt;();
+const stop = async.Channel&lt;bool&gt;();
+
+read_lines() {
+    lines.send("first");
+    lines.send("second");
+    lines.close();
+}
+
+read_sensor() {
+    var i: long = 1;
+    while (i &lt;= 3) {
+        readings.send(i * 10);
+        i = i + 1;
+    }
+    readings.close();
+}
+
+main(): int {
+    var select = async.Select&lt;Event&gt;();
+    select.receive(lines, (text: String): Event =&gt; Event.Line(text));
+    select.receive(readings, (value: long): Event =&gt; Event.Reading(value));
+    select.receive(stop, (unused: bool): Event =&gt; Event.Stop);
+
+    var threads = [async.Thread.spawn(read_lines), async.Thread.spawn(read_sensor)];
+    var text = 0;
+    var total: long = 0;
+    var running = true;
+    while (running) {
+        match (select.wait()) {
+            Ok(event) =&gt; {
+                match (event) {
+                    Line(line) =&gt; {
+                        text = text + 1;
+                    }
+                    Reading(value) =&gt; {
+                        total = total + value;
+                    }
+                    Stop =&gt; {
+                        running = false;
+                    }
+                }
+            }
+            Err(error) =&gt; {
+                # Every channel is closed and empty (`stop` included, below).
+                running = false;
+            }
+        }
+        if (text == 2 &amp;&amp; total == 60) {
+            stop.close();
+        }
+    }
+    for (var thread in threads) {
+        thread.join();
+    }
+    assert(text == 2 &amp;&amp; total == 60, "every value arrived once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>receive(channel, wrap)</code> adds a channel. <code>wrap</code> runs on the waiting
+thread, with the value received.</li>
+<li><code>wait()</code> waits until a channel has a value and returns it as an <code>E</code>, in a
+<code>Result&lt;E&gt;</code>. <code>wait_for(milliseconds)</code> gives up after that long, and
+<code>try_wait()</code> does not wait at all.</li>
+<li>The value is taken under that channel’s own lock, so no other receiver
+can take it between “ready” and “take”.</li>
+<li>When several channels have values, each wait starts just after the
+channel that fired last, so one busy channel cannot starve the others.</li>
+<li>A channel that is closed and empty is skipped. Once every channel is,
+<code>wait()</code> returns an error (<code>every channel is closed</code>). A timeout’s error
+is <code>the time ran out</code>.</li>
+<li>A <code>Select</code> belongs to the thread (or <a href="tasks.html">task</a>) that made it; it
+is not <code>[Shared]</code>. In a task, waiting parks the task, and a cancel or the
+task’s <code>timeout</code> ends the wait.</li>
+</ul>
+<p>The <a href="../reference/async-select.html">Select reference</a> documents every method.</p>
+<h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
+<p>A <code>Mutex&lt;T&gt;</code> owns a value that one thread at a time can use. The way to
+reach the value is a <a href="scopes.html"><code>with</code> block</a>:</p>
+<pre><code class="language-pepper">import async;
+
+# Each balance is an Atomic, but moving money changes both, and no thread
+# may see it in neither account. A Mutex makes the pair of updates one step.
+[Shared]
+struct Accounts {
+    const checking: async.Atomic&lt;long&gt;;
+    const savings: async.Atomic&lt;long&gt;;
+    construct(long checking = 0, long savings = 0) {
+        this.checking = async.Atomic&lt;long&gt;(checking);
+        this.savings = async.Atomic&lt;long&gt;(savings);
+    }
+}
+
+const accounts = async.Mutex&lt;Accounts&gt;(Accounts(1000, 0));
+const bad_totals = async.Atomic&lt;long&gt;(0);
+
+move_to_savings() {
+    var i = 0;
+    while (i &lt; 1000) {
+        with (var a = accounts.lock()) {
+            a.checking.fetch_sub(1);
+            a.savings.fetch_add(1);
+        }   # unlocked here, on every path out of the block
+        i = i + 1;
+    }
+}
+
+audit() {
+    var i = 0;
+    while (i &lt; 1000) {
+        with (var a = accounts.lock()) {
+            if (a.checking.load() + a.savings.load() != 1000) {
+                bad_totals.fetch_add(1);
+            }
+        }
+        i = i + 1;
+    }
+}
+
+main(): int {
+    var mover = async.Thread.spawn(move_to_savings);
+    var auditor = async.Thread.spawn(audit);
+    mover.join();
+    auditor.join();
+    assert(bad_totals.load() == 0, "the auditor never saw money missing");
+
+    # try_lock does not wait: the body runs if the lock was free, and the
+    # else block runs if another thread held it.
+    with (var a = accounts.try_lock()) {
+        assert(a.savings.load() == 1000, "everything was moved");
+    } else {
+        assert(false, "no other thread holds the lock now");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>with (var v = mutex.lock()) { ... }</code> waits until no other thread holds
+the lock, binds the value, and unlocks when the block ends by any path:
+the end of the body, <code>return</code>, <code>break</code> or <code>continue</code>. Everything a thread
+did while it held the lock is visible to the next thread that takes it.</li>
+<li><code>try_lock()</code> does not wait. With <code>with (var v = mutex.try_lock()) { ... } else { ... }</code>, the body runs if the lock was free and the <code>else</code> block runs
+if it was not.</li>
+<li>A Mutex is not re-entrant: calling <code>lock()</code> again on the thread that holds
+it panics instead of deadlocking. <code>is_held()</code> reports whether the calling
+thread holds it.</li>
+<li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
+“poisoned”.</li>
+</ul>
+<p><code>T</code> is a struct type: a struct of your own, an <code>Array&lt;String&gt;</code>, or a
+<code>[Shared]</code> struct whose <code>Atomic</code> fields must change as a unit.
+<code>Mutex&lt;int&gt;</code> is an error (use <code>async.Atomic&lt;int&gt;</code>). A Mutex of values that are not
+thread-safe is kept apart from the rest of the program by the compiler; see
+<a href="#what-a-lock-body-may-do">What a lock body may do</a>.</p>
+<ul>
+<li><code>Mutex&lt;T&gt;(value)</code> and <code>replace(value)</code> take a <strong>new</strong> value: a constructor
+call, a string literal, a call that returns a fresh value, <code>copy(x)</code>, or
+<code>move(x)</code>, never a variable something else still references. The caller
+hands its reference over, so nothing is copied.</li>
+<li><code>replace(value)</code> swaps the whole value under the lock and returns the old
+one, which the caller then owns outright.</li>
+</ul>
+<p>A value built in a local variable goes in with
+<a href="memory.html#handing-a-reference-over-with-move"><code>move</code></a>, which hands over the
+variable’s reference instead of copying the value:</p>
+<pre><code class="language-pepper">import async;
+
+main(): int {
+    # Build the list here, then hand it to the Mutex: `move` gives up
+    # `lines`' reference, so nothing is copied and `lines` is empty after.
+    var lines = Array&lt;String&gt;();
+    lines.append("first");
+    var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));
+
+    var line = "second";
+    with (var list = log.lock()) {
+        # `line` holds the only reference to its String, so it can move in.
+        list.append(move(line));
+    }
+
+    # Swap in a new list; the old one comes back without a copy either.
+    var next = Array&lt;String&gt;();
+    next.append("third");
+    var old = log.replace(move(next));
+    print($"{old.count}");     # 2
+    print(old[1]);               # second
+    return 0;
+}
+</code></pre>
+<p>A <code>Condition&lt;T&gt;</code> lets a thread that holds a Mutex sleep until another thread
+changes the value. Get one with <code>mutex.condition()</code>:</p>
+<pre><code class="language-pepper">import async;
+
+# A baker makes pies and eaters take them. The eaters sleep on a Condition
+# until there is a pie, or until the bakery closes.
+[Shared]
+struct Bakery {
+    const pies: async.Atomic&lt;long&gt;;
+    const closed: async.Atomic&lt;int&gt;;
+    construct() {
+        pies = async.Atomic&lt;long&gt;(0);
+        closed = async.Atomic&lt;int&gt;(0);
+    }
+}
+
+const bakery = async.Mutex&lt;Bakery&gt;(Bakery());
+const changed = bakery.condition();
+const eaten = async.Atomic&lt;long&gt;(0);
+
+eat() {
+    while (true) {
+        with (var b = bakery.lock()) {
+            # Wait in a loop: a wakeup can be spurious, and another eater
+            # may take the pie first.
+            while (b.pies.load() == 0 &amp;&amp; b.closed.load() == 0) {
+                changed.wait();   # unlocks, sleeps, locks again
+            }
+            if (b.pies.load() == 0) {
+                return;   # closed and nothing left; the block unlocks
+            }
+            b.pies.fetch_sub(1);
+        }
+        eaten.fetch_add(1);
+    }
+}
+
+main(): int {
+    var eaters = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 3) {
+        eaters.append(async.Thread.spawn(eat));
+        i = i + 1;
+    }
+    i = 0;
+    while (i &lt; 50) {
+        with (var b = bakery.lock()) {
+            b.pies.fetch_add(1);
+            changed.notify_one();
+        }
+        i = i + 1;
+    }
+    with (var b = bakery.lock()) {
+        b.closed.store(1);
+        changed.notify_all();
+    }
+    for (var eater in eaters) {
+        eater.join();
+    }
+    assert(eaten.load() == 50, "every pie was eaten once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>wait()</code> must run while the caller holds the Mutex, normally
+inside its <code>with</code> block. It unlocks, sleeps until notified, and locks again
+before returning. It panics if the caller does not hold the Mutex.</li>
+<li>A thread can wake without a notification (a spurious wakeup), and another
+thread may get to the value first, so always wait in a loop that re-checks
+what it waits for.</li>
+<li><code>wait_for(milliseconds)</code> gives up after that long and returns <code>false</code>.</li>
+<li><code>notify_one()</code> wakes one waiting thread, and <code>notify_all()</code> wakes them all.</li>
+</ul>
+<p><code>wait_while(predicate)</code> writes that loop for you: it waits while
+<code>predicate</code> returns true for the locked value, asking again after every
+wakeup, and returns with the Mutex still locked. <code>wait_while_for(milliseconds, predicate)</code> gives up after that long and returns <code>false</code>:</p>
+<pre><code class="language-pepper">import async;
+
+# A worker takes jobs from a queue, sleeping while it is empty.
+const jobs = async.Mutex&lt;Array&lt;long&gt;&gt;(Array&lt;long&gt;());
+const changed = jobs.condition();
+const done = async.Atomic&lt;long&gt;(0);
+
+work() {
+    var taken = 0;
+    while (taken &lt; 5) {
+        with (var queue = jobs.lock()) {
+            # Waits while the predicate holds; spurious wakeups are handled.
+            # The predicate is given the locked value: it cannot capture it.
+            changed.wait_while((waiting: Array&lt;long&gt;): bool =&gt; waiting.count == 0);
+            done.fetch_add(queue.remove_at(0));
+            taken = taken + 1;
+        }
+    }
+}
+
+main(): int {
+    var worker = async.Thread.spawn(work);
+    var i: long = 1;
+    while (i &lt;= 5) {
+        with (var queue = jobs.lock()) {
+            queue.append(i);
+            changed.notify_all();
+        }
+        i = i + 1;
+    }
+    worker.join();
+    assert(done.load() == 15, "every job was taken once");
+
+    with (var queue = jobs.lock()) {
+        # Gives up after 10 milliseconds: nothing is queued.
+        var ready = changed.wait_while_for(10, (waiting: Array&lt;long&gt;): bool =&gt; waiting.count == 0);
+        assert(!ready, "the time ran out");
+    }
+    return 0;
+}
+</code></pre>
+<p>The predicate is given the locked value as its parameter, since a closure
+cannot capture part of a locked value. It must be a closure written at the
+call, and the compiler checks its body as it checks a lock body (see
+<a href="#what-a-lock-body-may-do">What a lock body may do</a>): it cannot keep any
+part of the value, or bring in a value from outside.</p>
+<pre><code class="language-text">main.pep:10:26: error: 'queue[0]' is part of the value locked by 'queue' and cannot outlive the lock
+   10 |             saved.append(queue[0]);
+      |                          ^~~~~~~~
+main.pep:9:27: note: locked here
+    9 |         ready.wait_while((queue: Array&lt;String&gt;): bool =&gt; {
+      |                           ^~~~~
+note: 'String' is not thread-safe, so no part of the locked value may be kept outside the block; take 'copy(queue[0])'
+</code></pre>
+<p>The <a href="../reference/async-mutex.html">Mutex reference</a> documents <code>Mutex</code>,
+<code>MutexGuard</code> and <code>Condition</code>.</p>
+<h2 id="what-a-lock-body-may-do"><a class="header" href="#what-a-lock-body-may-do">What a lock body may do</a></h2>
+<p>A value that is not thread-safe counts its references plainly, so no thread
+may hold a reference into a Mutex’s value while the Mutex is unlocked. The
+compiler checks each <code>with</code> block over a lock so that none can:</p>
+<pre><code class="language-pepper">import async;
+
+# A Mutex of values that are not thread-safe: a list of Strings that
+# several threads add to.
+const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
+
+add_names(prefix: String) {
+    var i = 0;
+    while (i &lt; 3) {
+        with (var list = names.lock()) {
+            list.append("worker");            # a new String: fine
+            list.append(prefix + "!");        # `+` returns a new String: fine
+            list.append(copy(prefix));        # a copy of an outside value: fine
+            var n = list.count;             # a number leaves freely
+            if (list.contains(prefix)) {      # comparing keeps nothing
+                n = n + 1;
+            }
+        }
+        i = i + 1;
+    }
+}
+
+# Part of the locked value leaves the block only as a copy.
+first_name(): String {
+    with (var list = names.lock()) {
+        if (list.count &gt; 0) {
+            return list[0].copy();
+        }
+    }
+    return "";
+}
+
+main(): int {
+    var a = async.Thread.spawn(() =&gt; { add_names("a"); });
+    var b = async.Thread.spawn(() =&gt; { add_names("b"); });
+    a.join();
+    b.join();
+
+    var first = first_name();
+    first.append(" (mine)");   # changing the copy leaves the list alone
+    with (var list = names.lock()) {
+        assert(list.count == 18, "every name was added");
+        assert(list[0] == "worker", "the locked String is unchanged");
+    }
+
+    # replace swaps in a new value and hands back the old one, which the
+    # caller then owns outright.
+    var old = names.replace(Array&lt;String&gt;());
+    assert(old.count == 18, "the old list");
+
+    # A thread's own value that is not thread-safe is reached through `with`.
+    var scratch = async.ThreadLocal&lt;String&gt;();
+    scratch.set("draft");
+    with (var text = scratch.enter()) {
+        text.append(" 2");
+    }
+    with (var text = scratch.enter()) {
+        assert(text == "draft 2", "this thread's value");
+    }
+    return 0;
+}
+</code></pre>
+<p>Inside the block, every value that is not thread-safe is either <strong>part of
+the locked value</strong> (the binding, its fields and elements, and what calls on
+them return), from <strong>outside</strong> (a parameter, <code>this</code>, or a variable declared
+before the block), or <strong>new</strong>. A new value may join either side; the other
+two must never meet:</p>
+<ul>
+<li>
+<p><strong>Moving in.</strong> A call, constructor or assignment that would link an
+outside value with the locked one is an error. Pass a new value instead:
+<code>copy(line)</code>, a literal, or the result of a call that returns a fresh
+value. A variable that holds the only reference to its value can hand it
+over with <code>move(line)</code>.</p>
+<pre><code class="language-text">main.pep:8:21: error: 'line' cannot move into the value locked by 'names'
+    8 |         list.append(line);
+      |                     ^~~~
+main.pep:7:28: note: locked here
+    7 |     with (var list = names.lock()) {
+      |                            ^~~~
+note: 'String' is not thread-safe, so the locked value cannot share it with the rest of the program; pass 'copy(line)'
+</code></pre>
+</li>
+<li>
+<p><strong>Moving out.</strong> Storing part of the locked value outside the block, or
+returning it from the block, is an error; take a copy
+(<code>copy(list[0])</code>, or <code>list[0].copy()</code>, which returns a fresh value).</p>
+<pre><code class="language-text">main.pep:8:17: error: 'list[0]' is part of the value locked by 'names' and cannot outlive the lock
+    8 |         first = list[0];
+      |                 ^~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong>Closures.</strong> A closure written in the block cannot capture part of the
+locked value, since a function value could carry it out.</p>
+</li>
+<li>
+<p><strong>Two locks.</strong> Values locked by two nested blocks stay apart as well.</p>
+</li>
+<li>
+<p><strong>Numbers pass freely</strong>, as do every thread-safe value and every new one.</p>
+</li>
+</ul>
+<p>Which calls link which values comes from what the called function does: the
+compiler works out, for every function, whether it keeps an argument (as
+<code>append</code> keeps its element) and whether its result shares anything with its
+arguments. A result that shares nothing, such as that of <code>+</code>, <code>substr</code>,
+<code>copy()</code> or a constructor, is <strong>fresh</strong>, and may cross in either direction.
+The language server shows “Returns a fresh value” when hovering over such a
+function. A call through a function value, a value an <code>extern</code> function
+hands back, and a value read through raw memory that a <code>[Shared]</code> struct
+holds are never fresh: something else may reference them. The runtime takes
+the few values it hands out that nothing else references out of raw memory
+with <code>move(p[i])</code>, a promise the compiler cannot check and allows only in the
+runtime: a channel’s <code>receive()</code> (the value <code>send</code> handed over) and a Mutex’s
+<code>replace()</code>.</p>
+<p>A function that returns a <a href="tuples.html">tuple</a> has one such fact per element:
+after <code>var (fresh, same) = split(line);</code>, <code>fresh</code> may move into a locked value
+while <code>same</code>, which <code>split</code> returned from its argument, may not.</p>
+<p>The guard a <code>lock()</code> returns can only be the scope of a <code>with</code> header: storing
+it in a variable or field is an error, so no lock outlives its block.</p>
+<p>Two attributes carry these rules, and code outside the runtime may use them
+too:</p>
+<ul>
+<li><code>[Isolated]</code> on a struct makes it a guard: it can only be the scope of a
+<code>with</code> header, and the block is checked as above. <code>MutexGuard&lt;T&gt;</code> and
+<code>ThreadLocalGuard&lt;T&gt;</code> are <code>[Isolated]</code>.</li>
+<li><code>[Move]</code> on a parameter (<code>construct([Move] T value)</code>) requires a new
+value for it at every call: a constructor call, a literal, a fresh result,
+<code>copy(x)</code>, <code>move(x)</code>, or any thread-safe value. The caller hands its
+reference over, so the function receives it without a count step.</li>
+</ul>
+<h3 id="checking-confinement-at-run-time"><a class="header" href="#checking-confinement-at-run-time">Checking confinement at run time</a></h3>
+<p>Raw memory (<code>__ptr&lt;T&gt;</code>) and <code>extern</code> code are promises the compiler cannot
+check, so a program that uses them can still keep a reference into a locked
+value. Set the environment variable <code>PEP_CHECK_SYNC</code> when running a program
+to check at every unlock that nothing outside the locked value refers into
+it:</p>
+<pre><code class="language-text">$ PEP_CHECK_SYNC=1 ./main
+PEP_CHECK_SYNC: an object in the value locked by a 'Mutex&lt;Box&gt;' is still referenced from outside it
+</code></pre>
+<p>The check copies the locked value to count the references inside it, so it
+costs time and memory in proportion to the value’s size at each unlock; it
+is off unless the variable is set. It checks a <code>Mutex&lt;T&gt;</code> whose <code>T</code> is not
+thread-safe and can be <a href="memory.html#copying-a-value-with-copy">copied</a>.</p>
+<h2 id="once-and-lazy"><a class="header" href="#once-and-lazy">Once and Lazy</a></h2>
+<p><code>Once</code> runs a function exactly once, however many threads ask, and <code>Lazy&lt;T&gt;</code>
+builds a value the first time a thread asks for it:</p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Settings {
+    const workers: long;
+    construct(this.workers = 1) {}
+}
+
+const builds = async.Atomic&lt;long&gt;(0);
+
+load_settings(): Settings {
+    builds.fetch_add(1);
+    return Settings(async.logical_cpus() as long);
+}
+
+# Built by the first thread that calls get(), not before main runs.
+const settings = async.Lazy&lt;Settings&gt;(load_settings);
+
+# Runs initialize() once, however many threads call it.
+const setup = async.Once();
+const setups = async.Atomic&lt;long&gt;(0);
+
+initialize() {
+    setups.fetch_add(1);
+}
+
+work() {
+    setup.call(initialize);
+    assert(settings.get().workers &gt;= 1, "every thread sees the settings");
+}
+
+main(): int {
+    assert(!settings.is_built(), "nothing is built before first use");
+    var workers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 4) {
+        workers.append(async.Thread.spawn(work));
+        i = i + 1;
+    }
+    for (var worker in workers) {
+        worker.join();
+    }
+    assert(builds.load() == 1, "the settings were built once");
+    assert(setups.load() == 1, "initialize ran once");
+    assert(setup.is_done(), "done");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>once.call(body)</code> runs <code>body</code> if no call has run one yet. Threads that
+call it while the body runs wait for it, and every caller sees what the
+body did. <code>is_done()</code> reports whether it has run.</li>
+<li><code>Lazy&lt;T&gt;(initializer)</code> takes a <code>shared () =&gt; T</code> function. The first
+<code>get()</code> runs it; later calls, from any thread, return the same value.
+<code>is_built()</code> reports whether it has run.</li>
+<li>A <code>Lazy&lt;T&gt;</code> is the usual way to give a module-scope variable a value that
+is expensive to build, or that cannot be built before <code>main</code> runs. Its <code>T</code>
+must be thread-safe, since every thread gets the same value.</li>
+</ul>
+<p>The <a href="../reference/async-once.html">Once reference</a> has the details.</p>
+<h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
+<ul>
+<li><code>Lazy&lt;T&gt;</code> holds only thread-safe values.</li>
+<li>A value received from a channel moves into a locked value directly
+(<code>list.append(jobs.receive().value())</code>), but not through a variable
+declared outside the block: such a variable is an outside value, whatever
+it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the only reference
+(<code>list.append(move(job))</code>).</li>
+<li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
+not re-entrant.</li>
+<li>A <code>Select</code> only receives: it cannot wait to send to a full channel. The
+value <code>wait()</code> returns is not a new value for a lock body, since <code>wrap</code>
+is a function value the compiler cannot follow; <code>copy</code> it to move it into
+a locked value.</li>
+<li>Deadlocks are not detected, except locking a Mutex twice on one thread,
+which panics.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/atomics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/tasks.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/atomics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/tasks.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
