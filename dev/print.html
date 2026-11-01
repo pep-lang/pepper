@@ -229,7 +229,7 @@ to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
 libraries that iOS and Android apps call (see
 <a href="language/mobile.html">iOS and Android</a>).
 Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
-and macOS (arm64 and x64), and installs with one command: see
+and macOS (arm64), and installs with one command: see
 <a href="tools/install.html">Installing Pepper</a>.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested, and so does a
@@ -361,8 +361,8 @@ refer to each other are never freed. Break the cycle with a
 chapter shows a feature, the example was compiled and run to check it.</p>
 <h2 id="how-this-book-is-organized"><a class="header" href="#how-this-book-is-organized">How this book is organized</a></h2>
 <ul>
-<li><strong>Tutorial.</strong> <a href="tutorial/getting-started.html">Getting started</a> builds the
-compiler and runs your first program. <a href="tutorial/tour.html">A tour of Pepper</a>
+<li><strong>Tutorial.</strong> <a href="tutorial/getting-started.html">Getting started</a> installs
+Pepper and builds and runs your first program. <a href="tutorial/tour.html">A tour of Pepper</a>
 then walks through the main features by building a small word-counting
 program.</li>
 <li><strong>Language guide.</strong> One chapter per part of the language, in an order to
@@ -375,14 +375,23 @@ tests; and then compile time, platforms and C, starting at
 topic you need.</li>
 <li><strong>Standard library guide.</strong> A chapter for each area of the library, from
 <a href="language/files.html">files</a> to <a href="language/http.html">HTTP</a>.</li>
-<li><strong>Tools.</strong> <a href="tools/pepper.html">The pepper command</a>,
+<li><strong>Tools.</strong> <a href="tools/install.html">Installing Pepper</a>,
+<a href="tools/pepper.html">the pepper command</a>, toolchains with
+<a href="tools/pep-install.html">pep-install</a>, the compiler
+<a href="tools/pep-build.html">pep-build</a>, <a href="tools/projects.html">projects</a> and their
+packages with <a href="tools/pep-package.html">pep-package</a>,
 <a href="tools/pep-new.html">pep-new</a>, <a href="tools/pep-run.html">pep-run</a>,
 <a href="tools/pep-fmt.html">pep-fmt</a>, <a href="tools/pep-profile.html">pep-profile</a>,
-<a href="tools/pep-test.html">pep-test</a> and <a href="tools/debugging.html">debugging</a>.</li>
+<a href="tools/pep-test.html">pep-test</a>, the language server
+<a href="tools/pep-lsp.html">pep-lsp</a>, <a href="tools/pep-doc.html">pep-doc</a> and
+<a href="tools/debugging.html">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
 generated from the runtime's own documentation comments. Start at the
 <a href="reference/README.html">overview</a>.</li>
-<li><strong>Contributing.</strong> <a href="contributing/docs.html">Building this documentation</a>.</li>
+<li><strong>Contributing.</strong> <a href="contributing/building.html">Building Pepper from source</a>,
+<a href="contributing/setup.html">setting up LLVM</a>,
+<a href="contributing/docs.html">building this documentation</a> and
+<a href="contributing/tests.html">testing the runtime and the compiler</a>.</li>
 </ul>
 <p>Every complete program in this book lives in the repository's
 <code>docs/examples/</code> folder and is compiled and run by the test suite, so what
@@ -504,7 +513,7 @@ Store the message in a variable first, then misspell its name:</p>
 }
 </code></pre>
 <p>The compiler reports:</p>
-<pre><code class="language-text">main.pep:3:11: error: use of undeclared identifier 'greting'
+<pre><code class="language-text">hello.pep:3:11: error: use of undeclared identifier 'greting'
     3 |     print(greting);
       |           ^~~~~~~
 </code></pre>
