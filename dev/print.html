@@ -2607,7 +2607,7 @@ entry file must declare it; a file of functions for C to call is a library
 <li>
 <p><strong>Calls must match the declaration.</strong> Passing the wrong number of arguments
 is a compile error:</p>
-<pre><code>main.pep:3:12: error: too many arguments to 'add': expected 2, have 3
+<pre><code class="language-text">main.pep:3:12: error: too many arguments to 'add': expected 2, have 3
     3 |     return add(1, 2, 3);
       |            ^~~
 </code></pre>
@@ -3857,17 +3857,36 @@ whatever holds it, and copied when assigned, passed or returned, instead of
 being an object. Making one allocates nothing, which suits small enums that
 are made often, such as <a href="language/optionals.html"><code>Optional</code></a> and
 <a href="language/results.html"><code>Result</code></a>, which are both value enums.</p>
-<pre><code class="language-pepper">[Value]
+<pre><code class="language-pepper"># A value enum: stored inline and copied, never null.
+
+[Value]
 enum Shape {
     Circle(radius: int),
     Rect(width: int, height: int),
     Point,
 }
+
+struct Drawing {
+    var shape: Shape;
+}
+
+main(): int {
+    # The tag, then every case's values in their own fields: radius, width
+    # and height, four bytes each.
+    assert(sizeof&lt;Shape&gt;() == 16, "tag + radius + width + height");
+    # A field never given a value holds the first case, with its values zero.
+    var drawing = Drawing();
+    assert(drawing.shape == Shape.Circle(0), "an unset Shape is Circle(0)");
+    var copy = drawing.shape;
+    drawing.shape = Shape.Rect(2, 3);
+    assert(copy == Shape.Circle(0), "a copy keeps its own value");
+    return 0;
+}
 </code></pre>
 <ul>
-<li>Its cases share one storage: a value is as large as its largest case, plus
-the tag that says which case it holds (<code>sizeof&lt;Shape&gt;()</code> is 12: the tag,
-then room for <code>Rect</code>'s two <code>int</code>s, which <code>Circle</code>'s <code>radius</code> reuses).</li>
+<li>A value holds the tag that says which case it holds, then the values of
+every case, each in a field of its own: cases do not share storage. So
+<code>sizeof&lt;Shape&gt;()</code> is 16, the tag and <code>radius</code>, <code>width</code> and <code>height</code>.</li>
 <li>A value enum is never null. A slot that is not given a value holds the
 first case, with every value it carries zero, <code>false</code>, or null: an unset
 <code>Shape</code> is <code>Circle(0)</code>.</li>
@@ -4656,15 +4675,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p><strong>Breaking change.</strong> <code>Array.find</code> used to return a <code>long</code> that was <code>-1</code> for
-"not found", and the <code>Path</code> methods above returned an empty <code>Path</code> or
-<code>String</code> (or <code>name.size</code> for <code>dot_index</code>). Code written against the old
-API must test the optional instead: <code>a.find(x) &gt;= 0</code> becomes
-<code>a.find(x).is_value()</code>, <code>p.parent().is_empty</code> becomes
-<code>p.parent().is_empty()</code>, and a value is read with <code>value()</code> or <code>value_or</code>.
-A comparison such as <code>a.find(x) == -1</code> still compiles but compares the
-optional object rather than an index, so search for these and rewrite them.
-<code>String.find</code> is unchanged and still returns <code>-1</code>.</p>
+<p><code>String.find</code> is the exception: it returns a <code>long</code>, <code>-1</code> when the text is
+not found. Comparing an optional with a number, as in <code>a.find(x) == -1</code>, is
+an error (<code>cannot compare 'Optional&lt;ulong&gt;' with an integer</code>); test it with
+<code>is_value()</code> or <code>is_empty()</code> (see <a href="language/deprecation.html#what-is-deprecated">Deprecation</a>
+for code written before these returned optionals).</p>
 <h2 id="optional-or-result"><a class="header" href="#optional-or-result">Optional or Result</a></h2>
 <p>An <code>Optional&lt;T&gt;</code> says only that a value is missing. When the caller needs to
 know <em>why</em>, return a <a href="language/results.html"><code>Result</code></a> instead, whose Err carries an
@@ -15183,6 +15198,8 @@ that names the replacement.</p>
 <tr><td><code>Optional</code> cases <code>None</code> and <code>Some(v)</code> (now an error: renamed)</td><td><code>Empty</code> and <code>Value(v)</code></td></tr>
 <tr><td><code>Optional&lt;T&gt;.some(v)</code>, <code>Optional&lt;T&gt;.none()</code></td><td>the cases <code>Optional&lt;T&gt;.Value(v)</code>, <code>Optional&lt;T&gt;.Empty</code></td></tr>
 <tr><td><code>Optional.is_some()</code>, <code>Optional.is_none()</code></td><td><code>is_value()</code>, <code>is_empty()</code></td></tr>
+<tr><td><code>Array.find(x)</code> returning a <code>long</code>, <code>-1</code> when not found (now an optional: comparing it with a number is an error)</td><td><code>a.find(x).is_value()</code>, and <code>value()</code> or <code>value_or(...)</code> for the index</td></tr>
+<tr><td><code>io.Path.parent()</code>, <code>file_name()</code>, <code>file_stem()</code>, <code>extension()</code> returning an empty <code>Path</code> or <code>String</code>, and <code>dot_index</code> returning <code>name.size</code>, when there is none (now optionals)</td><td><code>is_value()</code> / <code>is_empty()</code> on the result, as in <code>p.parent().is_empty()</code></td></tr>
 <tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
 <tr><td>A parameter's former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="language/functions.html#other-names-for-a-parameter">named arguments</a>)</td></tr>
 <tr><td><code>Copyable&lt;T&gt;</code> implemented as <code>copy(copies: Copies): T</code>, with <code>copies.copy(x)</code> and <code>copies.register(original, made)</code></td><td><code>copy(): T</code>, with <code>copy(x)</code> and <code>register_copy(original, made)</code> (see <a href="language/memory.html">copying</a>)</td></tr>

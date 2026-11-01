@@ -374,17 +374,36 @@ whatever holds it, and copied when assigned, passed or returned, instead of
 being an object. Making one allocates nothing, which suits small enums that
 are made often, such as <a href="optionals.html"><code>Optional</code></a> and
 <a href="results.html"><code>Result</code></a>, which are both value enums.</p>
-<pre><code class="language-pepper">[Value]
+<pre><code class="language-pepper"># A value enum: stored inline and copied, never null.
+
+[Value]
 enum Shape {
     Circle(radius: int),
     Rect(width: int, height: int),
     Point,
 }
+
+struct Drawing {
+    var shape: Shape;
+}
+
+main(): int {
+    # The tag, then every case's values in their own fields: radius, width
+    # and height, four bytes each.
+    assert(sizeof&lt;Shape&gt;() == 16, "tag + radius + width + height");
+    # A field never given a value holds the first case, with its values zero.
+    var drawing = Drawing();
+    assert(drawing.shape == Shape.Circle(0), "an unset Shape is Circle(0)");
+    var copy = drawing.shape;
+    drawing.shape = Shape.Rect(2, 3);
+    assert(copy == Shape.Circle(0), "a copy keeps its own value");
+    return 0;
+}
 </code></pre>
 <ul>
-<li>Its cases share one storage: a value is as large as its largest case, plus
-the tag that says which case it holds (<code>sizeof&lt;Shape&gt;()</code> is 12: the tag,
-then room for <code>Rect</code>'s two <code>int</code>s, which <code>Circle</code>'s <code>radius</code> reuses).</li>
+<li>A value holds the tag that says which case it holds, then the values of
+every case, each in a field of its own: cases do not share storage. So
+<code>sizeof&lt;Shape&gt;()</code> is 16, the tag and <code>radius</code>, <code>width</code> and <code>height</code>.</li>
 <li>A value enum is never null. A slot that is not given a value holds the
 first case, with every value it carries zero, <code>false</code>, or null: an unset
 <code>Shape</code> is <code>Circle(0)</code>.</li>
