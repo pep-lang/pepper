@@ -1,0 +1,347 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Building this documentation - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/contributing/docs.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="building-this-documentation"><a class="header" href="#building-this-documentation">Building this documentation</a></h1>
+<p>This book lives in <code>docs/</code> and is rendered with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>.
+The standard library reference (<code>docs/src/reference/</code>) is generated from the
+runtime's doc comments by <code>pep-doc</code>, a Pepper tool in this repository
+(<code>tools/pep-doc</code>), which <code>scripts/pepper-tests.sh</code> builds beside <code>pep-build</code>.</p>
+<p>Install mdBook once, from <a href="https://github.com/rust-lang/mdBook/releases">its releases</a>
+(a single binary to put on the <code>PATH</code>), then:</p>
+<pre><code class="language-sh">
+pep-doc serve                                 # live preview while writing
+pep-doc reference                             # regenerate the reference after changing runtime docs
+pep-doc build                                 # render into target/docs-site/dev/
+pep-doc build --version 0.11.1 --site &lt;dir&gt;
+</code></pre>
+<p>Run it as <code>target/pepper-tests/bin/pep-doc</code> after <code>scripts/pepper-tests.sh</code>,
+or as <code>pepper doc</code>.</p>
+<p><code>pep-doc</code>'s commands and options are described in
+<a href="../tools/pep-doc.html">The documentation builder: pep-doc</a>.</p>
+<h2 id="keeping-the-book-current"><a class="header" href="#keeping-the-book-current">Keeping the book current</a></h2>
+<p>Documentation changes land in the same PR as the code they describe. The
+checklist of what to update for each kind of change is in <code>AGENTS.md</code>, under
+"Keep the documentation current".</p>
+<h2 id="examples-are-tested"><a class="header" href="#examples-are-tested">Examples are tested</a></h2>
+<p>Every runnable example lives in <code>docs/examples/</code>: a single <code>name.pep</code>, or a
+folder <code>name/</code> whose entry point is <code>main.pep</code>. Chapters pull them in with
+mdBook's include syntax, so the text on the page is the file that was tested:</p>
+<pre><code class="language-markdown">```pepper
+{{#include ../../examples/structs.pep}}
+```
+</code></pre>
+<p><code>tools/pep-doc/examples_test.pep</code>, which <code>scripts/pepper-tests.sh</code> runs,
+builds and runs every example; each must return 0 from <code>main</code> and uses
+<code>assert</code> to check what it shows. An example that prints ends with an
+<code># Output:</code> block, a <code># </code> line for each line it prints (<code>#</code> alone for an
+empty one), and must print exactly that; leave it out where the output
+differs between runs or platforms. A failure is printed as it happens.
+<code>PEPPER_DOCS_EXAMPLE=structs</code> limits it to
+the examples whose name starts with <code>structs</code>, and
+<code>PEPPER_DOCS_EXAMPLES=platform</code> to those marked per platform, which is all
+a pull request's macOS and Windows jobs run (see
+<a href="tests.html">Testing</a>). An example whose code differs per platform marks it
+with <code>[Target(OS(...))]</code> or <code>[Target(Arch(...))]</code>. A sample of the examples is
+also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
+chapter.</p>
+<p>The same test builds and runs every <code>@example</code> in the runtime's doc
+comments that is a whole program (it declares <code>main</code>), and reports a
+failure at its <code>@example</code> line. Its names start with <code>runtime-</code>, so
+<code>PEPPER_DOCS_EXAMPLE=runtime-</code> runs only those. One that must not run, such
+as a server or a program that needs arguments, is written <code>@example no-run</code>: it is built but not run.</p>
+<h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
+<p>Documentation is versioned with the compiler's <a href="https://semver.org">semantic version</a>
+(the one line of the root <code>VERSION</code> file). <code>pep-doc build --version X.Y.Z</code>
+renders the book into <code>&lt;site&gt;/X.Y.Z/</code> and leaves every other version in the
+site alone; <code>versions.json</code> lists them for the version picker, and the site's
+<code>index.html</code> and <code>latest/</code> open the newest release. On GitHub Pages a
+deeper <code>latest/</code> link, such as <code>latest/tools/pep-doc.html</code>, opens that page
+in the newest release too, through the site's <code>404.html</code>. Builds from <code>main</code>
+publish as <code>dev</code>.</p>
+<p>The version picker at the top of every page opens the chosen version as
+soon as it is picked with the mouse. Chosen with the arrow keys, it waits
+for Enter, so a keyboard user can look through the versions without
+leaving the page. It opens the same page in the chosen version, or that
+version's introduction when it has no such page.</p>
+<p>The <code>Docs</code> workflow (<code>.github/workflows/docs.yml</code>) publishes to the
+<code>gh-pages</code> branch: pushing to <code>main</code> updates <code>dev</code>, and pushing a tag
+<code>vX.Y.Z</code> adds the <code>X.Y.Z</code> docs. Published versions are never deleted.
+Every release from 0.2.0 on has its docs except 0.9.0, whose tag's workflow
+still fetches from the repository's old name, so it cannot be built again;
+0.9.1's docs cover it.</p>
+<p>A release's docs are built once, from its tag. When that run fails, the
+workflow opens an issue, "Docs for vX.Y.Z did not publish", with the
+command that publishes them once the cause is fixed:</p>
+<pre><code class="language-bash">gh workflow run docs.yml --ref vX.Y.Z
+</code></pre>
+<h2 id="the-reference-stays-current"><a class="header" href="#the-reference-stays-current">The reference stays current</a></h2>
+<p><code>pep-doc check</code> fails when <code>docs/src/reference/</code> does not match the
+runtime, and CI runs it.</p>
+<p>What the compiler provides rather than the runtime declares is still
+declared in the runtime, marked <code>[__BuiltIn]</code>: <code>runtime/reflect.pep</code>
+declares the <code>reflect</code> functions of <code>static</code> blocks and the values they
+return, and <code>runtime/builtins.pep</code> the raw pointer and weak reference
+types, <code>__null</code>, <code>sizeof</code>, <code>unsafe_cast</code> and the <code>__</code> intrinsics. The compiler ignores such a declaration (its functions and methods end in
+<code>;</code>, with no body), so
+it costs nothing and cannot clash with the built-in; the reference, the doc
+comment check and the language server read it like any other. A string
+argument names the built-in when it is not the declaration's own name:
+<code>[__BuiltIn("reflect.name")]</code> titles the entry and its signature
+<code>reflect.name</code>, and hover and go-to-definition on a use of <code>reflect.name</code>
+lead to it. Only the runtime may use the attribute.</p>
+<p>Each reference page's title and place in the table of contents come from
+<code>pages()</code> in <code>tools/pep-doc/reference.pep</code>. A new runtime file with public
+declarations must be added there, under its module's <code>module.pep</code>; until it
+is, <code>reference</code> and <code>check</code> fail and name the file.</p>
+<p><code>check</code> also fails on chapter Markdown that renders broken without an
+mdBook error. An include indented inside a list item is one: mdBook pastes
+the file's lines at column 0, which ends the list and the code block, so the
+rest of the example shows as prose and its <code>#</code> comments as headings. Put an
+included example at column 0, after the list or in its own <code>###</code> section. The runtime itself must meet the doc
+comment standard in <code>AGENTS.md</code>, which <code>pep-doc check</code> enforces.</p>
+<h2 id="tool-options-stay-documented"><a class="header" href="#tool-options-stay-documented">Tool options stay documented</a></h2>
+<p>Every command-line option of every tool has its place in the book:
+<code>docs/src/tools/&lt;tool&gt;.md</code> for <code>pep-build</code>, <code>pepper</code>, <code>pep-fmt</code>, <code>pep-lsp</code>
+and <code>pep-doc</code>, and <a href="setup.html">Setting up LLVM</a> for <code>scripts/setup-llvm.sh</code>.
+<code>pep-doc check</code> takes each tool's options from the tool itself (its
+<code>--help</code> text, from the tools that <code>scripts/pepper-tests.sh</code> builds beside
+<code>pep-build</code>) and fails, naming the tool, the option and the page, when a
+page does not mention one. It also checks <code>pep-build</code>'s option values,
+trace channels and environment variables, and <code>pep-lsp</code>'s initialization
+options and VS Code settings. A new option goes in the tool's <code>--help</code> (or
+the usage text at the top of <code>setup-llvm.sh</code>) and on its page in the same PR.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../contributing/setup.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../contributing/tests.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../contributing/setup.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../contributing/tests.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

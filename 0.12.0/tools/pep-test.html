@@ -1,0 +1,405 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Testing with pep-test - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/tools/pep-test.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="testing-with-pep-test"><a class="header" href="#testing-with-pep-test">Testing with pep-test</a></h1>
+<p><code>pep-test</code> builds the <code>[Test]</code> functions of Pepper files and runs them,
+each in a child process of its own, reporting which pass. Writing tests is
+covered in <a href="../language/testing.html">Unit tests</a>.</p>
+<pre><code class="language-bash">pepper test                          # every test under the current folder
+pepper test src/words_test.pep       # the tests of one file
+pepper test -f words src             # only tests whose name contains "words"
+pepper test --list src               # list them without running them
+pepper test --shard 2/4 src          # the second of four parts of them
+pepper test -I . geometry/tests      # tests that import the module geometry
+</code></pre>
+<pre><code class="language-text">running 3 tests
+test counts_the_words ... ok (4 ms)
+test an_empty_string_has_no_words ... ok (3 ms)
+test reading_past_the_last_word_panics ... ok (5 ms)
+3 passed, 0 failed
+</code></pre>
+<p><code>pep-test</code> is written in Pepper (<code>tools/pep-test</code>). Build it with the
+compiler and put it next to <code>pepper</code> and <code>pep-build</code>, so that <code>pepper test</code>
+finds it and it finds the compiler:</p>
+<pre><code class="language-bash">target/bin/pep-build tools/pep-test/main.pep -o target/bin/pep-test
+</code></pre>
+<h2 id="usage-and-options"><a class="header" href="#usage-and-options">Usage and options</a></h2>
+<pre><code class="language-text">pep-test [options] [path]...
+</code></pre>
+<div class="table-wrapper"><table><thead><tr><th>Option</th><th>What it does</th><th>Default</th></tr></thead><tbody>
+<tr><td><code>&lt;path&gt;</code></td><td>A <code>.pep</code> file to test, or a folder to search for files holding <code>[Test]</code> functions; repeatable</td><td>the current folder</td></tr>
+<tr><td><code>-f &lt;text&gt;</code>, <code>--filter &lt;text&gt;</code></td><td>Run only the tests whose name contains the text; repeated, any of them</td><td>every test</td></tr>
+<tr><td><code>-l</code>, <code>--list</code></td><td>List the tests instead of running them</td><td></td></tr>
+<tr><td><code>-j &lt;count&gt;</code>, <code>--jobs &lt;count&gt;</code></td><td>How many tests run at once</td><td>one per logical CPU</td></tr>
+<tr><td><code>--target &lt;triple&gt;</code></td><td>Builds the test programs for this target and runs the tests there: in the iOS simulator for an iOS simulator triple, on an Android emulator or device for an Android one (see <a href="#testing-on-ios-and-android">Testing on iOS and Android</a>)</td><td>this machine</td></tr>
+<tr><td><code>--shard &lt;i&gt;/&lt;n&gt;</code></td><td>Run only the <code>i</code>th of <code>n</code> parts of the tests (<code>1</code> to <code>n</code>), so the <code>n</code> runs <code>1/n</code> to <code>n/n</code> run each test once</td><td>every test</td></tr>
+<tr><td><code>-t &lt;seconds&gt;</code>, <code>--timeout &lt;seconds&gt;</code></td><td>Fail a test still running after this long; <code>0</code> for no limit</td><td>60</td></tr>
+<tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
+<tr><td><code>-L &lt;dir&gt;</code>, <code>--library-path &lt;dir&gt;</code></td><td>A folder the linker searches for libraries, for <code>pep-build</code>; repeatable</td><td></td></tr>
+<tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="../language/build-options.html">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
+<tr><td><code>--build-environment &lt;name&gt;=&lt;value&gt;</code></td><td>Sets an environment variable for each <code>pep-build</code> that builds a test program, and not for the tests, which run with <code>pep-test</code>'s environment; repeatable. For example, <code>--build-environment PEPC_NO_COMPILATION_UNITS=1</code> builds each test program as one, while tests that build programs of their own still use compilation units</td><td></td></tr>
+<tr><td><code>--locked</code></td><td>Passed to <code>pep-build</code>: fail, rather than fetch, when the project's <code>pep.lock</code> is out of date (also <code>PEPPER_LOCKED=1</code>)</td><td></td></tr>
+<tr><td><code>--offline</code></td><td>Passed to <code>pep-build</code>: fetch nothing over the network, building with what <code>.pep/deps</code> and the <a href="pep-package.html#the-download-cache">download cache</a> hold (also <code>PEPPER_OFFLINE=1</code>)</td><td></td></tr>
+<tr><td><code>--frozen</code></td><td>Both <code>--locked</code> and <code>--offline</code></td><td></td></tr>
+<tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Passed to <code>pep-build</code>: features of the project's package to turn on, comma-separated; repeatable (see <a href="projects.html#features">Features</a>)</td><td>the <code>default</code> feature</td></tr>
+<tr><td><code>--no-default-features</code></td><td>Passed to <code>pep-build</code>: leave the project's package's <code>default</code> feature off</td><td></td></tr>
+<tr><td><code>--all</code></td><td>Test every member of the project's <a href="projects.html#workspaces-workspace">workspace</a>, with their features unified; no <code>&lt;path&gt;</code> with it</td><td></td></tr>
+<tr><td><code>-p &lt;name&gt;</code>, <code>--package &lt;name&gt;</code></td><td>Test this workspace member, by package name; repeatable, the members' features then unified</td><td></td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
+</tbody></table>
+</div>
+<p><code>--locked</code>, <code>--offline</code> and <code>--frozen</code> govern the fetch each <code>pep-build</code>
+does for a project (see <a href="pep-build.html">pep-build</a>); <code>pep-build</code> reads
+<code>PEPPER_LOCKED</code> and <code>PEPPER_OFFLINE</code> itself.</p>
+<p>The exit status is 0 when every test program builds and every test
+passes, 1 when a test fails or a program does not build, and 2 for a usage
+error. A run in which no test runs, because <code>--filter</code> matches none or the
+<code>--shard</code> gets none, passes and exits with 0 (<code>running 0 tests</code>, then
+<code>0 passed, 0 failed, 5 filtered out</code>), as <code>cargo test</code> does, so one
+filter can go to runs over several folders and those that hold none of
+its tests still pass. A misspelt filter therefore passes too; the summary
+shows it.</p>
+<h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
+<ol>
+<li><strong>Finds the files.</strong> A file named on the command line is tested as it
+is. In a folder, and the folders below it (except those whose names
+start with <code>.</code>), it takes each <code>.pep</code> file with a line that starts with
+<code>[Test]</code>.</li>
+<li><strong>Builds one test program per folder,</strong> of that folder's test files,
+with <code>pep-build --test</code> (found next to <code>pep-test</code>, else on the <code>PATH</code>),
+in parallel. Each file keeps the scope it has in any program, so test
+files in a module's folder see each other's names, and a helper two of
+them declare must be <code>private</code> (see
+<a href="../language/testing.html#where-tests-live">Unit tests</a>). A test build
+sees the project's <code>[dev-dependencies]</code> (see
+<a href="projects.html#dev-dependencies">Projects: pep.toml</a>). A program that
+does not build is reported with the compiler's errors, and the other
+folders' tests still run.</li>
+<li><strong>Lists each program's tests</strong> with <code>--list</code> and keeps those that match
+<code>--filter</code>. With <code>--shard I/N</code> it keeps every <code>N</code>th of those, starting
+with the <code>I</code>th: tests next to each other in the list, such as one
+file's slow ones, land in different shards, and every test is in
+exactly one, as long as the <code>N</code> runs see the same files. With <code>--list</code>
+it prints them and stops: the test's name, or
+<code>file::name</code> when the tests come from more than one file.</li>
+<li><strong>Runs each test</strong> as <code>program --run FILE::NAME --timeout SECONDS</code>,
+each in its own process, up to
+<code>--jobs</code> at once, and prints <code>test NAME ... ok (TIME)</code> or
+<code>... FAILED (TIME)</code> as each ends (in order with <code>--jobs 1</code>). TIME is
+how long the test's process ran: whole milliseconds (<code>12 ms</code>), or
+seconds with two decimals from one second up (<code>1.25 s</code>). A test that
+passes after more than 60% of its timeout is followed by
+<code>warning: test NAME took TIME, over 60% of its N s timeout</code>: it will
+time out once its machine is busier. A test passes
+when its process exits with 0; a <code>[ShouldPanic]</code> test passes when its
+process panics with a message that contains the attribute's text.</li>
+<li><strong>Reports the failures,</strong> each with what the test printed (the panic's
+message and location) and why it failed, then a summary:
+<code>2 passed, 1 failed</code>, with the number of tests <code>--filter</code> left out, of
+tests left to other shards, and of test programs that did not build
+when there are any. Each shard builds every test program: only the
+tests' runs are split.</li>
+</ol>
+<p>The test programs are built in a temporary folder that is removed at the
+end. A test runs in the current folder, with <code>PEPPER_BACKTRACE=0</code> unless
+<code>PEPPER_BACKTRACE</code> is set, so a panic prints its message without a
+backtrace. Each test gets a temporary folder of its own (<code>TMPDIR</code>, and
+<code>TMP</code> and <code>TEMP</code> for Windows, name it), removed when the test ends, so
+what a test that panics or times out leaves there, such as a
+<a href="../reference/testing-temp_folder.html"><code>TempFolder</code></a> whose destructor
+never ran, is removed too.</p>
+<h2 id="testing-on-ios-and-android"><a class="header" href="#testing-on-ios-and-android">Testing on iOS and Android</a></h2>
+<p>With <code>--target</code>, each test program builds for that target (<code>pep-build --target</code>, which needs the platform's SDK; see
+<a href="../language/mobile.html#building">iOS and Android</a>), and every request to
+it, <code>--list</code> and each <code>--run</code>, goes to where that target runs. The report
+is the same as on this machine.</p>
+<pre><code class="language-bash">pepper test --target aarch64-apple-ios-simulator src   # on a Mac, in the booted simulator
+pepper test --target x86_64-linux-android src          # on the running emulator
+</code></pre>
+<ul>
+<li><strong>iOS simulator</strong> (<code>aarch64-apple-ios-simulator</code>, or
+<code>x86_64-apple-ios-simulator</code> on an Intel Mac): each program runs in a
+booted simulator with <code>xcrun simctl spawn</code>, from this Mac's file system,
+so its temporary folder is the one <code>pep-test</code> makes here. <code>simctl</code> starts
+it in another folder, so <code>pep-test</code> names the current one in
+<code>PEPPER_TEST_DIRECTORY</code> and the program goes back there first: data
+files beside a test are found as on the Mac. <code>simctl</code> passes no <code>USER</code>,
+and the simulator's user database lacks the Mac's user, so
+<code>os.user_name()</code> finds none. The simulator
+is the one whose UDID <code>PEPPER_IOS_SIMULATOR</code> holds, else the booted
+one (<code>booted</code>). Boot it first (<code>xcrun simctl boot "iPhone 16"</code>).
+A device triple (<code>aarch64-apple-ios</code>) is a usage error: nothing here can
+start a program on an iPhone.</li>
+<li><strong>Android</strong> (<code>aarch64-linux-android</code>, <code>x86_64-linux-android</code>): <code>adb</code>,
+from the <code>PATH</code> or <code>$ANDROID_HOME/platform-tools</code>, pushes each program
+to a folder of its own under <code>/data/local/tmp</code> on the device that
+<code>ANDROID_SERIAL</code> names, or the only one connected, and runs it there
+with <code>adb shell</code>, from that folder. The folder of each program's test
+files is pushed too, to the same path below it, so a test that reads a
+data file beside it by a path from the current folder (such as
+<code>tls/test/key.pem</code>, from <code>runtime/</code>) finds it. Each test gets a
+temporary folder there, removed when it ends, and the whole folder is
+removed at the end. Start the emulator first, and build for its ABI
+(<code>x86_64</code> on an x64 host, <code>aarch64</code> on Apple silicon).</li>
+</ul>
+<p>A target that is neither runs its programs here, as any program (such as
+<code>x86_64-apple-darwin</code> on an Apple silicon Mac).</p>
+<h2 id="the-test-program"><a class="header" href="#the-test-program">The test program</a></h2>
+<p><code>pep-build --test</code> builds a folder's test program (see <a href="pep-build.html#--test">pep-build</a>),
+which <code>pep-test</code> runs with one of two requests:</p>
+<ul>
+<li><code>--list</code> prints a line per test, its fields separated by tabs: the name,
+<code>file:line</code>, <code>returns</code> or <code>panics</code> (a <code>[ShouldPanic]</code> test), and the text
+the panic must contain.</li>
+<li><code>--run NAME [--timeout SECONDS]</code> runs one test (<code>NAME</code>, or
+<code>FILE::NAME</code> with the file as <code>--list</code> gives it) and exits with 0 when it
+returns having released everything it allocated; a test that leaves an
+allocation behind (or releases one too many) exits with 1 and says so on
+standard error. A panic aborts the program, and so does a stack overflow,
+after <code>panic: stack overflow</code>; a test that runs past the timeout
+ends it with exit status 124. However the program ends (the test returns,
+panics, crashes or times out), every process the test started ends with
+it (a job object on Windows, a process group elsewhere): one left running
+would hold the pipes to its output open, and <code>pep-test</code> would wait on it.
+With <code>PEPPER_TEST_DIRECTORY</code> set and not empty, the program first makes
+that folder its current one (and exits with 2 when it cannot enter it).</li>
+</ul>
+<p>On Windows, a test program turns off Windows Error Reporting for its
+crashes and <code>abort()</code>, so a test that panics or crashes ends at once,
+without a dialog.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../tools/pep-profile.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../tools/pep-lsp.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../tools/pep-profile.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../tools/pep-lsp.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

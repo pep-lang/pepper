@@ -1,0 +1,471 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Testing the runtime and the compiler - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/contributing/tests.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="testing-the-runtime-and-the-compiler"><a class="header" href="#testing-the-runtime-and-the-compiler">Testing the runtime and the compiler</a></h1>
+<p>The tests are written in Pepper: <code>[Test]</code> functions (see
+<a href="../language/testing.html">Unit tests</a>) that <code>pepper test</code>
+(<a href="../tools/pep-test.html"><code>pep-test</code></a>) builds and runs. They cover the
+runtime and the Pepper tools, the compiler written in Pepper
+(<code>tools/compiler</code>) among them.</p>
+<p>They are the whole suite: Pepper is written in Pepper, and so are its
+tests.</p>
+<h2 id="where-runtime-tests-live"><a class="header" href="#where-runtime-tests-live">Where runtime tests live</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Code under test</th><th>Its tests</th></tr></thead><tbody>
+<tr><td>A module, <code>runtime/&lt;module&gt;/</code></td><td><code>runtime/&lt;module&gt;/test/&lt;topic&gt;_test.pep</code>, which imports the module</td></tr>
+<tr><td>A prelude file, <code>runtime/&lt;name&gt;.pep</code></td><td><code>runtime/test/&lt;topic&gt;_test.pep</code></td></tr>
+<tr><td>A file's private functions</td><td><code>[Test]</code> functions in that file itself</td></tr>
+<tr><td>A Pepper tool, <code>tools/&lt;tool&gt;/</code></td><td><code>tools/&lt;tool&gt;/&lt;topic&gt;_test.pep</code>, which imports the tool's files (<code>import "format";</code>), or runs the built tool (see <a href="#tests-that-run-the-tools">Tests that run the tools</a>)</td></tr>
+</tbody></table>
+</div>
+<p>A <code>test/</code> folder holds no <code>module.pep</code>, so no program that imports the
+module loads it. Its files are still files of the module, though: a test file
+that imports one of the module's files (<code>import "../atomic";</code> in <code>runtime/async/test/</code>) sees its
+unexported names. <code>pep-test</code> builds each
+folder's tests into one program, so a helper (or test name) that two test
+files of one folder declare collides; mark it <code>private</code> in each (as
+<code>runtime/async/test/</code> does). Prefer it to tests inside a
+source file, which only a test of private internals needs. The reference
+generator and the doc-comment check skip <code>test/</code> folders, so a test file
+needs no <code>##</code> comments.</p>
+<h2 id="running-them"><a class="header" href="#running-them">Running them</a></h2>
+<p><code>scripts/pepper-tests.sh</code> runs them all:</p>
+<pre><code class="language-bash">sh scripts/install.sh --version 0.12.0-dev       # the build of main; see below
+scripts/pepper-tests.sh                          # every runtime and tool test
+scripts/pepper-tests.sh -f parses                # by name, in each run
+scripts/pepper-tests.sh target/bin               # with a pep-build you built
+</code></pre>
+<p>The tests build with the installed toolchain's <code>pep-build</code>, the one
+<code>pepper install which</code> names. Every merge into main that changes the
+compiler, the runtime or the tools publishes the build of main as a
+prerelease named <code>x.y.z-dev</code> (<code>pepper install list --available</code> shows it),
+replacing the one before. Install it with the install scripts (run the
+install again to refresh it). CI does the same when a change leaves the
+compiler alone, and otherwise builds the compiler with
+<a href="#stage-0">stage 0</a>, the pinned build of main, which may be older. The
+compiler's own tests (<code>tools/compiler/*_test.pep</code>) build
+the compiler's sources into their test programs, so they test a change to
+it. To run the whole suite with the changed compiler too, build it from
+<code>tools/compiler</code> (see
+<a href="building.html#building">Building Pepper from source</a>)
+and pass its folder as the first argument.</p>
+<p>The script builds the Pepper tools (<code>pepper</code>, <code>pep-test</code>, <code>pep-doc</code> and the
+others) from the checkout with that <code>pep-build</code>, against the checkout's
+runtime, into <code>target/pepper-tests/bin</code> beside a copy of the <code>pep-build</code>,
+and runs <code>pepper test</code>:</p>
+<ul>
+<li>in <code>runtime/</code>, every runtime test;</li>
+<li>in <code>runtime/</code>, the <code>compress</code> tests again with <code>-D USE_ZLIB</code> and the
+<code>digest</code> tests with <code>-D USE_LIBCRYPTO</code>, which link the system's zlib and
+libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a folder
+holding <code>zlib.lib</code>, and is skipped without it);</li>
+<li>in <code>tools/</code>, the tools' tests, each under its tool's <code>pep.toml</code>.</li>
+</ul>
+<p><code>PEPPER_TESTS_PART</code> runs part of them: <code>compiler</code> the compiler's tests
+(<code>tools/compiler/</code>), <code>others</code> everything else; unset or <code>all</code>, both.</p>
+<p>The tools' run, the longest, starts as soon as the tools its tests run
+(<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>,
+<code>pep-run</code>, <code>pep-new</code> and <code>pep-init</code>) are
+built, and runs beside the runtime's runs. Its output is interleaved with
+theirs as it comes, each line starting <code>tools| </code>, so a slow test shows
+while it runs.</p>
+<p>Once <code>pepper</code> is built, run any part of them by hand:</p>
+<pre><code class="language-bash">cd runtime
+pepper test                       # every runtime test
+pepper test json/test             # one module's
+pepper test -f parses test        # by name
+</code></pre>
+<p>Further arguments to <code>scripts/pepper-tests.sh</code> go to each of its <code>pepper test</code> runs. <code>--shard I/N</code> splits every run into <code>N</code> parts and takes the
+<code>I</code>th, so the <code>N</code> runs from <code>1/N</code> to <code>N/N</code>, on as many machines, run the
+whole suite between them:</p>
+<pre><code class="language-bash">scripts/pepper-tests.sh target/compiler --shard 2/4
+</code></pre>
+<p>Tests run with <code>runtime/</code> as the current folder, so a test reads data
+files kept beside it by a path from there (<code>archive/test/gnu.tar.gz</code>).
+The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writes
+files uses a fresh folder under the system's temporary folder
+(<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
+<p>CI runs <code>scripts/pepper-tests.sh</code> with the installed build of main on
+Linux, macOS and Windows, in two jobs on each: one runs the compiler's
+tests (<code>PEPPER_TESTS_PART=compiler</code>), the other everything else
+(<code>PEPPER_TESTS_PART=others</code>), and every build in a job shares one build
+cache. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0's
+pin (<code>.github/stage0</code>) is tested with that compiler instead: CI builds it
+with stage 0 first (<code>scripts/ci-build-compiler.sh</code>, from a build cache CI
+keeps between runs, keyed on stage 0's contents) and runs the suite with
+it.</p>
+<p>On a pull request, the docs examples (<code>tools/pep-doc/examples_test.pep</code>)
+build and run in full only on Linux. The macOS and Windows jobs set
+<code>PEPPER_DOCS_EXAMPLES=platform</code>, which keeps only the examples that select
+code per platform: those with a line holding a <code>[Target(...)]</code> that names
+an <code>OS(...)</code> or an <code>Arch(...)</code>. On main, and on every other event, every
+OS runs every example. To run only those examples by hand:</p>
+<pre><code class="language-bash">PEPPER_DOCS_EXAMPLES=platform scripts/pepper-tests.sh target/compiler
+</code></pre>
+<p>Each job has
+a time limit a little above its slowest passing runs, and prints the
+runner's memory, swap, disk and biggest processes every minute beside the
+tests (<code>scripts/ci-monitor.sh</code>). A job that fails, is cancelled or runs out
+of time ends with a Diagnostics step (<code>scripts/ci-monitor.sh --report</code>):
+the samples with the least memory free, every process still running with
+its age and size (a hung build or test is the old one), the disks, and on
+Linux the kernel's out-of-memory kills.</p>
+<p>CI also builds the compiler for a commit that leaves <code>tools/compiler/</code>
+alone when the published build of main is stale. The build of main
+publishes only after main's CI passes, so a run cancelled by the next
+push leaves it behind main's newest compiler change, and main's new
+tests would run with the old compiler. <code>scripts/ci-published-compiler.sh</code>
+decides: the published compiler is used only when the commit the
+<code>v&lt;VERSION&gt;</code> tag is on is on the commit's history and its
+<code>tools/compiler/</code> is the commit's. Otherwise, or when VERSION is not
+published, CI builds the commit's compiler with stage 0. CI's <code>changes</code> job runs it on
+pull requests, on pushes to main and on dispatches on main. It prints the
+decision and its reason in its log and in the run's summary, under
+"Compiler". To check a commit by hand:</p>
+<pre><code class="language-bash">scripts/ci-published-compiler.sh [&lt;commit&gt;]   # exit 0: the published compiler will do
+</code></pre>
+<h3 id="on-ios-and-android"><a class="header" href="#on-ios-and-android">On iOS and Android</a></h3>
+<p><code>scripts/mobile-test.sh</code> runs the runtime's tests in the iOS simulator and
+the Android emulator, with <code>pep-test --target</code> (see
+<a href="../tools/pep-test.html#testing-on-ios-and-android">Testing on iOS and Android</a>),
+from <code>runtime/</code> as above, then every docs example and the prototype apps
+(see <a href="../language/mobile.html#the-prototype-apps">iOS and Android</a>). By
+hand, on a Mac with Xcode, or on Linux for Android:</p>
+<pre><code class="language-bash">bash scripts/openssl-android.sh fetch runtime     # once: the tls module's OpenSSL for Android
+PEPPER_RUNTIME=$PWD/runtime bash scripts/mobile-test.sh target/compiler/pep-build /tmp/mobile android
+</code></pre>
+<p>Or only the tests, in a simulator or emulator already running:</p>
+<pre><code class="language-bash">cd runtime
+pepper test --target x86_64-linux-android
+</code></pre>
+<p>CI's <code>mobile</code> workflow (<code>.github/workflows/mobile.yml</code>) runs the script on
+GitHub-hosted runners, iOS on macOS and Android on Linux (where
+<code>scripts/ci-provision-android.sh</code> sets up the emulator, with KVM), on
+every push to main and nightly, but not on pull requests: the iOS job
+takes about 40 minutes on a 3-core macOS runner and holds one of the
+few macOS runners CI's own test jobs wait for. Each job builds the commit's compiler with
+stage 0, from the build cache the test jobs keep, and the Android job
+fetches the OpenSSL itself, so <code>gh workflow run mobile.yml --ref &lt;branch&gt;</code>
+checks a branch with nothing else to set up. A test that cannot run there
+(the runtime's need a Unix socket file or a hard link, which <code>adb shell</code>
+may not make) leaves that part out with <code>[Target(!OS(Android))]</code>.</p>
+<p>Two Pepper tools depend on packages in other repositories. The compiler
+written in Pepper, <code>tools/compiler</code>, depends on <code>pep-lang/pepper-llvm</code>, and
+the language server <code>tools/pep-lsp</code> depends on <code>pep-lang/pepper-lsp</code>. Both
+are public, so the build clones them over HTTPS with no credentials.</p>
+<h2 id="stage-0"><a class="header" href="#stage-0">Stage 0</a></h2>
+<p>Stage 0 is the published compiler that builds the compiler: in CI, in the
+release build and in <code>scripts/stage0-check.sh</code>. It is a pinned build of
+main, named in <code>.github/stage0</code>: its version, the commit it is the build
+of, and the SHA-256 sum of each archive. The build of main replaces its
+archives on every merge, so the pinned ones are copies on the repository's
+<code>stage0</code> release, named <code>&lt;commit&gt;-&lt;asset&gt;</code> with the commit's first 12 hex
+digits. <code>scripts/ci-install-toolchain.sh</code> installs stage 0 by default
+(<code>--newest</code> installs the newest published toolchain, <code>--version</code> a
+release). A stage 0 that stays the same from run to run keeps the
+compiler's build cache, which is keyed on it.</p>
+<p>The <code>Stage 0</code> workflow (<code>.github/workflows/stage0.yml</code>) moves the pin. Every
+night, and when dispatched, it takes the newest build of main once its
+publish has passed, copies it onto the <code>stage0</code> release, and pushes the
+branch <code>stage0/bump</code> that pins it. GitHub Actions may not open pull
+requests in this repository, so the run's summary and a warning link to
+open one. Its CI runs as any pull request's, building the compiler with
+the new stage 0 and running the whole suite with it, so it may auto-merge.
+While that pull request is open the branch stays put (a push with the
+workflow's token would start no CI on it); the run after it merges pins
+the next build. The <code>stage0</code> release keeps the newest 20 builds and the
+one main pins, so an older branch whose pin is gone (a patch release made
+from it, say) copies main's <code>.github/stage0</code> first.</p>
+<pre><code class="language-bash">gh workflow run stage0.yml                                  # pin the newest build of main now
+git fetch origin stage0/bump:stage0/bump                    # then open its pull request
+gh pr create --base main --head stage0/bump --fill
+</code></pre>
+<p>So runtime code may only use what stage 0 accepts. A runtime change that
+needs a newer compiler than stage 0 dispatches the workflow and merges its
+pull request first.</p>
+<p>The branch's compiler can hide a runtime change that needs a compiler fix
+stage 0 does not have, which breaks main's CI and the release, since both
+build the compiler with stage 0. So a PR that changes <code>tools/compiler/</code> or
+<code>runtime/</code> also runs, before it merges:</p>
+<pre><code class="language-bash">scripts/stage0-check.sh                    # with stage 0
+scripts/stage0-check.sh --version 0.10.0   # with a release
+</code></pre>
+<p>It installs stage 0 with
+<code>scripts/ci-install-toolchain.sh</code> into <code>target/pepper-home</code>, builds
+<code>tools/compiler</code> with it (<code>scripts/ci-build-compiler.sh</code>, into
+<code>target/compiler</code>), then runs the runtime's tests with stage 0's own
+<code>pepper test</code>. Further arguments go to that <code>pepper test</code>. On macOS and
+Windows it needs LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
+or this checkout's <code>.pep/llvm-prefix</code>).</p>
+<h2 id="tests-that-run-the-tools"><a class="header" href="#tests-that-run-the-tools">Tests that run the tools</a></h2>
+<p>Some tests run programs rather than call functions: <code>pep-build</code> on
+programs, and the Pepper tools on files and folders, checking their
+output and exit status as a user would see them.</p>
+<div class="table-wrapper"><table><thead><tr><th>Test</th><th>What it runs</th></tr></thead><tbody>
+<tr><td><code>tools/compiler/corpus_test.pep</code></td><td><code>pep-build -I tests</code> on each <code>tests/&lt;Name&gt;/test.pep</code>, then the program from the repository's root, which must exit with 0. With <code>WASI_SDK_PATH</code> set and wasmtime on the PATH (or <code>WASMTIME</code> naming it), each again for <code>wasm32-wasip1</code> under wasmtime; it says it skipped otherwise, except under CI on Linux, which provisions both (<code>scripts/ci-provision-wasi.sh</code>) and where it fails without them. A new <code>tests/&lt;Name&gt;/test.pep</code> joins the run.</td></tr>
+<tr><td><code>tools/compiler/programs_test.pep</code></td><td><code>pep-build</code> on the programs of <code>tools/compiler/testdata/</code>, each run with the arguments and environment it needs: <code>cli</code>'s <code>parse</code> and an <code>add_options</code> error, <code>os</code>'s environment and host, <code>time</code>'s zones (TZif files under <code>TZDIR</code>, <code>TZ</code>, the system's database), and <code>process</code>'s arguments, <code>exit</code> and the <code>atexit</code> handlers it runs, <code>main</code>'s arguments, children that are copies of the program, and <code>exec</code>; and a build with a runtime copied into a package's folder, which leaves that package's files out.</td></tr>
+<tr><td><code>tools/pep-doc/examples_test.pep</code></td><td><code>pep-build</code> on every example of the book, then the example (see <a href="docs.html">Building this documentation</a>).</td></tr>
+<tr><td><code>tools/pep-fmt/repository_test.pep</code></td><td><code>format_source</code> in the test itself on every <code>.pep</code> file under <code>runtime/</code>, <code>tools/</code>, <code>tests/</code> and <code>docs/examples/</code>: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of <code>runtime/</code> and <code>tools/</code> are already formatted (<code>pep-fmt -w</code> fixes one that is not).</td></tr>
+<tr><td><code>tools/pep-fmt/cli_test.pep</code></td><td><code>pep-fmt</code> on standard input and on files and folders (<code>--check</code>, <code>-w</code>), its syntax errors and usage errors.</td></tr>
+<tr><td><code>tools/pepper/pepper_test.pep</code></td><td><code>pepper</code>, copied beside stand-in tools built from <code>tools/pepper/testdata/</code>; and every tool's <code>--version</code> against the version in each <code>tools/*/main.pep</code> (and pep-lsp's <code>tools/pep-lsp/arguments.pep</code>).</td></tr>
+<tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes (tests that pass, fail, time out, leak an allocation or release one too many), from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite's own run skips them).</td></tr>
+<tr><td><code>tools/pep-package/package_test.pep</code></td><td><code>pep-package</code> and <code>pep-build</code> on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under <code>.pep/fetch.lock</code>; skipped without git.</td></tr>
+<tr><td><code>tools/pep-run/pep_run_test.pep</code></td><td><code>pep-run</code> building and running the programs in <code>tools/pep-run/testdata/</code> with a Pepper home of its own: arguments, exit status, working folder, the up-to-date rerun, compile errors and the options it refuses.</td></tr>
+<tr><td><code>tools/pep-new/pep_new_test.pep</code></td><td><code>pep-new</code> and <code>pep-init</code> scaffolding programs and packages into temporary folders, which <code>pepper build</code> and <code>pepper test</code> then build and test (a package with itself on the import path, as its <code>tests/run.sh</code> puts it); the refusal to overwrite, and the name and license errors.</td></tr>
+<tr><td><code>tools/pep-profile/profile_test.pep</code></td><td><code>pep-profile</code> on the recordings in <code>tools/pep-profile/testdata/</code>, and on a real program when samply or a working perf is installed (skipped otherwise).</td></tr>
+</tbody></table>
+</div>
+<p>They find <code>pep-build</code> and the tools beside the test program or on the
+PATH (<code>process.find_companion</code>), where <code>scripts/pepper-tests.sh</code> puts the
+ones it builds from the checkout, so they test this checkout's tools. To
+run one by hand, put that folder first on the PATH (after a run of the
+script, or with the tools built there as the script builds them):</p>
+<pre><code class="language-bash">export PATH="$PWD/target/pepper-tests/bin:$PATH"
+cd tools &amp;&amp; pepper test pep-fmt/cli_test.pep
+</code></pre>
+<p>The <code>tool_testing</code> module (<code>tools/tool_testing/</code>) holds what they share:
+<code>tool(name)</code> finds a tool, <code>run</code> and <code>run_with_input</code> run a
+<code>process.Command</code> and read its output with Windows' line ends made
+<code>\n</code>, <code>build_program</code> builds a program with <code>pep-build</code>, and
+<code>expect_exit</code>, <code>expect_contains</code>, <code>expect_starts_with</code> and
+<code>expect_ends_with</code> show the program's output when they fail.
+<code>tool_testing.server</code>'s <code>serve_folder</code> serves a folder over HTTP on
+loopback, for a test that downloads (<code>pep-install</code>, <code>pep-package</code>).</p>
+<h2 id="leaks-fail-a-test"><a class="header" href="#leaks-fail-a-test">Leaks fail a test</a></h2>
+<p>Each test counts the runtime's live allocations before and after it runs,
+and fails when they differ:</p>
+<pre><code class="language-text">error: test 'parses_components' left 2 allocations behind
+</code></pre>
+<p>So a test needs no census of its own: every object it made must be
+released by the time it returns. What the program keeps for good, such as
+a global made on first use (<code>async.Lazy</code>), is made inside
+<code>keep_for_the_program(() =&gt; { ... })</code> at the start of the test, which
+leaves it out of the count.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../contributing/docs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../contributing/docs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

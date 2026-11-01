@@ -1,0 +1,585 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Equality, hashing and ordering - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/hashing.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="equality-hashing-and-ordering"><a class="header" href="#equality-hashing-and-ordering">Equality, hashing and ordering</a></h1>
+<p><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> find a key by hashing it with <code>hash&lt;K&gt;</code>
+and comparing it with <code>==</code>. What those two mean for a type decides which keys
+count as the same.
+<code>OrderedMap&lt;K, V&gt;</code> finds keys the same way. For maps that keep their keys
+in order, see <a href="maps.html">Maps and sets</a>; what <code>&lt;</code> and sorting mean for a
+type is <a href="#ordering-with-comparable">Ordering with Comparable</a>, below.</p>
+<div class="table-wrapper"><table><thead><tr><th>Key type</th><th><code>==</code></th><th><code>hash&lt;K&gt;</code></th></tr></thead><tbody>
+<tr><td>Numbers, <code>bool</code>, <code>char</code>, pointers</td><td>the value</td><td>the value's bits</td></tr>
+<tr><td><code>String</code></td><td>the content</td><td>the content</td></tr>
+<tr><td>An <code>Array</code></td><td>element by element</td><td>the elements' hashes, combined</td></tr>
+<tr><td>A tuple</td><td>element by element</td><td>the elements' hashes, combined</td></tr>
+<tr><td>A <a href="value-structs.html">value struct</a></td><td>field by field</td><td>the fields' hashes, combined</td></tr>
+<tr><td>An <a href="#deriving-both-with-equatable"><code>[Equatable]</code></a> struct or enum</td><td>field by field</td><td>the fields' hashes, combined</td></tr>
+<tr><td>Any other struct</td><td>identity (<code>===</code>)</td><td>the object's address</td></tr>
+</tbody></table>
+</div>
+<p>The standard library's structs that compare by value also hash by it:
+<code>BitSet</code> by its members, <code>io.Path</code> by its text, and <code>io.IpAddress</code> and
+<code>io.SocketAddress</code> by their address and port.</p>
+<h2 id="struct-keys-use-identity-by-default"><a class="header" href="#struct-keys-use-identity-by-default">Struct keys use identity by default</a></h2>
+<p>A struct is a <a href="memory.html#values-and-references">reference</a>. Unless it says
+otherwise, two references are the same key only when they refer to the same
+object. Another object with equal fields is a different key:</p>
+<pre><code class="language-pepper">struct Point {
+    int x;
+    int y;
+
+    construct(this.x = 0, this.y = 0) {}
+}
+
+main(): int {
+    var origin = Point(0, 0);
+    var visits = HashMap&lt;Point, int&gt;();
+    visits[origin] = 1;
+
+    # A struct key is found by identity: the same object finds its entry...
+    assert(visits.contains(origin), "the stored object");
+
+    # ...but another object with equal fields is a different key.
+    assert(!visits.contains(Point(0, 0)), "an equal but distinct object");
+    return 0;
+}
+</code></pre>
+<p>Identity is right for objects that stand for one thing: a connection, a
+node in a graph, a task. It is wrong for a struct that describes a value,
+such as a point or a record looked up by its fields.</p>
+<h2 id="deriving-both-with-equatable"><a class="header" href="#deriving-both-with-equatable">Deriving both with <code>[Equatable]</code></a></h2>
+<p>Mark the struct <code>[Equatable]</code>, and the compiler writes both halves from its
+fields, so they cannot drift apart. It compares and hashes like a tuple of
+its fields: a field of a struct type uses that struct's <code>==</code> and <code>hash</code>, a
+<code>String</code> its content, and a null field equals only null. Mark a field
+<code>[Equatable(exclude = true)]</code>, or <code>[Equatable(include = false)]</code>, to leave it
+out of both; a field with neither takes part:</p>
+<pre><code class="language-pepper"># `[Equatable]` derives `==` and the hash from the fields, so they always
+# agree.
+[Equatable]
+struct Person {
+    String name;
+    int id;
+    # Not part of the identity: two records for the same person may differ.
+    [Equatable(exclude = true)]
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+}
+
+# An enum whose cases carry values compares the case and then its values.
+[Equatable]
+enum Token {
+    Word(text: String),
+    Number(value: int),
+    End,
+}
+
+main(): int {
+    HashSet&lt;Person&gt; people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
+    assert(people.count == 1, "equal people are one member");
+    assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
+    assert(!people.contains(Person("Ada", 2)), "a different id");
+    assert(Person("Ada", 1) == Person("Ada", 1, "B"), "== is derived");
+
+    var counts = HashMap&lt;Token, int&gt;();
+    counts[Token.Word("pepper")] = 2;
+    counts[Token.End] = 1;
+    assert(counts[Token.Word("pepper")] == 2, "found by case and value");
+    assert(Token.Word("salt") != Token.Word("pepper"), "different values");
+    assert(Token.Number(0) != Token.End, "different cases");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>An <a href="enums.html#cases-that-carry-values">enum whose cases carry values</a> can
+be <code>[Equatable]</code> too: two values are equal when they hold the same case
+and its values are equal.</li>
+<li>A generic struct derives both for each specialization, from the fields
+its type arguments give it.</li>
+<li><code>include</code> and <code>exclude</code> are <code>bool</code>s, and saying both in a way that
+contradicts (<code>include = true, exclude = true</code>) is an error. On the struct
+itself, <code>[Equatable]</code> takes no arguments.</li>
+<li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
+either is an error. To compare some other way, drop the attribute and
+declare both by hand (below).</li>
+<li>An <code>Array</code> field compares and hashes by its elements, as an <code>Array</code> key
+does, and so does an <code>Array</code> in a tuple. Its hash takes O(count).</li>
+<li><code>[Equatable]</code> does not apply to a <a href="value-structs.html">value struct</a> or an
+enum whose cases carry nothing: they already compare and hash by content.</li>
+</ul>
+<h2 id="keying-a-struct-by-its-content"><a class="header" href="#keying-a-struct-by-its-content">Keying a struct by its content</a></h2>
+<p>To decide yourself what counts as equal, give the struct both halves of the
+pair:</p>
+<ul>
+<li>an <code>==</code> <a href="structs.html#operators">operator</a> that says when two keys are the
+same, and</li>
+<li>an override of <code>hash&lt;T&gt;</code> for the struct (see
+<a href="generics.html#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a>),
+<code>hash&lt;Point&gt;(value: Point): u64</code>.</li>
+</ul>
+<pre><code class="language-pepper">struct Point {
+    int x;
+    int y;
+
+    construct(this.x = 0, this.y = 0) {}
+
+    # Two points are equal when their coordinates are...
+    ==(other: Point): bool {
+        return x == other.x and y == other.y;
+    }
+}
+
+# ...so equal points must hash equally: hash the same fields `==` compares.
+# A tuple hashes each element in turn, which combines them.
+hash&lt;Point&gt;(value: Point): u64 {
+    return hash&lt;(int, int)&gt;((value.x, value.y));
+}
+
+struct Person {
+    String name;
+    int id;
+    # Not part of the identity: two records for the same person may differ.
+    String nickname;
+
+    construct(this.name = "", this.id = 0, this.nickname = "") {}
+
+    ==(other: Person): bool {
+        return id == other.id and name == other.name;
+    }
+}
+
+# A String field hashes by its content, through hash&lt;String&gt;.
+hash&lt;Person&gt;(value: Person): u64 {
+    return hash&lt;(String, int)&gt;((value.name, value.id));
+}
+
+main(): int {
+    var visits = HashMap&lt;Point, int&gt;();
+    visits[Point(1, 2)] = 1;
+    visits[Point(1, 2)] = visits[Point(1, 2)] + 1;   # the same key
+    assert(visits.count == 1, "one entry");
+    assert(visits[Point(1, 2)] == 2, "found by content");
+    assert(Point(1, 2) != Point(2, 1), "!= is the negation of ==");
+
+    HashSet&lt;Person&gt; people = [Person("Ada", 1, "A"), Person("Ada", 1, "Countess")];
+    assert(people.count == 1, "equal people are one member");
+    assert(people.contains(Person("Ada", 1)), "the nickname is ignored");
+    assert(!people.contains(Person("Ada", 2)), "a different id");
+    return 0;
+}
+</code></pre>
+<p>The two must agree: <strong>keys that are <code>==</code> must have the same hash.</strong> The
+simplest way to keep that promise is to hash exactly the fields that <code>==</code>
+compares, by hashing a tuple of them: <code>hash&lt;(int, int)&gt;((value.x, value.y))</code>. A tuple's hash combines its elements' hashes, and each element
+uses its own type's <code>hash</code>, so a <code>String</code> field contributes its content.
+Unequal keys may share a hash. That costs speed, not correctness.</p>
+<p>With <code>==</code> declared, <code>!=</code> is its negation, as for any struct. The struct may
+also <a href="overloading.html">overload</a> <code>==</code> for other types (<code>==(rhs: int)</code>); the map
+and set compare keys with the <code>==</code> that takes the struct itself.</p>
+<p>Keep these rules in mind:</p>
+<ul>
+<li>
+<p><strong>Declare both or neither.</strong> With <code>==</code> but no <code>hash&lt;T&gt;</code>, two equal keys
+usually hash differently, so a lookup would miss an entry that is there.
+With <code>hash&lt;T&gt;</code> but no <code>==</code>, keys would still compare by identity, so an
+equal object would never find another's entry. Either is a compile error
+when the struct is used as a <code>HashMap</code> or <code>HashSet</code> key:</p>
+<pre><code class="language-text">main.pep:5:5: error: 'Point' declares '==' but no 'hash&lt;Point&gt;', so as a HashMap or HashSet key, equal values will not find each other
+    5 |     ==(other: Point): bool {
+      |     ^~
+note: declare 'hash&lt;Point&gt;(value: Point): u64' hashing the fields '==' compares, or remove '==' and mark 'Point' '[Equatable]' to derive both
+</code></pre>
+<p>The runtime's own structs are not reported in your program; the
+compiler's own tests hold them to the same rule. An <code>Array</code> key matches
+an equal <code>Array</code>: both its <code>==</code> and its hash go by its elements. So does
+a slice (<code>ArrayView</code>), wherever its elements are, and a <code>simd.Vector</code> by
+its lanes.</p>
+</li>
+<li>
+<p><strong>Don't change a key's fields while it is in a map or set.</strong> The entry
+stays where its old hash put it, so lookups by its new or its old fields
+both miss it. Remove it, change it, then insert it again. The same goes
+for an <code>Array</code> key's elements.</p>
+</li>
+<li>
+<p><strong>One override per program.</strong> <code>hash&lt;Point&gt;</code> replaces <code>hash&lt;T&gt;</code> for
+<code>Point</code> everywhere, including inside <code>HashMap</code>, so it may be declared in
+only one file, and that file must declare <code>Point</code> or be in its module
+(see <a href="generics.html#overriding-a-generic-function-for-one-type">overriding a generic function</a>).</p>
+</li>
+<li>
+<p>The hash is not keyed, so it does not resist keys chosen by an attacker to
+collide.</p>
+</li>
+</ul>
+<h2 id="value-structs-compare-and-hash-by-their-fields"><a class="header" href="#value-structs-compare-and-hash-by-their-fields">Value structs compare and hash by their fields</a></h2>
+<p>A <a href="value-structs.html">value struct</a> has no identity, so <code>==</code> and <code>hash</code>
+already compare and hash it field by field. Declare your own pair only to
+change what counts as equal, here to ignore case:</p>
+<pre><code class="language-pepper"># A value struct compares and hashes by its fields with no code at all.
+[Value]
+struct Cell {
+    int row;
+    int column;
+
+    construct(this.row = 0, this.column = 0) {}
+}
+
+# A value struct may still declare its own pair, here to ignore case.
+[Value]
+struct Tag {
+    String text;
+
+    construct(this.text = "") {}
+
+    ==(other: Tag): bool {
+        return text.lower() == other.text.lower();
+    }
+}
+
+hash&lt;Tag&gt;(value: Tag): u64 {
+    return hash&lt;String&gt;(value.text.lower());
+}
+
+main(): int {
+    var board = HashMap&lt;Cell, String&gt;();
+    board[Cell(0, 0)] = "rook";
+    assert(board[Cell(0, 0)] == "rook", "fields decide");
+
+    var tags = HashSet&lt;Tag&gt;();
+    tags.insert(Tag("Pepper"));
+    assert(tags.contains(Tag("PEPPER")), "case is ignored");
+    return 0;
+}
+</code></pre>
+<h2 id="ordering-with-comparable"><a class="header" href="#ordering-with-comparable">Ordering with Comparable</a></h2>
+<p>A type whose values sort in one order declares the <code>Comparable</code> trait. It
+asks for one method, <code>compare(other)</code>, which returns a negative number, zero
+or a positive number as the value sorts before, with or after <code>other</code>, and
+gives the type the rest:</p>
+<ul>
+<li>the operators <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>;</li>
+<li><code>min(other)</code>, <code>max(other)</code> and <code>clamp(low, high)</code> (which panics when <code>low</code>
+sorts after <code>high</code>);</li>
+<li>a place as a <a href="maps.html#how-keys-are-ordered"><code>Map</code> key or <code>Set</code> element</a>,
+in that order;</li>
+<li>the constraint <code>T: Comparable</code> in a <a href="generics.html#constraints">generic</a>
+function, whose body can then use all of the above on a <code>T</code>.</li>
+</ul>
+<pre><code class="language-pepper">struct Version {
+    var major: int;
+    var minor: int;
+
+    construct(this.major = 0, this.minor = 0) {}
+
+    # The one method Comparable asks for.
+    compare(other: Version): int {
+        var order = major.compare(other.major);
+        if (order != 0) {
+            return order;
+        }
+        return minor.compare(other.minor);
+    }
+}
+
+extend Version with Comparable;
+
+# A generic function asks for an order with `T: Comparable`.
+largest&lt;T: Comparable&gt;(items: Array&lt;T&gt;): T {
+    var best = items[0];
+    for (var item in items) {
+        best = best.max(item);
+    }
+    return best;
+}
+
+main(): int {
+    # `&lt;`, `&lt;=`, `&gt;` and `&gt;=` come from `compare`.
+    assert(Version(1, 2) &lt; Version(1, 10), "1.2 sorts before 1.10");
+    assert(Version(2, 0).min(Version(1, 9)).major == 1, "min");
+    assert(Version(3, 0).clamp(Version(1, 0), Version(2, 0)).major == 2, "clamp");
+
+    # Numbers and strings are Comparable too.
+    assert(largest([3, 9, 2]) == 9, "numbers");
+    assert(largest(["pear", "apple"]) == "pear", "strings");
+    assert((15).clamp(0, 10) == 10, "clamp a number");
+
+    # A Comparable struct is a Map key, in its order.
+    var releases = Map&lt;Version, String&gt;();
+    releases[Version(2, 0)] = "second";
+    releases[Version(1, 5)] = "first";
+    assert(releases.first().value().1 == "first", "sorted by compare");
+
+    # An array of a Comparable type sorts in its order; a comparer gives
+    # any other.
+    var versions = [Version(2, 1), Version(1, 5)];
+    versions.sort();
+    assert(versions[0].major == 1, "sorted");
+    versions.sort((a, b) =&gt; b.compare(a));
+    assert(versions[0].major == 2, "sorted in reverse");
+    return 0;
+}
+</code></pre>
+<p>A type that declares its own <code>&lt;</code> (or <code>min</code>, or any of the others) keeps it;
+the trait's version fills in only what the type leaves out.</p>
+<p><code>compare</code> must give a total, consistent order: the same two values always
+compare the same way, <code>a.compare(b)</code> has the opposite sign of
+<code>b.compare(a)</code>, and if <code>a</code> sorts before <code>b</code> and <code>b</code> before <code>c</code>, <code>a</code> sorts
+before <code>c</code>. <code>Map</code>, <code>Set</code> and sorting depend on it.</p>
+<h3 id="sorting"><a class="header" href="#sorting">Sorting</a></h3>
+<p>An array of <code>Comparable</code> elements sorts in their own order with <code>sort()</code>,
+stably, as <code>sort((a, b) =&gt; a.compare(b))</code> would. Floats sort in the total
+order, NaN last. Any other order still takes a comparer:
+<code>items.sort((a, b) =&gt; b.compare(a))</code> sorts in reverse.</p>
+<h3 id="numbers-char-and-string"><a class="header" href="#numbers-char-and-string">Numbers, <code>char</code> and <code>String</code></a></h3>
+<p>Every number type and <code>char</code> is <code>Comparable</code> by value, and <code>String</code> by
+content, the order of <code>String.compare</code>. Their <code>compare</code> returns -1, 0 or 1
+(<code>String.compare</code> any negative or positive number).</p>
+<p><code>float</code> and <code>double</code> compare in a total order: NaN sorts after every number
+and with every other NaN, and <code>-0.0</code> sorts with <code>0.0</code>. Their <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>
+and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, while
+<code>compare</code>, <code>clamp</code> and <code>Map</code> keys follow the total order, so a NaN key
+cannot break a map.</p>
+<h3 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h3>
+<ul>
+<li>Tuples and <code>Optional</code> are not <code>Comparable</code>, and <code>Comparable</code> is not
+derived from a struct's fields: a struct writes its <code>compare</code>, as
+<code>Version</code> does above.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/value-structs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/traits-and-extensions.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/value-structs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/traits-and-extensions.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

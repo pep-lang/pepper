@@ -1,0 +1,805 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>The reflect module (compile time) - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/reflect.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/reflect.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="the-reflect-module-compile-time"><a class="header" href="#the-reflect-module-compile-time">The reflect module (compile time)</a></h1>
+<p><code>reflect</code> exists only inside a <a href="../language/reflection.html"><code>static</code> block</a>,
+which runs while compiling. It needs no import. Everything here is
+evaluated by the compiler: the values are compile-time numbers, <code>bool</code>s,
+strings, lists, and the members, cases, functions and attributes below.
+The <a href="../language/reflection.html">Reflection and attributes</a> chapter
+explains how a block mixes them with the code it emits.</p>
+<p>The compiler provides <code>reflect</code> itself; this file only declares it, with
+<code>[__BuiltIn]</code>, for this reference and the editor.</p>
+<p>Source: <code>runtime/reflect.pep</code></p>
+<h2 id="reflectname"><a class="header" href="#reflectname">reflect.name</a></h2>
+<pre><code class="language-pepper">reflect.name&lt;T&gt;(): String
+</code></pre>
+<p>The name of type <code>T</code> as it is written in source, with its type arguments
+(<code>"Box&lt;int&gt;"</code>, <code>"Array&lt;String&gt;"</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the type's name</li>
+</ul>
+<h2 id="reflectproperties"><a class="header" href="#reflectproperties">reflect.properties</a></h2>
+<pre><code class="language-pepper">reflect.properties&lt;T&gt;(): List&lt;Member&gt;
+</code></pre>
+<p>The public fields and <a href="../language/properties.html">properties</a> of struct
+<code>T</code>, in declaration order, as members.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one member per public field or property</li>
+</ul>
+<h2 id="reflectfields"><a class="header" href="#reflectfields">reflect.fields</a></h2>
+<pre><code class="language-pepper">reflect.fields&lt;T&gt;(): List&lt;Member&gt;
+</code></pre>
+<p>Every field of struct <code>T</code>, private ones and a property's storage included,
+in declaration order, as members. It is meant for code a struct's author
+writes, such as a field-by-field <code>==</code>, so it is available only in the
+file that declares <code>T</code>; anywhere else it is an error that points at
+<code>properties</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a struct declared in this file</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one member per field</li>
+</ul>
+<h2 id="reflectcases"><a class="header" href="#reflectcases">reflect.cases</a></h2>
+<pre><code class="language-pepper">reflect.cases&lt;E&gt;(): List&lt;Case&gt;
+</code></pre>
+<p>The cases of enum <code>E</code>, in declaration order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — an enum</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one case per enum case</li>
+</ul>
+<h2 id="reflectfunctions_with"><a class="header" href="#reflectfunctions_with">reflect.functions_with</a></h2>
+<pre><code class="language-pepper">reflect.functions_with&lt;A&gt;(): List&lt;Function&gt;
+</code></pre>
+<p>Every free function in the program that carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — an <a href="../language/reflection.html#attributes">attribute struct</a></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one function per function marked <code>[A]</code></li>
+</ul>
+<h2 id="reflectis_struct"><a class="header" href="#reflectis_struct">reflect.is_struct</a></h2>
+<pre><code class="language-pepper">reflect.is_struct&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is a struct. A number, <code>bool</code> or <code>char</code> is not, nor is an
+enum or a trait.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is a struct</li>
+</ul>
+<h2 id="reflectis_enum"><a class="header" href="#reflectis_enum">reflect.is_enum</a></h2>
+<pre><code class="language-pepper">reflect.is_enum&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is an enum.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is an enum</li>
+</ul>
+<h2 id="reflectis_trait"><a class="header" href="#reflectis_trait">reflect.is_trait</a></h2>
+<pre><code class="language-pepper">reflect.is_trait&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is a trait.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is a trait</li>
+</ul>
+<h2 id="reflectis_reference"><a class="header" href="#reflectis_reference">reflect.is_reference</a></h2>
+<pre><code class="language-pepper">reflect.is_reference&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is a reference type, whose slots can be null: a struct, or an
+enum whose cases carry values, unless it is <code>[Value]</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is a reference type</li>
+</ul>
+<h2 id="reflectis_same"><a class="header" href="#reflectis_same">reflect.is_same</a></h2>
+<pre><code class="language-pepper">reflect.is_same&lt;A, B&gt;(): bool
+</code></pre>
+<p>Whether <code>A</code> and <code>B</code> are the same type, after aliases (<code>int</code> and <code>i32</code>
+are). A member's <code>Type</code> can be either argument:
+<code>reflect.is_same&lt;field.Type, String&gt;()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the first type</li>
+<li><code>B</code> — the second type</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether they are the same type</li>
+</ul>
+<h2 id="reflecthas_attribute"><a class="header" href="#reflecthas_attribute">reflect.has_attribute</a></h2>
+<pre><code class="language-pepper">reflect.has_attribute&lt;T, A&gt;(): bool
+</code></pre>
+<p>Whether struct or enum <code>T</code> carries attribute <code>A</code>. A member, case or
+function has the same test as a method with one type argument
+(<code>field.has_attribute&lt;A&gt;()</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or enum</li>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> carries <code>A</code></li>
+</ul>
+<h2 id="reflectattribute"><a class="header" href="#reflectattribute">reflect.attribute</a></h2>
+<pre><code class="language-pepper">reflect.attribute&lt;T, A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on struct or enum <code>T</code>: each field of attribute
+struct <code>A</code> by name (<code>reflect.attribute&lt;T, Deprecated&gt;().message</code>). It is
+an error when <code>T</code> does not carry <code>A</code>. A member, case or function has the
+same as a method with one type argument (<code>field.attribute&lt;A&gt;()</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or enum</li>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute's value</li>
+</ul>
+<h2 id="reflecthas_build_option"><a class="header" href="#reflecthas_build_option">reflect.has_build_option</a></h2>
+<pre><code class="language-pepper">reflect.has_build_option(name: String): bool
+</code></pre>
+<p>Whether the build defines <a href="../language/build-options.html">build option</a>
+<code>name</code> (<code>-D NAME</code> or <code>-D NAME=value</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the option's name: a letter or <code>_</code>, then letters, digits and <code>_</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it is defined</li>
+</ul>
+<h2 id="reflectbuild_option"><a class="header" href="#reflectbuild_option">reflect.build_option</a></h2>
+<pre><code class="language-pepper">reflect.build_option(name: String): String
+</code></pre>
+<p>The value of <a href="../language/build-options.html">build option</a> <code>name</code>, as a
+string (<code>-D NAME</code> alone is <code>"1"</code>). It is an error when the build does not
+define the option.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the option's name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the option's value</li>
+</ul>
+<h2 id="reflectbuild_option-1"><a class="header" href="#reflectbuild_option-1">reflect.build_option</a></h2>
+<pre><code class="language-pepper">reflect.build_option(name: String, default: String): String
+</code></pre>
+<p>The value of <a href="../language/build-options.html">build option</a> <code>name</code>, as a
+string, or <code>default</code> when the build does not define it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the option's name</li>
+<li><code>default</code> — the value when the build does not define it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the option's value, else <code>default</code></li>
+</ul>
+<h2 id="reflectprint"><a class="header" href="#reflectprint">reflect.print</a></h2>
+<pre><code class="language-pepper">reflect.print&lt;T&gt;(value: T)
+</code></pre>
+<p>Writes <code>value</code> as a note each time the compiler runs the call, on every
+compile, including one that succeeds; in an unrolled loop the note says
+which pass printed it. See
+<a href="../language/reflection.html#seeing-what-a-block-does">Seeing what a block does</a>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the value's compile-time kind</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — any compile-time value</li>
+</ul>
+<h2 id="reflecterror"><a class="header" href="#reflecterror">reflect.error</a></h2>
+<pre><code class="language-pepper">reflect.error(message: String)
+</code></pre>
+<p>Stops the compile with an error at the call.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the error's text; an interpolated string can show the values that matter</li>
+</ul>
+<h2 id="reflectassert"><a class="header" href="#reflectassert">reflect.assert</a></h2>
+<pre><code class="language-pepper">reflect.assert(condition: bool, message: String)
+</code></pre>
+<p>Stops the compile with an error at <code>condition</code> when it is false.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — a compile-time condition</li>
+<li><code>message</code> — the error's text</li>
+</ul>
+<h2 id="reflectmember"><a class="header" href="#reflectmember">reflect.Member</a></h2>
+<pre><code class="language-pepper">struct reflect.Member
+</code></pre>
+<p>A field or property, from <code>properties</code> or <code>fields</code>. A compile-time value:
+no program can name its type.</p>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="name"><a class="header" href="#name">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name.</p>
+<h4 id="index"><a class="header" href="#index">index</a></h4>
+<pre><code class="language-pepper">const index: int
+</code></pre>
+<p>Its position in the list, from 0.</p>
+<h4 id="is_last"><a class="header" href="#is_last">is_last</a></h4>
+<pre><code class="language-pepper">const is_last: bool
+</code></pre>
+<p>Whether it is the last in the list.</p>
+<h4 id="type_name"><a class="header" href="#type_name">type_name</a></h4>
+<pre><code class="language-pepper">const type_name: String
+</code></pre>
+<p>Its type, as a string.</p>
+<h4 id="type"><a class="header" href="#type">Type</a></h4>
+<pre><code class="language-pepper">const Type: Type
+</code></pre>
+<p>Its type, usable wherever a type is written
+(<code>var copy: field.Type = ...</code>).</p>
+<h4 id="is_const"><a class="header" href="#is_const">is_const</a></h4>
+<pre><code class="language-pepper">const is_const: bool
+</code></pre>
+<p>Whether it is a <code>const</code> field.</p>
+<h4 id="is_property"><a class="header" href="#is_property">is_property</a></h4>
+<pre><code class="language-pepper">const is_property: bool
+</code></pre>
+<p>Whether it is a property rather than a field.</p>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="has_attribute"><a class="header" href="#has_attribute">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute"><a class="header" href="#attribute">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute's value</li>
+</ul>
+<h4 id="get"><a class="header" href="#get">get</a></h4>
+<pre><code class="language-pepper">get&lt;T&gt;(value: T): Type
+</code></pre>
+<p>Emits <code>value.name</code>, a read of this member of <code>value</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the struct to read from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the member's value</li>
+</ul>
+<h4 id="set"><a class="header" href="#set">set</a></h4>
+<pre><code class="language-pepper">set&lt;T&gt;(value: T, x: Type)
+</code></pre>
+<p>Emits <code>value.name = x</code>, a store to this member of <code>value</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the struct to store into</li>
+<li><code>x</code> — the value to store</li>
+</ul>
+<h2 id="reflectcase"><a class="header" href="#reflectcase">reflect.Case</a></h2>
+<pre><code class="language-pepper">struct reflect.Case
+</code></pre>
+<p>An enum case, from <code>cases</code>. A compile-time value: no program can name its
+type.</p>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
+<h4 id="name-1"><a class="header" href="#name-1">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name.</p>
+<h4 id="value"><a class="header" href="#value">value</a></h4>
+<pre><code class="language-pepper">const value: int
+</code></pre>
+<p>Its integer value, or the tag of a case that carries values.</p>
+<h4 id="index-1"><a class="header" href="#index-1">index</a></h4>
+<pre><code class="language-pepper">const index: int
+</code></pre>
+<p>Its position, from 0.</p>
+<h4 id="is_last-1"><a class="header" href="#is_last-1">is_last</a></h4>
+<pre><code class="language-pepper">const is_last: bool
+</code></pre>
+<p>Whether it is the last case.</p>
+<h4 id="values"><a class="header" href="#values">values</a></h4>
+<pre><code class="language-pepper">const values: List&lt;Member&gt;
+</code></pre>
+<p>The values it carries, as members, in order; empty when it carries
+none. A value's <code>get(v)</code> reads it from <code>v</code>, which must hold this case.</p>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="has_attribute-1"><a class="header" href="#has_attribute-1">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute-1"><a class="header" href="#attribute-1">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute's value</li>
+</ul>
+<h4 id="matches"><a class="header" href="#matches">matches</a></h4>
+<pre><code class="language-pepper">matches&lt;E&gt;(v: E): bool
+</code></pre>
+<p>Emits a test of whether <code>v</code> holds this case.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — the enum</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the enum value to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>v</code> holds this case</li>
+</ul>
+<h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
+<pre><code class="language-pepper">get&lt;E, TValues&gt;(values: TValues): E
+</code></pre>
+<p>Emits the case made with <code>values</code> (<code>case.get()</code> for one that carries
+none); at module scope, the case itself.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — the enum</li>
+<li><code>TValues</code> — the types of the values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>values</code> — the values the case carries, one argument each</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the enum value</li>
+</ul>
+<h2 id="reflectfunction"><a class="header" href="#reflectfunction">reflect.Function</a></h2>
+<pre><code class="language-pepper">struct reflect.Function
+</code></pre>
+<p>A function, from <code>functions_with</code>. A compile-time value: no program can
+name its type.</p>
+<h3 id="fields-2"><a class="header" href="#fields-2">Fields</a></h3>
+<h4 id="name-2"><a class="header" href="#name-2">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name.</p>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="has_attribute-2"><a class="header" href="#has_attribute-2">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute-2"><a class="header" href="#attribute-2">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute's value</li>
+</ul>
+<h4 id="call"><a class="header" href="#call">call</a></h4>
+<pre><code class="language-pepper">call&lt;R, TArguments&gt;(arguments: TArguments): R
+</code></pre>
+<p>Emits a direct call of the function with <code>arguments</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — what the function returns</li>
+<li><code>TArguments</code> — the types of the arguments</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>arguments</code> — the call's arguments, one argument each</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>what the call returns</li>
+</ul>
+<h2 id="reflectlist"><a class="header" href="#reflectlist">reflect.List</a></h2>
+<pre><code class="language-pepper">struct reflect.List&lt;T&gt;
+</code></pre>
+<p>What <code>properties</code>, <code>fields</code>, <code>cases</code>, <code>functions_with</code> and a case's
+<code>values</code> return. A compile-time <code>for</code> unrolls over it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a member, case or function</li>
+</ul>
+<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">const count: int
+</code></pre>
+<p>How many items it holds.</p>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">const is_empty: bool
+</code></pre>
+<p>Whether it holds none.</p>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
+<pre><code class="language-pepper">[](i: int): T
+</code></pre>
+<p>The item at index <code>i</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>i</code> — its position, from 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the item</li>
+</ul>
+<h2 id="reflectstring"><a class="header" href="#reflectstring">reflect.String</a></h2>
+<pre><code class="language-pepper">struct reflect.String
+</code></pre>
+<p>A compile-time string: a literal, a member's <code>name</code>, or the result of
+<code>name</code>, <code>+</code> or interpolation. It joins with <code>+</code> and interpolation.</p>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h4 id="length"><a class="header" href="#length">length</a></h4>
+<pre><code class="language-pepper">const length: int
+</code></pre>
+<p>How many characters it holds.</p>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">const is_empty: bool
+</code></pre>
+<p>Whether it holds none.</p>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="starts_with"><a class="header" href="#starts_with">starts_with</a></h4>
+<pre><code class="language-pepper">starts_with(s: String): bool
+</code></pre>
+<p>Whether it starts with <code>s</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the prefix</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it starts with <code>s</code></li>
+</ul>
+<h4 id="ends_with"><a class="header" href="#ends_with">ends_with</a></h4>
+<pre><code class="language-pepper">ends_with(s: String): bool
+</code></pre>
+<p>Whether it ends with <code>s</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the suffix</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it ends with <code>s</code></li>
+</ul>
+<h4 id="contains"><a class="header" href="#contains">contains</a></h4>
+<pre><code class="language-pepper">contains(s: String): bool
+</code></pre>
+<p>Whether <code>s</code> occurs in it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the text to find</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it contains <code>s</code></li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator +</a></h4>
+<pre><code class="language-pepper">+(rhs: String): String
+</code></pre>
+<p>A new compile-time string: this one followed by <code>rhs</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the string to append</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the joined string</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/attributes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/builtins.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/attributes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/builtins.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

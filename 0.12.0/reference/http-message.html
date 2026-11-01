@@ -1,0 +1,683 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Requests and responses - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/http-message.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/http/message.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="requests-and-responses"><a class="header" href="#requests-and-responses">Requests and responses</a></h1>
+<p>HTTP messages: <code>Headers</code>, <code>Request</code> and <code>Response</code>, the values a
+<code>Client</code> sends and receives and a <code>Server</code> handler takes and returns.</p>
+<p>Source: <code>runtime/http/message.pep</code></p>
+<h2 id="headers"><a class="header" href="#headers">Headers</a></h2>
+<pre><code class="language-pepper">struct Headers
+</code></pre>
+<p>HTTP header fields, by name. Names ignore ASCII case: they are stored
+lowercased, so <code>Content-Type</code> and <code>content-type</code> are the same field. A
+name may hold several values, kept in the order added. Different names
+have no defined order, as HTTP allows.</p>
+<p><code>Headers</code> takes any name and value, but a <code>Client</code> refuses to send a
+field name that is not an RFC 9110 token or a value with CR, LF or NUL,
+and a <code>Server</code> answers <code>500</code> instead of sending one.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var headers = http.Headers();
+headers.add("Accept", "text/html");
+headers["accept"] = "application/json";   # replaces it
+assert(headers["ACCEPT"] == "application/json", "one value");
+</code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of field names.</p>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates an empty set of fields.</p>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="names"><a class="header" href="#names">names</a></h4>
+<pre><code class="language-pepper">names(): String[]
+</code></pre>
+<p>Returns the field names, lowercased, in no defined order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array with one entry per name</li>
+</ul>
+<h4 id="values"><a class="header" href="#values">values</a></h4>
+<pre><code class="language-pepper">values(name: String): String[]
+</code></pre>
+<p>Returns every value of the field named <code>name</code>, in the order added.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of the values; empty when no field has that name</li>
+</ul>
+<h4 id="add"><a class="header" href="#add">add</a></h4>
+<pre><code class="language-pepper">add(name: String, value: String)
+</code></pre>
+<p>Adds a value to the field named <code>name</code>, keeping any it has.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+<li><code>value</code> — the field value</li>
+</ul>
+<h4 id="set"><a class="header" href="#set">set</a></h4>
+<pre><code class="language-pepper">set(name: String, value: String)
+</code></pre>
+<p>Replaces every value of the field named <code>name</code> with <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+<li><code>value</code> — the field value</li>
+</ul>
+<h4 id="get"><a class="header" href="#get">get</a></h4>
+<pre><code class="language-pepper">get(name: String): String?
+</code></pre>
+<p>Returns the first value of the field named <code>name</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when no field has that name</li>
+</ul>
+<h4 id="has"><a class="header" href="#has">has</a></h4>
+<pre><code class="language-pepper">has(name: String): bool
+</code></pre>
+<p>Reports whether a field is named <code>name</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if a field has that name</li>
+</ul>
+<h4 id="remove"><a class="header" href="#remove">remove</a></h4>
+<pre><code class="language-pepper">remove(name: String)
+</code></pre>
+<p>Removes the field named <code>name</code> and all its values.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+</ul>
+<h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
+<pre><code class="language-pepper">[](name: String): String
+</code></pre>
+<p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
+an empty string when there is none. Use <code>get</code> to tell an empty value
+from a missing field.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first value, or <code>""</code></li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator []</a></h4>
+<pre><code class="language-pepper">[](name: String, value: String): String
+</code></pre>
+<p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
+<code>set</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the field name, in any case</li>
+<li><code>value</code> — the field value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>value</code>, the value of the assignment expression</li>
+</ul>
+<h2 id="request"><a class="header" href="#request">Request</a></h2>
+<pre><code class="language-pepper">struct Request
+</code></pre>
+<p>An HTTP request.</p>
+<p>A <code>Client</code> sends one: build it with a method and an absolute URL, then
+add headers and a body. A <code>Server</code> handler receives one, with <code>url</code> set to
+the target from the request line (<code>/path?query</code>) and the body read in
+full.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
+request.headers["Content-Type"] = "application/x-www-form-urlencoded";
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="method"><a class="header" href="#method">method</a></h4>
+<pre><code class="language-pepper">var method: String
+</code></pre>
+<p>The method, such as <code>GET</code> or <code>POST</code>.</p>
+<h4 id="url"><a class="header" href="#url">url</a></h4>
+<pre><code class="language-pepper">var url: String
+</code></pre>
+<p>For a client, the absolute URL (<code>https://host/path?query</code>); for a
+server handler, the request target (<code>/path?query</code>).</p>
+<h4 id="headers-2"><a class="header" href="#headers-2">headers</a></h4>
+<pre><code class="language-pepper">var headers: Headers
+</code></pre>
+<p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> (or
+<code>Transfer-Encoding</code>) and <code>Connection</code> itself.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
+<pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
+</code></pre>
+<p>Creates a request with no headers and no body.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>method</code> — the method, such as <code>GET</code></li>
+<li><code>url</code> — the absolute URL to send it to</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="can_upgrade"><a class="header" href="#can_upgrade">can_upgrade</a></h4>
+<pre><code class="language-pepper">can_upgrade(): bool
+</code></pre>
+<p>Reports whether a <code>Server</code> handler may answer this request with
+<code>Response.upgrade</code>: true for an HTTP/1.1 request, false for HTTP/1.0,
+for a request on an HTTP/2 stream (which cannot switch protocols), and
+for one a client builds.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the connection can be taken over</li>
+</ul>
+<h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
+<pre><code class="language-pepper">set_text(text: String): Request
+</code></pre>
+<p>Sets the body to the UTF-8 bytes of <code>text</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the body</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this request</li>
+</ul>
+<h4 id="set_body"><a class="header" href="#set_body">set_body</a></h4>
+<pre><code class="language-pepper">set_body(data: u8[]): Request
+</code></pre>
+<p>Sets the body to <code>data</code>, which may be any bytes (see <code>body</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the body's bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this request</li>
+</ul>
+<h4 id="set_reader"><a class="header" href="#set_reader">set_reader</a></h4>
+<pre><code class="language-pepper">set_reader(source: io.Reader, length: long = -1): Request
+</code></pre>
+<p>Sets the body to the bytes <code>source</code> gives, read as the request is sent
+rather than held in memory: a large file, or the output of a
+<code>compress.CompressReader</code>. With a <code>length</code> the client sends
+<code>Content-Length</code>; without one it sends the body chunked
+(<code>Transfer-Encoding: chunked</code>), which every HTTP/1.1 server accepts.</p>
+<p>The source is read once, so a client cannot send the request again
+(to follow a redirect, for instance).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the stream the body is read from, to its end</li>
+<li><code>length</code> — the number of bytes <code>source</code> gives, or -1 when it is not known</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this request</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var file = io.File.open(io.Path("upload.bin")).value();
+var request = http.Request("PUT", "http://localhost:8080/files/upload.bin").set_reader(file);
+</code></pre>
+<h4 id="uri"><a class="header" href="#uri">uri</a></h4>
+<pre><code class="language-pepper">uri(): Result&lt;Uri&gt;
+</code></pre>
+<p>Parses <code>url</code> as a URI reference: an absolute URL for a request a
+client sends, or the target (<code>/items?page=2</code>) for one a server
+received.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the parsed URL, or an error when <code>url</code> is not a valid URI reference (see <code>Uri.parse</code>)</li>
+</ul>
+<h4 id="path"><a class="header" href="#path">path</a></h4>
+<pre><code class="language-pepper">path(): String
+</code></pre>
+<p>Returns the path of <code>url</code>, with its percent-escapes: <code>/</code> when the path
+is empty.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the path, such as <code>/items</code>, or an empty string when <code>url</code> is not a valid URI reference</li>
+</ul>
+<h4 id="query"><a class="header" href="#query">query</a></h4>
+<pre><code class="language-pepper">query(): String
+</code></pre>
+<p>Returns the query of <code>url</code>: the text after <code>?</code>, with its
+percent-escapes (see <code>Uri.decode</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the query without the <code>?</code>, or an empty string for none or when <code>url</code> is not a valid URI reference</li>
+</ul>
+<h4 id="body"><a class="header" href="#body">body</a></h4>
+<pre><code class="language-pepper">body(): u8[]
+</code></pre>
+<p>Returns the body's bytes, as they were sent or received: use it for a
+binary body. The array is the body itself, not a copy. It is empty
+when the body comes from <code>set_reader</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the body; empty for none</li>
+</ul>
+<h4 id="text"><a class="header" href="#text">text</a></h4>
+<pre><code class="language-pepper">text(): String
+</code></pre>
+<p>Returns the body as text, decoded as UTF-8. For a binary body, call
+<code>body()</code> instead: here each byte that is not valid UTF-8 becomes
+U+FFFD, the replacement character.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the body's bytes decoded as a String</li>
+</ul>
+<h2 id="response"><a class="header" href="#response">Response</a></h2>
+<pre><code class="language-pepper">struct Response
+</code></pre>
+<p>An HTTP response.</p>
+<p><code>Client.send</code> returns one with the body read in full; <code>Client.open</code>
+returns one whose body is read as it arrives, through <code>reader()</code>. A
+<code>Server</code> handler returns one: build it with a status, then add headers
+and a body, in memory (<code>set_text</code>, <code>set_body</code>) or streamed
+(<code>set_reader</code>). The server adds <code>Content-Length</code> (or
+<code>Transfer-Encoding: chunked</code>) itself.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">handle(request: http.Request): http.Response {
+    var response = http.Response(200).set_text("hello");
+    response.headers["Content-Type"] = "text/plain";
+    return response;
+}
+</code></pre>
+<h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
+<h4 id="status"><a class="header" href="#status">status</a></h4>
+<pre><code class="language-pepper">var status: int
+</code></pre>
+<p>The status code, such as 200 or 404.</p>
+<h4 id="reason"><a class="header" href="#reason">reason</a></h4>
+<pre><code class="language-pepper">var reason: String
+</code></pre>
+<p>The reason phrase, such as <code>OK</code>; the server sends the standard one
+for the status when this is empty.</p>
+<h4 id="headers-3"><a class="header" href="#headers-3">headers</a></h4>
+<pre><code class="language-pepper">var headers: Headers
+</code></pre>
+<p>The header fields.</p>
+<h4 id="url-1"><a class="header" href="#url-1">url</a></h4>
+<pre><code class="language-pepper">var url: String
+</code></pre>
+<p>For a response a <code>Client</code> returns, the URL it came from: the
+request's, or after redirects the last one's. Empty otherwise.</p>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
+<pre><code class="language-pepper">construct(status: int = 200)
+</code></pre>
+<p>Creates a response with no headers and no body.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>status</code> — the status code</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="upgrade"><a class="header" href="#upgrade">upgrade</a></h4>
+<pre><code class="language-pepper">upgrade(protocol: String, takeover: (Connection) =&gt; void): Response
+</code></pre>
+<p>Makes this a <code>101 Switching Protocols</code> response that hands the
+connection to <code>takeover</code>, for a protocol that starts as HTTP/1.1, such
+as WebSocket. The server sends the status, <code>Upgrade: protocol</code>,
+<code>Connection: Upgrade</code> and the other headers (no <code>Content-Length</code>, no
+body), then calls <code>takeover</code> in the connection's task with the
+connection, and serves no more HTTP on it. The connection closes when
+<code>takeover</code> returns, or earlier at <code>Connection.close()</code>.</p>
+<p>Only a request whose <code>can_upgrade()</code> is true can be upgraded: for
+any other (HTTP/1.0, or an HTTP/2 stream) the server sends <code>501 Not Implemented</code> instead and never calls <code>takeover</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocol</code> — the <code>Upgrade</code> field: the protocol the connection switches to, such as <code>websocket</code></li>
+<li><code>takeover</code> — speaks the new protocol on the connection; bytes the client sent right after the request are the first it reads</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">echo(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) =&gt; {
+        for (var chunk in connection.chunks(4096)) {
+            connection.write_all(chunk.value());
+        }
+    });
+}
+</code></pre>
+<h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
+<pre><code class="language-pepper">set_text(text: String): Response
+</code></pre>
+<p>Sets the body to the UTF-8 bytes of <code>text</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the body</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<h4 id="set_body-1"><a class="header" href="#set_body-1">set_body</a></h4>
+<pre><code class="language-pepper">set_body(data: u8[]): Response
+</code></pre>
+<p>Sets the body to <code>data</code>, which may be any bytes (see <code>body</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the body's bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<h4 id="set_reader-1"><a class="header" href="#set_reader-1">set_reader</a></h4>
+<pre><code class="language-pepper">set_reader(source: io.Reader, length: long = -1): Response
+</code></pre>
+<p>Sets the body to the bytes <code>source</code> gives, which the server reads and
+sends as it goes rather than holding them in memory. With a <code>length</code>
+the server sends <code>Content-Length</code>; without one it sends the body
+chunked to an HTTP/1.1 client, and to an HTTP/1.0 client sends it
+unframed and closes the connection after it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the stream the body is read from, to its end</li>
+<li><code>length</code> — the number of bytes <code>source</code> gives, or -1 when it is not known</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">download(request: http.Request): http.Response {
+    var file = io.File.open(io.Path("large.bin")).value();
+    return http.Response(200).set_reader(file);
+}
+</code></pre>
+<h4 id="body-1"><a class="header" href="#body-1">body</a></h4>
+<pre><code class="language-pepper">body(): u8[]
+</code></pre>
+<p>Returns the body's bytes, as they were sent or received: use it for a
+binary body. The array is the body itself, not a copy. It is empty for
+a response from <code>Client.open</code>, whose body is read through <code>reader()</code>,
+and for one whose body comes from <code>set_reader</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the body; empty for none</li>
+</ul>
+<h4 id="reader"><a class="header" href="#reader">reader</a></h4>
+<pre><code class="language-pepper">reader(): io.Reader
+</code></pre>
+<p>Returns the body as a stream. For a response from <code>Client.open</code> it is
+the connection's <code>BodyReader</code>, which reads the body as it arrives and
+ends where the body ends; read it once. For a response whose body
+comes from <code>set_reader</code> it is that source, and otherwise an
+<code>io.ByteReader</code> over <code>body()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stream of the body's bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var response = http.Client().open(http.Request("GET", url)).value();
+var file = io.File.create(io.Path("download.bin")).value();
+for (var chunk in response.reader().chunks(65536)) {
+    file.write_all(chunk.value());
+}
+</code></pre>
+<h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
+<pre><code class="language-pepper">text(): String
+</code></pre>
+<p>Returns the body as text, decoded as UTF-8. For a binary body, call
+<code>body()</code> instead: here each byte that is not valid UTF-8 becomes
+U+FFFD, the replacement character.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the body's bytes decoded as a String</li>
+</ul>
+<h4 id="is_success"><a class="header" href="#is_success">is_success</a></h4>
+<pre><code class="language-pepper">is_success(): bool
+</code></pre>
+<p>Reports whether the status is 2xx.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a status from 200 to 299</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/http-module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/http-client.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/http-module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/http-client.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

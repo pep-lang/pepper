@@ -1,0 +1,452 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Introduction - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/introduction.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
+<p>Pepper is a compiled programming language for writing fast, native programs
+that are safe by default. Like Rust and Swift, it aims to rule out whole
+classes of memory bugs without asking you to manage memory by hand. It puts
+three things first:</p>
+<ul>
+<li><strong>Clarity.</strong> Code should say what it does. Pepper has a small, familiar
+syntax, one way to write most things, and error messages that point at the
+exact token you need to change.</li>
+<li><strong>Simplicity.</strong> There is no inheritance, no garbage collector to tune, and
+no ownership annotations to learn. Structs hold data, methods and
+extensions add behavior, and traits describe what a type can do.</li>
+<li><strong>Concurrent safety.</strong> Shared data should be safe to use from more than one
+thread. Only thread-safe values can be shared: numbers, <code>async.Atomic&lt;T&gt;</code>, and
+structs declared <code>[Shared]</code>, whose fields the compiler checks.</li>
+</ul>
+<p>Here is a complete Pepper program:</p>
+<pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
+main(): int {
+    print("Hello, world!");
+    return 0;
+}
+
+# Output:
+# Hello, world!
+</code></pre>
+<h2 id="how-pepper-manages-memory"><a class="header" href="#how-pepper-manages-memory">How Pepper manages memory</a></h2>
+<p>Every struct value in Pepper is a reference to an object on the heap, and the
+object is freed when the last reference to it goes away. The model is exactly
+C++'s <code>std::shared_ptr&lt;T&gt;</code> passed by value: storing a reference in a
+variable, a field, an array element or a parameter adds a reference, and that
+reference is released when the variable goes out of scope or is overwritten.
+There is no separate notion of a "borrowed" reference to learn. Numbers and
+other primitive values are copied, as in C.</p>
+<p>Because the rules are the same everywhere, you can predict exactly when an
+object is freed and when its destructor runs. The chapter on
+<a href="language/memory.html">memory and reference counting</a> covers the model in
+detail.</p>
+<h2 id="how-pepper-is-built"><a class="header" href="#how-pepper-is-built">How Pepper is built</a></h2>
+<p>The compiler is written in Pepper, and builds itself. It parses your program, checks it, and
+generates native code through <a href="https://llvm.org">LLVM</a>, then links an
+executable with the system's C toolchain. The same compiler powers a language
+server, so editors such as VS Code show Pepper's errors as you type.</p>
+<p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), compiles
+to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
+<a href="language/platform-selection.html#webassembly">WebAssembly</a>), and builds
+libraries that iOS and Android apps call (see
+<a href="language/mobile.html">iOS and Android</a>).
+Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
+and macOS (arm64), and installs with one command: see
+<a href="tools/install.html">Installing Pepper</a>.</p>
+<h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
+<p>Pepper is young. The core language works and is tested, and so does a
+standard library large enough to write real programs, but expect gaps. In
+the order this book covers them:</p>
+<ul>
+<li><strong>Basics:</strong> variables, functions, tuples and multiple return values,
+<a href="language/enums.html">enums</a> (with cases that carry values, methods and
+computed properties) and <code>match</code> (as a statement or a value, on enums,
+integers, characters, strings and trait values, with <code>is</code> tests, nested
+and tuple patterns, guards, ranges and constants), <code>Optional</code> values, and
+<code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates
+errors).</li>
+<li><strong>Collections and iteration:</strong> array and map literals, sortable,
+searchable arrays with read-only slices, hash maps and sets, sorted maps
+and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, a <code>BitSet</code>
+of small integers, a double-ended <code>Deque</code> and a <code>PriorityQueue</code>, and
+iteration (with adapters such as <code>map</code>, <code>filter</code>, <code>take</code> and <code>chain</code>, and
+consumers such as <code>fold</code>, <code>any</code> and <code>sum</code>).</li>
+<li><strong>Types of your own:</strong> structs with constructors, destructors, methods
+and <a href="language/properties.html">properties</a>,
+<a href="language/value-structs.html">value structs and enums</a> (<code>[Value]</code>), derived
+<code>==</code> and <code>hash</code> (<a href="language/hashing.html"><code>[Equatable]</code></a>), a <code>Comparable</code>
+trait for ordered types, traits (with default methods, and usable as
+types that convert back with <code>as?</code>), generics (with type arguments
+inferred at calls, and generic methods), type aliases, and function types
+and closures.</li>
+<li><strong>Memory and resources:</strong> <code>with</code> blocks, and weak references (to structs
+and trait values).</li>
+<li><strong>Concurrency:</strong> atomics, threads, channels and mutexes, and tasks (green
+threads that take turns on a few worker threads, parking on sockets and
+timeouts).</li>
+<li><strong>Organizing a program:</strong> modules (with <code>export * from</code> re-exports), and
+<a href="language/testing.html">unit tests</a>: <code>[Test]</code> functions that <code>pepper test</code>
+runs in parallel, each in a process of its own.</li>
+<li><strong>Compile time, platforms and C:</strong> calling C (including C callbacks), and
+being called from C (<code>[Export]</code>ed functions in a static or shared
+library, with a generated header), and <a href="language/simd.html">SIMD vectors</a>
+(<code>simd.Vector&lt;T, N&gt;</code>).</li>
+<li><strong>Standard library:</strong> strings (with a <code>StringBuilder</code>, <code>StringConstant</code>
+for literals' constant bytes, <code>to_string</code> and a <code>ToString</code> trait,
+<code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and
+<code>String.format</code>), file-system access (with glob patterns and watching a
+directory for changes; see <a href="language/files.html">files</a>),
+text encodings (UTF-16, ASCII; see
+<a href="language/encodings.html#text-encodings">text</a>), TCP, UDP and Unix domain
+sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies,
+redirects, connection reuse, ALPN), URI parsing and percent-encoding,
+<a href="language/encodings.html">base64, form data and UUIDs</a>, regular
+expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that
+keep their comments, and converting structs with <code>json.encode</code> and
+<code>json.decode</code>), <a href="language/toml.html">TOML</a> (parsing, writing, editing a
+document in place, and converting structs), gzip and zlib compression,
+tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3, with HMAC
+and PBKDF2, in the <a href="language/digest.html"><code>digest</code></a> module),
+<a href="language/random.html">random numbers</a> (secure bytes from the operating
+system and a seedable generator), command-line arguments
+(<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module),
+starting child processes, the <code>os</code> module (environment variables,
+monotonic and wall clocks with <code>Duration</code>, and machine and user
+information), the <code>time</code> module (dates, times of day, time zones from the
+system's database, and RFC 3339, HTTP and <code>strftime</code> text), the <code>debug</code>
+module (stack backtraces, which a panic also prints, and the debugger),
+and <a href="language/logging.html">leveled, structured logging</a> (the <code>log</code>
+module). <a href="language/yaml.html">YAML</a> and
+<a href="language/compression.html#zip-archives">zip archives</a> come as packages.</li>
+</ul>
+<p><a href="tools/pep-fmt.html">pep-fmt</a>, the code formatter,
+<a href="tools/pep-profile.html">pep-profile</a>, which profiles a program and draws a
+flame graph, <a href="tools/pep-test.html">pep-test</a>, which runs unit tests, and
+<a href="tools/pepper.html"><code>pepper</code></a>, the entry point that runs every
+tool, are themselves written in Pepper. A <a href="tools/projects.html"><code>pep.toml</code></a>
+project builds with <code>pepper build</code> alone and imports the packages it depends
+on by name, which <a href="tools/pep-package.html"><code>pepper package</code></a> fetches from
+GitHub, GitLab or Codeberg.
+Some things you will meet quickly:</p>
+<ul>
+<li>Functions are values: a named function, an <code>extern</code> C function, a method (<code>p.norm</code>,
+<code>Point.norm</code>), a constructor (<code>Point</code>), a generic function's
+specialization (<code>larger&lt;int&gt;</code>) or a closure such as <code>(x: int) =&gt; x * 2</code>
+can be stored, passed and called through a function type such as
+<code>(int) =&gt; int</code> (see
+<a href="language/function-types.html">function types and closures</a>).</li>
+<li>A constructor marked <code>[Implicit]</code> converts a value into its struct
+wherever the struct is expected, so <code>io.Path</code> parameters accept a <code>String</code>
+(see <a href="language/structs.html#implicit-conversions">implicit conversions</a>).</li>
+<li>Free functions, methods, operators, constructors, extension methods and
+trait members can be <a href="language/overloading.html">overloaded</a>.</li>
+<li>A <code>static</code> block runs in the compiler: it can list a struct's fields and
+the attributes on them (<code>[Attribute]</code> structs of your own) and generate
+code for each, so one function can encode any struct (see
+<a href="language/reflection.html">reflection and attributes</a>).</li>
+<li><code>-D NAME=VALUE</code> on the command line defines a build option, which
+<code>[BuildOption("NAME")]</code> and <code>[Target(BuildOption(NAME) &gt;= 2)]</code> select code
+by and <code>static</code> blocks read (see
+<a href="language/build-options.html">build options</a>).</li>
+<li>A call can name its arguments, <code>window("Editor", resizable = false)</code>, to
+skip defaulted parameters or pass them in any order (see
+<a href="language/functions.html#named-arguments">named arguments</a>).</li>
+<li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
+wherever the generic is used and, inside the generic, against what the
+traits declare (see <a href="language/generics.html#constraints">constraints</a>).
+Numbers, <code>bool</code> and enums whose cases carry nothing can declare traits
+too, for constraints, but are never trait values.</li>
+<li>Threads can share only thread-safe values, which the compiler checks,
+closure captures included. A channel hands over what it is sent without
+copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
+waits to receive from or send to several channels at once, and a <code>Mutex</code> holds any struct, with
+the compiler keeping each locked value apart from the rest of the program
+(see
+<a href="language/threads.html#what-a-lock-body-may-do">threads</a>). An <code>RwLock</code>
+lets many threads read a thread-safe value at once, and <code>Semaphore</code>,
+<code>Barrier</code> and <code>Latch</code> coordinate groups of threads. A <code>[ThreadLocal]</code>
+module-scope <code>var</code> gives every thread its own copy, compiled to the
+platform's native thread-local storage (see
+<a href="language/threads.html#thread-local-variables">thread-local variables</a>).</li>
+<li>Integer arithmetic that overflows panics instead of wrapping, at every
+optimization level; <code>wrapping_add</code> and its siblings wrap on purpose (see
+<a href="language/types-and-variables.html#integer-overflow">integer overflow</a>).
+Bit counting, rotation, byte swapping and the floating-point functions
+are methods that compile to LLVM's intrinsics, and any other intrinsic
+can be declared as an extern (see
+<a href="language/c-interop.html#llvm-intrinsics">LLVM intrinsics</a>).</li>
+<li>Reference counting does not reclaim cycles on its own: two objects that
+refer to each other are never freed. Break the cycle with a
+<a href="language/memory.html#weak-references">weak reference</a> on one side.</li>
+</ul>
+<p>Each chapter of this book says plainly what is and is not supported. When a
+chapter shows a feature, the example was compiled and run to check it.</p>
+<h2 id="how-this-book-is-organized"><a class="header" href="#how-this-book-is-organized">How this book is organized</a></h2>
+<ul>
+<li><strong>Tutorial.</strong> <a href="tutorial/getting-started.html">Getting started</a> installs
+Pepper and builds and runs your first program. <a href="tutorial/tour.html">A tour of Pepper</a>
+then walks through the main features by building a small word-counting
+program.</li>
+<li><strong>Language guide.</strong> One chapter per part of the language, in an order to
+learn it by: the basics, from
+<a href="language/types-and-variables.html">types and variables</a> to
+<a href="language/results.html">error handling</a>; collections and iteration; types
+of your own; memory; concurrency; organizing a program into modules and
+tests; and then compile time, platforms and C, starting at
+<a href="language/attributes.html">attributes</a>. Read it in order, or jump to the
+topic you need.</li>
+<li><strong>Standard library guide.</strong> A chapter for each area of the library, from
+<a href="language/files.html">files</a> to <a href="language/http.html">HTTP</a>.</li>
+<li><strong>Tools.</strong> <a href="tools/install.html">Installing Pepper</a>,
+<a href="tools/pepper.html">the pepper command</a>, toolchains with
+<a href="tools/pep-install.html">pep-install</a>, the compiler
+<a href="tools/pep-build.html">pep-build</a>, <a href="tools/projects.html">projects</a> and their
+packages with <a href="tools/pep-package.html">pep-package</a>,
+<a href="tools/pep-new.html">pep-new</a>, <a href="tools/pep-run.html">pep-run</a>,
+<a href="tools/pep-fmt.html">pep-fmt</a>, <a href="tools/pep-profile.html">pep-profile</a>,
+<a href="tools/pep-test.html">pep-test</a>, the language server
+<a href="tools/pep-lsp.html">pep-lsp</a>, <a href="tools/pep-doc.html">pep-doc</a> and
+<a href="tools/debugging.html">debugging</a>.</li>
+<li><strong>Standard library reference.</strong> Every type and function in the runtime,
+generated from the runtime's own documentation comments. Start at the
+<a href="reference/README.html">overview</a>.</li>
+<li><strong>Contributing.</strong> <a href="contributing/building.html">Building Pepper from source</a>,
+<a href="contributing/setup.html">setting up LLVM</a>,
+<a href="contributing/docs.html">building this documentation</a> and
+<a href="contributing/tests.html">testing the runtime and the compiler</a>.</li>
+</ul>
+<p>Every complete program in this book lives in the repository's
+<code>docs/examples/</code> folder and is compiled and run by the test suite, so what
+you read is what works.</p>
+<h2 id="versions-of-this-book"><a class="header" href="#versions-of-this-book">Versions of this book</a></h2>
+<p>This documentation is versioned with the compiler. Use the version picker in
+the top-right corner of each page to switch between releases; <code>dev</code> follows the <code>main</code>
+branch. Read the version that matches the compiler you are using.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+                            <a rel="next prefetch" href="tutorial/getting-started.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+                    <a rel="next prefetch" href="tutorial/getting-started.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

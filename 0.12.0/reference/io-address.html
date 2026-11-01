@@ -1,0 +1,674 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Network addresses - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/io-address.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/io/address.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="network-addresses"><a class="header" href="#network-addresses">Network addresses</a></h1>
+<p>Network addresses: <code>IpAddress</code> (IPv4 or IPv6), <code>SocketAddress</code> (an IP
+address and a port), and <code>resolve</code>, which turns a host name into socket
+addresses.</p>
+<p>Source: <code>runtime/io/address.pep</code></p>
+<h2 id="ipaddress"><a class="header" href="#ipaddress">IpAddress</a></h2>
+<pre><code class="language-pepper">struct IpAddress
+</code></pre>
+<p>An IPv4 or IPv6 address.</p>
+<p>Make one with <code>IpAddress.v4</code>, <code>IpAddress.v6</code>, <code>IpAddress.parse</code>, or one
+of the well-known addresses (<code>loopback_v4()</code>, <code>unspecified_v6()</code>, ...).
+<code>IpAddress()</code> is the IPv4 unspecified address <code>0.0.0.0</code>.</p>
+<p><code>to_string()</code> prints IPv4 in dotted decimal (<code>127.0.0.1</code>) and IPv6 in the
+RFC 5952 form (<code>::1</code>, <code>2001:db8::8a2e:370:7334</code>); an IPv4-mapped IPv6
+address prints as <code>::ffff:1.2.3.4</code>. An IPv4 address and the IPv6 address
+that maps it are different values.</p>
+<p>An IPv6 address can carry a scope id, the network interface a link-local
+address such as <code>fe80::1</code> belongs to. Its text form is <code>fe80::1%eth0</code>
+(RFC 4007), and a socket address carries it to the system as
+<code>sin6_scope_id</code>.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>SocketAddress</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var a = io.IpAddress.parse("192.168.1.10").value();
+var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
+print(a.is_v4());         # true
+print(b.to_string());     # 2001:db8::1
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates the IPv4 unspecified address, <code>0.0.0.0</code>.</p>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="v4"><a class="header" href="#v4">v4</a></h4>
+<pre><code class="language-pepper">static v4(a: u8, b: u8, c: u8, d: u8): IpAddress
+</code></pre>
+<p>Creates an IPv4 address from its four bytes, <code>a.b.c.d</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first byte</li>
+<li><code>b</code> — the second byte</li>
+<li><code>c</code> — the third byte</li>
+<li><code>d</code> — the fourth byte</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address <code>a.b.c.d</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var home = IpAddress.v4(127, 0, 0, 1);
+</code></pre>
+<h4 id="v6"><a class="header" href="#v6">v6</a></h4>
+<pre><code class="language-pepper">static v6(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16): IpAddress
+</code></pre>
+<p>Creates an IPv6 address from its eight 16-bit groups, <code>a:b:c:d:e:f:g:h</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first group</li>
+<li><code>b</code> — the second group</li>
+<li><code>c</code> — the third group</li>
+<li><code>d</code> — the fourth group</li>
+<li><code>e</code> — the fifth group</li>
+<li><code>f</code> — the sixth group</li>
+<li><code>g</code> — the seventh group</li>
+<li><code>h</code> — the eighth group</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var loopback = IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);   # ::1
+</code></pre>
+<h4 id="loopback_v4"><a class="header" href="#loopback_v4">loopback_v4</a></h4>
+<pre><code class="language-pepper">static loopback_v4(): IpAddress
+</code></pre>
+<p>Returns the IPv4 loopback address, <code>127.0.0.1</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>127.0.0.1</code></li>
+</ul>
+<h4 id="loopback_v6"><a class="header" href="#loopback_v6">loopback_v6</a></h4>
+<pre><code class="language-pepper">static loopback_v6(): IpAddress
+</code></pre>
+<p>Returns the IPv6 loopback address, <code>::1</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>::1</code></li>
+</ul>
+<h4 id="unspecified_v4"><a class="header" href="#unspecified_v4">unspecified_v4</a></h4>
+<pre><code class="language-pepper">static unspecified_v4(): IpAddress
+</code></pre>
+<p>Returns the IPv4 unspecified address, <code>0.0.0.0</code>. Binding to it listens
+on every IPv4 interface.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>0.0.0.0</code></li>
+</ul>
+<h4 id="unspecified_v6"><a class="header" href="#unspecified_v6">unspecified_v6</a></h4>
+<pre><code class="language-pepper">static unspecified_v6(): IpAddress
+</code></pre>
+<p>Returns the IPv6 unspecified address, <code>::</code>. Binding to it listens on
+every IPv6 interface (and, where the system allows dual-stack sockets
+by default, such as Linux, on every IPv4 interface too).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>::</code></li>
+</ul>
+<h4 id="parse"><a class="header" href="#parse">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): IoResult&lt;IpAddress&gt;
+</code></pre>
+<p>Parses an IPv4 address in dotted decimal (<code>192.168.0.1</code>) or an IPv6
+address in the RFC 4291 text form (<code>::1</code>, <code>fe80::1:2</code>,
+<code>::ffff:10.0.0.1</code>), with an optional scope (<code>fe80::1%eth0</code>).</p>
+<p>IPv4 needs exactly four decimal parts from 0 to 255 without leading
+zeros. IPv6 takes up to eight groups of one to four hex digits (either
+case), at most one <code>::</code>, and an optional IPv4 address as the last 32
+bits. Brackets and surrounding spaces are not accepted.</p>
+<p>An IPv6 address may end in <code>%</code> and a scope: a decimal scope id
+(<code>%3</code>), or the name of a network interface (<code>%eth0</code>), which is looked
+up on this machine (so it fails where there is no such interface).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the address to parse</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the address; an error with <code>is_invalid_input()</code> when <code>text</code> is not a valid IPv4 or IPv6 address or names an unknown interface</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = IpAddress.parse("10.0.0.300");
+print(r.is_err());   # true: 300 is out of range
+var scoped = IpAddress.parse("fe80::1%7").value();
+print(scoped.scope_id());   # 7
+</code></pre>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
+<pre><code class="language-pepper">is_v4(): bool
+</code></pre>
+<p>Returns whether this is an IPv4 address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for IPv4, false for IPv6</li>
+</ul>
+<h4 id="is_v6"><a class="header" href="#is_v6">is_v6</a></h4>
+<pre><code class="language-pepper">is_v6(): bool
+</code></pre>
+<p>Returns whether this is an IPv6 address (including an IPv4-mapped one,
+<code>::ffff:a.b.c.d</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for IPv6, false for IPv4</li>
+</ul>
+<h4 id="scope_id"><a class="header" href="#scope_id">scope_id</a></h4>
+<pre><code class="language-pepper">scope_id(): uint
+</code></pre>
+<p>Returns the scope id of an IPv6 address: the index of the network
+interface it belongs to (the <code>3</code> or <code>eth0</code> of <code>fe80::1%3</code> or
+<code>fe80::1%eth0</code>), or 0 when it has none. Always 0 for IPv4.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the scope id, 0 for none</li>
+</ul>
+<h4 id="with_scope_id"><a class="header" href="#with_scope_id">with_scope_id</a></h4>
+<pre><code class="language-pepper">with_scope_id(id: uint): IpAddress
+</code></pre>
+<p>Returns this address with scope id <code>id</code>, such as the index of the
+interface a link-local address is reached through; 0 removes the
+scope.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>id</code> — the scope id, 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a copy of this address with that scope id</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is an IPv4 address and <code>id</code> is not 0</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = IpAddress.parse("fe80::1").value().with_scope_id(2);
+print(a.to_string());   # fe80::1%eth0 where interface 2 is eth0
+</code></pre>
+<h4 id="is_loopback"><a class="header" href="#is_loopback">is_loopback</a></h4>
+<pre><code class="language-pepper">is_loopback(): bool
+</code></pre>
+<p>Returns whether this is a loopback address: <code>127.0.0.0/8</code> for IPv4,
+<code>::1</code> for IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for a loopback address</li>
+</ul>
+<h4 id="is_unspecified"><a class="header" href="#is_unspecified">is_unspecified</a></h4>
+<pre><code class="language-pepper">is_unspecified(): bool
+</code></pre>
+<p>Returns whether this is the unspecified address, <code>0.0.0.0</code> or <code>::</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for the unspecified address</li>
+</ul>
+<h4 id="to_bytes"><a class="header" href="#to_bytes">to_bytes</a></h4>
+<pre><code class="language-pepper">to_bytes(): u8[]
+</code></pre>
+<p>Returns the address's bytes in network order: 4 for IPv4, 16 for
+IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of the address bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
+</code></pre>
+<h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the address as text: dotted decimal for IPv4, the RFC 5952
+form for IPv6 (lowercase hex, leading zeros dropped, the longest run of
+two or more zero groups written <code>::</code>, <code>::ffff:a.b.c.d</code> for an
+IPv4-mapped address). A scope id follows as <code>%</code> and the name of its
+interface (<code>fe80::1%eth0</code>), or the number when no interface on this
+machine has that index (<code>fe80::1%9</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text form, which <code>IpAddress.parse</code> reads back</li>
+</ul>
+<h4 id="operator-"><a class="header" href="#operator-">operator ==</a></h4>
+<pre><code class="language-pepper">==(other: IpAddress): bool
+</code></pre>
+<p>Returns whether two addresses are the same: same family, same bytes
+and same scope id. An IPv4 address never equals an IPv6 one, not even
+the IPv6 address that maps it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both are equal</li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator !=</a></h4>
+<pre><code class="language-pepper">!=(other: IpAddress): bool
+</code></pre>
+<p>Returns whether two addresses differ.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the family, any byte or the scope id differs</li>
+</ul>
+<h2 id="hash"><a class="header" href="#hash">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;IpAddress&gt;(value: IpAddress): u64
+</code></pre>
+<p>Returns a hash of an address's family, bytes and scope id, what <code>==</code>
+compares, so an <code>IpAddress</code> keys a <code>HashMap</code> or <code>HashSet</code> by its value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the address to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the address</li>
+</ul>
+<h2 id="socketaddress"><a class="header" href="#socketaddress">SocketAddress</a></h2>
+<pre><code class="language-pepper">struct SocketAddress
+</code></pre>
+<p>An IP address and a port: where a socket is bound, or where it connects
+or sends.</p>
+<p>Make one with <code>SocketAddress(address, port)</code> or <code>SocketAddress.parse</code>,
+or get a list from <code>resolve</code>. <code>SocketAddress()</code> is <code>0.0.0.0:0</code>. The text
+form is <code>address:port</code> for IPv4 and <code>[address]:port</code> for IPv6.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>IpAddress</code></li>
+<li><code>resolve</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var any = io.SocketAddress(io.IpAddress.unspecified_v4(), 8080);
+var local = io.SocketAddress.parse("[::1]:443").value();
+print(local.port());   # 443
+</code></pre>
+<h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
+<h4 id="socketaddress-1"><a class="header" href="#socketaddress-1">SocketAddress()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates <code>0.0.0.0:0</code>, the IPv4 unspecified address with port 0.</p>
+<h4 id="socketaddress-2"><a class="header" href="#socketaddress-2">SocketAddress()</a></h4>
+<pre><code class="language-pepper">construct(address: IpAddress, port: u16)
+</code></pre>
+<p>Creates a socket address from an IP address and a port.</p>
+<p>Port 0 asks the system to choose a free port when binding; read the
+one it chose with the socket's <code>local_address()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the IP address</li>
+<li><code>port</code> — the port</li>
+</ul>
+<h3 id="static-methods-1"><a class="header" href="#static-methods-1">Static methods</a></h3>
+<h4 id="parse-1"><a class="header" href="#parse-1">parse</a></h4>
+<pre><code class="language-pepper">static parse(text: String): IoResult&lt;SocketAddress&gt;
+</code></pre>
+<p>Parses <code>a.b.c.d:port</code> (IPv4) or <code>[ipv6]:port</code> (IPv6), with the address
+syntax of <code>IpAddress.parse</code> (a scope goes inside the brackets,
+<code>[fe80::1%eth0]:80</code>) and a decimal port from 0 to 65535.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the socket address to parse</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the socket address; an error with <code>is_invalid_input()</code> when the text is malformed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = SocketAddress.parse("127.0.0.1:8080").value();
+var b = SocketAddress.parse("[::1]:8080").value();
+</code></pre>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="address"><a class="header" href="#address">address</a></h4>
+<pre><code class="language-pepper">address(): IpAddress
+</code></pre>
+<p>Returns the IP address.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the IP address part</li>
+</ul>
+<h4 id="port"><a class="header" href="#port">port</a></h4>
+<pre><code class="language-pepper">port(): u16
+</code></pre>
+<p>Returns the port.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the port, 0 to 65535</li>
+</ul>
+<h4 id="is_v4-1"><a class="header" href="#is_v4-1">is_v4</a></h4>
+<pre><code class="language-pepper">is_v4(): bool
+</code></pre>
+<p>Returns whether the IP address is IPv4.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an IPv4 socket address</li>
+</ul>
+<h4 id="is_v6-1"><a class="header" href="#is_v6-1">is_v6</a></h4>
+<pre><code class="language-pepper">is_v6(): bool
+</code></pre>
+<p>Returns whether the IP address is IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an IPv6 socket address</li>
+</ul>
+<h4 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the text form: <code>a.b.c.d:port</code> for IPv4, <code>[ipv6]:port</code> for
+IPv6.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text form, which <code>SocketAddress.parse</code> reads back</li>
+</ul>
+<h4 id="operator--2"><a class="header" href="#operator--2">operator ==</a></h4>
+<pre><code class="language-pepper">==(other: SocketAddress): bool
+</code></pre>
+<p>Returns whether two socket addresses have equal IP addresses and the
+same port.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the socket address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both are equal</li>
+</ul>
+<h4 id="operator--3"><a class="header" href="#operator--3">operator !=</a></h4>
+<pre><code class="language-pepper">!=(other: SocketAddress): bool
+</code></pre>
+<p>Returns whether two socket addresses differ.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the socket address to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the address or the port differs</li>
+</ul>
+<h2 id="hash-1"><a class="header" href="#hash-1">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;SocketAddress&gt;(value: SocketAddress): u64
+</code></pre>
+<p>Returns a hash of a socket address's IP address and port, what <code>==</code>
+compares, so a <code>SocketAddress</code> keys a <code>HashMap</code> or <code>HashSet</code> by its value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the socket address to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the socket address</li>
+</ul>
+<h2 id="resolve"><a class="header" href="#resolve">resolve</a></h2>
+<pre><code class="language-pepper">resolve(host: String, port: u16): IoResult&lt;SocketAddress[]&gt;
+</code></pre>
+<p>Looks up the socket addresses of a host, with <code>port</code> attached to each.</p>
+<p>A <code>host</code> that is already an IP address (as <code>IpAddress.parse</code> reads it) is
+returned as is, without a lookup. Anything else goes to the system
+resolver (<code>getaddrinfo</code> on POSIX, <code>GetAddrInfoW</code> on Windows), which
+consults the hosts file and DNS and blocks until it answers. The addresses
+come in the resolver's order of preference, IPv4 and IPv6 mixed, each at
+most once.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>host</code> — a host name such as <code>"example.com"</code> or <code>"localhost"</code>, or an IP address</li>
+<li><code>port</code> — the port to put in every result</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>at least one address; an error with <code>is_not_found()</code> when the name has no address, <code>is_invalid_input()</code> when <code>host</code> is empty, or another resolver error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var r = io.resolve("localhost", 8080);
+if (r.is_ok()) {
+    for (var address in r.value()) {
+        print(address.to_string());   # 127.0.0.1:8080, [::1]:8080, ...
+    }
+}
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/io-watch.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/io-socket.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/io-watch.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/io-socket.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

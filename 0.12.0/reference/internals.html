@@ -1,0 +1,377 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Built-in functions - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/internals.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/internals.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
+<p><code>assert</code> and <code>panic</code>, which every program can call without an import.</p>
+<p>Source: <code>runtime/internals.pep</code></p>
+<h2 id="assert"><a class="header" href="#assert">assert</a></h2>
+<pre><code class="language-pepper">assert(condition: bool, message: String)
+</code></pre>
+<p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
+<p>The check always runs; there is no release mode that removes it. A
+string literal message picks the <code>__ptr&lt;char&gt;</code> overload instead, which
+builds no <code>String</code>. Any other message is evaluated before the call.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition that must hold</li>
+<li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>condition</code> is false: prints the location and <code>message</code>, and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(count &gt; 0, "count must be positive");
+</code></pre>
+<h2 id="assert-1"><a class="header" href="#assert-1">assert</a></h2>
+<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;)
+</code></pre>
+<p>Checks that <code>condition</code> holds; if not, panics with <code>message</code>, a
+NUL-terminated C string. A string literal message picks this overload,
+so an assertion that holds builds no <code>String</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition that must hold</li>
+<li><code>message</code> — the text to print on failure, or <code>__null</code> for a generic message</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>condition</code> is false: prints the location and <code>message</code>, and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(count &gt; 0, "count must be positive");
+</code></pre>
+<h2 id="panic"><a class="header" href="#panic">panic</a></h2>
+<pre><code class="language-pepper">panic(message: String)
+</code></pre>
+<p>Prints <code>message</code> and aborts the program. It never returns.</p>
+<p>Flushes every C output stream, so output printed so far is not lost,
+then writes <code>location: panic: message</code> and a newline to standard error
+("Assertion failed with no additional information" when <code>message</code> is
+null), followed in a build without <code>-O</code> by a backtrace of the calls
+that led there (<code>PEPPER_BACKTRACE</code> overrides the build; see the <code>debug</code>
+module's <code>print_backtrace</code>), and calls C <code>abort()</code>. No destructors or
+releases run, and the process ends abnormally (SIGABRT on POSIX).</p>
+<p>The location is the call's <code>file:line:col</code>, which the compiler passes
+in a hidden parameter, the way a C++ <code>std::source_location</code> default
+argument works. A function that panics on its caller's behalf, as the
+runtime's indexers do, declares that parameter itself and passes it on,
+so the panic names its caller's line:</p>
+<pre><code>check_positive(value: int, location: __ptr&lt;char&gt; = __caller_location()) {
+    if (value &lt;= 0) {
+        panic("expected a positive value", location);
+    }
+}
+</code></pre>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the text to print</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>always</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">panic("unreachable");
+</code></pre>
+<h2 id="panic-1"><a class="header" href="#panic-1">panic</a></h2>
+<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;)
+</code></pre>
+<p>Reports <code>message</code>, a NUL-terminated C string (a generic message when it
+is <code>__null</code>), as a panic and aborts, as <code>panic(String)</code> does. A string
+literal message picks this overload, so it allocates nothing.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the text to print, or <code>__null</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>always</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">panic("unreachable");
+</code></pre>
+<h2 id="panichook"><a class="header" href="#panichook">PanicHook</a></h2>
+<pre><code class="language-pepper">type PanicHook = shared (String, String) =&gt; void
+</code></pre>
+<p>The function a panic runs before it prints its message: see
+<code>set_panic_hook</code>. It receives the panic's message and its location
+(<code>file:line:col</code>, or an empty string when the panic has none).</p>
+<h2 id="set_panic_hook"><a class="header" href="#set_panic_hook">set_panic_hook</a></h2>
+<pre><code class="language-pepper">set_panic_hook(hook: PanicHook)
+</code></pre>
+<p>Installs <code>hook</code> as the process's panic hook, replacing the one installed
+before (take that one with <code>take_panic_hook</code> first to chain them).</p>
+<p>Every panic, on any thread, calls the hook on the panicking thread
+before it prints its message and backtrace, then prints and aborts as
+always: the hook cannot stop the panic. A full-screen terminal program
+uses it to leave the alternate screen, so the message lands where the
+user can read it. That covers <code>panic</code>, a failed <code>assert</code>, an index out
+of range, an overflowing operator and every other check the compiler or
+the runtime adds. A stack overflow skips the hook: the thread has no
+stack left to run it on.</p>
+<p>A panic inside the hook does not run the hook again: it prints the
+first panic's message, then its own, and aborts. Two threads that
+panic at once each run the hook, at the same time. Keep the hook
+short, and keep it from taking a lock the panicking code may hold: it
+would wait forever instead of letting the program end.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hook</code> — runs with the panic's message and location</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var previous = take_panic_hook();
+set_panic_hook((message, location) =&gt; {
+    leave_alternate_screen();
+    previous(message, location);
+});
+</code></pre>
+<h2 id="take_panic_hook"><a class="header" href="#take_panic_hook">take_panic_hook</a></h2>
+<pre><code class="language-pepper">take_panic_hook(): PanicHook
+</code></pre>
+<p>Removes the process's panic hook and returns it, so that a panic again
+only prints its message.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hook <code>set_panic_hook</code> installed last, or one that does nothing when there is none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var hook = take_panic_hook();   # panics no longer run it
+set_panic_hook(hook);           # and now they do again
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/prelude.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/attributes.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/prelude.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/attributes.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

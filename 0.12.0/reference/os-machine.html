@@ -1,0 +1,420 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Machine - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/os-machine.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/os/machine.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="machine"><a class="header" href="#machine">Machine</a></h1>
+<p>The machine the program runs on: its operating system, processor,
+memory and name.</p>
+<p>Source: <code>runtime/os/machine.pep</code></p>
+<h2 id="operatingsystem"><a class="header" href="#operatingsystem">OperatingSystem</a></h2>
+<pre><code class="language-pepper">enum OperatingSystem
+</code></pre>
+<p>An operating system Pepper runs on, with the names <code>[Target(OS(...))]</code>
+uses.</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>system_os</code></li>
+</ul>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="linux"><a class="header" href="#linux">Linux</a></h4>
+<pre><code class="language-pepper">Linux
+</code></pre>
+<p>Linux.</p>
+<h4 id="mac"><a class="header" href="#mac">Mac</a></h4>
+<pre><code class="language-pepper">Mac
+</code></pre>
+<p>macOS.</p>
+<h4 id="windows"><a class="header" href="#windows">Windows</a></h4>
+<pre><code class="language-pepper">Windows
+</code></pre>
+<p>Windows.</p>
+<h4 id="wasi"><a class="header" href="#wasi">Wasi</a></h4>
+<pre><code class="language-pepper">Wasi
+</code></pre>
+<p>WASI: a WebAssembly runtime such as wasmtime (<code>--target wasm32-wasip1</code>).</p>
+<h4 id="ios"><a class="header" href="#ios">IOS</a></h4>
+<pre><code class="language-pepper">IOS
+</code></pre>
+<p>iOS and iPadOS, on a device or in the simulator (<code>--target aarch64-apple-ios</code>). <code>[Target(OS(Mac))]</code> covers it too.</p>
+<h4 id="android"><a class="header" href="#android">Android</a></h4>
+<pre><code class="language-pepper">Android
+</code></pre>
+<p>Android (<code>--target aarch64-linux-android</code>). <code>[Target(OS(Linux))]</code>
+covers it too.</p>
+<h2 id="system_os"><a class="header" href="#system_os">system_os</a></h2>
+<pre><code class="language-pepper">system_os(): OperatingSystem
+</code></pre>
+<p>Returns the operating system the program was built for.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the operating system</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
+    print(executable);
+    return 0;
+}
+</code></pre>
+<h2 id="system_name"><a class="header" href="#system_name">system_name</a></h2>
+<pre><code class="language-pepper">system_name(): String
+</code></pre>
+<p>Returns the name of the operating system the program was built for, in
+lowercase: <code>"linux"</code>, <code>"macos"</code>, <code>"windows"</code>, <code>"wasi"</code>, <code>"ios"</code> or
+<code>"android"</code>, for printing and for file and directory names.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the operating system's name</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>system_os</code></li>
+</ul>
+<h2 id="system_version"><a class="header" href="#system_version">system_version</a></h2>
+<pre><code class="language-pepper">system_version(): String
+</code></pre>
+<p>Returns the operating system's version: the kernel release on Linux
+(<code>uname -r</code>, such as <code>6.8.0-45-generic</code>), the product version on macOS
+(<code>sw_vers -productVersion</code>, such as <code>14.5</code>), and the major, minor and
+build numbers on Windows (such as <code>10.0.22631</code>). WASI does not report
+one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the version, or an empty String when the system does not report it</li>
+</ul>
+<h2 id="architecture"><a class="header" href="#architecture">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(x64))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture's name</li>
+</ul>
+<h2 id="architecture-1"><a class="header" href="#architecture-1">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(aarch64))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture's name</li>
+</ul>
+<h2 id="architecture-2"><a class="header" href="#architecture-2">architecture</a></h2>
+<pre><code class="language-pepper">[Target(Arch(wasm32))] architecture(): String
+</code></pre>
+<p>Returns the processor architecture the program was built for: <code>"x64"</code>,
+<code>"aarch64"</code> or <code>"wasm32"</code>, the names <code>[Target(Arch(...))]</code> uses.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the architecture's name</li>
+</ul>
+<h2 id="hostname"><a class="header" href="#hostname">hostname</a></h2>
+<pre><code class="language-pepper">hostname(): String
+</code></pre>
+<p>Returns the machine's host name, as <code>hostname</code> prints it (on Windows its
+DNS host name). WASI does not report one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the host name, or an empty String when the system does not report it</li>
+</ul>
+<h2 id="logical_cpus"><a class="header" href="#logical_cpus">logical_cpus</a></h2>
+<pre><code class="language-pepper">logical_cpus(): ulong
+</code></pre>
+<p>Returns the number of logical processors: every hardware thread, so a
+core with hyperthreading counts two or more times. On Linux a cgroup
+CPU quota (<code>docker run --cpus</code>) caps it, rounded up. The same as
+<code>async.logical_cpus()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of logical processors, at least 1</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>physical_cpus</code></li>
+</ul>
+<h2 id="physical_cpus"><a class="header" href="#physical_cpus">physical_cpus</a></h2>
+<pre><code class="language-pepper">physical_cpus(): ulong
+</code></pre>
+<p>Returns the number of physical processor cores: hardware threads that
+share a core count once. The same as <code>async.physical_cpus()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of physical cores, at least 1 and at most <code>logical_cpus()</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>logical_cpus</code></li>
+</ul>
+<h2 id="total_memory"><a class="header" href="#total_memory">total_memory</a></h2>
+<pre><code class="language-pepper">total_memory(): ulong
+</code></pre>
+<p>Returns the machine's physical memory in bytes. Inside a virtual
+machine this is what the guest sees. On Linux, a lower memory limit on
+the process's cgroup or any cgroup above it (cgroup v2's <code>memory.max</code>
+or v1's <code>memory.limit_in_bytes</code>, as <code>docker run --memory</code> sets) is
+returned instead, as the JVM does. WASI does not report it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the total physical memory, or the container's memory limit when that is lower, in bytes; 0 when the system does not report it</li>
+</ul>
+<h2 id="peak_memory"><a class="header" href="#peak_memory">peak_memory</a></h2>
+<pre><code class="language-pepper">peak_memory(): ulong
+</code></pre>
+<p>Returns the most physical memory this process has held at once since it
+started: its peak resident set size (<code>ru_maxrss</code> on Linux and macOS, the
+peak working set on Windows). WASI does not report it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the peak resident set size in bytes; 0 when the system does not report it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var megabytes = os.peak_memory() / 1048576;
+</code></pre>
+<h2 id="page_size"><a class="header" href="#page_size">page_size</a></h2>
+<pre><code class="language-pepper">page_size(): ulong
+</code></pre>
+<p>Returns the size of a page of virtual memory in bytes: the unit the
+operating system maps memory in, usually 4096 (16384 on Apple silicon;
+65536, WebAssembly's page, on WASI).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the page size in bytes</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/os-time.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/os-user.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/os-time.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/os-user.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

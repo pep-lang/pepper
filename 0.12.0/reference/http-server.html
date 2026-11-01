@@ -1,0 +1,469 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Server - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/http-server.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/http/server.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="server"><a class="header" href="#server">Server</a></h1>
+<p>The HTTP server: <code>Server</code> accepts HTTP/1.1 and HTTP/2 connections on
+every worker of <code>async.run</code> and answers each request with a handler
+function.</p>
+<p>Source: <code>runtime/http/server.pep</code></p>
+<h2 id="max_request_body"><a class="header" href="#max_request_body">MAX_REQUEST_BODY</a></h2>
+<pre><code class="language-pepper">const MAX_REQUEST_BODY: ulong = 16777216
+</code></pre>
+<p>The largest request body a <code>Server</code> reads: 16 MiB. A larger one gets
+<code>413 Content Too Large</code>.</p>
+<h2 id="server-1"><a class="header" href="#server-1">Server</a></h2>
+<pre><code class="language-pepper">[Shared] struct Server
+</code></pre>
+<p>An HTTP/1.1 and HTTP/2 server.</p>
+<p><code>Server.bind</code> listens on an address (<code>Server.bind_tls</code> serves HTTPS);
+<code>serve</code> then accepts connections on every worker of the running
+<code>async.run</code> and serves each connection in a task of its own, calling the
+handler for every request (<code>serve_each</code> builds a handler for each
+connection instead). Connections are kept open between requests
+unless the client asks to close (or speaks HTTP/1.0).</p>
+<p>The handler gets the <code>Request</code> with its body read in full and returns the
+<code>Response</code>; the server adds <code>Content-Length</code> (and <code>Connection: close</code>
+when it will close). A request the server cannot parse gets <code>400 Bad Request</code>, one with header fields over 64 KiB <code>431 Request Header Fields Too Large</code>, and one with a body over <code>MAX_REQUEST_BODY</code> <code>413 Content Too Large</code>; the connection then closes. A response whose reason phrase or
+field value holds CR, LF or NUL, or whose field name is not an RFC 9110
+token, is sent as <code>500 Internal Server Error</code> instead, since those
+characters would split the response; the 500's text body names the
+field (or the reason phrase) at fault.</p>
+<p>HTTP/2 is served to a client that chooses it through ALPN (see
+<code>bind_tls</code>) or that starts a plain TCP connection with the HTTP/2
+preface (prior knowledge): each stream is a request, answered by the same
+handler in a task of its own.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+import http;
+import io;
+
+hello(request: http.Request): http.Response {
+    var response = http.Response(200).set_text("hello from " + request.path());
+    response.headers["Content-Type"] = "text/plain";
+    return response;
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var server = http.Server.bind(io.SocketAddress.parse("0.0.0.0:8080").value()).value();
+        server.serve(hello);
+    });
+    return 0;
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>
+<pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
+</code></pre>
+<p>Wraps a listening socket. Use <code>Server.bind</code> or <code>Server.bind_tls</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>listener</code> — the listening socket</li>
+<li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
+<li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
+</ul>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="bind"><a class="header" href="#bind">bind</a></h4>
+<pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
+</code></pre>
+<p>Listens for HTTP connections on <code>address</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address (port 0 for any free port)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the server; the errors of <code>io.TcpListener.bind</code></li>
+</ul>
+<h4 id="bind_tls"><a class="header" href="#bind_tls">bind_tls</a></h4>
+<pre><code class="language-pepper">static bind_tls(address: io.SocketAddress, acceptor: tls.TlsAcceptor): io.IoResult&lt;Server&gt;
+</code></pre>
+<p>Listens for HTTPS connections on <code>address</code>, presenting <code>acceptor</code>'s
+certificate. It sets the acceptor's ALPN protocols to <code>h2</code> and
+<code>http/1.1</code>, so clients that offer HTTP/2 get it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the local address (port 0 for any free port)</li>
+<li><code>acceptor</code> — the certificate and key to serve with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the server; the errors of <code>io.TcpListener.bind</code></li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="local_address"><a class="header" href="#local_address">local_address</a></h4>
+<pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
+</code></pre>
+<p>Returns the address the server listens on, with the port the system
+chose for port 0.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the local address, or a platform error</li>
+</ul>
+<h4 id="serve"><a class="header" href="#serve">serve</a></h4>
+<pre><code class="language-pepper">serve(handler: shared (Request) =&gt; Response)
+</code></pre>
+<p>Serves connections until the task is cancelled (when <code>async.run</code>
+ends): accepts on every worker and serves each connection in a task
+on the worker that accepted it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handler</code> — answers one request; it runs in the connection's task, so it may wait (on sockets, files, locks) without holding up other connections</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>async.run</code></li>
+</ul>
+<h4 id="serve_each"><a class="header" href="#serve_each">serve_each</a></h4>
+<pre><code class="language-pepper">serve_each(make: shared () =&gt; (Request) =&gt; Response)
+</code></pre>
+<p>Like <code>serve</code>, but builds a handler for each connection: the
+connection's task calls <code>make</code> once, when the connection is set up
+(after the TLS handshake, for HTTPS), and answers every request on
+that connection with the handler it returns.
+So the handler can keep per-connection state, or hold something that
+is not thread-safe, since it stays on the connection's worker.</p>
+<p>Every stream of an HTTP/2 connection shares the connection's handler,
+so it must be safe to call while another stream's call is waiting.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>make</code> — builds one connection's handler; every worker calls it</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>outside <code>async.run</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">server.serve_each(() =&gt; {
+    var paths = Array&lt;String&gt;();   # one list per connection
+    return (request) =&gt; {
+        paths.append(request.path());
+        return http.Response(200).set_text($"request {paths.count} on this connection");
+    };
+});
+</code></pre>
+<h2 id="connection"><a class="header" href="#connection">Connection</a></h2>
+<pre><code class="language-pepper">struct Connection
+</code></pre>
+<p>A connection a <code>Server</code> handler took over by answering with
+<code>Response.upgrade</code>: the raw stream after the <code>101 Switching Protocols</code>
+head, TCP or (under <code>Server.bind_tls</code>) TLS, as an <code>io.Reader</code> and an
+<code>io.Writer</code>.</p>
+<p>Reads return first the bytes the server had already read past the
+request (a client may send its first message right after the request),
+then what arrives. Like the handler, it belongs to the connection's task.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">upgraded(request: http.Request): http.Response {
+    return http.Response().upgrade("echo", (connection) =&gt; {
+        var data = Array&lt;u8&gt;();
+        while (connection.read(data, 4096).value() &gt; 0) {
+            connection.write_all(data);
+            data.clear();
+        }
+    });
+}
+</code></pre>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="connection-1"><a class="header" href="#connection-1">Connection()</a></h4>
+<pre><code class="language-pepper">construct(reader: _HttpReader)
+</code></pre>
+<p>Wraps the connection <code>reader</code> reads. The server makes one for
+<code>Response.upgrade</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>reader</code> — the connection and the bytes it buffered</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="read"><a class="header" href="#read">read</a></h4>
+<pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits until some bytes are available, then appends up to <code>max</code> of
+them to <code>buffer</code>: the ones buffered past the request first.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended, 0 at the end of the stream; an error when the stream fails</li>
+</ul>
+<h4 id="write"><a class="header" href="#write">write</a></h4>
+<pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
+</code></pre>
+<p>Writes what the stream takes in one call, which may be less than all
+of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes written; an error when the stream fails</li>
+</ul>
+<h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
+<pre><code class="language-pepper">write_all(data: u8[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Writes all of <code>data</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the bytes to write</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once every byte is written; an error when the stream fails</li>
+</ul>
+<h4 id="close"><a class="header" href="#close">close</a></h4>
+<pre><code class="language-pepper">close()
+</code></pre>
+<p>Closes the connection, sending TLS close_notify first under TLS. The
+server also closes it when the <code>takeover</code> function returns; closing
+again does nothing.</p>
+<h2 id="reason_phrase"><a class="header" href="#reason_phrase">reason_phrase</a></h2>
+<pre><code class="language-pepper">reason_phrase(status: int): String
+</code></pre>
+<p>Returns the standard reason phrase for an HTTP status code.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>status</code> — the status code</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the phrase, such as <code>Not Found</code> for 404; an empty string for a code without one</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/http-client.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/tls-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/http-client.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/tls-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

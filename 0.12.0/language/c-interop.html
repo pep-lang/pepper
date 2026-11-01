@@ -1,0 +1,1191 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Calling C - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/language/c-interop.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
+<p>Pepper programs can call functions written in C: the C standard library, your
+operating system's API, or any other library with a C interface. You declare
+the C function's prototype with <code>extern</code>, make sure the library that defines it
+is linked, and then call it like any Pepper function.</p>
+<h2 id="declaring-a-c-function"><a class="header" href="#declaring-a-c-function">Declaring a C function</a></h2>
+<p>An <code>extern</code> declaration is a C prototype, written the way C writes it: the
+return type, the name, and the parameter types, each followed by a parameter
+name. It has no body.</p>
+<pre><code class="language-pepper">extern ulong strlen(char* s);
+extern int strcmp(char* a, char* b);
+extern void* malloc(ulong size);
+extern void free(void* p);
+</code></pre>
+<p>After that, <code>strlen("hello")</code> calls the C library's <code>strlen</code>. The compiler
+does not check your prototype against any C header, so it must match the real
+C function exactly. A wrong parameter or return type compiles, and then passes
+or reads the wrong bits when the program runs.</p>
+<p>Match C types with Pepper types of the same size:</p>
+<div class="table-wrapper"><table><thead><tr><th>C</th><th>Pepper</th></tr></thead><tbody>
+<tr><td><code>char</code>, <code>signed char</code>, <code>unsigned char</code></td><td><code>char</code> or <code>i8</code>, <code>u8</code> or <code>byte</code></td></tr>
+<tr><td><code>short</code>, <code>unsigned short</code></td><td><code>short</code> or <code>i16</code>, <code>ushort</code> or <code>u16</code></td></tr>
+<tr><td><code>int</code>, <code>unsigned int</code></td><td><code>int</code> or <code>i32</code>, <code>uint</code> or <code>u32</code></td></tr>
+<tr><td><code>long long</code>, <code>unsigned long long</code>, <code>int64_t</code>, <code>size_t</code> (64-bit)</td><td><code>long</code> or <code>i64</code>, <code>ulong</code> or <code>u64</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td><code>float</code>, <code>double</code></td></tr>
+<tr><td><code>T*</code></td><td><code>T*</code> in the prototype</td></tr>
+</tbody></table>
+</div>
+<p>Pepper's <code>long</code> is always 64 bits. C's <code>long</code> is 64 bits on Linux and macOS but
+32 bits on Windows, so a C function that takes <code>long</code> needs a different
+prototype per platform (see <a href="#binding-to-a-different-symbol-name"><code>[Link(name = ...)]</code></a>
+below for an example).</p>
+<h3 id="32-bit-targets"><a class="header" href="#32-bit-targets">32-bit targets</a></h3>
+<p>On a 32-bit target (<code>wasm32-wasip1</code>, see
+<a href="platform-selection.html#webassembly">WebAssembly</a>), pointers, C's <code>long</code> and
+<code>size_t</code> are 32 bits. There, an extern's <code>long</code> and <code>ulong</code> stand for C's
+pointer-sized <code>long</code>/<code>ssize_t</code> and <code>unsigned long</code>/<code>size_t</code>: the call passes
+the low 32 bits and widens the result back to 64 (sign-extending a <code>long</code>,
+zero-extending a <code>ulong</code>), so <code>extern ulong strlen(char* s);</code> works
+unchanged. A Pepper function passed to C as a callback is converted the same
+way in the other direction. <code>i64</code> and <code>u64</code> stay 64 bits on every target; use them for C's
+<code>long long</code>, <code>int64_t</code> and <code>off_t</code>. WebAssembly checks every call's
+signature, so a prototype with the wrong width traps instead of returning
+garbage.</p>
+<p>Some things to know about <code>extern</code> declarations:</p>
+<ul>
+<li>The prototype uses C syntax only. The <code>name(parameter: type): type</code> form that
+Pepper functions use is a parse error on an extern, and <code>__ptr&lt;T&gt;</code> as a
+parameter type is an error too: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
+<li>An extern is private to its file (or module), like every declaration. Write
+<code>export extern ...</code> to let files that import this one call it (see
+<a href="visibility.html">Visibility</a>).</li>
+<li>Several files may declare the same extern, since every declaration names the
+same C function. The runtime already declares <code>malloc</code>, <code>free</code> and a few
+others privately, and your program can declare them again.</li>
+<li>An extern is linked by name. If no linked library defines it, the program
+compiles and then fails to link, with the linker reporting an undefined symbol. See
+<a href="linking.html">Linking</a> for how to add libraries.</li>
+<li>An extern is a <a href="function-types.html">function value</a> too, of the function
+type its prototype gives (<code>abs</code> is an <code>(int) =&gt; int</code>), so it can be stored
+and passed like a Pepper function. Where a C function pointer type is
+expected, it is the C function's own address (see
+<a href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a>). A
+variadic extern (one ending in <code>...</code>, below) is not a value: wrap a call
+to it in a closure.</li>
+</ul>
+<pre><code class="language-pepper"># An extern function is a function value, like a Pepper function.
+extern int abs(int x);
+extern ulong strlen(char* s);
+
+apply(f: (int) =&gt; int, x: int): int {
+    return f(x);
+}
+
+main(): int {
+    # Its type comes from the prototype: `abs` is an `(int) =&gt; int`.
+    var absolute = abs;
+    assert(absolute(-3) == 3, "through a local");
+    assert(apply(abs, -4) == 4, "as an argument");
+
+    # A `char*` parameter is a `__ptr&lt;char&gt;` in the function type.
+    var length: (__ptr&lt;char&gt;) =&gt; ulong = strlen;
+    var word = "four";
+    assert(length(word.c_str()) == 4, "strlen");
+
+    # Where a C function pointer is expected, it is the C function itself.
+    var pointer: extern (int) =&gt; int = abs;
+    assert(pointer(-5) == 5, "C function pointer");
+    return 0;
+}
+</code></pre>
+<h2 id="passing-strings"><a class="header" href="#passing-strings">Passing strings</a></h2>
+<p>Pepper's <a href="../reference/string.html"><code>String</code></a> is a reference-counted object, not
+a C string, so a <code>String</code> value cannot be passed where C expects <code>char*</code>.</p>
+<ul>
+<li>A <strong>string literal</strong> passed to an extern is passed as a NUL-terminated C
+string, with no allocation: <code>strlen("hello")</code> is 5. The same is true
+wherever a literal flows into a <code>__ptr&lt;char&gt;</code>, <code>__ptr&lt;u8&gt;</code>, or
+<code>__ptr&lt;void&gt;</code> in Pepper code (a variable, field, argument, or return
+value), so <code>String("hello")</code> copies the literal's five bytes.</li>
+<li>A <strong><a href="types-and-variables.html#string-constants"><code>StringConstant</code></a></strong> passes
+its constant NUL-terminated bytes with no copy, by itself where a
+<code>__ptr&lt;char&gt;</code> is expected or through <code>c_str()</code>. The pointer is valid for
+the whole run of the program and is never <code>__null</code>.</li>
+<li>A <strong><code>String</code> value</strong> is passed with <code>c_str()</code>, which returns the String's
+buffer, NUL-terminated, as a <code>__ptr&lt;char&gt;</code>. A String is not guaranteed to
+be NUL-terminated otherwise, so always go through <code>c_str()</code> when C needs
+the terminator. The pointer belongs to the String:
+it is valid until the String is destroyed or grows (for example with
+<code>append</code> or <code>+=</code>). An empty <code>String()</code> has no buffer, so its <code>c_str()</code> is
+<code>__null</code>; check before you pass it to a C function that does not accept
+<code>NULL</code>.</li>
+<li>To turn a C string back into a <code>String</code>, pass the pointer to the
+constructor: <code>String(p)</code> copies a NUL-terminated C string, and
+<code>String(p, size)</code> copies <code>size</code> bytes. If you already know the number of
+code points, pass it as a third argument:
+<code>String(p, size, String.length_of(p, size))</code>. The constructor copies the
+bytes, so you still own (and may free) the C buffer. A C string is never
+passed or stored where a <code>String</code> is expected without this copy: that is
+an error.</li>
+</ul>
+<pre><code class="language-pepper"># Passing strings to C, and turning C strings back into Strings.
+
+extern ulong strlen(char* s);
+extern int strcmp(char* a, char* b);
+extern char* strchr(char* s, int c);
+
+main(): int {
+    # A string literal passed to an extern is a NUL-terminated C string.
+    assert(strlen("hello") == 5, "a literal is passed as a C string");
+    assert(strcmp("abc", "abc") == 0, "equal C strings compare as 0");
+
+    # So is one stored in a __ptr&lt;char&gt;, or passed to the String
+    # constructor, which copies it.
+    __ptr&lt;char&gt; greeting = "hello";
+    assert(strlen(greeting) == 5, "a literal in a __ptr&lt;char&gt; is a C string");
+    assert(String("hello").size == 5, "String(literal) copies its bytes");
+
+    # A String value goes through c_str().
+    var name = "Pepper";
+    name += " and C";
+    assert(strlen(name.c_str()) == name.size, "c_str() is the String's bytes");
+
+    # A char* result is a __ptr&lt;char&gt;. Copy it into a String with the
+    # constructor: the byte size and the number of code points.
+    var rest = strchr(name.c_str(), 32);   # 32 is ' '
+    assert(rest != __null, "strchr found a space");
+    var size = strlen(rest);
+    var copy = String(rest, size, String.length_of(rest, size));
+    assert(copy == " and C", "the copy holds the tail of the C string");
+    return 0;
+}
+</code></pre>
+<p>Passing a <code>String</code> value directly to an extern's <code>char*</code> parameter is an error:</p>
+<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type '__ptr&lt;char&gt;'; pass its 'c_str()'
+    4 |     return strlen(name) as int;
+      |                   ^~~~
+</code></pre>
+<p>The reverse is an error too: a <code>char*</code> (or any raw pointer, <code>void*</code>
+included) is never a <code>String</code>, so passing one where a <code>String</code> is expected,
+assigning it to a <code>String</code> variable, or returning it as one is rejected. Copy
+it into a String with <code>String(p)</code> first:</p>
+<pre><code class="language-text">main.pep:3:19: error: cannot pass a value of type '__ptr&lt;char&gt;' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
+</code></pre>
+<h2 id="passing-arrays"><a class="header" href="#passing-arrays">Passing arrays</a></h2>
+<p>An <a href="../reference/array.html"><code>Array&lt;T&gt;</code></a> is a reference-counted object too, so
+C gets its elements through a pointer:</p>
+<ul>
+<li><code>data()</code> returns a <code>__ptr&lt;T&gt;</code> to the first element. C may read and write
+the elements through it. The pointer belongs to the Array: it is valid
+until the Array is destroyed or its buffer grows (for example with
+<code>append</code>). An empty Array's <code>data()</code> is <code>__null</code>.</li>
+<li><code>append_from(p, count)</code> appends <code>count</code> elements copied from <code>p</code>, as
+<code>String(p, size)</code> does for bytes, so you still own (and may free) the C
+buffer.</li>
+</ul>
+<pre><code class="language-pepper"># Passing an Array's elements to C, and filling an Array from a C buffer.
+
+extern void* memset(void* s, int c, ulong n);
+extern void* malloc(ulong size);
+extern void free(void* p);
+
+main(): int {
+    # data() points at the elements, so C can read or write them in place.
+    var bytes = Array&lt;u8&gt;();
+    bytes.append(1);
+    bytes.append(2);
+    bytes.append(3);
+    memset(bytes.data() as __ptr&lt;void&gt;, 7, bytes.count);
+    assert(bytes[2] == 7, "C wrote through data()");
+
+    # An empty Array has no elements to point at: data() is __null.
+    var none = Array&lt;u8&gt;();
+    assert(unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(none.data()) == __null, "empty is __null");
+
+    # append_from copies count elements out of a C buffer, which you still own.
+    __ptr&lt;u8&gt; buffer = unsafe_cast&lt;__ptr&lt;u8&gt;&gt;(malloc(4));
+    memset(buffer as __ptr&lt;void&gt;, 9, 4);
+    var copy = Array&lt;u8&gt;();
+    copy.append_from(buffer, 4);
+    free(buffer as __ptr&lt;void&gt;);
+    assert(copy.count == 4 &amp;&amp; copy[3] == 9, "append_from copied the buffer");
+    return 0;
+}
+</code></pre>
+<h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
+<p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
+ends its prototype with <code>...</code> after at least one named parameter:</p>
+<pre><code class="language-pepper">extern int snprintf(char* buffer, ulong size, char* format, ...);
+</code></pre>
+<p>The call uses the C calling convention for variadic functions, which differs
+from a plain call on some targets (such as macOS on Apple silicon). Each
+argument past the named ones gets C's default argument promotions: integers
+narrower than <code>int</code> widen to <code>int</code>, and <code>float</code> widens to <code>double</code>. Match your
+format string to the promoted type: <code>%d</code> for a <code>u8</code>, <code>%f</code> for a <code>float</code>, and
+<code>%lld</code> (not <code>%ld</code>) for a <code>long</code>, because C's <code>long</code> is 32 bits on Windows.</p>
+<p><code>...</code> must come last and must follow a named parameter: <code>extern int f(...);</code>
+is a parse error.</p>
+<pre><code class="language-pepper"># Calling a C function that takes a variable argument list.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+
+# On Windows, snprintf lives in legacy_stdio_definitions.
+[Target(OS(Windows))] [Link("legacy_stdio_definitions")]
+extern int snprintf(char* buffer, ulong size, char* format, ...);
+[Target(!OS(Windows))]
+extern int snprintf(char* buffer, ulong size, char* format, ...);
+
+main(): int {
+    var buffer = malloc(64) as __ptr&lt;char&gt;;
+    u8 small = 200;     # widened to int
+    float half = 0.5;   # widened to double
+    long big = 5000000000;
+    var written = snprintf(buffer, 64, "%d %.1f %lld %s", small, half, big, "ok");
+    var text = String(buffer, written as ulong, String.length_of(buffer, written as ulong));
+    free(buffer);
+    assert(text == "200 0.5 5000000000 ok", "snprintf formatted every argument");
+    return 0;
+}
+</code></pre>
+<p>On Windows, the C runtime defines <code>snprintf</code> and its relatives inline in its
+headers, so the linkable symbols live in a separate library,
+<code>legacy_stdio_definitions</code>. The example links it with <code>[Link]</code> on Windows only.</p>
+<h2 id="pointers"><a class="header" href="#pointers">Pointers</a></h2>
+<p>C code deals in raw pointers, and Pepper has a raw pointer type for talking to
+it: <code>__ptr&lt;T&gt;</code>, such as <code>__ptr&lt;void&gt;</code>, <code>__ptr&lt;char&gt;</code> or <code>__ptr&lt;__ptr&lt;int&gt;&gt;</code>.
+A <code>void*</code> returned by an extern is a <code>__ptr&lt;void&gt;</code> in Pepper, and a
+<code>__ptr&lt;T&gt;</code> can be passed to an extern that takes a C pointer.</p>
+<p>A pointer supports these operations:</p>
+<div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Meaning</th></tr></thead><tbody>
+<tr><td><code>p[i]</code></td><td>reads or writes the element <code>i</code> places from <code>p</code>; its type is <code>T</code>, so <code>var v = p[i]</code> declares a <code>T</code></td></tr>
+<tr><td><code>p + n</code></td><td>the address <code>n</code> elements after <code>p</code> (<code>n</code> bytes for <code>__ptr&lt;void&gt;</code>)</td></tr>
+<tr><td><code>p == __null</code>, <code>p != __null</code></td><td>compares with the null pointer</td></tr>
+<tr><td><code>p == q</code>, <code>p != q</code></td><td>compares two addresses (a pointer also compares with an integer address)</td></tr>
+<tr><td><code>p as __ptr&lt;void&gt;</code>, <code>v as __ptr&lt;T&gt;</code></td><td>the same address, to and from <code>__ptr&lt;void&gt;</code></td></tr>
+<tr><td><code>unsafe_cast&lt;__ptr&lt;U&gt;&gt;(p)</code></td><td>the same address, seen as pointing at <code>U</code></td></tr>
+<tr><td><code>unsafe_cast&lt;ulong&gt;(p)</code>, <code>unsafe_cast&lt;__ptr&lt;T&gt;&gt;(n)</code></td><td>the address as an integer, and back</td></tr>
+</tbody></table>
+</div>
+<p><code>as</code> converts a pointer only to and from <code>__ptr&lt;void&gt;</code>, like <code>static_cast</code> in
+C++. Any other pointer conversion reinterprets memory, so it is spelled
+<code>unsafe_cast</code> (see <a href="types-and-variables.html#reinterpreting-with-unsafe_cast">Reinterpreting with
+<code>unsafe_cast</code></a>).</p>
+<p><code>__null</code> is the null pointer. <code>sizeof&lt;T&gt;()</code> gives the size of a type in bytes,
+which you need to allocate memory for C. The
+<a href="../reference/builtins.html">compiler built-ins</a> reference lists these and the
+other <code>__</code> intrinsics.</p>
+<p><code>T*</code> spelling is for extern prototypes only, since they mirror C. Everywhere
+else (parameters, return types, struct fields, locals, globals, type aliases,
+generic arguments and casts) you write <code>__ptr&lt;T&gt;</code>, and <code>T*</code> is a compile error:</p>
+<pre><code class="language-pepper">clear(p: void*, n: ulong) { }
+</code></pre>
+<pre><code class="language-text">main.pep:1:10: error: C pointer syntax `void*` is only allowed in extern declarations; use `__ptr&lt;void&gt;`
+    1 | clear(p: void*, n: ulong) { }
+      |          ^~~~
+</code></pre>
+<pre><code class="language-pepper"># Raw pointers: __ptr&lt;T&gt; in Pepper code, T* in extern prototypes.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+extern void* memset(void* p, int value, ulong size);
+
+struct Buffer {
+    var data: __ptr&lt;u8&gt; = __null;
+    var size: ulong = 0;
+}
+
+make_buffer(size: ulong): Buffer {
+    var b = Buffer();
+    b.data = malloc(size) as __ptr&lt;u8&gt;;
+    b.size = size;
+    memset(b.data, 0, size);
+    return b;
+}
+
+sum(values: __ptr&lt;int&gt;, count: int): int {
+    var total = 0;
+    var i = 0;
+    while (i &lt; count) {
+        total = total + values[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+# `var` takes the element type from the pointer: `big` is a ulong, so a value
+# above 2^32 reads back whole.
+first(values: __ptr&lt;ulong&gt;): ulong {
+    var big = values[0];
+    return big;
+}
+
+main(): int {
+    # Indexing reads and writes elements of T.
+    var numbers = malloc(4 * sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
+    numbers[0] = 10;
+    numbers[1] = 20;
+    numbers[2] = 30;
+    numbers[3] = 40;
+    assert(sum(numbers, 4) == 100, "indexing reads what was written");
+
+    var wide = malloc(sizeof&lt;ulong&gt;()) as __ptr&lt;ulong&gt;;
+    wide[0] = 5000000000;
+    assert(first(wide) == 5000000000, "var v = p[i] has the pointee's type");
+    free(wide);
+
+    # p + n moves by n elements, not n bytes.
+    var third = numbers + 2;
+    assert(third[0] == 30, "numbers + 2 points at the third element");
+    assert(unsafe_cast&lt;ulong&gt;(third) - unsafe_cast&lt;ulong&gt;(numbers) == 8, "two ints are eight bytes");
+
+    # __ptr&lt;void&gt; strides by bytes; cast to see the memory another way.
+    var raw = numbers as __ptr&lt;void&gt;;
+    var bytes = raw as __ptr&lt;u8&gt;;
+    assert(bytes[4] == 20, "the second int starts at byte 4 (little-endian)");
+    free(raw);
+
+    # Pointers can live in struct fields, and compare with __null.
+    var b = make_buffer(16);
+    assert(b.data != __null, "malloc returned memory");
+    assert(b.data[15] == 0, "memset cleared it");
+    free(b.data);
+    b.data = __null;
+
+    # A pointer to pointers: indexing yields the inner pointer, and indexing
+    # again reads or writes through it.
+    var rows = malloc(2 * sizeof&lt;__ptr&lt;int&gt;&gt;()) as __ptr&lt;__ptr&lt;int&gt;&gt;;
+    var row = malloc(sizeof&lt;int&gt;()) as __ptr&lt;int&gt;;
+    rows[1] = row;
+    rows[1][0] = 7;
+    assert(rows[1][0] == 7, "rows[1][0] reads through the row pointer");
+    assert(row[0] == 7, "rows[1] is the row pointer");
+    free(row);
+    free(rows);
+    return 0;
+}
+</code></pre>
+<p>Pointers are not reference-counted and nothing checks them: indexing past the
+end of an allocation, using memory after <code>free</code>, or forgetting to <code>free</code> it
+behaves exactly as it would in C. Keep raw pointers inside small functions or
+structs that own the memory, and give the rest of your program ordinary Pepper
+types.</p>
+<h2 id="owning-a-c-resource-handlet"><a class="header" href="#owning-a-c-resource-handlet">Owning a C resource: <code>Handle&lt;T&gt;</code></a></h2>
+<p>A C library hands out objects that it frees with a function of its own
+(<code>fclose</code>, <code>free</code>, <code>LLVMDisposeModule</code>). Pepper's reference counting does
+not know about them, so the runtime's <code>Handle&lt;T&gt;</code> ties one to Pepper's
+lifetimes, like C#'s <code>SafeHandle</code>: it holds the raw value and a release
+function, and calls the function once, when the last reference to the
+handle goes away.</p>
+<pre><code class="language-pepper"># A C resource owned by a Handle: `free` runs when the last reference to
+# the handle goes away.
+
+extern void* malloc(ulong size);
+extern void free(void* p);
+extern void* memset(void* p, int value, ulong size);
+
+# A buffer from C, freed with the struct that holds it.
+struct Buffer {
+    var _memory: Handle&lt;__ptr&lt;void&gt;&gt;;
+    var size: ulong { get; }
+
+    construct(size: ulong) {
+        _memory = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(size), (p) =&gt; free(p));
+        this.size = size;
+    }
+
+    fill(value: u8) {
+        memset(_memory.value, value as int, size);
+    }
+
+    at(index: ulong): u8 {
+        return (_memory.value as __ptr&lt;u8&gt;)[index];
+    }
+}
+
+main(): int {
+    var buffer = Buffer(16);
+    buffer.fill(7);
+    if (buffer.at(15) != 7) {
+        return 1;
+    }
+
+    # release() frees early; the handle then no longer owns the memory.
+    var scratch = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(8), (p) =&gt; free(p));
+    scratch.release();
+    return scratch.is_owned() ? 2 : 0;
+}
+</code></pre>
+<ul>
+<li><code>Handle&lt;T&gt;(value, release)</code> takes ownership of <code>value</code>. <code>T</code> is usually
+<code>__ptr&lt;void&gt;</code> or an integer descriptor.</li>
+<li><code>value</code> reads the raw value, to pass to C.</li>
+<li>A handle is a reference, so copies share the resource; it is released
+when the last copy goes away. Keep it in a field of the struct that
+wraps the resource, as <code>Buffer</code> does.</li>
+<li><code>release()</code> frees the resource early, and <code>detach()</code> gives it back
+without freeing it. Either way the release function never runs again,
+and <code>is_owned()</code> becomes false.</li>
+<li><code>release</code> is a function value, so a closure may capture what the release
+needs. A captured reference stays alive until the release runs, which is
+how a C object that must not outlive its parent (an LLVM module and its
+context) keeps the parent alive.</li>
+</ul>
+<h2 id="passing-a-pepper-function-to-c"><a class="header" href="#passing-a-pepper-function-to-c">Passing a Pepper function to C</a></h2>
+<p>A Pepper <a href="function-types.html">function value</a> is a reference-counted object,
+not a C function pointer. For C, Pepper has a separate type,
+<code>extern (P...) =&gt; R</code>: the address of a function that C calls with the C
+calling convention. Declare a callback parameter of a C function with it,
+and pass a named function, or a closure that captures nothing:</p>
+<pre><code class="language-pepper"># `extern (P...) =&gt; R` is a C function pointer type: qsort calls `compare`
+# with pointers to two elements.
+extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);
+
+ascending(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
+    __ptr&lt;int&gt; x = a;
+    __ptr&lt;int&gt; y = b;
+    return x[0] - y[0];
+}
+
+main(): int {
+    __ptr&lt;int&gt; numbers = _pep_malloc(4 * sizeof&lt;int&gt;());
+    numbers[0] = 30;
+    numbers[1] = 10;
+    numbers[2] = 40;
+    numbers[3] = 20;
+
+    # A named function converts to the C function pointer type.
+    qsort(numbers, 4, sizeof&lt;int&gt;(), ascending);
+    assert(numbers[0] == 10 &amp;&amp; numbers[3] == 40, "ascending");
+
+    # So does a closure that captures nothing; its parameter types come
+    # from the C function pointer type.
+    qsort(numbers, 4, sizeof&lt;int&gt;(), (a, b) =&gt; {
+        __ptr&lt;int&gt; x = a;
+        __ptr&lt;int&gt; y = b;
+        return y[0] - x[0];
+    });
+    assert(numbers[0] == 40 &amp;&amp; numbers[3] == 10, "descending");
+
+    # A C function pointer is a value like a number: store it, call it.
+    var compare: extern (__ptr&lt;void&gt;, __ptr&lt;void&gt;) =&gt; int = ascending;
+    assert(compare(numbers, numbers + 1) &gt; 0, "40 sorts after 30");
+
+    _pep_free(numbers);
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>What converts.</strong> A named free function, an <code>extern</code> function, a static method
+(<code>Order.descending</code>), or a closure literal that captures nothing, whose
+parameter and return types match the C function pointer type exactly. A
+closure literal takes its parameter types from the type, as it does from
+any function type.</p>
+</li>
+<li>
+<p><strong>Nothing captured.</strong> C calls the function with its arguments alone, so a
+closure that captures a value, or a bound method (<code>p.get</code>), cannot
+convert:</p>
+<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (__ptr&lt;void&gt;, __ptr&lt;void&gt;) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
+    4 |     qsort(_pep_malloc(4), 0, 4, (a, b) =&gt; bias);
+      |                                           ^~~~
+main.pep:3:9: note: pass what the callback needs through the C function's context argument instead
+    3 |     var bias = 1;
+      |         ^~~~
+</code></pre>
+<p>This is a design decision, not a missing feature: a C function pointer is
+a bare address, and giving each capturing closure an address of its own
+would mean writing executable code at run time, which some platforms
+forbid. A callback that needs state gets it another way (see
+<a href="#callbacks-that-need-state">Callbacks that need state</a>).</p>
+<p>A function value held in a variable does not convert either, since it may
+be a closure.</p>
+</li>
+<li>
+<p><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
+and return types must be numbers, <code>bool</code>, pointers, or other C function
+pointer types. A struct is an error:
+<code>C function pointer type 'extern (String) =&gt; int' cannot use 'String'; C passes only numbers, 'bool' and pointers</code>.
+Write pointers as <code>void*</code> in an <code>extern</code> declaration and as <code>__ptr&lt;void&gt;</code>
+elsewhere, as for any pointer.</p>
+</li>
+<li>
+<p><strong>A value like a number.</strong> A C function pointer has no reference count.
+Store it in a variable, field or module-scope <code>const</code>, return it, pass it
+to other threads, or call it: <code>compare(a, b)</code> calls through it with the C
+calling convention. Calling a null one (from C) panics. It converts to
+<code>void*</code> but not to a Pepper function type; wrap it in a closure that calls
+it, <code>(x) =&gt; f(x)</code>, to use it as one.</p>
+</li>
+</ul>
+<p><code>__function_pointer(name)</code> also gives a function's address, as an untyped
+<code>__ptr&lt;void&gt;</code>. It takes a free function, or a static method of the struct
+whose method uses it. Inside a generic struct the static method is the one
+for the current type arguments, which is how <code>Thread.spawn</code> gives the
+operating system its thread entry point. Prefer a C function pointer type
+where the signature is known, since the compiler then checks it.</p>
+<h3 id="callbacks-that-need-state"><a class="header" href="#callbacks-that-need-state">Callbacks that need state</a></h3>
+<p>Since a C function pointer holds no captured values, a callback that needs
+state gets it another way:</p>
+<ul>
+<li><strong>The C function's context argument.</strong> Most C APIs that take a callback
+also take a <code>void*</code> context argument that they hand back to it; pass a
+pointer to the data the callback needs through that.</li>
+<li><strong>A thread-local or module-scope value.</strong> Set a
+<a href="threads.html#thread-local-variables"><code>[ThreadLocal]</code> variable</a>, an
+<a href="threads.html#per-thread-values-with-threadlocal"><code>async.ThreadLocal&lt;T&gt;</code></a>
+or an <code>Atomic&lt;T&gt;</code> before calling C, and read it in the callback, which
+is a named function:</li>
+</ul>
+<pre><code class="language-pepper"># A C function pointer holds no captured values, so a callback that needs
+# state reads it from somewhere C does not have to carry: here, a
+# thread-local the caller sets before handing the callback to C.
+extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);
+
+# The value to sort around, for the calling thread.
+[ThreadLocal]
+var pivot: int = 0;
+
+distance(x: int): int {
+    var d = x - pivot;
+    return d &lt; 0 ? -d : d;
+}
+
+closest_first(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
+    __ptr&lt;int&gt; x = a;
+    __ptr&lt;int&gt; y = b;
+    return distance(x[0]) - distance(y[0]);
+}
+
+main(): int {
+    __ptr&lt;int&gt; numbers = _pep_malloc(4 * sizeof&lt;int&gt;());
+    numbers[0] = 10;
+    numbers[1] = 40;
+    numbers[2] = 22;
+    numbers[3] = 31;
+
+    pivot = 30;
+    qsort(numbers, 4, sizeof&lt;int&gt;(), closest_first);
+    assert(numbers[0] == 31 &amp;&amp; numbers[3] == 10, "closest to 30 first");
+
+    _pep_free(numbers);
+    return 0;
+}
+</code></pre>
+<h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
+<p><code>[Link(name = "symbol")]</code> binds an extern to a C symbol whose name differs
+from the declared one. Pepper code calls the extern by its declared name, and
+the object file refers to <code>symbol</code>, even when a Pepper function is named
+<code>symbol</code> too: each call reaches its own function. Use it to give a C function a clearer
+name, to avoid clashing with a Pepper name, or, together with
+<a href="platform-selection.html"><code>[Target]</code></a>, to bind one Pepper name to a different
+symbol on each platform. <code>lib</code> names the library that defines the symbol in
+the same attribute, as <a href="linking.html#linking-a-library-from-the-source-link"><code>[Link("library")]</code></a>
+does on its own:</p>
+<pre><code class="language-pepper"># [Link(name = "symbol")] binds a Pepper name to a C symbol with a different name.
+
+# llabs takes a 64-bit long long on every platform: `i64` in an extern is
+# 64 bits everywhere, where `long` follows the size of a pointer.
+[Link(name = "llabs")]
+extern i64 absolute(i64 value);
+
+# A Pepper function may be named after the C symbol: each call reaches its own.
+llabs(value: i64): i64 {
+    return value;
+}
+
+# C's long is 64 bits on Linux and macOS but 32 bits on Windows and
+# WebAssembly, so the 64-bit labs is only right on the first two.
+[Target(OS(Windows) || OS(Wasi))]
+[Link(name = "llabs")]
+extern i64 abs64(i64 value);
+[Target(OS(Linux) || OS(Mac))]
+[Link(name = "labs")]
+extern long abs64(long value);
+
+# `lib` names the library that defines the symbol, as [Link("m")] does.
+[Target(OS(Linux))]
+[Link(lib = "m", name = "cbrt")]
+extern double cube_root(double value);
+
+main(): int {
+    assert(absolute(-7) == 7, "absolute calls llabs");
+    assert(llabs(-7) == -7, "llabs calls the Pepper function");
+    assert(abs64(-5000000000) == 5000000000, "abs64 calls a 64-bit abs");
+    [Target(OS(Linux))]
+    {
+        var root = cube_root(27.0);
+        assert(root &gt; 2.999 &amp;&amp; root &lt; 3.001, "cube_root calls cbrt from libm");
+    }
+    return 0;
+}
+</code></pre>
+<p>Real uses of the per-platform form include macOS on Intel, where the
+64-bit-inode version of <code>stat</code> is named <code>stat$INODE64</code>:</p>
+<pre><code class="language-pepper">[Target(OS(Mac) &amp;&amp; Arch(x64))]
+[Link(name = "stat$INODE64")]
+extern int stat(char* path, void* buf);
+[Target(OS(Mac) &amp;&amp; Arch(aarch64))]
+extern int stat(char* path, void* buf);
+</code></pre>
+<p><code>[Link]</code> takes the library as its one positional argument or as <code>lib</code>, and
+the symbol as <code>name</code>; each is a non-empty string, and an extern names at
+most one symbol. Anything else is an error, such as:</p>
+<pre><code class="language-text">main.pep:1:7: error: 'Link' has no argument named 'symbol'; use 'lib', 'path' or 'name'
+    1 | [Link(symbol = "labs")] extern long pep_abs(long v);
+      |       ^~~~~~
+</code></pre>
+<p>The earlier <code>[LinkName("symbol")]</code> was removed; it is an error that suggests
+the <code>[Link(name = "symbol")]</code> that replaces it.</p>
+<h2 id="llvm-intrinsics"><a class="header" href="#llvm-intrinsics">LLVM intrinsics</a></h2>
+<p>An extern whose <code>[Link(name = ...)]</code> symbol starts with <code>llvm.</code> is not a C
+function but an <a href="https://llvm.org/docs/LangRef.html#intrinsic-functions">LLVM intrinsic</a>:
+a call to it compiles to the operation itself, usually one instruction, and
+nothing is linked. The runtime's bit and math methods
+(<a href="types-and-variables.html#bit-operations-and-math-functions">Bit operations</a>)
+are written this way; declare one yourself for an intrinsic they do not
+cover, such as a CPU-specific one:</p>
+<pre><code class="language-pepper"># An extern bound to an LLVM intrinsic: a call is the instruction itself.
+[Link(name = "llvm.umin")]
+extern ulong smaller(ulong a, ulong b);
+
+# `llvm.ctlz` takes a second argument that must be a constant.
+[Link(name = "llvm.ctlz")]
+extern ushort leading_zeros(ushort value, bool is_zero_poison);
+
+main(): int {
+    assert(smaller(7, 3) == 3, "llvm.umin.i64");
+    assert(leading_zeros(1, false) == 15, "llvm.ctlz.i16");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p>The extern's prototype is the intrinsic's signature, in the types Pepper
+maps to LLVM's: <code>byte</code> and <code>char</code> are <code>i8</code>, <code>ushort</code> and <code>short</code> <code>i16</code>,
+<code>uint</code> and <code>int</code> <code>i32</code>, <code>ulong</code> and <code>long</code> <code>i64</code>, <code>bool</code> <code>i1</code>, <code>float</code> and
+<code>double</code> themselves, any pointer <code>ptr</code>, and a <code>void</code> return is <code>void</code>.
+Intrinsics that take or return vectors or structs cannot be declared yet.</p>
+</li>
+<li>
+<p>Name an overloaded intrinsic by its base name (<code>llvm.ctpop</code>): the
+overload is picked from the prototype (<code>llvm.ctpop.i32</code> for a <code>uint</code>).
+The mangled name works too.</p>
+</li>
+<li>
+<p>A prototype that matches no overload is an error at the extern, with
+LLVM's reason:</p>
+<pre><code class="language-text">main.pep:2:13: error: 'popcount' does not match the signature of LLVM intrinsic 'llvm.ctpop': intrinsic has incorrect argument type
+    2 | extern long popcount(int value);
+      |             ^~~~~~~~
+</code></pre>
+</li>
+<li>
+<p>Some arguments must be constants, such as <code>llvm.ctlz</code>'s
+<code>is_zero_poison</code>; passing a variable is an error at the argument:</p>
+<pre><code class="language-text">main.pep:5:19: error: argument 2 to 'leading_zeros' must be a constant
+    5 |     return leading_zeros(1, zero_poison);
+      |                             ^~~~~~~~~~~
+</code></pre>
+</li>
+</ul>
+<p>An unknown name (<code>llvm.nonsense</code>) is an error too. A target-specific
+intrinsic (<code>llvm.x86.*</code>, <code>llvm.aarch64.*</code>) only exists on its architecture,
+so pair it with <a href="platform-selection.html"><code>[Target(Arch(...))]</code></a>.</p>
+<h2 id="linking-the-library"><a class="header" href="#linking-the-library">Linking the library</a></h2>
+<p>A C function is only callable if the library that defines it is linked into
+your program. The C library is always linked. For anything else, attach
+<code>[Link("name")]</code> to the extern or pass <code>-l name</code> to the compiler. A
+package that bundles the C source compiles it with a
+<a href="../tools/projects.html#native"><code>[native]</code></a> table in its <code>pep.toml</code>, or a
+build script. The <a href="linking.html">Linking</a> chapter covers all of these.</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]
+[Link("gdi32")]
+extern ulong GetStockObject(int kind);
+</code></pre>
+<h2 id="calling-pepper-from-c"><a class="header" href="#calling-pepper-from-c">Calling Pepper from C</a></h2>
+<p>C code can call Pepper functions: mark each one <code>[Export]</code>, and build the
+program as a library with <code>--lib static</code> or <code>--lib shared</code>. The compiler
+writes a C header beside the library that declares every exported function.</p>
+<pre><code class="language-pepper"># A library C code calls: build it with `pepper build counter.pep --lib
+# static` (or `--lib shared`), which also writes `counter.h`.
+#
+# `main` is not needed in a library; this one calls the exported functions
+# from Pepper, so the example runs as a program too.
+
+[Export]
+add(a: int, b: int): int {
+    return a + b;
+}
+
+# A struct crosses to C as an opaque handle, `Counter*`.
+struct Counter {
+    var count: int;
+
+    construct(this.count = 0) {}
+}
+
+# The C name can differ from the Pepper name.
+[Export(name = "counter_new")]
+make_counter(start: int): Counter {
+    return Counter(start);
+}
+
+[Export]
+counter_increment(counter: Counter): int {
+    counter.count += 1;
+    return counter.count;
+}
+
+# A C function pointer, called back.
+[Export]
+apply(f: extern (int) =&gt; int, x: int): int {
+    return f(x);
+}
+
+# An enum whose cases carry nothing crosses as the integer it is stored
+# as, here `uint8_t`.
+enum Light: u8 {
+    Red,
+    Green,
+}
+
+[Export]
+light_next(light: Light): Light {
+    return light == Light.Red ? Light.Green : Light.Red;
+}
+
+# A String arrives as UTF-8 bytes and their size, and leaves as a
+# NUL-terminated copy that C frees with `pepper_string_free`.
+[Export]
+greet(name: String): String {
+    return "hello, " + name;
+}
+
+main(): int {
+    var counter = make_counter(41);
+    assert(counter_increment(counter) == 42, "the counter counts");
+    assert(add(2, 3) == 5, "add adds");
+    assert(greet("C") == "hello, C", "greet greets");
+    assert(light_next(Light.Red) == Light.Green, "the light turns");
+    return 0;
+}
+</code></pre>
+<pre><code class="language-bash">pepper build counter.pep --lib static     # libcounter.a and counter.h
+pepper build counter.pep --lib shared     # libcounter.so and counter.h
+</code></pre>
+<p>The header declares the functions with C types:</p>
+<pre><code class="language-c">typedef struct Counter Counter;
+
+void counter_retain(Counter* handle);
+void counter_release(Counter* handle);
+
+void pepper_string_free(char* text);
+
+int32_t add(int32_t a, int32_t b);
+int32_t apply(int32_t (*f)(int32_t), int32_t x);
+int32_t counter_increment(Counter* counter);
+Counter* counter_new(int32_t start);
+char* greet(const char* name, size_t name_size);
+uint8_t light_next(uint8_t light);
+</code></pre>
+<p>and a C program calls them like any C function:</p>
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "counter.h"
+
+static int32_t twice(int32_t x) { return 2 * x; }
+
+int main(void) {
+    Counter* counter = counter_new(41);
+    printf("%d\n", counter_increment(counter));   /* 42 */
+    counter_release(counter);
+    printf("%d\n", apply(twice, add(2, 3)));      /* 10 */
+    char* greeting = greet("C", 1);
+    printf("%s\n", greeting);                       /* hello, C */
+    pepper_string_free(greeting);
+    printf("%d\n", light_next(0));                /* 1: Light.Green */
+    return 0;
+}
+</code></pre>
+<pre><code class="language-bash">cc main.c -I. -L. -lcounter -lm -o main    # Linux; macOS needs no -lm
+</code></pre>
+<h3 id="exporting-a-function"><a class="header" href="#exporting-a-function">Exporting a function</a></h3>
+<ul>
+<li><code>[Export]</code> goes on a free function that is not generic. Its C name is its
+Pepper name; <code>[Export(name = "c_name")]</code> gives it another, which must be a
+C identifier. Two exports with one C name are an error.</li>
+<li><code>[Export]</code> anywhere else (a struct, a method, an extern, a variable, a
+generic function) is a warning, and does nothing.</li>
+<li>An exported function is still a Pepper function: Pepper code calls it by
+its Pepper name.</li>
+<li>Do not confuse <code>[Export]</code> with the <code>export</code> keyword, which makes a
+declaration visible to other Pepper files (see
+<a href="visibility.html">Visibility</a>). A function can be either, both or neither.</li>
+</ul>
+<h3 id="what-crosses-to-c"><a class="header" href="#what-crosses-to-c">What crosses to C</a></h3>
+<p>Each parameter and the result must be a type C can hold:</p>
+<div class="table-wrapper"><table><thead><tr><th>Pepper</th><th>C (in the header)</th></tr></thead><tbody>
+<tr><td><code>bool</code></td><td><code>bool</code></td></tr>
+<tr><td><code>char</code>, <code>i8</code>, <code>u8</code>, <code>short</code>, <code>ushort</code>, <code>int</code>, <code>uint</code>, <code>long</code>, <code>ulong</code> (and their <code>i16</code>... spellings)</td><td><code>char</code>, <code>int8_t</code>, <code>uint8_t</code>, <code>int16_t</code>, <code>uint16_t</code>, <code>int32_t</code>, <code>uint32_t</code>, <code>int64_t</code>, <code>uint64_t</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td><code>float</code>, <code>double</code></td></tr>
+<tr><td><code>__ptr&lt;T&gt;</code></td><td><code>T*</code> for a number type, else <code>void*</code></td></tr>
+<tr><td><code>extern (P...) =&gt; R</code></td><td>a C function pointer, <code>R (*name)(P...)</code></td></tr>
+<tr><td>an enum whose cases carry nothing</td><td>the integer it is stored as: <code>int32_t</code>, or its representation's (<code>enum Mode: u8</code> is <code>uint8_t</code>)</td></tr>
+<tr><td><code>String</code></td><td>a parameter: <code>const char* name, size_t name_size</code>; a result: <code>char*</code> (see <a href="#strings">Strings</a>)</td></tr>
+<tr><td>a struct</td><td>an opaque handle, <code>Name*</code></td></tr>
+</tbody></table>
+</div>
+<p>Anything else is an error at the parameter or result that C cannot hold:</p>
+<pre><code class="language-text">main.pep:2:15: error: cannot export 'total': C cannot hold 'Array&lt;int&gt;'
+    2 | total(values: Array&lt;int&gt;): int {
+      |               ^~~~~~~~~~
+note: only a non-generic struct passes to C, as a handle
+</code></pre>
+<p>A generic struct (<code>Array&lt;int&gt;</code>), a value struct, an enum whose cases carry
+values, a trait, a tuple, <code>Optional</code> and a Pepper function type cannot
+cross. Pass an array as a pointer to its elements and a count, or wrap it
+in a struct of your own and pass a handle.</p>
+<h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
+<p>A <code>String</code> crosses as UTF-8 bytes, copied each way, so neither side keeps a
+pointer into the other's memory:</p>
+<ul>
+<li>A <code>String</code> <strong>parameter</strong> is two C parameters: a pointer to the bytes and
+their size, <code>const char* name, size_t name_size</code>. The bytes need no NUL
+terminator, and may contain NULs. The function gets its own copy for the
+call; C keeps its buffer. A size of 0 (with any pointer, <code>NULL</code>
+included) is the empty string.</li>
+<li>A <code>String</code> <strong>result</strong> is a NUL-terminated copy of its bytes, as <code>char*</code>,
+which the C code owns and frees with <code>pepper_string_free</code>, never with
+<code>free</code>. An empty <code>String</code> is <code>""</code>, never <code>NULL</code>. A string with NULs inside
+ends at its first one for C; return a pointer and a size instead when that
+matters.</li>
+<li>The header declares <code>pepper_string_free</code> when some export returns a
+<code>String</code>.</li>
+</ul>
+<h3 id="handles"><a class="header" href="#handles">Handles</a></h3>
+<p>A struct reaches C as a pointer to an incomplete C type (<code>Counter*</code>), which
+C code passes back but never looks inside. Handles follow Pepper's
+<a href="memory.html">reference counting</a>:</p>
+<ul>
+<li>A handle a function <strong>returns</strong> is one reference, which the C code owns.
+It releases it with <code>&lt;name&gt;_release</code> (<code>counter_release</code>) when it is done;
+the last release frees the object, running its destructor.</li>
+<li>A handle C <strong>passes in</strong> stays C's: the function borrows it for the call.</li>
+<li><code>&lt;name&gt;_retain</code> adds a reference, for C code that keeps a handle in two
+places; each retain needs a release.</li>
+<li>The names are the struct's name in snake case: <code>ByteBuffer</code> gets
+<code>byte_buffer_retain</code> and <code>byte_buffer_release</code>. The header declares them
+for every struct an export passes.</li>
+</ul>
+<p>A handle must not be null, and is freed at most once: C gets no checks on
+either.</p>
+<h3 id="why-a-string-is-freed-but-a-handle-is-released"><a class="header" href="#why-a-string-is-freed-but-a-handle-is-released">Why a string is freed but a handle is released</a></h3>
+<p>The two look alike from C, a pointer Pepper hands over, but they are
+different things, and the names say which:</p>
+<ul>
+<li><strong>A handle is a live Pepper object.</strong> Pepper may hold references to it
+too: a field, a global, another thread. C holds one or more of those
+references, so it uses the same counting Pepper does: <code>&lt;name&gt;_retain</code>
+adds one, <code>&lt;name&gt;_release</code> drops one, and the object is destroyed only
+when the last reference anywhere goes away. Releasing is not freeing.</li>
+<li><strong>A returned string is not a Pepper object.</strong> It is a plain copy of the
+bytes, made at the boundary like <code>strdup</code> makes one, with no count and no
+other owner. Pepper keeps no reference to it, so there is nothing to
+retain or share; the C code owns it outright and gives it back once with
+<code>pepper_string_free</code>.</li>
+<li><strong>Why not <code>free</code>:</strong> the copy comes from Pepper's allocator, which tracks
+live allocations, serves short strings from its own small block pools
+(see <a href="memory.html#where-objects-live">Where objects live</a>) and, on Windows,
+may use a different C runtime's heap than the caller's. <code>pepper_string_free</code> returns it to the allocator that
+made it.</li>
+</ul>
+<p>A <code>String</code> parameter needs neither: Pepper copies the bytes for the call,
+and C's buffer stays C's.</p>
+<h3 id="building-the-library"><a class="header" href="#building-the-library">Building the library</a></h3>
+<p><code>--lib static</code> writes an archive of the program's objects: <code>libname.a</code>
+(<code>name.lib</code> on Windows). <code>--lib shared</code> links a shared library:
+<code>libname.so</code>, <code>libname.dylib</code> on macOS, or <code>name.dll</code> on Windows, with its
+import library <code>name.lib</code>. <code>-o</code> chooses another name. Either way the header
+is written beside the library, named for it without the <code>lib</code> prefix
+(<code>counter.h</code>).</p>
+<p>The compiler writes the archive itself, in the format of the platform it
+builds for (with <code>--target</code>, another one's: GNU's for Linux and Android,
+the BSD format Apple's linkers read for macOS and iOS, the COFF archive for
+Windows), with the index of the symbols its objects define, so no archiver
+needs to be installed and a static library for another platform needs no
+system root. A shared library links like an executable, with clang. With
+<code>--lto=full</code> the library is optimized as one module first, as an
+executable is (see <code>--lto</code> in <a href="../tools/pep-build.html">pep-build</a>).</p>
+<ul>
+<li>A library needs no <code>main</code>. One that has a <code>main</code> keeps it, and C code that
+links the library cannot have its own.</li>
+<li>Only the exported functions and their handle functions are visible
+outside a shared library; everything else in it is hidden.</li>
+<li>A program that links the <strong>static</strong> library must also link the C libraries
+Pepper's runtime uses. The header lists them in a comment at the top, such
+as <code>/* Link the static library with: -lm */</code> on Linux. A shared library
+links them itself.</li>
+<li>On Windows, <code>--lib static</code> and <code>--lib shared</code> both write <code>name.lib</code> (the
+archive, or the DLL's import library), so build them into different
+folders.</li>
+<li>A C program links at most one Pepper static library: each holds its own
+copy of the runtime, and two would define it twice. Shared libraries
+keep their runtimes to themselves, so a program may load several.</li>
+<li>A library's thread-locals (its own and the runtime's) use the
+initial-exec TLS model, as a program's do, where reading one costs a
+load, except on Android (see below). On Linux this makes a <code>.so</code> built
+from either kind need static TLS (<code>readelf -d</code> shows <code>FLAGS STATIC_TLS</code>): a program that links it always loads it, but a <code>dlopen</code>
+of it works only while glibc's spare static
+TLS (512 bytes by default, which the <code>glibc.rtld.optional_static_tls</code>
+tunable raises) has room for its thread-locals. macOS and Windows have
+no such limit.</li>
+<li>On Android every app loads its native code with <code>dlopen</code>, and bionic
+refuses initial-exec there, so an Android library's thread-locals use
+the general-dynamic model, which costs a call (<code>__tls_get_addr</code> on
+x86_64, a TLS descriptor's on arm64) per access.</li>
+</ul>
+<p>Swift, Kotlin and Java code can call the exports with its own values
+instead: <code>--bindings swift</code> and <code>--bindings java</code> write bindings beside the
+header (see <a href="mobile.html#bindings">iOS and Android</a>).</p>
+<h3 id="initialization-panics-and-threads"><a class="header" href="#initialization-panics-and-threads">Initialization, panics and threads</a></h3>
+<ul>
+<li>Module-scope variables are initialized when the library is loaded, before
+C calls any exported function (a static library's initializer runs with
+the program's other static constructors).</li>
+<li>A panic in Pepper code called from C prints its message and aborts the
+process, as it does in a Pepper program: it never unwinds into C.</li>
+<li>Exported functions may be called from any thread, including threads C
+created. The thread-safety rules of <a href="threads.html">threads</a> still hold:
+a handle to a struct that is not <code>[Shared]</code> must stay on one thread at a
+time, and C does not check that.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/platform-selection.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/linking.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/platform-selection.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/linking.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

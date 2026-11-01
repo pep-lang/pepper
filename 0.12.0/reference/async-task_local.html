@@ -1,0 +1,403 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>TaskLocal - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/pep-lang/pepper/edit/main/docs/src/reference/async-task_local.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <!-- Generated from runtime/async/task_local.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="tasklocal"><a class="header" href="#tasklocal">TaskLocal</a></h1>
+<p>Per-task values: <code>TaskLocal&lt;T&gt;</code> gives every task its own copy of a
+variable.</p>
+<p>Source: <code>runtime/async/task_local.pep</code></p>
+<h2 id="tasklocal-1"><a class="header" href="#tasklocal-1">TaskLocal</a></h2>
+<pre><code class="language-pepper">[Shared] struct TaskLocal&lt;T&gt;
+</code></pre>
+<p>A variable with a separate value in every task, the task counterpart of
+<code>ThreadLocal&lt;T&gt;</code>.</p>
+<p>Each task that calls <code>set</code> stores its own value, which is released when
+the task finishes. A task starts with no value, including one started by
+a task that has one: values are not inherited. Tasks that take turns on
+one worker thread each see their own value, which a <code>ThreadLocal</code> cannot
+give them.</p>
+<p>Code that does not run in a task (before <code>async.run</code>, or on a plain
+<code>Thread</code>) has one value per thread, as with a <code>ThreadLocal</code>.</p>
+<p>For a thread-safe <code>T</code> (a number, a <code>[Shared]</code> struct), <code>get</code> returns the
+calling task's value (the default of <code>T</code>, zero or null, until it sets
+one). For any other <code>T</code>, such as a <code>String</code>, the value is reached through
+a <code>with</code> block, <code>with (var value = local.enter()) { ... }</code>, and <code>get</code> is a
+compile error; <code>set</code> then takes a new value (a constructor call, a string
+literal, <code>copy(x)</code>).</p>
+<p>A <code>TaskLocal</code> is <code>[Shared]</code>, so one object can be used from every task
+and thread; it is usually a module-scope variable. Destroying one
+releases only the caller's value, so destroy it only after the tasks that
+used it have finished.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the per-task value</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>ThreadLocal</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+const request_id = async.TaskLocal&lt;long&gt;();
+
+handle(id: long) {
+    request_id.set(id);
+    async.yield_now();   # the other tasks run meanwhile
+    assert(request_id.get() == id, "still this task's id");
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var tasks = Array&lt;async.Task&lt;void&gt;&gt;();
+        for (var id in [1, 2, 3]) {
+            tasks.append(async.spawn&lt;void&gt;(() =&gt; {
+                handle(id);
+            }));
+        }
+        for (var task in tasks) {
+            task.join();
+        }
+    });
+    return 0;
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="tasklocal-2"><a class="header" href="#tasklocal-2">TaskLocal()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a task-local variable. No task has a value yet.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the operating system has no thread-local keys left</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="get"><a class="header" href="#get">get</a></h4>
+<pre><code class="language-pepper">get(): T
+</code></pre>
+<p>Returns the calling task's value.</p>
+<p>For a struct <code>T</code> the caller gets its own reference. Only for a
+thread-safe <code>T</code>: for any other <code>T</code>, use <code>with (var value = local.enter())</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value this task last stored, or the default of <code>T</code> (zero or null) if it has not stored one</li>
+</ul>
+<h4 id="set"><a class="header" href="#set">set</a></h4>
+<pre><code class="language-pepper">set([Move] value: T)
+</code></pre>
+<p>Stores <code>value</code> as the calling task's value, replacing (and, for a
+struct <code>T</code>, releasing) the one it held. Other tasks' values are not
+affected.</p>
+<p>For a <code>T</code> that is not thread-safe, <code>value</code> must be a new value (a
+constructor call, a string literal, <code>copy(x)</code>), which the compiler
+checks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the new value for this task</li>
+</ul>
+<h4 id="enter"><a class="header" href="#enter">enter</a></h4>
+<pre><code class="language-pepper">enter(): TaskLocalGuard&lt;T&gt;
+</code></pre>
+<p>Returns the guard that a <code>with</code> block enters to reach the calling
+task's value: <code>with (var value = local.enter()) { ... }</code>. The body
+runs with the value bound; the <code>else</code> block runs when this task has
+no value (for a struct <code>T</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns this task's value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">const trail = async.TaskLocal&lt;Array&lt;String&gt;&gt;();
+
+note(step: String) {
+    if (!trail.is_set()) {
+        trail.set(Array&lt;String&gt;());
+    }
+    with (var steps = trail.enter()) {
+        steps.append(step.copy());
+    }
+}
+</code></pre>
+<h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
+<pre><code class="language-pepper">is_set(): bool
+</code></pre>
+<p>Reports whether the calling task has stored a value since it started
+or last called <code>clear()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if this task has a value</li>
+</ul>
+<h4 id="clear"><a class="header" href="#clear">clear</a></h4>
+<pre><code class="language-pepper">clear()
+</code></pre>
+<p>Removes the calling task's value, releasing it for a struct <code>T</code>.
+<code>get()</code> returns the default of <code>T</code> afterwards.</p>
+<h2 id="tasklocalguard"><a class="header" href="#tasklocalguard">TaskLocalGuard</a></h2>
+<pre><code class="language-pepper">[Isolated] struct TaskLocalGuard&lt;T&gt;
+</code></pre>
+<p>The access to a task's <code>TaskLocal&lt;T&gt;</code> value that a <code>with</code> block holds:
+<code>enter()</code> returns the value. Get one from <code>TaskLocal.enter()</code>.</p>
+<p>A guard is <code>[Isolated]</code>: it can only be the scope of a <code>with</code> header, and
+the compiler checks the block with the confinement rule (see <code>Mutex</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the per-task value</li>
+</ul>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
+<pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
+</code></pre>
+<p>Creates the guard for the calling task's value of <code>local</code>; the same as
+<code>local.enter()</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>local</code> — the task-local variable</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="enter-1"><a class="header" href="#enter-1">enter</a></h4>
+<pre><code class="language-pepper">enter(): T
+</code></pre>
+<p>Returns the calling task's value, for the <code>with</code> header to bind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this task's value, or the default of <code>T</code> (null for a struct) when it has none</li>
+</ul>
+<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Does nothing: the value stays with the task.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/async-task.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/async-driver.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/async-task.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/async-driver.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
