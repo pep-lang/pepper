@@ -227,11 +227,17 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Built with <code>-g</code>, this prints:</p>
+<p>Built with <code>-g</code> on Linux or macOS, this prints:</p>
 <pre><code class="language-text">Parser.where at debug-backtrace.pep:13:16
 main at debug-backtrace.pep:19:24
 done
 </code></pre>
+<p>The two frames go to standard output. <code>done</code> goes to the
+<a href="#the-debugger-channel">debugger channel</a>: standard error on Linux and
+macOS, and on Windows only a debugger's output window, so a console there
+shows just the frames. A frame names its file as the build was given it
+(<code>pepper build D:\work\debug-backtrace.pep</code> prints that full path), and on
+Windows it has no column (<code>debug-backtrace.pep:13</code>).</p>
 <p>Built with <code>-g -O2</code>, the optimizer inlines <code>where</code> into <code>main</code>, and the
 backtrace still shows it, marked as inlined:</p>
 <pre><code class="language-text">Parser.where at debug-backtrace.pep:13:16 (inlined)

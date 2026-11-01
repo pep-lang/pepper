@@ -577,7 +577,7 @@ Notes follow the conversion into the runtime:</p>
 <pre><code class="language-text">main.pep:10:16: error: 'encode' cannot convert property 'outcome' of type 'Result&lt;int&gt;' to JSON
    10 |     var text = json.encode(job);
       |                ^~~~~~~~~~~
-runtime/json/convert.pep:358:21: note: reported by the runtime here
+.../runtime/json/convert.pep:...: note: reported by the runtime here
 ...
 </code></pre>
 <p>The same goes for any error a <code>static</code> block of the runtime's raises for

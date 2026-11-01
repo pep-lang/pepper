@@ -850,6 +850,7 @@ pipe (on Windows, a loopback UDP socket that a second socket sends to) with
 through the same messages.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
+<li><code>async.timeout</code> takes milliseconds, not an <code>os.Duration</code>.</li>
 <li><code>File</code> calls other than <code>read</code>, <code>write</code> and <code>write_all</code> (opening,
 seeking, <code>sync</code>, directories) block the thread in a task.</li>
 <li>The tasks of a thread share its <code>ThreadLocal</code> values, on every system; a

@@ -185,13 +185,41 @@
                         <h1 id="attributes"><a class="header" href="#attributes">Attributes</a></h1>
 <p>An attribute is a name in square brackets that tells the compiler something
 about the declaration below it. Each attribute goes on its own line, above
-its target, as <code>pep-fmt</code> writes it:</p>
-<pre><code class="language-pepper">[Target(OS(Linux))]
-[Deprecated("use 'open' instead", "open")]
-export open_file(path: String): int { ... }
+its target, as <code>pep-fmt</code> writes it, except a parameter's, which stay on its
+line, in front of it:</p>
+<pre><code class="language-pepper"># Attributes, each on its own line above what it applies to.
+
+[Target(OS(Windows))]
+system_name(): String {
+    return "Windows";
+}
+
+[Target(!OS(Windows))]
+system_name(): String {
+    return "not Windows";
+}
+
+[Deprecated("use 'system_name' instead", "system_name")]
+os_name(): String {
+    return system_name();
+}
+
+# A parameter's attributes stay on its line, in front of it.
+keep([Move] names: Array&lt;String&gt;): ulong {
+    return names.count;
+}
+
+main(): int {
+    print(system_name().size &gt; 0);
+    var names = ["a", "b"];
+    print(keep(move(names)));
+    return 0;
+}
+
+# Output:
+# true
+# 2
 </code></pre>
-<p>A parameter's attributes stay on its line, in front of it
-(<code>send([Move] value: T)</code>).</p>
 <p>The built-in attributes are each covered in the chapter for what they do:</p>
 <div class="table-wrapper"><table><thead><tr><th>Attribute</th><th>Goes on</th><th>Chapter</th></tr></thead><tbody>
 <tr><td><code>[Value]</code></td><td>a struct or enum</td><td><a href="value-structs.html">Value structs</a>, <a href="enums.html#value-enums">value enums</a></td></tr>
@@ -213,6 +241,8 @@ export open_file(path: String): int { ... }
 <tr><td><code>[Test]</code>, <code>[ShouldPanic]</code></td><td>a function</td><td><a href="testing.html">Unit tests</a></td></tr>
 <tr><td><code>[Deprecated]</code></td><td>most declarations</td><td><a href="deprecation.html">Deprecation</a></td></tr>
 <tr><td><code>[Attribute]</code></td><td>a struct</td><td><a href="reflection.html#attributes">Attributes of your own</a></td></tr>
+<tr><td><code>[Name]</code>, <code>[Ignore]</code>, <code>[Required]</code>, <code>[Tag]</code>, <code>[Untagged]</code></td><td>a property; an enum or its cases</td><td><a href="json.html#attributes">JSON: attributes</a> (the <code>serialize</code> module)</td></tr>
+<tr><td><code>[cli.Option]</code>, <code>[cli.Positional]</code></td><td>a field</td><td><a href="cli.html#declaring-options-as-a-struct">Declaring options as a struct</a></td></tr>
 </tbody></table>
 </div>
 <p>A struct marked <code>[Attribute]</code> is an attribute of your own, which a <code>static</code>

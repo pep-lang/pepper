@@ -213,6 +213,11 @@ Editors and terminals recognize <code>file:line:column</code> and can jump to it
 the rest of the token when it is longer than one character. Here, the
 member name <code>z</code>, not the whole statement.</li>
 </ol>
+<p>A note that points into the runtime names the file where the toolchain's
+runtime is installed, an absolute path such as
+<code>C:\Users\you\AppData\Local\pepper\toolchains\0.12.0-dev\runtime\string.pep</code>,
+and a line that moves as the runtime changes. This book writes such a place
+as <code>.../runtime/string.pep:...</code>.</p>
 <p>Messages follow clang's style: they start in lowercase, put names and types in
 single quotes (<code>'z'</code>, <code>'Point'</code>), and say what to do when there is an obvious
 fix. The fixed program is:</p>
@@ -293,37 +298,8 @@ the code it replaces:</p>
       |     ^~~
       |     construct
 </code></pre>
-<div class="table-wrapper"><table><thead><tr><th>Deprecated</th><th>Replacement</th></tr></thead><tbody>
-<tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
-<tr><td>A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their names)</td><td>one declaration, or two names</td></tr>
-<tr><td>A declaration of another file of the module, used without importing that file (now an error)</td><td><code>import "file";</code> in the file that uses it</td></tr>
-<tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
-<tr><td><code>String.clone()</code></td><td><code>String.copy()</code></td></tr>
-<tr><td><code>ThreadLocal&lt;T&gt;.get()</code> for a <code>T</code> that is not thread-safe (now an error)</td><td><code>with (var value = local.enter()) { ... }</code></td></tr>
-<tr><td><code>io.Path.is_dir()</code></td><td><code>io.Path.is_directory()</code></td></tr>
-<tr><td><code>io.File.set_len(ulong)</code></td><td><code>io.File.set_length(ulong)</code></td></tr>
-<tr><td><code>io.File.write_string(String)</code></td><td><code>io.File.write_all(String)</code></td></tr>
-<tr><td><code>io.TcpStream.write_string(String)</code>, <code>io.UnixStream.write_string(String)</code>, <code>tls.TlsStream.write_string(String)</code></td><td><code>write_all(String)</code></td></tr>
-<tr><td><code>io.File.seek(Offset, int)</code></td><td><code>io.File.seek(io.SeekFrom)</code></td></tr>
-<tr><td><code>io.File.std_file(int, String)</code></td><td><code>io.File.std_file(io.StdStream, String)</code></td></tr>
-<tr><td><code>HashMap.cap()</code>, <code>HashSet.cap()</code></td><td>the <code>capacity</code> property</td></tr>
-<tr><td><code>arguments()</code>, <code>exit(code)</code> in the prelude</td><td><code>process.arguments()</code>, <code>process.exit(code)</code> (<code>import process</code>)</td></tr>
-<tr><td><code>Channel.send(x)</code>, <code>try_send(x)</code> with a variable something else references (now an error: <code>send</code> no longer copies)</td><td><code>send(move(x))</code>, or <code>send(copy(x))</code> to keep using <code>x</code></td></tr>
-<tr><td><code>[Sending]</code> parameter attribute (now an error)</td><td><code>[Move]</code></td></tr>
-<tr><td><code>io.Print</code> trait</td><td><code>io.Writer</code> (which also needs <code>write(data)</code>)</td></tr>
-<tr><td><code>ArraySlice&lt;T&gt;</code>, <code>ArraySliceIterator&lt;T&gt;</code></td><td><code>ArrayView&lt;T&gt;</code>, <code>ArrayViewIterator&lt;T&gt;</code></td></tr>
-<tr><td><code>Atomic&lt;T&gt;</code> without an import (now an error: it moved to the <code>async</code> module)</td><td><code>async.Atomic&lt;T&gt;</code> after <code>import async</code>, or <code>import [Atomic] from async</code></td></tr>
-<tr><td><code>math.parse_int(text, base)</code></td><td><code>long.parse(text, base)</code>, with no import</td></tr>
-<tr><td><code>Optional&lt;T&gt;()</code> (now an error: <code>Optional</code> is an enum)</td><td><code>Optional&lt;T&gt;.Empty</code></td></tr>
-<tr><td><code>Optional</code> cases <code>None</code> and <code>Some(v)</code> (now an error: renamed)</td><td><code>Empty</code> and <code>Value(v)</code></td></tr>
-<tr><td><code>Optional&lt;T&gt;.some(v)</code>, <code>Optional&lt;T&gt;.none()</code></td><td>the cases <code>Optional&lt;T&gt;.Value(v)</code>, <code>Optional&lt;T&gt;.Empty</code></td></tr>
-<tr><td><code>Optional.is_some()</code>, <code>Optional.is_none()</code></td><td><code>is_value()</code>, <code>is_empty()</code></td></tr>
-<tr><td><code>[LinkName("symbol")]</code> on an extern (now an error)</td><td><code>[Link(name = "symbol")]</code></td></tr>
-<tr><td>A parameter's former name, kept by <code>[Rename("old", "new")]</code></td><td>the new name (see <a href="functions.html#other-names-for-a-parameter">named arguments</a>)</td></tr>
-<tr><td><code>Copyable&lt;T&gt;</code> implemented as <code>copy(copies: Copies): T</code>, with <code>copies.copy(x)</code> and <code>copies.register(original, made)</code></td><td><code>copy(): T</code>, with <code>copy(x)</code> and <code>register_copy(original, made)</code> (see <a href="memory.html">copying</a>)</td></tr>
-<tr><td><code>hint.likely(condition)</code>, <code>hint.unlikely(condition)</code></td><td><code>[Likely]</code> or <code>[Unlikely]</code> above the <code>if</code> or <code>match</code> arm (see <a href="control-flow.html#branch-hints-likely-and-unlikely">branch hints</a>)</td></tr>
-</tbody></table>
-</div>
+<p>Every deprecated API and piece of syntax, with its replacement, is listed in
+<a href="deprecation.html#what-is-deprecated">Deprecation</a>.</p>
 <h2 id="errors-in-the-editor"><a class="header" href="#errors-in-the-editor">Errors in the editor</a></h2>
 <p>The Pepper language server, used by the VS Code extension, reports the same
 errors at the same places while you type. It underlines the token the caret
@@ -486,8 +462,8 @@ name, which a call could not tell apart:</p>
 <pre><code class="language-text">main.pep:1:1: error: functions that differ only in their return type cannot be overloaded
     1 | to_string(value: int): int { return value; }
       | ^~~~~~~~~
-runtime/string.pep:1621:8: note: previous declaration is here
- 1621 | export to_string(value: int): String {
+.../runtime/string.pep:...: note: previous declaration is here
+  ... | export to_string(value: int): String {
       |        ^~~~~~~~~
 </code></pre>
 <p><strong>Looping over something that cannot be iterated</strong> (see
