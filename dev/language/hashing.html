@@ -503,6 +503,8 @@ main(): int {
     return 0;
 }
 </code></pre>
+<p>Every number, <code>char</code> and <code>String</code> is <code>Comparable</code>, and so is an <code>Array</code> or
+<code>ArrayView</code> of <code>Comparable</code> elements, in lexicographic order: <code>[1, 2] &lt; [1, 3]</code>, and <code>sort()</code> works on an array of arrays.</p>
 <p>A type that declares its own <code>&lt;</code> (or <code>min</code>, or any of the others) keeps it;
 the trait's version fills in only what the type leaves out.</p>
 <p><code>compare</code> must give a total, consistent order: the same two values always

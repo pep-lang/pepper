@@ -234,6 +234,10 @@ main(): int {
     scores.sort_unstable((x, y) =&gt; y - x);
     assert(scores == [95, 77, 63, 40, 12, 8], "descending");
     assert([1, 2, 3].compare([1, 3]) &lt; 0, "lexicographic");
+    assert([1, 2, 3] &lt; [1, 3], "arrays of Comparable elements are Comparable");
+    var rows = [[2, 1], [1, 5], [1]];
+    rows.sort();
+    assert(rows == [[1], [1, 5], [2, 1]], "an array of arrays sorts");
 
     # A slice views part of an array without copying it.
     var numbers = [1, 2, 3, 4, 5];
@@ -261,7 +265,7 @@ main(): int {
 <ul>
 <li><code>binary_search(item)</code> returns the index of the first element equal to
 <code>item</code> as a <code>ulong?</code>, in O(log count). The element type must be
-<a href="hashing.html#ordering-with-comparable"><code>Comparable</code></a> (every number, <code>char</code> and <code>String</code> is), and
+<a href="hashing.html#ordering-with-comparable"><code>Comparable</code></a> (every number, <code>char</code> and <code>String</code> is, and an <code>Array</code> or <code>ArrayView</code> of <code>Comparable</code> elements), and
 the array sorted in its <code>compare</code> order.</li>
 <li><code>binary_search_by(order)</code> searches with a function that says whether an
 element sorts before (negative), at (0) or after (positive) the target.</li>
@@ -317,8 +321,8 @@ and the searches above, plus:</p>
 slices; the last run is shorter when <code>size</code> does not divide the count.</li>
 <li><code>windows(size)</code>, which visits every run of <code>size</code> neighbors, each
 starting one element after the one before.</li>
-<li><code>==</code> and, for <code>Comparable</code> elements, the lexicographic <code>compare</code>, which
-compare the elements, not where they are.</li>
+<li><code>==</code> and, for <code>Comparable</code> elements, the lexicographic <code>compare</code> and
+<code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, which compare the elements, not where they are.</li>
 </ul>
 <p><code>Array</code> has <code>chunks</code> and <code>windows</code> too, over all its elements. Neither
 copies an element: each run is a slice of the same array.</p>
@@ -360,9 +364,6 @@ buckets.resize(4, none);   # one empty array, four times; no nulls
 <li>Slices are read-only; there is no slice that writes through to its
 array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code> (the compiler says
 so: <code>cannot index 'Array&lt;int&gt;' with a value of type 'Range&lt;int&gt;'</code>).</li>
-<li>An <code>Array</code> is not itself <code>Comparable</code>, so <code>&lt;</code> between arrays and
-<code>sort()</code> on an array of arrays need <code>compare</code>:
-<code>rows.sort((a, b) =&gt; a.compare(b))</code>.</li>
 <li><code>String</code> has no slice type; <code>substr</code> copies.</li>
 </ul>
 

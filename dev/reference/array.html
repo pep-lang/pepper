@@ -1301,6 +1301,16 @@ Arrays sorts with <code>sort((a, b) =&gt; a.compare(b))</code>.</p>
 <pre><code class="language-pepper">assert([1, 2, 3].compare([1, 3]) &lt; 0, "2 sorts before 3");
 assert([1, 2].compare([1, 2, 0]) &lt; 0, "the shorter first");
 </code></pre>
+<h2 id="extend-array-1"><a class="header" href="#extend-array-1">extend Array<T></a></h2>
+<pre><code class="language-pepper">extend Array&lt;T: Comparable&gt; with Comparable; ## An `Iterator&lt;T&gt;` over the elements of an Array, in index order; returned by ## `Array.iterate()` and driven by `for (var x in array)`. ## ## Holds a reference to the Array, so iterating a temporary keeps it alive for ## the whole loop. The iterator is fail-fast: if the Array is modified after ## the iterator was created (see `Array` for which operations count), its next ## `next()` or `current()` panics instead of skipping or repeating elements ## (an iterator over an Array that was empty when it was made just ends). ## ## @typeParam T the element type of the source Array ## @example ## var it = a.iterate(); ## while (it.next())
+</code></pre>
+<p>An Array of <code>Comparable</code> elements is <code>Comparable</code> itself, in the
+lexicographic order of <code>compare</code>: <code>&lt;</code> works between arrays, and <code>sort()</code>
+on an array of arrays.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type, <code>Comparable</code></li>
+</ul>
 <h2 id="arrayiterator"><a class="header" href="#arrayiterator">ArrayIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ArrayIterator&lt;T&gt;
 </code></pre>
@@ -1735,6 +1745,15 @@ when one slice is the start of the other, the shorter first.</p>
 <pre><code class="language-pepper">var a = [1, 2, 3];
 assert(a.slice(0, 2).compare(a.slice(1, 3)) &lt; 0, "[1, 2] before [2, 3]");
 </code></pre>
+<h2 id="extend-arrayview-1"><a class="header" href="#extend-arrayview-1">extend ArrayView<T></a></h2>
+<pre><code class="language-pepper">extend ArrayView&lt;T: Comparable&gt; with Comparable; ## An `Iterator&lt;T&gt;` over the elements of an `ArrayView`, in order; returned ## by `ArrayView.iterate()` and driven by `for (var x in slice)`. ## ## @typeParam T the element type of the slice ## @see ArrayView.iterate [Value] export struct ArrayViewIterator&lt;T&gt;
+</code></pre>
+<p>An ArrayView of <code>Comparable</code> elements is <code>Comparable</code> itself, in the
+lexicographic order of <code>compare</code>, so <code>&lt;</code> works between views.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type, <code>Comparable</code></li>
+</ul>
 <h2 id="arrayviewiterator"><a class="header" href="#arrayviewiterator">ArrayViewIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ArrayViewIterator&lt;T&gt;
 </code></pre>
