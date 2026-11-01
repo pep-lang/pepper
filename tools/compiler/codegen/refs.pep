@@ -244,7 +244,8 @@ extend Generator {
                 }
                 var desc = structs.try_get(struct_name.value());
                 if (!desc.is_value()) {
-                    return Optional<String>.Empty;
+                    var tuple = tuple_method_returns.try_get(struct_name.value());
+                    return tuple.is_value() ? tuple.value().try_get(node.method) : Optional<String>.Empty;
                 }
                 return desc.value().method_returns.try_get(node.method);
             }

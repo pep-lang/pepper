@@ -198,6 +198,9 @@ export struct PassState {
     ## Which extension (by index) was applied to which struct (by name), as
     ## `apply_extensions` records them: `"{index}\n{name}"`.
     var applied_extensions: HashSet<String> = HashSet<String>();
+    ## The tuple structs `synthesize_function_types` has decided whether to
+    ## declare `Comparable` for, by name (#367).
+    var ordered_tuples: HashSet<String> = HashSet<String>();
     ## The program's files' text, by file index, for fixes that edit near a
     ## declaration.
     var sources: SourceText[] = Array<SourceText>();

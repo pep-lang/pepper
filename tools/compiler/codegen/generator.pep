@@ -182,6 +182,9 @@ export struct Generator {
     var state: PassState;
     var types: Types;
     var structs: HashMap<String, StructDesc> = HashMap<String, StructDesc>();
+    ## The result types of a tuple's methods (`compare`, `<`, #367), by
+    ## tuple and method: a tuple has no `StructDesc`.
+    var tuple_method_returns: HashMap<String, HashMap<String, String>> = HashMap<String, HashMap<String, String>>();
     ## Structs a cycle of fields runs through (`find_chains`): their last
     ## release is the chain one.
     var recursive: HashSet<String> = HashSet<String>();

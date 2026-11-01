@@ -175,6 +175,15 @@ Every number type and `char` is `Comparable` by value, and `String` by
 content, the order of `String.compare`. Their `compare` returns -1, 0 or 1
 (`String.compare` any negative or positive number).
 
+A tuple whose elements are all `Comparable` is `Comparable` too, in
+lexicographic order: the first element that differs decides, so
+`(1, "b") < (2, "a")`. Labels take no part. An array of such tuples sorts,
+and a `Map` keys on them:
+
+```pepper
+{{#include ../../examples/ordering-tuples.pep}}
+```
+
 `float` and `double` compare in a total order: NaN sorts after every number
 and with every other NaN, and `-0.0` sorts with `0.0`. Their `<`, `<=`, `>`
 and `>=` keep IEEE behavior, false whenever a NaN takes part, while
@@ -183,6 +192,6 @@ cannot break a map.
 
 ### Not yet
 
-- Tuples and `Optional` are not `Comparable`, and `Comparable` is not
+- `Optional` is not `Comparable`, and `Comparable` is not
   derived from a struct's fields: a struct writes its `compare`, as
   `Version` does above.
