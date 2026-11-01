@@ -6,11 +6,13 @@
 ## What is still unused when specializing ends is dropped.
 
 import [drop_body] from "checked";
-import [Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
+import [BinaryOp, Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
 import [set_name, without_type_arguments] from "names";
+import [op_name] from "operators";
 import [for_each_place, Place, PlaceVisitor] from "places";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import [is_dispatchable] from "traits";
 import "type_name";
 import [Rewriter, rewrite_block] from "walk";
 
@@ -33,14 +35,32 @@ _called_implicitly(name: String): bool {
 
 ## Whether `method` of a specialization keeps its body from the start:
 ## when its return type is inferred from it, when the passes or code
-## generation may call it with no use naming it, or when a trait may
-## dispatch to it.
+## generation may call it with no use naming it, or when a trait value may
+## dispatch to it. An ordering operator (`<`) waits for a use like any
+## method (`_MethodUses` finds `a < b`), and so does a trait's member or
+## default that no trait value can call (`Comparable`'s, which name
+## `this`, #491).
 _needed_at_once(method: FunctionDef, trait_methods: HashSet<String>): bool {
     var name = set_name(method.name);
-    if (method.ty.is_auto() or method.trait_default.is_value()) {
+    if (method.ty.is_auto()) {
         return true;
     }
+    if (_is_ordering(name)) {
+        return false;
+    }
     return _built_in_or_implicit(name) or trait_methods.contains(name);
+}
+
+# Whether `op` is an operator of an order, which code names only as `a < b`.
+_orders(op: BinaryOp): bool {
+    return op == BinaryOp.Less or op == BinaryOp.LessEqual or op == BinaryOp.Greater or op == BinaryOp.GreaterEqual;
+}
+
+_is_ordering(name: String): bool {
+    return name == op_name(BinaryOp.Less)
+        or name == op_name(BinaryOp.LessEqual)
+        or name == op_name(BinaryOp.Greater)
+        or name == op_name(BinaryOp.GreaterEqual);
 }
 
 ## Whether code may call a method named `name` without naming it: an
@@ -75,12 +95,15 @@ _built_in_or_implicit(name: String): bool {
     return _called_implicitly(name);
 }
 
-## The names of every trait's methods.
+## The names of the trait members a trait value can call, which its vtable
+## holds.
 _trait_methods(module: Module): HashSet<String> {
     var names = HashSet<String>();
     for (var t in module.traits) {
         for (var m in t.methods) {
-            names.insert(set_name(m.name));
+            if (is_dispatchable(m)) {
+                names.insert(set_name(m.name));
+            }
         }
     }
     return names;
@@ -314,6 +337,11 @@ struct _MethodUses {
             }
             MemberRef(node) => {
                 _found(node.lhs, node.name);
+            }
+            Binary(node) => {
+                if (_orders(node.op)) {
+                    _found(node.lhs, op_name(node.op));
+                }
             }
             FunctionCall(node) => {
                 _named(node.function);
