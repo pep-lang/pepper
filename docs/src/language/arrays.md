@@ -12,7 +12,7 @@
 
 - `binary_search(item)` returns the index of the first element equal to
   `item` as a `ulong?`, in O(log count). The element type must be
-  [`Comparable`](hashing.md#ordering-with-comparable) (every number, `char` and `String` is), and
+  [`Comparable`](hashing.md#ordering-with-comparable) (every number, `char` and `String` is, and an `Array` or `ArrayView` of `Comparable` elements), and
   the array sorted in its `compare` order.
 - `binary_search_by(order)` searches with a function that says whether an
   element sorts before (negative), at (0) or after (positive) the target.
@@ -71,8 +71,8 @@ and the searches above, plus:
   slices; the last run is shorter when `size` does not divide the count.
 - `windows(size)`, which visits every run of `size` neighbors, each
   starting one element after the one before.
-- `==` and, for `Comparable` elements, the lexicographic `compare`, which
-  compare the elements, not where they are.
+- `==` and, for `Comparable` elements, the lexicographic `compare` and
+  `<`, `<=`, `>`, `>=`, which compare the elements, not where they are.
 
 `Array` has `chunks` and `windows` too, over all its elements. Neither
 copies an element: each run is a slice of the same array.
@@ -122,7 +122,4 @@ When "no array" must differ from "an empty array", say so in the type with
 - Slices are read-only; there is no slice that writes through to its
   array, and no `a[1..4]` syntax: write `a.slice(1, 4)` (the compiler says
   so: `cannot index 'Array<int>' with a value of type 'Range<int>'`).
-- An `Array` is not itself `Comparable`, so `<` between arrays and
-  `sort()` on an array of arrays need `compare`:
-  `rows.sort((a, b) => a.compare(b))`.
 - `String` has no slice type; `substr` copies.
