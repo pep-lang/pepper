@@ -455,7 +455,13 @@ struct _Desugarer {
                     return Statement.Return(returned, span);
                 }
             }
-            LoopBreak(_, _) => {}
+            LoopBreak(_, _, _, _) => {}
+            Labeled(label, label_span, loop, span) => {
+                var inner = statement(loop);
+                if (rewrites != before) {
+                    return Statement.Labeled(label, label_span, inner, span);
+                }
+            }
             Destructure(bindings, value, is_const, span) => {
                 var destructured = expression(value);
                 if (rewrites != before) {

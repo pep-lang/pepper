@@ -95,6 +95,9 @@ export struct Frame {
     var loop_break: Optional<(llvm.BasicBlock, llvm.BasicBlock)> = Optional<(llvm.BasicBlock, llvm.BasicBlock)>.Empty;
     ## The index of the innermost enclosing loop's body scope.
     var loop_base_depth: ulong? = Optional<ulong>.Empty;
+    ## The enclosing loops that have a label, innermost last: the label, the
+    ## `continue` and `break` blocks, and the body scope's index.
+    var labeled_loops: Array<(String, llvm.BasicBlock, llvm.BasicBlock, ulong)> = Array<(String, llvm.BasicBlock, llvm.BasicBlock, ulong)>();
     ## Whether the current region has emitted a `return`, `break` or
     ## `continue`: the rest of it is dead.
     var exited: bool = false;

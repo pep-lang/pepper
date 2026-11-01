@@ -446,8 +446,12 @@ export statement_text(statement: Statement): String {
         Return(value, _) => {
             return value.is_value() ? $"return {expression_text(value.value())};" : "return;";
         }
-        LoopBreak(is_continue, _) => {
-            return is_continue ? "continue;" : "break;";
+        LoopBreak(is_continue, label, _, _) => {
+            var word = is_continue ? "continue" : "break";
+            return label.is_empty ? word + ";" : $"{word} {label};";
+        }
+        Labeled(label, _, loop, _) => {
+            return $"{label}: {statement_text(loop)}";
         }
         Destructure(bindings, value, is_const, _) => {
             return $"{is_const ? "const" : "var"} ({_bindings(bindings)}) = {expression_text(value)};";

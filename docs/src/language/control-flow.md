@@ -158,9 +158,33 @@ checking the condition again, so update the counter before any `continue`.
 {{#include ../../examples/control-loops.pep}}
 ```
 
-Both work in `while` and `for` loops and always apply to the innermost loop.
-There are no labeled breaks: to leave several loops at once, set a flag and test
-it, or move the loops into a function and `return` from it.
+Both work in `while` and `for` loops and apply to the innermost loop.
+
+### Labeled loops
+
+To leave or go on with an outer loop, give it a label, a name and a colon
+before `for` or `while`, and name it after `break` or `continue`. `break
+rows;` leaves the loop labeled `rows` and every loop inside it; `continue
+rows;` goes on with the next iteration of `rows`:
+
+```pepper
+{{#include ../../examples/control-labels.pep}}
+```
+
+A label names a loop only inside that loop's body, and not inside a closure
+there, whose body is a function of its own. Naming a label that no loop
+around the `break` has is an error, and so is giving a loop the label of a
+loop around it:
+
+```text
+main.pep:3:15: error: use of undeclared label 'nope'
+    3 |         break nope;
+      |               ^~~~
+```
+
+A label goes only on a loop (`expected 'for' or 'while' after the label
+'a'`). A compile-time loop in a [`static` block](reflection.md) cannot have
+a label yet.
 
 ## `return`
 

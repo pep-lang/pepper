@@ -2442,6 +2442,26 @@ struct Parser {
     }
 
     _statement(): Statement {
+        # `name: while ...` or `name: for ...`: a label, which no other
+        # statement starts with.
+        var first = _peek();
+        if (first.kind == TokenKind.Identifier
+            and !is_statement_keyword(_source, first)
+            and _peek_at(1).is(_source, ":")) {
+            var label = _text(_position);
+            var label_span = _token_span(_position);
+            _advance();
+            _advance();
+            if (!_at_word("while") and !_at_word("for")) {
+                _fail($"expected 'for' or 'while' after the label '{label}'");
+                return _no_statement();
+            }
+            var loop = _statement();
+            if (_failed) {
+                return _no_statement();
+            }
+            return Statement.Labeled(label, label_span, loop, Span(label_span.start, loop.span().end));
+        }
         if (_at("[")) {
             var list = _attributes();
             if (_failed) {
@@ -2496,7 +2516,14 @@ struct Parser {
             bool is_continue = _at_word("continue");
             var keyword = _token_span(_position);
             _advance();
-            return Statement.LoopBreak(is_continue, keyword);
+            # `break outer;`: the label of the loop it leaves.
+            if (_peek().kind == TokenKind.Identifier and !is_statement_keyword(_source, _peek())) {
+                var label = _text(_position);
+                var label_span = _token_span(_position);
+                _advance();
+                return Statement.LoopBreak(is_continue, label, label_span, Span(keyword.start, label_span.end));
+            }
+            return Statement.LoopBreak(is_continue, "", keyword, keyword);
         }
         if ((_at_word("var") or _at_word("const")) and _peek_at(1).is(_source, "(")) {
             return _destructure();
@@ -5156,7 +5183,7 @@ ends_in_semicolon(statement: Statement): bool {
         Return(_, _) => {
             return true;
         }
-        LoopBreak(_, _) => {
+        LoopBreak(_, _, _, _) => {
             return true;
         }
         Destructure(_, _, _, _) => {

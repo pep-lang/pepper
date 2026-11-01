@@ -888,7 +888,7 @@ shares_the_runtimes_units_between_projects() {
     expect_contains(second.stderr, "cache: compilation unit runtime checked already");
     var own = folder.path.join(Path("second")).join(Path("cache")).join(Path("v3"));
     expect_false(own.join(Path("u")).join(Path("array")).is_directory());
-    expect_false(own.join(Path("c16")).join(Path("runtime")).is_directory());
+    expect_false(own.join(Path("c17")).join(Path("runtime")).is_directory());
     var array = shared.join(Path("v3")).join(Path("u")).join(Path("array"));
     expect_equal(_children_count(array), 1 as ulong);
 

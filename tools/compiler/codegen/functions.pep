@@ -770,6 +770,7 @@ extend Generator {
         frame.locals = Array<(String, Address)>();
         frame.exited = false;
         frame.loop_base_depth = Optional<ulong>.Empty;
+        frame.labeled_loops = Array<(String, llvm.BasicBlock, llvm.BasicBlock, ulong)>();
         copied_params = HashSet<String>();
         scopes = Array<Array<ScopeSlot>>();
         scopes.append(Array<ScopeSlot>());
@@ -1408,9 +1409,15 @@ extend Generator {
         builder.position_at_end(body_block);
         scopes.append(Array<ScopeSlot>());
         frame.loop_base_depth = Optional<ulong>.Value(scopes.count - 1);
+        if (!wh.label.is_empty) {
+            frame.labeled_loops.append((wh.label, cond_block, merge_block, scopes.count - 1));
+        }
         frame.exited = false;
         var locals = frame.locals.count;
         codegen_scoped_block(wh.block)?;
+        if (!wh.label.is_empty) {
+            frame.labeled_loops.pop();
+        }
         frame.locals.truncate(locals);
         var body_scope = scopes.pop();
         var body_end = builder.insert_block();
@@ -1437,6 +1444,25 @@ extend Generator {
         var (cont, brk) = frame.loop_break.value();
         # Leaving the iteration releases the scopes the jump leaves behind.
         var base = frame.loop_base_depth.value();
+        if (!lb.label.is_empty) {
+            # `break outer;`: the loop of that label, and every scope inside
+            # its body.
+            var found = false;
+            var at = frame.labeled_loops.count;
+            while (at > 0 and !found) {
+                at -= 1;
+                var (label, labeled_cont, labeled_brk, labeled_base) = frame.labeled_loops[at];
+                if (label == lb.label) {
+                    cont = labeled_cont;
+                    brk = labeled_brk;
+                    base = labeled_base;
+                    found = true;
+                }
+            }
+            if (!found) {
+                return fail<void>($"no loop labeled '{lb.label}'");
+            }
+        }
         var depth = scopes.count;
         var start = base < depth - 1 ? base : depth - 1;
         var all = scopes;

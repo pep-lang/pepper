@@ -827,10 +827,20 @@ struct TokenWalk {
                 take_optional(";");
                 leave();
             }
-            LoopBreak(is_continue, _) => {
+            LoopBreak(is_continue, label, _, _) => {
                 enter("Jump");
                 take(is_continue ? "continue" : "break");
+                if (!label.is_empty) {
+                    take(label);
+                }
                 take_optional(";");
+                leave();
+            }
+            Labeled(label, _, loop, _) => {
+                enter("Labeled");
+                take(label);
+                take(":");
+                statement(loop);
                 leave();
             }
             Destructure(bindings, value, is_const, _) => {

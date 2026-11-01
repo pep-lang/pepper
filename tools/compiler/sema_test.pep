@@ -442,6 +442,9 @@ outcome(root: Path, runtime: bool): String {
 # The programs `lowers_statements` builds.
 lowering_programs(): String[] {
     return [
+        # Labeled loops: `break` and `continue` naming an outer `for` or
+        # `while`, a `while (x is P)` and a `while` with a `?` (#324).
+        "# expect: accepted\nenum Step { Go(n: int), Stop }\nf(): Result<bool, String> { return Result<bool, String>.ok(true); }\nmain(): int {\n    var total = 0;\n    rows: for (var i in 0..3) {\n        for (var j in 0..3) {\n            if (j == 1) { continue rows; }\n            if (i == 2) { break rows; }\n            total += 1;\n        }\n    }\n    var s = Step.Go(1);\n    steps: while (s is Go(n)) {\n        while (true) { s = Step.Stop; continue steps; }\n    }\n    tries: while (f()?) {\n        for (var k in 0..2) { break tries; }\n    }\n    return total;\n}\n",
         # Ranges, tuple and collection literals, `for`, `match` with guards
         # and alternatives, `is`, destructuring, `with` and interpolation.
         "# expect: accepted\nstruct P { var x: int = 1; var y: int = 2; }\nenum Shape { Circle(r: int), Square(side: int), Empty }\nmain(): int {\n    var total = 0;\n    for (var i in 0..10) { total += i; }\n    for (var (a, b) in [(1, 2), (3, 4)]) { total += a + b; }\n    var m = [\"a\": 1, \"b\": 2];\n    var s = Shape.Circle(3);\n    match (s) {\n        Circle(r) => { total += r; }\n        Square(side) if side > 2 => { total += side; }\n        else => {}\n    }\n    if (s is Circle(r)) { total += r; }\n    var (x, y) = (1, 2);\n    var t = match (total) { 0 => 1, 1, 2 => 2, else => 3 };\n    with (var p = P()) { total += p.x; }\n    var text = $\"{total} and {x}\";\n    return total + y + t;\n}\n",
@@ -453,6 +456,16 @@ lowering_programs(): String[] {
 # The programs `reports_builder_errors` builds.
 error_programs(): String[] {
     return [
+        # `break` and `continue` may name only a loop around them (#324)
+        "# expect: main.pep:4:15: error: use of undeclared label 'nope'\nmain(): int {\n    while (true) {\n        break nope;\n    }\n    return 0;\n}\n",
+        # a closure's body cannot leave a loop outside it
+        "# expect: main.pep:6:23: error: use of undeclared label 'outer'\nmain(): int {\n    outer: while (true) {\n        var f = () => {\n            while (true) {\n                break outer;\n            }\n        };\n        break;\n    }\n    return 0;\n}\n",
+        # a label names one loop of the loops around it
+        "# expect: main.pep:4:9: error: label 'a' is already the label of a loop around it\nmain(): int {\n    a: while (true) {\n        a: for (var i in 0..2) {\n            break a;\n        }\n    }\n    return 0;\n}\n",
+        # a label goes on a loop
+        "# expect: main.pep:3:8: error: expected 'for' or 'while' after the label 'a'\nmain(): int {\n    a: if (true) {\n    }\n    return 0;\n}\n",
+        # a compile-time loop has no label yet
+        "# expect: main.pep:4:9: error: a compile-time loop cannot have a label yet\nmain(): int {\n    static {\n        x: for (var i in 0..2) {\n        }\n    }\n    return 0;\n}\n",
         # a closure in a guard cannot use 'r', bound by the arm's patterns
         "# expect: main.pep:5:29: error: a closure in a guard cannot use 'r', bound by the arm's patterns\nenum Shape { Circle(r: int), Point }\ntest(): int {\n    return match (Shape.Point) {\n        Circle(r) if (() => r)() > 1 => 1,\n        else => 2,\n    };\n}\n",
         # a destructuring assignment cannot have labels: list the places alone
