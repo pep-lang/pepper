@@ -35,7 +35,7 @@ import toolchain;
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.12.0-dev";
+    return "0.12.0";
 }
 
 # The help `--help` prints. pep-run reads its arguments itself, since those
