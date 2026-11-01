@@ -150,6 +150,10 @@ gives the type the rest:
 {{#include ../../examples/ordering-comparable.pep}}
 ```
 
+Every number, `char` and `String` is `Comparable`, and so is an `Array` or
+`ArrayView` of `Comparable` elements, in lexicographic order: `[1, 2] < [1,
+3]`, and `sort()` works on an array of arrays.
+
 A type that declares its own `<` (or `min`, or any of the others) keeps it;
 the trait's version fills in only what the type leaves out.
 

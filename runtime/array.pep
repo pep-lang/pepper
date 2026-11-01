@@ -1450,6 +1450,13 @@ export extend Array<T: Comparable> {
     }
 }
 
+## An Array of `Comparable` elements is `Comparable` itself, in the
+## lexicographic order of `compare`: `<` works between arrays, and `sort()`
+## on an array of arrays.
+##
+## @typeParam T the element type, `Comparable`
+export extend Array<T: Comparable> with Comparable;
+
 ## An `Iterator<T>` over the elements of an Array, in index order; returned by
 ## `Array.iterate()` and driven by `for (var x in array)`.
 ##
@@ -1875,6 +1882,12 @@ export extend ArrayView<T: Comparable> {
         return count.compare(other.count);
     }
 }
+
+## An ArrayView of `Comparable` elements is `Comparable` itself, in the
+## lexicographic order of `compare`, so `<` works between views.
+##
+## @typeParam T the element type, `Comparable`
+export extend ArrayView<T: Comparable> with Comparable;
 
 ## An `Iterator<T>` over the elements of an `ArrayView`, in order; returned
 ## by `ArrayView.iterate()` and driven by `for (var x in slice)`.
