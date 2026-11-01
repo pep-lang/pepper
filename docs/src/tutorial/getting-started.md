@@ -152,7 +152,7 @@ main(): int {
 The compiler reports:
 
 ```text
-main.pep:3:11: error: use of undeclared identifier 'greting'
+hello.pep:3:11: error: use of undeclared identifier 'greting'
     3 |     print(greting);
       |           ^~~~~~~
 ```
