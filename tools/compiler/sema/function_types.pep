@@ -136,7 +136,8 @@ export synthesize_function_types(module: Module, state: PassState) {
 }
 
 # Declares `Comparable` for every tuple struct of `Comparable` elements that
-# has no such extension yet, whichever pass or checked unit made it.
+# has no such extension yet, whichever pass or checked unit made it,
+# deciding each tuple once.
 _declare_comparable_tuples(module: Module, state: PassState) {
     var declared = HashSet<String>();
     for (var ext in module.extensions) {
@@ -148,9 +149,10 @@ _declare_comparable_tuples(module: Module, state: PassState) {
     var structs = module.structs.count;
     for (var i in 0..structs) {
         var st = module.structs[i];
-        if (!st.ty.is_tuple() or declared.contains(st.name)) {
+        if (!st.ty.is_tuple() or declared.contains(st.name) or state.ordered_tuples.contains(st.name)) {
             continue;
         }
+        state.ordered_tuples.insert(st.name);
         if (!conformance.is_value()) {
             conformance = Optional<Conformance>.Value(Conformance(module, state));
         }
