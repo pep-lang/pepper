@@ -178,6 +178,9 @@ main(): int {
 }
 ```
 
+This program is the package's `examples/book/main.pep`, which its CI
+builds and runs.
+
 - It reads and writes stored and DEFLATE entries, ZIP64 (archives and
   entries past 4 GiB, more than 65,535 entries), and UTF-8 names; names in
   older archives are decoded as code page 437 (`text.CodePage437`).

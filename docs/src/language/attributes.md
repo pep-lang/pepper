@@ -2,16 +2,12 @@
 
 An attribute is a name in square brackets that tells the compiler something
 about the declaration below it. Each attribute goes on its own line, above
-its target, as `pep-fmt` writes it:
+its target, as `pep-fmt` writes it, except a parameter's, which stay on its
+line, in front of it:
 
 ```pepper
-[Target(OS(Linux))]
-[Deprecated("use 'open' instead", "open")]
-export open_file(path: String): int { ... }
+{{#include ../../examples/attributes.pep}}
 ```
-
-A parameter's attributes stay on its line, in front of it
-(`send([Move] value: T)`).
 
 The built-in attributes are each covered in the chapter for what they do:
 
@@ -36,6 +32,8 @@ The built-in attributes are each covered in the chapter for what they do:
 | `[Test]`, `[ShouldPanic]` | a function | [Unit tests](testing.md) |
 | `[Deprecated]` | most declarations | [Deprecation](deprecation.md) |
 | `[Attribute]` | a struct | [Attributes of your own](reflection.md#attributes) |
+| `[Name]`, `[Ignore]`, `[Required]`, `[Tag]`, `[Untagged]` | a property; an enum or its cases | [JSON: attributes](json.md#attributes) (the `serialize` module) |
+| `[cli.Option]`, `[cli.Positional]` | a field | [Declaring options as a struct](cli.md#declaring-options-as-a-struct) |
 
 A struct marked `[Attribute]` is an attribute of your own, which a `static`
 block reads at compile time (see

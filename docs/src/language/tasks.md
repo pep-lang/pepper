@@ -324,6 +324,7 @@ through the same messages.
 
 ## Current status
 
+- `async.timeout` takes milliseconds, not an `os.Duration`.
 - `File` calls other than `read`, `write` and `write_all` (opening,
   seeking, `sync`, directories) block the thread in a task.
 - The tasks of a thread share its `ThreadLocal` values, on every system; a

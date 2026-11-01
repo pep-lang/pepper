@@ -113,7 +113,3 @@ it, under `/sys/fs/cgroup`, with cgroup v2 or v1:
 
 Where no limit is set, or the files cannot be read, they report the
 machine.
-
-## Current limitations
-
-- `async.timeout` still takes milliseconds, not a `Duration`.
