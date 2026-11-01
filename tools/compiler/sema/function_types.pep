@@ -8,6 +8,7 @@
 import [has_bare_attribute, SHARED_ATTRIBUTE] from "builder";
 import [unit_decls] from "checked";
 import [DESTROY_FIELD, empty_function, field_def, INVOKE_FIELD] from "closures";
+import [COMPARABLE, Conformance] from "constraints";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -16,14 +17,19 @@ import [
     Branch,
     CallPointerExpression,
     CountField,
+    Declaration,
     Expression,
+    ExtensionDef,
     FunctionCallExpression,
     FunctionDef,
     Kind,
     MemberRefExpression,
+    MethodCallExpression,
     Module,
+    ReturnStatement,
     Statement,
     StructDef,
+    SymbolRefExpression,
     TypeFlags,
     TypeName,
     UnaryExpression,
@@ -125,6 +131,34 @@ export synthesize_function_types(module: Module, state: PassState) {
         }
         finish(state, st);
         _push(module, names, st);
+    }
+    _declare_comparable_tuples(module, state);
+}
+
+# Declares `Comparable` for every tuple struct of `Comparable` elements that
+# has no such extension yet, whichever pass or checked unit made it,
+# deciding each tuple once.
+_declare_comparable_tuples(module: Module, state: PassState) {
+    var declared = HashSet<String>();
+    for (var ext in module.extensions) {
+        if (ext.target.is_tuple() and ext.resolved.is_value()) {
+            declared.insert(ext.resolved.value());
+        }
+    }
+    var conformance = Optional<Conformance>.Empty;
+    var structs = module.structs.count;
+    for (var i in 0..structs) {
+        var st = module.structs[i];
+        if (!st.ty.is_tuple() or declared.contains(st.name) or state.ordered_tuples.contains(st.name)) {
+            continue;
+        }
+        state.ordered_tuples.insert(st.name);
+        if (!conformance.is_value()) {
+            conformance = Optional<Conformance>.Value(Conformance(module, state));
+        }
+        if (conformance.value().tuple_is_comparable(st.ty)) {
+            module.extensions.append(_comparable_tuple(st.ty, st.name));
+        }
     }
 }
 
@@ -325,6 +359,75 @@ _destructor(parent: String): FunctionDef {
     );
     destructor.body = Optional<Block>.Value(Block(items = [Statement.Branch(Branch(condition, Block("if", [call])))]));
     return destructor;
+}
+
+# `extend (A, B) with Comparable` for a tuple whose elements are all
+# `Comparable` (#367), whose `compare` orders by the first element that
+# differs; `apply_extensions` gives it the trait's `<`, `min` and the rest.
+_comparable_tuple(ty: TypeName, name: String): ExtensionDef {
+    var other = VariableDef(name = "other", ty = ty.copy(), kind = Kind.Param, loc = Loc.none(), type_loc = Loc.none());
+    var items = Array<Statement>();
+    ulong i = 0;
+    while (i < ty.sub_types.count) {
+        var order = Expression.MethodCall(
+            MethodCallExpression(
+                Expression.MemberRef(MemberRefExpression(Expression.ThisRef, $"{i}", Loc.none())),
+                "compare",
+                [
+                    Expression.MemberRef(
+                        MemberRefExpression(
+                            Expression.SymbolRef(SymbolRefExpression("other", ty.copy(), Loc.none())),
+                            $"{i}",
+                            Loc.none()
+                        )
+                    )
+                ],
+                Loc.none()
+            )
+        );
+        if (i + 1 == ty.sub_types.count) {
+            items.append(Statement.Return(ReturnStatement(Optional<Expression>.Value(order), Loc.none())));
+        } else {
+            var local = $"__order_{i}";
+            var declared = VariableDef(
+                name = local,
+                ty = TypeName.named("int"),
+                default = Optional<Expression>.Value(order),
+                loc = Loc.none(),
+                type_loc = Loc.none()
+            );
+            items.append(Statement.Declaration(Declaration.Variable(declared)));
+            var differs = Expression.Binary(
+                BinaryExpression(
+                    Expression.SymbolRef(SymbolRefExpression(local, TypeName.named("int"), Loc.none())),
+                    Expression.IntLiteral(0),
+                    BinaryOp.NotEqual,
+                    Loc.none()
+                )
+            );
+            var early = Statement.Return(
+                ReturnStatement(
+                    Optional<Expression>.Value(
+                        Expression.SymbolRef(SymbolRefExpression(local, TypeName.named("int"), Loc.none()))
+                    ),
+                    Loc.none()
+                )
+            );
+            items.append(Statement.Branch(Branch(differs, Block("if", [early]))));
+        }
+        i += 1;
+    }
+    var compare = empty_function("compare", TypeName.named("int"), name);
+    compare.parameters = [other];
+    compare.body = Optional<Block>.Value(Block(items = items));
+    return ExtensionDef(
+        target = ty.copy(),
+        resolved = Optional<String>.Value(name),
+        traits = [TypeName.named(COMPARABLE)],
+        trait_locs = [Loc.none()],
+        methods = [compare],
+        loc = Loc.none()
+    );
 }
 
 ## Returns the struct sema uses for tuple type `ty`: a `const` field per

@@ -146,6 +146,10 @@ export struct Unmet {
     }
 }
 
+## The runtime's ordering trait, which a tuple of `Comparable` elements
+## conforms to (#367).
+export const COMPARABLE = "Comparable";
+
 ## What deciding conformance needs from the module: `Conformance`.
 export struct Conformance {
     ## Each trait's members a value of the trait type cannot call: the name
@@ -267,6 +271,11 @@ export struct Conformance {
         if (arg.is_pointer()) {
             return false;
         }
+        # A tuple of `Comparable` elements is `Comparable` (#367); a tuple
+        # conforms to no other trait.
+        if (arg.is_tuple()) {
+            return want == _canonical(TypeName.named(COMPARABLE)) and _comparable_elements(arg, scope);
+        }
         # A number, `bool` or enum conforms through `extend int with Tr`.
         if (arg.sub_types.count == 0) {
             var key = value_type_key(_state, arg.name);
@@ -303,6 +312,24 @@ export struct Conformance {
             }
         }
         return false;
+    }
+
+    ## Whether every element of the tuple type `ty` is `Comparable`, so the
+    ## tuple is too (`synthesize_function_types` declares it).
+    ##
+    ## @param ty the tuple type
+    ## @returns whether it is
+    tuple_is_comparable(ty: TypeName): bool {
+        return _undispatchable.contains(COMPARABLE) and _comparable_elements(ty, HashMap<String, _InScope>());
+    }
+
+    _comparable_elements(ty: TypeName, scope: HashMap<String, _InScope>): bool {
+        for (var e in ty.sub_types) {
+            if (!_conforms(e, TypeName.named(COMPARABLE), scope)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     ## The extensions that declare `required` for `arg`, a struct: each

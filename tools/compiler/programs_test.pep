@@ -181,8 +181,8 @@ errors_show_no_internal_names() {
         ("var a = [1];\n    a.nope();", "main.pep:8:7: error: no member named 'nope' in 'Array<int>'"),
         ("var n = 3;\n    n(1);", "main.pep:8:5: error: called object type 'int' is not a function"),
         (
-            "var c = 0;\n    c = (1, 2).compare((1, 3));",
-            "main.pep:8:16: error: no member named 'compare' in '(int, int)'"
+            "var c = 0;\n    c = (1, V()).compare((1, V()));",
+            "main.pep:8:18: error: no member named 'compare' in '(int, V)'"
         ),
         ("var f = () => nope;\n    f();", "main.pep:7:19: error: use of undeclared identifier 'nope'\n"),
         ("var a = V();\n    a += V();", "main.pep:8:7: error: no '+=' operator for 'V'")
