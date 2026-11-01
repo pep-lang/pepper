@@ -316,7 +316,7 @@ a note at the other:
 alt/module.pep:1:15: error: redefinition of 'MapIterator'
     1 | export struct MapIterator<K, V> { var key: K; var value: V; }
       |               ^~~~~~~~~~~
-runtime/iterator.pep:182:15: note: also exported here
+.../runtime/iterator.pep:...: note: also exported here
 ```
 
 ## How imported names behave

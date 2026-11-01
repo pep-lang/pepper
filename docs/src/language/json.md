@@ -255,7 +255,7 @@ Notes follow the conversion into the runtime:
 main.pep:10:16: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
    10 |     var text = json.encode(job);
       |                ^~~~~~~~~~~
-runtime/json/convert.pep:358:21: note: reported by the runtime here
+.../runtime/json/convert.pep:...: note: reported by the runtime here
 ...
 ```
 

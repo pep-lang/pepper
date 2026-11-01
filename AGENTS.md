@@ -26,7 +26,7 @@ opening a PR, check each of these against the diff:
   including any limitation it states ("not supported yet"), and add or
   change an example in `docs/examples/`. A new feature with no chapter gets
   one, listed in `docs/src/SUMMARY.md`. A deprecation also gets a row in the
-  table in `docs/src/language/compiler-errors.md`. Grep the whole book for
+  table in `docs/src/language/deprecation.md` ("What is deprecated"). Grep the whole book for
   the limitation a change lifts ("not supported", "not yet", "cannot"), since
   it is often repeated in other chapters and in the "Current status" list of
   `docs/src/introduction.md`.
