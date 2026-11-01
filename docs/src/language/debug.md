@@ -16,13 +16,20 @@ with `import debug`.
 {{#include ../../examples/debug-backtrace.pep}}
 ```
 
-Built with `-g`, this prints:
+Built with `-g` on Linux or macOS, this prints:
 
 ```text
 Parser.where at debug-backtrace.pep:13:16
 main at debug-backtrace.pep:19:24
 done
 ```
+
+The two frames go to standard output. `done` goes to the
+[debugger channel](#the-debugger-channel): standard error on Linux and
+macOS, and on Windows only a debugger's output window, so a console there
+shows just the frames. A frame names its file as the build was given it
+(`pepper build D:\work\debug-backtrace.pep` prints that full path), and on
+Windows it has no column (`debug-backtrace.pep:13`).
 
 Built with `-g -O2`, the optimizer inlines `where` into `main`, and the
 backtrace still shows it, marked as inlined:

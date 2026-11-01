@@ -85,7 +85,7 @@
 - [Regular expressions](language/regex.md)
 - [JSON](language/json.md)
 - [TOML](language/toml.md)
-- [YAML](language/yaml.md)
+- [YAML (package)](language/yaml.md)
 - [Compression and archives](language/compression.md)
 - [Cryptographic hashes](language/digest.md)
 - [Random numbers](language/random.md)

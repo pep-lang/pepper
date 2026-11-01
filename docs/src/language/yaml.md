@@ -20,13 +20,17 @@ main(): int {
         return 1;
     }
     var root = parsed.value();
-    print(root["server"]["port"].as_int().value());       # 8080
-    print(root["server"]["debug"].as_string().value());   # no
+    print(root["server"]["port"].as_int().value());      # 8080
+    print(root["server"]["debug"].as_string().value());  # no
     root["server"]["port"] = yaml.YamlValue.Integer(9090);
     print(root.to_string());
     return 0;
 }
 ```
+
+This program is the package's `examples/book/main.pep`, which its CI
+builds and runs (the book's own example test cannot, since it needs the
+package).
 
 - **The core schema**: `yes`, `no`, `on` and `off` are strings, not
   booleans, so `NO` (Norway) stays `NO`.
