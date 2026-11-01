@@ -12,6 +12,7 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
+import [has_body] from "checked";
 import [known_location, location_of] from "common";
 import "confinement";
 import "copies";
@@ -81,7 +82,8 @@ export collect_exports(module: Module, state: PassState) {
             state.report(symbol.error());
             return;
         }
-        if (!function.body.is_value() and !module.stripped.contains(function.loc)) {
+        # A checked declaration's body (the runtime's) is in the stash now.
+        if (!has_body(module, state, function)) {
             continue;
         }
         var parameters = Array<(String, TypeName)>();
