@@ -181,6 +181,8 @@ jobs:
     if: ${{ !cancelled() && github.event_name == 'push' }}
     permissions:
       contents: write
+      # docs.yml opens an issue when a release's docs fail.
+      issues: write
     uses: ./.github/workflows/docs.yml
 
   # The suite, one job per OS, so a run takes three runners: the free

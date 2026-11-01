@@ -21,14 +21,20 @@ on:
   workflow_call:
   workflow_dispatch:
 
-# Publishes must not cancel each other: a cancelled release build would leave
-# that version missing. They queue instead.
+# A group per ref: GitHub keeps one pending run per group and cancels the
+# one before, so with one group for all, a merge into main queued behind a
+# release's run would cancel the release's docs (#340). A newer dev build
+# replacing a pending older one is fine. Runs of different refs may then
+# publish at once: Publish rebuilds on the newer gh-pages when its push
+# loses the race.
 concurrency:
-  group: docs-publish
+  group: docs-publish-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: write
+  # To open an issue when a release's docs fail to publish.
+  issues: write
 
 # A container job leaves root-owned files in the checkout, and git then
 # refuses it ("dubious ownership").
@@ -40,7 +46,7 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash -euxo pipefail {0}
@@ -96,11 +102,20 @@ jobs:
 
       # pep-doc is a Pepper program, built against this checkout's runtime
       # with the newest published build of main, also for a release
-      # tag, whose own release may not be published yet.
+      # tag, whose own release may not be published yet. While a merge
+      # republishes the build of main its archives are missing (the
+      # v0.11.0 docs failed so, #340), so the install is tried again, then
+      # with stage 0 (.github/stage0), whose archives never change.
       - name: Install the toolchain
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/ci-install-toolchain.sh --newest
+        run: |
+          for attempt in 1 2 3 4; do
+            bash scripts/ci-install-toolchain.sh --newest && exit 0
+            echo "::warning::installing the newest build of main failed (attempt $attempt)"
+            sleep 180
+          done
+          bash scripts/ci-install-toolchain.sh
 
       - name: Build pep-doc
         env:
@@ -112,14 +127,47 @@ jobs:
       - name: Build the docs
         run: target/docs-tools/pep-doc build --version "$DOCS_VERSION" --site site
 
+      # pep-doc build replaces only this version's folder and regenerates
+      # versions.json and index.html from the folders present, so after a
+      # push another run made first, building again on its gh-pages keeps
+      # both versions.
       - name: Publish
         run: |
-          cd site
-          git add -A
-          if git diff --cached --quiet; then
-            echo "docs $DOCS_VERSION unchanged"
-            exit 0
-          fi
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "Publish docs $DOCS_VERSION from $GITHUB_SHA"
-          git push origin gh-pages
+          for attempt in 1 2 3 4 5; do
+            git -C site add -A
+            if git -C site diff --cached --quiet; then
+              echo "docs $DOCS_VERSION unchanged"
+              exit 0
+            fi
+            git -C site -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Publish docs $DOCS_VERSION from $GITHUB_SHA"
+            git -C site push origin gh-pages && exit 0
+            echo "::warning::gh-pages moved while publishing (attempt $attempt); building on it again"
+            git -C site fetch --depth 1 origin gh-pages
+            git -C site reset -q --hard FETCH_HEAD
+            git -C site clean -q -fdx
+            target/docs-tools/pep-doc build --version "$DOCS_VERSION" --site site
+          done
+          exit 1
+
+      # A release's docs are built once, from its tag, so a failure there
+      # leaves that version off the site until someone dispatches this
+      # workflow again: say so where it is seen.
+      - name: Report a release whose docs did not publish
+        if: (failure() || cancelled()) && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "The Docs run for $TAG failed, so its docs are not on the site: $RUN_URL"
+            echo
+            echo "Publish them once the cause is fixed:"
+            echo
+            echo '```bash'
+            echo "gh workflow run docs.yml --ref $TAG"
+            echo '```'
+          } > "$RUNNER_TEMP/docs-issue.md"
+          gh issue create --title "Docs for $TAG did not publish" --label bug --label documentation \
+            --body-file "$RUNNER_TEMP/docs-issue.md"

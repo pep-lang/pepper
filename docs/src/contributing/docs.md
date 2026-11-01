@@ -82,6 +82,17 @@ version's introduction when it has no such page.
 The `Docs` workflow (`.github/workflows/docs.yml`) publishes to the
 `gh-pages` branch: pushing to `main` updates `dev`, and pushing a tag
 `vX.Y.Z` adds the `X.Y.Z` docs. Published versions are never deleted.
+Every release from 0.2.0 on has its docs except 0.9.0, whose tag's workflow
+still fetches from the repository's old name, so it cannot be built again;
+0.9.1's docs cover it.
+
+A release's docs are built once, from its tag. When that run fails, the
+workflow opens an issue, "Docs for vX.Y.Z did not publish", with the
+command that publishes them once the cause is fixed:
+
+```bash
+gh workflow run docs.yml --ref vX.Y.Z
+```
 
 ## The reference stays current
 
