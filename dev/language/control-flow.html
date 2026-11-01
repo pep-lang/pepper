@@ -426,9 +426,66 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Both work in <code>while</code> and <code>for</code> loops and always apply to the innermost loop.
-There are no labeled breaks: to leave several loops at once, set a flag and test
-it, or move the loops into a function and <code>return</code> from it.</p>
+<p>Both work in <code>while</code> and <code>for</code> loops and apply to the innermost loop.</p>
+<h3 id="labeled-loops"><a class="header" href="#labeled-loops">Labeled loops</a></h3>
+<p>To leave or go on with an outer loop, give it a label, a name and a colon
+before <code>for</code> or <code>while</code>, and name it after <code>break</code> or <code>continue</code>. <code>break rows;</code> leaves the loop labeled <code>rows</code> and every loop inside it; <code>continue rows;</code> goes on with the next iteration of <code>rows</code>:</p>
+<pre><code class="language-pepper"># Labeled loops: `break` and `continue` that name an outer loop.
+
+main(): int {
+    var grid = [[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+
+    # `break rows` leaves both loops at once.
+    var found = "";
+    rows: for (var row in grid) {
+        for (var cell in row) {
+            if (cell &gt; 4) {
+                found = $"{cell}";
+                break rows;
+            }
+        }
+    }
+    assert(found == "5", "the first cell above 4");
+
+    # `continue rows` goes on to the next row, skipping the rest of this one.
+    var firsts = 0;
+    rows: for (var row in grid) {
+        for (var cell in row) {
+            firsts += cell;
+            continue rows;
+        }
+    }
+    assert(firsts == 1 + 4 + 7, "the first cell of each row");
+
+    # A label works on `while` too.
+    var tries = 0;
+    attempts: while (tries &lt; 10) {
+        tries += 1;
+        var step = 0;
+        while (true) {
+            step += 1;
+            if (step == 3) {
+                break attempts;
+            }
+        }
+    }
+    print($"{found} {firsts} {tries}");
+    return 0;
+}
+
+# Output:
+# 5 12 1
+</code></pre>
+<p>A label names a loop only inside that loop's body, and not inside a closure
+there, whose body is a function of its own. Naming a label that no loop
+around the <code>break</code> has is an error, and so is giving a loop the label of a
+loop around it:</p>
+<pre><code class="language-text">main.pep:3:15: error: use of undeclared label 'nope'
+    3 |         break nope;
+      |               ^~~~
+</code></pre>
+<p>A label goes only on a loop (<code>expected 'for' or 'while' after the label 'a'</code>). A compile-time loop in a <a href="reflection.html"><code>static</code> block</a> cannot have
+a label yet.</p>
 <h2 id="return"><a class="header" href="#return"><code>return</code></a></h2>
 <p><code>return value;</code> leaves the current function and hands <code>value</code> back to the
 caller. It works from anywhere in the function, including from inside loops.
