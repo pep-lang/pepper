@@ -7835,6 +7835,31 @@ order, NaN last. Any other order still takes a comparer:
 <p>Every number type and <code>char</code> is <code>Comparable</code> by value, and <code>String</code> by
 content, the order of <code>String.compare</code>. Their <code>compare</code> returns -1, 0 or 1
 (<code>String.compare</code> any negative or positive number).</p>
+<p>A tuple whose elements are all <code>Comparable</code> is <code>Comparable</code> too, in
+lexicographic order: the first element that differs decides, so
+<code>(1, "b") &lt; (2, "a")</code>. Labels take no part. An array of such tuples sorts,
+and a <code>Map</code> keys on them:</p>
+<pre><code class="language-pepper">main(): int {
+    # A tuple of Comparable elements compares element by element.
+    assert((1, "b") &lt; (2, "a"), "the first element decides");
+    assert((1, "a") &lt; (1, "b"), "then the second");
+
+    # So an array of tuples sorts, and a Map keys on them in that order.
+    var scores = [(3, "cy"), (1, "al"), (3, "bo")];
+    scores.sort();
+    assert(scores[0].1 == "al" &amp;&amp; scores[1].1 == "bo", "by score, then name");
+    var grid = Map&lt;(int, int), char&gt;();
+    grid[(1, 0)] = 'b';
+    grid[(0, 1)] = 'a';
+    var first = 'z';
+    for (var (_, cell) in grid) {
+        first = cell;
+        break;
+    }
+    assert(first == 'a', "(0, 1) sorts first");
+    return 0;
+}
+</code></pre>
 <p><code>float</code> and <code>double</code> compare in a total order: NaN sorts after every number
 and with every other NaN, and <code>-0.0</code> sorts with <code>0.0</code>. Their <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>
 and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, while
@@ -7842,7 +7867,7 @@ and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, whil
 cannot break a map.</p>
 <h3 id="not-yet-1"><a class="header" href="#not-yet-1">Not yet</a></h3>
 <ul>
-<li>Tuples and <code>Optional</code> are not <code>Comparable</code>, and <code>Comparable</code> is not
+<li><code>Optional</code> is not <code>Comparable</code>, and <code>Comparable</code> is not
 derived from a struct's fields: a struct writes its <code>compare</code>, as
 <code>Version</code> does above.</li>
 </ul>
