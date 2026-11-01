@@ -752,8 +752,8 @@ arm's type, and every other arm's value must convert to it. When the arms
 are numbers of different types, the value has their common type, as C's
 <code>? :</code> does (<code>int</code> and <code>long</code> give <code>long</code>), and converts from it wherever
 it goes (<code>0</code> or a <code>ulong</code> <code>length</code>, returned as an <code>int</code>). A closure in
-an arm's value cannot use a name the arm binds; use a <code>match</code> statement
-there.</li>
+an arm's value captures the names the arm binds, as it captures a
+<code>const</code> local, and keeps them after the <code>match</code>.</li>
 <li><strong><code>value is Pattern</code></strong> is a <code>bool</code>: whether <code>value</code> holds that case
 (<code>d is Line</code>, <code>!(d is Text)</code>). It takes any one pattern. When it is the
 whole condition of an <code>if</code> or <code>while</code>, its bindings are declared in that
@@ -996,7 +996,8 @@ has a guard does not handle <code>Circle</code>, and a later unguarded arm (or
 <li>A guarded arm for a case an earlier unguarded arm already handles is an
 error, like any case handled twice. Two guarded arms may name the same
 case.</li>
-<li>A closure in a guard cannot use a name the arm binds.</li>
+<li>A closure in a guard captures the names the arm binds, as one in the
+arm's body does.</li>
 </ul>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
