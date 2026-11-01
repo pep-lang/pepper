@@ -779,6 +779,13 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     statement with one arm (`is_branch`, `is_loop`; the loop is `while
     (true)` whose `else` breaks), its `MatchSite` marked `partial` so it
     need not handle every case; `a` is a local of the block.
+  - A labeled loop (`ast.Statement.Labeled`) gives its label to the
+    `While` it lowers to (`While.label`): `_Builder.pending_label` holds it
+    until `_take_label` hands it to the loop being built, the inner `while`
+    of a `for` (where `continue` goes) or the `while (true)` of `is_loop`
+    and `while_with_try`. `_Builder.labels` lists the labels around the
+    statement being built (a closure's body starts with none), which a
+    `break label;` (`LoopBreak.label`) must name.
   - Every case pattern also carries its name read as a type
     (`ast.Pattern.ty`, `CasePattern.ty`, `CaseChoice.ty`: `Circle`,
     `shapes.Circle`, `Box<int>`, the parser taking type arguments right
@@ -2485,7 +2492,7 @@ entry, whose caller may pass its only reference) keep both steps.
 | By-value parameter | `codegen_function_unlocated`: acquire each struct parameter on entry (`this` excepted) and track it in the function scope. A `[Move]` parameter is not acquired: the caller hands its reference over (`pass_argument`: an owned temporary is not released after the call, an lvalue is acquired for it). |
 | `std::construct_at` | `__construct_at(p[i], v)` (`Expression.ConstructAt`): acquire `v` and store it into a raw buffer element that holds no reference, with no load, compare or release of the old occupant (`construct_refcount_ops`). The runtime uses it where a slot is known empty: `Array.append` and `insert`, and `HashMap`'s insert and rehash. A non-empty slot leaks its occupant. |
 | `move(x)` | `codegen_move`: load the reference from the place and store null there, with no count step; the result is an owned rvalue (`is_owned_rvalue`). |
-| Scope exit | `scopes: Vec<Vec<(name, type, slot)>>`. `release_scope` runs at block fall-through, `release_all_scopes` at `return`, and `codegen_loop_break` releases the scopes a `break` or `continue` leaves. |
+| Scope exit | `scopes: Vec<Vec<(name, type, slot)>>`. `release_scope` runs at block fall-through, `release_all_scopes` at `return`, and `codegen_loop_break` releases the scopes a `break` or `continue` leaves: the innermost loop's (`Frame.loop_break`, `loop_base_depth`), or for `break label;` the labeled loop's, from `Frame.labeled_loops`. |
 | `return` | An lvalue read is acquired before `release_all_scopes`. A call result moves. |
 | Discarded temporary | `Statement.Expression` releases `owned_temp_type(expr)`. Arguments that are owned rvalues are released after the call (`owned_arg_temps` in `codegen_call`). The receiver of `f().x` or `f()[i]` goes on `deferred_temps` and is released at the end of the full expression by `flush_deferred_temps`. Ternary arms use `codegen_expr_in_arm`. |
 | Tuples | Same rules, same call sites: `Tuple.__acquire`/`Tuple.__release` step each reference element (§4.6). A destructuring binding moves its element out of the hidden tuple. |
@@ -3769,7 +3776,7 @@ nothing a check makes may outlive it: `run_steps_with` drops the memos of
 unit's state and the closure it reached alive, 8 GB in a worker and over 50
 GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
-**Records.** A record lives at `<cache>/v3/c16/<name>/<key>.rec`. The
+**Records.** A record lives at `<cache>/v3/c17/<name>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new
 number, so old records are never misread. Each compilation unit keeps its newest four
 keys. A record starts with the program's files' namespaces, which its file

@@ -280,7 +280,10 @@ struct _PointerCheck {
                     expression(value.value());
                 }
             }
-            LoopBreak(_, _) => {}
+            LoopBreak(_, _, _, _) => {}
+            Labeled(_, _, loop, _) => {
+                statement(loop);
+            }
             Destructure(bindings, value, _, _) => {
                 _leaves(bindings);
                 expression(value);

@@ -678,7 +678,10 @@ export trait ScopeWalk {
                     return Statement.Return(Optional<Expression>.Value(visit_expression(value.value())), span);
                 }
             }
-            LoopBreak(_, _) => {}
+            LoopBreak(_, _, _, _) => {}
+            Labeled(label, label_span, loop, span) => {
+                return Statement.Labeled(label, label_span, walk_statement(loop), span);
+            }
             Destructure(bindings, value, is_const, span) => {
                 # The value is evaluated before the bindings exist; they
                 # belong to the enclosing block.

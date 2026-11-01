@@ -2431,11 +2431,22 @@ export enum Statement {
     ## @param value the value, if any
     ## @param span the statement
     Return(value: Expression?, span: Span),
-    ## `break;` or, `is_continue`, `continue;`.
+    ## `break;` or, `is_continue`, `continue;`, with the label of the loop it
+    ## leaves (`break outer;`), or none for the innermost.
     ##
     ## @param is_continue whether it is `continue`
+    ## @param label the loop's label, or empty
+    ## @param label_span the label, or the keyword when there is none
     ## @param span the statement
-    LoopBreak(is_continue: bool, span: Span),
+    LoopBreak(is_continue: bool, label: String, label_span: Span, span: Span),
+    ## `label: while (...) { ... }` or `label: for (...) { ... }`: a loop that
+    ## `break label;` and `continue label;` name.
+    ##
+    ## @param label the label
+    ## @param label_span the label
+    ## @param loop the `While` or `For` it names
+    ## @param span the statement, label included
+    Labeled(label: String, label_span: Span, loop: Statement, span: Span),
     ## `var (a, b) = value;`.
     ##
     ## @param bindings the bindings
@@ -2481,7 +2492,10 @@ export enum Statement {
             Return(_, span) => {
                 return span;
             }
-            LoopBreak(_, span) => {
+            LoopBreak(_, _, _, span) => {
+                return span;
+            }
+            Labeled(_, _, _, span) => {
                 return span;
             }
             Destructure(_, _, _, span) => {
@@ -2550,11 +2564,20 @@ export enum Statement {
                 out["span"] = span.to_json();
                 return tagged("Return", out);
             }
-            LoopBreak(is_continue, span) => {
+            LoopBreak(is_continue, label, _, span) => {
                 var out = JsonValue.object();
                 out["kind"] = JsonValue.String(is_continue ? "Continue" : "Break");
+                out["label"] = JsonValue.String(label);
                 out["span"] = span.to_json();
                 return tagged("LoopBreak", out);
+            }
+            Labeled(label, label_span, loop, span) => {
+                var out = JsonValue.object();
+                out["label"] = JsonValue.String(label);
+                out["label_span"] = label_span.to_json();
+                out["loop"] = loop.to_json();
+                out["span"] = span.to_json();
+                return tagged("Labeled", out);
             }
             Destructure(bindings, value, is_const, span) => {
                 var out = JsonValue.object();

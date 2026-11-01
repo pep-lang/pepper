@@ -1645,6 +1645,12 @@ struct _Builder {
     ## The hidden-local counters.
     var tuples: ulong = 0;
     var for_loops: ulong = 0;
+    # The labels of the loops around the statement being built, innermost
+    # last, which `break label;` and `continue label;` may name.
+    var labels: Array<(String, ast.Span)> = Array<(String, ast.Span)>();
+    # The label a `Labeled` statement gives the loop it is building, until
+    # that loop takes it (`_take_label`).
+    var pending_label: String = "";
     var with_blocks: ulong = 0;
     var matches: ulong = 0;
     var tries: ulong = 0;
@@ -2116,9 +2122,14 @@ struct _Builder {
                 }
                 var ty = type_name_from(closure.return_type);
                 var saved = return_type;
+                var saved_labels = labels;
                 return_type = Optional<ast.TypeName>.Value(closure.return_type);
+                # A closure's body is a function of its own: no loop outside
+                # it can be named.
+                labels = Array<(String, ast.Span)>();
                 var body = block(closure.body)?;
                 return_type = saved;
+                labels = saved_labels;
                 var literal = ClosureLiteral(
                     parameters = parameters,
                     ty = ty,
@@ -2534,9 +2545,10 @@ struct _Builder {
                 if (lowered.is_value()) {
                     return Built<Statement>.Ok(lowered.value());
                 }
+                var label = _take_label();
                 var c = expression(condition)?;
                 var built = block(body)?;
-                return Built<Statement>.Ok(Statement.While(While(c, block = built)));
+                return Built<Statement>.Ok(Statement.While(While(c, block = built, label = label)));
             }
             For(binding, pattern, iterable, body, span) => {
                 return for_loop(binding, pattern, iterable, body, span);
@@ -2564,9 +2576,32 @@ struct _Builder {
                 }
                 return Built<Statement>.Ok(Statement.Return(ReturnStatement(expr = built, loc = at)));
             }
-            LoopBreak(is_continue, _) => {
+            LoopBreak(is_continue, label, label_span, _) => {
+                if (!label.is_empty and _label_at(label).is_empty()) {
+                    return Built<Statement>.Err(_error($"use of undeclared label '{label}'", loc(label_span)));
+                }
                 var kind = is_continue ? LoopBreakKind.Continue : LoopBreakKind.Break;
-                return Built<Statement>.Ok(Statement.LoopBreak(LoopBreak(kind = kind)));
+                return Built<Statement>.Ok(Statement.LoopBreak(LoopBreak(kind = kind, label = label)));
+            }
+            Labeled(label, label_span, loop, _) => {
+                var outer = _label_at(label);
+                if (outer.is_value()) {
+                    return Built<Statement>.Err(
+                        _noted(
+                            _error($"label '{label}' is already the label of a loop around it", loc(label_span)),
+                            "the outer loop is labeled here",
+                            loc(outer.value())
+                        )
+                    );
+                }
+                labels.append((label, label_span));
+                pending_label = label;
+                var built = lowered(loop)?;
+                labels.remove_at(labels.count - 1);
+                if (built.count == 1) {
+                    return Built<Statement>.Ok(built[0]);
+                }
+                return Built<Statement>.Ok(Statement.Block(_block_of(built)));
             }
         }
         return Built<Statement>.Err(_error("unsupported statement", loc(s.span())));
@@ -2681,6 +2716,25 @@ struct _Builder {
         return Built<bool>.Ok(true);
     }
 
+    ## Where `label` labels a loop around the statement being built, if it
+    ## does.
+    _label_at(label: String): ast.Span? {
+        for (var (name, span) in labels) {
+            if (name == label) {
+                return Optional<ast.Span>.Value(span);
+            }
+        }
+        return Optional<ast.Span>.Empty;
+    }
+
+    ## The label a `Labeled` statement gave the loop being built, or empty;
+    ## the loop takes it, so a loop in its body gets none.
+    _take_label(): String {
+        var label = pending_label;
+        pending_label = "";
+        return label;
+    }
+
     ## Lowers `for (var x in source) body` to a block of the hidden iterator
     ## and a `while (iterator.next())` whose body declares `x`.
     for_loop(
@@ -2690,6 +2744,7 @@ struct _Builder {
         body: ast.Block,
         span: ast.Span
     ): Built<Statement> {
+        var label = _take_label();
         var iterator = $"{FOR_ITERATOR}{for_loops}";
         for_loops += 1;
         # The hidden code is located at the iterable, its calls at `for`.
@@ -2713,7 +2768,9 @@ struct _Builder {
         var inner = block(body)?;
         items.append(Statement.Block(inner));
         var condition = _method_call(_symbol(iterator, at), "next", Array<Expression>(), keyword);
-        var loop = Statement.While(While(condition, block = _block_of(items)));
+        # A label names the `while`, where `continue` goes on to the next
+        # element.
+        var loop = Statement.While(While(condition, block = _block_of(items), label = label));
         return Built<Statement>.Ok(Statement.Block(_block_of([_declare(hidden_iterator), loop])));
     }
 
@@ -2910,12 +2967,15 @@ struct _Builder {
     ## body } else => { break; } } }`.
     is_loop(condition: ast.Expression, body: ast.Block): Built<Statement?> {
         if (condition is Is(value, pattern, keyword_span, _)) {
+            var label = _take_label();
             var stop = _block_of([Statement.LoopBreak(LoopBreak(kind = LoopBreakKind.Break))]);
             var arms = [_Arm([pattern], Optional<ast.Expression>.Empty, body)];
             var lowered = lower_match_statement(
                 value, keyword_span, arms, Optional<(Loc, Block)>.Value((Loc.none(), stop)), true
             )?;
-            var loop = Statement.While(While(Expression.BoolLiteral(true), block = _block_of([lowered])));
+            var loop = Statement.While(
+                While(Expression.BoolLiteral(true), block = _block_of([lowered]), label = label)
+            );
             return Built<Statement?>.Ok(Optional<Statement>.Value(loop));
         }
         return Built<Statement?>.Ok(Optional<Statement>.Empty);
@@ -4638,8 +4698,29 @@ struct _Builder {
                         );
                     }
                 }
-                LoopBreak(is_continue, span) => {
+                Labeled(_, label_span, loop, _) => {
+                    # A runtime loop is emitted, label and all; a compile-time
+                    # one cannot be named yet.
+                    bool compile_time = false;
+                    if (loop is For(_, pattern, iterable, _, _)) {
+                        compile_time = pattern.count == 0 and !names.mentions_runtime(iterable);
+                    }
+                    if (loop is While(condition, _, _)) {
+                        compile_time = !names.mentions_runtime(condition);
+                    }
+                    if (compile_time) {
+                        return Built<StaticItem[]>.Err(
+                            _error("a compile-time loop cannot have a label yet", loc(label_span))
+                        );
+                    }
+                }
+                LoopBreak(is_continue, label, label_span, span) => {
                     var word = is_continue ? "continue" : "break";
+                    if (!label.is_empty and names.loops > 0) {
+                        return Built<StaticItem[]>.Err(
+                            _error($"'{word}' in a compile-time loop cannot name a label yet", loc(label_span))
+                        );
+                    }
                     if (names.loops == 0) {
                         var message = names.in_runtime_if ?
                             $"'{word}' in a runtime 'if' cannot leave a compile-time loop; the condition is not known while compiling" :
@@ -4751,8 +4832,9 @@ struct _Builder {
     ## `while (c) { body }` with a `?` in `c`: `while (true) { if (c) { body }
     ## else { break; } }`.
     while_with_try(condition: ast.Expression, body: ast.Block): Built<Statement[]> {
+        var label = _take_label();
         var span = condition.span();
-        var stop = ast.Statement.LoopBreak(false, span);
+        var stop = ast.Statement.LoopBreak(false, "", span, span);
         var otherwise = ast.Block();
         otherwise.statements = [stop];
         otherwise.span = span;
@@ -4761,7 +4843,9 @@ struct _Builder {
         wrapper.statements = [branch];
         wrapper.span = body.span;
         var built = block(wrapper)?;
-        return Built<Statement[]>.Ok([Statement.While(While(Expression.BoolLiteral(true), block = built))]);
+        return Built<Statement[]>.Ok(
+            [Statement.While(While(Expression.BoolLiteral(true), block = built, label = label))]
+        );
     }
 
     ## `e` with each `?` replaced by a read of its hidden local, and what

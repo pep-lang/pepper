@@ -82,6 +82,27 @@ writes_an_empty_extension_body_as_a_semicolon() {
     );
 }
 
+# A label sits before its loop, and `break` and `continue` keep theirs (#324).
+[Test]
+formats_labeled_loops() {
+    expect_formats(
+        "main(): int {\n"
+            + "    outer:   for (var x in xs) {\n"
+            + "        while (true) { continue   outer; }\n"
+            + "        break outer ;\n"
+            + "    }\n"
+            + "    return 0;\n"
+            + "}\n",
+        "main(): int {\n"
+            + "    outer: for (var x in xs) {\n"
+            + "        while (true) { continue outer; }\n"
+            + "        break outer;\n"
+            + "    }\n"
+            + "    return 0;\n"
+            + "}\n"
+    );
+}
+
 [Test]
 keeps_one_line_bodies_and_else_as_written() {
     expect_formats(

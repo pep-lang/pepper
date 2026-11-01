@@ -133,7 +133,7 @@ start_of(span: Span, attributes: Attribute[]): ulong {
 # Whether `statement` takes the `;` after it.
 statement_takes_semicolon(statement: Statement): bool {
     match (statement) {
-        Expression(_), Declaration(_), Return(_, _), LoopBreak(_, _), Destructure(_, _, _, _) => {
+        Expression(_), Declaration(_), Return(_, _), LoopBreak(_, _, _, _), Destructure(_, _, _, _) => {
             return true;
         }
         else => {
@@ -213,7 +213,7 @@ struct Item {
     # Whether the item is a `return`, `break` or `continue`.
     is_jump(): bool {
         if (entry is Statement(statement)) {
-            return statement is Return(_, _) or statement is LoopBreak(_, _);
+            return statement is Return(_, _) or statement is LoopBreak(_, _, _, _);
         }
         return false;
     }
@@ -1956,6 +1956,9 @@ export struct Formatter {
                 _prefix(if_block.attributes, false, false, result);
                 return _branch(condition, if_block, else_block, result);
             }
+            Labeled(label, _, loop, _) => {
+                return concat().add(_take(label)).add(_take(":")).add(text(" ")).add(_statement(loop));
+            }
             While(condition, body, _) => {
                 var result = concat().add(_take("while")).add(text(" ")).add(_expression(condition));
                 return result.add(text(" ")).add(_block(body, false));
@@ -2007,8 +2010,11 @@ export struct Formatter {
                 }
                 return result;
             }
-            LoopBreak(_, _) => {
+            LoopBreak(_, label, _, _) => {
                 var result = concat().add(_take_any());
+                if (!label.is_empty) {
+                    result.add(text(" ")).add(_take(label));
+                }
                 if (_at(";")) {
                     result.add(_take(";"));
                 }
