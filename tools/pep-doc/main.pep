@@ -23,7 +23,7 @@ import "site";
 
 # The release this tool belongs to, as the other Pepper tools give it.
 version(): String {
-    return "0.12.0";
+    return "0.13.0-dev";
 }
 
 # What `pep-doc --help` prints.

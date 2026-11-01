@@ -17,7 +17,7 @@ import [create, Options] from scaffold;
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.12.0";
+    return "0.13.0-dev";
 }
 
 main(args: String[]): int {
