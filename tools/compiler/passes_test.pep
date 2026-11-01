@@ -868,11 +868,13 @@ nested_array_literals_keep_few_methods_per_level() {
     var at_24 = _bodies_at_depth(folder, 24);
     # As many more per level at any depth: linear.
     expect_equal(at_24 - at_16, at_16 - at_8);
-    # 135 a level now: an Array of Comparable elements is Comparable (#366),
-    # so each level has the Comparable methods too. 72 before that (67
-    # before the iterators' `next(location)`, #319, and 128 before that).
+    # 126 a level now: an Array of Comparable elements is Comparable (#366),
+    # so each level has the Comparable methods too (135 before #491 made
+    # the ordering operators and Comparable's members wait for a use). 72
+    # before #366 (67 before the iterators' `next(location)`, #319, and 128
+    # before that).
     var per_level = (at_16 - at_8) / 8;
-    if (per_level > 140) {
+    if (per_level > 130) {
         panic($"a level of a nested array literal keeps {per_level} method bodies");
     }
 }
