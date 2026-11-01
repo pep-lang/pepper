@@ -100,7 +100,7 @@ main.pep:7:13: error: too many arguments to 'Point': expected 0, have 2
 
 > **Note:** `new` is the older, deprecated spelling of `construct`. It still
 > compiles, with a warning that offers the fix (see
-> [Deprecations](compiler-errors.md#deprecations)).
+> [Deprecation](deprecation.md#what-is-deprecated)).
 
 ### Implicit conversions
 

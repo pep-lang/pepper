@@ -104,3 +104,40 @@ The other errors are `'Deprecated' expects the replacement as a string`, `the
 replacement 'a b' is not a name`, `too many arguments to 'Deprecated':
 expected at most 2, have 3`, `duplicate 'Deprecated' attribute`, and
 `'Deprecated' cannot be applied to` an extension or a destructor.
+
+## What is deprecated
+
+Each API and piece of syntax deprecated so far, and what replaces it. Those
+marked "now an error" no longer compile; the rest still do, with a warning
+that names the replacement.
+
+| Deprecated | Replacement |
+|------------|-------------|
+| `new(...)` constructor | `construct(...)` |
+| A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their names) | one declaration, or two names |
+| A declaration of another file of the module, used without importing that file (now an error) | `import "file";` in the file that uses it |
+| `io.Path.join_str(String)` | `io.Path.join(Path)`, which accepts a `String` |
+| `String.clone()` | `String.copy()` |
+| `ThreadLocal<T>.get()` for a `T` that is not thread-safe (now an error) | `with (var value = local.enter()) { ... }` |
+| `io.Path.is_dir()` | `io.Path.is_directory()` |
+| `io.File.set_len(ulong)` | `io.File.set_length(ulong)` |
+| `io.File.write_string(String)` | `io.File.write_all(String)` |
+| `io.TcpStream.write_string(String)`, `io.UnixStream.write_string(String)`, `tls.TlsStream.write_string(String)` | `write_all(String)` |
+| `io.File.seek(Offset, int)` | `io.File.seek(io.SeekFrom)` |
+| `io.File.std_file(int, String)` | `io.File.std_file(io.StdStream, String)` |
+| `HashMap.cap()`, `HashSet.cap()` | the `capacity` property |
+| `arguments()`, `exit(code)` in the prelude | `process.arguments()`, `process.exit(code)` (`import process`) |
+| `Channel.send(x)`, `try_send(x)` with a variable something else references (now an error: `send` no longer copies) | `send(move(x))`, or `send(copy(x))` to keep using `x` |
+| `[Sending]` parameter attribute (now an error) | `[Move]` |
+| `io.Print` trait | `io.Writer` (which also needs `write(data)`) |
+| `ArraySlice<T>`, `ArraySliceIterator<T>` | `ArrayView<T>`, `ArrayViewIterator<T>` |
+| `Atomic<T>` without an import (now an error: it moved to the `async` module) | `async.Atomic<T>` after `import async`, or `import [Atomic] from async` |
+| `math.parse_int(text, base)` | `long.parse(text, base)`, with no import |
+| `Optional<T>()` (now an error: `Optional` is an enum) | `Optional<T>.Empty` |
+| `Optional` cases `None` and `Some(v)` (now an error: renamed) | `Empty` and `Value(v)` |
+| `Optional<T>.some(v)`, `Optional<T>.none()` | the cases `Optional<T>.Value(v)`, `Optional<T>.Empty` |
+| `Optional.is_some()`, `Optional.is_none()` | `is_value()`, `is_empty()` |
+| `[LinkName("symbol")]` on an extern (now an error) | `[Link(name = "symbol")]` |
+| A parameter's former name, kept by `[Rename("old", "new")]` | the new name (see [named arguments](functions.md#other-names-for-a-parameter)) |
+| `Copyable<T>` implemented as `copy(copies: Copies): T`, with `copies.copy(x)` and `copies.register(original, made)` | `copy(): T`, with `copy(x)` and `register_copy(original, made)` (see [copying](memory.md)) |
+| `hint.likely(condition)`, `hint.unlikely(condition)` | `[Likely]` or `[Unlikely]` above the `if` or `match` arm (see [branch hints](control-flow.md#branch-hints-likely-and-unlikely)) |

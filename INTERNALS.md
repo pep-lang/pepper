@@ -2632,7 +2632,7 @@ diagnostics"). The mechanics:
   - Deprecated syntax: the parser records a `SyntaxWarning` in
     `ast.Module.warnings`, which `Program.warnings` turns into
     `Diagnostic.deprecated(what, instead, loc, fix)` (always with a fix). The book lists these in
-    `docs/src/language/compiler-errors.md`.
+    `docs/src/language/deprecation.md`.
   - Uses of a declaration marked `[Deprecated("message", "replacement")]`
     (`link/deprecation.pep`):
     `Diagnostic.deprecated_declaration(name, message, loc)` plus a note at
