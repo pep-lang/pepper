@@ -69,6 +69,8 @@ documents_a_package_with_its_features_and_dependencies() {
     expect_contains(
         index, "- `default`: turns on `fast`\n- `fast`: turns on nothing else\n- `tls`: turns on `dep:semver`\n"
     );
+    # The book is served from docs.pepper-lang.dev (#299).
+    expect_contains(index, "(see [Features](https://docs.pepper-lang.dev/dev/tools/projects.html#features))");
     expect_contains(index, "- [`semver`](https://pep-lang.github.io/pepper-semver/) (optional)\n");
     expect_contains(index, "- `local`\n");
 

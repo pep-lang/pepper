@@ -151,7 +151,7 @@ export package_index(manifest: Manifest, pages: Page[]): String {
     if (!manifest.features.is_empty) {
         out.append("\n## Features\n\n");
         out.append(
-            $"A feature that a build turns on defines the build option `{manifest.name}_<feature>` (see [Features](https://pepper-lang.dev/dev/tools/projects.html#features)).\n\n"
+            $"A feature that a build turns on defines the build option `{manifest.name}_<feature>` (see [Features](https://docs.pepper-lang.dev/dev/tools/projects.html#features)).\n\n"
         );
         for (var feature in manifest.features) {
             var enables = Array<String>();
