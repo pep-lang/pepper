@@ -246,7 +246,15 @@ leaving the page. It opens the same page in the chosen version, or that
 version's introduction when it has no such page.</p>
 <p>The <code>Docs</code> workflow (<code>.github/workflows/docs.yml</code>) publishes to the
 <code>gh-pages</code> branch: pushing to <code>main</code> updates <code>dev</code>, and pushing a tag
-<code>vX.Y.Z</code> adds the <code>X.Y.Z</code> docs. Published versions are never deleted.</p>
+<code>vX.Y.Z</code> adds the <code>X.Y.Z</code> docs. Published versions are never deleted.
+Every release from 0.2.0 on has its docs except 0.9.0, whose tag's workflow
+still fetches from the repository's old name, so it cannot be built again;
+0.9.1's docs cover it.</p>
+<p>A release's docs are built once, from its tag. When that run fails, the
+workflow opens an issue, "Docs for vX.Y.Z did not publish", with the
+command that publishes them once the cause is fixed:</p>
+<pre><code class="language-bash">gh workflow run docs.yml --ref vX.Y.Z
+</code></pre>
 <h2 id="the-reference-stays-current"><a class="header" href="#the-reference-stays-current">The reference stays current</a></h2>
 <p><code>pep-doc check</code> fails when <code>docs/src/reference/</code> does not match the
 runtime, and CI runs it.</p>
