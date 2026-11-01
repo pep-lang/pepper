@@ -3,7 +3,7 @@
 ## `for_each_applied_site` and `rewrite_module`.
 
 import [checked_decls, unit_decls] from "checked";
-import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
+import [CALL_METHOD, DESTROY_FIELD, INVOKE_FIELD, is_closure_struct] from "closures";
 import [is_trait] from "enums";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
 import [CheckedDecls] from "pending";
@@ -1005,8 +1005,10 @@ _capture_fields(st: StructDef): ulong[] {
     var out = Array<ulong>();
     ulong i = 0;
     while (i < st.field_members.count) {
+        # Every field but the head's and the function's: what it captures,
+        # hidden locals (`__match_N`, `__subject_N`) and `this` included.
         var name = st.field_members[i].name;
-        if (!name.starts_with("__") or name == THIS_FIELD) {
+        if (name != "__refcount" and name != "__weakcount" and name != INVOKE_FIELD and name != DESTROY_FIELD) {
             out.append(i);
         }
         i += 1;

@@ -9,6 +9,7 @@
 import [Diagnostic, Location] from compiler.diagnostic;
 import [integer_range, payload_field, TAG_FIELD] from "builder";
 import [unit_decls] from "checked";
+import [is_closure_struct] from "closures";
 import "common";
 import "confinement";
 import [install_traits, is_trait, reference_cases] from "enums";
@@ -69,9 +70,19 @@ export lower_matches(module: Module, state: PassState) {
         methods.append(st.destructor);
         methods.append(st.acquire);
         methods.append(st.release);
+        # A closure in a `match` reads its subject through the field that
+        # captured it (`__match_N`, `__subject_N`).
+        var captured = Array<(String, TypeName)>();
+        if (is_closure_struct(st.name)) {
+            for (var field in st.field_members) {
+                if (field.name.starts_with("__match_") or field.name.starts_with("__subject_")) {
+                    captured.append((field.name, field.ty));
+                }
+            }
+        }
         for (var m in methods) {
             if (!generic_base and !m.is_generic_func and m.body.is_value()) {
-                bodies.append(_MatchBody(m, current));
+                bodies.append(_MatchBody(m, current, captured));
             }
         }
     }
@@ -88,6 +99,9 @@ export lower_matches(module: Module, state: PassState) {
         # of its `match`es.
         lowering.coverage = HashMap<ulong, _Coverage>();
         lowering.subjects = HashMap<String, TypeName>();
+        for (var (name, ty) in body.captured) {
+            lowering.subjects[name] = ty;
+        }
         lowering.block(block);
         var ids = Array<ulong>();
         for (var (id, _) in lowering.coverage) {
@@ -118,10 +132,15 @@ _seen_at(warnings: Diagnostic[], w: Diagnostic): bool {
 struct _MatchBody {
     var function: FunctionDef;
     var current: TypeName?;
+    # The subjects a closure struct's fields captured, with their types.
+    var captured: Array<(String, TypeName)>;
 
-    construct(function: FunctionDef, current: TypeName?) {
+    construct(
+        function: FunctionDef, current: TypeName?, captured: Array<(String, TypeName)> = Array<(String, TypeName)>()
+    ) {
         this.function = function;
         this.current = current;
+        this.captured = captured;
     }
 }
 
@@ -791,6 +810,13 @@ struct _MatchLowering {
                 );
             }
             MemberRef(node) => {
+                # A closure's field that captured the subject.
+                if (node.lhs is ThisRef) {
+                    var captured = subjects.try_get(node.name);
+                    if (captured.is_value()) {
+                        return Optional<_TypedPath>.Value(_TypedPath(path.copy(), captured.value()));
+                    }
+                }
                 var index = ulong.parse(node.name);
                 if (!index.is_value()) {
                     return none;
