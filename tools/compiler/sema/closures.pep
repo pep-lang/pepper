@@ -176,6 +176,13 @@ struct _ClosureLifter {
     # The closure levels at which enclosing `static` blocks begin: a closure
     # deeper than one is lifted out of that block's expansion.
     var static_levels: Array<ulong> = Array<ulong>();
+    # The closure level of each `WithSubject` walked, by its id: a closure
+    # deeper than that which reads its `Subject` captures the subject.
+    var subject_levels: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
+    # The captured local standing for each subject a closure reads, and the
+    # subject of each such local.
+    var subject_vars: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
+    var var_subjects: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
 
     construct(state: PassState, ctx: _ClosureContext) {
         this.state = state;
@@ -201,6 +208,20 @@ struct _ClosureLifter {
             }
         }
         return Optional<ulong>.Empty;
+    }
+
+    # The captured local standing for subject `subject`, of type `ty`, which
+    # the `WithSubject` at closure level `at` holds.
+    subject_var(subject: ulong, ty: TypeName, at: ulong, loc: Loc): ulong {
+        var known = subject_vars.try_get(subject);
+        if (known.is_value()) {
+            return known.value();
+        }
+        vars.append(_CapturedLocal($"__subject_{subject}", ty.copy(), at, loc));
+        var id = vars.count - 1;
+        subject_vars[subject] = id;
+        var_subjects[id] = subject;
+        return id;
     }
 
     # A use of local `id`: every closure between it and its declaration
@@ -410,6 +431,21 @@ struct _ClosureLifter {
             ClosureLiteral(literal) => {
                 return lift(literal);
             }
+            WithSubject(scoped) => {
+                subject_levels[scoped.id] = level;
+            }
+            Subject(node) => {
+                # A `match` expression's value read in a closure in an arm
+                # (what the arm binds, lowered to the subject's fields): the
+                # closure captures it, like a local.
+                var at = subject_levels.try_get(node.id);
+                if (at.is_value() and at.value() < level) {
+                    var id = subject_var(node.id, node.ty, at.value(), node.loc);
+                    use_var(id, node.loc);
+                    return Expression.SymbolRef(SymbolRefExpression(vars[id].name, node.ty.copy(), node.loc));
+                }
+                return e;
+            }
             StaticValue(value) => {
                 if (static_value_in_closure(value.loc)) {
                     return expr;
@@ -592,7 +628,13 @@ struct _ClosureLifter {
             var captured_field = field_def(v.name, v.ty.copy(), Optional<Expression>.Empty, used);
             captured_field.type_loc = v.loc;
             captures.append(captured_field);
-            args.append(Expression.SymbolRef(SymbolRefExpression(v.name, TypeName.auto(), loc)));
+            var subject = var_subjects.try_get(id);
+            if (subject.is_value() and v.level == level) {
+                # Made where the subject is: the value itself.
+                args.append(Expression.Subject(SubjectExpression(subject.value(), v.ty.copy(), loc)));
+            } else {
+                args.append(Expression.SymbolRef(SymbolRefExpression(v.name, TypeName.auto(), loc)));
+            }
         }
         if (frame.uses_this and ctx.this_ty.is_value()) {
             var used = frame.this_use.is_none() ? loc : frame.this_use;

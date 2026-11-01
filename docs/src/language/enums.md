@@ -254,8 +254,8 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   are numbers of different types, the value has their common type, as C's
   `? :` does (`int` and `long` give `long`), and converts from it wherever
   it goes (`0` or a `ulong` `length`, returned as an `int`). A closure in
-  an arm's value cannot use a name the arm binds; use a `match` statement
-  there.
+  an arm's value captures the names the arm binds, as it captures a
+  `const` local, and keeps them after the `match`.
 - **`value is Pattern`** is a `bool`: whether `value` holds that case
   (`d is Line`, `!(d is Text)`). It takes any one pattern. When it is the
   whole condition of an `if` or `while`, its bindings are declared in that
@@ -354,7 +354,8 @@ the next arm is tried, as if this one had not matched.
 - A guarded arm for a case an earlier unguarded arm already handles is an
   error, like any case handled twice. Two guarded arms may name the same
   case.
-- A closure in a guard cannot use a name the arm binds.
+- A closure in a guard captures the names the arm binds, as one in the
+  arm's body does.
 
 ## Current limits
 

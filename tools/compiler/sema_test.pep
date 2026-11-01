@@ -442,6 +442,9 @@ outcome(root: Path, runtime: bool): String {
 # The programs `lowers_statements` builds.
 lowering_programs(): String[] {
     return [
+        # A closure in a `match` expression's arm or in a guard captures what
+        # the arm binds (#309, #310).
+        "# expect: accepted\napply(f: () => int): int { return f(); }\nenum E { A(n: int), B }\nmain(): int {\n    E e = E.A(3);\n    var v = match (e) {\n        A(n) if (apply(() => n) == 3) => apply(() => n + 1),\n        else => 0,\n    };\n    match (e) {\n        A(n) if (apply(() => n) == 3) => { return v; }\n        else => { return 1; }\n    }\n}\n",
         # Labeled loops: `break` and `continue` naming an outer `for` or
         # `while`, a `while (x is P)` and a `while` with a `?` (#324).
         "# expect: accepted\nenum Step { Go(n: int), Stop }\nf(): Result<bool, String> { return Result<bool, String>.ok(true); }\nmain(): int {\n    var total = 0;\n    rows: for (var i in 0..3) {\n        for (var j in 0..3) {\n            if (j == 1) { continue rows; }\n            if (i == 2) { break rows; }\n            total += 1;\n        }\n    }\n    var s = Step.Go(1);\n    steps: while (s is Go(n)) {\n        while (true) { s = Step.Stop; continue steps; }\n    }\n    tries: while (f()?) {\n        for (var k in 0..2) { break tries; }\n    }\n    return total;\n}\n",
@@ -466,8 +469,6 @@ error_programs(): String[] {
         "# expect: main.pep:3:8: error: expected 'for' or 'while' after the label 'a'\nmain(): int {\n    a: if (true) {\n    }\n    return 0;\n}\n",
         # a compile-time loop has no label yet
         "# expect: main.pep:4:9: error: a compile-time loop cannot have a label yet\nmain(): int {\n    static {\n        x: for (var i in 0..2) {\n        }\n    }\n    return 0;\n}\n",
-        # a closure in a guard cannot use 'r', bound by the arm's patterns
-        "# expect: main.pep:5:29: error: a closure in a guard cannot use 'r', bound by the arm's patterns\nenum Shape { Circle(r: int), Point }\ntest(): int {\n    return match (Shape.Point) {\n        Circle(r) if (() => r)() > 1 => 1,\n        else => 2,\n    };\n}\n",
         # a destructuring assignment cannot have labels: list the places alone
         "# expect: main.pep:5:6: error: a destructuring assignment cannot have labels: list the places alone\nmain(): int {\n    var a = 1;\n    var b = 2;\n    (x: a, y: b) = (b, a);\n    return 0;\n}\n",
         # a module-scope 'static' block has no runtime values to capture

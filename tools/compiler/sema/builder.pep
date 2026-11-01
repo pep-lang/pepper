@@ -1473,15 +1473,13 @@ struct _FieldFinder {
 extend _FieldFinder with Rewriter;
 
 ## Replaces each name an arm binds with the value it reads, in a `match`
-## expression's arm value or an arm's guard; a closure there may not use one.
+## expression's arm value or an arm's guard. A closure there captures the
+## value it reads (`closures`, the subject of a `WithSubject`).
 struct _ArmBinder {
     var bindings: _Binding[];
-    var in_guard: bool;
-    var error: Diagnostic?;
 
-    construct(bindings: _Binding[], in_guard: bool) {
+    construct(bindings: _Binding[]) {
         this.bindings = bindings;
-        this.in_guard = in_guard;
     }
 
     rewrite(e: Expression): Expression {
@@ -1493,11 +1491,36 @@ struct _ArmBinder {
             }
         }
         if (e is ClosureLiteral(closure)) {
-            var hidden = Array<String>();
+            # Its body declares each name it uses and its parameters do not
+            # hide as a `const` local, around the body, so its own locals
+            # hide them as they would any other.
+            var hidden = HashSet<String>();
             for (var p in closure.parameters) {
-                hidden.append(p.name);
+                hidden.insert(p.name);
             }
-            rewrite_block(closure.body, _ClosureUseFinder(this, hidden));
+            var used = _SymbolUses();
+            rewrite_block(closure.body, used);
+            var items = Array<Statement>();
+            for (var b in bindings) {
+                if (!hidden.contains(b.name) and used.names.contains(b.name)) {
+                    items.append(
+                        _declare(
+                            VariableDef(
+                                name = b.name,
+                                ty = TypeName.auto(),
+                                default = Optional<Expression>.Value(b.value.copy()),
+                                loc = b.at,
+                                type_loc = Loc.none(),
+                                is_const = true
+                            )
+                        )
+                    );
+                }
+            }
+            if (items.count > 0) {
+                items.append(Statement.Block(closure.body));
+                closure.body = _block_of(items);
+            }
             return e;
         }
         return rewrite_children(e, this);
@@ -1506,37 +1529,21 @@ struct _ArmBinder {
 
 extend _ArmBinder with Rewriter;
 
-## Reports the first use, in a closure, of a name an arm binds.
-struct _ClosureUseFinder {
-    var binder: _ArmBinder;
-    var hidden: String[];
+## The names `SymbolRef`s use, in closure bodies too.
+struct _SymbolUses {
+    var names = HashSet<String>();
 
-    construct(binder: _ArmBinder, hidden: String[]) {
-        this.binder = binder;
-        this.hidden = hidden;
-    }
+    construct() {}
 
     rewrite(e: Expression): Expression {
         if (e is SymbolRef(node)) {
-            if (!hidden.contains(node.id) and binder.error.is_empty()) {
-                for (var b in binder.bindings) {
-                    if (b.name == node.id) {
-                        var message = binder.in_guard ?
-                            $"a closure in a guard cannot use '{b.name}', bound by the arm's patterns" :
-                            $"a closure cannot use '{b.name}', bound by an arm of a 'match' expression; use a 'match' statement";
-                        binder.error = Optional<Diagnostic>.Value(
-                            _noted(_error(message, node.loc), $"'{b.name}' is bound here", b.at)
-                        );
-                        break;
-                    }
-                }
-            }
+            names.insert(node.id);
         }
         return e;
     }
 }
 
-extend _ClosureUseFinder with Rewriter;
+extend _SymbolUses with Rewriter;
 
 ## Collects the locals that `move(x)` hands over.
 struct _MovedNames {
@@ -3006,7 +3013,7 @@ struct _Builder {
             }
             var value = expression(arm.value)?;
             var (bindings, element_names) = match_bindings(arm.patterns, subject)?;
-            value = bind_in_expression(value, bindings, false)?;
+            value = bind_in_expression(value, bindings);
             var test = arm_test(subject, patterns, site, element_names, arm.guard, bindings)?;
             tests.append(test);
             values.append(value);
@@ -3108,7 +3115,7 @@ struct _Builder {
         }
         var at = loc(guard.value().span());
         var built = expression(guard.value())?;
-        built = bind_in_expression(built, bindings, true)?;
+        built = bind_in_expression(built, bindings);
         return Built<Expression>.Ok(_binary(BinaryOp.LogicalAnd, test, built, at));
     }
 
@@ -3260,17 +3267,12 @@ struct _Builder {
     }
 
     ## Replaces each name an arm binds with the value it reads, in a `match`
-    ## expression's arm value or (`in_guard`) an arm's guard.
-    bind_in_expression(value: Expression, bindings: _Binding[], in_guard: bool): Built<Expression> {
+    ## expression's arm value or an arm's guard.
+    bind_in_expression(value: Expression, bindings: _Binding[]): Expression {
         if (bindings.count == 0) {
-            return Built<Expression>.Ok(value);
+            return value;
         }
-        var binder = _ArmBinder(bindings, in_guard);
-        var out = binder.rewrite(value);
-        if (binder.error.is_value()) {
-            return Built<Expression>.Err(binder.error.value());
-        }
-        return Built<Expression>.Ok(out);
+        return _ArmBinder(bindings).rewrite(value);
     }
 
     ## The names an arm's patterns bind, each with the value it reads and

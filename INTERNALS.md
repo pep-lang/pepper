@@ -840,7 +840,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     subject once, then the body) around a `?:` chain of `MatchArm` tests
     over `Expression.Subject` (the value, by the site's id). A name an arm
     binds is replaced in the arm's value by its `CaseValue`
-    (`bind_in_expression`; a closure there may not use one). Without an
+    (`bind_in_expression`, inside a closure too, which `lift_closures`
+    then makes capture the subject: a `Subject` read in a closure becomes
+    a `__subject_N` field, which `lower_matches` types from the closure
+    struct's fields, like a captured `__match_N`). Without an
     `else`, the chain ends in `Expression.NoMatch`. An `is` test anywhere
     else is a `WithSubject` around a single test, and may not bind.
   - A range pattern (`1..9`, `ast.Pattern.range`) carries the test
