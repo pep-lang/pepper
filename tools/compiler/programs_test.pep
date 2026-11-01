@@ -169,6 +169,21 @@ an_unclosed_brace_notes_the_brace() {
     );
 }
 
+# A derived order (`[Equatable(ordered = true)]`, #369) with a field that
+# has none is reported at the field.
+[Test]
+a_derived_order_needs_comparable_fields() {
+    var folder = TempFolder("programs_derived_order");
+    var source = folder.path.join("main.pep");
+    write_file(
+        source,
+        "struct P {\n    var x: int;\n}\n\n[Equatable(ordered = true)]\nstruct S {\n    var p: P;\n}\n\nmain(): int {\n    return S() < S() ? 0 : 1;\n}\n"
+    );
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(error.value(), "main.pep:7:9: error: no member named 'compare' in 'P'");
+}
+
 # Errors name types and operators as the program writes them, never the
 # compiler's internal names (#296).
 [Test]

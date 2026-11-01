@@ -99,15 +99,28 @@ export struct Value {}
 ##
 ## On a field of such a struct, it says whether the field takes part:
 ## `[Equatable(exclude = true)]` or `[Equatable(include = false)]` leaves it
-## out of both `==` and the hash. A field with neither takes part. On the
-## struct itself it takes no arguments.
+## out of `==`, the hash and the order. A field with neither takes part.
+##
+## On the struct, `[Equatable(ordered = true)]` also derives `compare` from
+## the same fields, in declaration order, as a tuple of them compares, and
+## makes the struct `Comparable`, so `<`, `sort()` and `Map` keys use that
+## order. Every field that takes part must be `Comparable` then.
+##
+## @example
+##     [Equatable(ordered = true)]
+##     struct Version {
+##         var major: int;
+##         var minor: int;
+##     }
 [Attribute]
 export struct Equatable {
-    ## Whether the field takes part in `==` and the hash; `false` leaves it
-    ## out.
+    ## On a field: whether it takes part in `==`, the hash and the order;
+    ## `false` leaves it out.
     bool include = true;
-    ## Whether the field is left out of `==` and the hash.
+    ## On a field: whether it is left out of `==`, the hash and the order.
     bool exclude = false;
+    ## On the struct: whether to derive `compare` too, making it `Comparable`.
+    bool ordered = false;
 }
 
 ## Makes a struct safe to share between threads: its counts step atomically
