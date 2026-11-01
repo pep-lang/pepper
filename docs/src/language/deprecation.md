@@ -137,6 +137,8 @@ that names the replacement.
 | `Optional` cases `None` and `Some(v)` (now an error: renamed) | `Empty` and `Value(v)` |
 | `Optional<T>.some(v)`, `Optional<T>.none()` | the cases `Optional<T>.Value(v)`, `Optional<T>.Empty` |
 | `Optional.is_some()`, `Optional.is_none()` | `is_value()`, `is_empty()` |
+| `Array.find(x)` returning a `long`, `-1` when not found (now an optional: comparing it with a number is an error) | `a.find(x).is_value()`, and `value()` or `value_or(...)` for the index |
+| `io.Path.parent()`, `file_name()`, `file_stem()`, `extension()` returning an empty `Path` or `String`, and `dot_index` returning `name.size`, when there is none (now optionals) | `is_value()` / `is_empty()` on the result, as in `p.parent().is_empty()` |
 | `[LinkName("symbol")]` on an extern (now an error) | `[Link(name = "symbol")]` |
 | A parameter's former name, kept by `[Rename("old", "new")]` | the new name (see [named arguments](functions.md#other-names-for-a-parameter)) |
 | `Copyable<T>` implemented as `copy(copies: Copies): T`, with `copies.copy(x)` and `copies.register(original, made)` | `copy(): T`, with `copy(x)` and `register_copy(original, made)` (see [copying](memory.md)) |

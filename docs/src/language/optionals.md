@@ -116,15 +116,11 @@ than a sentinel value:
 {{#include ../../examples/optionals-library.pep}}
 ```
 
-**Breaking change.** `Array.find` used to return a `long` that was `-1` for
-"not found", and the `Path` methods above returned an empty `Path` or
-`String` (or `name.size` for `dot_index`). Code written against the old
-API must test the optional instead: `a.find(x) >= 0` becomes
-`a.find(x).is_value()`, `p.parent().is_empty` becomes
-`p.parent().is_empty()`, and a value is read with `value()` or `value_or`.
-A comparison such as `a.find(x) == -1` still compiles but compares the
-optional object rather than an index, so search for these and rewrite them.
-`String.find` is unchanged and still returns `-1`.
+`String.find` is the exception: it returns a `long`, `-1` when the text is
+not found. Comparing an optional with a number, as in `a.find(x) == -1`, is
+an error (`cannot compare 'Optional<ulong>' with an integer`); test it with
+`is_value()` or `is_empty()` (see [Deprecation](deprecation.md#what-is-deprecated)
+for code written before these returned optionals).
 
 ## Optional or Result
 

@@ -122,17 +122,12 @@ are made often, such as [`Optional`](optionals.md) and
 [`Result`](results.md), which are both value enums.
 
 ```pepper
-[Value]
-enum Shape {
-    Circle(radius: int),
-    Rect(width: int, height: int),
-    Point,
-}
+{{#include ../../examples/enums-value.pep}}
 ```
 
-- Its cases share one storage: a value is as large as its largest case, plus
-  the tag that says which case it holds (`sizeof<Shape>()` is 12: the tag,
-  then room for `Rect`'s two `int`s, which `Circle`'s `radius` reuses).
+- A value holds the tag that says which case it holds, then the values of
+  every case, each in a field of its own: cases do not share storage. So
+  `sizeof<Shape>()` is 16, the tag and `radius`, `width` and `height`.
 - A value enum is never null. A slot that is not given a value holds the
   first case, with every value it carries zero, `false`, or null: an unset
   `Shape` is `Circle(0)`.

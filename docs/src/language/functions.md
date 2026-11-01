@@ -46,7 +46,7 @@ consistently. The first form is the one used throughout this book.
 - **Calls must match the declaration.** Passing the wrong number of arguments
   is a compile error:
 
-  ```
+  ```text
   main.pep:3:12: error: too many arguments to 'add': expected 2, have 3
       3 |     return add(1, 2, 3);
         |            ^~~
