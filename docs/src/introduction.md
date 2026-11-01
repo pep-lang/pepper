@@ -49,7 +49,7 @@ to WebAssembly for WASI (`--target wasm32-wasip1`, see
 libraries that iOS and Android apps call (see
 [iOS and Android](language/mobile.md)).
 Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
-and macOS (arm64 and x64), and installs with one command: see
+and macOS (arm64), and installs with one command: see
 [Installing Pepper](tools/install.md).
 
 ## Current status
@@ -184,8 +184,8 @@ chapter shows a feature, the example was compiled and run to check it.
 
 ## How this book is organized
 
-- **Tutorial.** [Getting started](tutorial/getting-started.md) builds the
-  compiler and runs your first program. [A tour of Pepper](tutorial/tour.md)
+- **Tutorial.** [Getting started](tutorial/getting-started.md) installs
+  Pepper and builds and runs your first program. [A tour of Pepper](tutorial/tour.md)
   then walks through the main features by building a small word-counting
   program.
 - **Language guide.** One chapter per part of the language, in an order to
@@ -198,14 +198,23 @@ chapter shows a feature, the example was compiled and run to check it.
   topic you need.
 - **Standard library guide.** A chapter for each area of the library, from
   [files](language/files.md) to [HTTP](language/http.md).
-- **Tools.** [The pepper command](tools/pepper.md),
+- **Tools.** [Installing Pepper](tools/install.md),
+  [the pepper command](tools/pepper.md), toolchains with
+  [pep-install](tools/pep-install.md), the compiler
+  [pep-build](tools/pep-build.md), [projects](tools/projects.md) and their
+  packages with [pep-package](tools/pep-package.md),
   [pep-new](tools/pep-new.md), [pep-run](tools/pep-run.md),
   [pep-fmt](tools/pep-fmt.md), [pep-profile](tools/pep-profile.md),
-  [pep-test](tools/pep-test.md) and [debugging](tools/debugging.md).
+  [pep-test](tools/pep-test.md), the language server
+  [pep-lsp](tools/pep-lsp.md), [pep-doc](tools/pep-doc.md) and
+  [debugging](tools/debugging.md).
 - **Standard library reference.** Every type and function in the runtime,
   generated from the runtime's own documentation comments. Start at the
   [overview](reference/README.md).
-- **Contributing.** [Building this documentation](contributing/docs.md).
+- **Contributing.** [Building Pepper from source](contributing/building.md),
+  [setting up LLVM](contributing/setup.md),
+  [building this documentation](contributing/docs.md) and
+  [testing the runtime and the compiler](contributing/tests.md).
 
 Every complete program in this book lives in the repository's
 `docs/examples/` folder and is compiled and run by the test suite, so what
