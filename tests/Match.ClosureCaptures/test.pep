@@ -7,6 +7,10 @@ apply(f: () => int): int {
     return f();
 }
 
+apply1(f: (int) => int): int {
+    return f(10);
+}
+
 [Value]
 enum Shape {
     Circle(radius: int),
@@ -55,5 +59,20 @@ main(): int {
         Nothing => 0,
     };
     assert(nested == 6, "a closure nested in a closure");
+
+    # A closure's own parameter or local hides what the arm binds, in its
+    # scope only.
+    var hidden = match (s) {
+        Rect(w, _) => apply(() => {
+            var t = 0;
+            if (w > 0) {
+                var w = 5;
+                t = w;
+            }
+            return t + w + apply1((w) => w);
+        }),
+        else => 0,
+    };
+    assert(hidden == 17, "a closure's own names hide the arm's");
     return 0;
 }

@@ -1227,8 +1227,7 @@ _declared_names(function: FunctionDef): HashSet<String> {
     return names;
 }
 
-## Adds each local `block` declares, in nested blocks too, to `names`.
-export _declared_in(block: Block, names: HashSet<String>) {
+_declared_in(block: Block, names: HashSet<String>) {
     for (var statement in block.items) {
         match (statement) {
             Declaration(declaration) => {

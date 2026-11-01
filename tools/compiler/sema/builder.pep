@@ -75,7 +75,6 @@ import [
     WhileStaticItem,
     WithSubject
 ] from "model";
-import [_declared_in] from "named_arguments";
 import [AUTO, POINTER, TUPLE] from "type_name";
 import [Rewriter, rewrite_block, rewrite_children, rewrite_expression, rewrite_statement] from "walk";
 
@@ -1492,20 +1491,36 @@ struct _ArmBinder {
             }
         }
         if (e is ClosureLiteral(closure)) {
-            # Its body too, but not a name its parameters or its own locals
-            # hide.
+            # Its body declares each name it uses and its parameters do not
+            # hide as a `const` local, around the body, so its own locals
+            # hide them as they would any other.
             var hidden = HashSet<String>();
             for (var p in closure.parameters) {
                 hidden.insert(p.name);
             }
-            _declared_in(closure.body, hidden);
-            var visible = Array<_Binding>();
+            var used = _SymbolUses();
+            rewrite_block(closure.body, used);
+            var items = Array<Statement>();
             for (var b in bindings) {
-                if (!hidden.contains(b.name)) {
-                    visible.append(b);
+                if (!hidden.contains(b.name) and used.names.contains(b.name)) {
+                    items.append(
+                        _declare(
+                            VariableDef(
+                                name = b.name,
+                                ty = TypeName.auto(),
+                                default = Optional<Expression>.Value(b.value.copy()),
+                                loc = b.at,
+                                type_loc = Loc.none(),
+                                is_const = true
+                            )
+                        )
+                    );
                 }
             }
-            rewrite_block(closure.body, _ArmBinder(visible));
+            if (items.count > 0) {
+                items.append(Statement.Block(closure.body));
+                closure.body = _block_of(items);
+            }
             return e;
         }
         return rewrite_children(e, this);
@@ -1513,6 +1528,22 @@ struct _ArmBinder {
 }
 
 extend _ArmBinder with Rewriter;
+
+## The names `SymbolRef`s use, in closure bodies too.
+struct _SymbolUses {
+    var names = HashSet<String>();
+
+    construct() {}
+
+    rewrite(e: Expression): Expression {
+        if (e is SymbolRef(node)) {
+            names.insert(node.id);
+        }
+        return e;
+    }
+}
+
+extend _SymbolUses with Rewriter;
 
 ## Collects the locals that `move(x)` hands over.
 struct _MovedNames {
