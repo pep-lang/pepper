@@ -42,7 +42,7 @@ export [StaticExpansion, StaticRecording, substitute_names] from "static_source"
 export [attribute_arguments, attribute_name] from "attributes";
 export [expression_loc] from "common";
 export [STATIC_REFCOUNT] from "synthesize";
-export [method_is_static] from "value_types";
+export [COPY_TRAIT_METHOD, method_is_static] from "value_types";
 ## What the language server asks of a checked model.
 export [field_type, local_type, member_at, member_loc, FoundMember] from "member_lookup";
 export [other_names, OtherName] from "named_arguments";

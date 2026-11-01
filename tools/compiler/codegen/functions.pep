@@ -73,6 +73,17 @@ is_abstract(st: StructDef): bool {
     return (st.ty.is_generic() and st.name == st.ty.name) or st.ty.is_tuple();
 }
 
+## Whether `method` of `st` gets code: every method of a concrete struct,
+## and of a tuple only those an extension gave it (`compare`, `<` and the
+## rest of `Comparable`, #367): a tuple is an LLVM value whose fields,
+## counts and copies codegen handles itself.
+has_code(st: StructDef, method: FunctionDef): bool {
+    if (!st.ty.is_tuple()) {
+        return !is_abstract(st);
+    }
+    return !method.name.starts_with("__") and method.name != sema.COPY_TRAIT_METHOD;
+}
+
 ## Whether a struct's `__release` is the standard one (`synthesize`'s),
 ## which codegen may generate itself: its counts may still skip immortal
 ## objects (`immortal_cases`).
@@ -166,7 +177,7 @@ extend Generator {
     }
 
     instantiate_methods_unlocated(st: StructDef): Result<void> {
-        if (is_abstract(st)) {
+        if (is_abstract(st) and !st.ty.is_tuple()) {
             return Result<void>.ok();
         }
         var struct_name = st.name;
@@ -176,6 +187,9 @@ extend Generator {
         var static_names = HashSet<String>();
         bool lazy = ast.has_attribute(st.attributes, sema.LAZY_ATTRIBUTE);
         for (var method in st.method_members) {
+            if (!has_code(st, method)) {
+                continue;
+            }
             var param_types = Array<llvm.Type>();
             if (!method.is_static) {
                 # `this` is a pointer; a value struct's is the address of its
@@ -257,6 +271,9 @@ extend Generator {
             method_params[method.name] = params;
         }
         var desc = structs.try_get(st.name);
+        if (st.ty.is_tuple()) {
+            tuple_method_returns[st.name] = method_returns;
+        }
         if (desc.is_value()) {
             desc.value().methods = methods;
             desc.value().static_methods = static_names;
@@ -514,7 +531,7 @@ extend Generator {
     }
 
     codegen_struct_unlocated(st: StructDef): Result<void> {
-        if (is_abstract(st)) {
+        if (is_abstract(st) and !st.ty.is_tuple()) {
             return Result<void>.ok();
         }
         debug_struct_loc = st.loc;
@@ -524,10 +541,15 @@ extend Generator {
     }
 
     codegen_struct_members(st: StructDef): Result<void> {
-        for (var ctor in patched_ctors(st)) {
-            codegen_function(ctor)?;
+        if (!st.ty.is_tuple()) {
+            for (var ctor in patched_ctors(st)) {
+                codegen_function(ctor)?;
+            }
         }
         for (var method in st.method_members) {
+            if (!has_code(st, method)) {
+                continue;
+            }
             var name = $"{st.name}.{method.name}";
             # One declared only needs no renamed copy of its body.
             if (declared_only(method, name)) {
