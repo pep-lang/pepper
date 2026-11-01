@@ -1382,6 +1382,19 @@ assert([1, 2, 3].compare([1, 3]) < 0, "2 sorts before 3");
 assert([1, 2].compare([1, 2, 0]) < 0, "the shorter first");
 ```
 
+## extend Array<T>
+
+```pepper
+extend Array<T: Comparable> with Comparable; ## An `Iterator<T>` over the elements of an Array, in index order; returned by ## `Array.iterate()` and driven by `for (var x in array)`. ## ## Holds a reference to the Array, so iterating a temporary keeps it alive for ## the whole loop. The iterator is fail-fast: if the Array is modified after ## the iterator was created (see `Array` for which operations count), its next ## `next()` or `current()` panics instead of skipping or repeating elements ## (an iterator over an Array that was empty when it was made just ends). ## ## @typeParam T the element type of the source Array ## @example ## var it = a.iterate(); ## while (it.next())
+```
+
+An Array of `Comparable` elements is `Comparable` itself, in the
+lexicographic order of `compare`: `<` works between arrays, and `sort()`
+on an array of arrays.
+
+**Type parameters**
+- `T` — the element type, `Comparable`
+
 ## ArrayIterator
 
 ```pepper
@@ -1875,6 +1888,18 @@ when one slice is the start of the other, the shorter first.
 var a = [1, 2, 3];
 assert(a.slice(0, 2).compare(a.slice(1, 3)) < 0, "[1, 2] before [2, 3]");
 ```
+
+## extend ArrayView<T>
+
+```pepper
+extend ArrayView<T: Comparable> with Comparable; ## An `Iterator<T>` over the elements of an `ArrayView`, in order; returned ## by `ArrayView.iterate()` and driven by `for (var x in slice)`. ## ## @typeParam T the element type of the slice ## @see ArrayView.iterate [Value] export struct ArrayViewIterator<T>
+```
+
+An ArrayView of `Comparable` elements is `Comparable` itself, in the
+lexicographic order of `compare`, so `<` works between views.
+
+**Type parameters**
+- `T` — the element type, `Comparable`
 
 ## ArrayViewIterator
 

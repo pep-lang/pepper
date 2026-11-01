@@ -396,6 +396,21 @@ array_of_strings_compares_by_value() {
 }
 
 [Test]
+arrays_of_comparable_elements_are_comparable() {
+    expect_true([1, 2] < [1, 3]);
+    expect_true([1, 2] <= [1, 2]);
+    expect_true([2] > [1, 9]);
+    expect_true([1] < [1, 0]);
+    expect_true(["a", "b"] >= ["a"]);
+    var rows = [[2, 1], [1, 5], [1], Array<int>()];
+    rows.sort();
+    expect_true(rows == [Array<int>(), [1], [1, 5], [2, 1]]);
+    var numbers = [1, 2, 3];
+    expect_true(numbers.slice(0, 2) < numbers.slice(1, 3));
+    expect_true(numbers.slice(0, 2) < numbers.slice(0, 3));
+}
+
+[Test]
 sort_is_ordered_and_stable() {
     var names = ["pear", "apple", "fig"];
     names.sort((a, b) => a.compare(b));

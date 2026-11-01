@@ -46,6 +46,10 @@ main(): int {
     scores.sort_unstable((x, y) => y - x);
     assert(scores == [95, 77, 63, 40, 12, 8], "descending");
     assert([1, 2, 3].compare([1, 3]) < 0, "lexicographic");
+    assert([1, 2, 3] < [1, 3], "arrays of Comparable elements are Comparable");
+    var rows = [[2, 1], [1, 5], [1]];
+    rows.sort();
+    assert(rows == [[1], [1, 5], [2, 1]], "an array of arrays sorts");
 
     # A slice views part of an array without copying it.
     var numbers = [1, 2, 3, 4, 5];
