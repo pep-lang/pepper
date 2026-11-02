@@ -1274,6 +1274,13 @@ language side.
   properties of a struct, in source order; `fields<T>()` every field but
   synthesized ones, only in `T`'s file. A member's attributes are its
   field's, or its getter's for a property.
+  `methods<T>()` and `constructors<T>()` (`_Expander.methods`, #392) are
+  `_CtFunction`s too, with `owner`, `is_static` and `is_constructor` set: a
+  struct's methods named by a letter, in source order (no `__` members,
+  accessors, operators or `_` names), or its constructors. Their `call`
+  emits `args[0].m(rest)` for an instance method, `S.m(args)` for a static
+  one (a `MethodCall` on the struct's name, as written), and `S(args)` for
+  a constructor.
 - **Attributes.** A struct marked `[Attribute]` is an attribute.
   `check_attributes` (first among the passes) reports an attribute that
   is neither one the compiler knows (`_is_built_in_name`) nor an `[Attribute]` struct

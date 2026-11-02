@@ -273,6 +273,8 @@ for the members, cases and functions they return.
 | `reflect.fields<T>()` | every field of a struct, private ones and a property's storage included; only in the file that declares `T` |
 | `reflect.cases<E>()` | an enum's cases, in order |
 | `reflect.functions_with<A>()` | every function in the program that carries attribute `A` |
+| `reflect.methods<T>()` | the public methods of a struct, instance and static, in declaration order |
+| `reflect.constructors<T>()` | the constructors of a struct, in declaration order |
 | `reflect.is_struct<T>()`, `is_enum<T>()`, `is_trait<T>()` | what kind of type `T` is |
 | `reflect.is_reference<T>()` | whether `T` is a reference type, whose slots can be null: a struct or an enum whose cases carry values, unless it is `[Value]` |
 | `reflect.is_same<A, B>()` | whether `A` and `B` are the same type (`int` and `i32` are) |
@@ -316,6 +318,14 @@ A **case** (from `cases`) has:
 
 A **function** (from `functions_with`) has `name`, `has_attribute<A>()`,
 `attribute<A>()`, and `call(arguments...)`, which emits a direct call.
+
+A **method** (from `methods` or `constructors`) has the same members and
+`is_static`. Its `call` emits a call of the method: for an instance method
+the first argument is the value it is called on (`m.call(p, 2)` is
+`p.scaled(2)`), and for a static method or a constructor every argument is
+the call's. A constructor's `name` is its struct's. `methods` leaves out
+methods whose names start with `_`, operators, and the accessors of
+properties, which `properties` lists.
 
 ```pepper
 {{#include ../../examples/reflection-types.pep}}
@@ -371,10 +381,13 @@ methods, constructors, parameters and module-scope variables.
 {{#include ../../examples/reflection-functions.pep}}
 ```
 
+```pepper
+{{#include ../../examples/reflection-methods.pep}}
+```
+
 ## Not supported yet
 
 - Calling functions other than the `reflect` functions at compile time.
-- Reflecting methods and constructors (`reflect.methods<T>()`).
 - Limiting where an attribute may be used (`[AttributeTargets(...)]`).
 - Tracing the blocks the compiler runs.
 - Type information at run time.

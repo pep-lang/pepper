@@ -90,6 +90,46 @@ Every free function in the program that carries attribute `A`.
 **Returns**
 - one function per function marked `[A]`
 
+## reflect.methods
+
+```pepper
+reflect.methods<T>(): List<Method>
+```
+
+The methods of struct `T` that a program may call, instance and static,
+in declaration order: not the compiler's own members, the accessors of
+properties, operators or methods whose names start with `_`.
+
+**Type parameters**
+- `T` — a struct
+
+**Returns**
+- one method per method of `T`
+
+**Example**
+```pepper
+static {
+    for (var m in reflect.methods<Point>()) {
+        reflect.print(m.name);
+    }
+}
+```
+
+## reflect.constructors
+
+```pepper
+reflect.constructors<T>(): List<Method>
+```
+
+The constructors of struct `T`, in declaration order. Each one's `name` is
+`T`'s, and its `call` makes a `T`.
+
+**Type parameters**
+- `T` — a struct
+
+**Returns**
+- one method per constructor of `T`
+
 ## reflect.is_struct
 
 ```pepper
@@ -594,6 +634,84 @@ Emits a direct call of the function with `arguments`.
 
 **Type parameters**
 - `R` — what the function returns
+- `TArguments` — the types of the arguments
+
+**Parameters**
+- `arguments` — the call's arguments, one argument each
+
+**Returns**
+- what the call returns
+
+## reflect.Method
+
+```pepper
+struct reflect.Method
+```
+
+A method or constructor of a struct, from `methods` or `constructors`. A
+compile-time value: no program can name its type.
+
+### Fields
+
+#### name
+
+```pepper
+const name: String
+```
+
+Its name; a constructor's is its struct's.
+
+#### is_static
+
+```pepper
+const is_static: bool
+```
+
+Whether it is a static method, called on the struct rather than a value.
+
+### Methods
+
+#### has_attribute
+
+```pepper
+has_attribute<A>(): bool
+```
+
+Whether it carries attribute `A`.
+
+**Type parameters**
+- `A` — the attribute struct
+
+**Returns**
+- whether it carries `A`
+
+#### attribute
+
+```pepper
+attribute<A>(): A
+```
+
+The value of attribute `A` on it; an error when it does not carry `A`.
+
+**Type parameters**
+- `A` — the attribute struct
+
+**Returns**
+- the attribute's value
+
+#### call
+
+```pepper
+call<R, TArguments>(arguments: TArguments): R
+```
+
+Emits a direct call with `arguments`: for an instance method the
+first argument is the value it is called on (`m.call<int, (Point,
+int)>(p, 2)` is `p.scaled(2)`), for a static method or a constructor
+every argument is the call's.
+
+**Type parameters**
+- `R` — what the call returns
 - `TArguments` — the types of the arguments
 
 **Parameters**
