@@ -174,3 +174,28 @@ export enum Optional<T> {
         return fallback;
     }
 }
+
+## Optionals of `Comparable` values are `Comparable`: Empty sorts before
+## every value, as in Rust and Swift, and two values by their own order, so
+## `Array<int?>.sort()` puts the Empty ones first.
+##
+## @typeParam T the value type, `Comparable`
+export extend Optional<T: Comparable> with Comparable {
+    ## Returns the order of this optional and `other`: Empty before any
+    ## value, and two values by `compare`.
+    ##
+    ## @param other the optional to compare with
+    ## @returns a negative number, zero or a positive number as this optional
+    ##   sorts before, with or after `other`
+    ## @example
+    ##     assert(Optional<int>.Empty.compare(Optional<int>.Value(0)) < 0, "Empty first");
+    compare(other: Optional<T>): int {
+        if (this is Value(mine)) {
+            if (other is Value(theirs)) {
+                return mine.compare(theirs);
+            }
+            return 1;
+        }
+        return other is Value ? -1 : 0;
+    }
+}
