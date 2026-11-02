@@ -204,12 +204,16 @@ and a `Map` keys on them:
 {{#include ../../examples/ordering-tuples.pep}}
 ```
 
+An `Optional` of a `Comparable` type is `Comparable` too: `Empty` sorts
+before every value, as in Rust and Swift, and two values by their own
+order, so `Array<int?>.sort()` puts the empty ones first:
+
+```pepper
+{{#include ../../examples/ordering-optional.pep}}
+```
+
 `float` and `double` compare in a total order: NaN sorts after every number
 and with every other NaN, and `-0.0` sorts with `0.0`. Their `<`, `<=`, `>`
 and `>=` keep IEEE behavior, false whenever a NaN takes part, while
 `compare`, `clamp` and `Map` keys follow the total order, so a NaN key
 cannot break a map.
-
-### Not yet
-
-- `Optional` is not `Comparable`.

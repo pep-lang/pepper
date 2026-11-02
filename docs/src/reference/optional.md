@@ -233,3 +233,38 @@ is used.
 ```pepper
 var n = Optional<int>.Empty.value_or(-1);   # -1
 ```
+
+## extend Optional<T>
+
+```pepper
+extend Optional<T: Comparable> with Comparable
+```
+
+Optionals of `Comparable` values are `Comparable`: Empty sorts before
+every value, as in Rust and Swift, and two values by their own order, so
+`Array<int?>.sort()` puts the Empty ones first.
+
+**Type parameters**
+- `T` — the value type, `Comparable`
+
+### Methods
+
+#### compare
+
+```pepper
+compare(other: Optional<T>): int
+```
+
+Returns the order of this optional and `other`: Empty before any
+value, and two values by `compare`.
+
+**Parameters**
+- `other` — the optional to compare with
+
+**Returns**
+- a negative number, zero or a positive number as this optional sorts before, with or after `other`
+
+**Example**
+```pepper
+assert(Optional<int>.Empty.compare(Optional<int>.Value(0)) < 0, "Empty first");
+```
