@@ -99,3 +99,10 @@ the_edges_do_not_panic() {
     a.swap(0, a.count - 1);
     expect_equal(a[0], 3);
 }
+
+[Test]
+[ShouldPanic("Array.wipe: the elements hold references")]
+wiping_strings_panics() {
+    var a = ["key"];
+    a.wipe();
+}

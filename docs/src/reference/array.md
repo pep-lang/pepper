@@ -852,6 +852,28 @@ var a = [1, 2, 3];
 a.fill(0);   # [0, 0, 0]
 ```
 
+#### wipe
+
+```pepper
+wipe()
+```
+
+Overwrites every byte of the array's storage, spare capacity included,
+with zero, in a way the optimizer keeps even when the array is freed
+right after, so a secret such as a key does not stay in memory.
+
+Runs in O(capacity). The count is unchanged; each element reads as
+zero afterwards. Invalidates running iterators.
+
+**Panics**
+- if `T` holds references (a struct, `String` or array)
+
+**Example**
+```pepper
+var key = "secret".bytes();
+key.wipe();   # every byte is now 0
+```
+
 #### retain
 
 ```pepper

@@ -115,6 +115,7 @@ Pepper, since libcrypto has no BLAKE3.
   official BLAKE3, which uses SIMD and threads.
 - The hashes have no secret-dependent branches or table lookups, but they
   have not been audited for timing side channels, which matter only when
-  hashing secrets. Copies of an HMAC key stay in memory until the hasher
-  is freed; nothing wipes them.
+  hashing secrets. An HMAC hasher wipes its copies of the key, and SHA-256
+  and SHA-1 wipe their state, when they are freed; `Array.wipe` does the
+  same for a key you hold. BLAKE3 does not wipe its state.
 - HMAC works over SHA-256 and SHA-1; there is no SHA-512 to put under it.

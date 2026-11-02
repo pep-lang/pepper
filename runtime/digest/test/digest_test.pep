@@ -556,3 +556,14 @@ from_hex_reverses_to_hex() {
     expect_true(digest.from_hex("abc").is_err());
     expect_true(digest.from_hex("zz").is_err());
 }
+
+[Test]
+hmac_leaves_the_callers_key_intact() {
+    # Hmac wipes its own copies of the key, never the caller's array.
+    var short_key = repeated(0x0b, 20);
+    var long_key = repeated(0xaa, 131);
+    digest.hmac_sha256(short_key, "message".bytes());
+    digest.hmac_sha1(long_key, "message".bytes());
+    expect_true(short_key == repeated(0x0b, 20));
+    expect_true(long_key == repeated(0xaa, 131));
+}
