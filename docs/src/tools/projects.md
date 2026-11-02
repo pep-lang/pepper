@@ -823,6 +823,51 @@ pep.toml:2:19: error: workspace member 'app' is listed twice
 - `optional`, `features`, `default-features` or `workspace` in
   `[workspace.dependencies]`.
 
+## `[build-options]`
+
+A package declares the [build options](../language/build-options.md) its
+code reads, so a misspelled one is an error rather than a silent `false`.
+Each key is an option's name, with its `type` (`"int"`, `"bool"` or
+`"string"`), an optional `default` of that type, and an optional
+`description`:
+
+```toml
+[build-options]
+LOG_LEVEL = { type = "int", default = 1, description = "how much to log: 0 to 3" }
+FAST_MATH = { type = "bool", default = false }
+REGION = { type = "string", default = "eu" }
+```
+
+```pepper
+[Target(BuildOption(LOG_LEVEL) >= 2)]
+trace(message: String) {
+    print(message);
+}
+
+[Target(BuildOption(LOG_LEVEL) < 2)]
+trace(message: String) {}
+```
+
+- **Defaults.** An option `-D` leaves out has its `default`, in
+  `[Target(...)]` conditions, in `reflect.build_option` and
+  `reflect.has_build_option`, in every package of the build, and in the
+  language server. `pepper build -D LOG_LEVEL=3` overrides it.
+- **Types.** A `-D` value of the wrong type is an error
+  (`build option 'LOG_LEVEL' is 'high', which is not an integer, as
+  package 'app' declares it in '[build-options]'`). A `bool` takes `true`,
+  `false`, `1`, `0`, `on`, `off`, `yes` or `no`; a bare `-D FAST_MATH` is
+  `1`.
+- **Names.** Once any package of the build declares options, a
+  `BuildOption(NAME)` that names none of them, and no defined option
+  either, is an error at the name. When the project's own package
+  declares options, so is a `-D` that names none of them (`'-D LOG_LEVL':
+  package 'app' declares no build option 'LOG_LEVL' in
+  '[build-options]'`); the options its features define are allowed.
+- Two packages may declare one option only with the same type.
+- `pepper package info` lists a package's options. The table needs
+  toolchain 0.13.0, so a package with one sets `minimum_toolchain` to it
+  or later.
+
 ## `[overrides]`
 
 To try a fix in a package deep in the graph, or to use a fork until the

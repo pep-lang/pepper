@@ -66,6 +66,13 @@ export struct Target {
     ## The build options by name, each with its value as written (`"1"`
     ## for a bare `-D NAME`).
     var build_options: HashMap<String, String> = HashMap<String, String>();
+    ## The names `-D` defined, which a project that declares
+    ## `[build-options]` must declare (#373).
+    var command_line_options: HashSet<String> = HashSet<String>();
+    ## The build options the packages' `[build-options]` declare: when any
+    ## is declared, a `BuildOption(NAME)` must name one of them or a
+    ## defined option.
+    var declared_options: HashSet<String> = HashSet<String>();
     ## The `[features]` of the project's package that `--features` turns on.
     var features: String[] = Array<String>();
     ## Whether the project's package's `default` feature is on: false
@@ -576,6 +583,14 @@ struct _Evaluator {
             _fail_at($"invalid build option name '{name}'; {BUILD_OPTION_NAME_RULE}", argument.span());
             return Optional<String>.Empty;
         }
+        # With `[build-options]`, an option the packages do not declare is a
+        # typo, unless something defined it (a feature, a build script).
+        if (!target.declared_options.is_empty
+            and !target.declared_options.contains(name)
+            and !target.build_options.contains(name)) {
+            _fail_at($"build option '{name}' is not declared in any package's '[build-options]'", argument.span());
+            return Optional<String>.Empty;
+        }
         return Optional<String>.Value(name);
     }
 
@@ -685,7 +700,7 @@ struct _Evaluator {
                 ordering = d < f ? -1 : (d > f ? 1 : 0);
             }
             Bool(b) => {
-                var parsed = _parse_bool(text);
+                var parsed = parse_bool_option(text);
                 if (!parsed.is_value()) {
                     return _fail_at($"build option '{name.value()}' is '{text}', which is not 'true' or 'false'", span);
                 }
@@ -1208,7 +1223,13 @@ _parse_integer(text: String): long? {
 
 # A build option's value as a bool: `true`/`false`, `1`/`0`, `on`/`off` or
 # `yes`/`no`, in any case.
-_parse_bool(text: String): bool? {
+## Returns `text` as a boolean build option's value: `true`, `1`, `on` or
+## `yes` (true), `false`, `0`, `off` or `no` (false), in any case; none for
+## anything else.
+##
+## @param text the value as `-D` wrote it
+## @returns the boolean, or none
+export parse_bool_option(text: String): bool? {
     match (text.trim().lower()) {
         "true", "1", "on", "yes" => {
             return Optional<bool>.Value(true);

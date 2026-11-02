@@ -403,6 +403,7 @@ _main(args: String[]): int {
             );
         }
         setup.target.build_options[name] = value;
+        setup.target.command_line_options.insert(name);
     }
     if (entry_function.is_set) {
         setup.target.build_options[link.ENTRY_BUILD_OPTION] = entry_function.value();

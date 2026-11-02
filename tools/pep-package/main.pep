@@ -606,6 +606,51 @@ search_index(words: Array<String>, offline: bool): int {
     return 0;
 }
 
+# The `[build-options]` a package's pep.toml declares, one line each: the
+# name, its type and default, and what it does (#373).
+_build_options_text(root: toml.TomlValue): String {
+    var table = root.lookup("build-options");
+    if (!table.is_value() or !table.value().as_table().is_value()) {
+        return "";
+    }
+    var text = "build options:\n";
+    for (var (name, entry) in table.value().as_table().value()) {
+        var kind = "";
+        var described = "";
+        var fallback = "";
+        var fields = entry.as_table();
+        if (fields.is_value()) {
+            for (var (field, value) in fields.value()) {
+                var shown = "";
+                match (value) {
+                    String(t) => {
+                        shown = t;
+                    }
+                    Integer(n) => {
+                        shown = $"{n}";
+                    }
+                    Boolean(b) => {
+                        shown = b ? "true" : "false";
+                    }
+                    else => {}
+                }
+                if (field == "type") {
+                    kind = shown;
+                } else if (field == "description") {
+                    described = shown;
+                } else if (field == "default") {
+                    fallback = shown;
+                }
+            }
+        }
+        text += $"  {name}: {kind}"
+            + (fallback.is_empty ? "" : $", default {fallback}")
+            + (described.is_empty ? "" : $" — {described}")
+            + "\n";
+    }
+    return text;
+}
+
 # `info`: the package `spec` names, by the name the index lists it by or
 # as `[host:]owner/name`: what the index says of it, its versions, newest
 # first, and what the pep.toml of its newest release declares.
@@ -710,6 +755,7 @@ show_info(spec: String, offline: bool): int {
     ]) {
         text += value.is_empty ? "" : $"{label}: {value}\n";
     }
+    text += _build_options_text(root);
     File.stdout().write_all(text);
     return 0;
 }
