@@ -329,8 +329,11 @@ no atomic counts.</li>
 <li>A field whose type is the struct itself, directly or through other value
 structs: the value would be infinitely large. Hold it through a reference
 struct or an <code>Array</code> instead.</li>
-<li>A parameter or result of an <a href="c-interop.html"><code>extern</code></a> function: pass a
-pointer to C instead.</li>
+<li>A parameter or result of an <a href="c-interop.html"><code>extern</code></a> function, or of an
+<code>[Export]</code>, when C cannot hold one of its fields: C takes a value struct
+by value only when each field is a number, <code>bool</code>, enum, pointer, C
+function pointer or such a value struct (see
+<a href="c-interop.html#passing-structs-by-value">Passing structs by value</a>).</li>
 </ul>
 <h2 id="value-structs-as-trait-values"><a class="header" href="#value-structs-as-trait-values">Value structs as trait values</a></h2>
 <p>A value struct can declare <a href="traits-and-extensions.html">traits</a> like any

@@ -7570,8 +7570,11 @@ no atomic counts.</li>
 <li>A field whose type is the struct itself, directly or through other value
 structs: the value would be infinitely large. Hold it through a reference
 struct or an <code>Array</code> instead.</li>
-<li>A parameter or result of an <a href="language/c-interop.html"><code>extern</code></a> function: pass a
-pointer to C instead.</li>
+<li>A parameter or result of an <a href="language/c-interop.html"><code>extern</code></a> function, or of an
+<code>[Export]</code>, when C cannot hold one of its fields: C takes a value struct
+by value only when each field is a number, <code>bool</code>, enum, pointer, C
+function pointer or such a value struct (see
+<a href="language/c-interop.html#passing-structs-by-value">Passing structs by value</a>).</li>
 </ul>
 <h2 id="value-structs-as-trait-values"><a class="header" href="#value-structs-as-trait-values">Value structs as trait values</a></h2>
 <p>A value struct can declare <a href="language/traits-and-extensions.html">traits</a> like any
@@ -17285,6 +17288,51 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="passing-structs-by-value"><a class="header" href="#passing-structs-by-value">Passing structs by value</a></h2>
+<p>A C function that takes or returns a struct by value, such as <code>div</code>
+(<code>div_t</code>), <code>struct timespec</code> or <code>SDL_Rect</code>, takes a
+<a href="language/value-structs.html">value struct</a> of the same fields in the same order:</p>
+<pre><code class="language-pepper"># Calling C functions that return a struct by value: the C library's `div`
+# and `lldiv` give a quotient and its remainder together, in a struct.
+
+[Value]
+struct Division {
+    var quot: int;
+    var rem: int;
+}
+
+[Value]
+struct LongDivision {
+    var quot: i64;
+    var rem: i64;
+}
+
+extern Division div(int numerator, int denominator);
+extern LongDivision lldiv(i64 numerator, i64 denominator);
+
+main(): int {
+    var small = div(17, 5);
+    assert(small.quot == 3 &amp;&amp; small.rem == 2, "17 / 5 is 3, remainder 2");
+    var large = lldiv(10000000007, 10);
+    assert(large.quot == 1000000000 &amp;&amp; large.rem == 7, "C's long long division");
+    return 0;
+}
+</code></pre>
+<p>The struct is laid out as C lays it out: each field at the next offset its
+alignment allows, and the whole padded to its largest alignment. C must be
+able to hold each field: a number, <code>bool</code>, an enum whose cases carry
+nothing, a pointer, a C function pointer (<code>extern (P...) =&gt; R</code>), or another
+such value struct. A field of any other type (a <code>String</code>, an <code>Array</code>, a
+reference struct) is an error at the parameter or result:</p>
+<pre><code class="language-text">main.pep:11:14: error: value struct 'S' cannot be passed to C by value: field 'b' of 'S' has type 'Box', which C cannot hold
+</code></pre>
+<p>The compiler passes the struct as the platform's C calling convention
+does, in registers or in memory: x86-64 System V (Linux and macOS), x86-64
+Windows, AArch64 (Linux, macOS, Windows, Android and iOS) and wasm32. A
+struct cannot be passed to a variadic function (<code>...</code>), and a reference
+struct still passes only as a pointer. A struct that C passes by pointer
+(<code>const struct stat*</code>) is a <code>__ptr&lt;T&gt;</code> to the value struct, as for any
+other pointer.</p>
 <h2 id="variadic-functions"><a class="header" href="#variadic-functions">Variadic functions</a></h2>
 <p>A C function with a variable argument list, such as <code>printf</code> or <code>snprintf</code>,
 ends its prototype with <code>...</code> after at least one named parameter:</p>
@@ -17906,7 +17954,8 @@ declaration visible to other Pepper files (see
 <tr><td><code>extern (P...) =&gt; R</code></td><td>a C function pointer, <code>R (*name)(P...)</code></td></tr>
 <tr><td>an enum whose cases carry nothing</td><td>the integer it is stored as: <code>int32_t</code>, or its representation's (<code>enum Mode: u8</code> is <code>uint8_t</code>)</td></tr>
 <tr><td><code>String</code></td><td>a parameter: <code>const char* name, size_t name_size</code>; a result: <code>char*</code> (see <a href="language/c-interop.html#strings">Strings</a>)</td></tr>
-<tr><td>a struct</td><td>an opaque handle, <code>Name*</code></td></tr>
+<tr><td>a value struct whose fields C can hold</td><td>a C struct of the same fields, by value (see <a href="language/c-interop.html#passing-structs-by-value">Passing structs by value</a>), which the header declares</td></tr>
+<tr><td>any other struct</td><td>an opaque handle, <code>Name*</code></td></tr>
 </tbody></table>
 </div>
 <p>Anything else is an error at the parameter or result that C cannot hold:</p>
@@ -17915,10 +17964,11 @@ declaration visible to other Pepper files (see
       |               ^~~~~~~~~~
 note: only a non-generic struct passes to C, as a handle
 </code></pre>
-<p>A generic struct (<code>Array&lt;int&gt;</code>), a value struct, an enum whose cases carry
-values, a trait, a tuple, <code>Optional</code> and a Pepper function type cannot
-cross. Pass an array as a pointer to its elements and a count, or wrap it
-in a struct of your own and pass a handle.</p>
+<p>A generic struct (<code>Array&lt;int&gt;</code>), a value struct with a field C cannot hold
+or a generic one, an enum whose cases carry values, a trait, a tuple,
+<code>Optional</code> and a Pepper function type cannot cross. Pass an array as a
+pointer to its elements and a count, or wrap it in a struct of your own and
+pass a handle.</p>
 <h3 id="strings-1"><a class="header" href="#strings-1">Strings</a></h3>
 <p>A <code>String</code> crosses as UTF-8 bytes, copied each way, so neither side keeps a
 pointer into the other's memory:</p>
