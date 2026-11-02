@@ -12,11 +12,15 @@ import [
     BinaryExpression,
     BinaryOp,
     Block,
+    Branch,
+    Declaration,
     Expression,
+    ExtensionDef,
     FunctionCallExpression,
     FunctionDef,
     Kind,
     MemberRefExpression,
+    MethodCallExpression,
     Module,
     ReturnStatement,
     Statement,
@@ -62,7 +66,7 @@ export derive_equatable(module: Module): Diagnostic? {
         }
     }
     for (var st in module.structs) {
-        var error = _derive_struct(st);
+        var error = _derive_struct(st, module);
         if (error.is_value()) {
             return error;
         }
@@ -70,14 +74,20 @@ export derive_equatable(module: Module): Diagnostic? {
     return Optional<Diagnostic>.Empty;
 }
 
+## The trait `[Equatable(ordered = true)]` declares (#369).
+const _COMPARABLE = "Comparable";
+
 ## An argument of an attribute call: its name, if it has one, and value.
 struct _Argument {
     var name: String?;
     var value: ast.Expression;
+    ## The name's span, or the value's when it has none.
+    var at: ast.Span;
 
-    construct(name: String?, value: ast.Expression) {
+    construct(name: String?, value: ast.Expression, at: ast.Span) {
         this.name = name;
         this.value = value;
+        this.at = at;
     }
 }
 
@@ -89,11 +99,11 @@ _arguments(attribute: ast.Attribute): _Argument[] {
         FunctionCall(_, arguments, _) => {
             for (var argument in arguments) {
                 match (argument) {
-                    NamedArgument(name, _, value, _) => {
-                        out.append(_Argument(Optional<String>.Value(name), value));
+                    NamedArgument(name, name_span, value, _) => {
+                        out.append(_Argument(Optional<String>.Value(name), value, name_span));
                     }
                     else => {
-                        out.append(_Argument(Optional<String>.Empty, argument));
+                        out.append(_Argument(Optional<String>.Empty, argument, argument.span()));
                     }
                 }
             }
@@ -118,6 +128,14 @@ _included(attributes: ast.Attribute[], file: uint): Result<bool, Diagnostic> {
     for (var argument in _arguments(attribute.value())) {
         var name = argument.name.is_value() ? argument.name.value() : (index == 0 ? "include" : "exclude");
         var span = argument.value.span();
+        if (name != "include" and name != "exclude") {
+            return Result<bool, Diagnostic>.Err(
+                error_at(
+                    $"'[{EQUATABLE_ATTRIBUTE}]' on a field takes only 'include' and 'exclude'; '{name}' applies to the struct",
+                    Loc.at(file, argument.at)
+                )
+            );
+        }
         var value = Optional<bool>.Empty;
         match (argument.value) {
             Literal(literal, _) => {
@@ -166,7 +184,7 @@ _included(attributes: ast.Attribute[], file: uint): Result<bool, Diagnostic> {
     return Result<bool, Diagnostic>.Ok(kept);
 }
 
-_derive_struct(st: StructDef): Diagnostic? {
+_derive_struct(st: StructDef, module: Module): Diagnostic? {
     var file = st.loc.file;
     var equatable = _find_equatable(st.attributes);
     if (!equatable.is_value()) {
@@ -187,13 +205,9 @@ _derive_struct(st: StructDef): Diagnostic? {
         return Optional<Diagnostic>.Empty;
     }
     var attribute_loc = Loc.at(file, equatable.value().span);
-    if (_arguments(equatable.value()).count > 0) {
-        return Optional<Diagnostic>.Value(
-            error_at(
-                $"'[{EQUATABLE_ATTRIBUTE}]' on '{st.name}' takes no arguments; 'include' and 'exclude' apply to its fields",
-                attribute_loc
-            )
-        );
+    var ordered = _ordered(equatable.value(), st, file);
+    if (ordered.is_err()) {
+        return Optional<Diagnostic>.Value(ordered.error());
     }
     # Already derived (a module built once and applied again).
     for (var m in st.method_members) {
@@ -255,7 +269,130 @@ _derive_struct(st: StructDef): Diagnostic? {
     st.method_members.append(
         _method(st, HASH_METHOD, TypeName.named("u64"), Array<VariableDef>(), hash, attribute_loc)
     );
+    if (ordered.value()) {
+        for (var own in st.method_members) {
+            if (own.name == "compare" and own.parameters.count == 1 and own.parameters[0].ty == st.ty) {
+                return Optional<Diagnostic>.Value(
+                    error_at(
+                        $"'{st.name}' is '[{EQUATABLE_ATTRIBUTE}(ordered = true)]', so its 'compare' is derived and cannot be declared",
+                        own.loc
+                    ).with_note(
+                        "remove this 'compare', or remove 'ordered = true' to declare it by hand",
+                        Optional<Location>.Empty
+                    ).with_note(
+                        $"'[{EQUATABLE_ATTRIBUTE}]' is here", Optional<Location>.Value(location_of(attribute_loc))
+                    )
+                );
+            }
+        }
+        st.method_members.append(_compare_method(st, compared, attribute_loc));
+        module.extensions.append(
+            ExtensionDef(
+                target = st.ty.copy(),
+                traits = [TypeName.named(_COMPARABLE)],
+                trait_locs = [attribute_loc],
+                loc = attribute_loc
+            )
+        );
+    }
     return Optional<Diagnostic>.Empty;
+}
+
+## Whether a struct's `[Equatable(...)]` asks for an order too
+## (`ordered = true`), the only argument it takes there.
+_ordered(attribute: ast.Attribute, st: StructDef, file: uint): Result<bool, Diagnostic> {
+    bool ordered = false;
+    for (var argument in _arguments(attribute)) {
+        var span = argument.value.span();
+        if (!argument.name.is_value() or argument.name.value() != "ordered") {
+            return Result<bool, Diagnostic>.Err(
+                error_at(
+                    $"'[{EQUATABLE_ATTRIBUTE}]' on '{st.name}' takes only 'ordered'; 'include' and 'exclude' apply to its fields",
+                    Loc.at(file, argument.at)
+                )
+            );
+        }
+        var value = Optional<bool>.Empty;
+        match (argument.value) {
+            Literal(literal, _) => {
+                match (literal) {
+                    Bool(b) => {
+                        value = Optional<bool>.Value(b);
+                    }
+                    else => {}
+                }
+            }
+            else => {}
+        }
+        if (!value.is_value()) {
+            return Result<bool, Diagnostic>.Err(
+                error_at($"'ordered' of '[{EQUATABLE_ATTRIBUTE}]' must be 'true' or 'false'", Loc.at(file, span))
+            );
+        }
+        ordered = value.value();
+    }
+    return Result<bool, Diagnostic>.Ok(ordered);
+}
+
+## The derived `compare(other)`: the `compare` of the first compared field
+## that differs, in declaration order, as a tuple of them compares; each
+## call is located at its field, so a field that is not `Comparable` is
+## reported there.
+_compare_method(st: StructDef, compared: VariableDef[], at: Loc): FunctionDef {
+    var parameter = VariableDef(name = "other", ty = st.ty.copy(), kind = Kind.Param, loc = at, type_loc = Loc.none());
+    var items = Array<Statement>();
+    ulong i = 0;
+    while (i < compared.count) {
+        var field = compared[i];
+        var order = Expression.MethodCall(
+            MethodCallExpression(
+                Expression.MemberRef(MemberRefExpression(Expression.ThisRef, field.name, field.loc)),
+                "compare",
+                [
+                    Expression.MemberRef(
+                        MemberRefExpression(
+                            Expression.SymbolRef(SymbolRefExpression("other", st.ty.copy(), field.loc)),
+                            field.name,
+                            field.loc
+                        )
+                    )
+                ],
+                field.loc
+            )
+        );
+        if (i + 1 == compared.count) {
+            items.append(Statement.Return(ReturnStatement(Optional<Expression>.Value(order), at)));
+        } else {
+            var local = $"__order_{i}";
+            var declared = VariableDef(
+                name = local,
+                ty = TypeName.named("int"),
+                default = Optional<Expression>.Value(order),
+                loc = Loc.none(),
+                type_loc = Loc.none()
+            );
+            items.append(Statement.Declaration(Declaration.Variable(declared)));
+            var read = Expression.SymbolRef(SymbolRefExpression(local, TypeName.named("int"), Loc.none()));
+            var differs = Expression.Binary(
+                BinaryExpression(read.copy(), Expression.IntLiteral(0), BinaryOp.NotEqual, Loc.none())
+            );
+            var early = Statement.Return(ReturnStatement(Optional<Expression>.Value(read), Loc.none()));
+            items.append(Statement.Branch(Branch(differs, Block("if", [early]))));
+        }
+        i += 1;
+    }
+    if (compared.count == 0) {
+        items.append(Statement.Return(ReturnStatement(Optional<Expression>.Value(Expression.IntLiteral(0)), at)));
+    }
+    return FunctionDef(
+        name = "compare",
+        ty = TypeName.named("int"),
+        parameters = [parameter],
+        body = Optional<Block>.Value(Block("", items)),
+        parent = Optional<String>.Value(st.ty.name),
+        loc = at,
+        owner = Loc.none()
+    );
 }
 
 ## The tuple of `lhs`'s compared fields; a tuple has two elements or more,

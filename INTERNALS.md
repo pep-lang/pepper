@@ -1028,7 +1028,11 @@ The steps after the platform filters prepare struct bodies
 comparing the tuples of its fields (`(this.a, this.b) == (other.a,
 other.b)`, a lone field paired with `true`) and `__hash(): u64` returning
 `hash` of the same tuple, leaving out a field marked `[Equatable(exclude =
-true)]` or `[Equatable(include = false)]` (`equatable.pep`); codegen's
+true)]` or `[Equatable(include = false)]` (`equatable.pep`). With
+`[Equatable(ordered = true)]` it also gets `compare(other: T): int`, the
+first `compare` of those fields that is not 0 (each call at its field's
+`Loc`), and an `extend T with Comparable` in `module.extensions`, so
+`apply_extensions` gives it `<`, `min` and the rest (#369); codegen's
 `__address<T>` and `tuple_hash` call `T.__hash` for a non-null `T` (a
 value struct's, like its `==` from `value_equal`, with the address of a
 copy, as any of its methods takes `this`), and

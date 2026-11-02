@@ -1123,7 +1123,13 @@ error_programs(): String[] {
         # Misplaced and contradictory `[Equatable]`.
         "# expect: main.pep:2:1: error: '[Equatable]' does not apply to enum 'E': its cases carry no values, so it already compares and hashes by case\n[Equatable]\nenum E { A, B }\nmain(): int { return 0; }\n",
         "# expect: main.pep:3:5: error: '[Equatable]' on a field applies only to a field of an '[Equatable]' struct\nstruct S {\n    [Equatable(exclude = true)]\n    var x: int;\n}\nmain(): int { return 0; }\n",
-        "# expect: main.pep:2:1: error: '[Equatable]' on 'S' takes no arguments; 'include' and 'exclude' apply to its fields\n[Equatable(include = true)]\nstruct S {\n    var x: int;\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:2:12: error: '[Equatable]' on 'S' takes only 'ordered'; 'include' and 'exclude' apply to its fields\n[Equatable(include = true)]\nstruct S {\n    var x: int;\n}\nmain(): int { return 0; }\n",
+        # The derived order (`ordered = true`, #369): an argument in the
+        # wrong place, a declared `compare` (a field with no order is in
+        # programs_test, which builds with the runtime).
+        "# expect: main.pep:4:16: error: '[Equatable]' on a field takes only 'include' and 'exclude'; 'ordered' applies to the struct\n[Equatable]\nstruct S {\n    [Equatable(ordered = true)]\n    var x: int;\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:2:22: error: 'ordered' of '[Equatable]' must be 'true' or 'false'\n[Equatable(ordered = 1)]\nstruct S {\n    var x: int;\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:6:5: error: 'S' is '[Equatable(ordered = true)]', so its 'compare' is derived and cannot be declared\n[Equatable(ordered = true)]\nstruct S {\n    var x: int;\n    construct(this.x = 0) {}\n    compare(other: S): int { return 0; }\n}\nmain(): int { return 0; }\n",
         "# expect: error: call to undeclared function 'hash'\n[Equatable]\nstruct S {\n    [Equatable(include = true, exclude = false)]\n    var x: int;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:4:26: error: 'include' of '[Equatable]' must be 'true' or 'false'\n[Equatable]\nstruct S {\n    [Equatable(include = 1)]\n    var x: int;\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:2:1: error: '[Equatable]' does not apply to value type 'S': a value already compares and hashes by its fields\n[Equatable]\n[Value]\nstruct S {\n    var x: int;\n}\nmain(): int { return 0; }\n",
