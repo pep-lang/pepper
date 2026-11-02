@@ -105,6 +105,9 @@ export struct Diagnostic {
     var code: String = "";
     ## The fixes it suggests.
     var fixes: Fix[] = Array<Fix>();
+    ## The other errors found with this one, in source order: rendered
+    ## after it, each with its own notes.
+    var also: Diagnostic[] = Array<Diagnostic>();
 
     ## Creates a diagnostic with no location.
     ##
@@ -221,6 +224,9 @@ export struct Diagnostic {
         for (var note in notes) {
             note._render_into(sources, out);
         }
+        for (var other in also) {
+            other._render_into(sources, out);
+        }
     }
 
     # The first fix's edit, when the fix is a single edit on the same line
@@ -230,10 +236,10 @@ export struct Diagnostic {
             return Optional<Edit>.Empty;
         }
         var edit = fixes[0].edits[0];
-        var line = _line_of(text, at.span.start);
+        var line = line_of(text, at.span.start);
         if (edit.location.file == at.file
-            and _line_of(text, edit.location.span.start) == line
-            and _line_of(text, edit.location.span.end) == line
+            and line_of(text, edit.location.span.start) == line
+            and line_of(text, edit.location.span.end) == line
             and !edit.replacement.contains("\n")) {
             return Optional<Edit>.Value(edit);
         }
@@ -277,6 +283,27 @@ export struct SourceText {
         this.name = name;
         this.text = text;
     }
+}
+
+## Orders diagnostics by file, then by where in it they start; those
+## without a location first.
+##
+## @param a one diagnostic
+## @param b the other
+## @returns -1, 0 or 1, as `a` comes before, with or after `b`
+export compare_locations(a: Diagnostic, b: Diagnostic): int {
+    if (!a.location.is_value() or !b.location.is_value()) {
+        return (a.location.is_value() ? 1 : 0) - (b.location.is_value() ? 1 : 0);
+    }
+    var x = a.location.value();
+    var y = b.location.value();
+    if (x.file != y.file) {
+        return x.file < y.file ? -1 : 1;
+    }
+    if (x.span.start != y.span.start) {
+        return x.span.start < y.span.start ? -1 : 1;
+    }
+    return 0;
 }
 
 ## Returns `diagnostics` rendered against `sources`, one after another.
@@ -325,8 +352,12 @@ _position(text: String, offset: ulong): (ulong, ulong) {
     return (line, column);
 }
 
-# The 0-based line of byte `offset`.
-_line_of(text: String, offset: ulong): ulong {
+## Returns the 0-based line of byte `offset` of `text`.
+##
+## @param text the file's text
+## @param offset the byte
+## @returns the line
+export line_of(text: String, offset: ulong): ulong {
     var end = offset < text.size ? offset : text.size;
     ulong line = 0;
     ulong i = 0;
@@ -363,7 +394,7 @@ _snippet(text: String, span: Span, fix: Edit?, out: StringBuilder) {
     while (line_size > 0 and text.byte_at(line_start + line_size - 1) == '\r') {
         line_size -= 1;
     }
-    ulong line_number = _line_of(text, line_start) + 1;
+    ulong line_number = line_of(text, line_start) + 1;
     # A span starting on a CRLF's '\n' lies past the line once its '\r' is
     # trimmed; the caret then goes at the line's end.
     ulong limit = line_start + line_size > start ? line_start + line_size : start;

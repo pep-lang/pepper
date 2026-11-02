@@ -2,7 +2,7 @@
 ## a pass reported, the closure numbering, and the facts some passes
 ## install for the later ones.
 
-import [Diagnostic, SourceText] from compiler.diagnostic;
+import [Diagnostic, SourceText, compare_locations, line_of] from compiler.diagnostic;
 import [Target] from compiler.link;
 import [Exports] from "export_table";
 import [Loc] from "loc";
@@ -135,12 +135,15 @@ _pad(text: String, width: ulong): String {
     return out;
 }
 
+## The most errors one build reports, as clang's `-ferror-limit` default.
+export const ERROR_LIMIT: ulong = 20;
+
 ## The passes' state for one program.
 export struct PassState {
     ## The compile target.
     var target: Target;
-    ## The first error reported since the last `take_error`.
-    var error: Diagnostic? = Optional<Diagnostic>.Empty;
+    ## The errors reported since the last `take_error`, as reported.
+    var errors: Diagnostic[] = Array<Diagnostic>();
     ## The program's file namespaces, by file, for naming closures.
     var namespaces: String[] = Array<String>();
     ## How many closures each file has (by file index; `-1` for code in no
@@ -278,23 +281,72 @@ export struct PassState {
         return Optional<TraitTypeMemo>.Value(trait_memo);
     }
 
-    ## Records an error. Only the first is kept: later ones are usually
-    ## fallout from it.
+    ## Records an error. The pass carries on, and may find more; the run
+    ## stops after it (`take_error`).
     ##
     ## @param diagnostic the error
     report(diagnostic: Diagnostic) {
-        if (!error.is_value()) {
-            error = Optional<Diagnostic>.Value(diagnostic);
+        # Bounded: `take_error` finds each one's line from its file's start.
+        if (errors.count < ERROR_LIMIT * 10) {
+            errors.append(diagnostic);
         }
     }
 
-    ## Returns the error reported since the last call, clearing it.
+    ## Whether an error was reported since the last `take_error`.
     ##
-    ## @returns the error, if any
+    ## @returns whether there is one
+    has_error(): bool {
+        return !errors.is_empty;
+    }
+
+    ## Returns the errors reported since the last call, clearing them: the
+    ## first in source order, with the others, up to `ERROR_LIMIT` in all,
+    ## in its `also`. Of the errors on one line only the first reported
+    ## counts, as a later one there is usually its fallout, and those with
+    ## no place are left out unless all are.
+    ##
+    ## @returns the first error, if any
     take_error(): Diagnostic? {
-        var out = error;
-        error = Optional<Diagnostic>.Empty;
-        return out;
+        if (errors.is_empty) {
+            return Optional<Diagnostic>.Empty;
+        }
+        var kept = Array<Diagnostic>();
+        var lines = HashSet<String>();
+        for (var error in errors) {
+            var line = _line_key(error);
+            if (line.is_value() and lines.insert(line.value())) {
+                kept.append(error);
+            }
+        }
+        var first = errors[0];
+        errors = Array<Diagnostic>();
+        if (kept.is_empty) {
+            return Optional<Diagnostic>.Value(first);
+        }
+        kept.sort((a, b) => compare_locations(a, b));
+        first = kept[0];
+        first.also = Array<Diagnostic>();
+        ulong index = 1;
+        while (index < kept.count and index < ERROR_LIMIT) {
+            first.also.append(kept[index]);
+            index += 1;
+        }
+        return Optional<Diagnostic>.Value(first);
+    }
+
+    # `error`'s file and line, or its place when the file's text is not at
+    # hand; nothing when it points into no file (`Loc.none()` is file -1).
+    _line_key(error: Diagnostic): String? {
+        if (error.location is Value(at)) {
+            if ((at.file as long) < 0) {
+                return Optional<String>.Empty;
+            }
+            if (at.file < sources.count) {
+                return Optional<String>.Value($"{at.file}:{line_of(sources[at.file].text, at.span.start)}");
+            }
+            return Optional<String>.Value($"{at.file}@{at.span.start}");
+        }
+        return Optional<String>.Empty;
     }
 
     ## Records each enum's representation and default value: enum names are integer types from here on.

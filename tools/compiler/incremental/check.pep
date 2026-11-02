@@ -6,7 +6,7 @@
 ## does not link LLVM.
 
 import compiler.ast;
-import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
+import [Diagnostic, SourceText, compare_locations, render_all] from compiler.diagnostic;
 import [File, Path] from io;
 import compiler.link;
 import os;
@@ -14,27 +14,6 @@ import compiler.sema;
 import "cache";
 import "compilation_units";
 import "recheck";
-
-## Orders diagnostics by file, then by where in it they start; those
-## without a location first.
-##
-## @param a one diagnostic
-## @param b the other
-## @returns -1, 0 or 1, as `a` comes before, with or after `b`
-export compare_locations(a: Diagnostic, b: Diagnostic): int {
-    if (!a.location.is_value() or !b.location.is_value()) {
-        return (a.location.is_value() ? 1 : 0) - (b.location.is_value() ? 1 : 0);
-    }
-    var x = a.location.value();
-    var y = b.location.value();
-    if (x.file != y.file) {
-        return x.file < y.file ? -1 : 1;
-    }
-    if (x.span.start != y.span.start) {
-        return x.span.start < y.span.start ? -1 : 1;
-    }
-    return 0;
-}
 
 ## Whether `PEPC_VERIFY_CUTOFF` checks every compilation unit loaded by early
 ## cutoff again and compares: its record, written on an earlier check of the

@@ -108,6 +108,19 @@ reports_the_first_type_error_of_the_text_given() {
 }
 
 [Test]
+reports_every_error_the_failing_pass_finds() {
+    var text = "f(): int {\n    return \"x\";\n}\nmain(): int {\n    return \"y\";\n}\n";
+    var analysis = analyze(temp_file("two_errors.pep", text), text);
+    expect_equal(analysis.outcome, "found an error");
+    expect_equal(analysis.diagnostics.count, 2 as ulong);
+    expect_equal(analysis.diagnostics[0].range.start.line, 1);
+    expect_equal(analysis.diagnostics[1].range.start.line, 4);
+    expect_equal(
+        analysis.diagnostics[1].message, "cannot return a value of type 'String' from 'main', which returns 'int'"
+    );
+}
+
+[Test]
 warns_about_an_import_it_cannot_find() {
     var uri = temp_file("imports.pep", "");
     var analysis = analyze(uri, "import nowhere_to_be_found;\nmain(): int {\n    return 0;\n}\n");

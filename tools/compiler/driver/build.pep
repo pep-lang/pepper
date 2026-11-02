@@ -4,14 +4,13 @@
 import compiler.ast;
 import async;
 import compiler.codegen;
-import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
+import [Diagnostic, SourceText, compare_locations, render_all] from compiler.diagnostic;
 import digest;
 import [
     Cache,
     check_compilation_unit,
     check_compilation_units,
     Clock,
-    compare_locations,
     every_file,
     find_checked,
     Keys,
