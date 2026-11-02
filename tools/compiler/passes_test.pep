@@ -760,8 +760,9 @@ main(): int {
         # `Lane` is sealed: a program cannot conform a type to it (#365).
         "# expect: main.pep:6:19: error: 'Lane' is sealed: only the runtime declares which types conform to it\nimport simd;\nstruct Money {\n    long cents;\n}\nextend Money with simd.Lane {\n}\nmain(): int {\n    return 0;\n}\n",
         # An index of the wrong type names `[]`'s operand, not the indexer
-        # method; a range asks for `slice` (#312).
-        "# expect: main.pep:4:16: error: cannot index 'Array<int>' with a value of type 'Range<int>'; write 'slice(start, end)' for part of it\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    var s = a[1..4];\n    return 0;\n}\n",
+        # method; a range held in a variable asks for `slice` (#312), since
+        # only one written in the brackets is a slice (#370).
+        "# expect: main.pep:5:15: error: cannot index 'Array<int>' with a value of type 'Range<int>'; write 'slice(start, end)' for part of it\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    var r = 1..4;\n    var s = a[r];\n    return 0;\n}\n",
         "# expect: main.pep:4:7: error: cannot index 'Array<int>' with a value of type 'String', which takes 'ulong'\nmain(): int {\n    var a = [1, 2, 3, 4, 5];\n    a[\"x\"] = 2;\n    return 0;\n}\n",
         # A static call of a method the struct does not declare names the
         # method and the struct, at the method (#411).

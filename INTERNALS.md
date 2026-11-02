@@ -697,7 +697,9 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `[Value]` `Range<T>`, so a `for` loop over it drives a value in place
     and allocates nothing. `ranges.check_ranges` reports non-integer
     bounds (section 3).
-  - `var (a, b: T, _) = e;` becomes a hidden `__tuple_N` local initialized
+    A range written as an index, `a[i..j]` or `a[i..>j]`, is not a
+    `Range` at all: the builder makes it the call `a.slice(i, j)` (`j + 1`
+    for `..>`), so a slice has one indexer to type (#370).  - `var (a, b: T, _) = e;` becomes a hidden `__tuple_N` local initialized
     with `Expression.Destructure { value: e, count }` followed by
     `var a = __tuple_N.0; var b: T = __tuple_N.1;` in the enclosing block
     (`destructure`). `(a, p.x) = e;` becomes a block holding the hidden
