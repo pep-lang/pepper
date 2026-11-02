@@ -355,6 +355,33 @@ is used.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var n = Optional&lt;int&gt;.Empty.value_or(-1);   # -1
 </code></pre>
+<h2 id="extend-optional"><a class="header" href="#extend-optional">extend Optional<T></a></h2>
+<pre><code class="language-pepper">extend Optional&lt;T: Comparable&gt; with Comparable
+</code></pre>
+<p>Optionals of <code>Comparable</code> values are <code>Comparable</code>: Empty sorts before
+every value, as in Rust and Swift, and two values by their own order, so
+<code>Array&lt;int?&gt;.sort()</code> puts the Empty ones first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the value type, <code>Comparable</code></li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="compare"><a class="header" href="#compare">compare</a></h4>
+<pre><code class="language-pepper">compare(other: Optional&lt;T&gt;): int
+</code></pre>
+<p>Returns the order of this optional and <code>other</code>: Empty before any
+value, and two values by <code>compare</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the optional to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, zero or a positive number as this optional sorts before, with or after <code>other</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(Optional&lt;int&gt;.Empty.compare(Optional&lt;int&gt;.Value(0)) &lt; 0, "Empty first");
+</code></pre>
 
                     </main>
 

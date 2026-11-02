@@ -581,15 +581,23 @@ and a <code>Map</code> keys on them:</p>
     return 0;
 }
 </code></pre>
+<p>An <code>Optional</code> of a <code>Comparable</code> type is <code>Comparable</code> too: <code>Empty</code> sorts
+before every value, as in Rust and Swift, and two values by their own
+order, so <code>Array&lt;int?&gt;.sort()</code> puts the empty ones first:</p>
+<pre><code class="language-pepper">main(): int {
+    # Empty sorts before every value; values by their own order.
+    var scores = [Optional&lt;int&gt;.Value(7), Optional&lt;int&gt;.Empty, Optional&lt;int&gt;.Value(2)];
+    scores.sort();
+    assert(scores[0].is_empty() &amp;&amp; scores[1].value() == 2, "Empty first, then 2 and 7");
+    assert(Optional&lt;String&gt;.Value("a") &lt; Optional&lt;String&gt;.Value("b"), "by the values");
+    return 0;
+}
+</code></pre>
 <p><code>float</code> and <code>double</code> compare in a total order: NaN sorts after every number
 and with every other NaN, and <code>-0.0</code> sorts with <code>0.0</code>. Their <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>
 and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, while
 <code>compare</code>, <code>clamp</code> and <code>Map</code> keys follow the total order, so a NaN key
 cannot break a map.</p>
-<h3 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h3>
-<ul>
-<li><code>Optional</code> is not <code>Comparable</code>.</li>
-</ul>
 
                     </main>
 

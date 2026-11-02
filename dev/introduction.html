@@ -254,8 +254,9 @@ consumers such as <code>fold</code>, <code>any</code> and <code>sum</code>).</li
 <li><strong>Types of your own:</strong> structs with constructors, destructors, methods
 and <a href="language/properties.html">properties</a>,
 <a href="language/value-structs.html">value structs and enums</a> (<code>[Value]</code>), derived
-<code>==</code> and <code>hash</code> (<a href="language/hashing.html"><code>[Equatable]</code></a>), a <code>Comparable</code>
-trait for ordered types, traits (with default methods, and usable as
+<code>==</code>, <code>hash</code> and order (<a href="language/hashing.html"><code>[Equatable]</code></a>), a <code>Comparable</code>
+trait for ordered types (which arrays, tuples and optionals of ordered
+types are), traits (with default methods, and usable as
 types that convert back with <code>as?</code>), generics (with type arguments
 inferred at calls, and generic methods), type aliases, and function types
 and closures.</li>
