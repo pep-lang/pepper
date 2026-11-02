@@ -311,18 +311,32 @@ compiler derives its <code>==</code> and its hash, so equal values find each oth
 as <code>HashMap</code> and <code>HashSet</code> keys.</p>
 <p>On a field of such a struct, it says whether the field takes part:
 <code>[Equatable(exclude = true)]</code> or <code>[Equatable(include = false)]</code> leaves it
-out of both <code>==</code> and the hash. A field with neither takes part. On the
-struct itself it takes no arguments.</p>
+out of <code>==</code>, the hash and the order. A field with neither takes part.</p>
+<p>On the struct, <code>[Equatable(ordered = true)]</code> also derives <code>compare</code> from
+the same fields, in declaration order, as a tuple of them compares, and
+makes the struct <code>Comparable</code>, so <code>&lt;</code>, <code>sort()</code> and <code>Map</code> keys use that
+order. Every field that takes part must be <code>Comparable</code> then.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">[Equatable(ordered = true)]
+struct Version {
+    var major: int;
+    var minor: int;
+}
+</code></pre>
 <h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="include"><a class="header" href="#include">include</a></h4>
 <pre><code class="language-pepper">bool include = true
 </code></pre>
-<p>Whether the field takes part in <code>==</code> and the hash; <code>false</code> leaves it
-out.</p>
+<p>On a field: whether it takes part in <code>==</code>, the hash and the order;
+<code>false</code> leaves it out.</p>
 <h4 id="exclude"><a class="header" href="#exclude">exclude</a></h4>
 <pre><code class="language-pepper">bool exclude = false
 </code></pre>
-<p>Whether the field is left out of <code>==</code> and the hash.</p>
+<p>On a field: whether it is left out of <code>==</code>, the hash and the order.</p>
+<h4 id="ordered"><a class="header" href="#ordered">ordered</a></h4>
+<pre><code class="language-pepper">bool ordered = false
+</code></pre>
+<p>On the struct: whether to derive <code>compare</code> too, making it <code>Comparable</code>.</p>
 <h2 id="shared"><a class="header" href="#shared">Shared</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Shared
 </code></pre>

@@ -7596,7 +7596,7 @@ and its values are equal.</li>
 its type arguments give it.</li>
 <li><code>include</code> and <code>exclude</code> are <code>bool</code>s, and saying both in a way that
 contradicts (<code>include = true, exclude = true</code>) is an error. On the struct
-itself, <code>[Equatable]</code> takes no arguments.</li>
+itself, <code>[Equatable]</code> takes only <code>ordered</code> (<a href="language/hashing.html#deriving-the-order-with-ordered--true">below</a>).</li>
 <li>An <code>[Equatable]</code> struct cannot also declare <code>==</code> or override <code>hash&lt;T&gt;</code>;
 either is an error. To compare some other way, drop the attribute and
 declare both by hand (below).</li>
@@ -7831,6 +7831,42 @@ before <code>c</code>. <code>Map</code>, <code>Set</code> and sorting depend on 
 stably, as <code>sort((a, b) =&gt; a.compare(b))</code> would. Floats sort in the total
 order, NaN last. Any other order still takes a comparer:
 <code>items.sort((a, b) =&gt; b.compare(a))</code> sorts in reverse.</p>
+<h3 id="deriving-the-order-with-ordered--true"><a class="header" href="#deriving-the-order-with-ordered--true">Deriving the order with <code>ordered = true</code></a></h3>
+<p><code>[Equatable(ordered = true)]</code> on a struct derives <code>compare</code> too, from the
+same fields as <code>==</code> and the hash, in declaration order, the way a tuple of
+them compares, and makes the struct <code>Comparable</code>. So the order agrees with
+<code>==</code>, as <code>Map</code> keys and sorting need, and a field left out with
+<code>[Equatable(exclude = true)]</code> takes no part in it either:</p>
+<pre><code class="language-pepper"># `ordered = true` derives `compare` from the fields `==` compares.
+[Equatable(ordered = true)]
+struct Version {
+    var major: int;
+    var minor: int;
+    # Left out of `==`, the hash and the order.
+    [Equatable(exclude = true)]
+    var label: String;
+
+    construct(this.major = 0, this.minor = 0, this.label = "") {}
+}
+
+main(): int {
+    assert(Version(1, 2) &lt; Version(1, 10), "by major, then minor");
+    assert(Version(2, 0, "beta") == Version(2, 0, "final"), "the label takes no part");
+    var versions = [Version(1, 10), Version(0, 9), Version(1, 2)];
+    versions.sort();
+    assert(versions[0].major == 0 &amp;&amp; versions[2].minor == 10, "sorted");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Every field that takes part must be <code>Comparable</code>; one that is not is
+reported at the field (<code>no member named 'compare' in 'P'</code>) when the
+order is used.</li>
+<li>The struct cannot also declare <code>compare(other)</code>; drop <code>ordered = true</code>
+to write it by hand, as <code>Version</code> does above.</li>
+<li><code>ordered</code> goes on the struct; a field's <code>[Equatable(...)]</code> takes only
+<code>include</code> and <code>exclude</code>.</li>
+</ul>
 <h3 id="numbers-char-and-string"><a class="header" href="#numbers-char-and-string">Numbers, <code>char</code> and <code>String</code></a></h3>
 <p>Every number type and <code>char</code> is <code>Comparable</code> by value, and <code>String</code> by
 content, the order of <code>String.compare</code>. Their <code>compare</code> returns -1, 0 or 1
@@ -7867,9 +7903,7 @@ and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, whil
 cannot break a map.</p>
 <h3 id="not-yet-1"><a class="header" href="#not-yet-1">Not yet</a></h3>
 <ul>
-<li><code>Optional</code> is not <code>Comparable</code>, and <code>Comparable</code> is not
-derived from a struct's fields: a struct writes its <code>compare</code>, as
-<code>Version</code> does above.</li>
+<li><code>Optional</code> is not <code>Comparable</code>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="traits-and-extensions"><a class="header" href="#traits-and-extensions">Traits and extensions</a></h1>
 <p>Pepper has no inheritance. Instead, you add behavior to a type with an
@@ -26884,18 +26918,32 @@ compiler derives its <code>==</code> and its hash, so equal values find each oth
 as <code>HashMap</code> and <code>HashSet</code> keys.</p>
 <p>On a field of such a struct, it says whether the field takes part:
 <code>[Equatable(exclude = true)]</code> or <code>[Equatable(include = false)]</code> leaves it
-out of both <code>==</code> and the hash. A field with neither takes part. On the
-struct itself it takes no arguments.</p>
+out of <code>==</code>, the hash and the order. A field with neither takes part.</p>
+<p>On the struct, <code>[Equatable(ordered = true)]</code> also derives <code>compare</code> from
+the same fields, in declaration order, as a tuple of them compares, and
+makes the struct <code>Comparable</code>, so <code>&lt;</code>, <code>sort()</code> and <code>Map</code> keys use that
+order. Every field that takes part must be <code>Comparable</code> then.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">[Equatable(ordered = true)]
+struct Version {
+    var major: int;
+    var minor: int;
+}
+</code></pre>
 <h3 id="fields-7"><a class="header" href="#fields-7">Fields</a></h3>
 <h4 id="include"><a class="header" href="#include">include</a></h4>
 <pre><code class="language-pepper">bool include = true
 </code></pre>
-<p>Whether the field takes part in <code>==</code> and the hash; <code>false</code> leaves it
-out.</p>
+<p>On a field: whether it takes part in <code>==</code>, the hash and the order;
+<code>false</code> leaves it out.</p>
 <h4 id="exclude"><a class="header" href="#exclude">exclude</a></h4>
 <pre><code class="language-pepper">bool exclude = false
 </code></pre>
-<p>Whether the field is left out of <code>==</code> and the hash.</p>
+<p>On a field: whether it is left out of <code>==</code>, the hash and the order.</p>
+<h4 id="ordered"><a class="header" href="#ordered">ordered</a></h4>
+<pre><code class="language-pepper">bool ordered = false
+</code></pre>
+<p>On the struct: whether to derive <code>compare</code> too, making it <code>Comparable</code>.</p>
 <h2 id="shared"><a class="header" href="#shared">Shared</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Shared
 </code></pre>
