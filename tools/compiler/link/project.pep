@@ -397,6 +397,46 @@ export struct Feature {
     }
 }
 
+## One entry of `[build-options]` (#373): a build option the package reads,
+## its type, and the value it has when `-D` does not define it.
+export struct DeclaredOption {
+    ## The option's name, as `BuildOption(NAME)` and `-D NAME` write it.
+    var name: String;
+    ## The key's span in the manifest's text.
+    var name_span: Span;
+    ## `"int"`, `"bool"` or `"string"`.
+    var kind: String = "string";
+    ## The default as `-D` would write it (`"1"`, `"true"`, `"eu"`), if it
+    ## has one.
+    var default: String? = Optional<String>.Empty;
+    ## What it does, for `pep-package info`.
+    var description: String = "";
+
+    construct(name: String, name_span: Span) {
+        this.name = name;
+        this.name_span = name_span;
+    }
+
+    ## Whether `value` is a value of this option's type: an integer, a
+    ## boolean (`true`, `false`, `1`, `0`, ...), or any string.
+    ##
+    ## @param value the value as `-D` wrote it
+    ## @returns whether it fits
+    accepts(value: String): bool {
+        match (kind) {
+            "int" => {
+                return long.parse(value.trim()).is_value();
+            }
+            "bool" => {
+                return parse_bool_option(value).is_value();
+            }
+            else => {
+                return true;
+            }
+        }
+    }
+}
+
 ## A `[native]` table, or a `[target.'<condition>'.native]` one: C sources
 ## a build compiles for its target and links, with no build script
 ## (`driver.run_build_scripts`). Every path is relative to the package.
@@ -479,6 +519,8 @@ export struct Manifest {
     var build_dependencies: Dependency[] = Array<Dependency>();
     ## `[features]`, in the order they are written.
     var features: Feature[] = Array<Feature>();
+    ## `[build-options]`, in the order they are written.
+    var declared_options: DeclaredOption[] = Array<DeclaredOption>();
     ## Whether it has a `[workspace]` table: it is the root of a workspace.
     var is_workspace: bool = false;
     ## `[workspace]`'s `members` as written: folders, or globs of them,
@@ -779,6 +821,21 @@ export is_identifier(name: String): bool {
 }
 
 ## What a value is, for "expected" messages.
+# A build option type, as a message says a value of it.
+_option_kind(kind: String): String {
+    match (kind) {
+        "int" => {
+            return "an integer";
+        }
+        "bool" => {
+            return "'true' or 'false'";
+        }
+        else => {
+            return "a string";
+        }
+    }
+}
+
 _kind(value: TomlValue): String {
     match (value) {
         String(_) => {
@@ -1472,6 +1529,92 @@ struct _Reader {
         }
     }
 
+    ## The `[build-options]` table: each key a build option, holding its
+    ## `type` (`"int"`, `"bool"` or `"string"`), optional `default` of that
+    ## type, and optional `description`.
+    build_options(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        for (var (key, value) in members) {
+            var path = ["build-options", key];
+            if (!is_build_option_name(key)) {
+                error($"invalid build option name '{key}'; {BUILD_OPTION_NAME_RULE}", key_span(path));
+                continue;
+            }
+            var entry = table(path, key, value);
+            if (!entry.is_value()) {
+                continue;
+            }
+            var option = DeclaredOption(key, key_span(path));
+            var typed = false;
+            var type_given = false;
+            var default_value = Optional<TomlValue>.Empty;
+            for (var (field, field_value) in entry.value()) {
+                var at = _at(path, field);
+                if (field == "type") {
+                    type_given = true;
+                    var kind = string(at, field, field_value);
+                    if (kind.is_value()) {
+                        if (kind.value() != "int" and kind.value() != "bool" and kind.value() != "string") {
+                            error(
+                                $"'type' of build option '{key}' must be \"int\", \"bool\" or \"string\"",
+                                value_span(at)
+                            );
+                        } else {
+                            option.kind = kind.value();
+                            typed = true;
+                        }
+                    }
+                } else if (field == "default") {
+                    default_value = Optional<TomlValue>.Value(field_value);
+                } else if (field == "description") {
+                    var text = string(at, field, field_value);
+                    if (text.is_value()) {
+                        option.description = text.value();
+                    }
+                } else {
+                    unknown_key(path, field, $"build-options.{key}", ["type", "default", "description"]);
+                }
+            }
+            if (!typed) {
+                if (!type_given) {
+                    error($"build option '{key}' needs a 'type': \"int\", \"bool\" or \"string\"", key_span(path));
+                }
+                continue;
+            }
+            if (default_value.is_value()) {
+                var at = _at(path, "default");
+                var given = default_value.value();
+                var text = Optional<String>.Empty;
+                match (given) {
+                    Integer(n) => {
+                        if (option.kind == "int") {
+                            text = Optional<String>.Value($"{n}");
+                        }
+                    }
+                    Boolean(flag) => {
+                        if (option.kind == "bool") {
+                            text = Optional<String>.Value(flag ? "true" : "false");
+                        }
+                    }
+                    String(s) => {
+                        if (option.kind == "string") {
+                            text = Optional<String>.Value(s);
+                        }
+                    }
+                    else => {}
+                }
+                if (!text.is_value()) {
+                    error(
+                        $"'default' of build option '{key}' must be {_option_kind(option.kind)}, not {_kind(given)}",
+                        value_span(at)
+                    );
+                } else {
+                    option.default = text;
+                }
+            }
+            manifest.declared_options.append(option);
+        }
+    }
+
     ## Checks what each feature of `manifest` turns on: a feature of its
     ## own, an optional dependency, or a feature of a dependency.
     check_features(manifest: Manifest) {
@@ -1715,6 +1858,11 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             if (table.is_value()) {
                 reader.features(manifest, table.value());
             }
+        } else if (key == "build-options") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.build_options(manifest, table.value());
+            }
         } else if (key == "workspace") {
             var table = reader.table(at, key, value);
             if (table.is_value()) {
@@ -1733,7 +1881,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
             }
         } else {
             reader.error(
-                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[cache]', '[workspace]', '[retract]' and '[audit]'",
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[build-options]', '[overrides]', '[fetch]', '[cache]', '[workspace]', '[retract]' and '[audit]'",
                 reader.key_span(at)
             );
         }
@@ -2182,7 +2330,78 @@ export struct Packages {
         if (_feature_error.is_value()) {
             return Result<void, String>.err(_feature_error.value());
         }
+        return _apply_declared_options(manifest);
+    }
+
+    # The `[build-options]` of every package in the build (#373): gives each
+    # option `-D` leaves out its default, checks each defined one has its
+    # type, and, when the project's own package declares options, that
+    # each `-D` names a declared option (or a feature's). Records the
+    # declared names in `target.declared_options`, which `[Target]`
+    # conditions check `BuildOption(...)` against.
+    _apply_declared_options(root: Manifest): Result<void, String> {
+        var declared = HashMap<String, (DeclaredOption, String)>();
+        for (var folder in _visited) {
+            var found = _by_dir.try_get(folder);
+            if (!found.is_value() or !found.value().is_value() or found.value().value().is_err()) {
+                continue;
+            }
+            var m = found.value().value().value();
+            for (var option in m.declared_options) {
+                var earlier = declared.try_get(option.name);
+                if (earlier.is_value()) {
+                    var (other, owner) = earlier.value();
+                    if (other.kind != option.kind) {
+                        return Result<void, String>.err(
+                            $"build option '{option.name}' is an '{other.kind}' in package '{owner}' but an '{option.kind}' in package '{m.name}'"
+                        );
+                    }
+                    continue;
+                }
+                declared[option.name] = (option, m.name);
+            }
+        }
+        for (var (name, entry) in declared) {
+            var (option, owner) = entry;
+            target.declared_options.insert(name);
+            var value = target.build_options.try_get(name);
+            if (!value.is_value()) {
+                if (option.default.is_value()) {
+                    target.build_options[name] = option.default.value();
+                }
+            } else if (!option.accepts(value.value())) {
+                return Result<void, String>.err(
+                    $"build option '{name}' is '{value.value()}', which is not {_option_kind(option.kind)}, as package '{owner}' declares it in '[build-options]'"
+                );
+            }
+        }
+        if (!root.declared_options.is_empty) {
+            for (var name in target.command_line_options) {
+                if (!declared.contains(name) and !_is_feature_option(name)) {
+                    return Result<void, String>.err(
+                        $"'-D {name}': package '{root.name}' declares no build option '{name}' in '[build-options]'"
+                    );
+                }
+            }
+        }
         return Result<void, String>.ok();
+    }
+
+    # Whether `name` is a build option a feature defines (`<package>_<feature>`).
+    _is_feature_option(name: String): bool {
+        for (var folder in _visited) {
+            var found = _by_dir.try_get(folder);
+            if (!found.is_value() or !found.value().is_value() or found.value().value().is_err()) {
+                continue;
+            }
+            var m = found.value().value().value();
+            for (var f in m.features) {
+                if (m.build_option(f.name) == name) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     ## Returns the features `turn_on_features` turned on in `manifest`'s

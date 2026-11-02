@@ -132,7 +132,7 @@ version tags, so publishing one needs no registry account:
 | `audit --json` | Prints the affected packages as JSON |
 | `vendor [<dir>]` | Copies every locked package into `<dir>` in the project (default: `pep.toml`'s `[fetch] vendor`, else `vendor`), and sets `[fetch] vendor` so builds read it (see [`vendor`](#vendor-dir)) |
 | `search [<word>...]` | Lists the packages in the [package index](#the-package-index) whose name, description or keywords hold every word; every package when none is given (see [`search`](#search-word)) |
-| `info <package>` | Prints a package's description, versions, minimum toolchain, license and repository; the package is the name the index lists it by, or `[host:]owner/name` (see [`info`](#info-package)) |
+| `info <package>` | Prints a package's description, versions, minimum toolchain, license, repository and build options; the package is the name the index lists it by, or `[host:]owner/name` (see [`info`](#info-package)) |
 | `cache info` | Prints the [download cache](#the-download-cache)'s folder, then each package it holds |
 | `cache clean` | Removes what the download cache holds, except a package a fetch is using; projects keep what their `.pep/deps` holds |
 | `-h`, `--help` | Prints the options; after a command, that command's |
@@ -487,7 +487,9 @@ tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Rata
 Prints what is known of a package: the index's description and keywords,
 its versions (its version tags, newest first, those its newest release
 [retracts](#retracted-versions) marked), and the `minimum_toolchain`,
-`license` and `repository` of its newest release's `pep.toml`, which is
+`license` and `repository` of its newest release's `pep.toml`, then the
+[build options](projects.md#build-options) it declares, one line each
+with its type, default and description. The `pep.toml` is
 read from the [download cache](#the-download-cache) (fetched into it
 when missing). The package is the name the index lists it by, or a
 repository as `add` takes one (`[host:]owner/name`), which need not be

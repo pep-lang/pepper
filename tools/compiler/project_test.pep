@@ -105,7 +105,7 @@ reports_problems_at_the_key() {
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
-        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[overrides]', '[fetch]', '[cache]', '[workspace]', '[retract]' and '[audit]'"
+        "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]', '[dev-dependencies]', '[build-dependencies]', '[native]', '[target]', '[features]', '[build-options]', '[overrides]', '[fetch]', '[cache]', '[workspace]', '[retract]' and '[audit]'"
     );
     expect_equal(
         errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"),
@@ -778,6 +778,77 @@ reads_features() {
         errors("[package]\nname = \"a\"\n[build-dependencies]\ny = { path = \"y\", optional = true }\n"),
         "optional: build-dependency 'y' cannot be optional; only '[dependencies]' are"
     );
+}
+
+[Test]
+reads_build_options() {
+    var parsed = link.parse_manifest(
+        Path("/p/pep.toml"),
+        "[package]\nname = \"a\"\n[build-options]\n"
+            + "LOG_LEVEL = { type = \"int\", default = 2, description = \"how much to log\" }\n"
+            + "FAST = { type = \"bool\" }\nREGION = { type = \"string\", default = \"eu\" }\n"
+    );
+    expect_true(parsed.is_ok());
+    var options = parsed.value().declared_options;
+    expect_equal(options.count, 3 as ulong);
+    expect_equal(options[0].kind, "int");
+    expect_equal(options[0].default.value(), "2");
+    expect_equal(options[0].description, "how much to log");
+    expect_true(options[1].default.is_empty());
+    expect_true(options[1].accepts("1") and options[1].accepts("false") and !options[1].accepts("maybe"));
+    expect_true(options[0].accepts("-3") and !options[0].accepts("three"));
+
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[build-options]\nX = { default = 1 }\n"),
+        "X: build option 'X' needs a 'type': \"int\", \"bool\" or \"string\""
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[build-options]\nX = { type = \"float\" }\n"),
+        "\"float\": 'type' of build option 'X' must be \"int\", \"bool\" or \"string\""
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[build-options]\nX = { type = \"int\", default = \"one\" }\n"),
+        "\"one\": 'default' of build option 'X' must be an integer, not a string"
+    );
+    expect_equal(
+        errors("[package]\nname = \"a\"\n[build-options]\nX = { type = \"int\", help = \"\" }\n"),
+        "help: unknown key 'help' in '[build-options.X]'; expected one of 'type', 'default', 'description'"
+    );
+}
+
+[Test]
+declared_build_options_have_defaults_and_types() {
+    var folder = TempFolder("declared_options");
+    File.write_text(
+        folder.path.join(Path("pep.toml")),
+        "[package]\nname = \"app\"\n[build-options]\nLEVEL = { type = \"int\", default = 1 }\n"
+    );
+    var main = folder.path.join(Path("main.pep"));
+    File.write_text(main, "[Target(BuildOption(LEVEL) == 1)]\nmain(): int {\n    return 0;\n}\n");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var plain = link.load_program(main, setup);
+    expect_true(plain.is_ok());
+    expect_equal(plain.value().target.build_options["LEVEL"], "1");
+
+    var typed = link.Setup();
+    typed.runtime = false;
+    typed.target.build_options["LEVEL"] = "high";
+    typed.target.command_line_options.insert("LEVEL");
+    var wrong = link.load_program(main, typed);
+    expect_true(wrong.is_err());
+    expect_equal(
+        wrong.error(),
+        "build option 'LEVEL' is 'high', which is not an integer, as package 'app' declares it in '[build-options]'"
+    );
+
+    var misspelled = link.Setup();
+    misspelled.runtime = false;
+    misspelled.target.build_options["LEVL"] = "2";
+    misspelled.target.command_line_options.insert("LEVL");
+    var undeclared = link.load_program(main, misspelled);
+    expect_true(undeclared.is_err());
+    expect_equal(undeclared.error(), "'-D LEVL': package 'app' declares no build option 'LEVL' in '[build-options]'");
 }
 
 [Test]

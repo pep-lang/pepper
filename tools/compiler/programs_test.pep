@@ -169,6 +169,26 @@ an_unclosed_brace_notes_the_brace() {
     );
 }
 
+# With `[build-options]` (#373), a `BuildOption(...)` of an option no
+# package declares is an error at the name.
+[Test]
+an_undeclared_build_option_is_an_error() {
+    var folder = TempFolder("programs_declared_options");
+    write_file(
+        folder.path.join("pep.toml"),
+        "[package]\nname = \"app\"\n[build-options]\nLEVEL = { type = \"int\", default = 1 }\n"
+    );
+    var source = folder.path.join("main.pep");
+    write_file(
+        source, "[Target(BuildOption(LEVL) == 1)]\nf(): int {\n    return 1;\n}\n\nmain(): int {\n    return 0;\n}\n"
+    );
+    var error = build_program(source, folder.path.join("never"), folder.path.join("build"));
+    expect_true(error.is_value(), "the program does not build");
+    expect_contains(
+        error.value(), "main.pep:1:21: error: build option 'LEVL' is not declared in any package's '[build-options]'"
+    );
+}
+
 # A derived order (`[Equatable(ordered = true)]`, #369) with a field that
 # has none is reported at the field.
 [Test]

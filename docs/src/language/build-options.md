@@ -185,7 +185,10 @@ The language server analyzes with the options in the VS Code setting
 an option shows dimmed, and comparisons with options warn until the
 setting names them.
 
-## Not yet
+## Declaring a package's options
 
-- A `pep.toml` table declaring the options a package takes, with their
-  types and defaults.
+A package lists the options it reads in its `pep.toml`, with their types
+and defaults, in [`[build-options]`](../tools/projects.md#build-options):
+an option `-D` leaves out then has its default, a `-D` value of the wrong
+type is an error, and so is a `BuildOption(NAME)` that names an option no
+package declares.

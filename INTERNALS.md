@@ -991,7 +991,13 @@ the cache key (`cache.Build.name`'s `-D<hash>`, and the checked
 runtime's key), `static` blocks read them (`reflect.build_option`,
 `has_build_option`), and the language server takes them from its
 `buildOptions` initialization option (`build_options` in
-`tools/pep-lsp/server.pep`; the analysis worker analyzes with them). The pass drops top-level declarations,
+`tools/pep-lsp/server.pep`; the analysis worker analyzes with them). A
+package's `[build-options]` (`Manifest.declared_options`, #373) are applied
+after its features (`Packages._apply_declared_options`): an option `-D`
+leaves out gets its default, a defined one is checked against its type, a
+`-D` the project's package does not declare is an error (`Target.command_line_options`),
+and the declared names go in `Target.declared_options`, against which
+`_build_option_name` reports an undeclared `BuildOption(NAME)` at the name. The pass drops top-level declarations,
 struct/trait/extension members, and attributed blocks whose predicate is
 false. Every predicate is validated before anything is dropped, so a typo in
 code that another platform would compile is still reported. Attributes other
