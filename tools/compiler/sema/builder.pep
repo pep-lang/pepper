@@ -3763,6 +3763,9 @@ struct _Builder {
                 _error($"property '{name}' has no 'get' accessor; a property must have one", loc(at))
             );
         }
+        if (property.is_static) {
+            return static_property_members(property, owner);
+        }
         var get = property.getter.value();
         var parent = owner.kind == _STRUCT_OWNER ? Optional<String>.Value(owner.name) : Optional<String>.Empty;
         var getter = accessor(
@@ -3890,6 +3893,64 @@ struct _Builder {
             accessors.append(setter.value());
         }
         return Built<_PropertyMembers>.Ok(_PropertyMembers(storage_def, accessors));
+    }
+
+    ## A `static` property's accessors, as static methods `__get_P()` and
+    ## `__set_P(value)` that `properties.lower_property` calls for `S.P`
+    ## (#406). It must be computed: its storage would be a module-scope
+    ## value, which is shared by every thread and so must be `const`.
+    static_property_members(property: ast.PropertyDecl, owner: _PropertyOwner): Built<_PropertyMembers> {
+        var name = property.name;
+        if (owner.kind == _TRAIT_OWNER or owner.kind == _ENUM_OWNER) {
+            var what = owner.kind == _TRAIT_OWNER ? "trait" : "enum";
+            return Built<_PropertyMembers>.Err(
+                _error(
+                    $"{what} '{owner.name}' cannot have a static property; declare '{name}' in a struct",
+                    loc(property.name_span)
+                )
+            );
+        }
+        var computed = $"static property '{name}' must be computed: give each accessor a body that does not use 'field'";
+        var get = property.getter.value();
+        if (get.function.body.is_empty()) {
+            return Built<_PropertyMembers>.Err(_error(computed, loc(get.span)));
+        }
+        if (property.setter.is_value() and property.setter.value().function.body.is_empty()) {
+            return Built<_PropertyMembers>.Err(_error(computed, loc(property.setter.value().span)));
+        }
+        if (property.default_value.is_value()) {
+            var message = $"static property '{name}' has no storage to initialize: it is computed";
+            return Built<_PropertyMembers>.Err(_error(message, loc(property.default_value.value().span())));
+        }
+        var parent = owner.kind == _STRUCT_OWNER ? Optional<String>.Value(owner.name) : Optional<String>.Empty;
+        var getter = accessor(
+            property,
+            parent,
+            getter_name(name),
+            Array<ast.VariableDecl>(),
+            property.type_name,
+            get.function.body,
+            property.name_span
+        )?;
+        var accessors = [getter];
+        if (property.setter.is_value()) {
+            var set = property.setter.value();
+            var value = ast.VariableDecl();
+            value.name = PROPERTY_VALUE;
+            value.name_span = property.name_span;
+            value.type_name = property.type_name;
+            value.span = property.name_span;
+            var void = ast.TypeName("void", property.name_span);
+            var setter = accessor(property, parent, setter_name(name), [value], void, set.function.body, set.span)?;
+            accessors.append(setter);
+        }
+        for (var a in accessors) {
+            a.is_static = true;
+            if (_uses_field(a)) {
+                return Built<_PropertyMembers>.Err(_error(computed, a.loc));
+            }
+        }
+        return Built<_PropertyMembers>.Ok(_PropertyMembers(Optional<VariableDef>.Empty, accessors));
     }
 
     ## One accessor of `property` as a method `method`.

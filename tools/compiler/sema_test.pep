@@ -475,6 +475,12 @@ error_programs(): String[] {
         "# expect: main.pep:4:9: error: a module-scope 'static' block has no runtime values to capture\nvar n = 0;\n\nstatic (n) {\n}\n\ntest(): int {\n    return 0;\n}\n",
         # an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'
         "# expect: main.pep:6:9: error: an extension cannot add storage: property 'y' must be computed, with accessor bodies that do not use 'field'\nstruct A {\n    var x: int;\n}\nextend A {\n    var y: int { get; }\n}\nmain(): int {\n    return 0;\n}\n",
+        # A static property must be computed, and only a struct or an
+        # extension declares one (#406).
+        "# expect: main.pep:3:25: error: static property 'x' must be computed: give each accessor a body that does not use 'field'\nstruct S {\n    static var x: int { get; }\n}\nmain(): int {\n    return 0;\n}\n",
+        "# expect: main.pep:3:16: error: static property 'x' must be computed: give each accessor a body that does not use 'field'\nstruct S {\n    static var x: int { get { return field; } }\n}\nmain(): int {\n    return 0;\n}\n",
+        "# expect: main.pep:3:47: error: static property 'x' has no storage to initialize: it is computed\nstruct S {\n    static var x: int { get { return 1; } } = 3;\n}\nmain(): int {\n    return 0;\n}\n",
+        "# expect: main.pep:3:16: error: trait 'T' cannot have a static property; declare 'x' in a struct\ntrait T {\n    static var x: int { get; }\n}\nmain(): int {\n    return 0;\n}\n",
         # 'Implicit' applies only to constructors
         "# expect: main.pep:2:1: error: 'Implicit' applies only to constructors\n[Implicit]\nstruct A {}\ntest(): int { return 0; }\n",
         # A struct field cannot be selected by platform (#294).
