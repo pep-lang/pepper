@@ -3782,6 +3782,32 @@ struct Parser {
         if (_failed) {
             return;
         }
+        # `static var name: T { get { ... } }`: a property of the type.
+        if (_at_word("static") and _peek_at(1).is_word(_source, "var")) {
+            ulong static_at = _position;
+            _advance();
+            var variable = _variable_declaration(Prefix(attributes));
+            if (_failed) {
+                return;
+            }
+            if (!_at("{")) {
+                _fail("expected '{'");
+                return;
+            }
+            var property = _property(variable);
+            if (_failed) {
+                return;
+            }
+            property.is_static = true;
+            property.span = Span(_start(static_at), property.span.end);
+            for (var accessor in [property.getter, property.setter]) {
+                if (accessor.is_value()) {
+                    accessor.value().function.is_static = true;
+                }
+            }
+            out.properties.append(property);
+            return;
+        }
         if (kind != MemberKind.Struct and _at_word("var")) {
             var variable = _variable_declaration(Prefix(attributes));
             if (_failed) {

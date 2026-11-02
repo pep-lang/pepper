@@ -597,6 +597,9 @@ struct TokenWalk {
     property(decl: PropertyDecl) {
         enter("Property");
         attributes(decl.attributes);
+        if (decl.is_static) {
+            take("static");
+        }
         take("var");
         leaf(decl.name_span);
         take(":");

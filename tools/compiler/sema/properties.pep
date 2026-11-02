@@ -22,6 +22,7 @@ import [Loc] from "loc";
 import [
     AccessorKind,
     BinaryExpression,
+    FunctionDef,
     BinaryOp,
     Expression,
     MemberRefExpression,
@@ -47,6 +48,10 @@ export struct Properties {
     ## else: a caller compares it before and after to learn whether an
     ## access changed.
     var lowered: ulong = 0;
+    ## The static properties (#406), by the struct that declares them: each
+    ## is the static getter `__get_P` the builder made, with `__set_P` when
+    ## it has a `set`.
+    var statics: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
 
     ## Returns the properties of `module`.
     ##
@@ -61,13 +66,40 @@ export struct Properties {
         for (var ext in module.extensions) {
             for (var m in ext.methods) {
                 extension_methods.insert(m.loc);
+                _add_static(ext.target.name, m);
+            }
+        }
+        for (var st in module.structs) {
+            for (var m in st.method_members) {
+                _add_static(st.name, m);
             }
         }
     }
 
+    _add_static(owner: String, m: FunctionDef) {
+        if (!m.is_static or !m.name.starts_with(getter_name(""))) {
+            return;
+        }
+        if (!statics.contains(owner)) {
+            statics[owner] = HashSet<String>();
+        }
+        statics[owner].insert(m.name.substr_bytes(getter_name("").size, m.name.size - getter_name("").size));
+    }
+
     ## Returns whether the program has no properties.
     is_empty(): bool {
-        return by_owner.count == 0;
+        return by_owner.count == 0 and statics.count == 0;
+    }
+
+    ## Whether `S.name`, with `receiver` the bare `S`, reads a static
+    ## property of struct `S`, not a member of a local named `S`.
+    is_static(receiver: Expression, name: String, site: PropertySite): bool {
+        if (statics.count == 0 or !(receiver is SymbolRef(_))) {
+            return false;
+        }
+        var id = _symbol(receiver).id;
+        var names = statics.try_get(id);
+        return names.is_value() and names.value().contains(name) and !site.is_local(id);
     }
 
     ## Returns property `name` of a value of type `ty`, if it has one.
@@ -137,6 +169,11 @@ _is_own_storage(site: PropertySite, receiver: Expression, property: PropertyDef)
 export lower_property(e: Expression, properties: Properties, site: PropertySite, state: PassState): Expression {
     if (properties.is_empty()) {
         return e;
+    }
+    var static_access = _static_access(e, properties, site);
+    if (static_access.is_value()) {
+        properties.lowered += 1;
+        return static_access.value();
     }
     match (e) {
         Binary(node) => {
@@ -251,6 +288,99 @@ export lower_property(e: Expression, properties: Properties, site: PropertySite,
             return e;
         }
     }
+}
+
+## A read or write of a static property, `S.P` (#406): the static call
+## `S.__get_P()`, `S.__set_P(v)` for `S.P = v`, and for `S.P += v` or
+## `S.P++` the set of the get combined; `S` names a type, so evaluating it
+## twice does nothing twice. None for any other expression.
+_static_access(e: Expression, properties: Properties, site: PropertySite): Expression? {
+    if (properties.statics.count == 0) {
+        return Optional<Expression>.Empty;
+    }
+    match (e) {
+        Binary(node) => {
+            if (!_is_assignment(node.op)) {
+                return Optional<Expression>.Empty;
+            }
+            var target = _static_member(node.lhs, properties, site);
+            if (!target.is_value()) {
+                return Optional<Expression>.Empty;
+            }
+            var value = node.rhs;
+            if (node.op != BinaryOp.Assign) {
+                var base = _compound_base(node.op);
+                if (!base.is_value()) {
+                    return Optional<Expression>.Empty;
+                }
+                value = Expression.Binary(
+                    BinaryExpression(_static_get(target.value()), node.rhs, base.value(), node.loc)
+                );
+            }
+            return Optional<Expression>.Value(_static_set(target.value(), value));
+        }
+        Unary(node) => {
+            bool increment = node.op == UnaryOp.PreInc or node.op == UnaryOp.PostInc;
+            if (!increment and node.op != UnaryOp.PreDec and node.op != UnaryOp.PostDec) {
+                return Optional<Expression>.Empty;
+            }
+            var target = _static_member(node.operand, properties, site);
+            if (!target.is_value()) {
+                return Optional<Expression>.Empty;
+            }
+            var step = Expression.Binary(
+                BinaryExpression(
+                    _static_get(target.value()),
+                    Expression.IntLiteral(1),
+                    increment ? BinaryOp.Add : BinaryOp.Sub,
+                    node.loc
+                )
+            );
+            return Optional<Expression>.Value(_static_set(target.value(), step));
+        }
+        else => {
+            var target = _static_member(e, properties, site);
+            if (target.is_value()) {
+                return Optional<Expression>.Value(_static_get(target.value()));
+            }
+        }
+    }
+    return Optional<Expression>.Empty;
+}
+
+## `e` as the static property it names, `S.P`: written so, or a bare `P` in
+## the code of struct `S` with no local of that name.
+_static_member(e: Expression, properties: Properties, site: PropertySite): MemberRefExpression? {
+    match (e) {
+        MemberRef(node) => {
+            if (properties.is_static(node.lhs, node.name, site)) {
+                return Optional<MemberRefExpression>.Value(node);
+            }
+        }
+        SymbolRef(node) => {
+            var current = site.current();
+            if (current.is_value() and !site.is_local(node.id)) {
+                var owner = Expression.SymbolRef(SymbolRefExpression(current.value().name, TypeName(), node.loc));
+                if (properties.is_static(owner, node.id, site)) {
+                    return Optional<MemberRefExpression>.Value(MemberRefExpression(owner, node.id, node.loc));
+                }
+            }
+        }
+        else => {}
+    }
+    return Optional<MemberRefExpression>.Empty;
+}
+
+_static_get(member: MemberRefExpression): Expression {
+    return Expression.MethodCall(
+        MethodCallExpression(member.lhs.copy(), getter_name(member.name), Array<Expression>(), member.loc)
+    );
+}
+
+_static_set(member: MemberRefExpression, value: Expression): Expression {
+    return Expression.MethodCall(
+        MethodCallExpression(member.lhs.copy(), setter_name(member.name), [value], member.loc)
+    );
 }
 
 _member(e: Expression): MemberRefExpression {

@@ -32,7 +32,7 @@ A property is a field declaration followed by an accessor block instead of
   always means the storage; reach a member of that name as `this.field`.
 - A property must have a `get`: `{ set; }` alone is an error.
 - A property is declared with `var` and an explicit type; it cannot be
-  `const`. There are no `static` properties.
+  `const`.
 
 ## Reading and writing
 
@@ -92,6 +92,26 @@ main.pep:5:9: error: an extension cannot add storage: property 'y' must be compu
 
 An [enum](enums.md#properties) can declare computed properties too, under
 the same rule, and no `set`, since its values never change.
+
+## Static properties
+
+`static var name: T { get { ... } set { ... } }` declares a property of the
+type rather than of each value: read it as `Type.name`, write it as
+`Type.name = value`. In the struct's own code, the bare name reaches it, as
+for a static method. `+=`, `++` and the other compound assignments are a
+`get` and then a `set`.
+
+```pepper
+{{#include ../../examples/properties-static.pep}}
+```
+
+- A static property is **computed**: each accessor has a body, and none uses
+  `field`. Its storage would be a module-scope value, which every thread
+  shares and so must be `const`; keep a changing value in an
+  `async.Atomic<T>` or another thread-safe value at module scope, as
+  `Ticket` does.
+- A struct or an extension may declare one; a trait or an enum may not.
+- Its accessors are static methods, so they have no `this`.
 
 ## Properties of `[Shared]` structs
 

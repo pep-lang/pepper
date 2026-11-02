@@ -1388,6 +1388,8 @@ export struct PropertyDecl {
     var getter: Accessor?;
     ## The `set` accessor.
     var setter: Accessor?;
+    ## Whether it is `static`, a property of the type (`S.name`).
+    var is_static: bool = false;
     ## From the first token to the last.
     var span: Span;
 
@@ -1406,6 +1408,7 @@ export struct PropertyDecl {
         out["default_value"] = optional_expression_json(default_value);
         out["get"] = getter.is_value() ? getter.value().to_json() : JsonValue.Null;
         out["set"] = setter.is_value() ? setter.value().to_json() : JsonValue.Null;
+        out["is_static"] = JsonValue.Bool(is_static);
         out["span"] = span.to_json();
         return out;
     }
