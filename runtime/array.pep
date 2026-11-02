@@ -954,6 +954,31 @@ export struct Array<T> {
         }
     }
 
+    ## Overwrites every byte of the array's storage, spare capacity included,
+    ## with zero, in a way the optimizer keeps even when the array is freed
+    ## right after, so a secret such as a key does not stay in memory.
+    ##
+    ## Runs in O(capacity). The count is unchanged; each element reads as
+    ## zero afterwards. Invalidates running iterators.
+    ##
+    ## @panics if `T` holds references (a struct, `String` or array)
+    ## @example
+    ##     var key = "secret".bytes();
+    ##     key.wipe();   # every byte is now 0
+    wipe() {
+        assert(__is_pod<T>(), "Array.wipe: the elements hold references");
+        _version = _version + 1;
+        __ptr<u8> bytes = unsafe_cast<__ptr<u8>>(_data);
+        ulong size = _capacity * sizeof<T>();
+        ulong index = 0;
+        while (index < size) {
+            # An atomic store is never removed as dead, unlike a plain one or
+            # `memset`.
+            __atomic_store<u8>(bytes + index, 0);
+            index = index + 1;
+        }
+    }
+
     ## Removes every element for which `keep` returns false, keeping the
     ## order of the rest.
     ##

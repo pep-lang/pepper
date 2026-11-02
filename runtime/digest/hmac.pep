@@ -57,7 +57,9 @@ export struct Hmac<T> {
     ##
     ## @param key the secret key
     construct(key: String) {
-        _use_key(key.bytes());
+        var bytes = key.bytes();
+        _use_key(bytes);
+        bytes.wipe();
     }
 
     # Starts over with the key `key`.
@@ -79,7 +81,17 @@ export struct Hmac<T> {
             _outer_pad.append(byte ^ 0x5c);
             index += 1;
         }
+        if (key.count > _HMAC_BLOCK_SIZE) {
+            block.wipe();
+        }
         reset();
+    }
+
+    # Wipes the copies of the key; `T`'s own destructor wipes the hashers'
+    # state (SHA-1's and SHA-256's do).
+    destruct {
+        _inner_pad.wipe();
+        _outer_pad.wipe();
     }
 
     ## Discards the input given so far, returning the hasher to its initial
@@ -150,7 +162,10 @@ export hmac_sha256(key: u8[], message: u8[]): u8[] {
 ##     var expected = "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8";
 ##     assert(digest.to_hex(mac) == expected, "HMAC-SHA-256");
 export hmac_sha256(key: String, message: String): u8[] {
-    return hmac_sha256(key.bytes(), message.bytes());
+    var bytes = key.bytes();
+    var mac = hmac_sha256(bytes, message.bytes());
+    bytes.wipe();
+    return mac;
 }
 
 ## Returns the HMAC-SHA-1 of `message` under `key`, for formats that
@@ -173,7 +188,10 @@ export hmac_sha1(key: u8[], message: u8[]): u8[] {
 ## @param message the message to sign
 ## @returns the 20-byte MAC
 export hmac_sha1(key: String, message: String): u8[] {
-    return hmac_sha1(key.bytes(), message.bytes());
+    var bytes = key.bytes();
+    var mac = hmac_sha1(bytes, message.bytes());
+    bytes.wipe();
+    return mac;
 }
 
 # RFC 8018's limit on PBKDF2's output: (2^32 - 1) blocks of HMAC-SHA-256's
@@ -296,7 +314,10 @@ _pbkdf2_finish(hasher: _Sha256Engine, outer: _Sha256Engine, out: u8[]) {
 ##     var key = digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 16);
 ##     assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
 export pbkdf2_sha256(password: String, salt: u8[], rounds: ulong, length: ulong): u8[] {
-    return pbkdf2_sha256(password.bytes(), salt, rounds, length);
+    var bytes = password.bytes();
+    var key = pbkdf2_sha256(bytes, salt, rounds, length);
+    bytes.wipe();
+    return key;
 }
 
 ## Returns whether `a` and `b` hold the same bytes, taking the same time

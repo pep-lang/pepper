@@ -674,3 +674,15 @@ append_from_nothing_keeps_a_loop_running() {
     }
     expect_equal(seen, 1);
 }
+
+[Test]
+wipe_zeroes_every_element_and_keeps_the_count() {
+    var a = [1, 2, 3];
+    a.pop();
+    a.wipe();
+    expect_equal(a.count, 2 as ulong);
+    expect_equal(a[0], 0);
+    expect_equal(a[1], 0);
+    a.append(4);
+    expect_equal(a[2], 4);
+}

@@ -90,6 +90,13 @@ struct _Sha1Engine {
         reset();
     }
 
+    # The state and buffers hold what was hashed, an HMAC key among it.
+    destruct {
+        _state.wipe();
+        _schedule.wipe();
+        _buffer.block.wipe();
+    }
+
     reset() {
         _state[0] = 0x67452301;
         _state[1] = 0xefcdab89;
