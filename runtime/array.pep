@@ -656,11 +656,17 @@ export struct Array<T> {
     # The body of `sort_unstable(compare)`, which `sort_unstable()` calls
     # too (see `_merge_sort`).
     _pdq_sort(compare: (T, T) => int) {
-        if (_size < 2) {
+        _pdq_sort_range(0, _size, compare);
+    }
+
+    # Sorts slots `start` up to `end`, as `sort_unstable(compare)` does the
+    # whole Array.
+    _pdq_sort_range(start: ulong, end: ulong, compare: (T, T) => int) {
+        if (end - start < 2) {
             return;
         }
         var sorter = _ArraySorter<T>(this, compare);
-        sorter.sort(0, _size);
+        sorter.sort(start, end);
     }
 
     ## Reorders the elements so that the one at `nth` is the element a full
@@ -727,7 +733,14 @@ export struct Array<T> {
     # (runtime/compare.pep) calls too: a call to `sort` from there is
     # ambiguous, as the extension's lookup finds this overload twice.
     _merge_sort(compare: (T, T) => int) {
-        if (_size < 2) {
+        _merge_sort_range(0, _size, compare);
+    }
+
+    # Sorts slots `start` up to `end` stably, as `sort(compare)` does the
+    # whole Array (a writable slice sorts its run with it).
+    _merge_sort_range(start: ulong, end: ulong, compare: (T, T) => int) {
+        ulong size = end - start;
+        if (size < 2) {
             return;
         }
         _version = _version + 1;
@@ -737,15 +750,16 @@ export struct Array<T> {
         # nulls the slot it leaves and the store takes its reference without
         # a count step), so the sort changes no count, and every pass starts
         # with an all-null `target` (`_pep_malloc` zeroes `scratch`).
-        __ptr<T> scratch = _pep_malloc(sizeof<T>() * _size);
-        __ptr<T> source = _data;
+        __ptr<T> scratch = _pep_malloc(sizeof<T>() * size);
+        __ptr<T> run = unsafe_cast<__ptr<T>>(_slot(start));
+        __ptr<T> source = run;
         __ptr<T> target = scratch;
         ulong width = 1;
-        while (width < _size) {
+        while (width < size) {
             ulong low = 0;
-            while (low < _size) {
-                ulong middle = _min(low + width, _size);
-                ulong high = _min(low + 2 * width, _size);
+            while (low < size) {
+                ulong middle = _min(low + width, size);
+                ulong high = _min(low + 2 * width, size);
                 ulong left = low;
                 ulong right = middle;
                 ulong out = low;
@@ -778,7 +792,7 @@ export struct Array<T> {
         # The sorted elements ended in `scratch`: copy them back as bytes,
         # leaving `scratch` with copies it does not own, and free it as is.
         if (unsafe_cast<__ptr<u8>>(source) == unsafe_cast<__ptr<u8>>(scratch)) {
-            _array_copy(_data, scratch, sizeof<T>() * _size);
+            _array_copy(run, scratch, sizeof<T>() * size);
         }
         _pep_free(scratch);
     }
@@ -868,6 +882,31 @@ export struct Array<T> {
     slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArrayView<T> {
         _pep_check_bounds(start <= end && end <= _size, "Array slice out of bounds", location);
         var view = ArrayView<T>();
+        view._source = this;
+        view._start = start;
+        view._end = end;
+        view._version = _version;
+        return view;
+    }
+
+    ## Returns a writable view of the elements from `start` up to but not
+    ## including `end`: storing into it, or sorting, filling, reversing or
+    ## swapping in it, changes those elements of this Array in place.
+    ##
+    ## Changing the Array other than through the slice (see `Array` for
+    ## which operations count) makes every later use of the slice panic, as
+    ## for `slice`.
+    ##
+    ## @param start the position of the first element
+    ## @param end the position one past the last element; from `start` through `count`
+    ## @returns a writable view of `end - start` elements
+    ## @panics if `start <= end` and `end <= count` do not both hold ("Array slice out of bounds")
+    ## @example
+    ##     var a = [9, 8, 7, 6, 5];
+    ##     a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
+    mutable_slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): MutableArrayView<T> {
+        _pep_check_bounds(start <= end && end <= _size, "Array slice out of bounds", location);
+        var view = MutableArrayView<T>();
         view._source = this;
         view._start = start;
         view._end = end;
@@ -1913,6 +1952,200 @@ export extend ArrayView<T: Comparable> {
 ##
 ## @typeParam T the element type, `Comparable`
 export extend ArrayView<T: Comparable> with Comparable;
+
+## A writable view of a run of an Array's elements, made by
+## `Array.mutable_slice`: its indexer stores into the Array, and it sorts,
+## fills, reverses and swaps that run in place, so part of an Array changes
+## without copying it out and back.
+##
+## Like `ArrayView` it holds a reference to its Array and is fail-fast: a
+## change made to the Array other than through this slice makes every later
+## use of it panic with "Array modified while a slice of it is in use". A
+## change through it invalidates the Array's iterators and other slices,
+## as the same change on the Array would. `view()` gives the read-only
+## `ArrayView` of the same elements, for searching and iterating.
+##
+## @typeParam T the element type of the Array
+## @example
+##     var a = [1, 2, 3, 4, 5, 6];
+##     var tail = a.mutable_slice(3, 6);
+##     tail.reverse();   # a is [1, 2, 3, 6, 5, 4]
+##     tail[0] = 0;      # a is [1, 2, 3, 0, 5, 4]
+## @see Array.mutable_slice
+export struct MutableArrayView<T> {
+    ## The Array viewed; the slice holds a reference to it.
+    Array<T> _source;
+    ## The position in `_source` of the slice's first element.
+    ulong _start;
+    ## The position in `_source` one past the slice's last element.
+    ulong _end;
+    ## The `_source._version` the slice last saw; a mismatch means the Array was modified around it.
+    ulong _version;
+
+    # Panics when the Array changed other than through this slice.
+    _check(location: __ptr<char>) {
+        assert(_source._version == _version, "Array modified while a slice of it is in use", location);
+    }
+
+    # Counts a change made through this slice: the Array's iterators and
+    # other slices see it, this slice stays valid.
+    _changed() {
+        _source._version = _source._version + 1;
+        _version = _source._version;
+    }
+
+    ## The number of elements in the slice.
+    var count: ulong {
+        get {
+            return _end - _start;
+        }
+    }
+
+    ## Whether the slice has no elements.
+    var is_empty: bool {
+        get {
+            return _end == _start;
+        }
+    }
+
+    ## Returns the element at `index` in the slice, `index` 0 being the
+    ## slice's first element; this is the indexer read `slice[index]`.
+    ##
+    ## @param index the zero-based position in the slice
+    ## @returns the element at `index`
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    ## @panics if `index < count` does not hold ("ArrayView index out of bounds")
+    [](index: ulong, location: __ptr<char> = __caller_location()): T {
+        _check(location);
+        _pep_check_bounds(index < _end - _start, "ArrayView index out of bounds", location);
+        return _source._data[_start + index];
+    }
+
+    ## Stores `value` at `index` in the slice, which is `_start + index` in
+    ## the Array; this is the indexer write `slice[index] = value`.
+    ##
+    ## @param index the zero-based position in the slice
+    ## @param value the new element
+    ## @returns the element now stored at `index` (that is, `value`)
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    ## @panics if `index < count` does not hold ("ArrayView index write out of bounds")
+    [](index: ulong, value: T, location: __ptr<char> = __caller_location()): T {
+        _check(location);
+        _pep_check_bounds(index < _end - _start, "ArrayView index write out of bounds", location);
+        _changed();
+        _source._data[_start + index] = value;
+        return value;
+    }
+
+    ## Returns the read-only view of the same elements, for the searches,
+    ## iteration and comparisons `ArrayView` has. It panics once the Array
+    ## changes, this slice's own changes included.
+    ##
+    ## @returns the elements as an `ArrayView`
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    view(location: __ptr<char> = __caller_location()): ArrayView<T> {
+        _check(location);
+        return _source.slice(_start, _end);
+    }
+
+    ## Returns an iterator over the slice's elements in order; this is what
+    ## `for (var x in slice)` calls. Storing through the slice while the
+    ## loop runs makes the loop panic, as for an Array.
+    ##
+    ## @returns a new iterator positioned before the first element
+    iterate(): ArrayViewIterator<T> {
+        return view().iterate();
+    }
+
+    ## Sets every element of the slice to `value`.
+    ##
+    ## @param value the value each element becomes
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    fill(value: T, location: __ptr<char> = __caller_location()) {
+        _check(location);
+        _changed();
+        ulong index = _start;
+        while (index < _end) {
+            _source._data[index] = value;
+            index = index + 1;
+        }
+    }
+
+    ## Exchanges the elements at positions `a` and `b` of the slice.
+    ##
+    ## @param a the position of the first element
+    ## @param b the position of the second element
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    ## @panics if `a < count` or `b < count` does not hold ("ArrayView swap index out of bounds")
+    swap(a: ulong, b: ulong, location: __ptr<char> = __caller_location()) {
+        _check(location);
+        assert(a < _end - _start && b < _end - _start, "ArrayView swap index out of bounds", location);
+        _changed();
+        if (a != b) {
+            _array_swap(_source._slot(_start + a), _source._slot(_start + b), sizeof<T>());
+        }
+    }
+
+    ## Reverses the order of the slice's elements in place.
+    ##
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    reverse(location: __ptr<char> = __caller_location()) {
+        _check(location);
+        _changed();
+        _source._reverse_range(_start, _end);
+    }
+
+    ## Sorts the slice's elements in place into the order `compare` defines,
+    ## keeping equal elements in their order; see `Array.sort(compare)`.
+    ##
+    ## @param compare returns the order of its two arguments, as for `Array.sort`
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    ## @panics if `compare` modifies the Array ("Array modified during sort")
+    sort(compare: (T, T) => int, location: __ptr<char> = __caller_location()) {
+        _check(location);
+        _source._merge_sort_range(_start, _end, compare);
+        _version = _source._version;
+    }
+
+    ## Sorts the slice's elements in place into the order `compare` defines,
+    ## without keeping equal elements in their order; see
+    ## `Array.sort_unstable(compare)`.
+    ##
+    ## @param compare returns the order of its two arguments, as for `Array.sort`
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    ## @panics if `compare` modifies the Array ("Array modified during sort")
+    sort_unstable(compare: (T, T) => int, location: __ptr<char> = __caller_location()) {
+        _check(location);
+        _source._pdq_sort_range(_start, _end, compare);
+        _version = _source._version;
+    }
+}
+
+## Writable slices of `Comparable` elements sort in the elements' own order.
+export extend MutableArrayView<T: Comparable> {
+    ## Sorts the slice's elements in place into their own order, keeping
+    ## equal elements in their order; see `Array.sort()`.
+    ##
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    ## @example
+    ##     var a = [9, 8, 7, 6, 5];
+    ##     a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
+    sort() {
+        _check(__caller_location());
+        _source._merge_sort_range(_start, _end, (a, b) => a.compare(b));
+        _version = _source._version;
+    }
+
+    ## Sorts the slice's elements in place into their own order, without
+    ## keeping equal elements in their order; see `Array.sort_unstable()`.
+    ##
+    ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
+    sort_unstable() {
+        _check(__caller_location());
+        _source._pdq_sort_range(_start, _end, (a, b) => a.compare(b));
+        _version = _source._version;
+    }
+}
 
 ## An `Iterator<T>` over the elements of an `ArrayView`, in order; returned
 ## by `ArrayView.iterate()` and driven by `for (var x in slice)`.

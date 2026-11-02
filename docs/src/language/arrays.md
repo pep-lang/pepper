@@ -104,6 +104,24 @@ A slice is safe by construction:
   it pointing at freed memory. The runs `chunks` and `windows` give are
   slices too, and follow the same rules.
 
+### Writable slices
+
+A slice is read-only. `a.mutable_slice(start, end)` is a
+`MutableArrayView<T>` that writes through to the array: its indexer stores
+(`s[i] = x`), and `fill`, `swap`, `reverse`, `sort` and `sort_unstable`
+(with a `compare` function, or in the elements' own order) change that run
+of the array in place, without copying it out and back. `view()` gives the
+read-only slice of the same elements, for `find`, `contains` and the rest;
+a `for` loop reads it directly.
+
+```pepper
+{{#include ../../examples/arrays-mutable-slice.pep}}
+```
+
+A change made through a writable slice counts as a change to the array, so
+the array's iterators and other slices fail fast after it, but the
+writable slice itself stays usable. A change made to the array any other
+way makes the writable slice fail fast too.
 ## String views
 
 `s.view(start, size)` is a `StringView`: a view of `size` bytes of the
@@ -145,7 +163,5 @@ When "no array" must differ from "an empty array", say so in the type with
 
 ## Not yet
 
-- Slices are read-only; there is no slice that writes through to its
-  array.
 - A `StringView` does not yet convert to a `String` by itself where one is
   expected; call `to_string()`.

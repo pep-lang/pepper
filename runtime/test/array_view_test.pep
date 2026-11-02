@@ -172,3 +172,60 @@ runs_keep_their_array_alive() {
     expect_equal(seen, 2);
     expect_equal(__refcount<Tally>(t), 3);
 }
+
+[Test]
+mutable_slices_write_through_to_their_array() {
+    var a = [9, 8, 7, 6, 5, 4];
+    var middle = a.mutable_slice(1, 5);
+    middle.sort();
+    expect_true(a == [9, 5, 6, 7, 8, 4]);
+    middle.reverse();
+    expect_true(a == [9, 8, 7, 6, 5, 4]);
+    middle[0] = 0;
+    middle.swap(0, 3);
+    expect_true(a == [9, 5, 7, 6, 0, 4]);
+    middle.sort((x, y) => y - x);
+    expect_true(a == [9, 7, 6, 5, 0, 4]);
+    middle.sort_unstable();
+    expect_true(a == [9, 0, 5, 6, 7, 4]);
+    middle.fill(1);
+    expect_true(a == [9, 1, 1, 1, 1, 4]);
+    var total = 0;
+    for (var x in middle) {
+        total += x;
+    }
+    expect_equal(total, 4);
+    expect_true(middle.view().contains(1));
+}
+
+[Test]
+a_mutable_slice_sorts_strings_stably() {
+    var words = ["z", "pear", "fig", "apple", "fig", "a"];
+    words.mutable_slice(1, 5).sort((x, y) => x.size as int - y.size as int);
+    expect_true(words == ["z", "fig", "fig", "pear", "apple", "a"]);
+}
+
+[Test]
+[ShouldPanic("Array modified while a slice of it is in use")]
+a_mutable_slice_fails_fast_after_the_array_changes() {
+    var a = [1, 2, 3];
+    var view = a.mutable_slice(0, 2);
+    a.append(4);
+    view[0] = 5;
+}
+
+[Test]
+[ShouldPanic("Array modified while a slice of it is in use")]
+a_write_through_a_mutable_slice_invalidates_other_slices() {
+    var a = [1, 2, 3];
+    var read = a.slice(0, 3);
+    a.mutable_slice(0, 1)[0] = 7;
+    var first = read[0];
+}
+
+[Test]
+[ShouldPanic("ArrayView index write out of bounds")]
+writing_past_a_mutable_slice_panics() {
+    var a = [1, 2, 3];
+    a.mutable_slice(0, 2)[2] = 0;
+}

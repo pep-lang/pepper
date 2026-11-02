@@ -742,6 +742,36 @@ var middle = a.slice(1, 4);   # views [2, 3, 4]
 var second = middle[1];       # 3
 ```
 
+#### mutable_slice
+
+```pepper
+mutable_slice(start: ulong, end: ulong): MutableArrayView<T>
+```
+
+Returns a writable view of the elements from `start` up to but not
+including `end`: storing into it, or sorting, filling, reversing or
+swapping in it, changes those elements of this Array in place.
+
+Changing the Array other than through the slice (see `Array` for
+which operations count) makes every later use of the slice panic, as
+for `slice`.
+
+**Parameters**
+- `start` — the position of the first element
+- `end` — the position one past the last element; from `start` through `count`
+
+**Returns**
+- a writable view of `end - start` elements
+
+**Panics**
+- if `start <= end` and `end <= count` do not both hold ("Array slice out of bounds")
+
+**Example**
+```pepper
+var a = [9, 8, 7, 6, 5];
+a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
+```
+
 #### chunks
 
 ```pepper
@@ -1914,7 +1944,7 @@ assert(a.slice(0, 2).compare(a.slice(1, 3)) < 0, "[1, 2] before [2, 3]");
 ## extend ArrayView<T>
 
 ```pepper
-extend ArrayView<T: Comparable> with Comparable; ## An `Iterator<T>` over the elements of an `ArrayView`, in order; returned ## by `ArrayView.iterate()` and driven by `for (var x in slice)`. ## ## @typeParam T the element type of the slice ## @see ArrayView.iterate [Value] export struct ArrayViewIterator<T>
+extend ArrayView<T: Comparable> with Comparable; ## A writable view of a run of an Array's elements, made by ## `Array.mutable_slice`: its indexer stores into the Array, and it sorts, ## fills, reverses and swaps that run in place, so part of an Array changes ## without copying it out and back. ## ## Like `ArrayView` it holds a reference to its Array and is fail-fast: a ## change made to the Array other than through this slice makes every later ## use of it panic with "Array modified while a slice of it is in use". A ## change through it invalidates the Array's iterators and other slices, ## as the same change on the Array would. `view()` gives the read-only ## `ArrayView` of the same elements, for searching and iterating. ## ## @typeParam T the element type of the Array ## @example ## var a = [1, 2, 3, 4, 5, 6]; ## var tail = a.mutable_slice(3, 6); ## tail.reverse(); # a is [1, 2, 3, 6, 5, 4] ## tail[0] = 0; # a is [1, 2, 3, 0, 5, 4] ## @see Array.mutable_slice export struct MutableArrayView<T>
 ```
 
 An ArrayView of `Comparable` elements is `Comparable` itself, in the
@@ -1922,6 +1952,240 @@ lexicographic order of `compare`, so `<` works between views.
 
 **Type parameters**
 - `T` — the element type, `Comparable`
+
+## MutableArrayView
+
+```pepper
+struct MutableArrayView<T>
+```
+
+A writable view of a run of an Array's elements, made by
+`Array.mutable_slice`: its indexer stores into the Array, and it sorts,
+fills, reverses and swaps that run in place, so part of an Array changes
+without copying it out and back.
+
+Like `ArrayView` it holds a reference to its Array and is fail-fast: a
+change made to the Array other than through this slice makes every later
+use of it panic with "Array modified while a slice of it is in use". A
+change through it invalidates the Array's iterators and other slices,
+as the same change on the Array would. `view()` gives the read-only
+`ArrayView` of the same elements, for searching and iterating.
+
+**Type parameters**
+- `T` — the element type of the Array
+
+**See also**
+- `Array.mutable_slice`
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4, 5, 6];
+var tail = a.mutable_slice(3, 6);
+tail.reverse();   # a is [1, 2, 3, 6, 5, 4]
+tail[0] = 0;      # a is [1, 2, 3, 0, 5, 4]
+```
+
+### Properties
+
+#### count
+
+```pepper
+var count: ulong { get; }
+```
+
+The number of elements in the slice.
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the slice has no elements.
+
+### Methods
+
+#### operator []
+
+```pepper
+[](index: ulong): T
+```
+
+Returns the element at `index` in the slice, `index` 0 being the
+slice's first element; this is the indexer read `slice[index]`.
+
+**Parameters**
+- `index` — the zero-based position in the slice
+
+**Returns**
+- the element at `index`
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+- if `index < count` does not hold ("ArrayView index out of bounds")
+
+#### operator []
+
+```pepper
+[](index: ulong, value: T): T
+```
+
+Stores `value` at `index` in the slice, which is `_start + index` in
+the Array; this is the indexer write `slice[index] = value`.
+
+**Parameters**
+- `index` — the zero-based position in the slice
+- `value` — the new element
+
+**Returns**
+- the element now stored at `index` (that is, `value`)
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+- if `index < count` does not hold ("ArrayView index write out of bounds")
+
+#### view
+
+```pepper
+view(): ArrayView<T>
+```
+
+Returns the read-only view of the same elements, for the searches,
+iteration and comparisons `ArrayView` has. It panics once the Array
+changes, this slice's own changes included.
+
+**Returns**
+- the elements as an `ArrayView`
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+
+#### iterate
+
+```pepper
+iterate(): ArrayViewIterator<T>
+```
+
+Returns an iterator over the slice's elements in order; this is what
+`for (var x in slice)` calls. Storing through the slice while the
+loop runs makes the loop panic, as for an Array.
+
+**Returns**
+- a new iterator positioned before the first element
+
+#### fill
+
+```pepper
+fill(value: T)
+```
+
+Sets every element of the slice to `value`.
+
+**Parameters**
+- `value` — the value each element becomes
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+
+#### swap
+
+```pepper
+swap(a: ulong, b: ulong)
+```
+
+Exchanges the elements at positions `a` and `b` of the slice.
+
+**Parameters**
+- `a` — the position of the first element
+- `b` — the position of the second element
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+- if `a < count` or `b < count` does not hold ("ArrayView swap index out of bounds")
+
+#### reverse
+
+```pepper
+reverse()
+```
+
+Reverses the order of the slice's elements in place.
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+
+#### sort
+
+```pepper
+sort(compare: (T, T) => int)
+```
+
+Sorts the slice's elements in place into the order `compare` defines,
+keeping equal elements in their order; see `Array.sort(compare)`.
+
+**Parameters**
+- `compare` — returns the order of its two arguments, as for `Array.sort`
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+- if `compare` modifies the Array ("Array modified during sort")
+
+#### sort_unstable
+
+```pepper
+sort_unstable(compare: (T, T) => int)
+```
+
+Sorts the slice's elements in place into the order `compare` defines,
+without keeping equal elements in their order; see
+`Array.sort_unstable(compare)`.
+
+**Parameters**
+- `compare` — returns the order of its two arguments, as for `Array.sort`
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+- if `compare` modifies the Array ("Array modified during sort")
+
+## extend MutableArrayView<T>
+
+```pepper
+extend MutableArrayView<T: Comparable>
+```
+
+Writable slices of `Comparable` elements sort in the elements' own order.
+
+### Methods
+
+#### sort
+
+```pepper
+sort()
+```
+
+Sorts the slice's elements in place into their own order, keeping
+equal elements in their order; see `Array.sort()`.
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
+
+**Example**
+```pepper
+var a = [9, 8, 7, 6, 5];
+a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
+```
+
+#### sort_unstable
+
+```pepper
+sort_unstable()
+```
+
+Sorts the slice's elements in place into their own order, without
+keeping equal elements in their order; see `Array.sort_unstable()`.
+
+**Panics**
+- if the Array was modified around the slice ("Array modified while a slice of it is in use")
 
 ## ArrayViewIterator
 
