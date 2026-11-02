@@ -286,7 +286,10 @@ export struct PassState {
     ##
     ## @param diagnostic the error
     report(diagnostic: Diagnostic) {
-        errors.append(diagnostic);
+        # Bounded: `take_error` finds each one's line from its file's start.
+        if (errors.count < ERROR_LIMIT * 10) {
+            errors.append(diagnostic);
+        }
     }
 
     ## Whether an error was reported since the last `take_error`.
