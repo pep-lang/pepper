@@ -74,8 +74,9 @@ the order this book covers them:
 - **Types of your own:** structs with constructors, destructors, methods
   and [properties](language/properties.md),
   [value structs and enums](language/value-structs.md) (`[Value]`), derived
-  `==` and `hash` ([`[Equatable]`](language/hashing.md)), a `Comparable`
-  trait for ordered types, traits (with default methods, and usable as
+  `==`, `hash` and order ([`[Equatable]`](language/hashing.md)), a `Comparable`
+  trait for ordered types (which arrays, tuples and optionals of ordered
+  types are), traits (with default methods, and usable as
   types that convert back with `as?`), generics (with type arguments
   inferred at calls, and generic methods), type aliases, and function types
   and closures.

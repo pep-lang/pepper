@@ -146,3 +146,17 @@ optional_is_an_enum_with_empty_and_value_cases() {
     String? unset;
     expect_true(unset == Optional<String>.Empty);
 }
+
+[Test]
+optionals_of_comparable_values_are_comparable() {
+    var empty = Optional<int>.Empty;
+    expect_true(empty < Optional<int>.Value(-5));
+    expect_true(Optional<int>.Value(1) < Optional<int>.Value(2));
+    expect_equal(empty.compare(Optional<int>.Empty), 0);
+    expect_true(Optional<String>.Value("b") > Optional<String>.Value("a"));
+    var values = [Optional<int>.Value(3), empty, Optional<int>.Value(1)];
+    values.sort();
+    expect_true(values[0].is_empty());
+    expect_equal(values[1].value(), 1);
+    expect_equal(values[2].value(), 3);
+}
