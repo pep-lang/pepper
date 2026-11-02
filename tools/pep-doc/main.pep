@@ -46,6 +46,9 @@ Options:
                        the site's index (default: .pep/doc/html)
   --check              with package: change nothing, and fail if a public
                        declaration has no doc comment
+  --docs-base <URL>    with package: link each dependency's docs on the site
+                       of many packages' docs at URL, as
+                       <URL>/<host>/<owner>/<name>/ (default: its own site)
   --tools <DIR>        with check: the folder of the built tools (default:
                        target/pepper-tests/bin, else the release build's, else
                        the debug build's)
@@ -254,7 +257,7 @@ _package(args: String[]): Result<void> {
         return Result<void>.ok();
     }
     var book = root.join(".pep").join("doc");
-    write_book(book, manifest, package_pages(manifest)?)?;
+    write_book(book, manifest, package_pages(manifest)?, _option(args, "--docs-base"))?;
     var site_option = _option(args, "--site");
     var out = book.join("html");
     if (site_option.is_value()) {

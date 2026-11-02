@@ -13,6 +13,7 @@ import [Directory, File, Path] from io;
 import [Dependency, Manifest, find_manifest, load_manifest] from compiler.link;
 import toml;
 import [package_string] from toolchain;
+import [inert_markdown] from "inert";
 import "reference";
 
 # The command whose pages these are, named in each page's header.
@@ -111,14 +112,23 @@ export package_pages(manifest: Manifest): Result<Page[]> {
     return Result<Page[]>.ok(out);
 }
 
-# Where the docs of `dependency` are: the GitHub Pages site the package
-# template's CI publishes, for a GitHub repository; its repository, for
-# another host; nothing for a folder.
-export dependency_docs(dependency: Dependency): String? {
+# Where the docs of `dependency` are: with `docs_base`, the site of many
+# packages' docs (`--docs-base`), which keeps each under its source
+# (`<base>/github.com/owner/name/`); else the GitHub Pages site the package
+# template's CI publishes, for a GitHub repository, or its repository, for
+# another host. Nothing for a folder.
+export dependency_docs(dependency: Dependency, docs_base: String? = Optional<String>.Empty): String? {
     if (dependency.host.is_empty()) {
         return Optional<String>.Empty;
     }
     var host = dependency.host.value();
+    if (docs_base.is_value()) {
+        var base = docs_base.value();
+        while (base.ends_with("/")) {
+            base = base.substr_bytes(0, base.size - 1);
+        }
+        return Optional<String>.Value($"{base}/{host.domain()}/{dependency.location}/");
+    }
     if (host.key() == "github") {
         var parts = dependency.location.split("/");
         if (parts.count == 2) {
@@ -130,7 +140,7 @@ export dependency_docs(dependency: Dependency): String? {
 
 # The front page: the package's name, version and description, then its
 # pages, features and dependencies.
-export package_index(manifest: Manifest, pages: Page[]): String {
+export package_index(manifest: Manifest, pages: Page[], docs_base: String? = Optional<String>.Empty): String {
     var version = manifest_string(manifest, "version");
     var out = StringBuilder();
     out.append($"<!-- Generated from pep.toml by `{COMMAND}`. Do not edit. -->\n\n");
@@ -165,7 +175,7 @@ export package_index(manifest: Manifest, pages: Page[]): String {
     if (!manifest.dependencies.is_empty) {
         out.append("\n## Dependencies\n\n");
         for (var dependency in manifest.dependencies) {
-            var docs = dependency_docs(dependency);
+            var docs = dependency_docs(dependency, docs_base);
             var name = docs.is_value() ? $"[`{dependency.name}`]({docs.value()})" : $"`{dependency.name}`";
             var notes = Array<String>();
             if (dependency.optional) {
@@ -182,8 +192,12 @@ export package_index(manifest: Manifest, pages: Page[]): String {
 
 # Writes the mdBook of `manifest`'s package into `dir`: `book.toml`, and
 # under `src/` the front page, `SUMMARY.md` and `pages`. A page from an
-# earlier run whose file is gone goes with the rest of `src/`.
-export write_book(dir: Path, manifest: Manifest, pages: Page[]): Result<void> {
+# earlier run whose file is gone goes with the rest of `src/`. What the
+# package wrote shows as text, never as HTML (`inert_markdown`), so a site
+# can serve many packages' docs on one origin (#301).
+export write_book(
+    dir: Path, manifest: Manifest, pages: Page[], docs_base: String? = Optional<String>.Empty
+): Result<void> {
     var src = dir.join("src");
     Directory.remove_all(src);
     var created = Directory.create_all(src);
@@ -199,11 +213,21 @@ export write_book(dir: Path, manifest: Manifest, pages: Page[]): Result<void> {
             );
         }
         summary.append($"- [{page.title}]({page.file})\n");
-        _write_file(src.join(page.file), page.markdown)?;
+        _write_file(src.join(page.file), _inert_page(page.markdown))?;
     }
-    _write_file(src.join("SUMMARY.md"), summary.to_string())?;
-    _write_file(src.join("README.md"), package_index(manifest, pages))?;
+    _write_file(src.join("SUMMARY.md"), inert_markdown(summary.to_string()))?;
+    _write_file(src.join("README.md"), _inert_page(package_index(manifest, pages, docs_base)))?;
     return _write_file(dir.join("book.toml"), $"[book]\ntitle = \"{manifest.name}\"\n");
+}
+
+# `page` made inert after its first line, the generated header comment.
+_inert_page(page: String): String {
+    var newline = page.find("\n");
+    if (!page.starts_with("<!--") or newline < 0) {
+        return inert_markdown(page);
+    }
+    var head = page.substr_bytes(0, newline as ulong + 1);
+    return head + inert_markdown(page.substr_bytes(head.size, page.size - head.size));
 }
 
 _write_file(path: Path, text: String): Result<void> {

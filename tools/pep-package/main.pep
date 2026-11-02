@@ -654,6 +654,11 @@ _build_options_text(root: toml.TomlValue): String {
 # `info`: the package `spec` names, by the name the index lists it by or
 # as `[host:]owner/name`: what the index says of it, its versions, newest
 # first, and what the pep.toml of its newest release declares.
+# The site of the reference docs of every package in the index, which the
+# index's `docs` workflow builds from each version tag (#301), each package
+# under its source: `<site>/github.com/owner/name/`.
+const PACKAGE_DOCS = "https://pepper-lang.dev/index";
+
 show_info(spec: String, offline: bool): int {
     if (offline) {
         return fail(
@@ -751,6 +756,7 @@ show_info(spec: String, offline: bool): int {
         ("minimum toolchain", manifest.minimum_toolchain),
         ("license", package_string(root, "license")),
         ("repository", package_string(root, "repository")),
+        ("docs", listing.name.is_empty ? "" : $"{PACKAGE_DOCS}/{host_domain(host)}/{repository}/"),
         ("keywords", ", ".join(listing.keywords))
     ]) {
         text += value.is_empty ? "" : $"{label}: {value}\n";
