@@ -55,7 +55,7 @@ out of both; a field with neither takes part:
   its type arguments give it.
 - `include` and `exclude` are `bool`s, and saying both in a way that
   contradicts (`include = true, exclude = true`) is an error. On the struct
-  itself, `[Equatable]` takes no arguments.
+  itself, `[Equatable]` takes only `ordered` ([below](#deriving-the-order-with-ordered--true)).
 - An `[Equatable]` struct cannot also declare `==` or override `hash<T>`;
   either is an error. To compare some other way, drop the attribute and
   declare both by hand (below).
@@ -169,6 +169,26 @@ stably, as `sort((a, b) => a.compare(b))` would. Floats sort in the total
 order, NaN last. Any other order still takes a comparer:
 `items.sort((a, b) => b.compare(a))` sorts in reverse.
 
+### Deriving the order with `ordered = true`
+
+`[Equatable(ordered = true)]` on a struct derives `compare` too, from the
+same fields as `==` and the hash, in declaration order, the way a tuple of
+them compares, and makes the struct `Comparable`. So the order agrees with
+`==`, as `Map` keys and sorting need, and a field left out with
+`[Equatable(exclude = true)]` takes no part in it either:
+
+```pepper
+{{#include ../../examples/ordering-derived.pep}}
+```
+
+- Every field that takes part must be `Comparable`; one that is not is
+  reported at the field (`no member named 'compare' in 'P'`) when the
+  order is used.
+- The struct cannot also declare `compare(other)`; drop `ordered = true`
+  to write it by hand, as `Version` does above.
+- `ordered` goes on the struct; a field's `[Equatable(...)]` takes only
+  `include` and `exclude`.
+
 ### Numbers, `char` and `String`
 
 Every number type and `char` is `Comparable` by value, and `String` by
@@ -192,6 +212,4 @@ cannot break a map.
 
 ### Not yet
 
-- `Optional` is not `Comparable`, and `Comparable` is not
-  derived from a struct's fields: a struct writes its `compare`, as
-  `Version` does above.
+- `Optional` is not `Comparable`.
