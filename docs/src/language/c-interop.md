@@ -148,6 +148,35 @@ C gets its elements through a pointer:
 {{#include ../../examples/c-arrays.pep}}
 ```
 
+## Passing structs by value
+
+A C function that takes or returns a struct by value, such as `div`
+(`div_t`), `struct timespec` or `SDL_Rect`, takes a
+[value struct](value-structs.md) of the same fields in the same order:
+
+```pepper
+{{#include ../../examples/c-struct-by-value.pep}}
+```
+
+The struct is laid out as C lays it out: each field at the next offset its
+alignment allows, and the whole padded to its largest alignment. C must be
+able to hold each field: a number, `bool`, an enum whose cases carry
+nothing, a pointer, a C function pointer (`extern (P...) => R`), or another
+such value struct. A field of any other type (a `String`, an `Array`, a
+reference struct) is an error at the parameter or result:
+
+```text
+main.pep:11:14: error: value struct 'S' cannot be passed to C by value: field 'b' of 'S' has type 'Box', which C cannot hold
+```
+
+The compiler passes the struct as the platform's C calling convention
+does, in registers or in memory: x86-64 System V (Linux and macOS), x86-64
+Windows, AArch64 (Linux, macOS, Windows, Android and iOS) and wasm32. A
+struct cannot be passed to a variadic function (`...`), and a reference
+struct still passes only as a pointer. A struct that C passes by pointer
+(`const struct stat*`) is a `__ptr<T>` to the value struct, as for any
+other pointer.
+
 ## Variadic functions
 
 A C function with a variable argument list, such as `printf` or `snprintf`,
@@ -514,7 +543,8 @@ Each parameter and the result must be a type C can hold:
 | `extern (P...) => R` | a C function pointer, `R (*name)(P...)` |
 | an enum whose cases carry nothing | the integer it is stored as: `int32_t`, or its representation's (`enum Mode: u8` is `uint8_t`) |
 | `String` | a parameter: `const char* name, size_t name_size`; a result: `char*` (see [Strings](#strings)) |
-| a struct | an opaque handle, `Name*` |
+| a value struct whose fields C can hold | a C struct of the same fields, by value (see [Passing structs by value](#passing-structs-by-value)), which the header declares |
+| any other struct | an opaque handle, `Name*` |
 
 Anything else is an error at the parameter or result that C cannot hold:
 
@@ -525,10 +555,11 @@ main.pep:2:15: error: cannot export 'total': C cannot hold 'Array<int>'
 note: only a non-generic struct passes to C, as a handle
 ```
 
-A generic struct (`Array<int>`), a value struct, an enum whose cases carry
-values, a trait, a tuple, `Optional` and a Pepper function type cannot
-cross. Pass an array as a pointer to its elements and a count, or wrap it
-in a struct of your own and pass a handle.
+A generic struct (`Array<int>`), a value struct with a field C cannot hold
+or a generic one, an enum whose cases carry values, a trait, a tuple,
+`Optional` and a Pepper function type cannot cross. Pass an array as a
+pointer to its elements and a count, or wrap it in a struct of your own and
+pass a handle.
 
 ### Strings
 

@@ -15,7 +15,7 @@ import [demangle_name] from compiler.link;
 import [known_location, location_of] from "common";
 import "confinement";
 import "copies";
-import [Export, Exports, Handle, is_export_string, STRING_FREE] from "export_table";
+import [Export, Exports, Handle, is_export_string, STRING_FREE, ValueStruct] from "export_table";
 import [Loc] from "loc";
 import [FunctionDef, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
@@ -68,6 +68,7 @@ export collect_exports(module: Module, state: PassState) {
     var exports = Exports();
     var symbols = HashMap<String, Loc>();
     var handles = HashMap<String, Handle>();
+    var values = _ValueStructs(module, state, exports);
     for (var function in module.functions) {
         if (function.parent.is_value() or _is_generic(function)) {
             continue;
@@ -88,7 +89,7 @@ export collect_exports(module: Module, state: PassState) {
         var parameter_locs = Array<Loc>();
         for (var parameter in function.parameters) {
             var loc = parameter.type_loc.is_none() ? parameter.loc : parameter.type_loc;
-            var checked = _check_type(module, state, parameter.ty, symbol.value(), loc, handles);
+            var checked = _check_type(module, state, parameter.ty, symbol.value(), loc, handles, values);
             if (checked.is_value()) {
                 state.report(checked.value());
                 return;
@@ -96,7 +97,7 @@ export collect_exports(module: Module, state: PassState) {
             parameters.append((parameter.name, parameter.ty));
             parameter_locs.append(loc);
         }
-        var checked = _check_type(module, state, function.ty, symbol.value(), function.loc, handles);
+        var checked = _check_type(module, state, function.ty, symbol.value(), function.loc, handles, values);
         if (checked.is_value()) {
             state.report(checked.value());
             return;
@@ -283,7 +284,13 @@ _is_c_identifier(name: String): bool {
 ## `symbol`, written at `loc`), recording the handle functions of a
 ## struct; the error when it cannot.
 _check_type(
-    module: Module, state: PassState, ty: TypeName, symbol: String, loc: Loc, handles: HashMap<String, Handle>
+    module: Module,
+    state: PassState,
+    ty: TypeName,
+    symbol: String,
+    loc: Loc,
+    handles: HashMap<String, Handle>,
+    values: _ValueStructs
 ): Diagnostic? {
     if (c_type(ty, state.enum_representations).is_value() or is_export_string(ty)) {
         return Optional<Diagnostic>.Empty;
@@ -309,15 +316,106 @@ _check_type(
             }
             return Optional<Diagnostic>.Empty;
         }
-        why = is_value ?
-            "a value struct has no handle; pass its fields" :
-            "only a non-generic struct passes to C, as a handle";
+        if (is_value) {
+            var problem = c_value_struct_problem(module, state, ty);
+            if (!problem.is_value() and st.ty.is_generic()) {
+                problem = Optional<String>.Value("a generic struct has no C name");
+            }
+            if (!problem.is_value()) {
+                values.add(st);
+                return Optional<Diagnostic>.Empty;
+            }
+            why = $"a value struct passes by value when C can hold each field; {problem.value()}";
+        } else {
+            why = "only a non-generic struct passes to C, as a handle";
+        }
     }
     return Optional<Diagnostic>.Value(
         _error_at_known(
             $"cannot export '{symbol}': C cannot hold '{shown}'", loc
         ).with_note(why, Optional<Location>.Empty)
     );
+}
+
+## Returns why C cannot hold the value struct `ty` by value, or nothing when
+## it can: when each field is a number, `bool`, an enum, a pointer, a C
+## function pointer or such a value struct (#384).
+##
+## @param module the model
+## @param state the passes' state
+## @param ty a value struct's type
+## @returns the reason, or nothing
+export c_value_struct_problem(module: Module, state: PassState, ty: TypeName): String? {
+    var found = _struct_named(module, ty.to_string());
+    if (!found.is_value()) {
+        return Optional<String>.Value($"'{demangle_name(ty.to_string())}' is not a struct");
+    }
+    var st = found.value();
+    if (st.field_members.is_empty) {
+        return Optional<String>.Value($"'{demangle_name(st.name)}' has no fields, and C has no empty struct");
+    }
+    for (var field in st.field_members) {
+        if (c_type(field.ty, state.enum_representations).is_value()) {
+            continue;
+        }
+        if (state.is_value_struct(field.ty.to_string())) {
+            var inner = c_value_struct_problem(module, state, field.ty);
+            if (inner.is_value()) {
+                return inner;
+            }
+            continue;
+        }
+        return Optional<String>.Value(
+            $"field '{field.name}' of '{demangle_name(st.name)}' has type '{demangle_name(field.ty.to_string())}', which C cannot hold"
+        );
+    }
+    return Optional<String>.Empty;
+}
+
+# The struct named `name` in `module`.
+_struct_named(module: Module, name: String): StructDef? {
+    for (var st in module.structs) {
+        if (st.name == name) {
+            return Optional<StructDef>.Value(st);
+        }
+    }
+    return Optional<StructDef>.Empty;
+}
+
+# The value structs the exports pass, gathered into `exports.values` with
+# each struct after those its fields hold, for the header.
+struct _ValueStructs {
+    var module: Module;
+    var state: PassState;
+    var exports: Exports;
+    var added: HashSet<String> = HashSet<String>();
+
+    construct(module: Module, state: PassState, exports: Exports) {
+        this.module = module;
+        this.state = state;
+        this.exports = exports;
+    }
+
+    # Adds `st`, after the value structs its fields hold.
+    add(st: StructDef) {
+        if (!added.insert(st.name)) {
+            return;
+        }
+        var value = ValueStruct(st.name, demangle_name(st.name));
+        for (var field in st.field_members) {
+            var spelled = c_type(field.ty, state.enum_representations);
+            if (spelled.is_value()) {
+                value.fields.append(declarator(spelled.value(), field.name));
+                continue;
+            }
+            var inner = _struct_named(module, field.ty.to_string());
+            if (inner.is_value()) {
+                add(inner.value());
+                value.fields.append(declarator(demangle_name(inner.value().name), field.name));
+            }
+        }
+        exports.values.append(value);
+    }
 }
 
 ## `ByteBuffer` as `byte_buffer`.
@@ -456,7 +554,9 @@ export declarator(c_type: String, name: String): String {
 
 ## Returns the C type of `ty` in a library's header: as `c_type`, a
 ## handle's pointer, or for a `String` result, `char*`.
-_header_type(ty: TypeName, handles: Handle[], representations: HashMap<String, (String, long)>): String {
+_header_type(
+    ty: TypeName, handles: Handle[], values: ValueStruct[], representations: HashMap<String, (String, long)>
+): String {
     if (is_export_string(ty)) {
         return "char*";
     }
@@ -464,6 +564,11 @@ _header_type(ty: TypeName, handles: Handle[], representations: HashMap<String, (
     for (var handle in handles) {
         if (handle.structure == key) {
             return handle.c_type + "*";
+        }
+    }
+    for (var value in values) {
+        if (value.structure == key) {
+            return value.c_type;
         }
     }
     var spelled = c_type(ty, representations);
@@ -494,6 +599,17 @@ export header_declarations(exports: Exports, representations: HashMap<String, (S
         }
         out.append("\n");
     }
+    if (!exports.values.is_empty) {
+        out.append("/* Structs passed by value, laid out as the Pepper [Value] structs. */\n");
+        for (var value in exports.values) {
+            out.append($"typedef struct {value.c_type} {{\n");
+            for (var field in value.fields) {
+                out.append($"    {field};\n");
+            }
+            out.append($"}} {value.c_type};\n");
+        }
+        out.append("\n");
+    }
     if (exports.frees_strings) {
         out.append("/* A string a function returns is a NUL-terminated UTF-8 copy, which the\n");
         out.append(" * caller frees with this. */\n");
@@ -506,11 +622,11 @@ export header_declarations(exports: Exports, representations: HashMap<String, (S
             if (is_export_string(ty)) {
                 parameters.append($"const char* {name}, size_t {name}_size");
             } else {
-                parameters.append(declarator(_header_type(ty, exports.handles, representations), name));
+                parameters.append(declarator(_header_type(ty, exports.handles, exports.values, representations), name));
             }
         }
         var listed = parameters.is_empty ? "void" : ", ".join(parameters);
-        var result = _header_type(e.result, exports.handles, representations);
+        var result = _header_type(e.result, exports.handles, exports.values, representations);
         out.append(declarator(result, $"{e.symbol}({listed})") + ";\n");
     }
     return out.to_string();

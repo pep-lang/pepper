@@ -96,8 +96,11 @@ Each of these is an error at the code to change:
 - A field whose type is the struct itself, directly or through other value
   structs: the value would be infinitely large. Hold it through a reference
   struct or an `Array` instead.
-- A parameter or result of an [`extern`](c-interop.md) function: pass a
-  pointer to C instead.
+- A parameter or result of an [`extern`](c-interop.md) function, or of an
+  `[Export]`, when C cannot hold one of its fields: C takes a value struct
+  by value only when each field is a number, `bool`, enum, pointer, C
+  function pointer or such a value struct (see
+  [Passing structs by value](c-interop.md#passing-structs-by-value)).
 
 ## Value structs as trait values
 

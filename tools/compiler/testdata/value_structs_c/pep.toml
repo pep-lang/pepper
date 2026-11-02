@@ -1,0 +1,6 @@
+[package]
+name = "value_structs_c"
+version = "0.1.0"
+
+[native]
+sources = ["shapes.c"]

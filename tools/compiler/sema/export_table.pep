@@ -74,6 +74,26 @@ export struct Handle {
     }
 }
 
+## A `[Value]` struct an export passes by value: the header declares it as
+## a C struct of the same fields.
+export struct ValueStruct {
+    ## The struct, by its model name.
+    var structure: String;
+    ## Its C type name (the struct's declared name).
+    var c_type: String;
+    ## Its fields, each a C declaration (`int32_t x`), in order.
+    var fields: String[] = Array<String>();
+
+    ## Creates a value struct with no fields yet.
+    ##
+    ## @param structure the struct's model name
+    ## @param c_type its C type name
+    construct(structure: String, c_type: String) {
+        this.structure = structure;
+        this.c_type = c_type;
+    }
+}
+
 ## What a program exports to C: its exported functions and the handle
 ## functions of every struct they pass, both in C symbol order.
 export struct Exports {
@@ -81,6 +101,9 @@ export struct Exports {
     var functions: Export[] = Array<Export>();
     ## The handles.
     var handles: Handle[] = Array<Handle>();
+    ## The `[Value]` structs the exports pass by value, each after the
+    ## structs its fields hold.
+    var values: ValueStruct[] = Array<ValueStruct>();
     ## Some export returns a `String`, so `STRING_FREE` is exported too.
     var frees_strings: bool = false;
 

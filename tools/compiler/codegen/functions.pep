@@ -24,6 +24,7 @@ import [
 ] from compiler.sema;
 import [Address, check_store_type] from "address";
 import "address";
+import "c_abi";
 import "calls";
 import "chains";
 import [function_checks] from "checks";
@@ -337,6 +338,15 @@ extend Generator {
             functions[ext.name] = intrinsic;
             fn_returns[ext.name] = ext.ty.to_string();
             return Result<void>.ok();
+        }
+        # A value struct passes as the C convention says (`c_abi.pep`),
+        # through an adapter of Pepper's signature.
+        bool passes_struct = state.is_value_struct(ext.ty.to_string());
+        for (var param in ext.parameters) {
+            passes_struct = passes_struct or state.is_value_struct(param.ty.to_string());
+        }
+        if (passes_struct) {
+            return declare_c_struct_extern(ext, symbol, param_types, return_type.value());
         }
         # On a 32-bit target the C function's own signature differs from
         # Pepper's (see `c_abi_type`): declare that one, and calls convert.
