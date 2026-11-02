@@ -43,7 +43,7 @@ import "interface";
 const _VERSION = "v3";
 ## The folder of compilation units' records, named for the record
 ## format's version: a new format gets a new folder.
-const _RECORDS_FOLDER = "c17";
+const _RECORDS_FOLDER = "c18";
 ## The file that marks a layout's folder as the shared cache's (`Cache.share`).
 const _SHARED_MARKER = "shared";
 ## How many hexadecimal digits of a key name its folder: 80 bits, so two

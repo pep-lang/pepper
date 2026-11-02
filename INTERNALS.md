@@ -1142,6 +1142,17 @@ lowered to ordinary members; nothing after sema knows about it.
   function type is an error. Assignments sema synthesizes (`Loc.none()`:
   field initializers, `__copy`) are left alone, except a constructor's
   `this.P` parameter.
+- **Static properties** (`static var P: T { get { ... } }`,
+  `PropertyDecl.is_static`, #406) skip all of the above: `Parser._member`
+  reads `static var`, and `static_property_members` makes the accessors
+  static methods `__get_P` / `__set_P`, with no `PropertyDef` and no
+  storage (each accessor must have a body that does not use `field`).
+  `Properties.statics` collects them from the structs' and extensions'
+  static `__get_` methods, and `lower_property` (`_static_access`) turns
+  `S.P`, or a bare `P` in `S`'s code with no local of that name, into the
+  static call `S.__get_P()`, `S.P = v` into `S.__set_P(v)`, and `S.P += v`
+  / `S.P++` into the set of the get combined, since a type has no side
+  effects to evaluate once.
 - **Typing.** `resolve_implicit_types` (`_TypeScopes.type_of`) gives `x.P` (and a bare `P` in a method) the
   getter's return type; `convert_member_refs` treats a property without a
   same-named field as a member, so a bare name becomes `this.P`.

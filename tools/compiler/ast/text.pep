@@ -303,7 +303,11 @@ _members(properties: PropertyDecl[], methods: FunctionDecl[]): String {
 # `var name: Type { get { ... } set; } = value;`.
 _property(decl: PropertyDecl): String {
     var out = StringBuilder();
-    out.append(_attributes(decl.attributes) + $"var {decl.name}: {decl.type_name.to_string()} {{");
+    out.append(
+        _attributes(decl.attributes)
+            + (decl.is_static ? "static " : "")
+            + $"var {decl.name}: {decl.type_name.to_string()} {{"
+    );
     if (decl.getter.is_value()) {
         out.append(_accessor("get", decl.getter.value()));
     }

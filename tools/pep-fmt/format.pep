@@ -1870,6 +1870,9 @@ export struct Formatter {
     _property(decl: PropertyDecl): Doc {
         var result = concat();
         _prefix(decl.attributes, false, false, result);
+        if (decl.is_static) {
+            result.add(_take("static")).add(text(" "));
+        }
         result.add(_take("var")).add(text(" ")).add(_take_any());
         result.add(_take(":")).add(text(" ")).add(_type(decl.type_name.span));
         result.add(text(" ")).add(_accessors(decl));
