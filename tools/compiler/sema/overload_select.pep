@@ -131,7 +131,7 @@ export struct ArgInfo {
 ## @returns true for a converted literal
 export is_string_literal(e: Expression): bool {
     if (e is FunctionCall(call)) {
-        if (call.function == "String" and call.args.count > 0) {
+        if (is_string_constructor(call.function) and call.args.count > 0) {
             if (call.args[0] is StringLiteral(literal)) {
                 return literal.is_raw and literal.loc.same(call.loc);
             }

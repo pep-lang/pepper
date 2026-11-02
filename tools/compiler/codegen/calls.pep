@@ -1282,7 +1282,7 @@ extend Generator {
 ## Whether `arg` is `String(raw, ...)` made from a raw string literal.
 _raw_string_argument(arg: Expression): bool {
     if (arg is FunctionCall(call)) {
-        if (call.function == "String" and call.args.count > 0) {
+        if (sema.is_string_constructor(call.function) and call.args.count > 0) {
             if (call.args[0] is StringLiteral(literal)) {
                 return literal.is_raw;
             }

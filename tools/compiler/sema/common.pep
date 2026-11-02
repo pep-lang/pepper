@@ -35,6 +35,16 @@ export error_at(message: String, loc: Loc): Diagnostic {
     return Diagnostic.error(message).at(location_of(loc));
 }
 
+## Returns whether `function` names `String`'s constructor: `String`, or,
+## once overload selection resolves a call, a member of its set (`String$1`)
+## when `String` has more than one constructor (#503).
+##
+## @param function the called name
+## @returns whether it constructs a `String`
+export is_string_constructor(function: String): bool {
+    return function == "String" or function.starts_with("String$");
+}
+
 ## Facts about a struct definition.
 export extend StructDef {
     ## Returns whether this is a value type (`[Value]`): copied, not

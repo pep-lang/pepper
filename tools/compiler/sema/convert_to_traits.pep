@@ -766,7 +766,7 @@ struct _TraitConversions {
             }
             FunctionCall(node) => {
                 # `String(text)` of a `StringConstant` copies its text.
-                if (node.function == "String" and node.args.count == 1) {
+                if (is_string_constructor(node.function) and node.args.count == 1) {
                     var ty = static_type_of(node.args[0], table, current, state);
                     if (ty.is_value() and ty.value().to_string() == STRING_CONSTANT) {
                         return Expression.MethodCall(

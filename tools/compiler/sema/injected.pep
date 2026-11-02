@@ -19,7 +19,7 @@
 ## concrete code still holds one in its placeholder form.
 
 import [RANGE_FUNCTION] from "builder";
-import [error_at] from "common";
+import [error_at, is_string_constructor] from "common";
 import [is_text_conversion] from "interpolation";
 import [convert_string_literal] from "literals";
 import [Loc] from "loc";
@@ -67,7 +67,7 @@ _is_string(e: Expression): bool {
             return !literal.is_raw;
         }
         FunctionCall(call) => {
-            return call.function == "String" or is_text_conversion(call.function);
+            return is_string_constructor(call.function) or is_text_conversion(call.function);
         }
         MethodCall(call) => {
             return call.method == "+" and _is_string(call.this_value);
