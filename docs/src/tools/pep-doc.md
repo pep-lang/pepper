@@ -122,11 +122,14 @@ pepper doc package           # writes .pep/doc/, renders it into .pep/doc/html/
   repository, and for a `path` dependency nothing. With `--docs-base`,
   the site of many packages' docs instead.
 - **Raw HTML:** what the package wrote (its doc comments, its `pep.toml`'s
-  text, its file names) shows as text: outside code, a `<` is written
-  `&lt;`, so a tag, comment or autolink is not HTML; and a link whose
-  target names a scheme other than `http`, `https` or `mailto` (such as
-  `javascript:`) points to `#`. A site can then serve every package's
-  docs on one origin.
+  text, its file names) shows as text. Outside code, `<` and `&` are
+  written `&lt;` and `&amp;`, so no tag, comment, autolink or entity is
+  HTML; `javascript:`, `vbscript:` and `data:` get a zero-width space
+  before their `:`, so no link has one of those schemes; and mdBook's
+  `{{#include}}` and other `{{#...}}` directives stay text, in code too.
+  Code (a fence, a code span) is left as written; an indented code
+  block counts as text. A site can then serve every package's docs on
+  one origin.
 - **Output:** an mdBook in `.pep/doc/` (`book.toml`, and `src/` with the
   pages, `README.md` and `SUMMARY.md`, rewritten on each run), rendered
   with mdBook into `.pep/doc/html/`. When mdBook cannot run, the error

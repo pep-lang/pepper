@@ -127,18 +127,26 @@ package_check_reports_undocumented_declarations() {
 # safe links and the generated header stay as they are.
 [Test]
 package_markdown_is_inert() {
-    expect_equal(inert_markdown("a <script>x</script> b"), "a &lt;script>x&lt;/script> b");
+    var zero_width = "&#8203;";
+    expect_equal(inert_markdown("a <script>x</script> & b"), "a &lt;script>x&lt;/script> &amp; b");
     expect_equal(inert_markdown("keep `a < b` and ``x`<`y``"), "keep `a < b` and ``x`<`y``");
     expect_equal(inert_markdown("```\n<b>\n```\n<i>"), "```\n<b>\n```\n&lt;i>");
-    expect_equal(inert_markdown("text\n\n    <code>"), "text\n\n    <code>");
-    expect_equal(inert_markdown("[a](javascript:alert(1)) [b](JavaScript:x)"), "[a](#)) [b](#)");
-    expect_equal(inert_markdown("[c](javascript&#58;x) [d](data:text/html,x)"), "[c](#) [d](#)");
+    # Only what CommonMark takes for code passes as written.
+    expect_equal(inert_markdown("text\n    ```\n<i>"), "text\n    ```\n&lt;i>");
+    expect_equal(inert_markdown("``` a`b\n<i>"), "``` a`b\n&lt;i>");
+    expect_equal(inert_markdown("- item\n\n    <i>"), "- item\n\n    &lt;i>");
+    expect_equal(inert_markdown("\\`<i>`"), "\\`&lt;i>`");
+    expect_equal(inert_markdown("`<i>`` x"), "`&lt;i>`` x");
+    # No link can reach a script, wherever its target is.
+    expect_equal(inert_markdown("[a](javascript:alert(1))"), $"[a](javascript{zero_width}:alert(1))");
+    expect_equal(inert_markdown("[r]:\n  JavaScript:x"), $"[r]:\n  JavaScript{zero_width}:x");
+    expect_equal(inert_markdown("[c](javascript&#58;x) data:x"), $"[c](javascript&amp;#58;x) data{zero_width}:x");
+    expect_equal(inert_markdown("metadata: [e](https://x.dev/a)"), "metadata: [e](https://x.dev/a)");
+    # mdBook's directives stay text, in code too.
     expect_equal(
-        inert_markdown("[e](https://x.dev/a) [f](page.md#top) [g](mailto:a@b.c) [h](../a:b)"),
-        "[e](https://x.dev/a) [f](page.md#top) [g](mailto:a@b.c) [h](../a:b)"
+        inert_markdown("{{#include /etc/passwd}}\n```\n{{#include x}}\n```"),
+        "\\{{#include /etc/passwd}}\n```\n\\{{#include x}}\n```"
     );
-    expect_equal(inert_markdown("[ref]: javascript:alert(1)"), "[ref]: #");
-    expect_equal(inert_markdown("<https://x.dev>"), "&lt;https://x.dev>");
 }
 
 # With `--docs-base`, a dependency's docs are on that site, under its
@@ -154,10 +162,11 @@ docs_base_links_dependencies_by_source() {
     expect_contains(index, "- `local`");
 }
 
-# Text that is not ASCII passes through whole.
+# Text that is not ASCII passes through whole; after a letter that is not
+# ASCII, a scheme's name still counts as starting a word.
 [Test]
 inert_markdown_keeps_other_scripts() {
-    expect_equal(inert_markdown("héllo <wörld> 日本 `ä<`"), "héllo &lt;wörld> 日本 `ä<`");
+    expect_equal(inert_markdown("héllo <wörld> 日本 `ä<` éjavascript:"), "héllo &lt;wörld> 日本 `ä<` éjavascript&#8203;:");
 }
 
 # `pep-doc package` only parses a package: the files it is made of import
