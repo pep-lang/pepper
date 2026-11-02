@@ -779,6 +779,32 @@ panics, so it never reads elements that moved or were freed.</p>
 var middle = a.slice(1, 4);   # views [2, 3, 4]
 var second = middle[1];       # 3
 </code></pre>
+<h4 id="mutable_slice"><a class="header" href="#mutable_slice">mutable_slice</a></h4>
+<pre><code class="language-pepper">mutable_slice(start: ulong, end: ulong): MutableArrayView&lt;T&gt;
+</code></pre>
+<p>Returns a writable view of the elements from <code>start</code> up to but not
+including <code>end</code>: storing into it, or sorting, filling, reversing or
+swapping in it, changes those elements of this Array in place.</p>
+<p>Changing the Array other than through the slice (see <code>Array</code> for
+which operations count) makes every later use of the slice panic, as
+for <code>slice</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the position of the first element</li>
+<li><code>end</code> — the position one past the last element; from <code>start</code> through <code>count</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a writable view of <code>end - start</code> elements</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>start &lt;= end</code> and <code>end &lt;= count</code> do not both hold ("Array slice out of bounds")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [9, 8, 7, 6, 5];
+a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
+</code></pre>
 <h4 id="chunks"><a class="header" href="#chunks">chunks</a></h4>
 <pre><code class="language-pepper">[__Reads] chunks&lt;TElement=T&gt;(size: ulong): ArrayChunks&lt;TElement&gt;
 </code></pre>
@@ -1762,13 +1788,201 @@ when one slice is the start of the other, the shorter first.</p>
 assert(a.slice(0, 2).compare(a.slice(1, 3)) &lt; 0, "[1, 2] before [2, 3]");
 </code></pre>
 <h2 id="extend-arrayview-1"><a class="header" href="#extend-arrayview-1">extend ArrayView<T></a></h2>
-<pre><code class="language-pepper">extend ArrayView&lt;T: Comparable&gt; with Comparable; ## An `Iterator&lt;T&gt;` over the elements of an `ArrayView`, in order; returned ## by `ArrayView.iterate()` and driven by `for (var x in slice)`. ## ## @typeParam T the element type of the slice ## @see ArrayView.iterate [Value] export struct ArrayViewIterator&lt;T&gt;
+<pre><code class="language-pepper">extend ArrayView&lt;T: Comparable&gt; with Comparable; ## A writable view of a run of an Array's elements, made by ## `Array.mutable_slice`: its indexer stores into the Array, and it sorts, ## fills, reverses and swaps that run in place, so part of an Array changes ## without copying it out and back. ## ## Like `ArrayView` it holds a reference to its Array and is fail-fast: a ## change made to the Array other than through this slice makes every later ## use of it panic with "Array modified while a slice of it is in use". A ## change through it invalidates the Array's iterators and other slices, ## as the same change on the Array would. `view()` gives the read-only ## `ArrayView` of the same elements, for searching and iterating. ## ## @typeParam T the element type of the Array ## @example ## var a = [1, 2, 3, 4, 5, 6]; ## var tail = a.mutable_slice(3, 6); ## tail.reverse(); # a is [1, 2, 3, 6, 5, 4] ## tail[0] = 0; # a is [1, 2, 3, 0, 5, 4] ## @see Array.mutable_slice export struct MutableArrayView&lt;T&gt;
 </code></pre>
 <p>An ArrayView of <code>Comparable</code> elements is <code>Comparable</code> itself, in the
 lexicographic order of <code>compare</code>, so <code>&lt;</code> works between views.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the element type, <code>Comparable</code></li>
+</ul>
+<h2 id="mutablearrayview"><a class="header" href="#mutablearrayview">MutableArrayView</a></h2>
+<pre><code class="language-pepper">struct MutableArrayView&lt;T&gt;
+</code></pre>
+<p>A writable view of a run of an Array's elements, made by
+<code>Array.mutable_slice</code>: its indexer stores into the Array, and it sorts,
+fills, reverses and swaps that run in place, so part of an Array changes
+without copying it out and back.</p>
+<p>Like <code>ArrayView</code> it holds a reference to its Array and is fail-fast: a
+change made to the Array other than through this slice makes every later
+use of it panic with "Array modified while a slice of it is in use". A
+change through it invalidates the Array's iterators and other slices,
+as the same change on the Array would. <code>view()</code> gives the read-only
+<code>ArrayView</code> of the same elements, for searching and iterating.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type of the Array</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Array.mutable_slice</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4, 5, 6];
+var tail = a.mutable_slice(3, 6);
+tail.reverse();   # a is [1, 2, 3, 6, 5, 4]
+tail[0] = 0;      # a is [1, 2, 3, 0, 5, 4]
+</code></pre>
+<h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
+<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of elements in the slice.</p>
+<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the slice has no elements.</p>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="operator--9"><a class="header" href="#operator--9">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): T
+</code></pre>
+<p>Returns the element at <code>index</code> in the slice, <code>index</code> 0 being the
+slice's first element; this is the indexer read <code>slice[index]</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the zero-based position in the slice</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the element at <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+<li>if <code>index &lt; count</code> does not hold ("ArrayView index out of bounds")</li>
+</ul>
+<h4 id="operator--10"><a class="header" href="#operator--10">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong, value: T): T
+</code></pre>
+<p>Stores <code>value</code> at <code>index</code> in the slice, which is <code>_start + index</code> in
+the Array; this is the indexer write <code>slice[index] = value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the zero-based position in the slice</li>
+<li><code>value</code> — the new element</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the element now stored at <code>index</code> (that is, <code>value</code>)</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+<li>if <code>index &lt; count</code> does not hold ("ArrayView index write out of bounds")</li>
+</ul>
+<h4 id="view"><a class="header" href="#view">view</a></h4>
+<pre><code class="language-pepper">view(): ArrayView&lt;T&gt;
+</code></pre>
+<p>Returns the read-only view of the same elements, for the searches,
+iteration and comparisons <code>ArrayView</code> has. It panics once the Array
+changes, this slice's own changes included.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the elements as an <code>ArrayView</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): ArrayViewIterator&lt;T&gt;
+</code></pre>
+<p>Returns an iterator over the slice's elements in order; this is what
+<code>for (var x in slice)</code> calls. Storing through the slice while the
+loop runs makes the loop panic, as for an Array.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new iterator positioned before the first element</li>
+</ul>
+<h4 id="fill-1"><a class="header" href="#fill-1">fill</a></h4>
+<pre><code class="language-pepper">fill(value: T)
+</code></pre>
+<p>Sets every element of the slice to <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value each element becomes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="swap-1"><a class="header" href="#swap-1">swap</a></h4>
+<pre><code class="language-pepper">swap(a: ulong, b: ulong)
+</code></pre>
+<p>Exchanges the elements at positions <code>a</code> and <code>b</code> of the slice.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the position of the first element</li>
+<li><code>b</code> — the position of the second element</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+<li>if <code>a &lt; count</code> or <code>b &lt; count</code> does not hold ("ArrayView swap index out of bounds")</li>
+</ul>
+<h4 id="reverse-1"><a class="header" href="#reverse-1">reverse</a></h4>
+<pre><code class="language-pepper">reverse()
+</code></pre>
+<p>Reverses the order of the slice's elements in place.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+</ul>
+<h4 id="sort-1"><a class="header" href="#sort-1">sort</a></h4>
+<pre><code class="language-pepper">sort(compare: (T, T) =&gt; int)
+</code></pre>
+<p>Sorts the slice's elements in place into the order <code>compare</code> defines,
+keeping equal elements in their order; see <code>Array.sort(compare)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>compare</code> — returns the order of its two arguments, as for <code>Array.sort</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+<li>if <code>compare</code> modifies the Array ("Array modified during sort")</li>
+</ul>
+<h4 id="sort_unstable-2"><a class="header" href="#sort_unstable-2">sort_unstable</a></h4>
+<pre><code class="language-pepper">sort_unstable(compare: (T, T) =&gt; int)
+</code></pre>
+<p>Sorts the slice's elements in place into the order <code>compare</code> defines,
+without keeping equal elements in their order; see
+<code>Array.sort_unstable(compare)</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>compare</code> — returns the order of its two arguments, as for <code>Array.sort</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+<li>if <code>compare</code> modifies the Array ("Array modified during sort")</li>
+</ul>
+<h2 id="extend-mutablearrayview"><a class="header" href="#extend-mutablearrayview">extend MutableArrayView<T></a></h2>
+<pre><code class="language-pepper">extend MutableArrayView&lt;T: Comparable&gt;
+</code></pre>
+<p>Writable slices of <code>Comparable</code> elements sort in the elements' own order.</p>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="sort-2"><a class="header" href="#sort-2">sort</a></h4>
+<pre><code class="language-pepper">sort()
+</code></pre>
+<p>Sorts the slice's elements in place into their own order, keeping
+equal elements in their order; see <code>Array.sort()</code>.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [9, 8, 7, 6, 5];
+a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
+</code></pre>
+<h4 id="sort_unstable-3"><a class="header" href="#sort_unstable-3">sort_unstable</a></h4>
+<pre><code class="language-pepper">sort_unstable()
+</code></pre>
+<p>Sorts the slice's elements in place into their own order, without
+keeping equal elements in their order; see <code>Array.sort_unstable()</code>.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified around the slice ("Array modified while a slice of it is in use")</li>
 </ul>
 <h2 id="arrayviewiterator"><a class="header" href="#arrayviewiterator">ArrayViewIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ArrayViewIterator&lt;T&gt;
@@ -1783,7 +1997,7 @@ by <code>ArrayView.iterate()</code> and driven by <code>for (var x in slice)</co
 <ul>
 <li><code>ArrayView.iterate</code></li>
 </ul>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -1878,7 +2092,7 @@ the last run may be shorter (chunks); otherwise every run is whole
 <ul>
 <li>if <code>size</code> is 0 ("ArrayView chunk size is 0")</li>
 </ul>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
 <h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>

@@ -352,6 +352,33 @@ range, so even growing the array (which moves the buffer) cannot leave
 it pointing at freed memory. The runs <code>chunks</code> and <code>windows</code> give are
 slices too, and follow the same rules.</li>
 </ul>
+<h3 id="writable-slices"><a class="header" href="#writable-slices">Writable slices</a></h3>
+<p>A slice is read-only. <code>a.mutable_slice(start, end)</code> is a
+<code>MutableArrayView&lt;T&gt;</code> that writes through to the array: its indexer stores
+(<code>s[i] = x</code>), and <code>fill</code>, <code>swap</code>, <code>reverse</code>, <code>sort</code> and <code>sort_unstable</code>
+(with a <code>compare</code> function, or in the elements' own order) change that run
+of the array in place, without copying it out and back. <code>view()</code> gives the
+read-only slice of the same elements, for <code>find</code>, <code>contains</code> and the rest;
+a <code>for</code> loop reads it directly.</p>
+<pre><code class="language-pepper">main(): int {
+    var scores = [90, 40, 75, 10, 60, 100];
+    # Sort the middle four in place; the first and last stay put.
+    scores.mutable_slice(1, 5).sort();
+    assert(scores == [90, 10, 40, 60, 75, 100], "middle sorted");
+
+    var tail = scores.mutable_slice(3, 6);
+    tail.reverse();
+    assert(scores == [90, 10, 40, 100, 75, 60], "tail reversed");
+    tail[0] = 0;
+    tail.fill(1);
+    assert(scores == [90, 10, 40, 1, 1, 1], "tail filled");
+    return 0;
+}
+</code></pre>
+<p>A change made through a writable slice counts as a change to the array, so
+the array's iterators and other slices fail fast after it, but the
+writable slice itself stays usable. A change made to the array any other
+way makes the writable slice fail fast too.</p>
 <h2 id="string-views"><a class="header" href="#string-views">String views</a></h2>
 <p><code>s.view(start, size)</code> is a <code>StringView</code>: a view of <code>size</code> bytes of the
 string from byte offset <code>start</code>, which copies nothing, so a parser can hand
@@ -398,8 +425,6 @@ buckets.resize(4, none);   # one empty array, four times; no nulls
 <a href="optionals.html"><code>Optional</code></a>: <code>u8[]?</code>, empty until it is given an array.</p>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
-<li>Slices are read-only; there is no slice that writes through to its
-array.</li>
 <li>A <code>StringView</code> does not yet convert to a <code>String</code> by itself where one is
 expected; call <code>to_string()</code>.</li>
 </ul>
