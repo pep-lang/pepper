@@ -314,7 +314,10 @@ _pbkdf2_finish(hasher: _Sha256Engine, outer: _Sha256Engine, out: u8[]) {
 ##     var key = digest.pbkdf2_sha256("passwd", "salt".bytes(), 1, 16);
 ##     assert(digest.to_hex(key) == "55ac046e56e3089fec1691c22544b605", "RFC 7914 section 11");
 export pbkdf2_sha256(password: String, salt: u8[], rounds: ulong, length: ulong): u8[] {
-    return pbkdf2_sha256(password.bytes(), salt, rounds, length);
+    var bytes = password.bytes();
+    var key = pbkdf2_sha256(bytes, salt, rounds, length);
+    bytes.wipe();
+    return key;
 }
 
 ## Returns whether `a` and `b` hold the same bytes, taking the same time
