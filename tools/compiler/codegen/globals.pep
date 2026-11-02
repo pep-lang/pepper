@@ -10,6 +10,7 @@ import compiler.sema;
 import [Expression, FunctionDef, Module, TypeName, VariableDef] from compiler.sema;
 import [Address] from "address";
 import "address";
+import "c_abi";
 import "calls";
 import "checks";
 import "debug";
@@ -720,11 +721,30 @@ extend Generator {
             }
             var target = found.value();
             # A `String` parameter is a pointer and a size in C, a `String`
-            # result a pointer; everything else keeps its Pepper type.
+            # result a pointer, and a value struct passes as the C
+            # convention says (`c_abi.pep`); everything else keeps its
+            # Pepper type.
             var target_type = target.global_type();
             var target_params = target_type.param_types();
+            if (target_params.count < item.parameters.count) {
+                return fail<void>("an exported function's parameters do not match");
+            }
+            var registers = CRegisters();
+            bool struct_result = state.is_value_struct(item.result.to_string());
+            var result_pass = CStructPass();
+            if (struct_result) {
+                result_pass = c_struct_pass(target_type.return_type(), true, registers)?;
+                if (result_pass.indirect) {
+                    registers.integers -= 1;
+                }
+            }
             var c_parameters = Array<llvm.Type>();
             var widened = Array<TypeName>();
+            var passes = Array<CStructPass?>();
+            if (struct_result and result_pass.indirect) {
+                c_parameters.append(pointer);
+                widened.append(item.result);
+            }
             for (var index in 0..item.parameters.count) {
                 var (_, ty) = item.parameters[index];
                 if (sema.is_export_string(ty)) {
@@ -732,32 +752,77 @@ extend Generator {
                     c_parameters.append(size);
                     widened.append(ty);
                     widened.append(ty);
-                } else {
-                    if (index >= target_params.count) {
-                        return fail<void>("an exported function's parameters do not match");
+                    registers.take(pointer);
+                    registers.take(size);
+                    passes.append(Optional<CStructPass>.Empty);
+                } else if (state.is_value_struct(ty.to_string())) {
+                    var pass = c_struct_pass(target_params[index], false, registers)?;
+                    passes.append(Optional<CStructPass>.Value(pass));
+                    var pieces = pass.indirect ? [pointer] : pass.parts;
+                    for (var piece in pieces) {
+                        c_parameters.append(piece);
+                        widened.append(ty);
                     }
+                } else {
                     c_parameters.append(target_params[index]);
                     widened.append(ty);
+                    registers.take(target_params[index]);
+                    passes.append(Optional<CStructPass>.Empty);
                 }
             }
             llvm.Type entry_type;
             if (sema.is_export_string(item.result)) {
                 entry_type = llvm.Type.function(pointer, c_parameters, false);
+            } else if (struct_result) {
+                var c_result = result_pass.indirect ? context.void_type() : c_result_type(result_pass);
+                entry_type = llvm.Type.function(c_result, c_parameters, false);
             } else {
                 entry_type = llvm.Type.function(target_type.return_type(), c_parameters, false);
             }
             var entry = export_function(item.symbol, entry_type)?;
             widen_small_integers(entry, widened, item.result);
+            uint next = 0;
+            if (struct_result and result_pass.indirect) {
+                entry.add_param_attribute(0, context.type_attribute("sret", target_type.return_type()));
+                next = 1;
+            }
+            for (var index in 0..item.parameters.count) {
+                var pass = passes[index];
+                if (pass.is_value() and pass.value().byval) {
+                    entry.add_param_attribute(next, context.type_attribute("byval", target_params[index]));
+                }
+                var (_, ty) = item.parameters[index];
+                if (sema.is_export_string(ty)) {
+                    next += 2;
+                } else if (pass.is_value() and pass.value().is_direct()) {
+                    next += pass.value().parts.count as uint;
+                } else {
+                    next += 1;
+                }
+            }
             var block = context.append_block(entry, "entry");
             builder.position_at_end(block);
-            uint next = 0;
+            next = struct_result and result_pass.indirect ? 1 : 0;
             var c_count = entry.param_count();
             var arguments = Array<llvm.Value>();
             var strings = Array<llvm.Value>();
-            for (var parameter in item.parameters) {
-                var (_, parameter_ty) = parameter;
+            for (var index in 0..item.parameters.count) {
+                var (_, parameter_ty) = item.parameters[index];
                 if (next >= c_count) {
                     return fail<void>("an exported function's parameters do not match");
+                }
+                var pass = passes[index];
+                if (pass.is_value()) {
+                    var count = pass.value().indirect ? 1 as uint : pass.value().parts.count as uint;
+                    var pieces = Array<llvm.Value>();
+                    uint piece = 0;
+                    while (piece < count) {
+                        pieces.append(entry.param(next + piece));
+                        piece += 1;
+                    }
+                    next += count;
+                    arguments.append(c_struct_value(pieces, target_params[index], pass.value()));
+                    continue;
                 }
                 var argument = entry.param(next);
                 next += 1;
@@ -785,6 +850,13 @@ extend Generator {
                 var converted = call_function(STRING_TO_C, [call])?;
                 release_ref("String", call)?;
                 builder.return_value(converted);
+            } else if (struct_result and result_pass.indirect) {
+                builder.store(call, entry.param(0));
+                builder.return_void();
+            } else if (struct_result) {
+                var slot = c_struct_slot(target_type.return_type(), result_pass);
+                builder.store(call, slot);
+                builder.return_value(builder.load(c_result_type(result_pass), slot, "c_result"));
             } else {
                 builder.return_value(call);
             }

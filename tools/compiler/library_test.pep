@@ -137,6 +137,22 @@ header_declares_exports_and_handles() {
     expect_true(text.ends_with("#endif /* COUNTER_H */\n"));
 }
 
+# A `[Value]` struct an export passes by value is a C struct of the same
+# fields in the header, after the structs its fields hold (#384).
+[Test]
+header_declares_value_structs() {
+    var (
+        state,
+        _
+    ) = _checked(
+        "[Value]\nstruct Point {\n    var x: int;\n    var y: int;\n}\n\n[Value]\nstruct Segment {\n    var from: Point;\n    var to: Point;\n    var width: float;\n}\n\n[Export]\nlength_squared(s: Segment): long {\n    return 0;\n}\n\n[Export]\norigin(): Point {\n    return Point();\n}\n"
+    );
+    expect_equal(
+        sema.header_declarations(state.exports, state.enum_representations),
+        "/* Structs passed by value, laid out as the Pepper [Value] structs. */\ntypedef struct Point {\n    int32_t x;\n    int32_t y;\n} Point;\ntypedef struct Segment {\n    Point from;\n    Point to;\n    float width;\n} Segment;\n\nint64_t length_squared(Segment s);\nPoint origin(void);\n"
+    );
+}
+
 # The checked state of `source`, the library `counter.pep` in a new
 # folder, and the program's sources, to render its errors with; with
 # `runtime`, the program uses the runtime.

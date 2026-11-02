@@ -10,6 +10,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import [stashed_member, unit_decls] from "checked";
 import [THIS_FIELD] from "closures";
 import "common";
+import [c_value_struct_problem] from "exports";
 import [Loc] from "loc";
 import [
     BinaryOp, Block, Expression, FunctionDef, Module, Statement, StructDef, TypeName, UnaryOp, VariableDef
@@ -191,20 +192,25 @@ _check_value_types(module: Module, state: PassState) {
             state.report(error_at(_weak_error(value.value()), _written_at(variable)));
         }
     }
+    # A value struct crosses to C by value when C can hold each field (#384).
     for (var ext in module.externs) {
         for (var param in ext.parameters) {
-            if (state.is_value_struct(param.ty.to_string())) {
-                state.report(error_at(_extern_error(param.ty), _written_at(param)));
-            }
+            _check_extern_value(module, state, param.ty, _written_at(param));
         }
-        if (state.is_value_struct(ext.ty.to_string())) {
-            state.report(error_at(_extern_error(ext.ty), ext.loc));
-        }
+        _check_extern_value(module, state, ext.ty, ext.loc);
     }
 }
 
-_extern_error(ty: TypeName): String {
-    return $"value struct '{ty.display()}' cannot be passed to C; pass a pointer";
+# Reports a value struct `ty` an extern passes, written at `at`, when C
+# cannot hold it by value.
+_check_extern_value(module: Module, state: PassState, ty: TypeName, at: Loc) {
+    if (!state.is_value_struct(ty.to_string())) {
+        return;
+    }
+    var problem = c_value_struct_problem(module, state, ty);
+    if (problem.is_value()) {
+        state.report(error_at($"value struct '{ty.display()}' cannot be passed to C by value: {problem.value()}", at));
+    }
 }
 
 _weak_error(value: TypeName): String {

@@ -909,3 +909,30 @@ panic_hook_runs_before_the_message() {
     expect_ends_with(lines[0], "panic_hook.pep:31:9: panic: first");
     expect_ends_with(lines[1], "panic_hook.pep:30:47: panic in the panic hook: in the hook");
 }
+
+# ── Value structs to and from C ─────────────────────────────────────────────
+
+# `[Value]` structs of each shape the C conventions pass differently (in
+# integer or SSE registers, as a homogeneous float aggregate, through
+# memory, once the registers run out) cross to C by value and back through
+# exports, at -O0 and -O, matching what clang compiles the C side to (#384).
+[Test]
+value_structs_cross_to_c_by_value() {
+    var folder = TempFolder("programs_value_structs_c");
+    var testdata = Path("compiler").join("testdata").join("value_structs_c");
+    for (var file in ["pep.toml", "main.pep", "shapes.c"]) {
+        write_file(folder.path.join(file), read_file(testdata.join(file)));
+    }
+    var expected = "point 31 42\nsize3 2 4 6\nvec2 3.0 -4.0\nvec3 0.0 0.0 1.0\nmixed 2.5 42\nbig 101 102 103 104\nnested 6 5 4.5\nsmall 9 7\npadded 1.5 2.5\nseven 98\nregs 17.75\ncallbacks 1651\n";
+    for (var options in [Array<String>(), ["-O"]]) {
+        var name = options.is_empty ? "debug" : "optimized";
+        var program = folder.path.join(name + toolchain.executable_suffix());
+        var error = build_program(folder.path.join("main.pep"), program, folder.path.join(name + ".build"), options);
+        if (error.is_value()) {
+            panic($"value_structs_c does not build:\n{error.value()}");
+        }
+        var ran = run(process.Command(program.to_string()));
+        expect_exit(ran, 0);
+        expect_equal(ran.stdout, expected);
+    }
+}

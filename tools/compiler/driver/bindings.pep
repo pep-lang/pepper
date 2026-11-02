@@ -158,6 +158,12 @@ _swift_type(ty: sema.TypeName, exports: sema.Exports, representations: HashMap<S
     if (handle.is_value()) {
         return handle.value().c_type;
     }
+    # A value struct is the C struct the header declares, as Swift imports it.
+    for (var value in exports.values) {
+        if (value.structure == ty.to_string()) {
+            return value.c_type;
+        }
+    }
     if (ty.is_extern_function_type()) {
         var parameters = Array<String>();
         for (var i in 1..ty.sub_types.count) {

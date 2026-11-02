@@ -283,7 +283,8 @@ late_pass_programs(): String[] {
         # and one that passes enums, pointers and a C function pointer.
         "# expect: accepted\nstruct S {\n    construct() {}\n    [Export]\n    run() {}\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:2:16: error: '2bad' is not a C identifier\n[Export(name = \"2bad\")]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
-        "# expect: main.pep:7:6: error: cannot export 'f': C cannot hold 'V'\n[Value]\nstruct V {\n    var x: int;\n}\n[Export]\nf(v: V): int { return 1; }\nmain(): int { return 0; }\n",
+        "# expect: main.pep:8:6: error: cannot export 'f': C cannot hold 'V'\nstruct B {}\n[Value]\nstruct V {\n    var b: B;\n}\n[Export]\nf(v: V): int { return 1; }\nmain(): int { return 0; }\n",
+        "# expect: accepted\n[Value]\nstruct V {\n    var x: int;\n}\n[Export]\nf(v: V): V { return v; }\nmain(): int { return 0; }\n",
         "# expect: main.pep:5:1: error: two functions are exported as 'same'\n[Export(name = \"same\")]\nf(): int { return 1; }\n[Export(name = \"same\")]\ng(): int { return 2; }\nmain(): int { return 0; }\n",
         "# expect: main.pep:3:1: error: cannot export a function as 'main'\n[Export(name = \"main\")]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         "# expect: main.pep:8:1: error: 'counter_retain' is exported already, as the handle function of 'Counter'\nstruct Counter {\n    construct() {}\n}\n[Export]\nmake(): Counter { return Counter(); }\n[Export]\ncounter_retain(): int { return 0; }\nmain(): int { return 0; }\n",
@@ -1119,7 +1120,10 @@ main(): int {
         "# expect: main.pep:15:12: error: '__weak' needs a reference type; 'Span' is a value struct\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var w: __weak<Span>;\n    return 0;\n}\n",
         "# expect: main.pep:16:23: error: 'Span' is a value struct and has no object\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    return __refcount(a);\n}\n",
         "# expect: main.pep:4:12: error: value struct 'A' contains itself through field 'b'\n[Value]\nstruct A {\n    var b: B;\n}\n\n[Value]\nstruct B {\n    var a: A;\n}\n\nmain(): int {\n    return 0;\n}\n",
-        "# expect: main.pep:7:14: error: value struct 'S' cannot be passed to C; pass a pointer\n[Value]\nstruct S {\n    var x: int;\n}\n\nextern int f(S s);\n\nmain(): int {\n    return 0;\n}\n",
+        # A value struct crosses to C by value only when C can hold each
+        # field (#384).
+        "# expect: main.pep:11:14: error: value struct 'S' cannot be passed to C by value: field 'b' of 'S' has type 'Box', which C cannot hold\nstruct Box {\n    var n: int;\n}\n\n[Value]\nstruct S {\n    var b: Box;\n}\n\nextern int f(S s);\n\nmain(): int {\n    return 0;\n}\n",
+        "# expect: accepted\n[Value]\nstruct P {\n    var x: int;\n    var at: __ptr<void>;\n}\n\n[Value]\nstruct S {\n    var p: P;\n    var f: double;\n}\n\nextern S f(S s, P p);\n\nmain(): int {\n    return 0;\n}\n",
         "# expect: main.pep:16:7: error: cannot assign to field 'end' of const variable 's'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.end = 3;\n    return 0;\n}\n",
         "# expect: main.pep:19:12: error: cannot call mutating method 'grow' on a temporary 'Span'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmake(): Span {\n    return Span(1, 2);\n}\n\nmain(): int {\n    make().grow(1);\n    return 0;\n}\n",
         "# expect: main.pep:16:7: error: cannot call mutating method 'grow' on const variable 's'\n[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.grow(1);\n    return 0;\n}\n",
