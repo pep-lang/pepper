@@ -652,6 +652,53 @@ export struct String {
         return _data[index] as byte;
     }
 
+    ## Returns a view of the `size` bytes starting at byte offset `start`,
+    ## which copies nothing: a parser can hand out its tokens as views of
+    ## the text it reads. Both arguments count bytes, as `find` does.
+    ##
+    ## The view keeps this String alive, and panics once the String changes
+    ## (`append`, `+=`, `grow`). It converts to a `String` where one is
+    ## expected, copying its text then.
+    ##
+    ## @param start the byte offset of the first byte
+    ## @param size the number of bytes
+    ## @returns a view of those bytes
+    ## @panics if `start + size` is greater than `size` ("String view range out of bounds")
+    ## @panics if `start` or `start + size` falls inside a multi-byte code point ("String view splits a code point")
+    ## @example
+    ##     var s = "key=value";
+    ##     var eq = s.find("=") as ulong;
+    ##     var key = s.view(0, eq);
+    ##     assert(key == "key", "before '='");
+    view(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): StringView {
+        assert(start <= _size && size <= _size - start, "String view range out of bounds", location);
+        assert(
+            _string_is_boundary(_data, _size, start) && _string_is_boundary(_data, _size, start + size),
+            "String view splits a code point",
+            location
+        );
+        return _string_view(this, start, size);
+    }
+
+    ## Returns a view of the code points from `start` up to but not
+    ## including `end`, counted as the indexer counts them; this is what
+    ## `s[start..end]` calls. Finding the bytes takes O(end) time; the
+    ## view copies nothing.
+    ##
+    ## @param start the position of the first code point
+    ## @param end the position one past the last code point; from `start` through `length`
+    ## @returns a view of `end - start` code points of this String
+    ## @panics if `start <= end` and `end <= length` do not both hold ("String slice out of bounds")
+    ## @example
+    ##     var s = "héllo";
+    ##     assert(s.slice(1, 4) == "éll", "code points 1 to 3");
+    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): StringView {
+        _pep_check_bounds(start <= end && end <= _length, "String slice out of bounds", location);
+        ulong begin = _pep_utf8_char_offset(_data, _size, start);
+        ulong size = _pep_utf8_char_offset(_data + begin, _size - begin, end - start);
+        return _string_view(this, begin, size);
+    }
+
     ## Returns a new String of the `size` bytes starting at byte offset
     ## `start`. Both arguments count bytes, not code points, so offsets from
     ## `find` can be used directly. Runs in O(size).
@@ -2430,6 +2477,338 @@ export struct StringIterator {
 }
 
 extend StringIterator with Iterator<String>;
+
+## A read-only view of a run of a `String`'s bytes, made by `String.view`
+## (byte offsets) or `String.slice` and `s[i..j]` (code points), that lets
+## a parser or tokenizer hand out pieces of its text without copying them.
+##
+## A view holds a reference to its String, so the String lives at least as
+## long as the view. It is fail-fast: once the String changes (`append`,
+## `+=`, `grow`), every later use of the view panics with "String modified
+## while a view of it is in use". It has `String`'s read API, measured the
+## same way (`size` and offsets in bytes, `length` in code points); the
+## pieces `split`, `split_once` and `trim` return are views too. It
+## converts to a `String` where one is expected (`String`'s `[Implicit]`
+## constructor), which copies its text; `to_string()` does the same.
+##
+## A view always starts and ends between code points, so its text is
+## UTF-8.
+##
+## @example
+##     var line = "name = pepper";
+##     var (key, value) = line.split_once("=").value();
+##     assert(key.trim() == "name", "a view of 'name'");
+##     String copy = value.trim();   # copies "pepper"
+[Value]
+export struct StringView {
+    ## The String viewed; the view holds a reference to it.
+    String _source;
+    ## The byte offset in `_source` of the view's first byte.
+    ulong _start;
+    ## The number of bytes in the view.
+    ulong _size;
+    ## The `_source._version` when the view was made; a mismatch means the String was modified.
+    ulong _version;
+
+    # Panics when the String changed since the view was made. A view made
+    # with `StringView()` has no String and shows nothing.
+    _check(location: __ptr<char>) {
+        if (_source === __null) {
+            return;
+        }
+        assert(_source._version == _version, "String modified while a view of it is in use", location);
+    }
+
+    # The view's first byte.
+    _data(): __ptr<char> {
+        if (_source === __null) {
+            return __null;
+        }
+        return _source._data + _start;
+    }
+
+    # A view of `size` bytes from byte offset `start` of this view.
+    _part(start: ulong, size: ulong): StringView {
+        if (_source === __null) {
+            return this;
+        }
+        return _string_view(_source, _start + start, size);
+    }
+
+    ## The number of bytes in the view.
+    var size: ulong {
+        get {
+            return _size;
+        }
+    }
+
+    ## The number of code points in the view. O(size): a view does not
+    ## store it.
+    var length: ulong {
+        get {
+            _check(__caller_location());
+            return _pep_utf8_length(_data(), _size);
+        }
+    }
+
+    ## Whether the view has no bytes.
+    var is_empty: bool {
+        get {
+            return _size == 0;
+        }
+    }
+
+    ## Returns the byte at byte offset `index` of the view.
+    ##
+    ## @param index the byte offset
+    ## @returns the byte at `index`
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ## @panics if `index < size` does not hold ("StringView byte_at index out of bounds")
+    byte_at(index: ulong, location: __ptr<char> = __caller_location()): byte {
+        _check(location);
+        _pep_check_bounds(index < _size, "StringView byte_at index out of bounds", location);
+        return _data()[index] as byte;
+    }
+
+    ## Returns a view of the `size` bytes from byte offset `start` of this
+    ## view, as `String.view` does.
+    ##
+    ## @param start the byte offset of the first byte, within this view
+    ## @param size the number of bytes
+    ## @returns a view of those bytes of the same String
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ## @panics if `start + size` is greater than `size` ("String view range out of bounds")
+    ## @panics if `start` or `start + size` falls inside a multi-byte code point ("String view splits a code point")
+    view(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): StringView {
+        _check(location);
+        assert(start <= _size && size <= _size - start, "String view range out of bounds", location);
+        assert(
+            _string_is_boundary(_data(), _size, start) && _string_is_boundary(_data(), _size, start + size),
+            "String view splits a code point",
+            location
+        );
+        return _part(start, size);
+    }
+
+    ## Returns a view of the code points from `start` up to but not
+    ## including `end` of this view, as `String.slice` does; this is what
+    ## `view[start..end]` calls.
+    ##
+    ## @param start the position of the first code point
+    ## @param end the position one past the last code point; from `start` through `length`
+    ## @returns a view of `end - start` code points of the same String
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ## @panics if `start <= end` and `end <= length` do not both hold ("String slice out of bounds")
+    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): StringView {
+        _check(location);
+        _pep_check_bounds(start <= end && end <= length, "String slice out of bounds", location);
+        ulong begin = _pep_utf8_char_offset(_data(), _size, start);
+        ulong size = _pep_utf8_char_offset(_data() + begin, _size - begin, end - start);
+        return _part(begin, size);
+    }
+
+    ## Returns the byte offset in the view of the first `needle` at or
+    ## after byte offset `from`, or -1, as `String.find` does.
+    ##
+    ## @param needle the text to look for
+    ## @param from the byte offset to start at
+    ## @returns the byte offset, or -1 when there is none
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    find(needle: String, from: ulong = 0): long {
+        _check(__caller_location());
+        return _string_find(_data(), _size, needle._data, needle._size, from);
+    }
+
+    ## Returns the byte offset in the view of the last `needle`, or -1.
+    ##
+    ## @param needle the text to look for
+    ## @returns the byte offset, or -1 when there is none
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    rfind(needle: String): long {
+        _check(__caller_location());
+        return _string_rfind(_data(), _size, needle._data, needle._size);
+    }
+
+    ## Returns whether the view holds `needle`.
+    ##
+    ## @param needle the text to look for
+    ## @returns whether it is there
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    contains(needle: String): bool {
+        return find(needle) >= 0;
+    }
+
+    ## Returns whether the view starts with `prefix`.
+    ##
+    ## @param prefix the text to compare with the view's start
+    ## @returns whether it does
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    starts_with(prefix: String): bool {
+        _check(__caller_location());
+        return _string_starts_with(_data(), _size, prefix._data, prefix._size);
+    }
+
+    ## Returns whether the view ends with `suffix`.
+    ##
+    ## @param suffix the text to compare with the view's end
+    ## @returns whether it does
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ends_with(suffix: String): bool {
+        _check(__caller_location());
+        return _string_ends_with(_data(), _size, suffix._data, suffix._size);
+    }
+
+    ## Returns the pieces of the view between each `separator`, as views,
+    ## in order; as `String.split`, but copying nothing.
+    ##
+    ## @param separator the text between pieces; not empty
+    ## @returns the pieces, at least one
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ## @panics if `separator` is empty ("StringView.split: the separator is empty")
+    split(separator: String, location: __ptr<char> = __caller_location()): StringView[] {
+        _check(location);
+        assert(separator._size > 0, "StringView.split: the separator is empty", location);
+        var pieces = Array<StringView>();
+        ulong start = 0;
+        while (true) {
+            var found = _string_find(_data(), _size, separator._data, separator._size, start);
+            if (found < 0) {
+                break;
+            }
+            pieces.append(_part(start, found as ulong - start));
+            start = found as ulong + separator._size;
+        }
+        pieces.append(_part(start, _size - start));
+        return pieces;
+    }
+
+    ## Returns the view's text before and after its first `separator`, as
+    ## views, or `Empty` when it has none.
+    ##
+    ## @param separator the text to split at; not empty
+    ## @returns the two pieces, or `Empty`
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ## @panics if `separator` is empty ("StringView.split_once: the separator is empty")
+    split_once(separator: String, location: __ptr<char> = __caller_location()): (StringView, StringView)? {
+        _check(location);
+        assert(separator._size > 0, "StringView.split_once: the separator is empty", location);
+        var found = _string_find(_data(), _size, separator._data, separator._size, 0);
+        if (found < 0) {
+            return Optional<(StringView, StringView)>.Empty;
+        }
+        var at = found as ulong;
+        var after = at + separator._size;
+        return Optional<(StringView, StringView)>.Value((_part(0, at), _part(after, _size - after)));
+    }
+
+    ## Returns the view without its leading and trailing ASCII whitespace.
+    ##
+    ## @returns a view of the rest
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    trim(): StringView {
+        _check(__caller_location());
+        var start = _string_trim_start(_data(), _size);
+        var end = start + _string_trim_end(_data() + start, _size - start);
+        return _part(start, end - start);
+    }
+
+    ## Returns the view without its leading ASCII whitespace.
+    ##
+    ## @returns a view of the rest
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    trim_start(): StringView {
+        _check(__caller_location());
+        var start = _string_trim_start(_data(), _size);
+        return _part(start, _size - start);
+    }
+
+    ## Returns the view without its trailing ASCII whitespace.
+    ##
+    ## @returns a view of the rest
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    trim_end(): StringView {
+        _check(__caller_location());
+        return _part(0, _string_trim_end(_data(), _size));
+    }
+
+    ## Returns whether the view holds the same text as `other`.
+    ##
+    ## @param other the text to compare with
+    ## @returns whether the bytes are equal
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ==(other: StringView): bool {
+        _check(__caller_location());
+        other._check(__caller_location());
+        return _size == other._size && _string_compare(_data(), _size, other._data(), other._size) == 0;
+    }
+
+    ## Returns whether the view holds the same text as `other`.
+    ##
+    ## @param other the text to compare with
+    ## @returns whether the bytes are equal
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ==(other: String): bool {
+        _check(__caller_location());
+        return _size == other._size && _string_compare(_data(), _size, other._data, other._size) == 0;
+    }
+
+    ## Returns whether the view holds the same text as `other`.
+    ##
+    ## @param other the text to compare with
+    ## @returns whether the bytes are equal
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    ==(other: StringConstant): bool {
+        _check(__caller_location());
+        return _size == other.size && _string_compare(_data(), _size, other.c_str(), other.size) == 0;
+    }
+
+    ## Returns the order of the view's text and `other`'s, as
+    ## `String.compare` does: negative, 0 or positive.
+    ##
+    ## @param other the view to compare with
+    ## @returns the order
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    compare(other: StringView): int {
+        _check(__caller_location());
+        other._check(__caller_location());
+        return _string_compare(_data(), _size, other._data(), other._size);
+    }
+
+    ## Returns the 64-bit hash of the view's bytes: the hash `hash<String>`
+    ## gives a String of the same text.
+    ##
+    ## @returns the hash
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    __hash(): u64 {
+        _check(__caller_location());
+        return _pep_hash_bytes(_data(), _size);
+    }
+
+    ## Returns a new String holding a copy of the view's text.
+    ##
+    ## @returns the copy
+    ## @panics if the String was modified since the view was made ("String modified while a view of it is in use")
+    to_string(): String {
+        _check(__caller_location());
+        # A zero size would tell the constructor to measure a C string.
+        return _size == 0 ? String() : String(_data(), _size);
+    }
+}
+
+# A view of `size` bytes of `source` from byte offset `start`, which the
+# caller checked: a view has no public constructor, so none is unchecked.
+_string_view(source: String, start: ulong, size: ulong): StringView {
+    var view = StringView();
+    view._source = source;
+    view._start = start;
+    view._size = size;
+    view._version = source._version;
+    return view;
+}
+
+extend StringView with ToString;
+
+extend StringView with Comparable;
 
 extend String with Copyable<String>;
 
