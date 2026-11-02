@@ -55,6 +55,14 @@ struct Nested {
 }
 
 [Value]
+struct Padded {
+    var d: double;
+    var f: float;
+
+    construct(this.d = 0.0, this.f = 0.0) {}
+}
+
+[Value]
 struct Small {
     var a: u8;
     var b: u8;
@@ -69,6 +77,7 @@ extern Mixed c_mixed(Mixed m);
 extern Big c_big(Big b, long add);
 extern Nested c_nested(Nested n);
 extern Small c_small(Small s);
+extern Padded c_padded(Padded p);
 extern int c_seven(Point a, Point b, Point c, Point d, Point e, Point f, Point g);
 extern double c_regs(double d1, long i1, Vec3d v, Mixed m, int i2);
 extern long c_callbacks();
@@ -125,6 +134,8 @@ main(): int {
     print($"nested {n.p.x} {n.p.y} {n.w}");
     var sm = c_small(Small(7, 9));
     print($"small {sm.a} {sm.b}");
+    var pd = c_padded(Padded(0.5, 1.25));
+    print($"padded {pd.d} {pd.f}");
     var seven = c_seven(Point(1, 1), Point(2, 1), Point(3, 1), Point(4, 1), Point(5, 1), Point(6, 1), Point(7, 1));
     print($"seven {seven}");
     print($"regs {c_regs(0.5, 2, Vec3d(1.0, 2.0, 3.0), Mixed(0.25, 4), 5)}");

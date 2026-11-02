@@ -923,7 +923,7 @@ value_structs_cross_to_c_by_value() {
     for (var file in ["pep.toml", "main.pep", "shapes.c"]) {
         write_file(folder.path.join(file), read_file(testdata.join(file)));
     }
-    var expected = "point 31 42\nsize3 2 4 6\nvec2 3.0 -4.0\nvec3 0.0 0.0 1.0\nmixed 2.5 42\nbig 101 102 103 104\nnested 6 5 4.5\nsmall 9 7\nseven 98\nregs 17.75\ncallbacks 1651\n";
+    var expected = "point 31 42\nsize3 2 4 6\nvec2 3.0 -4.0\nvec3 0.0 0.0 1.0\nmixed 2.5 42\nbig 101 102 103 104\nnested 6 5 4.5\nsmall 9 7\npadded 1.5 2.5\nseven 98\nregs 17.75\ncallbacks 1651\n";
     for (var options in [Array<String>(), ["-O"]]) {
         var name = options.is_empty ? "debug" : "optimized";
         var program = folder.path.join(name + toolchain.executable_suffix());

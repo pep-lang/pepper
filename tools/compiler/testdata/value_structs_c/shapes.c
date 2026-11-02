@@ -7,6 +7,7 @@ typedef struct { double d; int32_t i; } Mixed;
 typedef struct { int64_t a, b, c, d; } Big;
 typedef struct { Point p; float w; } Nested;
 typedef struct { uint8_t a, b; } Small;
+typedef struct { double d; float f; } Padded;
 
 Point c_point_add(Point a, Point b) { Point r = { a.x + b.x, a.y + b.y }; return r; }
 Size3 c_size3_twice(Size3 s) { Size3 r = { 2 * s.a, 2 * s.b, 2 * s.c }; return r; }
@@ -19,6 +20,7 @@ Mixed c_mixed(Mixed m) { Mixed r = { m.d * 2, m.i + 1 }; return r; }
 Big c_big(Big b, int64_t add) { Big r = { b.a + add, b.b + add, b.c + add, b.d + add }; return r; }
 Nested c_nested(Nested n) { Nested r = { { n.p.y, n.p.x }, n.w * 3 }; return r; }
 Small c_small(Small s) { Small r = { s.b, s.a }; return r; }
+Padded c_padded(Padded p) { Padded r = { p.d + 1, p.f * 2 }; return r; }
 int32_t c_seven(Point a, Point b, Point c, Point d, Point e, Point f, Point g) {
     return a.x + b.x + c.x + d.x + e.x + f.x + g.x + 10 * (a.y + b.y + c.y + d.y + e.y + f.y + g.y);
 }

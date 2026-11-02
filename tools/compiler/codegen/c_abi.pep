@@ -191,6 +191,7 @@ extend Generator {
             bool floats_only = true;
             var doubles = 0;
             var singles = 0;
+            ulong last_float = 0;
             for (var (offset, leaf) in leaves) {
                 if (offset < start or offset >= start + 8) {
                     continue;
@@ -200,13 +201,15 @@ extend Generator {
                     doubles += 1;
                 } else if (kind == llvm.TypeKind.Float) {
                     singles += 1;
+                    last_float = offset;
                 } else {
                     floats_only = false;
                 }
             }
             if (floats_only and doubles == 1 and singles == 0) {
                 parts.append(context.double_type());
-            } else if (floats_only and doubles == 0 and singles == 1 and bytes <= 4) {
+            } else if (floats_only and doubles == 0 and singles == 1 and last_float == start) {
+                # One float, then padding (`{ double, float }`'s high half).
                 parts.append(context.float_type());
             } else if (floats_only and doubles == 0 and singles > 0) {
                 parts.append(context.float_type().vector_type(2));
