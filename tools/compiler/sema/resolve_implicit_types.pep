@@ -1378,7 +1378,15 @@ struct _TypeScopes {
             if (arg is SymbolRef(node)) {
                 tables.note(_function_read(node.id));
             }
-            infos.append(arg_info(arg, overloads, Optional<TypeName>.Value(type_of(arg, current))));
+            var ty = type_of(arg, current);
+            # A converted literal's `String(raw, size, length)` passes its
+            # raw `char*`, which picks among `String`'s constructors (#503).
+            if (arg is StringLiteral(literal)) {
+                if (literal.is_raw) {
+                    ty = TypeName.pointer_to(TypeName.named("char"));
+                }
+            }
+            infos.append(arg_info(arg, overloads, Optional<TypeName>.Value(ty)));
         }
         return infos;
     }

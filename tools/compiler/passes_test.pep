@@ -1037,6 +1037,9 @@ const ALL_STEPS: ulong = 1000000;
 # Programs a pass rejects.
 error_programs(): String[] {
     return [
+        # A string literal's `String(raw, size, length)` picks among
+        # `String`'s constructors when it has several (#503).
+        "# expect: accepted\nstruct String {\n    var data: __ptr<char>;\n    construct(raw: __ptr<char>, size: long, length: long) {}\n    construct(n: int) {}\n}\npick(c: bool): String {\n    return c ? \"a\" : \"b\";\n}\nmain(): int {\n    String s = \"x\";\n    var t = pick(true);\n    var n = String(3);\n    return 0;\n}\n",
         # `String.format` used as a value, at `format` (#407); it is part of
         # the compiler, not a function.
         "# expect: main.pep:3:20: error: 'String.format' is built into the compiler and cannot be used as a value; call it, or wrap a call in a closure\nmain(): int {\n    var f = String.format;\n    return 0;\n}\n",

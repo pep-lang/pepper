@@ -3432,7 +3432,7 @@ _describe(e: Expression): String {
         }
         FunctionCall(node) => {
             # A string literal becomes `String(raw, size, length)`.
-            if (node.function == "String" and node.args.count > 0) {
+            if (is_string_constructor(node.function) and node.args.count > 0) {
                 if (node.args[0] is StringLiteral(literal)) {
                     return $"\"{literal.value}\"";
                 }

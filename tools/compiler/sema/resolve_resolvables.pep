@@ -2,7 +2,7 @@
 ## extension finds the struct it extends, and, on the last run, each call
 ## that names no function, extern or struct is reported.
 
-import [error_at] from "common";
+import [error_at, is_string_constructor] from "common";
 import [Block, Expression, FunctionDef, Module, TypeName] from "model";
 import "named_arguments";
 import [PassState] from "state";
@@ -206,7 +206,7 @@ struct _CallChecker {
             # depends on `T`, and `verify_injected` checks concrete code.
             bool builtin = function.starts_with("_pep_")
                 or function.starts_with("trace_")
-                or function == "String"
+                or is_string_constructor(function)
                 or function == "__caller_location"
                 or open >= 0
                 or type_params.contains(function)
