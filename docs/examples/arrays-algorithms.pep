@@ -55,6 +55,7 @@ main(): int {
     var numbers = [1, 2, 3, 4, 5];
     var middle = numbers.slice(1, 4);
     assert(middle.count == 3 && middle[0] == 2, "views [2, 3, 4]");
+    assert(numbers[1..4].count == 3 && numbers[3..>4][1] == 5, "a[i..j], and a[i..>j] through j");
     assert(total(middle) == 9, "passed to a function");
     assert(middle.to_array() == [2, 3, 4], "copied out");
     var (head, rest) = middle.split_at(1);

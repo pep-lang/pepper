@@ -2069,6 +2069,21 @@ struct _Builder {
             }
             Index(lhs, rhs, span) => {
                 var left = expression(lhs)?;
+                # A range written in the brackets is a slice (#370):
+                # `a[i..j]` is `a.slice(i, j)`, `a[i..>j]` is
+                # `a.slice(i, j + 1)`.
+                if (rhs is Binary(low, op, high, _)) {
+                    if (op == ".." or op == "..>") {
+                        var start = expression(low)?;
+                        Expression end = expression(high)?;
+                        if (op == "..>") {
+                            end = _binary(BinaryOp.Add, end, Expression.IntLiteral(1), loc(high.span()));
+                        }
+                        return Built<Expression>.Ok(
+                            Expression.MethodCall(MethodCallExpression(left, "slice", [start, end], loc(span)))
+                        );
+                    }
+                }
                 var right = expression(rhs)?;
                 return Built<Expression>.Ok(Expression.Index(IndexExpression(left, right, loc = loc(span))));
             }
