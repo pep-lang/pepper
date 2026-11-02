@@ -259,6 +259,40 @@ file that declares <code>T</code>; anywhere else it is an error that points at
 <ul>
 <li>one function per function marked <code>[A]</code></li>
 </ul>
+<h2 id="reflectmethods"><a class="header" href="#reflectmethods">reflect.methods</a></h2>
+<pre><code class="language-pepper">reflect.methods&lt;T&gt;(): List&lt;Method&gt;
+</code></pre>
+<p>The methods of struct <code>T</code> that a program may call, instance and static,
+in declaration order: not the compiler's own members, the accessors of
+properties, operators or methods whose names start with <code>_</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one method per method of <code>T</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">static {
+    for (var m in reflect.methods&lt;Point&gt;()) {
+        reflect.print(m.name);
+    }
+}
+</code></pre>
+<h2 id="reflectconstructors"><a class="header" href="#reflectconstructors">reflect.constructors</a></h2>
+<pre><code class="language-pepper">reflect.constructors&lt;T&gt;(): List&lt;Method&gt;
+</code></pre>
+<p>The constructors of struct <code>T</code>, in declaration order. Each one's <code>name</code> is
+<code>T</code>'s, and its <code>call</code> makes a <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one method per constructor of <code>T</code></li>
+</ul>
 <h2 id="reflectis_struct"><a class="header" href="#reflectis_struct">reflect.is_struct</a></h2>
 <pre><code class="language-pepper">reflect.is_struct&lt;T&gt;(): bool
 </code></pre>
@@ -655,6 +689,64 @@ name its type.</p>
 <ul>
 <li>what the call returns</li>
 </ul>
+<h2 id="reflectmethod"><a class="header" href="#reflectmethod">reflect.Method</a></h2>
+<pre><code class="language-pepper">struct reflect.Method
+</code></pre>
+<p>A method or constructor of a struct, from <code>methods</code> or <code>constructors</code>. A
+compile-time value: no program can name its type.</p>
+<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
+<h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name; a constructor's is its struct's.</p>
+<h4 id="is_static"><a class="header" href="#is_static">is_static</a></h4>
+<pre><code class="language-pepper">const is_static: bool
+</code></pre>
+<p>Whether it is a static method, called on the struct rather than a value.</p>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="has_attribute-3"><a class="header" href="#has_attribute-3">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute-3"><a class="header" href="#attribute-3">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute's value</li>
+</ul>
+<h4 id="call-1"><a class="header" href="#call-1">call</a></h4>
+<pre><code class="language-pepper">call&lt;R, TArguments&gt;(arguments: TArguments): R
+</code></pre>
+<p>Emits a direct call with <code>arguments</code>: for an instance method the
+first argument is the value it is called on (<code>m.call&lt;int, (Point, int)&gt;(p, 2)</code> is <code>p.scaled(2)</code>), for a static method or a constructor
+every argument is the call's.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — what the call returns</li>
+<li><code>TArguments</code> — the types of the arguments</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>arguments</code> — the call's arguments, one argument each</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>what the call returns</li>
+</ul>
 <h2 id="reflectlist"><a class="header" href="#reflectlist">reflect.List</a></h2>
 <pre><code class="language-pepper">struct reflect.List&lt;T&gt;
 </code></pre>
@@ -664,7 +756,7 @@ name its type.</p>
 <ul>
 <li><code>T</code> — a member, case or function</li>
 </ul>
-<h3 id="fields-3"><a class="header" href="#fields-3">Fields</a></h3>
+<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
 <pre><code class="language-pepper">const count: int
 </code></pre>
@@ -673,7 +765,7 @@ name its type.</p>
 <pre><code class="language-pepper">const is_empty: bool
 </code></pre>
 <p>Whether it holds none.</p>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
 <pre><code class="language-pepper">[](i: int): T
 </code></pre>
@@ -691,7 +783,7 @@ name its type.</p>
 </code></pre>
 <p>A compile-time string: a literal, a member's <code>name</code>, or the result of
 <code>name</code>, <code>+</code> or interpolation. It joins with <code>+</code> and interpolation.</p>
-<h3 id="fields-4"><a class="header" href="#fields-4">Fields</a></h3>
+<h3 id="fields-5"><a class="header" href="#fields-5">Fields</a></h3>
 <h4 id="length"><a class="header" href="#length">length</a></h4>
 <pre><code class="language-pepper">const length: int
 </code></pre>
@@ -700,7 +792,7 @@ name its type.</p>
 <pre><code class="language-pepper">const is_empty: bool
 </code></pre>
 <p>Whether it holds none.</p>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="starts_with"><a class="header" href="#starts_with">starts_with</a></h4>
 <pre><code class="language-pepper">starts_with(s: String): bool
 </code></pre>

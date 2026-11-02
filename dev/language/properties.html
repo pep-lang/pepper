@@ -276,7 +276,7 @@ or <code>value</code> elsewhere keeps working. Inside an accessor, a bare <code>
 always means the storage; reach a member of that name as <code>this.field</code>.</li>
 <li>A property must have a <code>get</code>: <code>{ set; }</code> alone is an error.</li>
 <li>A property is declared with <code>var</code> and an explicit type; it cannot be
-<code>const</code>. There are no <code>static</code> properties.</li>
+<code>const</code>.</li>
 </ul>
 <h2 id="reading-and-writing"><a class="header" href="#reading-and-writing">Reading and writing</a></h2>
 <ul>
@@ -363,6 +363,56 @@ main(): int {
 </code></pre>
 <p>An <a href="enums.html#properties">enum</a> can declare computed properties too, under
 the same rule, and no <code>set</code>, since its values never change.</p>
+<h2 id="static-properties"><a class="header" href="#static-properties">Static properties</a></h2>
+<p><code>static var name: T { get { ... } set { ... } }</code> declares a property of the
+type rather than of each value: read it as <code>Type.name</code>, write it as
+<code>Type.name = value</code>. In the struct's own code, the bare name reaches it, as
+for a static method. <code>+=</code>, <code>++</code> and the other compound assignments are a
+<code>get</code> and then a <code>set</code>.</p>
+<pre><code class="language-pepper">import async;
+
+const _created = async.Atomic&lt;int&gt;(0);
+
+struct Ticket {
+    var number: int;
+
+    construct() {
+        number = _created.fetch_add(1) + 1;
+    }
+
+    # A property of the type, read as `Ticket.issued`.
+    static var issued: int {
+        get { return _created.load(); }
+        set {
+            _created.store(value);
+        }
+    }
+
+    # In the struct's own code, a bare name.
+    static var next: int {
+        get { return issued + 1; }
+    }
+}
+
+main(): int {
+    Ticket();
+    Ticket();
+    assert(Ticket.issued == 2 &amp;&amp; Ticket.next == 3, "two issued");
+    Ticket.issued = 10;
+    Ticket.issued += 5;
+    assert(Ticket().number == 16, "numbering goes on from 15");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>A static property is <strong>computed</strong>: each accessor has a body, and none uses
+<code>field</code>. Its storage would be a module-scope value, which every thread
+shares and so must be <code>const</code>; keep a changing value in an
+<code>async.Atomic&lt;T&gt;</code> or another thread-safe value at module scope, as
+<code>Ticket</code> does.</li>
+<li>A struct or an extension may declare one; a trait or an enum may not.</li>
+<li>Its accessors are static methods, so they have no <code>this</code>.</li>
+</ul>
 <h2 id="properties-of-shared-structs"><a class="header" href="#properties-of-shared-structs">Properties of <code>[Shared]</code> structs</a></h2>
 <p>The fields of a <a href="threads.html"><code>[Shared]</code> struct</a> are <code>const</code>, so the storage
 of its properties is too:</p>
