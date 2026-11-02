@@ -657,8 +657,8 @@ main.pep:5:12: error: too many arguments to function of type '(String) =&gt; int
     5 |     return f(1, 2);                    # error
       |            ^
 </code></pre>
-<p>The compiler reports <a href="compiler-errors.html#one-error-at-a-time">one error at a time</a>,
-so the second appears once the first is fixed.</p>
+<p>The compiler reports both errors in one build (see
+<a href="compiler-errors.html#several-errors-at-once">Several errors at once</a>).</p>
 <p>Calling a variable that does not hold a function is an error at the call,
 which names the variable's type:</p>
 <pre><code class="language-text">main.pep:3:12: error: called object type 'String' is not a function

@@ -352,6 +352,38 @@ range, so even growing the array (which moves the buffer) cannot leave
 it pointing at freed memory. The runs <code>chunks</code> and <code>windows</code> give are
 slices too, and follow the same rules.</li>
 </ul>
+<h2 id="string-views"><a class="header" href="#string-views">String views</a></h2>
+<p><code>s.view(start, size)</code> is a <code>StringView</code>: a view of <code>size</code> bytes of the
+string from byte offset <code>start</code>, which copies nothing, so a parser can hand
+out its tokens as views of the text it reads. Both arguments count bytes, as
+<code>find</code> does. <code>s[i..j]</code> (<code>s.slice(i, j)</code>) is the view of code points <code>i</code> up
+to <code>j</code>, counted as <code>s[i]</code> counts them.</p>
+<p>A view has the string's read API: <code>size</code>, <code>length</code>, <code>byte_at</code>, <code>find</code>,
+<code>rfind</code>, <code>contains</code>, <code>starts_with</code>, <code>ends_with</code>, <code>==</code>, <code>compare</code>, a hash
+equal to the string's, and <code>view</code> and <code>slice</code> of its own; <code>split</code>,
+<code>split_once</code> and the <code>trim</code>s return views too. <code>to_string()</code> copies its text
+into a new <code>String</code>, where one is needed.</p>
+<pre><code class="language-pepper">main(): int {
+    var line = "name = pepper, version = 0.12";
+    var names = Array&lt;String&gt;();
+    # Each piece is a view of `line`: nothing is copied until `to_string`.
+    for (var field in line.view(0, line.size).split(",")) {
+        var (key, value) = field.split_once("=").value();
+        if (key.trim() == "name") {
+            names.append(value.trim().to_string());
+        }
+    }
+    assert(names.count == 1 &amp;&amp; names[0] == "pepper", "one name");
+
+    # `s[i..j]` counts code points, as `s[i]` does.
+    var word = "héllo";
+    assert(word[1..4] == "éll", "code points 1 to 3");
+    return 0;
+}
+</code></pre>
+<p>Like an array slice, a view holds a reference to its string and is
+fail-fast: once the string changes (<code>append</code>, <code>+=</code>, <code>grow</code>), every later use
+of the view panics with <code>String modified while a view of it is in use</code>.</p>
 <h2 id="an-array-is-never-null"><a class="header" href="#an-array-is-never-null">An Array is never null</a></h2>
 <p>Unlike other struct types, an <code>Array</code> is never null. A variable, field or
 element of an array type that was not given a value holds an empty array,
@@ -368,7 +400,8 @@ buckets.resize(4, none);   # one empty array, four times; no nulls
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
 array.</li>
-<li><code>String</code> has no slice type and no <code>s[1..4]</code>; <code>substr</code> copies.</li>
+<li>A <code>StringView</code> does not yet convert to a <code>String</code> by itself where one is
+expected; call <code>to_string()</code>.</li>
 </ul>
 
                     </main>
