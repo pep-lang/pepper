@@ -14,6 +14,7 @@ export [
 export [check_cast] from "casts";
 export [canonical_type] from "common";
 export [error_at] from "common";
+export [is_string_constructor] from "common";
 export [verify_injected] from "injected";
 export [returns_fresh, takes_over] from "confinement";
 export [LAZY_ATTRIBUTE, READS_ATTRIBUTE] from "lazy";

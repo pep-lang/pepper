@@ -976,10 +976,13 @@ struct _FunctionTypes {
                 if (!true_type.is_value()) {
                     return;
                 }
+                # A literal has no place: point at the other operand then.
+                var at = _expression_loc(node.false_expr);
+                if (at.is_none()) {
+                    at = _expression_loc(node.true_expr);
+                }
                 flows_into(
-                    node.false_expr,
-                    true_type.value(),
-                    _FlowSlot(_SlotKind.Operands, "an operand of '?:'", "", _expression_loc(node.false_expr))
+                    node.false_expr, true_type.value(), _FlowSlot(_SlotKind.Operands, "an operand of '?:'", "", at)
                 );
             }
             else => {}

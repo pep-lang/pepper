@@ -335,7 +335,14 @@ export gather_generics(module: Module, state: PassState) {
                 structs.request(field.ty.to_string(), st.name, _written(field));
             }
         }
+        var deferred = state.deferred.try_get(st.name);
         for (var method in st.method_members) {
+            # A method whose body waits for a use asks for its types once
+            # one names it: else an `Array<T>` method returning a
+            # `MutableArrayView<T>` makes one for every element type.
+            if (deferred.is_value() and !method.body.is_value() and deferred.value().contains(method.name)) {
+                continue;
+            }
             if (_is_requested(method.ty, params)) {
                 structs.request(method.ty.to_string(), st.name, method.loc);
             }

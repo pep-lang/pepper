@@ -3113,7 +3113,7 @@ _model_constant(module: Module, e: Expression): _CtValue? {
         }
         FunctionCall(node) => {
             # A lowered string literal: `String(raw, size, length)`.
-            if (node.function == "String" and node.args.count == 3) {
+            if (is_string_constructor(node.function) and node.args.count == 3) {
                 return _model_constant(module, node.args[0]);
             }
         }

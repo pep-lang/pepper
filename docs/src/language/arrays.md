@@ -122,6 +122,27 @@ A change made through a writable slice counts as a change to the array, so
 the array's iterators and other slices fail fast after it, but the
 writable slice itself stays usable. A change made to the array any other
 way makes the writable slice fail fast too.
+## String views
+
+`s.view(start, size)` is a `StringView`: a view of `size` bytes of the
+string from byte offset `start`, which copies nothing, so a parser can hand
+out its tokens as views of the text it reads. Both arguments count bytes, as
+`find` does. `s[i..j]` (`s.slice(i, j)`) is the view of code points `i` up
+to `j`, counted as `s[i]` counts them.
+
+A view has the string's read API: `size`, `length`, `byte_at`, `find`,
+`rfind`, `contains`, `starts_with`, `ends_with`, `==`, `compare`, a hash
+equal to the string's, and `view` and `slice` of its own; `split`,
+`split_once` and the `trim`s return views too. `to_string()` copies its text
+into a new `String`, where one is needed.
+
+```pepper
+{{#include ../../examples/strings-view.pep}}
+```
+
+Like an array slice, a view holds a reference to its string and is
+fail-fast: once the string changes (`append`, `+=`, `grow`), every later use
+of the view panics with `String modified while a view of it is in use`.
 
 ## An Array is never null
 
@@ -142,4 +163,5 @@ When "no array" must differ from "an empty array", say so in the type with
 
 ## Not yet
 
-- `String` has no slice type and no `s[1..4]`; `substr` copies.
+- A `StringView` does not yet convert to a `String` by itself where one is
+  expected; call `to_string()`.

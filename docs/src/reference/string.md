@@ -696,6 +696,66 @@ var s = "a=b";
 assert(s.byte_at(1) == '=', "second byte");
 ```
 
+#### view
+
+```pepper
+view(start: ulong, size: ulong): StringView
+```
+
+Returns a view of the `size` bytes starting at byte offset `start`,
+which copies nothing: a parser can hand out its tokens as views of
+the text it reads. Both arguments count bytes, as `find` does.
+
+The view keeps this String alive, and panics once the String changes
+(`append`, `+=`, `grow`). It converts to a `String` where one is
+expected, copying its text then.
+
+**Parameters**
+- `start` — the byte offset of the first byte
+- `size` — the number of bytes
+
+**Returns**
+- a view of those bytes
+
+**Panics**
+- if `start + size` is greater than `size` ("String view range out of bounds")
+- if `start` or `start + size` falls inside a multi-byte code point ("String view splits a code point")
+
+**Example**
+```pepper
+var s = "key=value";
+var eq = s.find("=") as ulong;
+var key = s.view(0, eq);
+assert(key == "key", "before '='");
+```
+
+#### slice
+
+```pepper
+slice(start: ulong, end: ulong): StringView
+```
+
+Returns a view of the code points from `start` up to but not
+including `end`, counted as the indexer counts them; this is what
+`s[start..end]` calls. Finding the bytes takes O(end) time; the
+view copies nothing.
+
+**Parameters**
+- `start` — the position of the first code point
+- `end` — the position one past the last code point; from `start` through `length`
+
+**Returns**
+- a view of `end - start` code points of this String
+
+**Panics**
+- if `start <= end` and `end <= length` do not both hold ("String slice out of bounds")
+
+**Example**
+```pepper
+var s = "héllo";
+assert(s.slice(1, 4) == "éll", "code points 1 to 3");
+```
+
 #### substr_bytes
 
 ```pepper
@@ -2308,3 +2368,372 @@ a new one-code-point String.
 - if the String was modified since the iterator was created
 - if `next()` has not been called yet
 - if `next()` has returned false (the iterator is past the end)
+
+## StringView
+
+```pepper
+[Value] struct StringView
+```
+
+A read-only view of a run of a `String`'s bytes, made by `String.view`
+(byte offsets) or `String.slice` and `s[i..j]` (code points), that lets
+a parser or tokenizer hand out pieces of its text without copying them.
+
+A view holds a reference to its String, so the String lives at least as
+long as the view. It is fail-fast: once the String changes (`append`,
+`+=`, `grow`), every later use of the view panics with "String modified
+while a view of it is in use". It has `String`'s read API, measured the
+same way (`size` and offsets in bytes, `length` in code points); the
+pieces `split`, `split_once` and `trim` return are views too. It
+converts to a `String` where one is expected (`String`'s `[Implicit]`
+constructor), which copies its text; `to_string()` does the same.
+
+A view always starts and ends between code points, so its text is
+UTF-8.
+
+**Example**
+```pepper
+var line = "name = pepper";
+var (key, value) = line.split_once("=").value();
+assert(key.trim() == "name", "a view of 'name'");
+String copy = value.trim();   # copies "pepper"
+```
+
+### Properties
+
+#### size
+
+```pepper
+var size: ulong { get; }
+```
+
+The number of bytes in the view.
+
+#### length
+
+```pepper
+var length: ulong { get; }
+```
+
+The number of code points in the view. O(size): a view does not
+store it.
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the view has no bytes.
+
+### Methods
+
+#### byte_at
+
+```pepper
+byte_at(index: ulong): byte
+```
+
+Returns the byte at byte offset `index` of the view.
+
+**Parameters**
+- `index` — the byte offset
+
+**Returns**
+- the byte at `index`
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+- if `index < size` does not hold ("StringView byte_at index out of bounds")
+
+#### view
+
+```pepper
+view(start: ulong, size: ulong): StringView
+```
+
+Returns a view of the `size` bytes from byte offset `start` of this
+view, as `String.view` does.
+
+**Parameters**
+- `start` — the byte offset of the first byte, within this view
+- `size` — the number of bytes
+
+**Returns**
+- a view of those bytes of the same String
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+- if `start + size` is greater than `size` ("String view range out of bounds")
+- if `start` or `start + size` falls inside a multi-byte code point ("String view splits a code point")
+
+#### slice
+
+```pepper
+slice(start: ulong, end: ulong): StringView
+```
+
+Returns a view of the code points from `start` up to but not
+including `end` of this view, as `String.slice` does; this is what
+`view[start..end]` calls.
+
+**Parameters**
+- `start` — the position of the first code point
+- `end` — the position one past the last code point; from `start` through `length`
+
+**Returns**
+- a view of `end - start` code points of the same String
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+- if `start <= end` and `end <= length` do not both hold ("String slice out of bounds")
+
+#### find
+
+```pepper
+find(needle: String, from: ulong = 0): long
+```
+
+Returns the byte offset in the view of the first `needle` at or
+after byte offset `from`, or -1, as `String.find` does.
+
+**Parameters**
+- `needle` — the text to look for
+- `from` — the byte offset to start at
+
+**Returns**
+- the byte offset, or -1 when there is none
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### rfind
+
+```pepper
+rfind(needle: String): long
+```
+
+Returns the byte offset in the view of the last `needle`, or -1.
+
+**Parameters**
+- `needle` — the text to look for
+
+**Returns**
+- the byte offset, or -1 when there is none
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### contains
+
+```pepper
+contains(needle: String): bool
+```
+
+Returns whether the view holds `needle`.
+
+**Parameters**
+- `needle` — the text to look for
+
+**Returns**
+- whether it is there
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### starts_with
+
+```pepper
+starts_with(prefix: String): bool
+```
+
+Returns whether the view starts with `prefix`.
+
+**Parameters**
+- `prefix` — the text to compare with the view's start
+
+**Returns**
+- whether it does
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### ends_with
+
+```pepper
+ends_with(suffix: String): bool
+```
+
+Returns whether the view ends with `suffix`.
+
+**Parameters**
+- `suffix` — the text to compare with the view's end
+
+**Returns**
+- whether it does
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### split
+
+```pepper
+split(separator: String): StringView[]
+```
+
+Returns the pieces of the view between each `separator`, as views,
+in order; as `String.split`, but copying nothing.
+
+**Parameters**
+- `separator` — the text between pieces; not empty
+
+**Returns**
+- the pieces, at least one
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+- if `separator` is empty ("StringView.split: the separator is empty")
+
+#### split_once
+
+```pepper
+split_once(separator: String): (StringView, StringView)?
+```
+
+Returns the view's text before and after its first `separator`, as
+views, or `Empty` when it has none.
+
+**Parameters**
+- `separator` — the text to split at; not empty
+
+**Returns**
+- the two pieces, or `Empty`
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+- if `separator` is empty ("StringView.split_once: the separator is empty")
+
+#### trim
+
+```pepper
+trim(): StringView
+```
+
+Returns the view without its leading and trailing ASCII whitespace.
+
+**Returns**
+- a view of the rest
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### trim_start
+
+```pepper
+trim_start(): StringView
+```
+
+Returns the view without its leading ASCII whitespace.
+
+**Returns**
+- a view of the rest
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### trim_end
+
+```pepper
+trim_end(): StringView
+```
+
+Returns the view without its trailing ASCII whitespace.
+
+**Returns**
+- a view of the rest
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### operator ==
+
+```pepper
+==(other: StringView): bool
+```
+
+Returns whether the view holds the same text as `other`.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- whether the bytes are equal
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### operator ==
+
+```pepper
+==(other: String): bool
+```
+
+Returns whether the view holds the same text as `other`.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- whether the bytes are equal
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### operator ==
+
+```pepper
+==(other: StringConstant): bool
+```
+
+Returns whether the view holds the same text as `other`.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- whether the bytes are equal
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### compare
+
+```pepper
+compare(other: StringView): int
+```
+
+Returns the order of the view's text and `other`'s, as
+`String.compare` does: negative, 0 or positive.
+
+**Parameters**
+- `other` — the view to compare with
+
+**Returns**
+- the order
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")
+
+#### to_string
+
+```pepper
+to_string(): String
+```
+
+Returns a new String holding a copy of the view's text.
+
+**Returns**
+- the copy
+
+**Panics**
+- if the String was modified since the view was made ("String modified while a view of it is in use")

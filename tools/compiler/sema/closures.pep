@@ -7,7 +7,7 @@ import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [is_deprecation, mangle] from compiler.link;
 import [unit_decls] from "checked";
-import [error_at, location_of] from "common";
+import [error_at, is_string_constructor, location_of] from "common";
 import [Loc] from "loc";
 import [
     BinaryOp,
@@ -688,7 +688,7 @@ _this_ref(loc: Loc): Expression {
 ## Whether a call constructs `String` from a raw literal at its own
 ## location: a string literal `convert_string_literals` converted.
 _is_converted_literal(call: FunctionCallExpression): bool {
-    if (call.function != "String" or call.args.count == 0) {
+    if (!is_string_constructor(call.function) or call.args.count == 0) {
         return false;
     }
     match (call.args[0]) {

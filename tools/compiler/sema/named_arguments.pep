@@ -660,7 +660,7 @@ _is_constant(e: Expression): bool {
 ## A string literal `convert_string_literals` made a `String`.
 _is_string_literal(e: Expression): bool {
     if (e is FunctionCall(call)) {
-        if (call.function == "String" and call.args.count > 0) {
+        if (is_string_constructor(call.function) and call.args.count > 0) {
             if (call.args[0] is StringLiteral(literal)) {
                 return literal.is_raw and literal.loc.same(call.loc);
             }
