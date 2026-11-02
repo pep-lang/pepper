@@ -1312,7 +1312,7 @@ steps for as many rounds as the program needs, then the passes after it.
 `pep-build --emit-model --emit-model-step N` prints the model after the
 first N steps. The order came from the C++ implementation, and several
 passes run more than once on purpose. What the passes share between steps
-(the first error reported, closure numbers, enum representations and
+(the errors reported, closure numbers, enum representations and
 methods, reference enums, value structs, `reflect.print`'s notes and
 deprecation warnings, the next `WithSubject` id) is the `PassState`
 (`state.pep`); where the table below says "thread-local" or "registry", it
@@ -1439,8 +1439,12 @@ alias the cycle passes through). Because `check_function_types` is a
 transform step, the driver and the LSP both run it.
 
 Error reporting inside passes goes through `state.report(diag)`, which
-keeps only the **first** diagnostic of a run. Other per-run state is in
-the `PassState` too, the target among it. No counter that numbers synthesized
+collects them; the pass carries on, and the run stops after it.
+`take_error` returns the first in source order with the rest, up to
+`ERROR_LIMIT` and one per line (a later one on the line is usually
+fallout), in its `Diagnostic.also`, which rendering prints after it and the
+language server shows apart. Other per-run state is in the `PassState` too,
+the target among it. No counter that numbers synthesized
 names is process-wide: closure structs are numbered in
 `PassState.closure_counts`, and the builder's counters (`_Builder.for_loops`,
 `with_blocks`, `tuples`, `matches`, `tries`) belong to the builder of one
@@ -3445,7 +3449,7 @@ through `tools/compiler`; these notes add what the modules do beyond that.
   generation. Index lowering sets
   through a chained `a[x][y] = v` once `a[x]` is typed, as
   `lower_index_assign` does. What the passes keep between steps (the
-  first error reported, closure numbers, enum representations and
+  errors reported, closure numbers, enum representations and
   methods, reference enums, value structs, `reflect.print`'s notes and
   deprecation warnings, the next `WithSubject` id) is a `PassState`
   (`state.pep`). Nearly every pass imports it, so it imports no pass:
@@ -4390,8 +4394,10 @@ the checkout (`PEPPER_TARGET_DIR`).
   variable is its only holder) to move into a locked value.
 - **`copy` of a trait value** cannot be checked at compile time: one that
   holds a struct that cannot be copied panics at run time.
-- **Only the first sema error is reported** per compile
-  (`PassState.report`).
+- **Only the first failing sema pass's errors are reported** per compile
+  (`PassState.take_error`, up to `ERROR_LIMIT`), and code generation reports
+  one error: an undeclared name in a free function, which only codegen
+  finds, waits for the sema errors to be fixed.
 - **Unused CLI flags**: `-v`, and `-T` channels other than `time`,
   `passes` and `cache`. Naming a second source file is an error (except under
   `--test`): only the entry file is compiled.

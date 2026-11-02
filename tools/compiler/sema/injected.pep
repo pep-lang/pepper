@@ -113,7 +113,7 @@ struct _Verifier {
     }
 
     visit(place: Place) {
-        if (place.is_generic() or state.error.is_value()) {
+        if (place.is_generic() or state.has_error()) {
             return;
         }
         var finder = _Placeholders(table, place.this_type, state);

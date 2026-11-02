@@ -80,10 +80,15 @@ main.pep:1:13: note: to match this '{'
       |             ^
 ```
 
-## One error at a time
+## Several errors at once
 
-The compiler stops at the first error it finds and exits with status 1, so fix
-that error and compile again. It never produces an executable from a program
+The compiler checks a program in stages, and stops after the first stage that
+finds an error, with exit status 1. It reports every error that stage found,
+up to 20, in the order of their places in the files, so one build can show
+several mistakes. It shows one error per line: a second error on a line is
+usually caused by the first. An error a later stage would find shows up only once these
+are fixed: a misspelled local name in a function, for one, is found after
+the type errors. The compiler never produces an executable from a program
 with an error.
 
 On a terminal, errors are colored like clang's. Set the `NO_COLOR` environment

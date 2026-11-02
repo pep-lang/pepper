@@ -238,8 +238,8 @@ main.pep:5:12: error: too many arguments to function of type '(String) => int': 
       |            ^
 ```
 
-The compiler reports [one error at a time](compiler-errors.md#one-error-at-a-time),
-so the second appears once the first is fixed.
+The compiler reports both errors in one build (see
+[Several errors at once](compiler-errors.md#several-errors-at-once)).
 
 Calling a variable that does not hold a function is an error at the call,
 which names the variable's type:

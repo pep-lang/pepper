@@ -1010,11 +1010,20 @@ outcome(root: Path, runtime: bool, notes: bool = false): String {
     }
     var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
     if (ran.is_err()) {
-        var rendered = render_all([ran.error()], program.value().sources());
-        var lines = [headline(rendered, root)];
-        for (var line in rendered.split("\n")) {
-            if (notes and line.starts_with("note: ")) {
-                lines.append(line);
+        # The first error, then the others reported with it, each with its
+        # notes.
+        var first = ran.error();
+        var errors = [first];
+        errors.append_all(first.also);
+        first.also = Array<Diagnostic>();
+        var lines = Array<String>();
+        for (var error in errors) {
+            var rendered = error.render(program.value().sources());
+            lines.append(headline(rendered, root));
+            for (var line in rendered.split("\n")) {
+                if (notes and line.starts_with("note: ")) {
+                    lines.append(line);
+                }
             }
         }
         return "\n".join(lines);
@@ -1055,6 +1064,15 @@ error_programs(): String[] {
         # pointer, weak and tuple types, `void` used as a value, calls with
         # the wrong arity, bare returns, and enum and struct comparisons.
         "# expect: main.pep:4:30: error: cannot initialize variable 'f' of type '(String) => int' with a value of type '(int) => int'\nsquare(x: int): int { return x * x; }\nmain(): int {\n    var f: (String) => int = square;\n    return 0;\n}\n",
+        # Every error of the pass that finds one, in source order (#344).
+        "# expect: main.pep:5:30: error: cannot initialize variable 'g' of type '(String) => int' with a value of type '(int) => int'
+# expect: main.pep:6:12: error: too many arguments to function of type '(String) => int': expected 1, have 2
+square(x: int): int { return x * x; }
+main(): int {
+    var g: (String) => int = square;
+    return g(1, 2);
+}
+",
         "# expect: main.pep:5:12: error: too many arguments to function of type '(int) => int': expected 1, have 2\nsquare(x: int): int { return x * x; }\nmain(): int {\n    var f = square;\n    return f(1, 2);\n}\n",
         "# expect: main.pep:4:9: error: non-void function 'f' should return a value\nf(x: int): int {\n    if (x > 0) {\n        return;\n    }\n    return 1;\n}\nmain(): int {\n    return f(1);\n}\n",
         "# expect: main.pep:5:11: error: cannot initialize variable 's' of type 'S' with a value of type '__ptr<void>'\nstruct S { int x = 0; }\nmain(): int {\n    var p: __ptr<void> = __null;\n    S s = p;\n    return 0;\n}\n",
@@ -1072,7 +1090,7 @@ error_programs(): String[] {
         "# expect: main.pep:8:20: error: cannot initialize variable 'n' of type 'int' with a value of type '() => int'; call it with '()'\nstruct S {\n    var x: int;\n    get(): int { return x; }\n}\nmain(): int {\n    var s = S();\n    var n: int = s.get;\n    return n;\n}\n",
         "# expect: main.pep:7:14: error: cannot compare a value of type 'Color' with a value of type 'Size'\nenum Color { Red, Green }\nenum Size { Small, Large }\nmain(): int {\n    var c = Color.Red;\n    var s = Size.Small;\n    return c == s ? 1 : 0;\n}\n",
         "# expect: main.pep:9:17: error: cannot pass a value of type 'long' as argument 1 of 'take', which has type 'Meters'\nstruct Meters {\n    var v: long;\n    construct(v: long) { this.v = v; }\n}\ntake(m: Meters): long { return m.v; }\nmain(): int {\n    long n = 2;\n    return take(n) as int;\n}\n",
-        "# expect: error: incompatible operand types ('S' and 'int')\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var n = true ? s : 1;\n    return 0;\n}\n",
+        "# expect: main.pep:7:20: error: incompatible operand types ('S' and 'int')\nstruct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var n = true ? s : 1;\n    return 0;\n}\n",
         "# expect: main.pep:5:13: error: invalid operand to unary expression ('Color'): an enum only compares with '==' and '!='\nenum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    var d = -c;\n    return 0;\n}\n",
         # Struct values in trait slots they do not conform to, trait values
         # of another trait, a number as a trait value, a static trait member

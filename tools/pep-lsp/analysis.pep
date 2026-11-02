@@ -467,6 +467,9 @@ export analyze(
             }
             Checking(error) => {
                 var shown = reporter.add(error);
+                for (var other in error.also) {
+                    reporter.add_if_in_document(other);
+                }
                 var arms = missing_arms(document, program, error, shown);
                 if (arms is Value(action)) {
                     out.actions.append(action);
