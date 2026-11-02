@@ -243,6 +243,7 @@ main(): int {
     var numbers = [1, 2, 3, 4, 5];
     var middle = numbers.slice(1, 4);
     assert(middle.count == 3 &amp;&amp; middle[0] == 2, "views [2, 3, 4]");
+    assert(numbers[1..4].count == 3 &amp;&amp; numbers[3..&gt;4][1] == 5, "a[i..j], and a[i..&gt;j] through j");
     assert(total(middle) == 9, "passed to a function");
     assert(middle.to_array() == [2, 3, 4], "copied out");
     var (head, rest) = middle.split_at(1);
@@ -311,7 +312,11 @@ other than the elements' own, or for elements that are not <code>Comparable</cod
 <h2 id="slices"><a class="header" href="#slices">Slices</a></h2>
 <p><code>a.slice(start, end)</code> is an <code>ArrayView&lt;T&gt;</code> (formerly <code>ArraySlice&lt;T&gt;</code>, a
 name that still works, with a deprecation warning): a read-only view of the
-elements from <code>start</code> up to but not including <code>end</code>. It has <code>count</code>,
+elements from <code>start</code> up to but not including <code>end</code>. A range written in the
+brackets is the same slice: <code>a[start..end]</code> is <code>a.slice(start, end)</code>, and
+<code>a[start..&gt;last]</code> includes <code>last</code>. It works on an <code>ArrayView</code> too, counting
+within it. A range held in a variable is not an index: <code>a[r]</code> is an error
+that asks for <code>slice</code>. A slice has <code>count</code>,
 <code>is_empty</code>, indexing, <code>for</code> loops, <code>slice</code>, <code>to_array</code>, <code>find</code>, <code>contains</code>
 and the searches above, plus:</p>
 <ul>
@@ -362,9 +367,8 @@ buckets.resize(4, none);   # one empty array, four times; no nulls
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
-array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code> (the compiler says
-so: <code>cannot index 'Array&lt;int&gt;' with a value of type 'Range&lt;int&gt;'</code>).</li>
-<li><code>String</code> has no slice type; <code>substr</code> copies.</li>
+array.</li>
+<li><code>String</code> has no slice type and no <code>s[1..4]</code>; <code>substr</code> copies.</li>
 </ul>
 
                     </main>
