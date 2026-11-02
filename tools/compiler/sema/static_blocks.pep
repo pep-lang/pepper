@@ -417,17 +417,29 @@ struct _CtCase {
     }
 }
 
-## A function, from `reflect.functions_with<A>()`.
+## A function, from `reflect.functions_with<A>()`, or a method or
+## constructor of a struct, from `reflect.methods<T>()` and
+## `reflect.constructors<T>()` (#392).
 struct _CtFunction {
-    # The function's name in the model, which a call uses.
+    # The function's name in the model, which a call uses: for a method,
+    # its name without its overload's number.
     var symbol: String;
     var attributes: ast.Attribute[];
     var file: uint;
+    # The struct a method or constructor belongs to, as written.
+    var owner: String? = Optional<String>.Empty;
+    var is_static: bool = false;
+    var is_constructor: bool = false;
 
     construct(symbol: String, attributes: ast.Attribute[], file: uint) {
         this.symbol = symbol;
         this.attributes = attributes;
         this.file = file;
+    }
+
+    # What `name` gives: a constructor's is its struct's.
+    shown(): String {
+        return is_constructor ? owner.value() : demangle_name(symbol);
     }
 }
 
@@ -500,7 +512,10 @@ enum _CtValue {
             }
             Function(f) => {
                 return Optional<StaticConstant>.Value(
-                    _record("reflect.Function", [("name", StaticConstant.String(demangle_name(f.symbol)))])
+                    _record(
+                        f.owner.is_value() ? "reflect.Method" : "reflect.Function",
+                        [("name", StaticConstant.String(f.shown()))]
+                    )
                 );
             }
             Attribute(a) => {
@@ -584,7 +599,7 @@ enum _CtValue {
                 return m.name;
             }
             Function(f) => {
-                return demangle_name(f.symbol);
+                return f.shown();
             }
             List(items) => {
                 var shown = Array<String>();
@@ -904,8 +919,18 @@ _member_source(receiver: _CtValue, method: String, arguments: ast.Span[]): Sourc
         }
         Function(f) => {
             if (method == "call") {
-                out.append(SourcePiece.Text($"{demangle_name(f.symbol)}("));
-                _append_arguments(out, arguments);
+                if (f.owner.is_value() and !f.is_static and !f.is_constructor) {
+                    # An instance method: the first argument is the receiver.
+                    if (arguments.count == 0) {
+                        return Optional<SourcePiece[]>.Empty;
+                    }
+                    out.append(SourcePiece.Argument(arguments[0]));
+                    out.append(SourcePiece.Text($".{demangle_name(f.symbol)}("));
+                    _append_arguments(out, arguments.slice(1, arguments.count).to_array());
+                } else {
+                    out.append(SourcePiece.Text($"{_callee(f)}("));
+                    _append_arguments(out, arguments);
+                }
                 out.append(SourcePiece.Text(")"));
                 return Optional<SourcePiece[]>.Value(out);
             }
@@ -936,6 +961,18 @@ _member_source(receiver: _CtValue, method: String, arguments: ast.Span[]): Sourc
 }
 
 ## Appends `arguments`, separated by commas, to `out`.
+# What a call of `f` names, as source: the function, `S.m` for a static
+# method, or `S` for a constructor.
+_callee(f: _CtFunction): String {
+    if (f.is_constructor) {
+        return f.owner.value();
+    }
+    if (f.owner.is_value()) {
+        return $"{f.owner.value()}.{demangle_name(f.symbol)}";
+    }
+    return demangle_name(f.symbol);
+}
+
 _append_arguments(out: SourcePiece[], arguments: ast.Span[]) {
     for (var i in 0..arguments.count) {
         if (i > 0) {
@@ -1621,6 +1658,29 @@ struct _Expander {
             }
             Function(f) => {
                 if (method == "call") {
+                    if (f.is_constructor) {
+                        return Result<Expression, Diagnostic>.Ok(
+                            Expression.FunctionCall(FunctionCallExpression(f.owner.value(), args, loc))
+                        );
+                    }
+                    if (f.owner.is_value()) {
+                        if (f.is_static) {
+                            var owner = Expression.SymbolRef(SymbolRefExpression(f.owner.value(), TypeName(), loc));
+                            return Result<Expression, Diagnostic>.Ok(
+                                Expression.MethodCall(MethodCallExpression(owner, f.symbol, args, loc))
+                            );
+                        }
+                        # An instance method: the first argument is the receiver.
+                        if (args.count == 0) {
+                            return Result<Expression, Diagnostic>.Err(
+                                error($"'call' of method '{f.shown()}' takes the receiver first", span)
+                            );
+                        }
+                        var rest = args.slice(1, args.count).to_array();
+                        return Result<Expression, Diagnostic>.Ok(
+                            Expression.MethodCall(MethodCallExpression(args[0], f.symbol, rest, loc))
+                        );
+                    }
                     return Result<Expression, Diagnostic>.Ok(
                         Expression.FunctionCall(FunctionCallExpression(f.symbol, args, loc))
                     );
@@ -2103,7 +2163,9 @@ struct _Expander {
             }
             Function(f) => {
                 if (name == "name") {
-                    found = Optional<_CtValue>.Value(_CtValue.Text(demangle_name(f.symbol)));
+                    found = Optional<_CtValue>.Value(_CtValue.Text(f.shown()));
+                } else if (name == "is_static" and f.owner.is_value()) {
+                    found = Optional<_CtValue>.Value(_CtValue.Bool(f.is_static));
                 }
             }
             List(items) => {
@@ -2376,6 +2438,15 @@ struct _Expander {
                 }
                 return ok(_CtValue.List(out));
             }
+            "methods", "constructors" => {
+                var failed = _checks(
+                    expect_types(name, type_args, 1, span), expect_arguments(name, arguments, 0, span)
+                );
+                if (failed.is_value()) {
+                    return failed.value();
+                }
+                return methods(type_args[0], name == "constructors", span);
+            }
             "is_struct", "is_enum", "is_trait" => {
                 var failed = _checks(
                     expect_types(name, type_args, 1, span), expect_arguments(name, arguments, 0, span)
@@ -2644,6 +2715,40 @@ struct _Expander {
             i += 1;
         }
         return Optional<(StructDef, Array<(String, TypeName)>)>.Value((base.value(), map));
+    }
+
+    ## The public methods of struct `ty`, in declaration order, or its
+    ## constructors: the members a program names, without the compiler's
+    ## own (`__` names, the accessors of properties) and operators.
+    methods(ty: TypeName, constructors: bool, span: ast.Span): Result<_CtValue, Diagnostic> {
+        var shown = display_name(ty.display());
+        var found_struct = find_struct(ty);
+        if (!found_struct.is_value() or find_enum(ty.name).is_value()) {
+            return fail($"'{shown}' is not a struct", span);
+        }
+        var (st, _) = found_struct.value();
+        if (st.enum_cases.is_value()) {
+            return fail($"'{shown}' is not a struct", span);
+        }
+        var chosen = Array<FunctionDef>();
+        for (var m in constructors ? st.constructors : st.method_members) {
+            var plain = set_name(m.name);
+            var first = plain.size == 0 ? 0 as u8 : plain.byte_at(0);
+            bool named = (first >= 'a' and first <= 'z') or (first >= 'A' and first <= 'Z');
+            if (constructors or (named and !m.loc.is_none())) {
+                chosen.append(m);
+            }
+        }
+        chosen.sort((a: FunctionDef, b: FunctionDef) => _compare_locs(a.loc, b.loc));
+        var out = Array<_CtValue>();
+        for (var m in chosen) {
+            var f = _CtFunction(set_name(m.name), m.attributes, m.loc.file);
+            f.owner = Optional<String>.Value(shown);
+            f.is_static = m.is_static;
+            f.is_constructor = constructors;
+            out.append(_CtValue.Function(f));
+        }
+        return ok(_CtValue.List(out));
     }
 
     members(ty: TypeName, all: bool, span: ast.Span): Result<_CtValue, Diagnostic> {

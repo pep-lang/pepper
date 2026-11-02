@@ -49,6 +49,29 @@ export cases<E>(): List<Case>;
 [__BuiltIn("reflect.functions_with")]
 export functions_with<A>(): List<Function>;
 
+## The methods of struct `T` that a program may call, instance and static,
+## in declaration order: not the compiler's own members, the accessors of
+## properties, operators or methods whose names start with `_`.
+##
+## @typeParam T a struct
+## @returns one method per method of `T`
+## @example
+##     static {
+##         for (var m in reflect.methods<Point>()) {
+##             reflect.print(m.name);
+##         }
+##     }
+[__BuiltIn("reflect.methods")]
+export methods<T>(): List<Method>;
+
+## The constructors of struct `T`, in declaration order. Each one's `name` is
+## `T`'s, and its `call` makes a `T`.
+##
+## @typeParam T a struct
+## @returns one method per constructor of `T`
+[__BuiltIn("reflect.constructors")]
+export constructors<T>(): List<Method>;
+
 ## Whether `T` is a struct. A number, `bool` or `char` is not, nor is an
 ## enum or a trait.
 ##
@@ -275,6 +298,39 @@ export struct Function {
     ## Emits a direct call of the function with `arguments`.
     ##
     ## @typeParam R what the function returns
+    ## @typeParam TArguments the types of the arguments
+    ## @param arguments the call's arguments, one argument each
+    ## @returns what the call returns
+    call<R, TArguments>(arguments: TArguments): R;
+}
+
+## A method or constructor of a struct, from `methods` or `constructors`. A
+## compile-time value: no program can name its type.
+[__BuiltIn("reflect.Method")]
+export struct Method {
+    ## Its name; a constructor's is its struct's.
+    const name: String;
+    ## Whether it is a static method, called on the struct rather than a value.
+    const is_static: bool;
+
+    ## Whether it carries attribute `A`.
+    ##
+    ## @typeParam A the attribute struct
+    ## @returns whether it carries `A`
+    has_attribute<A>(): bool;
+
+    ## The value of attribute `A` on it; an error when it does not carry `A`.
+    ##
+    ## @typeParam A the attribute struct
+    ## @returns the attribute's value
+    attribute<A>(): A;
+
+    ## Emits a direct call with `arguments`: for an instance method the
+    ## first argument is the value it is called on (`m.call<int, (Point,
+    ## int)>(p, 2)` is `p.scaled(2)`), for a static method or a constructor
+    ## every argument is the call's.
+    ##
+    ## @typeParam R what the call returns
     ## @typeParam TArguments the types of the arguments
     ## @param arguments the call's arguments, one argument each
     ## @returns what the call returns
