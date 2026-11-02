@@ -16758,11 +16758,12 @@ different ones.</p>
 (<code>["USE_ZLIB", "LOG_LEVEL=2"]</code>). It has none by default, so code that needs
 an option shows dimmed, and comparisons with options warn until the
 setting names them.</p>
-<h2 id="not-yet-1"><a class="header" href="#not-yet-1">Not yet</a></h2>
-<ul>
-<li>A <code>pep.toml</code> table declaring the options a package takes, with their
-types and defaults.</li>
-</ul>
+<h2 id="declaring-a-packages-options"><a class="header" href="#declaring-a-packages-options">Declaring a package's options</a></h2>
+<p>A package lists the options it reads in its <code>pep.toml</code>, with their types
+and defaults, in <a href="language/../tools/projects.html#build-options"><code>[build-options]</code></a>:
+an option <code>-D</code> leaves out then has its default, a <code>-D</code> value of the wrong
+type is an error, and so is a <code>BuildOption(NAME)</code> that names an option no
+package declares.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="platform-selection"><a class="header" href="#platform-selection">Platform selection</a></h1>
 <p>Some code only makes sense on one platform: a Windows API call, a
 Linux-specific constant, a type whose size differs between operating systems.
@@ -19924,7 +19925,7 @@ main(): int {
 <tr><td><code>powershell</code></td><td>dot-sourced from <code>$PROFILE</code></td></tr>
 </tbody></table>
 </div>
-<h2 id="not-yet-2"><a class="header" href="#not-yet-2">Not yet</a></h2>
+<h2 id="not-yet-1"><a class="header" href="#not-yet-1">Not yet</a></h2>
 <ul>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
 </ul>
@@ -20020,7 +20021,7 @@ the example does.</p>
 under a <a href="language/threads.html#mutexes-and-conditions"><code>Mutex</code></a>, so lines from many threads and
 tasks never interleave. A task waiting for that lock parks instead of
 blocking its worker thread. A failed write is ignored.</p>
-<h2 id="not-yet-3"><a class="header" href="#not-yet-3">Not yet</a></h2>
+<h2 id="not-yet-2"><a class="header" href="#not-yet-2">Not yet</a></h2>
 <ul>
 <li>Levels cannot be removed at compile time.</li>
 <li>The runtime's own modules (such as <code>http</code>) and the <code>pep-*</code> tools do not
@@ -21501,8 +21502,9 @@ megabytes per second. BLAKE3 is always the portable code, below the
 official BLAKE3, which uses SIMD and threads.</li>
 <li>The hashes have no secret-dependent branches or table lookups, but they
 have not been audited for timing side channels, which matter only when
-hashing secrets. Copies of an HMAC key stay in memory until the hasher
-is freed; nothing wipes them.</li>
+hashing secrets. An HMAC hasher wipes its copies of the key, and SHA-256
+and SHA-1 wipe their state, when they are freed; <code>Array.wipe</code> does the
+same for a key you hold. BLAKE3 does not wipe its state.</li>
 <li>HMAC works over SHA-256 and SHA-1; there is no SHA-512 to put under it.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="random-numbers"><a class="header" href="#random-numbers">Random numbers</a></h1>
@@ -24434,6 +24436,43 @@ no workspace lists, or naming what <code>[workspace.dependencies]</code> lacks;<
 <li><code>optional</code>, <code>features</code>, <code>default-features</code> or <code>workspace</code> in
 <code>[workspace.dependencies]</code>.</li>
 </ul>
+<h2 id="build-options-2"><a class="header" href="#build-options-2"><code>[build-options]</code></a></h2>
+<p>A package declares the <a href="tools/../language/build-options.html">build options</a> its
+code reads, so a misspelled one is an error rather than a silent <code>false</code>.
+Each key is an option's name, with its <code>type</code> (<code>"int"</code>, <code>"bool"</code> or
+<code>"string"</code>), an optional <code>default</code> of that type, and an optional
+<code>description</code>:</p>
+<pre><code class="language-toml">[build-options]
+LOG_LEVEL = { type = "int", default = 1, description = "how much to log: 0 to 3" }
+FAST_MATH = { type = "bool", default = false }
+REGION = { type = "string", default = "eu" }
+</code></pre>
+<pre><code class="language-pepper">[Target(BuildOption(LOG_LEVEL) &gt;= 2)]
+trace(message: String) {
+    print(message);
+}
+
+[Target(BuildOption(LOG_LEVEL) &lt; 2)]
+trace(message: String) {}
+</code></pre>
+<ul>
+<li><strong>Defaults.</strong> An option <code>-D</code> leaves out has its <code>default</code>, in
+<code>[Target(...)]</code> conditions, in <code>reflect.build_option</code> and
+<code>reflect.has_build_option</code>, in every package of the build, and in the
+language server. <code>pepper build -D LOG_LEVEL=3</code> overrides it.</li>
+<li><strong>Types.</strong> A <code>-D</code> value of the wrong type is an error
+(<code>build option 'LOG_LEVEL' is 'high', which is not an integer, as package 'app' declares it in '[build-options]'</code>). A <code>bool</code> takes <code>true</code>,
+<code>false</code>, <code>1</code>, <code>0</code>, <code>on</code>, <code>off</code>, <code>yes</code> or <code>no</code>; a bare <code>-D FAST_MATH</code> is
+<code>1</code>.</li>
+<li><strong>Names.</strong> Once any package of the build declares options, a
+<code>BuildOption(NAME)</code> that names none of them, and no defined option
+either, is an error at the name. When the project's own package
+declares options, so is a <code>-D</code> that names none of them (<code>'-D LOG_LEVL': package 'app' declares no build option 'LOG_LEVL' in '[build-options]'</code>); the options its features define are allowed.</li>
+<li>Two packages may declare one option only with the same type.</li>
+<li><code>pepper package info</code> lists a package's options. The table needs
+toolchain 0.13.0, so a package with one sets <code>minimum_toolchain</code> to it
+or later.</li>
+</ul>
 <h2 id="overrides"><a class="header" href="#overrides"><code>[overrides]</code></a></h2>
 <p>To try a fix in a package deep in the graph, or to use a fork until the
 fix is released, the project replaces the package wherever the graph
@@ -24885,7 +24924,7 @@ so <a href="tools/pep-package.html#audit"><code>audit</code></a> reports it.</li
 <tr><td><code>audit --json</code></td><td>Prints the affected packages as JSON</td></tr>
 <tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="tools/pep-package.html#vendor-dir"><code>vendor</code></a>)</td></tr>
 <tr><td><code>search [&lt;word&gt;...]</code></td><td>Lists the packages in the <a href="tools/pep-package.html#the-package-index">package index</a> whose name, description or keywords hold every word; every package when none is given (see <a href="tools/pep-package.html#search-word"><code>search</code></a>)</td></tr>
-<tr><td><code>info &lt;package&gt;</code></td><td>Prints a package's description, versions, minimum toolchain, license and repository; the package is the name the index lists it by, or <code>[host:]owner/name</code> (see <a href="tools/pep-package.html#info-package"><code>info</code></a>)</td></tr>
+<tr><td><code>info &lt;package&gt;</code></td><td>Prints a package's description, versions, minimum toolchain, license, repository and build options; the package is the name the index lists it by, or <code>[host:]owner/name</code> (see <a href="tools/pep-package.html#info-package"><code>info</code></a>)</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="tools/pep-package.html#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -25180,7 +25219,9 @@ tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Rata
 <p>Prints what is known of a package: the index's description and keywords,
 its versions (its version tags, newest first, those its newest release
 <a href="tools/pep-package.html#retracted-versions">retracts</a> marked), and the <code>minimum_toolchain</code>,
-<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, which is
+<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, then the
+<a href="tools/projects.html#build-options">build options</a> it declares, one line each
+with its type, default and description. The <code>pep.toml</code> is
 read from the <a href="tools/pep-package.html#the-download-cache">download cache</a> (fetched into it
 when missing). The package is the name the index lists it by, or a
 repository as <code>add</code> takes one (<code>[host:]owner/name</code>), which need not be
@@ -36306,6 +36347,22 @@ releases its previous occupant. Invalidates running iterators.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var a = [1, 2, 3];
 a.fill(0);   # [0, 0, 0]
+</code></pre>
+<h4 id="wipe"><a class="header" href="#wipe">wipe</a></h4>
+<pre><code class="language-pepper">wipe()
+</code></pre>
+<p>Overwrites every byte of the array's storage, spare capacity included,
+with zero, in a way the optimizer keeps even when the array is freed
+right after, so a secret such as a key does not stay in memory.</p>
+<p>Runs in O(capacity). The count is unchanged; each element reads as
+zero afterwards. Invalidates running iterators.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>T</code> holds references (a struct, <code>String</code> or array)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var key = "secret".bytes();
+key.wipe();   # every byte is now 0
 </code></pre>
 <h4 id="retain"><a class="header" href="#retain">retain</a></h4>
 <pre><code class="language-pepper">retain(keep: (T) =&gt; bool)

@@ -911,6 +911,43 @@ no workspace lists, or naming what <code>[workspace.dependencies]</code> lacks;<
 <li><code>optional</code>, <code>features</code>, <code>default-features</code> or <code>workspace</code> in
 <code>[workspace.dependencies]</code>.</li>
 </ul>
+<h2 id="build-options"><a class="header" href="#build-options"><code>[build-options]</code></a></h2>
+<p>A package declares the <a href="../language/build-options.html">build options</a> its
+code reads, so a misspelled one is an error rather than a silent <code>false</code>.
+Each key is an option's name, with its <code>type</code> (<code>"int"</code>, <code>"bool"</code> or
+<code>"string"</code>), an optional <code>default</code> of that type, and an optional
+<code>description</code>:</p>
+<pre><code class="language-toml">[build-options]
+LOG_LEVEL = { type = "int", default = 1, description = "how much to log: 0 to 3" }
+FAST_MATH = { type = "bool", default = false }
+REGION = { type = "string", default = "eu" }
+</code></pre>
+<pre><code class="language-pepper">[Target(BuildOption(LOG_LEVEL) &gt;= 2)]
+trace(message: String) {
+    print(message);
+}
+
+[Target(BuildOption(LOG_LEVEL) &lt; 2)]
+trace(message: String) {}
+</code></pre>
+<ul>
+<li><strong>Defaults.</strong> An option <code>-D</code> leaves out has its <code>default</code>, in
+<code>[Target(...)]</code> conditions, in <code>reflect.build_option</code> and
+<code>reflect.has_build_option</code>, in every package of the build, and in the
+language server. <code>pepper build -D LOG_LEVEL=3</code> overrides it.</li>
+<li><strong>Types.</strong> A <code>-D</code> value of the wrong type is an error
+(<code>build option 'LOG_LEVEL' is 'high', which is not an integer, as package 'app' declares it in '[build-options]'</code>). A <code>bool</code> takes <code>true</code>,
+<code>false</code>, <code>1</code>, <code>0</code>, <code>on</code>, <code>off</code>, <code>yes</code> or <code>no</code>; a bare <code>-D FAST_MATH</code> is
+<code>1</code>.</li>
+<li><strong>Names.</strong> Once any package of the build declares options, a
+<code>BuildOption(NAME)</code> that names none of them, and no defined option
+either, is an error at the name. When the project's own package
+declares options, so is a <code>-D</code> that names none of them (<code>'-D LOG_LEVL': package 'app' declares no build option 'LOG_LEVL' in '[build-options]'</code>); the options its features define are allowed.</li>
+<li>Two packages may declare one option only with the same type.</li>
+<li><code>pepper package info</code> lists a package's options. The table needs
+toolchain 0.13.0, so a package with one sets <code>minimum_toolchain</code> to it
+or later.</li>
+</ul>
 <h2 id="overrides"><a class="header" href="#overrides"><code>[overrides]</code></a></h2>
 <p>To try a fix in a package deep in the graph, or to use a fork until the
 fix is released, the project replaces the package wherever the graph

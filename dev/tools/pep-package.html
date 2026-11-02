@@ -304,7 +304,7 @@ so <a href="#audit"><code>audit</code></a> reports it.</li>
 <tr><td><code>audit --json</code></td><td>Prints the affected packages as JSON</td></tr>
 <tr><td><code>vendor [&lt;dir&gt;]</code></td><td>Copies every locked package into <code>&lt;dir&gt;</code> in the project (default: <code>pep.toml</code>'s <code>[fetch] vendor</code>, else <code>vendor</code>), and sets <code>[fetch] vendor</code> so builds read it (see <a href="#vendor-dir"><code>vendor</code></a>)</td></tr>
 <tr><td><code>search [&lt;word&gt;...]</code></td><td>Lists the packages in the <a href="#the-package-index">package index</a> whose name, description or keywords hold every word; every package when none is given (see <a href="#search-word"><code>search</code></a>)</td></tr>
-<tr><td><code>info &lt;package&gt;</code></td><td>Prints a package's description, versions, minimum toolchain, license and repository; the package is the name the index lists it by, or <code>[host:]owner/name</code> (see <a href="#info-package"><code>info</code></a>)</td></tr>
+<tr><td><code>info &lt;package&gt;</code></td><td>Prints a package's description, versions, minimum toolchain, license, repository and build options; the package is the name the index lists it by, or <code>[host:]owner/name</code> (see <a href="#info-package"><code>info</code></a>)</td></tr>
 <tr><td><code>cache info</code></td><td>Prints the <a href="#the-download-cache">download cache</a>'s folder, then each package it holds</td></tr>
 <tr><td><code>cache clean</code></td><td>Removes what the download cache holds, except a package a fetch is using; projects keep what their <code>.pep/deps</code> holds</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command's</td></tr>
@@ -599,7 +599,9 @@ tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Rata
 <p>Prints what is known of a package: the index's description and keywords,
 its versions (its version tags, newest first, those its newest release
 <a href="#retracted-versions">retracts</a> marked), and the <code>minimum_toolchain</code>,
-<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, which is
+<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, then the
+<a href="projects.html#build-options">build options</a> it declares, one line each
+with its type, default and description. The <code>pep.toml</code> is
 read from the <a href="#the-download-cache">download cache</a> (fetched into it
 when missing). The package is the name the index lists it by, or a
 repository as <code>add</code> takes one (<code>[host:]owner/name</code>), which need not be

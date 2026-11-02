@@ -875,6 +875,22 @@ releases its previous occupant. Invalidates running iterators.</p>
 <pre><code class="language-pepper">var a = [1, 2, 3];
 a.fill(0);   # [0, 0, 0]
 </code></pre>
+<h4 id="wipe"><a class="header" href="#wipe">wipe</a></h4>
+<pre><code class="language-pepper">wipe()
+</code></pre>
+<p>Overwrites every byte of the array's storage, spare capacity included,
+with zero, in a way the optimizer keeps even when the array is freed
+right after, so a secret such as a key does not stay in memory.</p>
+<p>Runs in O(capacity). The count is unchanged; each element reads as
+zero afterwards. Invalidates running iterators.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>T</code> holds references (a struct, <code>String</code> or array)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var key = "secret".bytes();
+key.wipe();   # every byte is now 0
+</code></pre>
 <h4 id="retain"><a class="header" href="#retain">retain</a></h4>
 <pre><code class="language-pepper">retain(keep: (T) =&gt; bool)
 </code></pre>

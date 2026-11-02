@@ -398,11 +398,12 @@ different ones.</p>
 (<code>["USE_ZLIB", "LOG_LEVEL=2"]</code>). It has none by default, so code that needs
 an option shows dimmed, and comparisons with options warn until the
 setting names them.</p>
-<h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
-<ul>
-<li>A <code>pep.toml</code> table declaring the options a package takes, with their
-types and defaults.</li>
-</ul>
+<h2 id="declaring-a-packages-options"><a class="header" href="#declaring-a-packages-options">Declaring a package's options</a></h2>
+<p>A package lists the options it reads in its <code>pep.toml</code>, with their types
+and defaults, in <a href="../tools/projects.html#build-options"><code>[build-options]</code></a>:
+an option <code>-D</code> leaves out then has its default, a <code>-D</code> value of the wrong
+type is an error, and so is a <code>BuildOption(NAME)</code> that names an option no
+package declares.</p>
 
                     </main>
 
