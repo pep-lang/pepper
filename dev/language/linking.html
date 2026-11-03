@@ -334,6 +334,21 @@ when the names differ), then add the library that defines it with <code>[Link]</
 manager) or the Xcode Command Line Tools on macOS.</p>
 <p>Warnings from the linker are passed through unchanged, even when the link
 succeeds.</p>
+<h3 id="a-library-another-pepper-build-made"><a class="header" href="#a-library-another-pepper-build-made">A library another Pepper build made</a></h3>
+<p>Every program and library Pepper writes carries an identity stamp, in a
+section of its own (<code>.pepmeta</code>, <code>__DATA,__pepmeta</code> on macOS and iOS) that
+the linker keeps: the compiler's release, its ABI number, the platform, a
+hash of the runtime's core files, and the build options defined. Before it
+links, the compiler reads the stamp of each library a <code>[Link]</code> or <code>-l</code> name
+finds in the search folders, and of each file a build script links, and
+refuses one that does not fit the build:</p>
+<pre><code class="language-text">error: './libgeo.a' was built by pepper 0.12.0 (ABI 1) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
+</code></pre>
+<p>The ABI number, the platform and the runtime must match, and so must each
+build option both builds define (<code>--test</code> and <code>--entry</code> are left out). The
+release may differ: the ABI number is what changes when a compiler changes
+code that two builds rely on of each other. A library with no stamp, such
+as a C one, is not checked.</p>
 <h2 id="output-files"><a class="header" href="#output-files">Output files</a></h2>
 <p>With no <code>-o</code>, the executable is named after the first source file, in the
 directory where you run the compiler: <code>main</code> for <code>main.pep</code>, and <code>main.exe</code>
