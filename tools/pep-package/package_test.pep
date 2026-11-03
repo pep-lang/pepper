@@ -2954,7 +2954,7 @@ search_info_and_add_read_the_package_index() {
     expect_equal(
         info.stdout,
         "shapes: Polygons and their Areas\nsource: github:other/shapes\nversions: 1.1.0, 1.0.0 (retracted)\n"
-            + "minimum toolchain: 0.1.0\nlicense: MIT\n"
+            + "minimum toolchain: 0.1.0\nlicense: MIT\ndocs: https://pepper-lang.dev/index/github.com/other/shapes/\n"
     );
     # Not in the index, by its repository.
     expect_equal(

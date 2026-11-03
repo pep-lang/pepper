@@ -7,6 +7,7 @@ import [load_manifest] from compiler.link;
 import process;
 import [TempFolder] from testing;
 import [expect_contains, expect_exit, read_file, run, tool, write_file] from tool_testing;
+import [inert_markdown] from "inert";
 import "package";
 import "reference";
 
@@ -119,4 +120,78 @@ package_check_reports_undocumented_declarations() {
         ),
         0
     );
+}
+
+# What a package writes cannot become HTML on its pages (#301): raw HTML
+# outside code shows as text, and a link to a script goes nowhere; code,
+# safe links and the generated header stay as they are.
+[Test]
+package_markdown_is_inert() {
+    var zero_width = "&#8203;";
+    expect_equal(inert_markdown("a <script>x</script> & b"), "a &lt;script>x&lt;/script> &amp; b");
+    expect_equal(inert_markdown("keep `a < b` and ``x`<`y``"), "keep `a < b` and ``x`<`y``");
+    expect_equal(inert_markdown("```\n<b>\n```\n<i>"), "```\n<b>\n```\n&lt;i>");
+    # Only what CommonMark takes for code passes as written.
+    expect_equal(inert_markdown("text\n    ```\n<i>"), "text\n    ```\n&lt;i>");
+    expect_equal(inert_markdown("``` a`b\n<i>"), "``` a`b\n&lt;i>");
+    expect_equal(inert_markdown("- item\n\n    <i>"), "- item\n\n    &lt;i>");
+    expect_equal(inert_markdown("\\`<i>`"), "\\`&lt;i>`");
+    expect_equal(inert_markdown("`<i>`` x"), "`&lt;i>`` x");
+    # No link can reach a script, wherever its target is.
+    expect_equal(inert_markdown("[a](javascript:alert(1))"), $"[a](javascript{zero_width}:alert(1))");
+    expect_equal(inert_markdown("[r]:\n  JavaScript:x"), $"[r]:\n  JavaScript{zero_width}:x");
+    expect_equal(inert_markdown("[c](javascript&#58;x) data:x"), $"[c](javascript&amp;#58;x) data{zero_width}:x");
+    expect_equal(inert_markdown("metadata: [e](https://x.dev/a)"), "metadata: [e](https://x.dev/a)");
+    # mdBook's directives stay text, in code too.
+    expect_equal(
+        inert_markdown("{{#include /etc/passwd}}\n```\n{{#include x}}\n```"),
+        "\\{{#include /etc/passwd}}\n```\n\\{{#include x}}\n```"
+    );
+}
+
+# With `--docs-base`, a dependency's docs are on that site, under its
+# source; a folder dependency still has none.
+[Test]
+docs_base_links_dependencies_by_source() {
+    var folder = TempFolder("docs_base");
+    write_package(folder.path);
+    var manifest = load_manifest(folder.path.join("pep.toml"), Array<Path>()).value();
+    var index = package_index(manifest, Array<Page>(), Optional<String>.Value("https://pkg.example/docs/"));
+    expect_contains(index, "[`semver`](https://pkg.example/docs/github.com/Pep-Lang/pepper-semver/)");
+    expect_contains(index, "[`win`](https://pkg.example/docs/codeberg.org/someone/win/)");
+    expect_contains(index, "- `local`");
+}
+
+# Text that is not ASCII passes through whole; after a letter that is not
+# ASCII, a scheme's name still counts as starting a word.
+[Test]
+inert_markdown_keeps_other_scripts() {
+    expect_equal(inert_markdown("héllo <wörld> 日本 `ä<` éjavascript:"), "héllo &lt;wörld> 日本 `ä<` éjavascript&#8203;:");
+}
+
+# `pep-doc package` only parses a package: the files it is made of import
+# no part of the compiler that checks, builds or runs code, nor `process`,
+# so documenting a package the site does not trust runs none of its code
+# (#301). Main runs only mdBook.
+[Test]
+package_docs_run_no_package_code() {
+    var forbidden = [
+        "compiler.sema", "compiler.driver", "compiler.codegen", "compiler.incremental", "compiler.desugar", "jit"
+    ];
+    for (var file in ["package.pep", "reference.pep", "inert.pep", "main.pep"]) {
+        var text = read_file(Path("pep-doc").join(file));
+        for (var line in text.lines()) {
+            if (!line.starts_with("import ")) {
+                continue;
+            }
+            for (var name in forbidden) {
+                if (line.contains(name)) {
+                    panic($"pep-doc/{file} imports {name}: `{line}`");
+                }
+            }
+            if (file != "main.pep" and line.contains("process")) {
+                panic($"pep-doc/{file} imports process: `{line}`");
+            }
+        }
+    }
 }

@@ -487,7 +487,9 @@ tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Rata
 Prints what is known of a package: the index's description and keywords,
 its versions (its version tags, newest first, those its newest release
 [retracts](#retracted-versions) marked), and the `minimum_toolchain`,
-`license` and `repository` of its newest release's `pep.toml`, then the
+`license` and `repository` of its newest release's `pep.toml`, for a
+package the index lists, the address of its reference on the
+[package docs site](#package-docs), then the
 [build options](projects.md#build-options) it declares, one line each
 with its type, default and description. The `pep.toml` is
 read from the [download cache](#the-download-cache) (fetched into it
@@ -504,6 +506,7 @@ source: github:pep-lang/pepper-semver
 versions: 1.0.0
 license: Apache-2.0
 repository: https://github.com/pep-lang/pepper-semver
+docs: https://pepper-lang.dev/index/github.com/pep-lang/pepper-semver/
 keywords: semver, version, range
 ```
 
@@ -535,6 +538,24 @@ warning that gives its age, and fails only when there is no copy; with
 `--offline`, `search` uses the copy as it is, and fails when there is
 none. The packages are also listed on
 <https://pepper-lang.dev/packages.html>.
+
+### Package docs
+
+Every package the index lists has its reference on one site,
+`https://pepper-lang.dev/index/`, under its source:
+`https://pepper-lang.dev/index/github.com/pep-lang/pepper-semver/`, with a
+folder per version tag and a version picker. A workflow in the index's
+repository builds it each night: for each version tag of each package
+not yet on the site, it clones that tag and runs
+[`pepper doc package --site`](pep-doc.md#pep-doc-package) with
+`--docs-base`, so the dependencies' links stay on the site. It only
+parses the package's files and runs none of its code (no build script,
+no `[native]` compile), and what a package wrote shows as text, never as
+HTML. A version is built once: a tag moved to another commit keeps its
+first build, and the run reports it. A tag that does not document gets a
+page saying so. Listing a package in the index is all it takes; a
+package may still publish its own docs too (see
+[Hosting a package's docs](pep-doc.md#hosting-a-packages-docs)).
 
 ### `audit`
 

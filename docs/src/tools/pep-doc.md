@@ -119,7 +119,17 @@ pepper doc package           # writes .pep/doc/, renders it into .pep/doc/html/
   dependencies, each linked to its docs: for a GitHub repository, the
   GitHub Pages site the [package template](#hosting-a-packages-docs)
   publishes (`https://<owner>.github.io/<name>/`), for another host its
-  repository, and for a `path` dependency nothing.
+  repository, and for a `path` dependency nothing. With `--docs-base`,
+  the site of many packages' docs instead.
+- **Raw HTML:** what the package wrote (its doc comments, its `pep.toml`'s
+  text, its file names) shows as text. Outside code, `<` and `&` are
+  written `&lt;` and `&amp;`, so no tag, comment, autolink or entity is
+  HTML; `javascript:`, `vbscript:` and `data:` get a zero-width space
+  before their `:`, so no link has one of those schemes; and mdBook's
+  `{{#include}}` and other `{{#...}}` directives stay text, in code too.
+  Code (a fence, a code span) is left as written; an indented code
+  block counts as text. A site can then serve every package's docs on
+  one origin.
 - **Output:** an mdBook in `.pep/doc/` (`book.toml`, and `src/` with the
   pages, `README.md` and `SUMMARY.md`, rewritten on each run), rendered
   with mdBook into `.pep/doc/html/`. When mdBook cannot run, the error
@@ -135,6 +145,9 @@ Options:
   being `pep.toml`'s (`dev` without one), and refreshes `<DIR>`'s
   `versions.json`, `index.html`, `latest/` and `404.html`, which open the
   newest release, as `build` does for this book. Earlier versions stay.
+- `--docs-base <URL>`: links each dependency hosted on a forge to its
+  docs on a site of many packages' docs at `URL`, which keeps each
+  package's under its source: `<URL>/github.com/<owner>/<name>/`.
 
 #### Hosting a package's docs
 
@@ -158,6 +171,7 @@ Prints the commands and options, as `-h` and `--help` do.
 | `--version <VERSION>` | With `build`: the version to build |
 | `--site <DIR>` | With `build`: the site folder; with `package`: the site to render into |
 | `--check` | With `package`: check the doc comments, changing nothing |
+| `--docs-base <URL>` | With `package`: link dependencies' docs on the site at `URL` |
 | `-h`, `--help` | Print the commands and options |
 | `-V`, `--version` | As the only argument: print `pep-doc` and its version |
 
