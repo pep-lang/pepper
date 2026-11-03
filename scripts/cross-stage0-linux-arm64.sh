@@ -32,7 +32,7 @@ static="$work/static"
 
 echo "=== cross C and C++ libraries"
 sudo apt-get update -qq
-sudo apt-get install -y -qq gcc-aarch64-linux-gnu libc6-dev-arm64-cross libstdc++-13-dev-arm64-cross
+sudo apt-get install -y -qq gcc-aarch64-linux-gnu libc6-dev-arm64-cross libstdc++-13-dev-arm64-cross lld
 
 echo "=== LLVM for aarch64"
 llvm_major=$(sed -nE 's/^LLVM_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
