@@ -25332,7 +25332,9 @@ tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Rata
 <p>Prints what is known of a package: the index's description and keywords,
 its versions (its version tags, newest first, those its newest release
 <a href="tools/pep-package.html#retracted-versions">retracts</a> marked), and the <code>minimum_toolchain</code>,
-<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, then the
+<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, for a
+package the index lists, the address of its reference on the
+<a href="tools/pep-package.html#package-docs">package docs site</a>, then the
 <a href="tools/projects.html#build-options">build options</a> it declares, one line each
 with its type, default and description. The <code>pep.toml</code> is
 read from the <a href="tools/pep-package.html#the-download-cache">download cache</a> (fetched into it
@@ -25347,6 +25349,7 @@ source: github:pep-lang/pepper-semver
 versions: 1.0.0
 license: Apache-2.0
 repository: https://github.com/pep-lang/pepper-semver
+docs: https://pepper-lang.dev/index/github.com/pep-lang/pepper-semver/
 keywords: semver, version, range
 </code></pre>
 <h3 id="the-package-index"><a class="header" href="#the-package-index">The package index</a></h3>
@@ -25372,6 +25375,22 @@ warning that gives its age, and fails only when there is no copy; with
 <code>--offline</code>, <code>search</code> uses the copy as it is, and fails when there is
 none. The packages are also listed on
 <a href="https://pepper-lang.dev/packages.html">https://pepper-lang.dev/packages.html</a>.</p>
+<h3 id="package-docs"><a class="header" href="#package-docs">Package docs</a></h3>
+<p>Every package the index lists has its reference on one site,
+<code>https://pepper-lang.dev/index/</code>, under its source:
+<code>https://pepper-lang.dev/index/github.com/pep-lang/pepper-semver/</code>, with a
+folder per version tag and a version picker. A workflow in the index's
+repository builds it each night: for each version tag of each package
+not yet on the site, it clones that tag and runs
+<a href="tools/pep-doc.html#pep-doc-package"><code>pepper doc package --site</code></a> with
+<code>--docs-base</code>, so the dependencies' links stay on the site. It only
+parses the package's files and runs none of its code (no build script,
+no <code>[native]</code> compile), and what a package wrote shows as text, never as
+HTML. A version is built once: a tag moved to another commit keeps its
+first build, and the run reports it. A tag that does not document gets a
+page saying so. Listing a package in the index is all it takes; a
+package may still publish its own docs too (see
+<a href="tools/pep-doc.html#hosting-a-packages-docs">Hosting a package's docs</a>).</p>
 <h3 id="audit-1"><a class="header" href="#audit-1"><code>audit</code></a></h3>
 <p>Checks every package <code>pep.lock</code> records, for every platform and
 dev-dependencies included, against a database of security advisories, as
@@ -26609,7 +26628,17 @@ per page, its <code>[features]</code> with what each turns on, and its
 dependencies, each linked to its docs: for a GitHub repository, the
 GitHub Pages site the <a href="tools/pep-doc.html#hosting-a-packages-docs">package template</a>
 publishes (<code>https://&lt;owner&gt;.github.io/&lt;name&gt;/</code>), for another host its
-repository, and for a <code>path</code> dependency nothing.</li>
+repository, and for a <code>path</code> dependency nothing. With <code>--docs-base</code>,
+the site of many packages' docs instead.</li>
+<li><strong>Raw HTML:</strong> what the package wrote (its doc comments, its <code>pep.toml</code>'s
+text, its file names) shows as text. Outside code, <code>&lt;</code> and <code>&amp;</code> are
+written <code>&amp;lt;</code> and <code>&amp;amp;</code>, so no tag, comment, autolink or entity is
+HTML; <code>javascript:</code>, <code>vbscript:</code> and <code>data:</code> get a zero-width space
+before their <code>:</code>, so no link has one of those schemes; and mdBook's
+<code>{{#include}}</code> and other <code>{{#...}}</code> directives stay text, in code too.
+Code (a fence, a code span) is left as written; an indented code
+block counts as text. A site can then serve every package's docs on
+one origin.</li>
 <li><strong>Output:</strong> an mdBook in <code>.pep/doc/</code> (<code>book.toml</code>, and <code>src/</code> with the
 pages, <code>README.md</code> and <code>SUMMARY.md</code>, rewritten on each run), rendered
 with mdBook into <code>.pep/doc/html/</code>. When mdBook cannot run, the error
@@ -26625,6 +26654,9 @@ the <a href="tools/../contributing/docs.html">documentation standard</a> require
 being <code>pep.toml</code>'s (<code>dev</code> without one), and refreshes <code>&lt;DIR&gt;</code>'s
 <code>versions.json</code>, <code>index.html</code>, <code>latest/</code> and <code>404.html</code>, which open the
 newest release, as <code>build</code> does for this book. Earlier versions stay.</li>
+<li><code>--docs-base &lt;URL&gt;</code>: links each dependency hosted on a forge to its
+docs on a site of many packages' docs at <code>URL</code>, which keeps each
+package's under its source: <code>&lt;URL&gt;/github.com/&lt;owner&gt;/&lt;name&gt;/</code>.</li>
 </ul>
 <h4 id="hosting-a-packages-docs"><a class="header" href="#hosting-a-packages-docs">Hosting a package's docs</a></h4>
 <p>The package template (<code>pepper new --lib</code>, and
@@ -26642,6 +26674,7 @@ skips the job.</p>
 <tr><td><code>--version &lt;VERSION&gt;</code></td><td>With <code>build</code>: the version to build</td></tr>
 <tr><td><code>--site &lt;DIR&gt;</code></td><td>With <code>build</code>: the site folder; with <code>package</code>: the site to render into</td></tr>
 <tr><td><code>--check</code></td><td>With <code>package</code>: check the doc comments, changing nothing</td></tr>
+<tr><td><code>--docs-base &lt;URL&gt;</code></td><td>With <code>package</code>: link dependencies' docs on the site at <code>URL</code></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the commands and options</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>As the only argument: print <code>pep-doc</code> and its version</td></tr>
 </tbody></table>

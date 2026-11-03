@@ -599,7 +599,9 @@ tui (github:pep-lang/pepper-tui): Full-screen terminal apps in the style of Rata
 <p>Prints what is known of a package: the index's description and keywords,
 its versions (its version tags, newest first, those its newest release
 <a href="#retracted-versions">retracts</a> marked), and the <code>minimum_toolchain</code>,
-<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, then the
+<code>license</code> and <code>repository</code> of its newest release's <code>pep.toml</code>, for a
+package the index lists, the address of its reference on the
+<a href="#package-docs">package docs site</a>, then the
 <a href="projects.html#build-options">build options</a> it declares, one line each
 with its type, default and description. The <code>pep.toml</code> is
 read from the <a href="#the-download-cache">download cache</a> (fetched into it
@@ -614,6 +616,7 @@ source: github:pep-lang/pepper-semver
 versions: 1.0.0
 license: Apache-2.0
 repository: https://github.com/pep-lang/pepper-semver
+docs: https://pepper-lang.dev/index/github.com/pep-lang/pepper-semver/
 keywords: semver, version, range
 </code></pre>
 <h3 id="the-package-index"><a class="header" href="#the-package-index">The package index</a></h3>
@@ -639,6 +642,22 @@ warning that gives its age, and fails only when there is no copy; with
 <code>--offline</code>, <code>search</code> uses the copy as it is, and fails when there is
 none. The packages are also listed on
 <a href="https://pepper-lang.dev/packages.html">https://pepper-lang.dev/packages.html</a>.</p>
+<h3 id="package-docs"><a class="header" href="#package-docs">Package docs</a></h3>
+<p>Every package the index lists has its reference on one site,
+<code>https://pepper-lang.dev/index/</code>, under its source:
+<code>https://pepper-lang.dev/index/github.com/pep-lang/pepper-semver/</code>, with a
+folder per version tag and a version picker. A workflow in the index's
+repository builds it each night: for each version tag of each package
+not yet on the site, it clones that tag and runs
+<a href="pep-doc.html#pep-doc-package"><code>pepper doc package --site</code></a> with
+<code>--docs-base</code>, so the dependencies' links stay on the site. It only
+parses the package's files and runs none of its code (no build script,
+no <code>[native]</code> compile), and what a package wrote shows as text, never as
+HTML. A version is built once: a tag moved to another commit keeps its
+first build, and the run reports it. A tag that does not document gets a
+page saying so. Listing a package in the index is all it takes; a
+package may still publish its own docs too (see
+<a href="pep-doc.html#hosting-a-packages-docs">Hosting a package's docs</a>).</p>
 <h3 id="audit"><a class="header" href="#audit"><code>audit</code></a></h3>
 <p>Checks every package <code>pep.lock</code> records, for every platform and
 dev-dependencies included, against a database of security advisories, as

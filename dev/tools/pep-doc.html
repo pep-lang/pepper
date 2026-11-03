@@ -282,7 +282,17 @@ per page, its <code>[features]</code> with what each turns on, and its
 dependencies, each linked to its docs: for a GitHub repository, the
 GitHub Pages site the <a href="#hosting-a-packages-docs">package template</a>
 publishes (<code>https://&lt;owner&gt;.github.io/&lt;name&gt;/</code>), for another host its
-repository, and for a <code>path</code> dependency nothing.</li>
+repository, and for a <code>path</code> dependency nothing. With <code>--docs-base</code>,
+the site of many packages' docs instead.</li>
+<li><strong>Raw HTML:</strong> what the package wrote (its doc comments, its <code>pep.toml</code>'s
+text, its file names) shows as text. Outside code, <code>&lt;</code> and <code>&amp;</code> are
+written <code>&amp;lt;</code> and <code>&amp;amp;</code>, so no tag, comment, autolink or entity is
+HTML; <code>javascript:</code>, <code>vbscript:</code> and <code>data:</code> get a zero-width space
+before their <code>:</code>, so no link has one of those schemes; and mdBook's
+<code>{{#include}}</code> and other <code>{{#...}}</code> directives stay text, in code too.
+Code (a fence, a code span) is left as written; an indented code
+block counts as text. A site can then serve every package's docs on
+one origin.</li>
 <li><strong>Output:</strong> an mdBook in <code>.pep/doc/</code> (<code>book.toml</code>, and <code>src/</code> with the
 pages, <code>README.md</code> and <code>SUMMARY.md</code>, rewritten on each run), rendered
 with mdBook into <code>.pep/doc/html/</code>. When mdBook cannot run, the error
@@ -298,6 +308,9 @@ the <a href="../contributing/docs.html">documentation standard</a> requires, as
 being <code>pep.toml</code>'s (<code>dev</code> without one), and refreshes <code>&lt;DIR&gt;</code>'s
 <code>versions.json</code>, <code>index.html</code>, <code>latest/</code> and <code>404.html</code>, which open the
 newest release, as <code>build</code> does for this book. Earlier versions stay.</li>
+<li><code>--docs-base &lt;URL&gt;</code>: links each dependency hosted on a forge to its
+docs on a site of many packages' docs at <code>URL</code>, which keeps each
+package's under its source: <code>&lt;URL&gt;/github.com/&lt;owner&gt;/&lt;name&gt;/</code>.</li>
 </ul>
 <h4 id="hosting-a-packages-docs"><a class="header" href="#hosting-a-packages-docs">Hosting a package's docs</a></h4>
 <p>The package template (<code>pepper new --lib</code>, and
@@ -315,6 +328,7 @@ skips the job.</p>
 <tr><td><code>--version &lt;VERSION&gt;</code></td><td>With <code>build</code>: the version to build</td></tr>
 <tr><td><code>--site &lt;DIR&gt;</code></td><td>With <code>build</code>: the site folder; with <code>package</code>: the site to render into</td></tr>
 <tr><td><code>--check</code></td><td>With <code>package</code>: check the doc comments, changing nothing</td></tr>
+<tr><td><code>--docs-base &lt;URL&gt;</code></td><td>With <code>package</code>: link dependencies' docs on the site at <code>URL</code></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the commands and options</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>As the only argument: print <code>pep-doc</code> and its version</td></tr>
 </tbody></table>
