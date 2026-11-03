@@ -18,6 +18,17 @@ export [
     TEST_BUILD_OPTION
 ] from "platform";
 export [absolute, path_key, Runtime] from "files";
+export [
+    ABI_VERSION,
+    COMPILER_LEVEL,
+    make_stamp,
+    parse_stamp,
+    read_stamps,
+    REQUIRED_LEVEL_NAME,
+    Stamp,
+    STAMP_MAGIC,
+    stamp_mismatch
+] from "stamp";
 export [declares_override, translation_units, TranslationUnit, unit_inputs] from "translation_units";
 export [
     demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR, symbol_name

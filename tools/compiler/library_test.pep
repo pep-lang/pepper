@@ -671,3 +671,94 @@ another_cpu_misses_the_cache_and_marks_every_function() {
     var ir = codegen.Cpu.from_options("x86_64-unknown-linux-gnu", ["arch=x86-64-v2", "popcnt"]).value();
     expect_equal(ir.key(), "x86-64-v2+popcnt");
 }
+
+# Every library carries its identity stamp (#220), and a build refuses one
+# that does not fit it: here, built with another value of a build option.
+[Test]
+a_library_built_otherwise_is_refused() {
+    var folder = TempFolder("stamped_library");
+    var root = folder.path;
+    var host = link.Target();
+    var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Static, "geo", host)));
+    var source = root.join(Path("geo.pep"));
+    File.write_text(source, "[Export]\nexport geo_area(side: int): int {\n    return side * side;\n}\n");
+    var setup = link.Setup();
+    setup.target.build_options["LEVEL"] = "1";
+    var options = driver.BuildOptions(archive, root.join(Path("build")));
+    options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
+    options.version = "1.2.3";
+    options.in_process = true;
+    expect_true(driver.build(link.load_program(source, setup).value(), options).is_ok());
+    var stamps = link.read_stamps(archive).value();
+    expect_equal(stamps.count, 1 as ulong);
+    expect_equal(stamps[0].version, "1.2.3");
+    expect_equal(stamps[0].abi, link.ABI_VERSION);
+    expect_equal(stamps[0].target, $"{host.os} {host.arch}");
+    expect_equal(",".join(stamps[0].options), "LEVEL=1");
+
+    var program = root.join(Path("main.pep"));
+    File.write_text(program, "extern int geo_area(int side);\n\nmain(): int {\n    return geo_area(3) - 9;\n}\n");
+    var other = link.Setup();
+    other.target.build_options["LEVEL"] = "2";
+    var linking = driver.BuildOptions(root.join(Path("main")), root.join(Path("build2")));
+    linking.libraries = ["geo"];
+    linking.library_dirs = [root];
+    linking.version = "1.2.4";
+    linking.in_process = true;
+    var refused = driver.build(link.load_program(program, other).value(), linking);
+    expect_true(refused.is_err());
+    expect_true(
+        refused.error().contains(
+            "was built by pepper 1.2.3 (ABI 1) for "
+                + host.os
+                + " "
+                + host.arch
+                + "; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler"
+        )
+    );
+}
+
+# A stamp reads back as written, the magic alone is none, and only the
+# ABI, the platform, the runtime and a build option both define must match.
+[Test]
+stamps_read_back_and_match() {
+    var options = HashMap<String, String>();
+    options["B"] = "2";
+    options["A"] = "1";
+    var stamp = link.make_stamp("0.1.0", "linux", "x86_64", ["prelude"], options);
+    expect_equal(",".join(stamp.options), "A=1,B=2");
+    var parsed = link.parse_stamp(stamp.text()).value();
+    expect_equal(parsed.text(), stamp.text());
+    expect_false(link.parse_stamp(link.STAMP_MAGIC).is_value());
+    expect_false(link.stamp_mismatch(parsed, stamp).is_value());
+
+    var newer = link.make_stamp("0.2.0", "linux", "x86_64", ["prelude"], HashMap<String, String>());
+    expect_false(link.stamp_mismatch(stamp, newer).is_value());
+    var mac = link.make_stamp("0.1.0", "macos", "aarch64", ["prelude"], options);
+    expect_equal(link.stamp_mismatch(stamp, mac).value(), "this build is for macos aarch64");
+    var runtime = link.make_stamp("0.1.0", "linux", "x86_64", ["changed"], options);
+    expect_true(link.stamp_mismatch(stamp, runtime).value().starts_with("this build's runtime differs"));
+    var abi = parsed;
+    abi.abi += 1;
+    expect_equal(link.stamp_mismatch(abi, stamp).value(), "this build is pepper 0.1.0 (ABI 1) for linux x86_64");
+}
+
+# A runtime that needs a newer compiler says so at its constant (#220): a
+# forced import is a prelude file, as the runtime's are.
+[Test]
+a_runtime_needing_a_newer_compiler_says_so() {
+    var folder = TempFolder("compiler_level");
+    var root = folder.path;
+    File.write_text(root.join(Path("needs.pep")), $"const {link.REQUIRED_LEVEL_NAME} = {link.COMPILER_LEVEL + 1};\n");
+    File.write_text(root.join(Path("main.pep")), "main(): int {\n    return 0;\n}\n");
+    var setup = link.Setup();
+    setup.forced_imports = [root.join(Path("needs.pep")).to_string()];
+    var program = link.load_program(root.join(Path("main.pep")), setup).value();
+    var errors = program.check_diagnostics();
+    expect_equal(errors.count, 1 as ulong);
+    expect_equal(
+        errors[0].message,
+        $"the runtime needs compiler level {link.COMPILER_LEVEL + 1}, and this compiler is level {link.COMPILER_LEVEL}: build it with a newer compiler (CI: move the stage 0 pin, .github/stage0)"
+    );
+    expect_equal(errors[0].location.value().span.start, 24 as ulong);
+}

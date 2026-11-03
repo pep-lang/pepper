@@ -216,6 +216,16 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   linked. Every directory scanned before the winner is also returned, and
   those become import search paths. `load_program` fails with `cannot find
   the Pepper runtime` when no runtime is found (unless `--no-runtime`).
+- **Identity stamp** (`link/stamp.pep`, #220). `driver.build_stamp` makes
+  the program's `Stamp` (release, `ABI_VERSION`, OS and architecture, a
+  hash of the prelude files, the build options but `--test`'s and
+  `--entry`'s); `Generator.embed_stamp` writes its text in a `.pepmeta`
+  section (`__DATA,__pepmeta` on Mach-O) of the entry part, kept by
+  `llvm.used`. Before linking, `driver.check_library_stamps` finds each
+  linked library's stamps by scanning its bytes (`read_stamps`, so any
+  object or library format) and reports the first `stamp_mismatch`.
+  `Program.level_error`, first in `check_diagnostics`, stops a runtime
+  whose `_COMPILER_LEVEL` is above the compiler's `COMPILER_LEVEL`.
 - **`load_program(root, setup)`** (`link/program.pep`) is the single loader.
   The compiler, its tests, pep-doc and the language server all call it.
   `Setup` holds `import_dirs` (`-I`), `forced_imports` (`--import`),
@@ -2267,7 +2277,8 @@ package lacks are declared in `debug.pep`.
   `runtime/debuggers/`. `embed_gdb_printers` puts `gdb_printers.py`
   (`driver.gdb_printers`, from the runtime) in the program module's
   `.debug_gdb_scripts` section on Linux, as an inline script (kind 4),
-  kept by `llvm.used`; `--emit-llvm -g` carries it too. Each matches the
+  kept by `llvm.used` (which `Generator.generate` makes once, for it and
+  the identity stamp); `--emit-llvm -g` carries it too. Each matches the
   struct and a reference to it, by name, and shows the head counts first
   as `[ref count]` and `[weak count]`; `Optional`, a value enum, has no
   head and shows its case from `__tag` and its value from `Value__value`.

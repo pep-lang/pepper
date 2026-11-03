@@ -81,7 +81,9 @@ it waits until the pin moves past that fix, or is written around it. The
 `Stage 0` workflow (`.github/workflows/stage0.yml`) pushes `stage0/bump`,
 which moves the pin, every night; a change that needs a newer compiler
 dispatches it (`gh workflow run stage0.yml`), opens and merges the pull
-request from `stage0/bump` first (see `docs/src/contributing/tests.md`). Check a runtime change by building any program with stage 0 and
+request from `stage0/bump` first (see `docs/src/contributing/tests.md`). Such a change also raises `_COMPILER_LEVEL` (`runtime/internals.pep`) to the
+compiler's `COMPILER_LEVEL`, so an older compiler stops with a clear error.
+Check a runtime change by building any program with stage 0 and
 `PEPPER_RUNTIME=runtime`.
 A PR that changes `tools/compiler/` or `runtime/` runs `scripts/stage0-check.sh`
 before it merges: stage 0 builds the compiler and runs the runtime's tests,

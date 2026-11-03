@@ -493,15 +493,16 @@ export struct DebugInfo {
     ## the text of `runtime/debuggers/gdb_printers.py`) in a
     ## `.debug_gdb_scripts` section, as an inline script gdb loads with the
     ## program (ELF only: the section means nothing to Mach-O or COFF
-    ## debuggers). `llvm.used` keeps it, so it lands in the program's entry
-    ## part.
-    embed_gdb_printers(ir: llvm.Module, printers: String) {
+    ## debuggers). Returns the section's global, which the caller keeps in
+    ## `llvm.used` (`Generator.keep_used`), so it lands in the program's
+    ## entry part; nothing when there is none.
+    embed_gdb_printers(ir: llvm.Module, printers: String): llvm.Value? {
         var triple = ir.target_triple();
         if (printers.is_empty
             or triple.contains("-windows")
             or triple.contains("-apple-")
             or triple.starts_with("wasm")) {
-            return;
+            return Optional<llvm.Value>.Empty;
         }
         # Kind 4: an inline Python script, its name on the first line.
         var text = context.const_string("\u{4}pepper/gdb_printers.py\n" + printers, true);
@@ -513,11 +514,7 @@ export struct DebugInfo {
         section.set_linkage(llvm.Linkage.Private);
         # Its address means nothing, so partitioning leaves it private.
         section.set_unnamed_address(2);
-        var pointer = context.pointer_type();
-        var used = ir.add_global(pointer.array_type(1), "llvm.used");
-        used.set_linkage(llvm.Linkage.Appending);
-        used.set_section("llvm.metadata");
-        used.set_initializer(pointer.const_array([section]));
+        return Optional<llvm.Value>.Value(section);
     }
 
     ## Finishes the module's debug info (see the module comment), and gives

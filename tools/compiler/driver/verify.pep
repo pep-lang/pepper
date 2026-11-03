@@ -47,6 +47,7 @@ export verify_cache(program: link.Program, options: BuildOptions): Result<void, 
     again.lto = options.lto;
     again.library = options.library;
     again.debug = options.debug;
+    again.version = options.version;
     again.debug_static_expanded = options.debug_static_expanded;
     again.entry = options.entry;
     var built = build(program, again);
