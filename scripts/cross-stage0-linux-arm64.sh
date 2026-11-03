@@ -30,13 +30,14 @@ rm -rf "$work"
 mkdir -p "$work/static"
 static="$work/static"
 
-echo "=== cross C and C++ libraries"
-sudo apt-get update -qq
-sudo apt-get install -y -qq gcc-aarch64-linux-gnu libc6-dev-arm64-cross libstdc++-13-dev-arm64-cross lld
-
-echo "=== LLVM for aarch64"
 llvm_major=$(sed -nE 's/^LLVM_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
 llvm_version=$(sed -nE "s/^ *$llvm_major\) echo \"([0-9.]+)\" ;;.*/\1/p" scripts/setup-llvm.sh | head -1)
+
+echo "=== cross C and C++ libraries"
+sudo apt-get update -qq
+sudo apt-get install -y -qq gcc-aarch64-linux-gnu libc6-dev-arm64-cross libstdc++-13-dev-arm64-cross "lld-$llvm_major"
+
+echo "=== LLVM for aarch64"
 llvm="$work/llvm"
 mkdir -p "$llvm"
 curl -fsSL --retry 3 "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm_version/LLVM-$llvm_version-Linux-ARM64.tar.xz" \
@@ -60,7 +61,8 @@ driver="$work/driver"
 mkdir -p "$driver/bin"
 printf '#!/bin/sh\nexec clang "$@" -static\n' > "$driver/bin/clang"
 chmod +x "$driver/bin/clang"
-lld=$(command -v ld.lld || command -v "ld.lld-$llvm_major")
+# lld as new as the LLVM: its archives hold bitcode an older one rejects.
+lld=$(command -v "ld.lld-$llvm_major")
 ln -sf "$lld" "$driver/bin/ld.lld"
 
 echo "=== stage 0's stage 0"
