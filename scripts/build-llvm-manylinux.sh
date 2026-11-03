@@ -65,6 +65,9 @@ if [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
   fi
 fi
 
+# What LLVM links that the image lacks (release-build.sh installs these too;
+# llvm-package.yml does not).
+dnf install -y libffi-devel libzstd-devel zlib-devel libxml2-devel
 "$python_bin/python" -m pip install --quiet cmake ninja
 src="$work/llvm-project-$version.src"
 build="$work/llvm-build"

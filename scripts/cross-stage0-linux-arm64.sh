@@ -4,10 +4,11 @@
 #
 #   bash scripts/cross-stage0-linux-arm64.sh <output-dir>
 #
-# Builds pep-build and pep-package from this checkout with the build
-# .github/stage0 pins, for aarch64-unknown-linux-gnu, statically linked, so
+# Builds pep-build and pep-package from the commit .github/stage0 pins,
+# with that commit's x64 build, for aarch64-unknown-linux-gnu, statically linked, so
 # they run in the release's manylinux_2_28_aarch64 container (glibc 2.28)
-# though Ubuntu's cross glibc is newer. They are only stage 0: the release
+# though Ubuntu's cross glibc is newer. So the result is the pin's build for
+# aarch64 and changes only with the pin (release.yml caches it). They are only stage 0: the release
 # builds pepc again with them (stage 1), and again with that (stage 2).
 #
 # What the link takes for aarch64: Ubuntu's cross C and C++ libraries
@@ -66,8 +67,15 @@ echo "=== stage 0's stage 0"
 stage0="$(GITHUB_ENV= bash scripts/ci-install-toolchain.sh | sed -n 's/^PEPPER_COMPILER_DIR=//p' | tail -1)"
 "$stage0/pep-build" --version
 
+echo "=== the pinned commit's source"
+commit=$(sed -n 's/^commit //p' .github/stage0)
+git fetch -q --depth 1 origin "$commit"
+src="$work/src"
+mkdir -p "$src"
+git archive "$commit" | tar -x -C "$src"
+cd "$src"
+
 echo "=== pep-build and pep-package for aarch64"
-export PEPPER_RUNTIME="$repo_root/runtime"
 export PEPPER_LLVM_PREFIX="$driver"
 for project in tools/compiler tools/pep-package; do
   "$stage0/pep-package" -C "$project" fetch
