@@ -17,6 +17,11 @@
 #
 #   linux-x64     ubuntu-24.04, inside a manylinux_2_28 container, so the
 #                 binaries need only glibc 2.28 (RHEL 8, Debian 10 and later)
+#   linux-arm64   ubuntu-24.04-arm, inside manylinux_2_28_aarch64 likewise.
+#                 No published build runs there, so its stage 0 is a static
+#                 aarch64 build the stage0-linux-arm64 job cross-compiles
+#                 on x64 with the pinned stage 0
+#                 (scripts/cross-stage0-linux-arm64.sh)
 #   macos-arm64   macos-15 (arm64)
 #   windows-x64   windows-2025
 #
@@ -142,13 +147,34 @@ jobs:
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
+  # The linux-arm64 leg's stage 0 (see the header).
+  stage0-linux-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cross-build pep-build and pep-package for aarch64
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash -euxo pipefail scripts/cross-stage0-linux-arm64.sh "$RUNNER_TEMP/stage0"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stage0-linux-arm64
+          path: ${{ runner.temp }}/stage0
+          if-no-files-found: error
+          retention-days: 1
+
   build:
-    needs: version
+    needs: [version, stage0-linux-arm64]
     strategy:
       fail-fast: false
       matrix:
         include:
           - { target: linux-x64, runs-on: ubuntu-24.04, container: "quay.io/pypa/manylinux_2_28_x86_64" }
+          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, container: "quay.io/pypa/manylinux_2_28_aarch64" }
           - { target: macos-arm64, runs-on: macos-15, container: "" }
           # No macos-x64 leg: it needs an Intel Mac, and GitHub-hosted runners
           # spend the account's Actions quota in days. release-build.sh still
@@ -170,6 +196,20 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: echo "PEPPER_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Stage 0 (linux-arm64)
+        if: matrix.target == 'linux-arm64'
+        uses: actions/download-artifact@v8
+        with:
+          name: stage0-linux-arm64
+          path: ${{ runner.temp }}/stage0
+
+      - name: Use it
+        if: matrix.target == 'linux-arm64'
+        shell: bash
+        run: |
+          chmod +x "$RUNNER_TEMP"/stage0/*
+          echo "PEPPER_COMPILER_DIR=$RUNNER_TEMP/stage0" >> "$GITHUB_ENV"
 
       - name: Build, package and smoke-test
         shell: bash
@@ -252,6 +292,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: dist
+          pattern: pepper-*
           merge-multiple: true
 
       - name: Publish to the release

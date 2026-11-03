@@ -12,6 +12,10 @@
 #
 #   linux-x64     in a manylinux_2_28 container (glibc 2.28: RHEL 8, Debian 10
 #                 and later), with LLVM built from source (cached)
+#   linux-arm64   the same on an arm64 machine, in manylinux_2_28_aarch64;
+#                 stage 0 is the static build of pep-build and pep-package
+#                 scripts/cross-stage0-linux-arm64.sh makes, as <stage0-dir>
+#                 or PEPPER_COMPILER_DIR, since no published build runs there
 #   macos-arm64   on an arm64 Mac, with LLVM from Homebrew
 #   macos-x64     on an Intel Mac, with LLVM from Homebrew
 #   windows-x64   under Git bash, with LLVM from scripts/ci-provision-llvm.sh
@@ -80,7 +84,7 @@ collect_static() {
 
 echo "=== provision ($target)"
 case "$target" in
-  linux-x64)
+  linux-x64|linux-arm64)
     # The manylinux_2_28 image is AlmaLinux 8. clang is the smoke test's
     # link driver, as it is a user's. git fetches pepc's pepper-llvm
     # package over HTTPS.
@@ -121,7 +125,7 @@ case "$target" in
     llvm_config=""
     ;;
   *)
-    echo "unknown target '$target' (expected linux-x64, macos-arm64, macos-x64 or windows-x64)" >&2
+    echo "unknown target '$target' (expected linux-x64, linux-arm64, macos-arm64, macos-x64 or windows-x64)" >&2
     exit 1
     ;;
 esac
@@ -185,13 +189,13 @@ echo "=== build pepc"
 # from the system and the C++ runtime.
 llvm_link=()
 case "$target" in
-  linux-x64|macos-arm64|macos-x64)
+  linux-x64|linux-arm64|macos-arm64|macos-x64)
     libdir=$("$llvm_config" --libdir)
     archives=()
     for name in $("$llvm_config" --link-static --libnames); do
       archives+=("$libdir/$name")
     done
-    if [ "$target" = linux-x64 ]; then
+    if [ "${target%-*}" = linux ]; then
       merged="$static_dir/libLLVM-$major.a"
       { echo "create $merged"; for a in "${archives[@]}"; do echo "addlib $a"; done; echo save; echo end; } | ar -M
       cxx=stdc++
@@ -204,7 +208,7 @@ case "$target" in
     # The link names no group, so LLVM is named here first, ahead of
     # pepper-llvm's [Link("LLVM-20")]: GNU ld then resolves its references
     # with the libraries after it.
-    [ "$target" = linux-x64 ] && llvm_link+=(-l "LLVM-$llvm_major")
+    [ "${target%-*}" = linux ] && llvm_link+=(-l "LLVM-$llvm_major")
     for flag in $("$llvm_config" --link-static --system-libs) ; do
       case "$flag" in
         -l*) llvm_link+=(-l "${flag#-l}") ;;

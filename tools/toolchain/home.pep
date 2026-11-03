@@ -222,20 +222,24 @@ export toolchain_path(): Array<Path> {
     return folders;
 }
 
-## Returns the name release archives give this machine (`linux-x64`,
-## `macos-arm64`, `macos-x64` or `windows-x64`), or none when there are no
-## releases for it.
+## Returns the name release archives give the machine this program was
+## built for (`linux-x64`, `linux-arm64`, `macos-arm64`, `macos-x64`,
+## `windows-x64` or `windows-arm64`), or none when there are no releases
+## for it.
 export target_name(): String? {
-    var system = os.system_os();
     var architecture = os.architecture() == "aarch64" ? "arm64" : os.architecture();
-    if (system == os.OperatingSystem.Linux and architecture == "x64") {
-        return Optional<String>.Value("linux-x64");
+    if (architecture != "x64" and architecture != "arm64") {
+        return Optional<String>.Empty;
     }
-    if (system == os.OperatingSystem.Mac and (architecture == "x64" or architecture == "arm64")) {
+    var system = os.system_os();
+    if (system == os.OperatingSystem.Linux) {
+        return Optional<String>.Value("linux-" + architecture);
+    }
+    if (system == os.OperatingSystem.Mac) {
         return Optional<String>.Value("macos-" + architecture);
     }
-    if (system == os.OperatingSystem.Windows and architecture == "x64") {
-        return Optional<String>.Value("windows-x64");
+    if (system == os.OperatingSystem.Windows) {
+        return Optional<String>.Value("windows-" + architecture);
     }
     return Optional<String>.Empty;
 }
