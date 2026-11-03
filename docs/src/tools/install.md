@@ -17,14 +17,17 @@ irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 |
 
 Each release also carries both scripts as assets, beside its archives.
 
-There is no prebuilt Pepper for Intel Macs, Linux on arm64 or musl-based
-Linux yet. On those the script stops with an error saying so, and Pepper
-can be [built from source](../contributing/building.md). A Mac with Apple
-silicon gets the `macos-arm64` archive even from a shell running under
-Rosetta.
+Releases have archives for Linux (`linux-x64`, `linux-arm64`), macOS on
+Apple silicon (`macos-arm64`) and Windows (`windows-x64`). There is no
+prebuilt Pepper for Intel Macs or musl-based Linux yet. On those the
+script stops with an error saying so, and Pepper can be
+[built from source](../contributing/building.md). A Mac with Apple silicon
+gets the `macos-arm64` archive even from a shell running under Rosetta.
+Windows on Arm gets the `windows-x64` archive, which it runs by emulation,
+until a release has a `windows-arm64` one.
 
 The script only bootstraps. It picks this machine's archives
-(`linux-x64`, `macos-arm64` or `windows-x64`) from the newest release that
+(`linux-x64`, `linux-arm64`, `macos-arm64` or `windows-x64`) from the newest release that
 has them: the toolchain, `pepper-<version>-<target>.tar.gz`
 (`.zip` on Windows), and the installer, `pepper-install-<version>-<target>.tar.gz`,
 which holds only `pep-install`. It downloads both, checks the installer
@@ -97,8 +100,8 @@ with `bin` and `runtime` straight in `~/.pepper`, moved: uninstall it
 first.
 
 On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
-18.10 and later); systems that use musl, such as Alpine, are not supported.
-There are no prebuilt binaries for Linux or Windows on arm64 yet. The macOS
+18.10 and later), on x64 and on arm64; systems that use musl, such as
+Alpine, are not supported. The macOS
 binaries are not signed: an archive downloaded with a browser makes
 Gatekeeper warn before it runs; one the script downloads does not.
 

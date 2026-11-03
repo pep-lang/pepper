@@ -170,8 +170,9 @@ they are missing or old; see [pep-lsp](pep-lsp.md).
 
 ## Downloads
 
-`add` and `update` find this machine's archive (`linux-x64`, `macos-arm64`
-or `windows-x64`) among the GitHub releases, as the
+`add` and `update` find this machine's archive (`linux-x64`,
+`linux-arm64`, `macos-arm64`, `windows-x64` or `windows-arm64`) among the
+GitHub releases, as the
 [install scripts](install.md) do, download it and check it against its
 `.sha256`. The archive is unpacked beside the toolchain's folder first, so
 a download that fails or does not match its checksum leaves nothing behind.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the LLVM the Linux release links, from source, inside a
-# manylinux_2_28 container (AlmaLinux 8, glibc 2.28):
+# manylinux_2_28 container (AlmaLinux 8, glibc 2.28), x86_64 or aarch64:
 #
 #   bash scripts/build-llvm-manylinux.sh <version> <prefix> <work-dir>
 #
@@ -17,8 +17,9 @@
 # <prefix>.partial and moves into place only once it is complete, and the
 # sources and build tree under <work-dir> are removed afterwards.
 #
-# release-build.sh calls it for its linux-x64 leg, and llvm-package.yml's
-# manylinux leg calls it to publish the result as a package.
+# release-build.sh calls it for its linux-x64 and linux-arm64 legs, and
+# llvm-package.yml's manylinux leg calls it to publish the result as a
+# package.
 set -euo pipefail
 
 if [ $# -ne 3 ]; then
@@ -39,7 +40,11 @@ mkdir -p "$work"
 
 # The package llvm-package.yml publishes is this build, already done: use it
 # when the repository has one. Any failure falls through to the build.
-asset="llvm-$version-linux-x64-manylinux_2_28.tar.xz"
+case "$(uname -m)" in
+  aarch64) arch=arm64 ;;
+  *) arch=x64 ;;
+esac
+asset="llvm-$version-linux-$arch-manylinux_2_28.tar.xz"
 if [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
   api="${GITHUB_API_URL:-https://api.github.com}/repos/$GITHUB_REPOSITORY"
   asset_id=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" "$api/releases/tags/llvm-$version" \
@@ -60,6 +65,9 @@ if [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
   fi
 fi
 
+# What LLVM links that the image lacks (release-build.sh installs these too;
+# llvm-package.yml does not).
+dnf install -y libffi-devel libzstd-devel zlib-devel libxml2-devel
 "$python_bin/python" -m pip install --quiet cmake ninja
 src="$work/llvm-project-$version.src"
 build="$work/llvm-build"

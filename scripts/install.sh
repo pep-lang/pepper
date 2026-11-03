@@ -108,7 +108,7 @@ api_die() {
   die "GET $got answered HTTP $status${message:+: $message}"
 }
 
-# This machine's archive name: linux-x64, macos-arm64 or macos-x64.
+# This machine's archive name: linux-x64, linux-arm64, macos-arm64 or macos-x64.
 detect_target() {
   case "$(uname -s)" in
     Linux) os=linux ;;
@@ -123,9 +123,6 @@ detect_target() {
   # A Mac running this shell under Rosetta reports x86_64.
   if [ "$os" = macos ] && [ "$arch" = x64 ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ]; then
     arch=arm64
-  fi
-  if [ "$os" = linux ] && [ "$arch" = arm64 ]; then
-    die "there is no prebuilt Pepper for Linux on arm64 yet; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"
   fi
   if [ "$os" = linux ] && ldd --version 2>&1 | grep -qi musl; then
     die "the prebuilt Pepper needs glibc 2.28 or newer, and this system uses musl; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"

@@ -3,8 +3,9 @@
     Installs Pepper on Windows from a release's prebuilt archive.
 
 .DESCRIPTION
-    Only bootstraps: downloads pepper-<version>-windows-x64.zip and the
-    installer archive beside it, pepper-install-<version>-windows-x64.zip,
+    Only bootstraps: downloads pepper-<version>-windows-x64.zip (on Arm,
+    windows-arm64, else windows-x64, which Windows runs by emulation) and
+    the installer archive beside it, pepper-install-<version>-<target>.zip,
     from the newest release that has both (or -Version's), checks the
     installer against its .sha256, unpacks its pep-install.exe into a
     temporary folder and runs `pep-install setup --archive <toolchain
@@ -26,7 +27,7 @@
 .PARAMETER Archive
     Install this downloaded archive instead of downloading one; it is
     checked against <Archive>.sha256 beside it, and the installer archive
-    pepper-install-<version>-windows-x64.zip must be beside it too.
+    pepper-install-<version>-<target>.zip must be beside it too.
 
 .PARAMETER Prefix
     Install into this folder instead of $env:PEPPER_HOME, else
@@ -68,7 +69,10 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $Repo = 'pep-lang/pepper'
-$Target = 'windows-x64'
+# The archives this machine runs, best first: on Arm its own, else x64's,
+# which Windows on Arm runs by emulation.
+$Targets = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { @('windows-arm64', 'windows-x64') } else { @('windows-x64') }
+$Target = $Targets[0]
 $Token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $env:GH_TOKEN }
 
 function Say([string]$Message) { Write-Host "pepper-install: $Message" }
@@ -147,12 +151,13 @@ function Find-Release([string]$Work) {
     }
     if ($found) { return $found }
     if ($Version) { Fail "release $wanted has no pepper-$($wanted.Substring(1))-$Target.zip and pepper-install-$($wanted.Substring(1))-$Target.zip" }
-    Fail "no release of $Repo has a prebuilt Pepper and its installer for $Target yet"
+    Fail "no release of $Repo has a prebuilt Pepper and its installer for $($Targets -join ' or ') yet"
 }
 
 # The first release in the file $List (one release or a list of them) that
-# may be installed, with this target's toolchain and installer archives,
-# or $null. The repository also has vsix-* and llvm-* releases.
+# may be installed, with the toolchain and installer archives of one of
+# $Targets (the first it has, which becomes $Target), or $null. The
+# repository also has vsix-* and llvm-* releases.
 function Select-Release([string]$List, [string]$Wanted) {
     $releases = Get-Content -Raw $List | ConvertFrom-Json
     foreach ($release in $releases) {
@@ -161,14 +166,17 @@ function Select-Release([string]$List, [string]$Wanted) {
         if ($release.tag_name.Contains('-') -and $release.tag_name -ne $wanted) { continue }
         if ($wanted -and $release.tag_name -ne $wanted) { continue }
         $number = $release.tag_name.Substring(1)
-        $names = @("pepper-$number-$Target.zip", "pepper-install-$number-$Target.zip")
-        $assets = @{}
-        foreach ($name in $names + ($names | ForEach-Object { "$_.sha256" })) {
-            $asset = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
-            if ($asset) { $assets[$name] = $asset }
+        foreach ($candidate in $Targets) {
+            $names = @("pepper-$number-$candidate.zip", "pepper-install-$number-$candidate.zip")
+            $assets = @{}
+            foreach ($name in $names + ($names | ForEach-Object { "$_.sha256" })) {
+                $asset = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+                if ($asset) { $assets[$name] = $asset }
+            }
+            if (-not ($assets[$names[0]] -and $assets[$names[1]])) { continue }
+            $script:Target = $candidate
+            return [pscustomobject]@{ Tag = $release.tag_name; Names = $names; Assets = $assets }
         }
-        if (-not ($assets[$names[0]] -and $assets[$names[1]])) { continue }
-        return [pscustomobject]@{ Tag = $release.tag_name; Names = $names; Assets = $assets }
     }
     return $null
 }
@@ -226,7 +234,7 @@ if ($knowsUninstall) {
     return
 }
 
-if ([Environment]::Is64BitOperatingSystem -eq $false -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
+if ([Environment]::Is64BitOperatingSystem -eq $false) {
     Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://docs.pepper-lang.dev/dev/contributing/building.html"
 }
 $work = Join-Path ([IO.Path]::GetTempPath()) ("pepper-install-" + [Guid]::NewGuid())

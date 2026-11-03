@@ -17,6 +17,11 @@
 #
 #   linux-x64     ubuntu-24.04, inside a manylinux_2_28 container, so the
 #                 binaries need only glibc 2.28 (RHEL 8, Debian 10 and later)
+#   linux-arm64   ubuntu-24.04-arm, inside manylinux_2_28_aarch64 likewise.
+#                 No published build runs there, so its stage 0 is a static
+#                 aarch64 build of the pinned commit, which the
+#                 stage0-linux-arm64 job cross-compiles on x64 and caches
+#                 (scripts/cross-stage0-linux-arm64.sh)
 #   macos-arm64   macos-15 (arm64)
 #   windows-x64   windows-2025
 #
@@ -142,8 +147,36 @@ jobs:
             echo "prerelease=$prerelease"
           } >> "$GITHUB_OUTPUT"
 
+  # The linux-arm64 leg's stage 0 (see the header): the pin's build for
+  # aarch64, so it is cached until the pin moves.
+  stage0-linux-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/stage0
+          key: stage0-linux-arm64-${{ hashFiles('.github/stage0', 'scripts/cross-stage0-linux-arm64.sh') }}
+
+      - name: Cross-build pep-build and pep-package for aarch64
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash -euxo pipefail scripts/cross-stage0-linux-arm64.sh "$RUNNER_TEMP/stage0"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stage0-linux-arm64
+          path: ${{ runner.temp }}/stage0
+          if-no-files-found: error
+          retention-days: 1
+
   build:
-    needs: version
+    needs: [version]
     strategy:
       fail-fast: false
       matrix:
@@ -160,9 +193,8 @@ jobs:
     # Linux leg builds its LLVM from source the first time (cached after).
     timeout-minutes: 180
 
-    steps:
+    steps: &build-steps
       - uses: actions/checkout@v7
-
 
       # The version, or `dev` for a build that publishes nothing.
       - name: Version
@@ -170,6 +202,20 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: echo "PEPPER_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Stage 0 (linux-arm64)
+        if: matrix.target == 'linux-arm64'
+        uses: actions/download-artifact@v8
+        with:
+          name: stage0-linux-arm64
+          path: ${{ runner.temp }}/stage0
+
+      - name: Use it
+        if: matrix.target == 'linux-arm64'
+        shell: bash
+        run: |
+          chmod +x "$RUNNER_TEMP"/stage0/*
+          echo "PEPPER_COMPILER_DIR=$RUNNER_TEMP/stage0" >> "$GITHUB_ENV"
 
       - name: Build, package and smoke-test
         shell: bash
@@ -237,9 +283,23 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # The linux-arm64 leg: the same steps, in a job of its own so the other
+  # legs need not wait for its stage 0. A failure here fails the run but
+  # does not stop the others from publishing.
+  build-linux-arm64:
+    needs: [version, stage0-linux-arm64]
+    strategy:
+      matrix:
+        include:
+          - { target: linux-arm64, runs-on: ubuntu-24.04-arm, container: "quay.io/pypa/manylinux_2_28_aarch64" }
+    runs-on: ${{ matrix.runs-on }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 180
+    steps: *build-steps
+
   publish:
-    if: needs.version.outputs.publish == 'true'
-    needs: [version, build]
+    if: ${{ !cancelled() && needs.version.outputs.publish == 'true' && needs.build.result == 'success' }}
+    needs: [version, build, build-linux-arm64]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -252,6 +312,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: dist
+          pattern: pepper-*
           merge-multiple: true
 
       - name: Publish to the release
