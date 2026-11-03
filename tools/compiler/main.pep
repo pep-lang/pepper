@@ -806,6 +806,7 @@ _main(args: String[]): int {
             options.bindings = Optional<driver.BindingsKind>.Value(bindings.value());
         }
         options.debug = debug.is_set;
+        options.version = version();
         options.entry = Optional<Path>.Value(entry);
         options.debug_static_expanded = debug_static.is_set and debug_static.value() == _DebugStatic.Expanded;
         options.runtime_checks = runtime_checks;

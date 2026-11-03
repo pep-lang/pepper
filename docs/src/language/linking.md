@@ -169,6 +169,26 @@ manager) or the Xcode Command Line Tools on macOS.
 Warnings from the linker are passed through unchanged, even when the link
 succeeds.
 
+### A library another Pepper build made
+
+Every program and library Pepper writes carries an identity stamp, in a
+section of its own (`.pepmeta`, `__DATA,__pepmeta` on macOS and iOS) that
+the linker keeps: the compiler's release, its ABI number, the platform, a
+hash of the runtime's core files, and the build options defined. Before it
+links, the compiler reads the stamp of each library a `[Link]` or `-l` name
+finds in the search folders, and of each file a build script links, and
+refuses one that does not fit the build:
+
+```text
+error: './libgeo.a' was built by pepper 0.12.0 (ABI 1) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
+```
+
+The ABI number, the platform and the runtime must match, and so must each
+build option both builds define (`--test` and `--entry` are left out). The
+release may differ: the ABI number is what changes when a compiler changes
+code that two builds rely on of each other. A library with no stamp, such
+as a C one, is not checked.
+
 ## Output files
 
 With no `-o`, the executable is named after the first source file, in the

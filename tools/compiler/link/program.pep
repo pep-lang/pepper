@@ -4,7 +4,7 @@
 ## the prelude.
 
 import compiler.ast;
-import [BUILT_IN_ATTRIBUTE, Expression, Span] from compiler.ast;
+import [BUILT_IN_ATTRIBUTE, Declaration, Expression, Literal, Span] from compiler.ast;
 import [Diagnostic, Fix, Location, render_all, shown_path, SourceText] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
@@ -18,9 +18,11 @@ import "files" as files;
 import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
+import [demangle_name] from "names";
 import [Target, undefined_build_option_comparisons] from "platform";
 import [load_manifest, Packages, ungenerated_module] from "project";
 import "project";
+import [COMPILER_LEVEL, REQUIRED_LEVEL_NAME] from "stamp";
 import [check_visibility] from "visibility";
 
 ## Where a program's files come from, beyond its root.
@@ -175,6 +177,12 @@ export struct Program {
     ## @returns the errors; empty when the program is well-formed
     check_diagnostics(walked: bool[] = Array<bool>()): Diagnostic[] {
         var errors = Array<Diagnostic>();
+        # A runtime newer than this compiler explains every error after it.
+        var level = level_error();
+        if (level.is_value()) {
+            errors.append(level.value());
+            return errors;
+        }
         for (var e in this.errors) {
             errors.append(e.to_diagnostic());
         }
@@ -187,6 +195,31 @@ export struct Program {
             }
         }
         return errors;
+    }
+
+    ## Returns the error for a runtime that needs a newer compiler than this
+    ## one: a prelude file's `REQUIRED_LEVEL_NAME` constant above
+    ## `COMPILER_LEVEL` (#220). Nothing when the runtime fits.
+    ##
+    ## @returns the error, located at the constant's value
+    level_error(): Diagnostic? {
+        for (var i in 0..files.count) {
+            if (!files[i].prelude and !files[i].prelude_part) {
+                continue;
+            }
+            for (var declaration in files[i].module.declarations) {
+                var found = _required_level(declaration);
+                if (found.is_value() and found.value().0 > COMPILER_LEVEL) {
+                    var (level, span) = found.value();
+                    return Optional<Diagnostic>.Value(
+                        Diagnostic.error(
+                            $"the runtime needs compiler level {level}, and this compiler is level {COMPILER_LEVEL}: build it with a newer compiler (CI: move the stage 0 pin, .github/stage0)"
+                        ).at(Location(i, span))
+                    );
+                }
+            }
+        }
+        return Optional<Diagnostic>.Empty;
     }
 
     ## Returns, for each file, whether it is part of the runtime: the
@@ -434,6 +467,21 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         program.runtime_dirs.append(files.path_key(dir));
     }
     return Result<Program, String>.ok(program);
+}
+
+# The level and its span when `declaration` is the runtime's
+# `REQUIRED_LEVEL_NAME` constant, an integer.
+_required_level(declaration: Declaration): (long, Span)? {
+    if (declaration is Declaration.Variable(decl)) {
+        if (demangle_name(decl.name) == REQUIRED_LEVEL_NAME and decl.default_value.is_value()) {
+            if (decl.default_value.value() is Expression.Literal(value, span)) {
+                if (value is Literal.Integer(level)) {
+                    return Optional<(long, Span)>.Value((level, span));
+                }
+            }
+        }
+    }
+    return Optional<(long, Span)>.Empty;
 }
 
 # One file waiting to be loaded.

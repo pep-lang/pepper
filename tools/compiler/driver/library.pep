@@ -599,3 +599,61 @@ _put_darwin_member(out: u8[], name: String, mode: String, data: u8[]) {
     out.append_all(data);
     _pad(out, 8, 0);
 }
+
+## Checks that every Pepper library this build links fits it: each of
+## `objects` (static libraries and objects build scripts made), and the
+## static or shared library each name of `libraries` finds first in
+## `dirs`, whose identity stamp (`link.Stamp`) another compiler or build
+## wrote. A file with no stamp is not Pepper's, and passes.
+##
+## @param build this build's stamp
+## @param libraries the libraries linked, by name
+## @param dirs the folders searched for them
+## @param objects more files linked by path
+## @param target the compile target
+## @returns the first library that does not fit: the name that found it
+##   (empty for one of `objects`) and the error
+export check_library_stamps(
+    build: link.Stamp, libraries: String[], dirs: Path[], objects: Path[], target: link.Target
+): Result<void, (String, String)> {
+    # Each file, with the name that found it.
+    var files = Array<(Path, String)>();
+    for (var object in objects) {
+        files.append((object, ""));
+    }
+    for (var name in libraries) {
+        for (var dir in dirs) {
+            var found = Array<Path>();
+            for (var kind in [LibraryKind.Static, LibraryKind.Shared]) {
+                var file = dir.join(Path(library_file_name(kind, name, target)));
+                if (file.is_file()) {
+                    found.append(file);
+                }
+            }
+            if (!found.is_empty) {
+                for (var file in found) {
+                    files.append((file, name));
+                }
+                break;
+            }
+        }
+    }
+    for (var (file, name) in files) {
+        var stamps = link.read_stamps(file);
+        if (stamps.is_err()) {
+            continue;
+        }
+        for (var stamp in stamps.value()) {
+            var mismatch = link.stamp_mismatch(stamp, build);
+            if (mismatch.is_value()) {
+                return Result<void, (String, String)>.err(
+                    (
+                        name,
+                        $"'{file}' was built by {stamp.describe()}; {mismatch.value()}; rebuild it with this compiler"
+                    )
+                );
+            }
+        }
+    }
+    return Result<void, (String, String)>.ok();
+}

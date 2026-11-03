@@ -3,6 +3,12 @@
 # A panic prints its backtrace through the debug module.
 import debug;
 
+# The compiler level this runtime needs (`COMPILER_LEVEL`,
+# tools/compiler/link/stamp.pep): a runtime change that relies on a newer
+# compiler raises it, so an older compiler, such as CI's stage 0, says to
+# move its pin instead of failing on the new code (#220).
+const _COMPILER_LEVEL = 1;
+
 # ── C ABI externs (identical signatures on MSVC CRT and libc) ───────────────
 extern void* malloc(ulong size);
 extern void* calloc(ulong count, ulong size);

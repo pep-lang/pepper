@@ -222,6 +222,16 @@ So runtime code may only use what stage 0 accepts. A runtime change that
 needs a newer compiler than stage 0 dispatches the workflow and merges its
 pull request first.
 
+The runtime states the compiler it needs: `_COMPILER_LEVEL` in
+`runtime/internals.pep`, which a compiler compares with its own
+`COMPILER_LEVEL` (`tools/compiler/link/stamp.pep`). A compiler change that
+the runtime may come to rely on raises `COMPILER_LEVEL`; the runtime change
+that relies on it raises `_COMPILER_LEVEL` to match. A compiler below the
+runtime's level then stops at that constant, before anything else, with
+`the runtime needs compiler level 2, and this compiler is level 1`, instead
+of failing on the new code: on a stage 0 that predates the change, the
+message says to move the pin.
+
 The branch's compiler can hide a runtime change that needs a compiler fix
 stage 0 does not have, which breaks main's CI and the release, since both
 build the compiler with stage 0. So a PR that changes `tools/compiler/` or

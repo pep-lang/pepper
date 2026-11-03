@@ -4,7 +4,7 @@
 import compiler.ast;
 import async;
 import compiler.codegen;
-import [Diagnostic, SourceText, compare_locations, render_all] from compiler.diagnostic;
+import [Diagnostic, Location, SourceText, compare_locations, render_all] from compiler.diagnostic;
 import digest;
 import [
     Cache,
@@ -72,6 +72,9 @@ export struct BuildOptions {
     var objects: Path[] = Array<Path>();
     ## The build cache, unless the build has none (`--no-cache`).
     var cache: Cache? = Optional<Cache>.Empty;
+    ## The compiler's release, which the program's identity stamp names
+    ## (`link.Stamp`).
+    var version: String = "";
     ## Whether to print how long each stage took (`-T time`).
     var trace_time: bool = false;
     ## Whether to print where each unit's object came from (`-T cache`).
@@ -192,6 +195,32 @@ _link_attributes(module: sema.Module): String {
         }
     }
     return out.to_string();
+}
+
+# Where the first `[Link]` attribute naming `library` names it, for an error
+# about it.
+_link_location(module: sema.Module, library: String): Location? {
+    for (var ext in module.externs) {
+        for (var attribute in ext.attributes) {
+            var name = sema.attribute_name(attribute);
+            if (!name.is_value() or name.value() != "Link") {
+                continue;
+            }
+            for (var argument in sema.attribute_arguments(attribute)) {
+                if (argument.name.is_value()) {
+                    continue;
+                }
+                if (argument.value is Literal(literal, span)) {
+                    if (literal is String(text)) {
+                        if (text == library) {
+                            return Optional<Location>.Value(Location(ext.loc.file as ulong, span));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Optional<Location>.Empty;
 }
 
 # The libraries and folders of `_link_attributes`' lines, each once: a
@@ -1142,6 +1171,8 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     setup.library = options.library.is_value();
     setup.debug_info = options.debug;
     setup.static_locations = static_locations;
+    var stamp = build_stamp(program, options.version);
+    setup.stamp = stamp.text();
     var runtime = _runtime_dir(program);
     if (options.debug) {
         setup.gdb_printers = gdb_printers(program);
@@ -1566,6 +1597,15 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             natvis.append(enums);
         }
     }
+    var fits = check_library_stamps(stamp, libraries, dirs, options.objects, program.target);
+    if (fits.is_err()) {
+        Directory.remove_all(work);
+        var (name, message) = fits.error();
+        var at = unit_objects or name.is_empty ? Optional<Location>.Empty : _link_location(module, name);
+        return Result<Built, String>.err(
+            at.is_value() ? render_all([Diagnostic.error(message).at(at.value())], sources) : message
+        );
+    }
     objects.append_all(options.objects);
     var made = Result<void, String>.ok();
     if (options.library.is_value() and options.library.value() == LibraryKind.Static) {
@@ -1866,4 +1906,28 @@ _link_text(options: BuildOptions): String {
         text.append($"--sysroot {options.sysroot.value()}\n");
     }
     return text.to_string();
+}
+
+## Returns the identity stamp of `program` built by the compiler of
+## release `version`: the build options it defines, but not the ones
+## `--test` and `--entry` add, which a library linked into a test or into
+## another entry point is not built with.
+##
+## @param program the program
+## @param version the compiler's release
+## @returns the stamp
+export build_stamp(program: link.Program, version: String): link.Stamp {
+    var prelude = Array<String>();
+    for (var file in program.files) {
+        if (file.prelude or file.prelude_part) {
+            prelude.append(file.source);
+        }
+    }
+    var options = HashMap<String, String>();
+    for (var (name, value) in program.target.build_options) {
+        if (name != link.TEST_BUILD_OPTION and name != link.ENTRY_BUILD_OPTION) {
+            options[name] = value;
+        }
+    }
+    return link.make_stamp(version, program.target.os, program.target.arch, prelude, options);
 }

@@ -336,6 +336,9 @@ export struct Generator {
     ## The text of gdb's pretty-printers for the runtime's types, which a
     ## Linux program carries with `-g` (`DebugInfo.embed_gdb_printers`).
     var gdb_printers: String = "";
+    ## The identity stamp the program carries (`link.Stamp.text`); empty
+    ## for none.
+    var stamp: String = "";
     ## Whether `__caller_location()` strings are defined apart from the
     ## code that uses them (`located_string`).
     var separate_locations: bool = false;
@@ -684,15 +687,45 @@ export struct Generator {
             codegen_function(function)?;
         }
         codegen_called()?;
+        var kept = Array<llvm.Value>();
+        if (!stamp.is_empty) {
+            kept.append(embed_stamp());
+        }
         if (debug.is_value()) {
-            debug.value().embed_gdb_printers(ir, gdb_printers);
+            var printers = debug.value().embed_gdb_printers(ir, gdb_printers);
+            if (printers.is_value()) {
+                kept.append(printers.value());
+            }
             debug.value().finish(ir);
+        }
+        if (!kept.is_empty) {
+            var pointer = context.pointer_type();
+            var used = ir.add_global(pointer.array_type(kept.count), "llvm.used");
+            used.set_linkage(llvm.Linkage.Appending);
+            used.set_section("llvm.metadata");
+            used.set_initializer(pointer.const_array(kept));
         }
         var verified = ir.verify();
         if (verified.is_err()) {
             return fail<void>(verification_error(module, verified.error().message));
         }
         return Result<void>.ok();
+    }
+
+    ## Puts `stamp`, NUL-ended, in a section of its own: `.pepmeta`, or
+    ## `__DATA,__pepmeta` on Mach-O. Returns its global, which `llvm.used`
+    ## keeps, so the linker keeps the section and partitioning puts it in
+    ## the entry part.
+    embed_stamp(): llvm.Value {
+        var text = context.const_string(stamp, true);
+        var global = ir.add_global(text.value_type(), "__pep_stamp");
+        global.set_initializer(text);
+        global.set_global_constant(true);
+        global.set_section(ir.target_triple().contains("-apple-") ? "__DATA,__pepmeta" : ".pepmeta");
+        global.set_alignment(1);
+        global.set_linkage(llvm.Linkage.Private);
+        global.set_unnamed_address(2);
+        return global;
     }
 
     ## The error for a module LLVM rejected with `message`: located at the
@@ -1002,6 +1035,9 @@ export struct Build {
     ## The text of `runtime/debuggers/gdb_printers.py`, which a Linux
     ## program carries with `-g`; empty for none.
     var gdb_printers: String = "";
+    ## The identity stamp the program carries (`link.Stamp.text`); empty
+    ## for none.
+    var stamp: String = "";
     ## Whether the location strings of checks and `__caller_location()`
     ## are defined apart from the code, under names that do not depend on
     ## the lines (`Generator.located_string`), so code a line shift moves
@@ -1059,6 +1095,7 @@ export generate(
     generator.debug_info = build.debug_info;
     generator.static_locations = build.static_locations;
     generator.gdb_printers = build.gdb_printers;
+    generator.stamp = build.stamp;
     generator.separate_locations = build.separate_locations;
     generator.library = build.library;
     var generated = generator.generate(module);
