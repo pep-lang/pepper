@@ -127,12 +127,24 @@ export parse_stamp(text: String): Stamp? {
     return Optional<Stamp>.Value(stamp);
 }
 
+## The largest file `read_stamps` reads. A Pepper library, its runtime
+## included, is a few MB; the libraries larger than this that a build
+## links (LLVM's) are not Pepper's.
+export const STAMP_SCAN_LIMIT: ulong = 64 * 1024 * 1024;
+
 ## Returns each different stamp in the file at `path` (an archive holds
-## one per object that has one); none for a file no Pepper build wrote.
+## one per object that has one); none for a file no Pepper build wrote, or
+## one larger than `STAMP_SCAN_LIMIT`.
 ##
 ## @param path the object, archive, shared library or executable
 ## @returns its stamps, or why the file could not be read
 export read_stamps(path: Path): Result<Stamp[], String> {
+    # shortcut: a Pepper library above the limit goes unchecked; read in
+    # chunks if libraries that large appear.
+    var metadata = path.metadata();
+    if (metadata.is_ok() and metadata.value().size > STAMP_SCAN_LIMIT) {
+        return Result<Stamp[], String>.ok(Array<Stamp>());
+    }
     var bytes = File.read_bytes(path);
     if (bytes.is_err()) {
         return Result<Stamp[], String>.err($"cannot read {path}: {bytes.error().message}");

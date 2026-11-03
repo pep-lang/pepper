@@ -611,12 +611,16 @@ _put_darwin_member(out: u8[], name: String, mode: String, data: u8[]) {
 ## @param dirs the folders searched for them
 ## @param objects more files linked by path
 ## @param target the compile target
-## @returns the error naming the first library that does not fit
+## @returns the first library that does not fit: the name that found it
+##   (empty for one of `objects`) and the error
 export check_library_stamps(
     build: link.Stamp, libraries: String[], dirs: Path[], objects: Path[], target: link.Target
-): Result<void, String> {
-    var files = Array<Path>();
-    files.append_all(objects);
+): Result<void, (String, String)> {
+    # Each file, with the name that found it.
+    var files = Array<(Path, String)>();
+    for (var object in objects) {
+        files.append((object, ""));
+    }
     for (var name in libraries) {
         for (var dir in dirs) {
             var found = Array<Path>();
@@ -627,12 +631,14 @@ export check_library_stamps(
                 }
             }
             if (!found.is_empty) {
-                files.append_all(found);
+                for (var file in found) {
+                    files.append((file, name));
+                }
                 break;
             }
         }
     }
-    for (var file in files) {
+    for (var (file, name) in files) {
         var stamps = link.read_stamps(file);
         if (stamps.is_err()) {
             continue;
@@ -640,11 +646,14 @@ export check_library_stamps(
         for (var stamp in stamps.value()) {
             var mismatch = link.stamp_mismatch(stamp, build);
             if (mismatch.is_value()) {
-                return Result<void, String>.err(
-                    $"'{file}' was built by {stamp.describe()}; {mismatch.value()}; rebuild it with this compiler"
+                return Result<void, (String, String)>.err(
+                    (
+                        name,
+                        $"'{file}' was built by {stamp.describe()}; {mismatch.value()}; rebuild it with this compiler"
+                    )
                 );
             }
         }
     }
-    return Result<void, String>.ok();
+    return Result<void, (String, String)>.ok();
 }

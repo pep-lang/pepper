@@ -4,7 +4,7 @@
 import compiler.ast;
 import async;
 import compiler.codegen;
-import [Diagnostic, SourceText, compare_locations, render_all] from compiler.diagnostic;
+import [Diagnostic, Location, SourceText, compare_locations, render_all] from compiler.diagnostic;
 import digest;
 import [
     Cache,
@@ -195,6 +195,32 @@ _link_attributes(module: sema.Module): String {
         }
     }
     return out.to_string();
+}
+
+# Where the first `[Link]` attribute naming `library` names it, for an error
+# about it.
+_link_location(module: sema.Module, library: String): Location? {
+    for (var ext in module.externs) {
+        for (var attribute in ext.attributes) {
+            var name = sema.attribute_name(attribute);
+            if (!name.is_value() or name.value() != "Link") {
+                continue;
+            }
+            for (var argument in sema.attribute_arguments(attribute)) {
+                if (argument.name.is_value()) {
+                    continue;
+                }
+                if (argument.value is Literal(literal, span)) {
+                    if (literal is String(text)) {
+                        if (text == library) {
+                            return Optional<Location>.Value(Location(ext.loc.file as ulong, span));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return Optional<Location>.Empty;
 }
 
 # The libraries and folders of `_link_attributes`' lines, each once: a
@@ -1574,7 +1600,11 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     var fits = check_library_stamps(stamp, libraries, dirs, options.objects, program.target);
     if (fits.is_err()) {
         Directory.remove_all(work);
-        return Result<Built, String>.err(fits.error());
+        var (name, message) = fits.error();
+        var at = unit_objects or name.is_empty ? Optional<Location>.Empty : _link_location(module, name);
+        return Result<Built, String>.err(
+            at.is_value() ? render_all([Diagnostic.error(message).at(at.value())], sources) : message
+        );
     }
     objects.append_all(options.objects);
     var made = Result<void, String>.ok();

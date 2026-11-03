@@ -697,11 +697,12 @@ a_library_built_otherwise_is_refused() {
     expect_equal(",".join(stamps[0].options), "LEVEL=1");
 
     var program = root.join(Path("main.pep"));
-    File.write_text(program, "extern int geo_area(int side);\n\nmain(): int {\n    return geo_area(3) - 9;\n}\n");
+    File.write_text(
+        program, "[Link(\"geo\")]\nextern int geo_area(int side);\n\nmain(): int {\n    return geo_area(3) - 9;\n}\n"
+    );
     var other = link.Setup();
     other.target.build_options["LEVEL"] = "2";
     var linking = driver.BuildOptions(root.join(Path("main")), root.join(Path("build2")));
-    linking.libraries = ["geo"];
     linking.library_dirs = [root];
     linking.version = "1.2.4";
     linking.in_process = true;
@@ -709,7 +710,7 @@ a_library_built_otherwise_is_refused() {
     expect_true(refused.is_err());
     expect_true(
         refused.error().contains(
-            "was built by pepper 1.2.3 (ABI 1) for "
+            $"main.pep:1:7: error: '{archive}' was built by pepper 1.2.3 (ABI 1) for "
                 + host.os
                 + " "
                 + host.arch
