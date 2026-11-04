@@ -16,7 +16,9 @@
     and the clang/lld/llc/lli/opt tools. This script downloads it (cached),
     extracts it under $env:LOCALAPPDATA\pepper\llvm, and records the prefix in
     .pep/llvm-prefix (one line, read by scripts/pepper-tests.sh, the release
-    build and the workflows).
+    build and the workflows). On arm64 Windows it downloads Pepper's own
+    llvm-<ver>-windows-arm64.tar.xz from the llvm-<ver> release instead,
+    since upstream's arm64 build has no WebAssembly backend.
 
     Note that pepc links LLVM-C.dll (pepper-llvm's `[Link("LLVM-C")]`) rather
     than the static libraries on Windows, because those are built against the
