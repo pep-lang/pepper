@@ -315,6 +315,32 @@ jobs:
         shell: bash
         run: bash scripts/ci-monitor.sh --report "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE"
 
+  # The docs examples on arm64 Linux, with the build of main the release
+  # just published (#358). Not when the change is to the compiler: stage 0
+  # has no arm64 build to build it with. Not part of `test` either, so it
+  # reports without blocking merges while the arm64 build is new.
+  examples-linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: [changes, release]
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.changes.outputs.compiler != 'true' }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/prepare-tests
+        timeout-minutes: 30
+        with:
+          compiler: "false"
+          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          token: ${{ github.token }}
+
+      - name: Docs examples
+        timeout-minutes: 30
+        shell: bash
+        env:
+          PEPPER_TESTS_PART: others
+          PEPC_COMPILATION_UNIT_JOBS: 2
+        run: bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1 -f builds_and_runs_the
+
   # The suite on Linux. Required: `test` gates on it.
   # build_cache_tests verify the cache (`--verify-cache`) on every
   # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
