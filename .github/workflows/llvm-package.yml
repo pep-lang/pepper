@@ -39,6 +39,11 @@
 # lets a runner without that folder skip the build:
 #
 #   gh workflow run llvm-package.yml -f platforms=manylinux
+#
+# `windows-arm64` publishes the windows-arm64 release's LLVM,
+# llvm-<version>-windows-arm64.tar.xz: built from source on a GitHub-hosted
+# arm64 runner (scripts/build-llvm-windows-arm64.sh), since upstream's arm64
+# Windows release has no WebAssembly backend.
 name: llvm-package
 
 on:
@@ -49,7 +54,7 @@ on:
         required: false
         default: ""
       platforms:
-        description: "Comma-separated: linux, macos, windows, manylinux, manylinux-arm64"
+        description: "Comma-separated: linux, macos, windows, windows-arm64, manylinux, manylinux-arm64"
         required: false
         default: windows
 
@@ -69,6 +74,7 @@ jobs:
       version: ${{ steps.resolve.outputs.version }}
       major: ${{ steps.resolve.outputs.major }}
       manylinux: ${{ steps.resolve.outputs.manylinux }}
+      windows_arm64: ${{ steps.resolve.outputs.windows_arm64 }}
     steps:
       - uses: actions/checkout@v7
 
@@ -117,6 +123,7 @@ jobs:
 
           runners=''
           manylinux=''
+          windows_arm64=false
           for platform in $(printf '%s' "$PLATFORMS" | tr ',' ' '); do
             case "$(printf '%s' "$platform" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')" in
               linux|ubuntu)  runner=pepper-linux ;;
@@ -124,6 +131,7 @@ jobs:
               windows|win)   runner=pepper-windows ;;
               manylinux)       manylinux="${manylinux:+$manylinux,}\"x64\""; continue ;;
               manylinux-arm64) manylinux="${manylinux:+$manylinux,}\"arm64\""; continue ;;
+              windows-arm64) windows_arm64=true; continue ;;
               '')            continue ;;
               *) echo "::error::unknown platform '$platform'"; exit 1 ;;
             esac
@@ -133,7 +141,7 @@ jobs:
             esac
           done
           manylinux="[$manylinux]"
-          if [ -z "$runners" ] && [ "$manylinux" = '[]' ]; then
+          if [ -z "$runners" ] && [ "$manylinux" = '[]' ] && [ "$windows_arm64" = false ]; then
             echo "::error::no platforms resolved"
             exit 1
           fi
@@ -144,6 +152,7 @@ jobs:
           echo "major=$major" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "manylinux=$manylinux" >> "$GITHUB_OUTPUT"
+          echo "windows_arm64=$windows_arm64" >> "$GITHUB_OUTPUT"
           echo "Packaging LLVM $version (major $major) for $matrix, manylinux=$manylinux"
 
       # Created once, before the matrix fans out, so three concurrent uploads
@@ -354,3 +363,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.prepare.outputs.version }}
         run: gh release upload "llvm-$VERSION" llvm-"$VERSION"-linux-*-manylinux_2_28.tar.xz --clobber -R "$GITHUB_REPOSITORY"
+
+  # The windows-arm64 release's LLVM: built from source on a GitHub-hosted
+  # arm64 runner (scripts/build-llvm-windows-arm64.sh; hours), since
+  # upstream's arm64 Windows release lacks the WebAssembly backend, then
+  # packaged like the x64 one.
+  windows-arm64:
+    needs: prepare
+    if: needs.prepare.outputs.windows_arm64 == 'true'
+    runs-on: windows-11-arm
+    timeout-minutes: 360
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build LLVM
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: bash -euxo pipefail scripts/build-llvm-windows-arm64.sh "$VERSION" "$RUNNER_TEMP/llvm" "$RUNNER_TEMP/llvm-work"
+
+      - name: Package and upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euxo pipefail
+          asset="llvm-$VERSION-windows-arm64.tar.xz"
+          pwsh -File scripts/package-llvm.ps1 -Prefix "$RUNNER_TEMP/llvm" -Output "$asset"
+          gh release upload "llvm-$VERSION" "$asset" --clobber

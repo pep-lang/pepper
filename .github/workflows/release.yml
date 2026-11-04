@@ -24,6 +24,9 @@
 #                 (scripts/cross-stage0-linux-arm64.sh)
 #   macos-arm64   macos-15 (arm64)
 #   windows-x64   windows-2025
+#   windows-arm64 windows-11-arm, with LLVM from this repository's
+#                 llvm-package release; the x64 stage 0, emulated, builds
+#                 stage 1 for arm64
 #
 # What publishes:
 #
@@ -238,7 +241,7 @@ jobs:
       # uninstall would remove stage 0 too, which Windows refuses while
       # its files are in use.
       - name: Test install.sh
-        if: matrix.target != 'windows-x64'
+        if: ${{ !startsWith(matrix.target, 'windows') }}
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
@@ -253,12 +256,14 @@ jobs:
       # machines. This runner is a person's computer, so the script installs
       # no prerequisites here.
       - name: Test install.ps1
-        if: matrix.target == 'windows-x64'
+        if: startsWith(matrix.target, 'windows')
         shell: powershell
+        env:
+          TARGET: ${{ matrix.target }}
         run: |
           $ErrorActionPreference = 'Stop'
           $prefix = Join-Path $env:RUNNER_TEMP 'install-test'
-          .\scripts\install.ps1 -Archive "dist\pepper-$env:PEPPER_VERSION-windows-x64.zip" -Prefix $prefix -NoModifyPath -NoPrerequisites
+          .\scripts\install.ps1 -Archive "dist\pepper-$env:PEPPER_VERSION-$env:TARGET.zip" -Prefix $prefix -NoModifyPath -NoPrerequisites
           .\scripts\install.ps1 -Uninstall -Prefix $prefix
           if (Test-Path $prefix) { throw "$prefix is still there after -Uninstall" }
 
@@ -283,15 +288,17 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The linux-arm64 leg: the same steps, in a job of its own so the other
-  # legs need not wait for its stage 0. A failure here fails the run but
-  # does not stop the others from publishing.
-  build-linux-arm64:
+  # The arm64 legs: the same steps, in a job of their own so the other
+  # legs need not wait for linux-arm64's stage 0. A failure here fails the
+  # run but does not stop the others from publishing.
+  build-arm64:
     needs: [version, stage0-linux-arm64]
     strategy:
+      fail-fast: false
       matrix:
         include:
           - { target: linux-arm64, runs-on: ubuntu-24.04-arm, container: "quay.io/pypa/manylinux_2_28_aarch64" }
+          - { target: windows-arm64, runs-on: windows-11-arm, container: "" }
     runs-on: ${{ matrix.runs-on }}
     container: ${{ matrix.container }}
     timeout-minutes: 180
@@ -299,7 +306,7 @@ jobs:
 
   publish:
     if: ${{ !cancelled() && needs.version.outputs.publish == 'true' && needs.build.result == 'success' }}
-    needs: [version, build, build-linux-arm64]
+    needs: [version, build, build-arm64]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -18,16 +18,16 @@ irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 |
 Each release also carries both scripts as assets, beside its archives.
 
 Releases have archives for Linux (`linux-x64`, `linux-arm64`), macOS on
-Apple silicon (`macos-arm64`) and Windows (`windows-x64`). There is no
+Apple silicon (`macos-arm64`) and Windows (`windows-x64`, `windows-arm64`). There is no
 prebuilt Pepper for Intel Macs or musl-based Linux yet. On those the
 script stops with an error saying so, and Pepper can be
 [built from source](../contributing/building.md). A Mac with Apple silicon
 gets the `macos-arm64` archive even from a shell running under Rosetta.
 Windows on Arm gets the `windows-x64` archive, which it runs by emulation,
-until a release has a `windows-arm64` one.
+from a release that has no `windows-arm64` one.
 
 The script only bootstraps. It picks this machine's archives
-(`linux-x64`, `linux-arm64`, `macos-arm64` or `windows-x64`) from the newest release that
+(`linux-x64`, `linux-arm64`, `macos-arm64`, `windows-x64` or `windows-arm64`) from the newest release that
 has them: the toolchain, `pepper-<version>-<target>.tar.gz`
 (`.zip` on Windows), and the installer, `pepper-install-<version>-<target>.tar.gz`,
 which holds only `pep-install`. It downloads both, checks the installer

@@ -19,6 +19,8 @@
 #   macos-arm64   on an arm64 Mac, with LLVM from Homebrew
 #   macos-x64     on an Intel Mac, with LLVM from Homebrew
 #   windows-x64   under Git bash, with LLVM from scripts/ci-provision-llvm.sh
+#   windows-arm64 the same on an arm64 machine; stage 0 is the x64 build,
+#                 emulated, which builds stage 1 for arm64 (--target)
 #
 # The archive (`pepper-<version>-<target>.tar.gz`, `.zip` on Windows) holds
 # one folder, `pepper-<version>-<target>`, laid out as an install:
@@ -58,7 +60,7 @@ mkdir -p "$output"
 output=$(cd "$output" && pwd)
 
 exe=""
-[ "$target" = windows-x64 ] && exe=".exe"
+case "$target" in windows-*) exe=".exe" ;; esac
 
 # A folder holding only static archives of LLVM's own dependencies. It is
 # searched before LLVM's library folder (its -L comes first), and the
@@ -120,12 +122,12 @@ case "$target" in
     llvm_config="$(brew --prefix "llvm@$major")/bin/llvm-config"
     collect_static "$(brew --prefix zstd)/lib" zstd
     ;;
-  windows-x64)
+  windows-x64|windows-arm64)
     bash scripts/ci-provision-llvm.sh
     llvm_config=""
     ;;
   *)
-    echo "unknown target '$target' (expected linux-x64, linux-arm64, macos-arm64, macos-x64 or windows-x64)" >&2
+    echo "unknown target '$target' (expected linux-x64, linux-arm64, macos-arm64, macos-x64, windows-x64 or windows-arm64)" >&2
     exit 1
     ;;
 esac
@@ -168,7 +170,7 @@ if [ -z "$stage0" ] || [ ! -x "$stage0/pep-build$exe" ]; then
   echo "set PEPPER_COMPILER_DIR, or install one (scripts/ci-install-toolchain.sh)" >&2
   exit 1
 fi
-[ "$target" != windows-x64 ] || stage0="$(cygpath -u "$stage0")"
+[ -z "$exe" ] || stage0="$(cygpath -u "$stage0")"
 echo "stage 0: $("$stage0/pep-build$exe" --version)"
 
 stage_name="pepper-$version-$target"
@@ -220,7 +222,7 @@ case "$target" in
     done
     llvm_link+=(-l "$cxx")
     ;;
-  windows-x64)
+  windows-x64|windows-arm64)
     # The prefix setup-llvm.ps1 settled on. pepc loads LLVM-C.dll from its
     # own folder.
     llvm_prefix="$(tr -d '\r' < .pep/llvm-prefix | head -1)"
@@ -249,9 +251,13 @@ export PEPC_NO_COMPILATION_UNITS=1
 for project in tools/compiler tools/pep-lsp tools/pep-package; do
   "$stage0/pep-package$exe" -C "$project" fetch
 done
-"$stage0/pep-build$exe" -O tools/compiler/main.pep \
+# No arm64 Windows build of stage 0 exists, so the x64 one, emulated,
+# builds stage 1 for arm64.
+stage1_target=()
+[ "$target" = windows-arm64 ] && stage1_target=(--target aarch64-pc-windows-msvc)
+"$stage0/pep-build$exe" -O tools/compiler/main.pep ${stage1_target[@]+"${stage1_target[@]}"} \
   -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"
-[ "$target" = windows-x64 ] && cp "$stage/bin/LLVM-C.dll" "$pepc_build/"
+[ -z "$exe" ] || cp "$stage/bin/LLVM-C.dll" "$pepc_build/"
 unset PEPC_NO_COMPILATION_UNITS
 "$pepc_build/pepc-stage1$exe" -O --lto=full tools/compiler/main.pep \
   -o "$stage/bin/pep-build$exe" --build "$pepc_build/stage2" --no-cache "${llvm_link[@]}"
@@ -270,7 +276,7 @@ rm -f "$stage"/bin/*.pdb "$stage"/bin/*.ilk
 echo "=== package"
 cd "$output"
 installer_name="pepper-install-$version-$target"
-if [ "$target" = windows-x64 ]; then
+if [ -n "$exe" ]; then
   archive="$stage_name.zip"
   installer="$installer_name.zip"
   rm -f "$archive" "$installer"

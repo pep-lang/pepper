@@ -16,7 +16,9 @@
     and the clang/lld/llc/lli/opt tools. This script downloads it (cached),
     extracts it under $env:LOCALAPPDATA\pepper\llvm, and records the prefix in
     .pep/llvm-prefix (one line, read by scripts/pepper-tests.sh, the release
-    build and the workflows).
+    build and the workflows). On arm64 Windows it downloads Pepper's own
+    llvm-<ver>-windows-arm64.tar.xz from the llvm-<ver> release instead,
+    since upstream's arm64 build has no WebAssembly backend.
 
     Note that pepc links LLVM-C.dll (pepper-llvm's `[Link("LLVM-C")]`) rather
     than the static libraries on Windows, because those are built against the
@@ -85,8 +87,15 @@ $Root = Join-Path $env:LOCALAPPDATA 'pepper'
 $Prefix = Join-Path $Root "llvm\$LlvmVersion"
 $CacheDir = Join-Path $Root 'cache'
 $Asset = "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc.tar.xz"
-$Archive = Join-Path $CacheDir $Asset
 $Url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/$Asset"
+# Upstream's arm64 build has no WebAssembly backend, so arm64 Windows takes
+# the package llvm-package.yml builds (scripts/build-llvm-windows-arm64.sh).
+# The OS architecture, not the process's: Git bash runs emulated as x64.
+if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') {
+    $Asset = "llvm-$LlvmVersion-windows-arm64.tar.xz"
+    $Url = "https://github.com/pep-lang/pepper/releases/download/llvm-$LlvmVersion/$Asset"
+}
+$Archive = Join-Path $CacheDir $Asset
 
 # Windows' bundled bsdtar, resolved absolutely. See its use below for why PATH
 # is not good enough.

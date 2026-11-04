@@ -25,7 +25,9 @@ pwsh -File scripts/setup-llvm.ps1 [-DevTools] [-Force]
   first: an LLVM 20 that is already installed, else the platform's package
   manager (apt `llvm-20-dev` or Homebrew `llvm@20`), else the LLVM release
   archive (cached, so a second run is free). Windows always uses the archive:
-  no Windows package ships `llvm-config` and the component libraries;
+  no Windows package ships `llvm-config` and the component libraries. On
+  arm64 Windows the archive is Pepper's own `llvm-<version>-windows-arm64`
+  package, since upstream's arm64 build has no WebAssembly backend;
 - on macOS, installs Homebrew `lld@20` when LLVM's `ld64.lld` is not in the
   prefix: iOS links need it, and Homebrew's `llvm@20` no longer ships it.
   Homebrew keeps both off the PATH, so to link for iOS, put them first:

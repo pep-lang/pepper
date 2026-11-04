@@ -17,7 +17,7 @@ target="${2:?usage: release-smoke-test.sh <archive> <target>}"
 archive=$(cd "$(dirname "$archive")" && pwd)/$(basename "$archive")
 
 exe=""
-[ "$target" = windows-x64 ] && exe=".exe"
+case "$target" in windows-*) exe=".exe" ;; esac
 
 # Outside the checkout, so the compiler cannot find the repository's
 # runtime from the current folder and must use the archive's.
