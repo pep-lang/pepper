@@ -690,7 +690,9 @@ each sample by following frame pointers, which is fast and finds every
 frame of Pepper code; without them, optimized code reuses the register and
 a profiler loses the callers of whatever was running. It costs a register
 and a few instructions per call. <a href="pep-profile.html">pep-profile</a> builds with
-it, <code>-O</code> and <code>-g</code>. It is part of the build cache's key.</p>
+it, <code>-O</code> and <code>-g</code>. It is part of the build cache's key. On Apple
+platforms and Windows on Arm, whose ABIs require it, every function that
+calls another keeps its frame pointer without the option.</p>
 <h2 id="targets-and-cross-compiling"><a class="header" href="#targets-and-cross-compiling">Targets and cross-compiling</a></h2>
 <h3 id="--target-triple"><a class="header" href="#--target-triple"><code>--target &lt;triple&gt;</code></a></h3>
 <p>Compiles for another platform, named by an LLVM target triple:
