@@ -192,7 +192,15 @@ links_another_platform_with_its_triple_lld_and_system_root() {
     expect_true(
         driver.cross_link_note(target, Optional<Path>.Empty).contains("pass '--sysroot <dir>' or set PEPPER_SYSROOT_")
     );
-    expect_true(driver.target_arguments(link.Target(), Optional<Path>.Empty, Optional<Path>.Empty).is_empty);
+    var host = driver.target_arguments(link.Target(), Optional<Path>.Empty, Optional<Path>.Empty);
+    if (link.Target().os == "windows") {
+        # The host's own triple, so clang links with libraries of the
+        # compiler's architecture, not its own.
+        expect_equal(host.count, 1);
+        expect_equal(host[0], $"--target={link.Target().arch}-pc-windows-msvc");
+    } else {
+        expect_true(host.is_empty);
+    }
 }
 
 [Test]

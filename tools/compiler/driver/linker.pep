@@ -588,7 +588,7 @@ export windows_library_dirs(sysroot: Path, arch: String): Path[] {
 
 ## The link driver's options that choose the platform: for the host, none
 ## but LLVM's linker on Linux when `lld` is found (much faster than the
-## system's BFD `ld`); for another target,
+## system's BFD `ld`), and on Windows the host's triple; for another target,
 ## its triple, LLVM's linker (`lld`, the one at `lld` when given), and its
 ## system root.
 ##
@@ -600,6 +600,10 @@ export target_arguments(target: link.Target, sysroot: Path?, lld: Path?): String
     var args = Array<String>();
     if (!target.triple.is_empty) {
         args.append($"--target={target.triple}");
+    } else if (target.os == "windows") {
+        # clang picks the MSVC and SDK libraries for its own architecture:
+        # on Windows on Arm, an x64 pepc would link with the arm64 ones.
+        args.append($"--target={target.arch}-pc-windows-msvc");
     }
     if (target.is_host()) {
         if (lld.is_value() and target.os == "linux") {
