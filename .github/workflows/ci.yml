@@ -341,7 +341,18 @@ jobs:
       # Not the x64 build, which Windows on Arm would run by emulation.
       - name: The installed build is arm64
         shell: bash
-        run: file "$PEPPER_COMPILER_DIR"/pep-build* | grep -i aarch64
+        run: |
+          if [ "$RUNNER_OS" = Windows ]; then
+            # Git bash's `file` does not name Arm64 PE files; read the PE
+            # header's machine field (0xaa64 is Arm64) instead.
+            exe="$PEPPER_COMPILER_DIR/pep-build.exe"
+            pe=$(od -An -tu4 -j60 -N4 "$exe" | tr -d ' ')
+            machine=$(od -An -tx2 -j$((pe + 4)) -N2 "$exe" | tr -d ' ')
+            echo "pep-build.exe machine: 0x$machine"
+            test "$machine" = aa64
+          else
+            file "$PEPPER_COMPILER_DIR/pep-build" | grep -i aarch64
+          fi
 
       - name: Docs examples
         timeout-minutes: 30
