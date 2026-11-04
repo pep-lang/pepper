@@ -85,8 +85,15 @@ $Root = Join-Path $env:LOCALAPPDATA 'pepper'
 $Prefix = Join-Path $Root "llvm\$LlvmVersion"
 $CacheDir = Join-Path $Root 'cache'
 $Asset = "clang+llvm-$LlvmVersion-x86_64-pc-windows-msvc.tar.xz"
-$Archive = Join-Path $CacheDir $Asset
 $Url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LlvmVersion/$Asset"
+# Upstream's arm64 build has no WebAssembly backend, so arm64 Windows takes
+# the package llvm-package.yml builds (scripts/build-llvm-windows-arm64.sh).
+# The OS architecture, not the process's: Git bash runs emulated as x64.
+if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq 'Arm64') {
+    $Asset = "llvm-$LlvmVersion-windows-arm64.tar.xz"
+    $Url = "https://github.com/pep-lang/pepper/releases/download/llvm-$LlvmVersion/$Asset"
+}
+$Archive = Join-Path $CacheDir $Asset
 
 # Windows' bundled bsdtar, resolved absolutely. See its use below for why PATH
 # is not good enough.

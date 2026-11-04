@@ -111,6 +111,9 @@ local_appdata=$(cygpath -u "$LOCALAPPDATA")
 prefix="$local_appdata/pepper/llvm/$version"
 
 platform=windows-x64
+# Git bash on arm64 Windows runs emulated and says x86_64; the processor
+# identifier still names the real CPU.
+case "${PROCESSOR_IDENTIFIER:-}" in ARMv8*) platform=windows-arm64 ;; esac
 tag="llvm-$version"
 asset="llvm-$version-$platform.tar.xz"
 
