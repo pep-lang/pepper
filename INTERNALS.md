@@ -4283,7 +4283,9 @@ the checkout (`PEPPER_TARGET_DIR`).
   is a static aarch64 build of pep-build and pep-package that the
   `stage0-linux-arm64` job cross-compiles on x64 with the pinned stage 0,
   `scripts/cross-stage0-linux-arm64.sh`, since no published build runs
-  there), macos-arm64 (`macos-15`) and windows-x64 (`windows-2025`)
+  there), macos-arm64 (`macos-15`), windows-x64 (`windows-2025`) and
+  windows-arm64 (`windows-11-arm`, where the x64 stage 0, emulated, builds
+  stage 1 with `--target aarch64-pc-windows-msvc`)
   with `scripts/release-build.sh`: it provisions LLVM and clang, installs
   stage 0 (the build `.github/stage0` pins, whatever `VERSION` holds,
   as CI installs it), builds pepc with
@@ -4304,7 +4306,9 @@ the checkout (`PEPPER_TARGET_DIR`).
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped
   Windows LLVM 20 package that CI installs, and with `platforms=manylinux`
   (`manylinux-arm64` for arm64, on `ubuntu-24.04-arm`) the Linux release's
-  LLVM (`build-llvm-manylinux.sh`), so a runner without
+  LLVM (`build-llvm-manylinux.sh`), and with `platforms=windows-arm64` (on
+  `windows-11-arm`) the arm64 Windows LLVM, built from source for its
+  WebAssembly backend (`build-llvm-windows-arm64.sh`), so a runner without
   a cached build skips hours of building. Its `version` input packages
   another LLVM release (`PEPPER_LLVM_VERSION` in the setup scripts). It is
   the one self-hosted workflow (`pepper-linux`, `pepper-macos`,
