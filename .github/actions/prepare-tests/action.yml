@@ -90,9 +90,10 @@ runs:
         dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
 
     # The corpus also runs under wasmtime, built for wasm32-wasip1
-    # (tools/compiler/corpus_test.pep), which fails here without them.
+    # (tools/compiler/corpus_test.pep), which fails here without them. Not
+    # on arm64, which runs only the docs examples (ci.yml).
     - name: Provision wasi-sdk and wasmtime
-      if: runner.os == 'Linux'
+      if: runner.os == 'Linux' && runner.arch == 'X64'
       shell: bash
       run: bash -euxo pipefail scripts/ci-provision-wasi.sh >> "$GITHUB_ENV"
 
