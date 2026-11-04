@@ -1450,10 +1450,15 @@ transform step, the driver and the LSP both run it.
 
 Error reporting inside passes goes through `state.report(diag)`, which
 collects them; the pass carries on, and the run stops after it.
-`take_error` returns the first in source order with the rest, up to
-`ERROR_LIMIT` and one per line (a later one on the line is usually
-fallout), in its `Diagnostic.also`, which rendering prints after it and the
-language server shows apart. Other per-run state is in the `PassState` too,
+`take_errors` hands them over (with none it allocates nothing), and the
+runner (`run_steps_with`, `run_steps`, `run_passes`) returns them as a
+`Diagnostic[]`, as `_reportable` (`passes.pep`) keeps them: each place and
+message once, only the first reported in each declaration (a later one
+there is usually fallout), found from the declarations' starts, which it
+gathers only once there is an error, then in source order
+(`compare_locations`). The
+driver shows `--error-limit` of them (`render_errors`, default
+`ERROR_LIMIT`, 20); the language server shows up to 100. Other per-run state is in the `PassState` too,
 the target among it. No counter that numbers synthesized
 names is process-wide: closure structs are numbered in
 `PassState.closure_counts`, and the builder's counters (`_Builder.for_loops`,
@@ -4419,7 +4424,7 @@ the checkout (`PEPPER_TARGET_DIR`).
 - **`copy` of a trait value** cannot be checked at compile time: one that
   holds a struct that cannot be copied panics at run time.
 - **Only the first failing sema pass's errors are reported** per compile
-  (`PassState.take_error`, up to `ERROR_LIMIT`), and code generation reports
+  (`PassState.take_errors`), one per declaration, and code generation reports
   one error: an undeclared name in a free function, which only codegen
   finds, waits for the sema errors to be fixed.
 - **Unused CLI flags**: `-v`, and `-T` channels other than `time`,

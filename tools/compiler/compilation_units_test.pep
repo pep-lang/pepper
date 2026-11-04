@@ -506,7 +506,8 @@ a_worker_record_that_cannot_be_written_stops_the_build() {
         program.sources(),
         missing,
         0,
-        StringBuilder()
+        StringBuilder(),
+        0
     );
     expect_true(worked.is_err());
     expect_true(worked.error().starts_with($"cannot write {incremental.worker_file(missing, 0, "rec")}: "));

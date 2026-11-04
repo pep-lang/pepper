@@ -25,7 +25,7 @@
 ## the output (`write_debug_sources`), for the debug info to point at.
 
 import compiler.ast;
-import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
+import [Diagnostic, ERROR_LIMIT, SourceText, render_errors] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -131,7 +131,7 @@ export check_recording(program: link.Program, sources: SourceText[]): Result<Sta
     warnings.append_all(state.notes);
     report_warnings(warnings, sources);
     if (ran.is_err()) {
-        return Result<StaticExpansion[], String>.err(render_all([ran.error()], sources));
+        return Result<StaticExpansion[], String>.err(render_errors(ran.error(), sources, ERROR_LIMIT));
     }
     return Result<StaticExpansion[], String>.ok(state.static_recording.value().expansions);
 }

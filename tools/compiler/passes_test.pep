@@ -523,7 +523,7 @@ suggests_no_extend_for_a_sealed_trait() {
     expect_true(built.is_ok());
     var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
     expect_true(ran.is_err());
-    var rendered = render_all([ran.error()], program.value().sources());
+    var rendered = render_all(ran.error(), program.value().sources());
     expect_true(rendered.contains("error: 'String' does not conform to trait 'Lane'"));
     expect_false(rendered.contains("declare it with"));
 }
@@ -951,11 +951,11 @@ runtime_structs_hash_as_they_compare() {
     var state = sema.run_passes(module.value(), program.value().target, program.value().sources());
     expect_true(state.is_ok());
     sema.check_runtime_hash_keys(module.value(), state.value());
-    var error = state.value().take_error();
-    if (error.is_value()) {
-        print(render_all([error.value()], program.value().sources()));
+    var errors = state.value().take_errors();
+    if (!errors.is_empty) {
+        print(render_all(errors, program.value().sources()));
     }
-    expect_false(error.is_value());
+    expect_true(errors.is_empty);
 }
 
 # A deprecated enum case warns at each use: `E.Case`, `E.Case(...)`, a
@@ -984,7 +984,7 @@ warnings_of(root: Path): String {
     }
     var state = sema.run_passes(built.value(), program.value().target, program.value().sources());
     if (state.is_err()) {
-        return headline(render_all([state.error()], program.value().sources()), root);
+        return headline(render_all(state.error(), program.value().sources()), root);
     }
     return headlines(render_all(state.value().notes, program.value().sources()), root);
 }
@@ -1012,14 +1012,9 @@ outcome(root: Path, runtime: bool, notes: bool = false): String {
     }
     var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
     if (ran.is_err()) {
-        # The first error, then the others reported with it, each with its
-        # notes.
-        var first = ran.error();
-        var errors = [first];
-        errors.append_all(first.also);
-        first.also = Array<Diagnostic>();
+        # Each error, with its notes.
         var lines = Array<String>();
-        for (var error in errors) {
+        for (var error in ran.error()) {
             var rendered = error.render(program.value().sources());
             lines.append(headline(rendered, root));
             for (var line in rendered.split("\n")) {
@@ -1069,12 +1064,16 @@ error_programs(): String[] {
         # pointer, weak and tuple types, `void` used as a value, calls with
         # the wrong arity, bare returns, and enum and struct comparisons.
         "# expect: main.pep:4:30: error: cannot initialize variable 'f' of type '(String) => int' with a value of type '(int) => int'\nsquare(x: int): int { return x * x; }\nmain(): int {\n    var f: (String) => int = square;\n    return 0;\n}\n",
-        # Every error of the pass that finds one, in source order (#344).
+        # Every error of the pass that finds one, in source order, the
+        # first of each function only (#344).
         "# expect: main.pep:5:30: error: cannot initialize variable 'g' of type '(String) => int' with a value of type '(int) => int'
-# expect: main.pep:6:12: error: too many arguments to function of type '(String) => int': expected 1, have 2
+# expect: main.pep:9:12: error: too many arguments to function of type '(String) => int': expected 1, have 2
 square(x: int): int { return x * x; }
 main(): int {
     var g: (String) => int = square;
+    return g(1, 2);
+}
+other(g: (String) => int): int {
     return g(1, 2);
 }
 ",

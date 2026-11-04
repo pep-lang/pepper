@@ -319,15 +319,15 @@ verify_injected_finds_what_the_passes_left() {
     var state = sema.PassState(program.value().target);
     expect_true(sema.run_steps_with(early.value(), state, 18).is_ok());
     sema.verify_injected(early.value(), state);
-    var error = state.take_error();
-    expect_true(error.is_value());
-    expect_true(error.value().message.contains("left unresolved"));
+    var errors = state.take_errors();
+    expect_false(errors.is_empty);
+    expect_true(errors[0].message.contains("left unresolved"));
     var late = sema.merge(program.value());
     expect_true(late.is_ok());
     state = sema.PassState(program.value().target);
     expect_true(sema.run_steps_with(late.value(), state, 0xffffffffffffffff).is_ok());
     sema.verify_injected(late.value(), state);
-    expect_false(state.take_error().is_value());
+    expect_true(state.take_errors().is_empty);
 }
 
 # `MergeAnchors`, kept up to date as a merge grows its module, finds what

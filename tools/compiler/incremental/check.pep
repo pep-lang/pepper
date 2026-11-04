@@ -91,8 +91,8 @@ export enum CheckError {
     Unread(message: String),
     ## The program's linking or visibility errors (`Program.check_diagnostics`).
     Linking(diagnostics: Diagnostic[]),
-    ## The error checking a compilation unit found.
-    Checking(diagnostic: Diagnostic),
+    ## The errors checking a compilation unit found, in the order to show them.
+    Checking(diagnostics: Diagnostic[]),
     ## The cache's records did not merge, or one loaded by early cutoff
     ## differs from the compilation unit checked again (`PEPC_VERIFY_CUTOFF`).
     Failed(message: String),
@@ -357,7 +357,7 @@ export check_compilation_units(
 ## @param warnings where its warnings go
 ## @param times where the time each pass took goes (`-T passes`), if anywhere
 ## @returns the module after, the passes' state and the type aliases as
-##   built; or the error
+##   built; or the errors
 export check_compilation_unit(
     program: link.Program,
     module: sema.Module,
@@ -366,13 +366,13 @@ export check_compilation_unit(
     sources: SourceText[],
     warnings: Diagnostic[],
     times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
-): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic> {
+): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic[]> {
     # The specializations the checked compilation units asked for met their
     # constraints when they were checked.
     var checked_specs = (module.struct_specs.count, module.func_specs.count);
     var built = sema.build_on(program, module, unit.files);
     if (built.is_err()) {
-        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic>.err(built.error());
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic[]>.err([built.error()]);
     }
     var after = built.value();
     var aliases = Array<sema.TypeAliasDef>();
@@ -399,9 +399,9 @@ export check_compilation_unit(
         warnings.append(note);
     }
     if (ran.is_err()) {
-        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic>.err(ran.error());
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic[]>.err(ran.error());
     }
-    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic>.ok((after, state, aliases));
+    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic[]>.ok((after, state, aliases));
 }
 
 ## Checks compilation unit `unit` on `module`, the records of the compilation
@@ -433,7 +433,7 @@ export check_unit(
     warnings: Diagnostic[],
     rechecked: String[],
     times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
-): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic> {
+): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic[]> {
     var inputs = inputs_digest(records, unit);
     var source = recheck_source(program, unit, inputs);
     var found = cache.is_value() ?
@@ -451,27 +451,29 @@ export check_unit(
         if (again.is_value()) {
             rechecked.append(unit.name);
             var (after, state, aliases) = again.value();
-            return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.ok(
+            return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic[]>.ok(
                 (after, state, aliases, source)
             );
         }
         # The re-check changed the merged records: merge them again.
         var merged = merged_module(program, records, unit.reads);
         if (merged.is_err()) {
-            return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.err(
-                Diagnostic.error(
-                    $"the compilation units that compilation unit {unit.name} reads do not merge: {merged.error()}"
-                )
+            return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic[]>.err(
+                [
+                    Diagnostic.error(
+                        $"the compilation units that compilation unit {unit.name} reads do not merge: {merged.error()}"
+                    )
+                ]
             );
         }
         on = merged.value();
     }
     var checked = check_compilation_unit(program, on, unit, reused, sources, warnings, times);
     if (checked.is_err()) {
-        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.err(checked.error());
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic[]>.err(checked.error());
     }
     var (after, state, aliases) = checked.value();
-    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.ok(
+    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic[]>.ok(
         (after, state, aliases, source)
     );
 }
@@ -667,9 +669,9 @@ export recheck_compilation_unit(
     var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
     if (ran.is_err()) {
         if (report is Value(out)) {
-            out.append(ran.error());
+            out.append_all(ran.error());
         }
-        return _not_rechecked($"an error: {ran.error().message}");
+        return _not_rechecked($"an error: {ran.error()[0].message}");
     }
     if (!state.notes.is_empty and report.is_empty()) {
         return _not_rechecked($"a warning: {state.notes[0].message}");
@@ -1030,7 +1032,7 @@ _verify_reuse_merged(
     var checked = check_compilation_unit(program, merged.value(), units[k], reused, sources, warnings);
     if (checked.is_err()) {
         return Optional<String>.Value(
-            $"compilation unit {units[k].name} does not check again: {render_all([checked.error()], sources)}"
+            $"compilation unit {units[k].name} does not check again: {render_all(checked.error(), sources)}"
         );
     }
     var (after, state, aliases) = checked.value();

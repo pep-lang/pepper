@@ -4,7 +4,7 @@
 ## specialization loop, whose steps a program runs as many rounds of as it
 ## needs.
 
-import [Diagnostic, SourceText] from compiler.diagnostic;
+import [Diagnostic, SourceText, compare_locations] from compiler.diagnostic;
 import io;
 import [Target] from compiler.link;
 import os;
@@ -16,7 +16,7 @@ import [check_casts] from "casts";
 import [check_bounds] from "check_bounds";
 import [check_tries] from "check_tries";
 import [restore_bodies, stash_bodies] from "checked";
-import [check_closures, lift_closures] from "closures";
+import [check_closures, is_closure_struct, lift_closures] from "closures";
 import [check_conditions] from "conditions";
 import [check_confinement] from "confinement";
 import [check_constraints, check_specializations] from "constraints";
@@ -42,6 +42,7 @@ import [check_interpolations] from "interpolation";
 import [check_lazy] from "lazy";
 import [drop_unused_methods, specialize_used_methods] from "lazy_methods";
 import [check_string_bytes, resolve_literals] from "literals";
+import [Loc, NO_FILE] from "loc";
 import [lower_matches] from "matches";
 import [Module] from "model";
 import [bind_calls, check_link_attributes, check_named_attributes] from "named_arguments";
@@ -131,10 +132,10 @@ _step_name(index: ulong): String {
 ## @param target the compile target
 ## @param limit how many steps to run
 ## @param sources the program's files' text, by file index
-## @returns how many steps ran, or the error a step reported
+## @returns how many steps ran, or the errors the step that failed reported
 export run_steps(
     module: Module, target: Target, limit: ulong, sources: SourceText[] = Array<SourceText>()
-): Result<ulong, Diagnostic> {
+): Result<ulong, Diagnostic[]> {
     var state = PassState(target);
     state.sources = sources;
     return run_steps_with(module, state, limit);
@@ -145,25 +146,27 @@ export run_steps(
 ## @param module the model `merge` built, changed in place
 ## @param target the compile target
 ## @param sources the program's files' text, by file index
-## @returns the passes' state, which code generation reads, or the error a step reported
-export run_passes(module: Module, target: Target, sources: SourceText[]): Result<PassState, Diagnostic> {
+## @returns the passes' state, which code generation reads, or the errors
+##   the step that failed reported
+export run_passes(module: Module, target: Target, sources: SourceText[]): Result<PassState, Diagnostic[]> {
     var state = PassState(target);
     state.sources = sources;
     state.lazy_methods = true;
     var ran = run_steps_with(module, state, 0xffffffffffffffff);
     if (ran.is_err()) {
-        return Result<PassState, Diagnostic>.Err(ran.error());
+        return Result<PassState, Diagnostic[]>.Err(ran.error());
     }
-    return Result<PassState, Diagnostic>.Ok(state);
+    return Result<PassState, Diagnostic[]>.Ok(state);
 }
 
-## `run_steps` with the passes' state given.
+## `run_steps` with the passes' state given. A step that fails stops the
+## run, which returns every error it reported, as `_reportable` keeps them.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
 ## @param limit how many steps to run
-## @returns how many steps ran, or the error a step reported
-export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic> {
+## @returns how many steps ran, or the errors the step that failed reported
+export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic[]> {
     # The passes ask the same deep types the same questions: the table
     # answers each once per distinct type (#210).
     var outer = begin_type_ids();
@@ -172,21 +175,21 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
     return ran;
 }
 
-_run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic> {
+_run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic[]> {
     var steps = _Steps(limit, state);
     while (steps.ran < limit and steps.ran < PORTED_STEPS) {
-        var error = _step(steps.ran, module, state);
+        var errors = _step(steps.ran, module, state);
         steps.record_step(_step_name(steps.ran), steps.ran >= 6);
-        if (error.is_value()) {
-            steps.error = error;
+        if (!errors.is_empty) {
+            steps.errors = errors;
             break;
         }
         steps.lap();
         steps.ran += 1;
     }
-    if (!steps.error.is_value() and steps.ran == PORTED_STEPS and steps.ran < limit) {
+    if (steps.errors.is_empty and steps.ran == PORTED_STEPS and steps.ran < limit) {
         _specialization_loop(module, state, steps);
-        if (!steps.error.is_value() and steps.ran < limit) {
+        if (steps.errors.is_empty and steps.ran < limit) {
             _after_specializing(module, state, steps);
         }
     }
@@ -198,11 +201,108 @@ _run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagno
     state.checked_implicit = Optional<PassMemo>.Empty;
     state.trait_memo.members = HashMap<String, PassMemo>();
     state.unit_memos = HashMap<String, PassMemo>();
-    if (steps.error.is_value()) {
-        # An error in a specialization notes the uses that asked for it.
-        return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));
+    if (!steps.errors.is_empty) {
+        return Result<ulong, Diagnostic[]>.Err(_reportable(module, steps.errors));
     }
-    return Result<ulong, Diagnostic>.Ok(steps.ran);
+    return Result<ulong, Diagnostic[]>.Ok(steps.ran);
+}
+
+# The errors a failed step reported, as the user is shown them: those with
+# a place (all when none has one), each place and message once, and of
+# those in one declaration only the first reported, as a later one there is
+# usually its fallout (even one earlier in the source), in source order. An error in a specialization notes the uses
+# that asked for it. Runs only after an error: a build without one pays
+# nothing for it.
+_reportable(module: Module, errors: Diagnostic[]): Diagnostic[] {
+    var placed = Array<Diagnostic>();
+    for (var error in errors) {
+        if (error.location is Value(at)) {
+            if (at.file != NO_FILE as ulong) {
+                placed.append(error);
+            }
+        }
+    }
+    if (placed.is_empty) {
+        placed.append_all(errors);
+    }
+    var starts = _declaration_starts(module);
+    var seen = HashSet<String>();
+    var declarations = HashSet<ulong>();
+    var out = Array<Diagnostic>();
+    for (var error in placed) {
+        var place = "";
+        if (error.location is Value(at)) {
+            place = $"{at.file}:{at.span.start}:{at.span.end}";
+            var after = starts.upper_bound(_position(at.file, at.span.start));
+            if (after > 0 and starts[after - 1] >> _FILE_SHIFT == at.file and !declarations.insert(starts[after - 1])) {
+                continue;
+            }
+        }
+        if (seen.insert($"{place} {error.message}")) {
+            out.append(with_instantiation(module, error));
+        }
+    }
+    out.sort((a, b) => compare_locations(a, b));
+    return out;
+}
+
+# A place as one number that orders by file, then offset: files stay under
+# 2^24 and offsets under 2^40.
+const _FILE_SHIFT: ulong = 40;
+
+_position(file: ulong, offset: ulong): ulong {
+    return (file << _FILE_SHIFT) | offset;
+}
+
+# Where each declaration with a place starts (`_position`), sorted: an
+# error belongs to the last one starting at or before it. A closure's struct
+# is not one, as its body is part of its function's.
+_declaration_starts(module: Module): ulong[] {
+    var starts = Array<ulong>();
+    for (var function in module.functions) {
+        _add_start(starts, function.loc);
+    }
+    for (var st in module.structs) {
+        if (is_closure_struct(st.name)) {
+            continue;
+        }
+        _add_start(starts, st.loc);
+        for (var method in st.method_members) {
+            _add_start(starts, method.loc);
+        }
+        for (var method in st.generic_methods) {
+            _add_start(starts, method.loc);
+        }
+        for (var constructor in st.constructors) {
+            _add_start(starts, constructor.loc);
+        }
+    }
+    for (var t in module.traits) {
+        _add_start(starts, t.loc);
+        for (var method in t.methods) {
+            _add_start(starts, method.loc);
+        }
+    }
+    for (var extension in module.extensions) {
+        _add_start(starts, extension.loc);
+        for (var method in extension.methods) {
+            _add_start(starts, method.loc);
+        }
+    }
+    for (var e in module.enums) {
+        _add_start(starts, e.loc);
+    }
+    for (var global in module.globals) {
+        _add_start(starts, global.loc);
+    }
+    starts.sort();
+    return starts;
+}
+
+_add_start(starts: ulong[], at: Loc) {
+    if (!at.is_none()) {
+        starts.append(_position(at.file as ulong, at.span.start));
+    }
 }
 
 ## Counts the steps, and stops at the first error or at the limit.
@@ -210,7 +310,7 @@ struct _Steps {
     var ran: ulong = 0;
     var limit: ulong;
     var state: PassState;
-    var error: Diagnostic? = Optional<Diagnostic>.Empty;
+    var errors: Diagnostic[] = Array<Diagnostic>();
     # With `PEPC_TRACE_STEPS` set, the time each step took, by step.
     var timed: bool = false;
     var mark: os.Instant = os.Instant.now();
@@ -295,8 +395,12 @@ struct _Steps {
         if (state.pass_times.is_value()) {
             pass_mark = os.Instant.now();
         }
-        error = state.take_error();
-        return error.is_value();
+        var taken = state.take_errors();
+        if (taken.is_empty) {
+            return false;
+        }
+        errors = taken;
+        return true;
     }
 }
 
@@ -583,8 +687,8 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     }
 }
 
-## Runs step `index` (from 0), and returns the error it reports.
-_step(index: ulong, module: Module, state: PassState): Diagnostic? {
+## Runs step `index` (from 0), and returns the errors it reports.
+_step(index: ulong, module: Module, state: PassState): Diagnostic[] {
     match (index) {
         0 => {
             # A struct whose method is checked again has a new body.
@@ -592,13 +696,13 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             for (var key in state.rechecked_methods) {
                 rechecked.insert(key.split(" ")[1]);
             }
-            return apply_platform_filters(module, state.target, rechecked);
+            return _reported(state, apply_platform_filters(module, state.target, rechecked));
         }
         1 => {
             # `[Equatable]` structs get their `==` and `__hash` first, so
             # every later step treats them as declared.
-            state.take_error();
-            return derive_equatable(module);
+            state.take_errors();
+            return _reported(state, derive_equatable(module));
         }
         2 => {
             # Enum names are integer types from here on; closure literals become
@@ -616,170 +720,178 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             stash_bodies(module, state);
             state.install_enums(module.enums);
             lift_closures(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         3 => {
             # Names synthesized from a file are numbered by now, so dropping
             # the cached units' bodies cannot renumber anything.
             strip_bodies(module);
-            return Optional<Diagnostic>.Empty;
+            return state.take_errors();
         }
         4 => {
             resolve_type_aliases(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         5 => {
-            return synthesize(module, state);
+            return _reported(state, synthesize(module, state));
         }
         6 => {
             check_attributes(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         7 => {
             expand_module_blocks(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         8 => {
             expand(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         9 => {
             resolve_enum_cases(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         10 => {
             lower_main_arguments(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         11 => {
             check_bindings(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         12 => {
             check_named_attributes(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         13 => {
             check_link_attributes(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         14 => {
             bind_calls(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         15 => {
             synthesize_function_types(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         16 => {
             resolve_literals(module);
-            return Optional<Diagnostic>.Empty;
+            return state.take_errors();
         }
         17 => {
             name_overloads(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         18 => {
             resolve_injected(module);
-            return Optional<Diagnostic>.Empty;
+            return state.take_errors();
         }
         19 => {
             gather_generics(module, state);
-            return Optional<Diagnostic>.Empty;
+            return state.take_errors();
         }
         20 => {
             resolve_implicit_types(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         21 => {
             check_tries(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         22 => {
             # Resolve as much as possible.
             resolve_resolvables(module, false, state);
-            return state.take_error();
+            return state.take_errors();
         }
         23 => {
             # Apply generic and concrete extensions.
             apply_extensions(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         24 => {
             # Parameter names against the traits', between the steps; then
             # the values interpolated outside generic code.
             check_parameter_names(module, state);
             check_interpolations(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         25 => {
             # Generic constraints, before any specialization clones a body.
             check_constraints(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         26 => {
             # Constrained generic code, in the generic itself.
             check_bounds(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         27 => {
             # The template stage ends here: every specialization is cloned
             # from the generic bases as they are now.
             module.templates = freeze_templates(module);
             specialize_structs(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         28 => {
             specialize_functions(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         29 => {
             # `a..b` over a non-integer, before the runtime's `Range<T>`
             # fails inside.
             check_ranges(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         30 => {
             specialize_methods(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         31 => {
             # The specializations' `static` blocks, with lowered strings.
             expand(module, state, true);
-            return state.take_error();
+            return state.take_errors();
         }
         32 => {
             synthesize_function_types(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         33 => {
             convert_intrinsics(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         34 => {
             # Resolve what remains.
             resolve_resolvables(module, false, state);
-            return state.take_error();
+            return state.take_errors();
         }
         35 => {
             # Specialized extensions.
             apply_extensions(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         36 => {
             convert_member_refs(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         37 => {
             resolve_implicit_types(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         38 => {
             resolve_operators(module, state);
-            return state.take_error();
+            return state.take_errors();
         }
         else => {
-            return Optional<Diagnostic>.Empty;
+            return state.take_errors();
         }
     }
+}
+
+# `error`, a step's own, as reported with any the step's passes reported.
+_reported(state: PassState, error: Diagnostic?): Diagnostic[] {
+    if (error is Value(found)) {
+        state.report(found);
+    }
+    return state.take_errors();
 }

@@ -42,7 +42,7 @@
 import compiler.ast;
 import cli;
 import compiler.codegen;
-import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
+import [Diagnostic, ERROR_LIMIT, Location, render_all, render_errors, SourceText] from compiler.diagnostic;
 import compiler.driver;
 import compiler.incremental;
 import io;
@@ -233,6 +233,11 @@ _main(args: String[]): int {
         "CHAN"
     );
     var trace_all = parser.flag("Tall", help = "Enable all trace channels");
+    var error_limit = parser.option<ulong>(
+        "error-limit",
+        help = "Show at most N errors, then `too many errors emitted, stopping now`; 0 shows every one. The default is 20",
+        value_name = "N"
+    );
     var no_cache = parser.flag("no-cache", help = "Compile every unit without reading or writing the build cache");
     var cache_dir = parser.option(
         "cache",
@@ -409,6 +414,7 @@ _main(args: String[]): int {
         setup.target.build_options[link.ENTRY_BUILD_OPTION] = entry_function.value();
     }
     var traces = trace_channels.values();
+    var errors_shown = error_limit.is_set ? error_limit.value() : ERROR_LIMIT;
     if (trace_all.is_set) {
         traces.append_all(TRACE_CHANNELS.split(" "));
     }
@@ -733,7 +739,7 @@ _main(args: String[]): int {
         }
         var ran = sema.run_steps_with(built.value(), state, 0xffffffffffffffff);
         if (ran.is_err()) {
-            File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
+            File.stderr().write_all(render_errors(ran.error(), program.value().sources(), errors_shown) + "\n");
             return 1;
         }
         if (state.pass_times.is_value()) {
@@ -782,7 +788,7 @@ _main(args: String[]): int {
             var limit = step.is_set ? step.value() : 0xffffffffffffffff;
             var ran = sema.run_steps_with(built.value(), state, limit);
             if (ran.is_err()) {
-                File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
+                File.stderr().write_all(render_errors(ran.error(), program.value().sources(), errors_shown) + "\n");
                 return 1;
             }
             if (steps.is_set) {
@@ -810,6 +816,7 @@ _main(args: String[]): int {
         options.entry = Optional<Path>.Value(entry);
         options.debug_static_expanded = debug_static.is_set and debug_static.value() == _DebugStatic.Expanded;
         options.runtime_checks = runtime_checks;
+        options.error_limit = errors_shown;
         if (traces.contains("passes")) {
             options.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
         }

@@ -105,9 +105,6 @@ export struct Diagnostic {
     var code: String = "";
     ## The fixes it suggests.
     var fixes: Fix[] = Array<Fix>();
-    ## The other errors found with this one, in source order: rendered
-    ## after it, each with its own notes.
-    var also: Diagnostic[] = Array<Diagnostic>();
 
     ## Creates a diagnostic with no location.
     ##
@@ -224,9 +221,6 @@ export struct Diagnostic {
         for (var note in notes) {
             note._render_into(sources, out);
         }
-        for (var other in also) {
-            other._render_into(sources, out);
-        }
     }
 
     # The first fix's edit, when the fix is a single edit on the same line
@@ -317,6 +311,30 @@ export render_all(diagnostics: Diagnostic[], sources: SourceText[]): String {
         parts.append(d.render(sources));
     }
     return "\n".join(parts);
+}
+
+## The most errors a build reports unless told otherwise
+## (`--error-limit`), as clang's `-ferror-limit` default.
+export const ERROR_LIMIT: ulong = 20;
+
+## Returns `errors` rendered against `sources` as `render_all` renders
+## them, but only the first `limit`, then, when that leaves some out, an
+## error saying the rest were not shown, as clang does.
+##
+## @param errors the errors, in the order to show them
+## @param sources each file's name and text, by index
+## @param limit the most errors to show; 0 shows every one
+## @returns the text, without a final newline
+export render_errors(errors: Diagnostic[], sources: SourceText[], limit: ulong): String {
+    if (limit == 0 or errors.count <= limit) {
+        return render_all(errors, sources);
+    }
+    var shown = Array<Diagnostic>();
+    for (var i in 0..limit) {
+        shown.append(errors[i]);
+    }
+    shown.append(Diagnostic.error("too many errors emitted, stopping now"));
+    return render_all(shown, sources);
 }
 
 _label(severity: Severity): String {
