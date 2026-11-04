@@ -22612,15 +22612,15 @@ irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 |
 </code></pre>
 <p>Each release also carries both scripts as assets, beside its archives.</p>
 <p>Releases have archives for Linux (<code>linux-x64</code>, <code>linux-arm64</code>), macOS on
-Apple silicon (<code>macos-arm64</code>) and Windows (<code>windows-x64</code>). There is no
+Apple silicon (<code>macos-arm64</code>) and Windows (<code>windows-x64</code>, <code>windows-arm64</code>). There is no
 prebuilt Pepper for Intel Macs or musl-based Linux yet. On those the
 script stops with an error saying so, and Pepper can be
 <a href="tools/../contributing/building.html">built from source</a>. A Mac with Apple silicon
 gets the <code>macos-arm64</code> archive even from a shell running under Rosetta.
 Windows on Arm gets the <code>windows-x64</code> archive, which it runs by emulation,
-until a release has a <code>windows-arm64</code> one.</p>
+from a release that has no <code>windows-arm64</code> one.</p>
 <p>The script only bootstraps. It picks this machine's archives
-(<code>linux-x64</code>, <code>linux-arm64</code>, <code>macos-arm64</code> or <code>windows-x64</code>) from the newest release that
+(<code>linux-x64</code>, <code>linux-arm64</code>, <code>macos-arm64</code>, <code>windows-x64</code> or <code>windows-arm64</code>) from the newest release that
 has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
 (<code>.zip</code> on Windows), and the installer, <code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
 which holds only <code>pep-install</code>. It downloads both, checks the installer
@@ -63372,7 +63372,9 @@ pwsh -File scripts/setup-llvm.ps1 [-DevTools] [-Force]
 first: an LLVM 20 that is already installed, else the platform's package
 manager (apt <code>llvm-20-dev</code> or Homebrew <code>llvm@20</code>), else the LLVM release
 archive (cached, so a second run is free). Windows always uses the archive:
-no Windows package ships <code>llvm-config</code> and the component libraries;</li>
+no Windows package ships <code>llvm-config</code> and the component libraries. On
+arm64 Windows the archive is Pepper's own <code>llvm-&lt;version&gt;-windows-arm64</code>
+package, since upstream's arm64 build has no WebAssembly backend;</li>
 <li>on macOS, installs Homebrew <code>lld@20</code> when LLVM's <code>ld64.lld</code> is not in the
 prefix: iOS links need it, and Homebrew's <code>llvm@20</code> no longer ships it.
 Homebrew keeps both off the PATH, so to link for iOS, put them first:
