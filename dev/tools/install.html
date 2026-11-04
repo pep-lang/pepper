@@ -194,13 +194,16 @@ curl -fsSL https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/instal
 irm https://raw.githubusercontent.com/pep-lang/pepper/main/scripts/install.ps1 | iex
 </code></pre>
 <p>Each release also carries both scripts as assets, beside its archives.</p>
-<p>There is no prebuilt Pepper for Intel Macs, Linux on arm64 or musl-based
-Linux yet. On those the script stops with an error saying so, and Pepper
-can be <a href="../contributing/building.html">built from source</a>. A Mac with Apple
-silicon gets the <code>macos-arm64</code> archive even from a shell running under
-Rosetta.</p>
+<p>Releases have archives for Linux (<code>linux-x64</code>, <code>linux-arm64</code>), macOS on
+Apple silicon (<code>macos-arm64</code>) and Windows (<code>windows-x64</code>). There is no
+prebuilt Pepper for Intel Macs or musl-based Linux yet. On those the
+script stops with an error saying so, and Pepper can be
+<a href="../contributing/building.html">built from source</a>. A Mac with Apple silicon
+gets the <code>macos-arm64</code> archive even from a shell running under Rosetta.
+Windows on Arm gets the <code>windows-x64</code> archive, which it runs by emulation,
+until a release has a <code>windows-arm64</code> one.</p>
 <p>The script only bootstraps. It picks this machine's archives
-(<code>linux-x64</code>, <code>macos-arm64</code> or <code>windows-x64</code>) from the newest release that
+(<code>linux-x64</code>, <code>linux-arm64</code>, <code>macos-arm64</code> or <code>windows-x64</code>) from the newest release that
 has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
 (<code>.zip</code> on Windows), and the installer, <code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
 which holds only <code>pep-install</code>. It downloads both, checks the installer
@@ -265,8 +268,8 @@ cannot be set up at all, and neither is an install from before toolchains,
 with <code>bin</code> and <code>runtime</code> straight in <code>~/.pepper</code>, moved: uninstall it
 first.</p>
 <p>On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
-18.10 and later); systems that use musl, such as Alpine, are not supported.
-There are no prebuilt binaries for Linux or Windows on arm64 yet. The macOS
+18.10 and later), on x64 and on arm64; systems that use musl, such as
+Alpine, are not supported. The macOS
 binaries are not signed: an archive downloaded with a browser makes
 Gatekeeper warn before it runs; one the script downloads does not.</p>
 <h2 id="what-linking-needs"><a class="header" href="#what-linking-needs">What linking needs</a></h2>
