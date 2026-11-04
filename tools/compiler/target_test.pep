@@ -148,6 +148,19 @@ only_an_android_librarys_thread_locals_are_general_dynamic() {
     }
 }
 
+# Apple's and Windows on Arm's stack walkers follow frame records, so their
+# functions keep one; RtlCaptureStackBackTrace on Windows on Arm skipped
+# every Pepper frame without it.
+[Test]
+keeps_frame_records_where_the_stack_walker_needs_them() {
+    for (var triple in ["arm64-apple-macosx14.0", "aarch64-pc-windows-msvc"]) {
+        expect_true(_ir(_BY_PLATFORM, _parse(triple)).contains("\"frame-pointer\"=\"non-leaf\""));
+    }
+    for (var triple in ["x86_64-pc-windows-msvc", "aarch64-unknown-linux-gnu"]) {
+        expect_false(_ir(_BY_PLATFORM, _parse(triple)).contains("\"frame-pointer\""));
+    }
+}
+
 [Test]
 builds_an_arm64_linux_executable_or_says_what_its_link_needs() {
     var folder = TempFolder("target_build");

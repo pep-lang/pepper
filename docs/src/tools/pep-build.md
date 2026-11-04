@@ -606,7 +606,9 @@ each sample by following frame pointers, which is fast and finds every
 frame of Pepper code; without them, optimized code reuses the register and
 a profiler loses the callers of whatever was running. It costs a register
 and a few instructions per call. [pep-profile](pep-profile.md) builds with
-it, `-O` and `-g`. It is part of the build cache's key.
+it, `-O` and `-g`. It is part of the build cache's key. On Apple
+platforms and Windows on Arm, whose ABIs require it, every function that
+calls another keeps its frame pointer without the option.
 
 ## Targets and cross-compiling
 

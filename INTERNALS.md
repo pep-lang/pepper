@@ -1928,8 +1928,8 @@ because sema skipped the cached units' bodies, differs.
 **IR facts** (`codegen/globals.pep`). Generation ends by annotating the
 module with what the language guarantees: `nounwind`
 on every function and `uwtable` on every definition (plus
-`"frame-pointer"="non-leaf"` on Apple targets, whose `backtrace` walks
-frame pointers); `noreturn` and `cold`
+`"frame-pointer"="non-leaf"` on Apple targets and Windows on Arm, whose
+`backtrace` and `RtlCaptureStackBackTrace` walk frame pointers); `noreturn` and `cold`
 on `NO_RETURN` (`_pep_panic`, `_pep_exit`, `abort`, `_Exit`); `noalias` on
 the result of `ALLOCATORS` (`_pep_malloc`, `_pep_malloc_uninit`, `_pep_realloc`, `_pep_realloc_uninit`); and `!tbaa` on
 object memory. The TBAA tree has two types under one root, `reference

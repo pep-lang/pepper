@@ -1057,7 +1057,8 @@ extend Generator {
 
 ## States the facts the language guarantees in `ir`, before it is
 ## optimized: `nounwind` on every function (and `uwtable`, and on Apple
-## targets `"frame-pointer"="non-leaf"`, on definitions), `noreturn` and
+## targets and Windows on Arm `"frame-pointer"="non-leaf"`, on
+## definitions), `noreturn` and
 ## `cold` on the functions that end the program, `noalias` on the
 ## allocators' results, and TBAA on loads and stores of object memory.
 export annotate_facts(ir: llvm.Module, context: llvm.Context) {
@@ -1067,7 +1068,12 @@ export annotate_facts(ir: llvm.Module, context: llvm.Context) {
     var noreturn = context.attribute("noreturn", 0);
     var cold = context.attribute("cold", 0);
     var noalias = context.attribute("noalias", 0);
-    bool apple = ir.target_triple().contains("-apple-");
+    # Their ABIs keep a chain of frame records, which their stack walkers
+    # follow: Apple's `backtrace`, and `RtlCaptureStackBackTrace` on
+    # Windows on Arm, which skips every function without one.
+    var triple = ir.target_triple();
+    bool frame_chain = triple.contains("-apple-")
+        or ((triple.starts_with("aarch64") or triple.starts_with("arm64")) and triple.contains("-windows"));
     var tags = TbaaTags(context);
     for (var function in ir.functions()) {
         var name = function.name();
@@ -1091,7 +1097,7 @@ export annotate_facts(ir: llvm.Module, context: llvm.Context) {
         }
         if (function.block_count() > 0) {
             function.add_function_attribute(uwtable);
-            if (apple) {
+            if (frame_chain) {
                 function.add_function_attribute(context.string_attribute("frame-pointer", "non-leaf"));
             }
             tags.annotate(function);
