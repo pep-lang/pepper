@@ -315,12 +315,17 @@ jobs:
         shell: bash
         run: bash scripts/ci-monitor.sh --report "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE"
 
-  # The docs examples on arm64 Linux, with the build of main the release
-  # just published (#358). Not when the change is to the compiler: stage 0
-  # has no arm64 build to build it with. Not part of `test` either, so it
-  # reports without blocking merges while the arm64 build is new.
-  examples-linux-arm64:
-    runs-on: ubuntu-24.04-arm
+  # The docs examples on arm64 Linux and Windows, with the build of main
+  # the release just published (#358). Not when the change is to the
+  # compiler: stage 0 has no arm64 build to build it with. Not part of
+  # `test` either, so it reports without blocking merges while the arm64
+  # builds are new.
+  examples-arm64:
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-24.04-arm, windows-11-arm]
+    runs-on: ${{ matrix.runs-on }}
     needs: [changes, release]
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.changes.outputs.compiler != 'true' }}
     timeout-minutes: 60
@@ -332,6 +337,11 @@ jobs:
           compiler: "false"
           expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
           token: ${{ github.token }}
+
+      # Not the x64 build, which Windows on Arm would run by emulation.
+      - name: The installed build is arm64
+        shell: bash
+        run: file "$PEPPER_COMPILER_DIR"/pep-build* | grep -i aarch64
 
       - name: Docs examples
         timeout-minutes: 30

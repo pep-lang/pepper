@@ -42,7 +42,7 @@ runs:
       uses: actions/cache@v6
       with:
         path: ~/AppData/Local/pepper/cache
-        key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
+        key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-${{ runner.arch }}
 
     # apt and Homebrew serve the others in seconds, Linux from a cache of
     # apt's packages when it can (.github/actions/provision-llvm).
