@@ -5,7 +5,9 @@
 
 import compiler.ast;
 import [BUILT_IN_ATTRIBUTE, Declaration, Expression, Literal, Span] from compiler.ast;
-import [Diagnostic, Fix, Location, render_all, shown_path, SourceText] from compiler.diagnostic;
+import [
+    compare_locations, Diagnostic, ERROR_LIMIT, Fix, Location, render_all, render_errors, shown_path, SourceText
+] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
 import json;
@@ -45,6 +47,8 @@ export struct Setup {
     ## finds the modules a package's build script wrote; empty for the
     ## project's `.pep/build`.
     var build_dir: Path? = Optional<Path>.Empty;
+    ## The most syntax errors to show (`--error-limit`); 0 shows every one.
+    var error_limit: ulong = ERROR_LIMIT;
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -68,6 +72,8 @@ export struct Program {
     ## The runtime's folders, as `files.path_key`s: found once per load,
     ## whether or not the program uses the runtime.
     var runtime_dirs: String[] = Array<String>();
+    ## The most syntax errors `link_bodies` shows (`Setup.error_limit`).
+    var error_limit: ulong = ERROR_LIMIT;
     # Linking left to `link_bodies`, when loaded with `defer_bodies`.
     var _pending: link.PendingLink? = Optional<link.PendingLink>.Empty;
 
@@ -101,7 +107,7 @@ export struct Program {
             var parsed = parse.parse(f.source);
             if (parsed.is_err()) {
                 var error = parsed.error();
-                return Optional<String>.Value(_render(f.name, f.source, error));
+                return Optional<String>.Value(_render(f.name, f.source, error, error_limit));
             }
             f.module = parsed.value();
             if (again) {
@@ -457,7 +463,15 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         Optional<Path>.Value(files.dir_of(runtime.sources[0])) :
         Optional<Path>.Empty;
     var loaded = load(
-        root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies, setup.build_dir, runtime_dir
+        root,
+        prelude,
+        search_paths,
+        setup.target,
+        setup.sources,
+        setup.defer_bodies,
+        setup.build_dir,
+        runtime_dir,
+        setup.error_limit
     );
     if (loaded.is_err()) {
         return loaded;
@@ -512,6 +526,7 @@ struct _Queued {
 ##   packages' generated modules; empty for the project's `.pep/build`
 ## @param runtime_dir the runtime's folder, if any: its files belong to no
 ##   module folder above it (a toolchain installed in a package's folder)
+## @param error_limit the most syntax errors to show; 0 shows every one
 ## @returns the program, or why a file cannot be read or parsed or a feature
 ##   turned on
 export load(
@@ -522,9 +537,11 @@ export load(
     sources: HashMap<String, String> = HashMap<String, String>(),
     defer_bodies: bool = false,
     build_dir: Path? = Optional<Path>.Empty,
-    runtime_dir: Path? = Optional<Path>.Empty
+    runtime_dir: Path? = Optional<Path>.Empty,
+    error_limit: ulong = ERROR_LIMIT
 ): Result<Program, String> {
     var program = Program();
+    program.error_limit = error_limit;
     var index = HashMap<String, ulong>();
     # Resolved import keys per file, mapped to indices once all are loaded.
     var resolved = Array<Array<String?>>();
@@ -588,7 +605,7 @@ export load(
         var parsed = defer_bodies ? parse.parse_declarations(source.value()) : parse.parse(source.value());
         if (parsed.is_err()) {
             var error = parsed.error();
-            return Result<Program, String>.err(_render(path.to_string(), source.value(), error));
+            return Result<Program, String>.err(_render(path.to_string(), source.value(), error, error_limit));
         }
         var module = parsed.value();
         ulong file = program.files.count;
@@ -782,26 +799,41 @@ _describe_paths(paths: Path[]): String {
     return ", ".join(parts);
 }
 
-# A parse error as the compiler reports it: `file:line:column: error: ...`
-# and the line, with a caret under the span, and a note at the place it is
-# about, such as the `{` a missing `}` should close.
-_render(name: String, source: String, error: parse.ParseError): String {
-    var diagnostic = Diagnostic.error(error.message).at(Location(0, error.span));
-    # Only the recovering parse finds that place: read again on this
-    # error path alone, and kept when its first error is this one.
-    var related = error.related;
-    var related_message = error.related_message;
-    if (!related.is_value()) {
-        var recovered = parse.parse_recovering(source).errors;
-        if (recovered.count > 0
-            and recovered[0].span.start == error.span.start
-            and recovered[0].message == error.message) {
-            related = recovered[0].related;
-            related_message = recovered[0].related_message;
+# A file's syntax errors as the compiler reports them: `file:line:column:
+# error: ...` with the line and a caret under the span, and a note at the
+# place it is about, such as the `{` a missing `}` should close; ordered by
+# place, each once, at most `limit` (`render_errors`). `error` is the one
+# `parse` stopped at; the recovering parse, run on this error path alone,
+# finds the rest, of which only those it can trust are kept: a missing `}`
+# only when it is `error` (after another error it is mostly the skipping's
+# doing), and past a line the lexer refused, which is read as spaces, only
+# the lexer's errors.
+_render(name: String, source: String, error: parse.ParseError, limit: ulong): String {
+    var recovered = parse.parse_recovering(source);
+    if (recovered.errors.is_empty) {
+        recovered.errors.append(error);
+    }
+    ulong refused = recovered.lexical > 0 ? recovered.errors[0].span.start : source.size + 1;
+    var errors = Array<Diagnostic>();
+    for (var i in 0..recovered.errors.count) {
+        var e = recovered.errors[i];
+        if (i > 0 and (e.related.is_value() or (i >= recovered.lexical and e.span.start >= refused))) {
+            continue;
+        }
+        var diagnostic = Diagnostic.error(e.message).at(Location(0, e.span));
+        if (e.related is Value(related)) {
+            diagnostic = diagnostic.with_note(e.related_message, Optional<Location>.Value(Location(0, related)));
+        }
+        errors.append(diagnostic);
+    }
+    errors.sort((a, b) => compare_locations(a, b));
+    var shown = Array<Diagnostic>();
+    for (var d in errors) {
+        if (shown.is_empty
+            or shown.last().location.value().span.start != d.location.value().span.start
+            or shown.last().message != d.message) {
+            shown.append(d);
         }
     }
-    if (related.is_value()) {
-        diagnostic = diagnostic.with_note(related_message, Optional<Location>.Value(Location(0, related.value())));
-    }
-    return diagnostic.render([SourceText(name, source)]);
+    return render_errors(shown, [SourceText(name, source)], limit);
 }

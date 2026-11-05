@@ -415,6 +415,7 @@ _main(args: String[]): int {
     }
     var traces = trace_channels.values();
     var errors_shown = error_limit.is_set ? error_limit.value() : ERROR_LIMIT;
+    setup.error_limit = errors_shown;
     if (trace_all.is_set) {
         traces.append_all(TRACE_CHANNELS.split(" "));
     }

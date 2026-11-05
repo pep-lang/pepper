@@ -132,6 +132,9 @@ export struct Recovered {
     ## Every error, in order; empty when the source parses. The first is
     ## the one `parse` reports.
     var errors: ParseError[] = Array<ParseError>();
+    ## How many of `errors`, the first, the lexer found: on each line it
+    ## refused, which was read as spaces after the error.
+    var lexical: ulong = 0;
 
     ## Creates a result.
     ##
@@ -186,9 +189,11 @@ export parse_recovering(source: String): Recovered {
         text = blanked.value();
         tokens = syntax.lex(text, false);
     }
+    ulong lexical = errors.count;
     if (tokens.is_err()) {
         var out = Recovered(ast.Module());
         out.errors = _pin_first(parsed.error(), errors);
+        out.lexical = lexical;
         return out;
     }
     var parser = Parser(text, tokens.value(), true);
@@ -206,6 +211,7 @@ export parse_recovering(source: String): Recovered {
     }
     var out = Recovered(module);
     out.errors = _pin_first(parsed.error(), errors);
+    out.lexical = lexical;
     return out;
 }
 
