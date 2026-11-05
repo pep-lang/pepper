@@ -1,7 +1,7 @@
 ## The linked program's model: `merge` builds each file's model and joins
 ## them into one, then writes it as `pep-build --emit-model` prints it.
 
-import [render_all, Diagnostic] from compiler.diagnostic;
+import [compare_locations, render_errors, Diagnostic, ERROR_LIMIT] from compiler.diagnostic;
 import json;
 import [JsonValue] from json;
 import compiler.link;
@@ -14,15 +14,17 @@ import [ExtensionScopes, ExternDef, Module, UNSIGNED_MARK, VariableDef] from "mo
 ## the files it imports. Members the passes synthesize come later.
 ##
 ## @param program the linked program
+## @param limit the most build errors to show (`render_errors`); 0 shows
+##   every one
 ## @returns the model, or the rendered errors
-export merge(program: Program): Result<Module, String> {
+export merge(program: Program, limit: ulong = ERROR_LIMIT): Result<Module, String> {
     var errors = program.check();
     if (errors.is_value()) {
         return Result<Module, String>.Err(errors.value());
     }
     var built = build(program);
     if (built.is_err()) {
-        return Result<Module, String>.Err(render_all([built.error()], program.sources()));
+        return Result<Module, String>.Err(render_errors(built.error(), program.sources(), limit));
     }
     return Result<Module, String>.Ok(built.value());
 }
@@ -32,8 +34,9 @@ export merge(program: Program): Result<Module, String> {
 ## itself (`Program.check_diagnostics`) and wants the errors unrendered.
 ##
 ## @param program the linked program
-## @returns the model, or the first file's error
-export build(program: Program): Result<Module, Diagnostic> {
+## @returns the model, or the error of each declaration that failed to
+##   build, in every file, in source order
+export build(program: Program): Result<Module, Diagnostic[]> {
     var out = Module(linked = true, extension_scopes = _extension_scopes(program));
     for (var (name, groups) in program.overload_unions) {
         out.overload_unions[name] = groups;
@@ -41,14 +44,14 @@ export build(program: Program): Result<Module, Diagnostic> {
     for (var file in program.files) {
         out.namespaces.append(file.namespace);
     }
+    var errors = Array<Diagnostic>();
     ulong i = 0;
     while (i < program.files.count) {
-        var built = build_file(program.files[i].module, i as uint);
-        if (built.is_err()) {
-            return Result<Module, Diagnostic>.Err(built.error());
-        }
-        _join(out, built.value());
+        _build_into(out, program, i, errors);
         i += 1;
+    }
+    if (!errors.is_empty) {
+        return Result<Module, Diagnostic[]>.Err(errors);
     }
     # Globals are initialized in declaration order: put each file's after
     # those of the files it depends on, so an initializer may use them.
@@ -66,7 +69,18 @@ export build(program: Program): Result<Module, Diagnostic> {
         var right = _rank_of(rank, b);
         return left < right ? -1 : (left > right ? 1 : 0);
     });
-    return Result<Module, Diagnostic>.Ok(out);
+    return Result<Module, Diagnostic[]>.Ok(out);
+}
+
+# Builds file `i` of `program` into `out`, or adds its errors to `errors`:
+# once one file has failed, the others are only built for their errors.
+_build_into(out: Module, program: Program, i: ulong, errors: Diagnostic[]) {
+    var built = build_file(program.files[i].module, i as uint);
+    if (built.is_err()) {
+        errors.append_all(built.error());
+    } else if (errors.is_empty) {
+        _join(out, built.value());
+    }
 }
 
 ## Builds the model of `files`, some of `program`'s, on top of `base`, a
@@ -78,8 +92,9 @@ export build(program: Program): Result<Module, Diagnostic> {
 ## @param program the linked program
 ## @param base the checked module, changed in place
 ## @param files the files to add, as indices into `program.files`
-## @returns `base` with the files, or the first file's error
-export build_on(program: Program, base: Module, files: ulong[]): Result<Module, Diagnostic> {
+## @returns `base` with the files, or the error of each declaration that
+##   failed to build, in source order
+export build_on(program: Program, base: Module, files: ulong[]): Result<Module, Diagnostic[]> {
     var fresh = Module(linked = true, extension_scopes = _extension_scopes(program));
     for (var (name, groups) in program.overload_unions) {
         fresh.overload_unions[name] = groups;
@@ -91,18 +106,19 @@ export build_on(program: Program, base: Module, files: ulong[]): Result<Module, 
     base.overload_unions = fresh.overload_unions;
     base.namespaces = fresh.namespaces;
     base.linked = true;
+    var errors = Array<Diagnostic>();
     for (var i in files) {
-        var built = build_file(program.files[i].module, i as uint);
-        if (built.is_err()) {
-            return Result<Module, Diagnostic>.Err(built.error());
-        }
-        _join(base, built.value());
+        _build_into(base, program, i, errors);
+    }
+    if (!errors.is_empty) {
+        errors.sort((a, b) => compare_locations(a, b));
+        return Result<Module, Diagnostic[]>.Err(errors);
     }
     sort_globals(program, base);
     # Externs are first-wins by C name, in file order, as when the whole
     # program is merged at once.
     base.externs.sort((a: ExternDef, b: ExternDef) => a.loc.file < b.loc.file ? -1 : (a.loc.file > b.loc.file ? 1 : 0));
-    return Result<Module, Diagnostic>.Ok(base);
+    return Result<Module, Diagnostic[]>.Ok(base);
 }
 
 ## Sorts `module`'s globals in the order their files' globals are

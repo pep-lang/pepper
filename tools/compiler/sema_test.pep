@@ -8,7 +8,7 @@ import json;
 import compiler.link;
 import compiler.sema;
 import [TempFolder] from testing;
-import [check_programs, headline] from "expected_outcomes";
+import [check_programs, check_trees, headline, headlines] from "expected_outcomes";
 
 # The programs are split in parts, each a test of its own, to keep each
 # within the time a test may take.
@@ -114,6 +114,25 @@ lowers_statements() {
 reports_builder_errors() {
     var folder = TempFolder("sema_errors");
     expect_equal(check_expected(folder, error_programs()), 0 as ulong);
+}
+
+# #344: the builder skips a declaration that fails and builds the rest, so
+# one build reports the error of each, in every file. The failed `f` leaves
+# its loop label behind for `g`'s to clash with unless the builder resets it.
+[Test]
+reports_the_builder_error_of_every_declaration() {
+    var folder = TempFolder("sema_every_error");
+    var main = "# expect: main.pep:11:17: error: empty array literal has no element type; declare the variable's type or write 'Array<T>()'\n"
+        + "# expect: main.pep:20:13: error: empty map literal has no key or value type; declare the variable's type or write 'HashMap<K, V>()'\n"
+        + "# expect: main.pep:24:12: error: '?' can be used only in a statement of a function body\n"
+        + "# expect: main.pep:26:15: error: missing label for element 1 of a labeled tuple: label every element or none\n"
+        + "# expect: main.pep:26:10: note: element labeled 'x' here\n"
+        + "# expect: a.pep:2:13: error: empty array literal has no element type; declare the variable's type or write 'Array<T>()'\n"
+        + "import \"a\";\n\nf(): int {\n    a: while (true) {\n        var x = [];\n    }\n    return 0;\n}\n\n"
+        + "g(): int {\n    a: while (true) {\n        break a;\n    }\n    var y = [:];\n    return 0;\n}\n\n"
+        + "var v = f()?;\n\nh(t: (x: int, int)): int {\n    return 0;\n}\n\nmain(): int {\n    return k();\n}\n";
+    var trees = [["main.pep", main, "a.pep", "export k(): int {\n    var z = [];\n    return 0;\n}\n"]];
+    expect_equal(check_trees(folder, trees, (root: Path): String => outcome(root, false, true)), 0 as ulong);
 }
 
 # A model value's fingerprint is the same for an equal value (a copy) and
@@ -424,8 +443,9 @@ check_expected(folder: TempFolder, programs: String[]): ulong {
 }
 
 # How building the program rooted at `root` ends: `accepted`, or the first
-# line of the error that loading or the builder reports.
-outcome(root: Path, runtime: bool): String {
+# line of the error that loading or the builder reports (with `every`, of
+# each error and note the builder reports).
+outcome(root: Path, runtime: bool, every: bool = false): String {
     var setup = link.Setup();
     setup.runtime = runtime;
     var program = link.load_program(root, setup);
@@ -434,7 +454,7 @@ outcome(root: Path, runtime: bool): String {
     }
     var built = sema.merge(program.value());
     if (built.is_err()) {
-        return headline(built.error(), root);
+        return every ? headlines(built.error(), root) : headline(built.error(), root);
     }
     return "accepted";
 }

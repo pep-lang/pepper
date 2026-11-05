@@ -124,7 +124,7 @@ export check_recording(
         report_warnings(warnings, sources);
         return Result<StaticExpansion[], String>.err(errors.value());
     }
-    var built = sema.merge(program);
+    var built = sema.merge(program, error_limit);
     if (built.is_err()) {
         report_warnings(warnings, sources);
         return Result<StaticExpansion[], String>.err(built.error());
