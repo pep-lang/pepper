@@ -2684,7 +2684,11 @@ diagnostics"). The mechanics:
   `_describe_paths`) uses it too.
 - Each layer reports errors its own way: the parser through
   `_expect`/`_fail`, the builder by returning the `Diagnostic` as a
-  `Built<T>`'s error, passes through `state.report`, codegen through an
+  `Built<T>`'s error (`build_module` records it in `_Builder.errors`, skips
+  that top-level declaration, resets the scopes it may have left open and
+  builds the next; `build_file` and `program.build`/`build_on` return
+  every file's errors, and the passes never run on a program with one),
+  passes through `state.report`, codegen through an
   `Err` plus `locate`, and linking through `ModuleError` and the
   visibility check's errors, which become diagnostics.
 - An error a pass reports inside a specialization's body (the runtime's
@@ -4425,9 +4429,10 @@ the checkout (`PEPPER_TARGET_DIR`).
   variable is its only holder) to move into a locked value.
 - **`copy` of a trait value** cannot be checked at compile time: one that
   holds a struct that cannot be copied panics at run time.
-- **Only the first failing sema pass's errors are reported** per compile
-  (`PassState.take_errors`), one per declaration, and code generation reports
-  one error.
+- **Only the first failing sema stage's errors are reported** per compile:
+  the builder's (every file's, one per top-level declaration), else the
+  first failing pass's (`PassState.take_errors`), one per declaration, and
+  code generation reports one error.
 - **Unused CLI flags**: `-v`, and `-T` channels other than `time`,
   `passes` and `cache`. Naming a second source file is an error (except under
   `--test`): only the entry file is compiled.

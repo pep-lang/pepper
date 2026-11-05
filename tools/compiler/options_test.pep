@@ -872,6 +872,27 @@ error_limit_caps_the_errors_shown() {
     expect_contains(capped.stderr, "error: too many errors emitted, stopping now");
 }
 
+# #344: a build shows the error of each declaration the builder rejects,
+# not only the first, within `--error-limit`.
+[Test]
+reports_every_builder_error() {
+    var folder = _program(
+        "options_builder_errors",
+        "f(): int {\n    var a = [];\n    return 0;\n}\n\nvar v = f()?;\n\nmain(): int {\n    var m = [:];\n    return 0;\n}\n"
+    );
+    var built = _pep_build(folder.path, ["main.pep", "--no-cache"]);
+    expect_exit(built, 1);
+    var first = built.stderr.find("main.pep:2:13: error: empty array literal");
+    var second = built.stderr.find("main.pep:6:12: error: '?' can be used only");
+    expect_true(first >= 0);
+    expect_true(second > first);
+    expect_true(built.stderr.find("main.pep:9:13: error: empty map literal") > second);
+    var capped = _pep_build(folder.path, ["main.pep", "--no-cache", "--error-limit=1"]);
+    expect_exit(capped, 1);
+    expect_false(capped.stderr.contains("main.pep:6:"));
+    expect_contains(capped.stderr, "error: too many errors emitted, stopping now");
+}
+
 # #344: undeclared names are reported with the type errors, in source
 # order, rather than by code generation once those are fixed.
 [Test]

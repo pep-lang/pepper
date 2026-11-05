@@ -1104,7 +1104,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
     } else {
         _stop_early_worker(options);
-        var built = sema.merge(program);
+        var built = sema.merge(program, options.error_limit);
         if (built.is_err()) {
             report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
             return Result<Built, String>.err(built.error());

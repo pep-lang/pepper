@@ -8,7 +8,7 @@ import json;
 import compiler.link;
 import compiler.sema;
 import [TempFolder] from testing;
-import [check_programs, headline] from "expected_outcomes";
+import [check_programs, check_trees, headline, headlines] from "expected_outcomes";
 
 # The programs are split in parts, each a test of its own, to keep each
 # within the time a test may take.
@@ -114,6 +114,35 @@ lowers_statements() {
 reports_builder_errors() {
     var folder = TempFolder("sema_errors");
     expect_equal(check_expected(folder, error_programs()), 0 as ulong);
+}
+
+# #344: the builder skips a declaration that fails and builds the rest, so
+# one build reports the error of each, in every file. The failed `f` leaves
+# its loop label behind for `g`'s to clash with unless the builder resets it.
+[Test]
+reports_the_builder_error_of_every_declaration() {
+    var folder = TempFolder("sema_every_error");
+    var main = "# expect: main.pep:11:17: error: empty array literal has no element type; declare the variable's type or write 'Array<T>()'\n"
+        + "# expect: main.pep:20:13: error: empty map literal has no key or value type; declare the variable's type or write 'HashMap<K, V>()'\n"
+        + "# expect: main.pep:24:12: error: '?' can be used only in a statement of a function body\n"
+        + "# expect: main.pep:26:15: error: missing label for element 1 of a labeled tuple: label every element or none\n"
+        + "# expect: main.pep:26:10: note: element labeled 'x' here\n"
+        + "# expect: a.pep:2:13: error: empty array literal has no element type; declare the variable's type or write 'Array<T>()'\n"
+        + "import \"a\";\n\nf(): int {\n    a: while (true) {\n        var x = [];\n    }\n    return 0;\n}\n\n"
+        + "g(): int {\n    a: while (true) {\n        break a;\n    }\n    var y = [:];\n    return 0;\n}\n\n"
+        + "var v = f()?;\n\nh(t: (x: int, int)): int {\n    return 0;\n}\n\nmain(): int {\n    return k();\n}\n";
+    var trees = [["main.pep", main, "a.pep", "export k(): int {\n    var z = [];\n    return 0;\n}\n"]];
+    var count = check_trees(folder, trees, (root: Path): String => {
+        var setup = link.Setup();
+        setup.runtime = false;
+        var program = link.load_program(root, setup);
+        if (program.is_err()) {
+            return headline(program.error(), root);
+        }
+        var built = sema.merge(program.value());
+        return built.is_err() ? headlines(built.error(), root) : "accepted";
+    });
+    expect_equal(count, 0 as ulong);
 }
 
 # A model value's fingerprint is the same for an equal value (a copy) and

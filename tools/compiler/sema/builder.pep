@@ -143,25 +143,24 @@ const _LITERAL_THEN = "_literal_then";
 
 ## Builds the model of `module`, the syntax tree of file `file`, with every
 ## location pointing into that file. Hidden locals are numbered from zero in
-## each file. Members the passes synthesize come later.
+## each file. Members the passes synthesize come later. A declaration that
+## fails to build is skipped and the rest are built, so the errors of all
+## of them come back together, one for each, in source order.
 ##
 ## @param module the file's linked syntax tree
 ## @param file the file's index in the program
-## @returns the model, or the first error
-export build_file(module: ast.Module, file: uint): Result<Module, Diagnostic> {
+## @returns the model, or the errors
+export build_file(module: ast.Module, file: uint): Result<Module, Diagnostic[]> {
     var builder = _Builder(file);
-    var built = builder.build_module(module);
-    if (builder.type_error.is_value()) {
-        return Result<Module, Diagnostic>.Err(builder.type_error.value());
+    var out = builder.build_module(module);
+    if (!builder.errors.is_empty) {
+        return Result<Module, Diagnostic[]>.Err(builder.errors);
     }
-    if (built.is_ok()) {
-        var out = built.value();
-        out.type_uses = builder.type_uses;
-        out.use_contexts = builder.use_contexts;
-        out.literal_args = builder.literal_args;
-        out.properties = builder.properties;
-    }
-    return built;
+    out.type_uses = builder.type_uses;
+    out.use_contexts = builder.use_contexts;
+    out.literal_args = builder.literal_args;
+    out.properties = builder.properties;
+    return Result<Module, Diagnostic[]>.Ok(out);
 }
 
 ## The getter method of property `name`.
@@ -1632,9 +1631,11 @@ struct _Builder {
     ## The file being built, whose index every location carries.
     var file: uint;
     ## The first bad type `type_name_from` met (a tuple's labels, or
-    ## `__ptr` without exactly one argument), reported when the build
-    ## finishes.
+    ## `__ptr` without exactly one argument) in the declaration being built,
+    ## reported when that declaration is built.
     var type_error: Diagnostic? = Optional<Diagnostic>.Empty;
+    ## The error of each declaration built so far that failed.
+    var errors: Diagnostic[] = Array<Diagnostic>();
     ## The declared return type of the function or closure being built.
     var return_type: ast.TypeName? = Optional<ast.TypeName>.Empty;
     ## The generic types written with arguments so far.
@@ -4440,20 +4441,32 @@ struct _Builder {
         return Built<FunctionDef>.Ok(f);
     }
 
-    ## The model of the file's syntax tree.
-    build_module(module: ast.Module): Built<Module> {
+    ## The model of the file's syntax tree, with `errors` holding the error
+    ## of each declaration that failed to build. After one has, the model is
+    ## partial: only the errors are used.
+    build_module(module: ast.Module): Module {
         var out = Module();
         out.imports = module.imports;
+        var top = Optional<_SavedContext>.Value(_SavedContext(context, context_index));
         # A `[__BuiltIn]` declaration documents a compiler built-in; the
         # compiler never reads it.
         for (var decl in module.declarations) {
             if (!ast.is_built_in(decl.attributes())) {
                 var saved = with_attributes(decl.attributes());
-                declare(decl, out)?;
+                var declared = declare(decl, out);
+                if (type_error.is_value() or declared.is_err()) {
+                    errors.append(type_error.is_value() ? type_error.value() : declared.error());
+                    type_error = Optional<Diagnostic>.Empty;
+                    # The failed declaration may have left its scopes open.
+                    saved = top;
+                    return_type = Optional<ast.TypeName>.Empty;
+                    labels = Array<(String, ast.Span)>();
+                    pending_label = "";
+                }
                 leave(saved);
             }
         }
-        return Built<Module>.Ok(out);
+        return out;
     }
 
     ## Builds top-level declaration `decl` into `out`.

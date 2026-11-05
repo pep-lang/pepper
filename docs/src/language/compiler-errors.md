@@ -86,7 +86,10 @@ The compiler checks a program in stages, and stops after the first stage that
 finds an error, with exit status 1. It reports every error that stage found,
 in the order of their places in the files, so one build can show several
 mistakes. It shows the first error in each function (or other declaration)
-only: a second one there is usually caused by the first. An error a later
+only: a second one there is usually caused by the first. Errors in how a
+declaration is written, such as an empty `[]` with no element type or a `?`
+outside a function body, come first, from every file together; the type
+errors and undeclared names are found once those are fixed. An error a later
 stage would find shows up only once these are fixed: a `match` that misses a
 case, for one, is found after the type errors and undeclared names. The
 compiler never produces an executable from a program with an error.

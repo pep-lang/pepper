@@ -728,7 +728,7 @@ _main(args: String[]): int {
     } else if (ir.is_set) {
         # The whole program's IR, optimized at the `-O` level, in
         # `<build>/<name>.ll`.
-        var built = sema.merge(program.value());
+        var built = sema.merge(program.value(), errors_shown);
         if (built.is_err()) {
             File.stderr().write_all($"{built.error()}\n");
             return 1;
@@ -778,7 +778,7 @@ _main(args: String[]): int {
             return 1;
         }
     } else if (model.is_set or steps.is_set) {
-        var built = sema.merge(program.value());
+        var built = sema.merge(program.value(), errors_shown);
         if (built.is_err()) {
             File.stderr().write_all($"{built.error()}\n");
             return 1;

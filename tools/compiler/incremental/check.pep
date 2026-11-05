@@ -372,7 +372,7 @@ export check_compilation_unit(
     var checked_specs = (module.struct_specs.count, module.func_specs.count);
     var built = sema.build_on(program, module, unit.files);
     if (built.is_err()) {
-        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic[]>.err([built.error()]);
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic[]>.err(built.error());
     }
     var after = built.value();
     var aliases = Array<sema.TypeAliasDef>();
