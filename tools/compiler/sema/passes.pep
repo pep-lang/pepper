@@ -210,9 +210,9 @@ _run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagno
 # The errors a failed step reported, as the user is shown them: those with
 # a place (all when none has one), each place and message once, and of
 # those in one declaration only the first reported, as a later one there is
-# usually its fallout (even one earlier in the source), in source order. An error in a specialization notes the uses
-# that asked for it. Runs only after an error: a build without one pays
-# nothing for it.
+# usually its fallout (even one earlier in the source), in source order. An
+# error in a specialization notes the uses that asked for it. Runs only after
+# an error: a build without one pays nothing for it.
 _reportable(module: Module, errors: Diagnostic[]): Diagnostic[] {
     var placed = Array<Diagnostic>();
     for (var error in errors) {
