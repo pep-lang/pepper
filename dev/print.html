@@ -15539,8 +15539,14 @@ main.pep:1:13: note: to match this '{'
 <p>The compiler checks a program in stages, and stops after the first stage that
 finds an error, with exit status 1. It reports every error that stage found,
 in the order of their places in the files, so one build can show several
-mistakes. It shows the first error in each function (or other declaration)
-only: a second one there is usually caused by the first. Errors in how a
+mistakes. Syntax errors come first: the compiler reads on past each one to
+the end of the broken statement or declaration, so it reports every syntax
+error in a file, but only in the first file that has any, and it checks
+nothing else until they are fixed. It leaves out what reading on cannot
+be sure of: a missing <code>}</code> after another error, and the syntax errors past
+a line it cannot split into tokens (an unterminated string, say). An
+unclosed <code>(</code> or <code>[</code> can hide the errors after it. Past the syntax, it shows
+the first error in each function (or other declaration) only: a second one there is usually caused by the first. Errors in how a
 declaration is written, such as an empty <code>[]</code> with no element type or a <code>?</code>
 outside a function body, come first, from every file together; the type
 errors and undeclared names are found once those are fixed. An error a later
@@ -15655,8 +15661,9 @@ main.pep:1:8: note: 'Node' declared here
     1 | struct Node {
       |        ^~~~
 </code></pre>
-<p><strong>A syntax error.</strong> The parser says what it expected at the first place the
-code stopped making sense:</p>
+<p><strong>A syntax error.</strong> The parser says what it expected at the place the code
+stopped making sense, then reads on from the next statement or declaration
+to report the file's other syntax errors too:</p>
 <pre><code class="language-text">main.pep:2:14: error: expected ')'
     2 |     if (true {
       |              ^
