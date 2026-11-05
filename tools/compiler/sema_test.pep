@@ -132,17 +132,7 @@ reports_the_builder_error_of_every_declaration() {
         + "g(): int {\n    a: while (true) {\n        break a;\n    }\n    var y = [:];\n    return 0;\n}\n\n"
         + "var v = f()?;\n\nh(t: (x: int, int)): int {\n    return 0;\n}\n\nmain(): int {\n    return k();\n}\n";
     var trees = [["main.pep", main, "a.pep", "export k(): int {\n    var z = [];\n    return 0;\n}\n"]];
-    var count = check_trees(folder, trees, (root: Path): String => {
-        var setup = link.Setup();
-        setup.runtime = false;
-        var program = link.load_program(root, setup);
-        if (program.is_err()) {
-            return headline(program.error(), root);
-        }
-        var built = sema.merge(program.value());
-        return built.is_err() ? headlines(built.error(), root) : "accepted";
-    });
-    expect_equal(count, 0 as ulong);
+    expect_equal(check_trees(folder, trees, (root: Path): String => outcome(root, false, true)), 0 as ulong);
 }
 
 # A model value's fingerprint is the same for an equal value (a copy) and
@@ -453,8 +443,9 @@ check_expected(folder: TempFolder, programs: String[]): ulong {
 }
 
 # How building the program rooted at `root` ends: `accepted`, or the first
-# line of the error that loading or the builder reports.
-outcome(root: Path, runtime: bool): String {
+# line of the error that loading or the builder reports (with `every`, of
+# each error and note the builder reports).
+outcome(root: Path, runtime: bool, every: bool = false): String {
     var setup = link.Setup();
     setup.runtime = runtime;
     var program = link.load_program(root, setup);
@@ -463,7 +454,7 @@ outcome(root: Path, runtime: bool): String {
     }
     var built = sema.merge(program.value());
     if (built.is_err()) {
-        return headline(built.error(), root);
+        return every ? headlines(built.error(), root) : headline(built.error(), root);
     }
     return "accepted";
 }
