@@ -4238,10 +4238,12 @@ the checkout (`PEPPER_TARGET_DIR`).
     check`, and the Linux `others` job cross-compiles a few examples for Linux arm64
     and runs them under qemu. All three are required, through `test`,
     which fails on a cancelled or timed-out job as on a failed one.
-  - `examples-linux-arm64` (**`ubuntu-24.04-arm`**) runs the docs
-    examples (`pepper-tests.sh -f builds_and_runs_the`) with the published
-    build of main for linux-arm64. It is skipped when the compiler changed
-    (stage 0 has no arm64 build), and `test` does not require it.
+  - `examples-arm64` (**`ubuntu-24.04-arm`** and **`windows-11-arm`**)
+    runs the docs examples (`pepper-tests.sh -f builds_and_runs_the`) with
+    the published build of main for linux-arm64 and windows-arm64, after
+    checking that the install is the arm64 build. It is skipped when the
+    compiler changed (stage 0 has no arm64 build), and `test` does not
+    require it.
   - `cross-sysroots`, `cross-link` and `cross-run` (not required)
     cross-link from each runner for the other two operating systems and
     run the result on its own runner. `cross-sysroots` packs the Linux

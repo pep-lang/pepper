@@ -70,8 +70,10 @@ $ProgressPreference = 'SilentlyContinue'
 
 $Repo = 'pep-lang/pepper'
 # The archives this machine runs, best first: on Arm its own, else x64's,
-# which Windows on Arm runs by emulation.
-$Targets = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { @('windows-arm64', 'windows-x64') } else { @('windows-x64') }
+# which Windows on Arm runs by emulation. The processor identifier names the
+# real CPU; PROCESSOR_ARCHITECTURE says AMD64 to a PowerShell started from an
+# emulated x64 process (Git bash), which passes on its own value.
+$Targets = if ($env:PROCESSOR_IDENTIFIER -like 'ARM*') { @('windows-arm64', 'windows-x64') } else { @('windows-x64') }
 $Target = $Targets[0]
 $Token = if ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $env:GH_TOKEN }
 
