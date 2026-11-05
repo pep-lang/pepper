@@ -1074,18 +1074,7 @@ _inherit_deprecation(attributes: Array<Array<ast.Attribute>>, lifted: StructDef[
 ## that nothing types and nothing declares: no parameter or local of that
 ## function, and no function, global, struct, enum, alias or extern.
 _undeclared_near(module: Module, closure: String): SymbolRefExpression? {
-    var top = _Known(module);
-    # What `_Known` leaves out.
-    var others = HashSet<String>();
-    for (var g in module.globals) {
-        others.insert(g.name);
-    }
-    for (var e in module.enums) {
-        others.insert(e.name);
-    }
-    for (var a in module.type_aliases) {
-        others.insert(a.name);
-    }
+    var top = _TopNames(module);
     var bodies = module.functions.copy();
     for (var st in module.structs) {
         bodies.append_all(st.constructors);
@@ -1095,7 +1084,7 @@ _undeclared_near(module: Module, closure: String): SymbolRefExpression? {
         if (!function.body.is_value()) {
             continue;
         }
-        var finder = _UndeclaredFinder(closure, top, others, _declared_names(function));
+        var finder = _UndeclaredFinder(closure, top, _declared_names(function));
         rewrite_block(function.body.value(), finder);
         if (finder.makes and finder.first.is_value()) {
             return finder.first;
@@ -1104,20 +1093,51 @@ _undeclared_near(module: Module, closure: String): SymbolRefExpression? {
     return Optional<SymbolRefExpression>.Empty;
 }
 
+## The names a module declares at the top level: its functions, globals,
+## structs, enums, aliases and externs.
+struct _TopNames {
+    var known: _Known;
+    ## What `_Known` leaves out.
+    var others: HashSet<String> = HashSet<String>();
+
+    construct(module: Module) {
+        known = _Known(module);
+        for (var g in module.globals) {
+            others.insert(g.name);
+        }
+        for (var e in module.enums) {
+            others.insert(e.name);
+        }
+        for (var a in module.type_aliases) {
+            others.insert(a.name);
+        }
+    }
+
+    ## Whether `id`, with no type, is an undeclared identifier: neither one
+    ## of these names nor one of `locals`.
+    undeclared(node: SymbolRefExpression, locals: HashSet<String>): bool {
+        var id = node.id;
+        return (node.ty.is_empty() or node.ty.is_auto())
+            and !known.functions.contains(id)
+            and !known.structs.contains(id)
+            and !known.externs.contains(id)
+            and !others.contains(id)
+            and !locals.contains(id);
+    }
+}
+
 ## Whether a body makes the closure `closure`, and the first untyped
-## identifier in it that `top`, `others` and `locals` do not name.
+## identifier in it that `top` and `locals` do not name.
 struct _UndeclaredFinder {
     var closure: String;
-    var top: _Known;
-    var others: HashSet<String>;
+    var top: _TopNames;
     var locals: HashSet<String>;
     var makes: bool = false;
     var first: SymbolRefExpression? = Optional<SymbolRefExpression>.Empty;
 
-    construct(closure: String, top: _Known, others: HashSet<String>, locals: HashSet<String>) {
+    construct(closure: String, top: _TopNames, locals: HashSet<String>) {
         this.closure = closure;
         this.top = top;
-        this.others = others;
         this.locals = locals;
     }
 
@@ -1129,13 +1149,7 @@ struct _UndeclaredFinder {
                 }
             }
             SymbolRef(node) => {
-                var id = node.id;
-                bool declared = top.functions.contains(id)
-                    or top.structs.contains(id)
-                    or top.externs.contains(id)
-                    or others.contains(id)
-                    or locals.contains(id);
-                if (!declared and !first.is_value() and (node.ty.is_empty() or node.ty.is_auto())) {
+                if (!first.is_value() and top.undeclared(node, locals)) {
                     first = Optional<SymbolRefExpression>.Value(node);
                 }
             }

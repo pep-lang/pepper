@@ -872,6 +872,23 @@ error_limit_caps_the_errors_shown() {
     expect_contains(capped.stderr, "error: too many errors emitted, stopping now");
 }
 
+# #344: undeclared names are reported with the type errors, in source
+# order, rather than by code generation once those are fixed.
+[Test]
+reports_undeclared_names_with_type_errors() {
+    var folder = _program(
+        "options_undeclared_names",
+        "f(): int {\n    return nope1;\n}\n\ng(): int {\n    return nope2;\n}\n\nmain(): int {\n    int x = \"s\";\n    return f() + g();\n}\n"
+    );
+    var built = _pep_build(folder.path, ["main.pep", "--no-cache"]);
+    expect_exit(built, 1);
+    var first = built.stderr.find("main.pep:2:12: error: use of undeclared identifier 'nope1'");
+    var second = built.stderr.find("main.pep:6:12: error: use of undeclared identifier 'nope2'");
+    expect_true(first >= 0);
+    expect_true(second > first);
+    expect_true(built.stderr.find("main.pep:10:13: error: cannot initialize variable 'x'") > second);
+}
+
 # pepper#230: `-o` into folders that do not exist yet makes them, and a
 # folder it cannot make is an error naming it.
 [Test]

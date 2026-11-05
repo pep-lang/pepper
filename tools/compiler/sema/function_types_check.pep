@@ -17,8 +17,19 @@ import "convert_to_traits";
 import [is_enum] from "enums";
 import [Loc] from "loc";
 import [
-    BinaryOp, Block, Expression, FunctionDef, GenericParam, Module, StructDef, TypeName, UnaryOp, VariableDef
+    BinaryOp,
+    Block,
+    Expression,
+    FunctionDef,
+    GenericParam,
+    Module,
+    StructDef,
+    SymbolRefExpression,
+    TypeName,
+    UnaryOp,
+    VariableDef
 ] from "model";
+import "named_arguments";
 import [set_name] from "names";
 import [op_name] from "operators";
 import "shared_functions";
@@ -329,6 +340,12 @@ struct _FlowNodes {
             Ternary(node) => {
                 nodes.append(e);
             }
+            SymbolRef(node) => {
+                # A name `resolve_implicit_types` found nothing for.
+                if (node.ty.is_auto() or node.ty.is_empty()) {
+                    nodes.append(e);
+                }
+            }
             else => {}
         }
         return e;
@@ -357,6 +374,12 @@ struct _FunctionTypes {
     ## `with_defaults` of each type it was asked for, by the type's id: filling
     ## in each level's defaults again cost a nested type its depth (#210).
     var filled: HashMap<ulong, TypeName> = HashMap<ulong, TypeName>();
+    ## The function being walked, and its parameters' and locals' names,
+    ## gathered at its first name that nothing typed.
+    var _function: FunctionDef = FunctionDef();
+    var _locals: HashSet<String>? = Optional<HashSet<String>>.Empty;
+    ## The module's top-level names, gathered at the first such name.
+    var _top: _TopNames? = Optional<_TopNames>.Empty;
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -856,6 +879,9 @@ struct _FunctionTypes {
 
     check_node(e: Expression) {
         match (e) {
+            SymbolRef(node) => {
+                undeclared(node);
+            }
             FunctionCall(node) => {
                 var found = parameters_of_call(node.function);
                 if (found.is_value()) {
@@ -1151,7 +1177,23 @@ struct _FunctionTypes {
         if (f.is_generic_func or !f.body.is_value()) {
             return;
         }
+        _function = f;
+        _locals = Optional<HashSet<String>>.Empty;
         block(f.body.value(), f);
+    }
+
+    ## Reports `node`, which nothing typed, if nothing declares it either.
+    ## Only such a name gets here, so a program without one builds no sets.
+    undeclared(node: SymbolRefExpression) {
+        if (!_top.is_value()) {
+            _top = Optional<_TopNames>.Value(_TopNames(module));
+        }
+        if (!_locals.is_value()) {
+            _locals = Optional<HashSet<String>>.Value(_declared_names(_function));
+        }
+        if (node.id != "this" and _top.value().undeclared(node, _locals.value())) {
+            state.report(error_at($"use of undeclared identifier '{node.id}'", node.loc));
+        }
     }
 }
 

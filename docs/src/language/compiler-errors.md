@@ -87,9 +87,9 @@ finds an error, with exit status 1. It reports every error that stage found,
 in the order of their places in the files, so one build can show several
 mistakes. It shows the first error in each function (or other declaration)
 only: a second one there is usually caused by the first. An error a later
-stage would find shows up only once these are fixed: a misspelled local name
-in a function, for one, is found after the type errors. The compiler never
-produces an executable from a program with an error.
+stage would find shows up only once these are fixed: a `match` that misses a
+case, for one, is found after the type errors and undeclared names. The
+compiler never produces an executable from a program with an error.
 
 A build shows at most 20 errors, then `error: too many errors emitted,
 stopping now`. `pep-build --error-limit=N` shows at most `N` instead, and
