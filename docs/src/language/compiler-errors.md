@@ -84,12 +84,17 @@ main.pep:1:13: note: to match this '{'
 
 The compiler checks a program in stages, and stops after the first stage that
 finds an error, with exit status 1. It reports every error that stage found,
-up to 20, in the order of their places in the files, so one build can show
-several mistakes. It shows one error per line: a second error on a line is
-usually caused by the first. An error a later stage would find shows up only once these
-are fixed: a misspelled local name in a function, for one, is found after
-the type errors. The compiler never produces an executable from a program
-with an error.
+in the order of their places in the files, so one build can show several
+mistakes. It shows the first error in each function (or other declaration)
+only: a second one there is usually caused by the first. An error a later
+stage would find shows up only once these are fixed: a misspelled local name
+in a function, for one, is found after the type errors. The compiler never
+produces an executable from a program with an error.
+
+A build shows at most 20 errors, then `error: too many errors emitted,
+stopping now`. `pep-build --error-limit=N` shows at most `N` instead, and
+`--error-limit=0` shows every one (see [pep-build](../tools/pep-build.md)).
+The language server shows up to 100.
 
 On a terminal, errors are colored like clang's. Set the `NO_COLOR` environment
 variable to turn colors off. Output that goes to a file or a pipe is never

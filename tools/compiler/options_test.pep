@@ -850,6 +850,28 @@ a_cached_build_takes_an_edited_imported_constructor() {
     }
 }
 
+# #344: a build shows the errors of the pass that fails in source order, at
+# most `--error-limit` of them, then says it stopped; `0` shows every one.
+[Test]
+error_limit_caps_the_errors_shown() {
+    var folder = _program(
+        "options_error_limit",
+        "f(): int {\n    return \"a\";\n}\ng(): int {\n    return \"b\";\n}\nmain(): int {\n    return \"c\";\n}\n"
+    );
+    var all = _pep_build(folder.path, ["main.pep", "--no-cache", "--error-limit=0"]);
+    expect_exit(all, 1);
+    var second = all.stderr.find("main.pep:5:");
+    expect_true(all.stderr.find("main.pep:2:") >= 0);
+    expect_true(second > all.stderr.find("main.pep:2:"));
+    expect_true(all.stderr.find("main.pep:8:") > second);
+    expect_false(all.stderr.contains("too many errors"));
+    var capped = _pep_build(folder.path, ["main.pep", "--no-cache", "--error-limit=2"]);
+    expect_exit(capped, 1);
+    expect_contains(capped.stderr, "main.pep:5:");
+    expect_false(capped.stderr.contains("main.pep:8:"));
+    expect_contains(capped.stderr, "error: too many errors emitted, stopping now");
+}
+
 # pepper#230: `-o` into folders that do not exist yet makes them, and a
 # folder it cannot make is an error naming it.
 [Test]

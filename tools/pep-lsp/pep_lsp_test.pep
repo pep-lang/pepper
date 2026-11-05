@@ -1684,8 +1684,8 @@ a_program_checked_whole_passes_or_finds_its_error() {
     var failed = check_whole(loaded_program("whole_fails", "main.pep", "main(): int { return \"two\"; }"), warnings);
     expect_true(failed.is_err());
     match (failed.error()) {
-        Checking(error) => {
-            expect_true(error.message.contains("String"));
+        Checking(errors) => {
+            expect_true(errors[0].message.contains("String"));
         }
         else => {
             expect_true(false);
@@ -1757,7 +1757,7 @@ an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
     expect_true(error.is_value() and error.value().is_err());
     match (error.value().error()) {
         Checking(found) => {
-            expect_true(found.message.contains("String"));
+            expect_true(found[0].message.contains("String"));
         }
         else => {
             expect_true(false);

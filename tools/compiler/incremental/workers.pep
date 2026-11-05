@@ -8,7 +8,7 @@
 ## check. INTERNALS.md §8.1 describes the protocol.
 
 import async;
-import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
+import [Diagnostic, SourceText, render_all, render_errors] from compiler.diagnostic;
 import [File, IoResult, Path] from io;
 import compiler.link;
 import os;
@@ -500,6 +500,7 @@ _own_files(program: link.Program, unit: CompilationUnit): bool[] {
 ## @param dir the folder the build and its workers share
 ## @param k the compilation unit's number
 ## @param stages where the time each stage took goes, a line each
+## @param error_limit the most errors to show (`--error-limit`); 0 shows every one
 ## @param times where the time each pass took goes, left in `<k>.passes`
 ##   too (`-T passes`), if anywhere
 ## @returns the module checked and its passes' state, or the error, rendered
@@ -513,6 +514,7 @@ export check_for_worker(
     dir: Path,
     k: ulong,
     stages: StringBuilder,
+    error_limit: ulong,
     times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
 ): Result<(sema.Module, sema.PassState), String> {
     var start = os.Instant.now();
@@ -523,7 +525,7 @@ export check_for_worker(
     # worker checked before are linked too, and checked already.
     var errors = program.check_diagnostics(_own_files(program, unit));
     if (errors.count > 0) {
-        return Result<(sema.Module, sema.PassState), String>.err(render_all(errors, sources));
+        return Result<(sema.Module, sema.PassState), String>.err(render_errors(errors, sources, error_limit));
     }
     var t0 = os.Instant.now();
     stages.append($"diagnostics {(t0 - start).milliseconds()}\n");
@@ -545,7 +547,7 @@ export check_for_worker(
         program, module, records, unit, Optional<Cache>.Value(cache), reused, sources, warnings, Array<String>(), times
     );
     if (checked.is_err()) {
-        return Result<(sema.Module, sema.PassState), String>.err(render_all([checked.error()], sources));
+        return Result<(sema.Module, sema.PassState), String>.err(render_errors(checked.error(), sources, error_limit));
     }
     if (times.is_value()) {
         File.write_text(worker_file(dir, k, "passes"), times.value().to_text());

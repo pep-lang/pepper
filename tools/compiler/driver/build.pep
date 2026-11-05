@@ -4,7 +4,9 @@
 import compiler.ast;
 import async;
 import compiler.codegen;
-import [Diagnostic, Location, SourceText, compare_locations, render_all] from compiler.diagnostic;
+import [
+    Diagnostic, ERROR_LIMIT, Location, SourceText, compare_locations, render_all, render_errors
+] from compiler.diagnostic;
 import digest;
 import [
     Cache,
@@ -127,6 +129,8 @@ export struct BuildOptions {
     ## The program's entry file, which `--debug-static=expanded` writes the
     ## expanded copies of the files below its folder for.
     var entry: Path? = Optional<Path>.Empty;
+    ## The most errors to show (`--error-limit`); 0 shows every one.
+    var error_limit: ulong = ERROR_LIMIT;
 
     construct(output: Path, build_dir: Path) {
         this.output = output;
@@ -347,17 +351,18 @@ export struct Built {
     construct() {}
 }
 
-# `error` as the build reports it, rendered.
-_check_error(error: CheckError, sources: SourceText[]): String {
+# `error` as the build reports it, rendered, with at most `limit` errors
+# (`--error-limit`).
+_check_error(error: CheckError, sources: SourceText[], limit: ulong): String {
     match (error) {
         Unread(message) => {
             return message;
         }
         Linking(diagnostics) => {
-            return render_all(diagnostics, sources);
+            return render_errors(diagnostics, sources, limit);
         }
-        Checking(diagnostic) => {
-            return render_all([diagnostic], sources);
+        Checking(diagnostics) => {
+            return render_errors(diagnostics, sources, limit);
         }
         Failed(message) => {
             return message;
@@ -850,7 +855,9 @@ _work_on(
     var times = options.pass_times.is_value() ?
         Optional<sema.PassTimes>.Value(sema.PassTimes()) :
         Optional<sema.PassTimes>.Empty;
-    var checked = check_for_worker(program, unit, records, cache, reused, sources, dir, k, stages, times);
+    var checked = check_for_worker(
+        program, unit, records, cache, reused, sources, dir, k, stages, options.error_limit, times
+    );
     if (checked.is_err()) {
         return Optional<String>.Value(checked.error());
     }
@@ -1088,7 +1095,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         }
         if (checked.is_err()) {
             report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
-            return Result<Built, String>.err(_check_error(checked.error(), sources));
+            return Result<Built, String>.err(_check_error(checked.error(), sources, options.error_limit));
         }
         module = checked.value().module;
         state = checked.value().state;
@@ -1120,7 +1127,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         }
         report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
         if (ran.is_err()) {
-            return Result<Built, String>.err(render_all([ran.error()], sources));
+            return Result<Built, String>.err(render_errors(ran.error(), sources, options.error_limit));
         }
     }
     # `--debug-static=expanded`: the expanded copies of the files, which

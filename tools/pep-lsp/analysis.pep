@@ -31,6 +31,10 @@ import "platforms";
 ## so typing does not start an analysis per keystroke.
 export const SETTLE_MILLISECONDS: ulong = 250;
 
+# The most errors of one check the editor shows (`--error-limit`'s 20 is
+# for a terminal).
+const _ERROR_LIMIT: ulong = 100;
+
 ## Work for the analysis thread.
 export enum Job {
     ## Analyze `text`, the text of document `uri`, after it settles.
@@ -465,10 +469,13 @@ export analyze(
                     }
                 }
             }
-            Checking(error) => {
+            Checking(errors) => {
+                # The first wherever it is, then the others in the document.
+                var error = errors[0];
                 var shown = reporter.add(error);
-                for (var other in error.also) {
-                    reporter.add_if_in_document(other);
+                var count = errors.count < _ERROR_LIMIT ? errors.count : _ERROR_LIMIT;
+                for (var i in 1..count) {
+                    reporter.add_if_in_document(errors[i]);
                 }
                 var arms = missing_arms(document, program, error, shown);
                 if (arms is Value(action)) {
@@ -844,7 +851,7 @@ export recheck_whole(
             return none;
         }
         return Optional<Result<incremental.Checked, incremental.CheckError>>.Value(
-            Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Checking(reported[0]))
+            Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Checking(reported))
         );
     }
     warnings.append_all(program.warnings());
@@ -1067,7 +1074,16 @@ export compilation_unit_worker(dir: Path): int {
         incremental.Clock(false),
         (k, records) => {
             var checked = incremental.check_for_worker(
-                program, units[k], records, cache, Optional<incremental.Reused>.Empty, sources, dir, k, StringBuilder()
+                program,
+                units[k],
+                records,
+                cache,
+                Optional<incremental.Reused>.Empty,
+                sources,
+                dir,
+                k,
+                StringBuilder(),
+                _ERROR_LIMIT
             );
             return checked.is_err() ? Optional<String>.Value(checked.error()) : Optional<String>.Empty;
         }

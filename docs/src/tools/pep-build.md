@@ -65,6 +65,7 @@ short, and `pepper help build` runs it.
 | `--verify-cache` | Check cache hits against fresh code | off, or `PEPPER_CACHE_VERIFY` |
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
+| `--error-limit=<N>` | Show at most N errors; `0` shows every one | 20 |
 | `-v`, `--verbose` | Accepted; prints nothing more yet | off |
 | `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members`, `--build-script <dir>` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
 | `-h`, `--help` | Print the options | |
@@ -838,6 +839,16 @@ more channels; `--Tall` turns on every one.
   skipped.
 
 Any other channel name is accepted and ignored.
+
+### `--error-limit=<N>`
+
+Shows at most `N` errors, then `error: too many errors emitted, stopping
+now`, as clang's `-ferror-limit` does; `--error-limit=0` shows every error.
+The default is 20. It applies to every command that checks the program:
+a build, `--emit-static`, `--emit-llvm`, `--emit-model-step` and
+`--emit-steps`. The compiler reports the errors of the first stage that
+finds any, one per function (see
+[Several errors at once](../language/compiler-errors.md#several-errors-at-once)).
 
 ### `-v`, `--verbose`
 
