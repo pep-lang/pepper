@@ -718,7 +718,9 @@ _main(args: String[]): int {
         # The copies go into `-o`, else `<stem>.static`.
         var stem = entry.file_stem();
         var out_dir = Path(output.is_set ? output.value() : $"{stem.is_value() ? stem.value() : "main"}.static");
-        var written = driver.emit_static(program.value(), entry, out_dir, emit_static.value() == _StaticMode.Keep);
+        var written = driver.emit_static(
+            program.value(), entry, out_dir, emit_static.value() == _StaticMode.Keep, errors_shown
+        );
         if (written.is_err()) {
             _report(written.error());
             return 1;

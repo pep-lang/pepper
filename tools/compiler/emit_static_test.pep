@@ -2,6 +2,7 @@
 # `static` block replaced by what it emits, which must build into the same
 # program.
 
+import [ERROR_LIMIT] from compiler.diagnostic;
 import compiler.driver;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -31,14 +32,14 @@ _load(main: Path): link.Program {
 }
 
 # `--emit-static` (`--emit-static=keep` with `keep`) of the program whose
-# entry is `main`, into `out`.
-_emit(main: Path, out: Path, keep: bool): Result<void, String> {
+# entry is `main`, into `out`, showing at most `limit` errors.
+_emit(main: Path, out: Path, keep: bool, limit: ulong = ERROR_LIMIT): Result<void, String> {
     var setup = link.Setup();
     var program = link.load_program(main, setup);
     if (program.is_err()) {
         return Result<void, String>.err(program.error());
     }
-    return driver.emit_static(program.value(), main, out, keep);
+    return driver.emit_static(program.value(), main, out, keep, limit);
 }
 
 # `main` built into `dir` as `name` and run: its output, then its exit
@@ -203,6 +204,14 @@ an_error_in_a_block_stops_it_as_it_stops_a_build() {
     var made = _emit(main, out, false);
     expect_true(made.is_err() and made.error().contains("bad.pep:3:17: error: not ready"));
     expect_false(out.exists());
+    # At most `--error-limit` errors, as a build shows them.
+    var two = folder.path.join(Path("two.pep"));
+    _write(two, "f(): int {\n    return \"a\";\n}\nmain(): int {\n    return \"b\";\n}\n");
+    var limited = _emit(two, folder.path.join(Path("two")), false, 1);
+    expect_true(limited.is_err());
+    expect_true(limited.error().contains("two.pep:2:"));
+    expect_false(limited.error().contains("two.pep:5:"));
+    expect_true(limited.error().contains("error: too many errors emitted, stopping now"));
 }
 
 # Emits and builds every `reflection-*` docs example whose index in the

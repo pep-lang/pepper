@@ -25,7 +25,7 @@
 ## the output (`write_debug_sources`), for the debug info to point at.
 
 import compiler.ast;
-import [Diagnostic, ERROR_LIMIT, SourceText, render_errors] from compiler.diagnostic;
+import [Diagnostic, SourceText, render_errors] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -43,10 +43,13 @@ import "build";
 ## @param entry the program's entry file
 ## @param out_dir the folder to write the copies into
 ## @param keep whether to keep each block as comments
-## @returns nothing, or the error, rendered
-export emit_static(program: link.Program, entry: Path, out_dir: Path, keep: bool): Result<void, String> {
+## @param error_limit the most errors to show (`--error-limit`); 0 shows every one
+## @returns nothing, or the errors, rendered
+export emit_static(
+    program: link.Program, entry: Path, out_dir: Path, keep: bool, error_limit: ulong
+): Result<void, String> {
     var sources = program.sources();
-    var expansions = check_recording(program, sources);
+    var expansions = check_recording(program, sources, error_limit);
     if (expansions.is_err()) {
         return Result<void, String>.err(expansions.error());
     }
@@ -110,8 +113,11 @@ export emit_static(program: link.Program, entry: Path, out_dir: Path, keep: bool
 ##
 ## @param program the loaded program, its bodies linked
 ## @param sources its files' text
-## @returns the expansions, or the error, rendered
-export check_recording(program: link.Program, sources: SourceText[]): Result<StaticExpansion[], String> {
+## @param error_limit the most errors to show (`--error-limit`); 0 shows every one
+## @returns the expansions, or the errors, rendered
+export check_recording(
+    program: link.Program, sources: SourceText[], error_limit: ulong
+): Result<StaticExpansion[], String> {
     var errors = program.check();
     var warnings = program.warnings();
     if (errors.is_value()) {
@@ -131,7 +137,7 @@ export check_recording(program: link.Program, sources: SourceText[]): Result<Sta
     warnings.append_all(state.notes);
     report_warnings(warnings, sources);
     if (ran.is_err()) {
-        return Result<StaticExpansion[], String>.err(render_errors(ran.error(), sources, ERROR_LIMIT));
+        return Result<StaticExpansion[], String>.err(render_errors(ran.error(), sources, error_limit));
     }
     return Result<StaticExpansion[], String>.ok(state.static_recording.value().expansions);
 }

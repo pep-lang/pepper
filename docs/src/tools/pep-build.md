@@ -842,7 +842,9 @@ Any other channel name is accepted and ignored.
 
 Shows at most `N` errors, then `error: too many errors emitted, stopping
 now`, as clang's `-ferror-limit` does; `--error-limit=0` shows every error.
-The default is 20. The compiler reports the errors of the first stage that
+The default is 20. It applies to every command that checks the program:
+a build, `--emit-static`, `--emit-llvm`, `--emit-model-step` and
+`--emit-steps`. The compiler reports the errors of the first stage that
 finds any, one per function (see
 [Several errors at once](../language/compiler-errors.md#several-errors-at-once)).
 
