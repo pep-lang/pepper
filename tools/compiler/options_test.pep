@@ -910,6 +910,31 @@ reports_undeclared_names_with_type_errors() {
     expect_true(built.stderr.find("main.pep:10:13: error: cannot initialize variable 'x'") > second);
 }
 
+# #344: a build shows every syntax error of the first file that does not
+# parse, in source order and within `--error-limit`, and nothing of a
+# later broken file.
+[Test]
+reports_every_syntax_error_of_a_file() {
+    var folder = _program(
+        "options_syntax_errors",
+        "import \"other\";\n\nf(): int {\n    var a = ;\n    return 1\n}\n\nmain(): int {\n    if (true {\n        return f();\n    }\n    return 0;\n}\n"
+    );
+    File.write_text(folder.path.join(Path("other.pep")), "export g(): int { return ; }\n");
+    var built = _pep_build(folder.path, ["main.pep", "--no-cache"]);
+    expect_exit(built, 1);
+    var first = built.stderr.find("main.pep:4:13: error: expected expression");
+    var second = built.stderr.find("main.pep:5:13: error: expected ';'");
+    expect_true(first >= 0);
+    expect_true(second > first);
+    expect_true(built.stderr.find("main.pep:9:14: error: expected ')'") > second);
+    expect_false(built.stderr.contains("other.pep"));
+    expect_false(built.stderr.contains("expected '}'"));
+    var capped = _pep_build(folder.path, ["main.pep", "--no-cache", "--error-limit=1"]);
+    expect_exit(capped, 1);
+    expect_false(capped.stderr.contains("main.pep:5:"));
+    expect_contains(capped.stderr, "error: too many errors emitted, stopping now");
+}
+
 # pepper#230: `-o` into folders that do not exist yet makes them, and a
 # folder it cannot make is an error naming it.
 [Test]

@@ -536,3 +536,40 @@ overrides_go_beside_their_generic_or_type() {
         }
     }
 }
+
+# #344: a file that fails to parse reports each syntax error the
+# recovering parse reads past, in source order, at most
+# `Setup.error_limit`, and ends the load: a later broken file is not
+# read. A missing `}` after another error, and a syntax error past a line
+# the lexer refused, are the recovery's doing and left out.
+[Test]
+reports_every_syntax_error_of_the_first_broken_file() {
+    var folder = TempFolder("link_syntax_errors");
+    var root = folder.path.join("main.pep");
+    File.write_text(
+        root,
+        "import \"other\";\n\nf(x: int): int {\n    var a = x +;\n    return a\n}\n\ng(): int {\n    if (x > {\n        return 1;\n    }\n    return 2;\n}\n\nmain(): int {\n    var s = \"open;\n    return f(1) + g();\n}\n"
+    );
+    File.write_text(folder.path.join("other.pep"), "export h(): int { return ; }\n");
+    var setup = link.Setup();
+    var program = link.load_program(root, setup);
+    expect_true(program.is_err(), "the program does not load");
+    if (program.is_ok()) {
+        return;
+    }
+    expect_equal(
+        headlines(program.error(), root),
+        "main.pep:4:16: error: expected expression\nmain.pep:5:13: error: expected ';'\nmain.pep:9:13: error: expected expression\nmain.pep:16:13: error: missing terminating '\"' character"
+    );
+    expect_false(program.error().contains("too many errors"));
+    setup.error_limit = 2;
+    var capped = link.load_program(root, setup);
+    expect_true(capped.is_err(), "the program does not load");
+    if (capped.is_ok()) {
+        return;
+    }
+    expect_equal(
+        headlines(capped.error(), root), "main.pep:4:16: error: expected expression\nmain.pep:5:13: error: expected ';'"
+    );
+    expect_true(capped.error().contains("error: too many errors emitted, stopping now"));
+}
