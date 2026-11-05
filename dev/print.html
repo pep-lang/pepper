@@ -10578,7 +10578,8 @@ main.pep:5:12: error: too many arguments to function of type '(String) =&gt; int
     5 |     return f(1, 2);                    # error
       |            ^
 </code></pre>
-<p>The compiler reports both errors in one build (see
+<p>Both are in <code>main</code>, so a build reports the first, and the second once the
+first is fixed: the compiler shows one error per function (see
 <a href="language/compiler-errors.html#several-errors-at-once">Several errors at once</a>).</p>
 <p>Calling a variable that does not hold a function is an error at the call,
 which names the variable's type:</p>
@@ -15537,12 +15538,15 @@ main.pep:1:13: note: to match this '{'
 <h2 id="several-errors-at-once"><a class="header" href="#several-errors-at-once">Several errors at once</a></h2>
 <p>The compiler checks a program in stages, and stops after the first stage that
 finds an error, with exit status 1. It reports every error that stage found,
-up to 20, in the order of their places in the files, so one build can show
-several mistakes. It shows one error per line: a second error on a line is
-usually caused by the first. An error a later stage would find shows up only once these
-are fixed: a misspelled local name in a function, for one, is found after
-the type errors. The compiler never produces an executable from a program
-with an error.</p>
+in the order of their places in the files, so one build can show several
+mistakes. It shows the first error in each function (or other declaration)
+only: a second one there is usually caused by the first. An error a later
+stage would find shows up only once these are fixed: a misspelled local name
+in a function, for one, is found after the type errors. The compiler never
+produces an executable from a program with an error.</p>
+<p>A build shows at most 20 errors, then <code>error: too many errors emitted, stopping now</code>. <code>pep-build --error-limit=N</code> shows at most <code>N</code> instead, and
+<code>--error-limit=0</code> shows every one (see <a href="language/../tools/pep-build.html">pep-build</a>).
+The language server shows up to 100.</p>
 <p>On a terminal, errors are colored like clang's. Set the <code>NO_COLOR</code> environment
 variable to turn colors off. Output that goes to a file or a pipe is never
 colored.</p>
@@ -23154,6 +23158,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--verify-cache</code></td><td>Check cache hits against fresh code</td><td>off, or <code>PEPPER_CACHE_VERIFY</code></td></tr>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
+<tr><td><code>--error-limit=&lt;N&gt;</code></td><td>Show at most N errors; <code>0</code> shows every one</td><td>20</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
 <tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--build-script &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
@@ -23784,6 +23789,13 @@ sources, and its imports' declarations, are unchanged), <code>hit (same code)</c
 skipped.</li>
 </ul>
 <p>Any other channel name is accepted and ignored.</p>
+<h3 id="--error-limitn"><a class="header" href="#--error-limitn"><code>--error-limit=&lt;N&gt;</code></a></h3>
+<p>Shows at most <code>N</code> errors, then <code>error: too many errors emitted, stopping now</code>, as clang's <code>-ferror-limit</code> does; <code>--error-limit=0</code> shows every error.
+The default is 20. It applies to every command that checks the program:
+a build, <code>--emit-static</code>, <code>--emit-llvm</code>, <code>--emit-model-step</code> and
+<code>--emit-steps</code>. The compiler reports the errors of the first stage that
+finds any, one per function (see
+<a href="tools/../language/compiler-errors.html#several-errors-at-once">Several errors at once</a>).</p>
 <h3 id="-v---verbose"><a class="header" href="#-v---verbose"><code>-v</code>, <code>--verbose</code></a></h3>
 <p>Accepted for compatibility with other compilers; it prints nothing more yet.</p>
 <p>Errors and warnings are printed like clang's, colored when standard error is
