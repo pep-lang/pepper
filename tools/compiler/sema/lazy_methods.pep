@@ -6,7 +6,8 @@
 ## What is still unused when specializing ends is dropped.
 
 import [drop_body] from "checked";
-import [BinaryOp, Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
+import [BinaryOp, Block, Expression, FunctionCallExpression, FunctionDef, Module, StructDef, TypeName] from "model";
+import "named_arguments";
 import [set_name, without_type_arguments] from "names";
 import [op_name] from "operators";
 import [for_each_place, Place, PlaceVisitor] from "places";
@@ -333,8 +334,11 @@ struct _MethodUses {
     var current: TypeName? = Optional<TypeName>.Empty;
     ## The struct whose methods are walked, for calls with no receiver.
     var owner: String = "";
-    ## The function walked, whose parameters are no sibling methods.
+    ## The function walked, whose parameters and locals are no sibling
+    ## methods.
     var function: FunctionDef? = Optional<FunctionDef>.Empty;
+    ## The names `function` declares, read at its first bare call.
+    var declared: HashSet<String>? = Optional<HashSet<String>>.Empty;
     var table: StructTable? = Optional<StructTable>.Empty;
     ## `"{struct}\n{method}"` of each use on a known type.
     var on: HashSet<String> = HashSet<String>();
@@ -354,6 +358,7 @@ struct _MethodUses {
         current = place.this_type;
         owner = place.owner.is_value() ? place.owner.value().name : "";
         function = place.function;
+        declared = Optional<HashSet<String>>.Empty;
         place.rewrite(this);
     }
 
@@ -390,22 +395,22 @@ struct _MethodUses {
             anywhere.insert(set_name(name.substr_bytes(dot as ulong + 1, name.size - dot as ulong - 1)));
             return;
         }
-        if (owner.size > 0 and !_is_parameter(name)) {
+        if (owner.size > 0 and !_is_declared(name)) {
             on.insert($"{owner}\n{set_name(name)}");
         }
     }
 
-    # Whether `name` is a parameter of the function walked: `_merge_sort`'s
-    # `compare(a, b)` calls its closure, not the struct's `compare`.
-    _is_parameter(name: String): bool {
-        if (function is Value(f)) {
-            for (var p in f.parameters) {
-                if (p.name == name) {
-                    return true;
-                }
-            }
+    # Whether `name` is a parameter or local of the function walked:
+    # `_merge_sort`'s `compare(a, b)` calls its closure, not the struct's
+    # `compare`.
+    _is_declared(name: String): bool {
+        if (!function.is_value()) {
+            return false;
         }
-        return false;
+        if (!declared.is_value()) {
+            declared = Optional<HashSet<String>>.Value(_declared_names(function.value()));
+        }
+        return declared.value().contains(name);
     }
 
     _found(receiver: Expression, method: String) {
@@ -418,15 +423,8 @@ struct _MethodUses {
         }
         var ty = Optional<TypeName>.Empty;
         if (receiver is FunctionCall(call)) {
-            ty = _call_result(call.function);
-            # A static call through a type (`Result<Uri>.ok`): the type may
-            # be spelled as written, not as its struct is named.
-            if (!ty.is_value() and call.args.count == 0) {
-                anywhere.insert(name);
-                return;
-            }
-        }
-        if (!ty.is_value()) {
+            ty = _call_result(call, receiver);
+        } else {
             ty = static_type_of(receiver, table.value(), current, state);
         }
         if (!ty.is_value() or ty.value().contains_auto()) {
@@ -437,23 +435,33 @@ struct _MethodUses {
         on.insert($"{key}\n{name}");
     }
 
-    # What a call of `function` returns when only one function can be
+    # What `call`, the receiver, returns when only one function can be
     # meant: a free function (`_monotonic_milliseconds() >= at`), or in a
     # method, a sibling method that `convert_member_refs` has not made
     # `this._find_slot(key)` yet (`_find_slot(key) >= 0`).
-    _call_result(function: String): TypeName? {
-        # A parameter's call (`compare(a, b)`) returns what its type does.
-        if (_is_parameter(function)) {
-            return Optional<TypeName>.Empty;
+    _call_result(call: FunctionCallExpression, receiver: Expression): TypeName? {
+        var none = Optional<TypeName>.Empty;
+        # A local's or parameter's call (`compare(a, b)`) returns what its
+        # type does.
+        if (_is_declared(call.function)) {
+            return none;
         }
-        var free = table.value().function(function);
-        var sibling = current.is_value() ?
-            table.value().method_return(current.value(), function) :
-            Optional<TypeName>.Empty;
-        if (free.is_value() == sibling.is_value()) {
-            return Optional<TypeName>.Empty;
+        var free = table.value().function(call.function);
+        var sibling = current.is_value() ? table.value().method_return(current.value(), call.function) : none;
+        if (sibling.is_value()) {
+            # Either may be meant, by the arguments (`copy(label)` in
+            # `copy()`): only a type both return is known.
+            if (free.is_value() and free.value().to_string() != sibling.value().to_string()) {
+                return none;
+            }
+            return sibling;
         }
-        return free.is_value() ? free : sibling;
+        # A static call through a type (`Result<Uri>.ok`): the type may be
+        # spelled as written, not as its struct is named.
+        if (!free.is_value() and call.args.count == 0) {
+            return none;
+        }
+        return static_type_of(receiver, table.value(), current, state);
     }
 }
 

@@ -905,11 +905,19 @@ comparable_members_wait_for_a_use() {
             + "largest<T: Comparable>(a: T, b: T): T { return a.max(b); }\nmain(): int {\n    var a = [P(1)];\n    bool less = a < [P(2)];\n    var t = largest((P(1), P(2)), (P(2), P(1)));\n    var o = [Optional<P>.Value(P(1)), Optional<P>.Empty];\n    o.sort();\n    return (less ? 1 : 0) + t.0.x + o.count as int;\n}\n"
     );
     expect_equal(used, "Array<P>: <, compare\nOptional<P>: compare\n__tuple<P, P>: compare, max\n");
+    # A local or parameter is no use of the sibling method it shares a name
+    # with: `S<int>.max` and `min` stay unused.
+    var shadowed = _comparable_bodies(
+        folder,
+        "shadowed",
+        "struct S<T> {\n    max(): int { return 1; }\n    min(): int { return 0; }\n    big(n: int, min: int): bool {\n        var max = 3;\n        return n > max and n > min;\n    }\n}\nmain(): int {\n    return S<int>().big(5, 1) ? 1 : 0;\n}\n"
+    );
+    expect_equal(shadowed, "S<int>: \n");
 }
 
-# The members of `Comparable` with bodies, `Array<P>`, `Optional<P>` and
-# `(P, P)` have once the passes ran over `source`: a line each, the
-# members sorted.
+# The members of `Comparable` with bodies, `Array<P>`, `Optional<P>`,
+# `(P, P)` and `S<int>` have once the passes ran over `source`: a line
+# each, the members sorted.
 _comparable_bodies(folder: TempFolder, name: String, source: String): String {
     var root = folder.path.join(name);
     Directory.create_all(root);
@@ -921,7 +929,7 @@ _comparable_bodies(folder: TempFolder, name: String, source: String): String {
     var members = HashSet<String>(["compare", "<", "<=", ">", ">=", "min", "max", "clamp"]);
     var lines = Array<String>();
     for (var st in module.structs) {
-        if (st.name != "Array<P>" and st.name != "Optional<P>" and st.name != "__tuple<P, P>") {
+        if (st.name != "Array<P>" and st.name != "Optional<P>" and st.name != "__tuple<P, P>" and st.name != "S<int>") {
             continue;
         }
         var names = Array<String>();
