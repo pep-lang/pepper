@@ -636,6 +636,45 @@ builds_in_compilation_units_after_a_whole_program_build_with_the_cache() {
     }
 }
 
+# A compilation unit checked in process, while the cache held its files'
+# whole-program objects, keeps every body in its record: a build in workers
+# that found the record but not the unit's objects compiled them from it,
+# and the runtime's skipped functions were undefined at the link.
+[Test]
+builds_in_workers_from_a_record_checked_with_whole_program_objects() {
+    var folder = _program("options_record_whole", "main(): int {\n    return 0;\n}\n");
+    File.write_text(
+        folder.path.join(Path("units.pep")), "import geo;\n\nmain(): int {\n    return geo.area(2, 3) - 6;\n}\n"
+    );
+    Directory.create_all(folder.path.join(Path("geo")));
+    File.write_text(
+        folder.path.join(Path("geo")).join(Path("module.pep")),
+        "export area(w: int, h: int): int {\n    return w * h;\n}\n"
+    );
+    # The whole program, then compilation units in process (one job), which
+    # store the runtime's record, then in workers.
+    var builds = [("main.pep", "whole", ""), ("main.pep", "process", "1"), ("units.pep", "units", "2")];
+    for (var (entry, name, jobs) in builds) {
+        var program = name + toolchain.executable_suffix();
+        var command = process.Command(_compiler().to_string());
+        command.arguments([entry, "-I", ".", "-o", program, "--build", name + ".build", "--cache", "cache"]);
+        command.working_directory(folder.path).stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+        if (jobs.is_empty) {
+            command.environment("PEPC_NO_COMPILATION_UNITS", "1");
+        } else {
+            command.remove_environment("PEPC_NO_COMPILATION_UNITS").environment("PEPC_COMPILATION_UNIT_JOBS", jobs);
+        }
+        var built = command.run();
+        expect_true(built.is_ok());
+        if (!built.value().status.success()) {
+            print(built.value().stderr);
+        }
+        expect_true(built.value().status.success());
+        var ran = process.Command(folder.path.join(Path(program)).to_string()).run();
+        expect_true(ran.is_ok() and ran.value().status.success());
+    }
+}
+
 # A program of several compilation units with location strings (an index's
 # bounds check) builds with link-time optimization and runs: a part that
 # only declares a location string once kept it in a comdat, and the linked

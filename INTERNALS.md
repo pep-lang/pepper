@@ -2099,7 +2099,10 @@ changed.
   compilation units in workers (`_in_workers`) links only their objects,
   so it and its workers look nothing up here (`nothing_reused`): a body it
   skipped for a translation unit's object, which a whole-program build
-  left in the cache, would be defined nowhere. After sema, `reuse_after_sema`
+  left in the cache, would be defined nowhere. Nor does checking a
+  compilation unit skip any (`check_compilation_unit`): its record, keyed
+  without the cache's objects, keeps every body, since a later build that
+  lacks those objects compiles the unit from it. After sema, `reuse_after_sema`
   hashes the other files' interfaces from their tokens and
   `summaries_to_record`, keys the remaining units, and a unit that hits
   then generates no objects. A function whose link summary calls through a

@@ -380,14 +380,10 @@ export check_compilation_unit(
         aliases.append(alias.copy());
     }
     # Summaries for the build cache's skipped bodies; a compilation unit records
-    # the ones it makes either way (`settled_summaries`).
+    # the ones it makes either way (`settled_summaries`). It skips no body
+    # (`cached_files`): its record keeps them, and a build whose cache lacks
+    # those translation units' objects compiles from it.
     after.record_summaries = reused.is_value();
-    if (reused.is_value()) {
-        after.cached_files = reused.value().files;
-        for (var (loc, text) in reused.value().summaries) {
-            after.recorded_summaries[loc] = text;
-        }
-    }
     var state = sema.PassState(program.target);
     state.sources = sources;
     state.checked_specs = checked_specs;
@@ -652,13 +648,8 @@ export recheck_compilation_unit(
         }
     }
     after.structs = kept;
+    # Skips no body, as `check_compilation_unit` does.
     after.record_summaries = reused.is_value();
-    if (reused.is_value()) {
-        after.cached_files = reused.value().files;
-        for (var (loc, text) in reused.value().summaries) {
-            after.recorded_summaries[loc] = text;
-        }
-    }
     var state = sema.PassState(program.target);
     state.sources = sources;
     state.checked_specs = checked_specs;
