@@ -882,6 +882,59 @@ nested_array_literals_keep_few_methods_per_level() {
     }
 }
 
+# A Comparable Array, Optional or tuple keeps a member of `Comparable`
+# (`compare`, `<`, `min` and the rest) only when a use names it (#491): an
+# operator, a call, or a constrained generic's call on its specialization.
+[Test]
+comparable_members_wait_for_a_use() {
+    var folder = TempFolder("passes_comparable_uses");
+    var point = "struct P {\n    var x: int;\n    construct(x: int) { this.x = x; }\n    compare(other: P): int { return x - other.x; }\n}\nextend P with Comparable;\n";
+    var unused = _comparable_bodies(
+        folder,
+        "unused",
+        point
+            + "main(): int {\n    var a = [P(1)];\n    var t = (P(1), P(2));\n    var o = Optional<P>.Value(P(1));\n    return a.count as int + t.0.x + (o.is_value() ? 1 : 0);\n}\n"
+    );
+    expect_equal(unused, "Array<P>: \nOptional<P>: \n__tuple<P, P>: \n");
+    var used = _comparable_bodies(
+        folder,
+        "used",
+        point
+            + "largest<T: Comparable>(a: T, b: T): T { return a.max(b); }\nmain(): int {\n    var a = [P(1)];\n    bool less = a < [P(2)];\n    var t = largest((P(1), P(2)), (P(2), P(1)));\n    var o = [Optional<P>.Value(P(1)), Optional<P>.Empty];\n    o.sort();\n    return (less ? 1 : 0) + t.0.x + o.count as int;\n}\n"
+    );
+    expect_equal(used, "Array<P>: <, compare\nOptional<P>: compare\n__tuple<P, P>: compare, max\n");
+}
+
+# The members of `Comparable` with bodies, `Array<P>`, `Optional<P>` and
+# `(P, P)` have once the passes ran over `source`: a line each, the
+# members sorted.
+_comparable_bodies(folder: TempFolder, name: String, source: String): String {
+    var root = folder.path.join(name);
+    Directory.create_all(root);
+    var main = root.join("main.pep");
+    File.write_text(main, source);
+    var program = link.load_program(main, link.Setup()).value();
+    var module = sema.merge(program).value();
+    sema.run_passes(module, program.target, program.sources()).value();
+    var members = HashSet<String>(["compare", "<", "<=", ">", ">=", "min", "max", "clamp"]);
+    var lines = Array<String>();
+    for (var st in module.structs) {
+        if (st.name != "Array<P>" and st.name != "Optional<P>" and st.name != "__tuple<P, P>") {
+            continue;
+        }
+        var names = Array<String>();
+        for (var m in st.method_members) {
+            if (m.body.is_value() and members.contains(m.name)) {
+                names.append(m.name);
+            }
+        }
+        names.sort();
+        lines.append($"{st.name}: {", ".join(names)}\n");
+    }
+    lines.sort();
+    return "".join(lines);
+}
+
 # How many methods with bodies the structs have once the passes ran over a
 # program holding a nested array literal `depth` levels deep.
 _bodies_at_depth(folder: TempFolder, depth: ulong): ulong {

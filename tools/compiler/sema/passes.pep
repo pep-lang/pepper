@@ -806,7 +806,7 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic[] {
         }
         23 => {
             # Apply generic and concrete extensions.
-            apply_extensions(module, state);
+            apply_extensions(module, state, defer = true);
             return state.take_errors();
         }
         24 => {
@@ -867,7 +867,7 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic[] {
         }
         35 => {
             # Specialized extensions.
-            apply_extensions(module, state);
+            apply_extensions(module, state, defer = true);
             return state.take_errors();
         }
         36 => {
