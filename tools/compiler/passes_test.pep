@@ -6,7 +6,7 @@
 # changes a diagnostic or what the language accepts, on purpose or not.
 
 import [Channel, Thread] from async;
-import [demangle, Diagnostic, render_all] from compiler.diagnostic;
+import [as_written, demangle, Diagnostic, render_all] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -508,6 +508,34 @@ calls_a_method_on_an_integer_literal() {
         "# expect: accepted\nmain(): int {\n    var y = 200.checked_add(100);\n    var z = 7.to_string();\n    return y.value() - 300 + z.size as int - 1;\n}\n"
     ];
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
+# A local closure shadows the sibling method of its name: `key(1)` is the
+# closure's call, typed `P[]`, not `S.key`'s `int` (#527).
+[Test]
+lets_an_untyped_local_shadow_a_sibling_method() {
+    var folder = TempFolder("passes_local_shadows_method");
+    var programs = [
+        "# expect: accepted\nstruct P {\n    var v: int;\n    construct(v: int) { this.v = v; }\n    compare(other: P): int { return v.compare(other.v); }\n}\nextend P with Comparable;\nstruct S {\n    construct() {}\n    key(i: int): int { return i; }\n    check(): bool {\n        var key = (i: int) => [P(i)];\n        return key(1) < [P(2)];\n    }\n}\nmain(): int { return S().check() ? 0 : 1; }\n",
+        # A global does not: the method of its name is called.
+        "# expect: accepted\nconst count = Atomic<int>(0);\nstruct S {\n    count(): int { return 1; }\n    total(): int { return count() + 1; }\n}\nmain(): int { return S().total() - 2; }\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
+# A value type's operator is named as written, not as the function it
+# becomes (`i32::{`) (#527).
+[Test]
+names_a_value_type_operator_as_written() {
+    var folder = TempFolder("passes_operator_name");
+    var programs = [
+        "# expect: main.pep:6:19: error: cannot pass a value of type 'String' as argument 2 of '<', which has type 'int'\nf(): int {\n    return 1;\n}\nmain(): int {\n    var a = f() < \"x\";\n    return 0;\n}\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+    expect_equal(
+        as_written("'i32::{=' and 'Color@geo/shapes::name<int>' in 'S', but not a::b or 'x'::y"),
+        "'<=' and 'name<int>' in 'S', but not a::b or 'x'::y"
+    );
 }
 
 # A type that is not a lane gets no note to declare it one: `Lane` is

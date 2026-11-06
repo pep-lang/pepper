@@ -18,7 +18,7 @@ import [Directory, File, Path] from io;
 import os;
 import process;
 
-import [demangle, Diagnostic, DEPRECATED_CODE, Severity] from compiler.diagnostic;
+import [as_written, Diagnostic, DEPRECATED_CODE, Severity] from compiler.diagnostic;
 import compiler.incremental;
 import compiler.link;
 import lsp;
@@ -1143,7 +1143,7 @@ struct _Reporter {
     # that file's name before its message.
     convert(diagnostic: Diagnostic): lsp.Diagnostic {
         var range = lsp.Range();
-        var message = demangle(diagnostic.message);
+        var message = as_written(diagnostic.message);
         if (diagnostic.location is Value(location)) {
             if (location.file == file) {
                 range = document.range_of(location.span.start, location.span.end);
@@ -1165,7 +1165,7 @@ struct _Reporter {
             if (at is Value(location)) {
                 var info = lsp.DiagnosticRelatedInformation();
                 info.location = location;
-                info.message = demangle(note.message);
+                info.message = as_written(note.message);
                 related.append(info);
             }
         }
