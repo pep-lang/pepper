@@ -341,6 +341,6 @@ export extend Array<T: Comparable> {
     ##     var numbers = [3, 1, 2];
     ##     numbers.sort();   # [1, 2, 3]
     sort() {
-        _merge_sort((a, b) => a.compare(b));
+        _merge_sort((a: T, b: T) => a.compare(b));
     }
 }

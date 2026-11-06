@@ -6,6 +6,7 @@ import [checked_decls, unit_decls] from "checked";
 import [CALL_METHOD, DESTROY_FIELD, INVOKE_FIELD, is_closure_struct] from "closures";
 import [is_trait] from "enums";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
+import "named_arguments";
 import [CheckedDecls] from "pending";
 import [for_each_place, Place, PlaceKind, PlaceVisitor, rewrite_places] from "places";
 import [PassState] from "state";
@@ -676,6 +677,11 @@ extend _CreatesClosure with SiteFilter;
 struct _Owned {
     var owner: String?;
     var visitor: SiteVisitor;
+    ## The function walked, if any, whose parameters and locals shadow its
+    ## struct's methods.
+    var function: FunctionDef? = Optional<FunctionDef>.Empty;
+    # Its parameters' and locals' names, read at the first bare call.
+    var _declared: HashSet<String>? = Optional<HashSet<String>>.Empty;
 
     construct(owner: String?, visitor: SiteVisitor) {
         this.owner = owner;
@@ -684,6 +690,17 @@ struct _Owned {
 
     visit(e: Expression, expected: TypeName?, current: TypeName?) {
         visitor.visit(owner, e, expected, current);
+    }
+
+    ## Whether `name` is a parameter or local of the function walked.
+    declares(name: String): bool {
+        if (!function.is_value()) {
+            return false;
+        }
+        if (!_declared.is_value()) {
+            _declared = Optional<HashSet<String>>.Value(_declared_names(function.value()));
+        }
+        return _declared.value().contains(name);
     }
 }
 
@@ -776,6 +793,7 @@ struct _SiteWalk {
             var v = place.variable.value();
             _sites_in_expression(v.default.value(), Optional<TypeName>.Value(v.ty), table, place.this_type, owned);
         } else {
+            owned.function = place.function;
             _sites_in_function(place.function.value(), table, place.this_type, owned);
         }
     }
@@ -859,6 +877,19 @@ _sites_in_expression(e: Expression, expected: TypeName?, table: SiteTable, curre
                 var signature = table.generic(node.function);
                 if (signature.is_value()) {
                     params = table.generic_parameters(signature.value(), node.args, current);
+                }
+            }
+            # A bare call of a sibling method, which `convert_member_refs`
+            # makes `this.m(...)` only later (`_pdq_sort(closure)` in
+            # `sort_unstable()`): its closure gets its types now, not from
+            # a walk of its body a round later (#525). A parameter or local
+            # of the name shadows the method (#527).
+            if (!params.is_value() and current.is_value()) {
+                var sibling = table.method(current.value().to_string(), node.function);
+                if (sibling.is_value()
+                    and sibling.value().count == node.args.count
+                    and !visitor.declares(node.function)) {
+                    params = sibling;
                 }
             }
             ulong i = 0;
