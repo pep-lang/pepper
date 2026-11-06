@@ -113,8 +113,8 @@ _trait_methods(module: Module): HashSet<String> {
 ## keeping them in `state.deferred` until one does.
 ##
 ## @param module the model
-## @param specialized a struct specialization, just made, or a tuple an
-##   extension just gave methods (`apply_extensions`)
+## @param specialized a struct specialization, just made, or a tuple
+##   (`defer_tuple_methods`)
 ## @param state the passes' state
 export defer_methods(module: Module, specialized: StructDef, state: PassState) {
     if (!state.lazy_methods) {
@@ -144,6 +144,22 @@ export defer_methods(module: Module, specialized: StructDef, state: PassState) {
     }
     if (deferred.count > 0) {
         state.deferred[specialized.name] = deferred;
+    }
+}
+
+## Takes the bodies of the methods extensions gave the tuples, their
+## `Comparable` members (#367) that most tuples never use, until a use names
+## them, as `defer_methods` does a specialization's. Runs after each
+## `apply_extensions` before the specialization loop, which gives them
+## back; a tuple whose methods wait already keeps them waiting.
+##
+## @param module the model
+## @param state the passes' state
+export defer_tuple_methods(module: Module, state: PassState) {
+    for (var st in module.structs) {
+        if (st.ty.is_tuple() and !module.checked.structs.contains(st.name)) {
+            defer_methods(module, st, state);
+        }
     }
 }
 

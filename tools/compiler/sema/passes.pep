@@ -40,7 +40,7 @@ import [resolve_injected, verify_injected] from "injected";
 import [with_instantiation] from "instantiation";
 import [check_interpolations] from "interpolation";
 import [check_lazy] from "lazy";
-import [drop_unused_methods, specialize_used_methods] from "lazy_methods";
+import [defer_tuple_methods, drop_unused_methods, specialize_used_methods] from "lazy_methods";
 import [check_string_bytes, resolve_literals] from "literals";
 import [Loc, NO_FILE] from "loc";
 import [lower_matches] from "matches";
@@ -806,7 +806,8 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic[] {
         }
         23 => {
             # Apply generic and concrete extensions.
-            apply_extensions(module, state, defer = true);
+            apply_extensions(module, state);
+            defer_tuple_methods(module, state);
             return state.take_errors();
         }
         24 => {
@@ -867,7 +868,8 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic[] {
         }
         35 => {
             # Specialized extensions.
-            apply_extensions(module, state, defer = true);
+            apply_extensions(module, state);
+            defer_tuple_methods(module, state);
             return state.take_errors();
         }
         36 => {

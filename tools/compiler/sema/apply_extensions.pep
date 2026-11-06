@@ -9,7 +9,6 @@ import [Diagnostic, Edit, Fix, Location] from compiler.diagnostic;
 import [TRAIT_SELF] from "closures";
 import "common";
 import "confinement";
-import [defer_methods] from "lazy_methods";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -94,10 +93,7 @@ _extends_sealed(module: Module, state: PassState): bool {
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state: what was applied, and the first error
-## @param defer whether a tuple's new methods wait for a use, as a
-##   specialization's do (`defer_methods`): only before specializing,
-##   whose loop gives their bodies back
-export apply_extensions(module: Module, state: PassState, defer: bool = false) {
+export apply_extensions(module: Module, state: PassState) {
     if (_extends_sealed(module, state)) {
         return;
     }
@@ -134,10 +130,6 @@ export apply_extensions(module: Module, state: PassState, defer: bool = false) {
                 }
                 if (sets.value().count > 0) {
                     module.method_overload_sets[st.name] = sets.value();
-                }
-                # A tuple's `Comparable` members (#367), unused by most.
-                if (defer and st.ty.is_tuple() and !module.checked.structs.contains(st.name)) {
-                    defer_methods(module, st, state);
                 }
             }
         }
