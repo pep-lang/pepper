@@ -88,7 +88,7 @@ export glob(pattern: String): Path[] {
     for (var text in found) {
         texts.append(text);
     }
-    texts.sort();
+    texts.sort((a, b) => a.compare(b));
     var paths = Array<Path>();
     for (var text in texts) {
         paths.append(Path(text));
