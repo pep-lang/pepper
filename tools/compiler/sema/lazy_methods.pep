@@ -426,6 +426,10 @@ struct _MethodUses {
     # method, a sibling method that `convert_member_refs` has not made
     # `this._find_slot(key)` yet (`_find_slot(key) >= 0`).
     _call_result(function: String): TypeName? {
+        # A parameter's call (`compare(a, b)`) returns what its type does.
+        if (_is_parameter(function)) {
+            return Optional<TypeName>.Empty;
+        }
         var free = table.value().function(function);
         var sibling = current.is_value() ?
             table.value().method_return(current.value(), function) :
