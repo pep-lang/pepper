@@ -1302,6 +1302,14 @@ struct _TypeScopes {
         return !arities.is_value() or _takes(arities.value(), name, count);
     }
 
+    ## The type of the parameter or local `name`, even one not known yet:
+    ## a call of `name` is then the variable's, not a method's or a free
+    ## function's (#527).
+    declared(name: String): TypeName? {
+        var found = param(name);
+        return found.is_value() ? found : local(name);
+    }
+
     ## Function type of the free function `name`, when a bare `name` in
     ## value position refers to it.
     function_value(name: String, current: TypeName?): TypeName? {
@@ -1349,7 +1357,9 @@ struct _TypeScopes {
     inferred_type_arguments(call: FunctionCallExpression, current: TypeName?): TypeName[]? {
         tables.note(_function_read(call.function));
         var signature = tables.generic_function(call.function);
-        if (!signature.is_value() or value_callee(call.function, current).is_value()) {
+        if (!signature.is_value()
+            or declared(call.function).is_value()
+            or value_callee(call.function, current).is_value()) {
             return Optional<TypeName[]>.Empty;
         }
         # Inside a method, a bare call may be one of the struct's methods.
@@ -1400,7 +1410,7 @@ struct _TypeScopes {
             return none;
         }
         var (base, explicit) = overloads.call_set(function);
-        if (!overloads.is_set(base) or value_callee(base, current).is_value()) {
+        if (!overloads.is_set(base) or declared(base).is_value() or value_callee(base, current).is_value()) {
             return none;
         }
         if (current.is_value()
@@ -1866,6 +1876,10 @@ struct _TypeScopes {
             var (_, ty) = callee.value();
             var ret = ty.function_return();
             return ret.is_value() ? ret.value() : TypeName.auto();
+        }
+        # A variable whose type is not known yet: its call is not typed yet.
+        if (declared(function).is_value()) {
+            return TypeName.auto();
         }
         # Inside a method, a bare call naming one of the struct's own
         # methods is that method; a converted string literal still

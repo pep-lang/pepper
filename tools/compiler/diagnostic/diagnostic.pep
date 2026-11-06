@@ -213,10 +213,10 @@ export struct Diagnostic {
             var at = location.value();
             var source = sources[at.file];
             var (line, column) = _position(source.text, at.span.start);
-            out.append($"{shown_path(source.name)}:{line}:{column}: {label}: {demangle(message)}{suffix}\n");
+            out.append($"{shown_path(source.name)}:{line}:{column}: {label}: {as_written(message)}{suffix}\n");
             _snippet(source.text, at.span, _fix_on_line(at, source.text), out);
         } else {
-            out.append($"{label}: {demangle(message)}{suffix}\n");
+            out.append($"{label}: {as_written(message)}{suffix}\n");
         }
         for (var note in notes) {
             note._render_into(sources, out);
@@ -498,6 +498,40 @@ export demangle(text: String): String {
     var namespaces = HashMap<String, HashSet<String>>();
     _demangle(text, namespaces, false);
     return _demangle(text, namespaces, true);
+}
+
+## Returns `text` (a message) as the user reads it: `demangle`d, and each
+## method of a value type in single quotes, which sema turns into a
+## function such as `i32::{` (`<` on `int`) or `Color::name`, named as it
+## was declared: `'<'`, `'name'`, as a struct's method is.
+##
+## @param text the message
+## @returns the message as the user reads it
+export as_written(text: String): String {
+    var shown = demangle(text);
+    var at = shown.find("::");
+    if (at < 0) {
+        return shown;
+    }
+    var out = StringBuilder();
+    ulong copied = 0;
+    while (at >= 0) {
+        var start = at as ulong;
+        while (start > copied and (_is_name_byte(shown.byte_at(start - 1)) or shown.byte_at(start - 1) == '.')) {
+            start -= 1;
+        }
+        var end = shown.find("'", at as ulong);
+        if (start < at as ulong and start > copied and shown.byte_at(start - 1) == '\'' and end >= 0) {
+            out.append(shown.substr_bytes(copied, start - copied));
+            # `enum_method_name` spells an operator's `<` and `>` as `{` and `}`.
+            var method = shown.substr_bytes(at as ulong + 2, end as ulong - at as ulong - 2);
+            out.append(method.replace("{", "<").replace("}", ">"));
+            copied = end as ulong;
+        }
+        at = shown.find("::", at as ulong + 2);
+    }
+    out.append(shown.substr_bytes(copied, shown.size - copied));
+    return out.to_string();
 }
 
 # `demangle`'s walk over `text`. Without `write`, it records the namespaces
