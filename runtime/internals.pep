@@ -1549,7 +1549,7 @@ export _pep_utf8_scan(data: __ptr<void>, size: ulong, chars: ulong): (ulong, ulo
     ulong ascii_run = 0;
     while (i < size && count < chars) {
         # Byte reads are signed; mask to the unsigned value.
-        var b = data[i] & 0xFF;
+        int b = data[i] & 0xFF;
         if (b < 128) {
             i = i + 1;
             count = count + 1;

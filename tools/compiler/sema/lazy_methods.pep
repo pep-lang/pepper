@@ -113,24 +113,31 @@ _trait_methods(module: Module): HashSet<String> {
 ## keeping them in `state.deferred` until one does.
 ##
 ## @param module the model
-## @param specialized a struct specialization, just made
+## @param specialized a struct specialization, just made, or a tuple
+##   (`defer_tuple_methods`)
 ## @param state the passes' state
 export defer_methods(module: Module, specialized: StructDef, state: PassState) {
-    # A struct whose methods call its generic methods keeps their bodies:
-    # a call in a body given back late would be bound without the generic
-    # method's specializations (`describe([u])` to the plain
-    # `describe(bool)` beside `describe<T>(Array<T>)`, `tag_of<U>()` to
-    # none).
-    if (!state.lazy_methods or _calls_generic_methods(specialized)) {
+    if (!state.lazy_methods) {
         return;
     }
     if (!state.trait_method_names.is_value()) {
         state.trait_method_names = Optional<HashSet<String>>.Value(_trait_methods(module));
     }
     var trait_methods = state.trait_method_names.value();
-    var deferred = HashMap<String, Block>();
+    var generic = HashSet<String>();
+    for (var m in specialized.generic_methods) {
+        generic.insert(set_name(m.name));
+    }
+    # A tuple deferred an earlier extension's methods already.
+    var waiting = state.deferred.try_get(specialized.name);
+    var deferred = waiting.is_value() ? waiting.value() : HashMap<String, Block>();
     for (var m in specialized.method_members) {
-        if (m.body.is_value() and !_needed_at_once(m, trait_methods)) {
+        # A method that calls one of the struct's generic methods keeps its
+        # body: a call in a body given back late would be bound without the
+        # generic method's specializations (`describe([u])` to the plain
+        # `describe(bool)` beside `describe<T>(Array<T>)`, `tag_of<U>()`
+        # to none).
+        if (m.body.is_value() and !_needed_at_once(m, trait_methods) and !_calls_generic_methods(m, generic)) {
             deferred[m.name] = m.body.value();
             drop_body(m);
         }
@@ -140,20 +147,30 @@ export defer_methods(module: Module, specialized: StructDef, state: PassState) {
     }
 }
 
-## Whether a method of `st` calls one of its generic methods.
-_calls_generic_methods(st: StructDef): bool {
-    if (st.generic_methods.count == 0) {
-        return false;
-    }
-    var calls = _GenericCalls();
-    for (var m in st.generic_methods) {
-        calls.names.insert(set_name(m.name));
-    }
-    for (var m in st.method_members) {
-        if (m.body.is_value()) {
-            rewrite_block(m.body.value(), calls);
+## Takes the bodies of the methods extensions gave the tuples, their
+## `Comparable` members (#367) that most tuples never use, until a use names
+## them, as `defer_methods` does a specialization's. Runs after each
+## `apply_extensions` before the specialization loop, which gives them
+## back; a tuple whose methods wait already keeps them waiting.
+##
+## @param module the model
+## @param state the passes' state
+export defer_tuple_methods(module: Module, state: PassState) {
+    for (var st in module.structs) {
+        if (st.ty.is_tuple() and !module.checked.structs.contains(st.name)) {
+            defer_methods(module, st, state);
         }
     }
+}
+
+## Whether `method`, a method with a body, calls one of its struct's
+## generic methods, named in `generic`.
+_calls_generic_methods(method: FunctionDef, generic: HashSet<String>): bool {
+    if (generic.count == 0) {
+        return false;
+    }
+    var calls = _GenericCalls(generic);
+    rewrite_block(method.body.value(), calls);
     return calls.found;
 }
 
@@ -163,8 +180,12 @@ _calls_generic_methods(st: StructDef): bool {
 # A value naming its type arguments (`this.tag_of<U>`) needs no such care:
 # given back late, it is specialized by the name it writes.
 struct _GenericCalls {
-    var names: HashSet<String> = HashSet<String>();
+    var names: HashSet<String>;
     var found: bool = false;
+
+    construct(names: HashSet<String>) {
+        this.names = names;
+    }
 
     rewrite(e: Expression): Expression {
         match (e) {
@@ -215,7 +236,10 @@ export specialize_used_methods(module: Module, state: PassState): bool {
     }
     for (var key in uses.on) {
         var at = key.find("\n");
-        if (!names.contains(key.substr_bytes(0, at as ulong))) {
+        var owner = key.substr_bytes(0, at as ulong);
+        # A number's or `bool`'s methods are free functions (`i32::compare`),
+        # never a struct's: `b < 128` names no struct's `<`.
+        if (!names.contains(owner) and !is_integral_name(owner)) {
             uses.anywhere.insert(key.substr_bytes(at as ulong + 1, key.size - at as ulong - 1));
         }
     }
@@ -309,6 +333,8 @@ struct _MethodUses {
     var current: TypeName? = Optional<TypeName>.Empty;
     ## The struct whose methods are walked, for calls with no receiver.
     var owner: String = "";
+    ## The function walked, whose parameters are no sibling methods.
+    var function: FunctionDef? = Optional<FunctionDef>.Empty;
     var table: StructTable? = Optional<StructTable>.Empty;
     ## `"{struct}\n{method}"` of each use on a known type.
     var on: HashSet<String> = HashSet<String>();
@@ -327,6 +353,7 @@ struct _MethodUses {
         }
         current = place.this_type;
         owner = place.owner.is_value() ? place.owner.value().name : "";
+        function = place.function;
         place.rewrite(this);
     }
 
@@ -363,9 +390,22 @@ struct _MethodUses {
             anywhere.insert(set_name(name.substr_bytes(dot as ulong + 1, name.size - dot as ulong - 1)));
             return;
         }
-        if (owner.size > 0) {
+        if (owner.size > 0 and !_is_parameter(name)) {
             on.insert($"{owner}\n{set_name(name)}");
         }
+    }
+
+    # Whether `name` is a parameter of the function walked: `_merge_sort`'s
+    # `compare(a, b)` calls its closure, not the struct's `compare`.
+    _is_parameter(name: String): bool {
+        if (function is Value(f)) {
+            for (var p in f.parameters) {
+                if (p.name == name) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     _found(receiver: Expression, method: String) {
@@ -373,24 +413,47 @@ struct _MethodUses {
         if (state.deferred.count == 0) {
             return;
         }
-        # A static call through a type (`Result<Uri>.ok`): the type may be
-        # spelled as written, not as its struct is named.
+        if (!table.is_value()) {
+            table = Optional<StructTable>.Value(StructTable(module, memo = state.trait_types_memo()));
+        }
+        var ty = Optional<TypeName>.Empty;
         if (receiver is FunctionCall(call)) {
-            if (call.args.count == 0) {
+            ty = _call_result(call.function);
+            # A static call through a type (`Result<Uri>.ok`): the type may
+            # be spelled as written, not as its struct is named.
+            if (!ty.is_value() and call.args.count == 0) {
                 anywhere.insert(name);
                 return;
             }
         }
-        if (!table.is_value()) {
-            table = Optional<StructTable>.Value(StructTable(module, memo = state.trait_types_memo()));
+        if (!ty.is_value()) {
+            ty = static_type_of(receiver, table.value(), current, state);
         }
-        var ty = static_type_of(receiver, table.value(), current, state);
         if (!ty.is_value() or ty.value().contains_auto()) {
             anywhere.insert(name);
             return;
         }
         var key = ty.value().without_pointers().to_string();
         on.insert($"{key}\n{name}");
+    }
+
+    # What a call of `function` returns when only one function can be
+    # meant: a free function (`_monotonic_milliseconds() >= at`), or in a
+    # method, a sibling method that `convert_member_refs` has not made
+    # `this._find_slot(key)` yet (`_find_slot(key) >= 0`).
+    _call_result(function: String): TypeName? {
+        # A parameter's call (`compare(a, b)`) returns what its type does.
+        if (_is_parameter(function)) {
+            return Optional<TypeName>.Empty;
+        }
+        var free = table.value().function(function);
+        var sibling = current.is_value() ?
+            table.value().method_return(current.value(), function) :
+            Optional<TypeName>.Empty;
+        if (free.is_value() == sibling.is_value()) {
+            return Optional<TypeName>.Empty;
+        }
+        return free.is_value() ? free : sibling;
     }
 }
 
