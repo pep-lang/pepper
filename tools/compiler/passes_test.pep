@@ -517,6 +517,9 @@ lets_an_untyped_local_shadow_a_sibling_method() {
     var folder = TempFolder("passes_local_shadows_method");
     var programs = [
         "# expect: accepted\nstruct P {\n    var v: int;\n    construct(v: int) { this.v = v; }\n    compare(other: P): int { return v.compare(other.v); }\n}\nextend P with Comparable;\nstruct S {\n    construct() {}\n    key(i: int): int { return i; }\n    check(): bool {\n        var key = (i: int) => [P(i)];\n        return key(1) < [P(2)];\n    }\n}\nmain(): int { return S().check() ? 0 : 1; }\n",
+        # Nor does a closure passed to the local take the method's slot
+        # type: `s` is a `String`, not `each`'s `int` (#525).
+        "# expect: accepted\nstruct S {\n    construct() {}\n    each(f: (int) => int): int { return f(1); }\n    run(): int {\n        var each = (f: (String) => int): int => f(\"ab\");\n        return each((s) => s.size as int);\n    }\n}\nmain(): int { return S().run() - 2; }\n",
         # A global does not: the method of its name is called.
         "# expect: accepted\nconst count = Atomic<int>(0);\nstruct S {\n    count(): int { return 1; }\n    total(): int { return count() + 1; }\n}\nmain(): int { return S().total() - 2; }\n"
     ];
@@ -898,14 +901,15 @@ nested_array_literals_keep_few_methods_per_level() {
     var at_24 = _bodies_at_depth(folder, 24);
     # As many more per level at any depth: linear.
     expect_equal(at_24 - at_16, at_16 - at_8);
-    # 99 a level now: a method waiting for a use no longer makes the types
-    # its signature names (126 before). An Array of Comparable elements is Comparable (#366), so each
+    # 96 a level now, since `Array`'s sorts no longer give `compare` back to
+    # every struct (99 before #525); a method waiting for a use no longer
+    # makes the types its signature names (126 before that). An Array of Comparable elements is Comparable (#366), so each
     # level has the Comparable methods too (135 before #491 made the
     # ordering operators and Comparable's members wait for a use). 72
     # before #366 (67 before the iterators' `next(location)`, #319, and 128
     # before that).
     var per_level = (at_16 - at_8) / 8;
-    if (per_level > 105) {
+    if (per_level > 100) {
         panic($"a level of a nested array literal keeps {per_level} method bodies");
     }
 }
@@ -923,9 +927,9 @@ comparable_members_wait_for_a_use() {
         point
             + "main(): int {\n    var a = [P(1)];\n    var t = (P(1), P(2));\n    var o = Optional<P>.Value(P(1));\n    return a.count as int + t.0.x + (o.is_value() ? 1 : 0);\n}\n"
     );
-    # `compare` comes back by name alone: `Array`'s sorts call it in a
-    # closure whose parameters have no type yet when the loop walks it.
-    expect_equal(unused, "Array<P>: compare\nOptional<P>: compare\n__tuple<P, P>: compare\n");
+    # `Array`'s sorts name `compare` on their typed closures' parameters,
+    # so an Array nobody sorts gives no struct its `compare` back (#525).
+    expect_equal(unused, "Array<P>: \nOptional<P>: \n__tuple<P, P>: \n");
     var used = _comparable_bodies(
         folder,
         "used",

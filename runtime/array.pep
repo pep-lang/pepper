@@ -1455,7 +1455,7 @@ export extend Array<T: Comparable> {
     ##     var a = [3, 1, 2];
     ##     a.sort_unstable();   # [1, 2, 3]
     sort_unstable() {
-        _pdq_sort((a, b) => a.compare(b));
+        _pdq_sort((a: T, b: T) => a.compare(b));
     }
 
     ## Reorders the elements so that the one at `nth` is the one sorting
@@ -1470,7 +1470,7 @@ export extend Array<T: Comparable> {
     ##     var a = [9, 1, 8, 2, 7];
     ##     a.select_nth(2);   # a[2] == 7, the median
     select_nth(nth: ulong, location: __ptr<char> = __caller_location()) {
-        _select_nth(nth, (a, b) => a.compare(b), location);
+        _select_nth(nth, (a: T, b: T) => a.compare(b), location);
     }
 
     ## Puts the `count` smallest elements into the first `count` positions,
@@ -1483,7 +1483,7 @@ export extend Array<T: Comparable> {
     ##     var a = [5, 3, 9, 1, 7];
     ##     a.partial_sort(2);   # starts [1, 3]
     partial_sort(count: ulong, location: __ptr<char> = __caller_location()) {
-        _partial_sort(count, (a, b) => a.compare(b), location);
+        _partial_sort(count, (a: T, b: T) => a.compare(b), location);
     }
 
     ## Returns the lexicographic order of this Array and `other`: the order
@@ -1882,7 +1882,7 @@ export extend ArrayView<T: Comparable> {
     ## @returns the index of the first element equal to `item`, or none
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     binary_search(item: T): ulong? {
-        return binary_search_by((x) => x.compare(item));
+        return binary_search_by((x: T) => x.compare(item));
     }
 
     ## Returns the index of the first element of this sorted slice that
@@ -1892,7 +1892,7 @@ export extend ArrayView<T: Comparable> {
     ## @returns the index of the first element at or after `item`
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     lower_bound(item: T): ulong {
-        return _partition((x) => x.compare(item), true);
+        return _partition((x: T) => x.compare(item), true);
     }
 
     ## Returns the index of the first element of this sorted slice that
@@ -1902,7 +1902,7 @@ export extend ArrayView<T: Comparable> {
     ## @returns the index of the first element after `item`
     ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
     upper_bound(item: T): ulong {
-        return _partition((x) => x.compare(item), false);
+        return _partition((x: T) => x.compare(item), false);
     }
 
     ## Reports whether the elements are in `compare` order; see
@@ -2132,7 +2132,7 @@ export extend MutableArrayView<T: Comparable> {
     ##     a.mutable_slice(1, 4).sort();   # a is [9, 6, 7, 8, 5]
     sort() {
         _check(__caller_location());
-        _source._merge_sort_range(_start, _end, (a, b) => a.compare(b));
+        _source._merge_sort_range(_start, _end, (a: T, b: T) => a.compare(b));
         _version = _source._version;
     }
 
@@ -2142,7 +2142,7 @@ export extend MutableArrayView<T: Comparable> {
     ## @panics if the Array was modified around the slice ("Array modified while a slice of it is in use")
     sort_unstable() {
         _check(__caller_location());
-        _source._pdq_sort_range(_start, _end, (a, b) => a.compare(b));
+        _source._pdq_sort_range(_start, _end, (a: T, b: T) => a.compare(b));
         _version = _source._version;
     }
 }
