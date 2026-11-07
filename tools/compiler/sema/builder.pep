@@ -3488,6 +3488,13 @@ struct _Builder {
     ## A trait's method, whose body is optional: one without is a requirement.
     trait_method_def(decl: ast.FunctionDecl, parent: String?): Built<FunctionDef> {
         reject_implicit(decl.attributes)?;
+        for (var p in decl.parameters) {
+            if (p.name.starts_with("this.")) {
+                return Built<FunctionDef>.Err(
+                    _error($"a '{p.name}' parameter is allowed only in a constructor", loc(p.name_span))
+                );
+            }
+        }
         return member_def(decl, parent);
     }
 

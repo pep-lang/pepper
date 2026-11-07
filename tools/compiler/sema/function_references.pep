@@ -557,7 +557,7 @@ struct _References {
         apply_synthesized(st);
         var error = finish(state, st);
         if (error.is_value()) {
-            state.report(error_at(error.value(), loc));
+            state.report(error.value());
             return e;
         }
         added.append(st);

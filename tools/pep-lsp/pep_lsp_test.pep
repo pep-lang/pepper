@@ -60,6 +60,22 @@ outlines_declarations_and_struct_members() {
     expect_equal(symbols[3].detail.value(), "int");
 }
 
+# A constructor's `this.x` parameter, required or defaulted, is spelled as
+# declared, without the `__auto` type the parser gives it (#325).
+[Test]
+spells_this_parameters_as_declared() {
+    var text = "struct P {\n    var x: int;\n    var y: int;\n    construct(this.x, this.y = 1, z: int) {}\n}\n";
+    if (parse.parse(text).value().declarations[0] is Struct(s)) {
+        var spelled = Array<String>();
+        for (var p in s.constructors[0].parameters) {
+            spelled.append(parameter_signature(p));
+        }
+        expect_equal(", ".join(spelled), "this.x, this.y, z: int");
+    } else {
+        panic("not a struct");
+    }
+}
+
 [Test]
 reports_a_syntax_error_without_loading_the_program() {
     var analysis = analyze("file:///nowhere/a.pep", "main(): int {\n    return 0\n}\n");

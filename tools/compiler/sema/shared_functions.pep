@@ -476,7 +476,7 @@ struct _SharedFunctions {
         apply_synthesized(st);
         var failed = finish(state, st);
         if (failed.is_value()) {
-            state.report(error_at(failed.value(), loc));
+            state.report(failed.value());
             return inner;
         }
         # `release_field_refs` has run: release the held value here.

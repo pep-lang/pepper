@@ -3,10 +3,10 @@
 ## of `__acquire` and `__release`; every constructor gets the allocation
 ## prologue, the field initializations and `return this`.
 
-import [Diagnostic] from compiler.diagnostic;
+import [Diagnostic, Location] from compiler.diagnostic;
 import [has_bare_attribute, payload_field, SHARED_ATTRIBUTE, TAG_FIELD] from "builder";
 import [drop_body] from "checked";
-import [error_at] from "common";
+import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -246,8 +246,9 @@ _has_field(st: StructDef, name: String): bool {
 ##
 ## @param state the passes' state
 ## @param st the struct, changed in place
-## @returns the error, if a `this.<field>` parameter names no field
-export finish(state: PassState, st: StructDef): String? {
+## @returns the error, at the parameter, if a `this.<field>` parameter names
+##     no field or the same field as an earlier one
+export finish(state: PassState, st: StructDef): Diagnostic? {
     for (var ctor in st.constructors) {
         # `this.<field>` parameters become real parameters that assign the
         # field.
@@ -265,9 +266,19 @@ export finish(state: PassState, st: StructDef): String? {
                     }
                 }
                 if (!ty.is_value()) {
-                    return Optional<String>.Value(
-                        $"constructor parameter 'this.{field}' has no matching field in '{st.name}'"
+                    return Optional<Diagnostic>.Value(
+                        error_at($"constructor parameter 'this.{field}' has no matching field in '{st.name}'", p.loc)
                     );
+                }
+                for (var (earlier, name, _) in init_params) {
+                    if (name == field) {
+                        var previous = location_of(ctor.parameters[earlier].loc);
+                        return Optional<Diagnostic>.Value(
+                            error_at(
+                                $"redefinition of 'this.{field}'", p.loc
+                            ).with_note("previous definition is here", Optional<Location>.Value(previous))
+                        );
+                    }
                 }
                 init_params.append((i, field, ty.value()));
             }
@@ -362,12 +373,12 @@ export finish(state: PassState, st: StructDef): String? {
     }
     # A value struct has no object to count or destroy.
     if (st.is_value()) {
-        return Optional<String>.Empty;
+        return Optional<Diagnostic>.Empty;
     }
     st.method_members.append(st.release.copy());
     st.method_members.append(st.acquire.copy());
     st.method_members.append(st.destructor.copy());
-    return Optional<String>.Empty;
+    return Optional<Diagnostic>.Empty;
 }
 
 # Gives each bare `return;` in `statement` the value `this_ref`, outside
@@ -479,7 +490,7 @@ export synthesize(module: Module, state: PassState): Diagnostic? {
         apply_synthesized(st);
         var error = finish(state, st);
         if (error.is_value()) {
-            return Optional<Diagnostic>.Value(error_at(error.value(), st.loc));
+            return error;
         }
     }
     return Optional<Diagnostic>.Empty;

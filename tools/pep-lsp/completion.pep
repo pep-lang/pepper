@@ -212,7 +212,7 @@ struct _Site {
                 }
                 var name = parameters[index];
                 index += 1;
-                _offer(items, named, name, $"{name}: {p.type_name.to_string()}");
+                _offer(items, named, name, parameter_signature(p));
             }
             for (var other in sema.other_names(callee.attributes, parameters, 0)) {
                 if (other.is_err() or other.value().deprecated) {
