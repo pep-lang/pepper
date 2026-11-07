@@ -1870,6 +1870,17 @@ follow the target's OS. Every link drops the sections nothing uses:
 `/OPT:REF` on Windows (not with `-g`, whose `/DEBUG` turns it off),
 `--gc-sections` on ELF, `-dead_strip` on Apple targets.
 
+**`-v`** (`driver/verbose.pep`). `main.pep` turns it on with `set_verbose`
+in the build's own process only (its `--compile-part` and compilation unit
+worker children get `-v` too and print nothing), then prints the compiler,
+target, `find_link_driver`'s clang, the build and cache folders and
+`link.Runtime.discover()`'s folder before the build scripts run, and the
+output once written. Every site in `driver/` that runs an external
+program (the link, `xcrun`, `dsymutil`, `pep-package fetch`, `git`, a
+build script's build and run, its `[native]` clang and `pkg-config`)
+calls `print_running(command)` first, which prints
+`process.Command.to_string()`. Off, each is one load of an atomic flag.
+
 **Optimization** (`codegen/target.pep`). `BuildOptions.opt_level` is `-O0` through
 `-O3`: `-O<n>`, else `PEPPER_OPT_LEVEL`, else `-O0` (a bare `-O` is `-O2`,
 and `-O main.pep` does not read the file as a level). Each part runs LLVM's
@@ -4461,6 +4472,6 @@ the checkout (`PEPPER_TARGET_DIR`).
   builder's (every file's, one per top-level declaration), else the
   first failing pass's (`PassState.take_errors`), one per declaration, and
   code generation reports one error.
-- **Unused CLI flags**: `-v`, and `-T` channels other than `time`,
+- **Unused CLI flags**: `-T` channels other than `time`,
   `passes` and `cache`. Naming a second source file is an error (except under
   `--test`): only the entry file is compiled.

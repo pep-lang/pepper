@@ -18,6 +18,7 @@ import [Directory, File, Path] from io;
 import compiler.link;
 import os;
 import process;
+import "verbose";
 
 ## The LLVM major the compiler is built against, whose clang links.
 export const LLVM_MAJOR = "20";
@@ -510,6 +511,7 @@ export apple_sdk(target: link.Target): Path? {
     var command = process.Command("xcrun");
     command.argument("--sdk").argument(sdk).argument("--show-sdk-path");
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    print_running(command);
     var ran = command.run();
     if (ran.is_err() or !ran.value().status.success() or ran.value().stdout.trim().is_empty) {
         return Optional<Path>.Empty;
@@ -824,6 +826,7 @@ export link_objects(
         command.argument("-Wl,--end-group");
     }
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    print_running(command);
     var ran = command.run();
     File.remove(listing);
     if (ran.is_err()) {
@@ -878,5 +881,6 @@ _write_dsym(output: Path) {
     var command = process.Command("dsymutil");
     command.argument(output.to_string());
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    print_running(command);
     command.run();
 }

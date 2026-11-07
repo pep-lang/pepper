@@ -48,3 +48,15 @@ starts_a_child_in_a_folder_by_fork_and_exec() {
     expect_true(nowhere.error().is_not_found());
     os.remove_environment("PEPPER_PROCESS_FORK_SPAWN");
 }
+
+# `to_string` shows the command line, quoted as the platform reads it.
+[Test]
+to_string_quotes_the_arguments_that_need_it() {
+    var command = process.Command("clang").argument("-o").argument("my app").argument("").argument("it's");
+    if (os.system_name() == "windows") {
+        expect_equal(command.to_string(), "clang -o \"my app\" \"\" it's");
+    } else {
+        expect_equal(command.to_string(), "clang -o 'my app' '' 'it'\\''s'");
+    }
+    expect_equal(process.Command("cc").argument("-DX=1").argument("a/b.c").to_string(), "cc -DX=1 a/b.c");
+}
