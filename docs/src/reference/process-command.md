@@ -394,3 +394,25 @@ main(args: String[]): int {
     return 1;
 }
 ```
+
+#### to_string
+
+```pepper
+to_string(): String
+```
+
+The command line, to show a person what runs: the program, then each
+argument, separated by spaces and quoted where needed. On Windows it
+is the line the program receives, quoted as the C runtime splits it;
+elsewhere an argument a POSIX shell would split or expand is in
+single quotes. The environment, working directory and streams are
+not shown.
+
+**Returns**
+- the command line
+
+**Example**
+```pepper
+var line = process.Command("clang").argument("-o").argument("my app").to_string();
+# "clang -o 'my app'" (on Windows, `clang -o "my app"`)
+```

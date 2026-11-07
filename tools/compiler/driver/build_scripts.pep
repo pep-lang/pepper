@@ -17,6 +17,7 @@ import process;
 import regex;
 import toolchain;
 import "linker";
+import "verbose";
 
 ## What the build scripts of a program's packages add to its build.
 export struct ScriptOutput {
@@ -244,12 +245,13 @@ _run_locked(
     if (inputs.refuse) {
         arguments.append("--no-build-scripts");
     }
-    var built = process
+    var build = process
         .Command(compiler.value().to_string())
         .arguments(arguments)
         .stdout(process.Stream.Pipe)
-        .stderr(process.Stream.Pipe)
-        .run();
+        .stderr(process.Stream.Pipe);
+    print_running(build);
+    var built = build.run();
     if (built.is_err()) {
         return Result<String, String>.err($"cannot run {compiler.value()}: {built.error().message}");
     }
@@ -262,6 +264,7 @@ _run_locked(
     for (var variable in environment) {
         command.environment(variable[0], variable[1]);
     }
+    print_running(command);
     var ran = command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe).run();
     if (ran.is_err()) {
         return Result<String, String>.err(
@@ -531,7 +534,9 @@ _compile_native(
         if (kept.is_ok() and key.is_value() and kept.value() == key.value() and object.is_file()) {
             continue;
         }
-        var ran = process.Command(clang.to_string()).arguments(arguments).working_directory(dir).run();
+        var compile = process.Command(clang.to_string()).arguments(arguments).working_directory(dir);
+        print_running(compile);
+        var ran = compile.run();
         if (ran.is_err()) {
             return Result<void, String>.err($"cannot run {clang}: {ran.error().message}");
         }
@@ -686,6 +691,7 @@ _run_pkg_config(name: String, library: String, query: String, inputs: ScriptInpu
             command.environment("PKG_CONFIG_SYSROOT_DIR", root);
         }
     }
+    print_running(command);
     var ran = command.run();
     if (ran.is_err()) {
         return Result<String[], String>.err(

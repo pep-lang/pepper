@@ -66,7 +66,7 @@ short, and `pepper help build` runs it.
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
 | `--error-limit=<N>` | Show at most N errors; `0` shows every one | 20 |
-| `-v`, `--verbose` | Accepted; prints nothing more yet | off |
+| `-v`, `--verbose` | Print the toolchain, runtime, folders, commands run and output | off |
 | `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>`, `--members <names>`, `--member <dir>`, `--print-members`, `--build-script <dir>` | Internal: what a build runs in the children it starts, and what `pep-test` asks | |
 | `-h`, `--help` | Print the options | |
 | `-V`, `--version` | Print the version | |
@@ -852,7 +852,45 @@ finds any, one per function (see
 
 ### `-v`, `--verbose`
 
-Accepted for compatibility with other compilers; it prints nothing more yet.
+Prints, on standard error, what to look at first when a build goes wrong:
+which compiler, toolchain and runtime it used, where it wrote, and each
+program it ran.
+
+```text
+compiler: C:\Users\me\AppData\Local\pepper\toolchains\0.13.0-dev\bin\pep-build.exe (0.13.0-dev)
+target: x86_64-pc-windows-msvc
+clang: C:\Program Files\LLVM\bin\clang.exe
+build folder: D:\app\.pep\build
+cache folder: D:\app\.pep\cache
+runtime: C:\Users\me\AppData\Local\pepper\toolchains\0.13.0-dev\runtime
+running: "C:\Program Files\LLVM\bin\clang.exe" -o app.exe --target=x86_64-pc-windows-msvc -Xlinker /DEBUG -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF @app.exe.objects -ldbghelp -lkernel32 -luser32 -lshell32
+wrote: app.exe
+```
+
+- `compiler`: the `pep-build` that ran, and its version.
+- `target`: the platform the build compiles for.
+- `clang`: the clang that links, as the build finds it (see
+  [Linking](#linking)), or `none found`.
+- `build folder` and `cache folder`: where intermediate files and the
+  [build cache](#the-build-cache) go; `(objects not cached: --no-cache)`
+  follows the cache folder under `--no-cache`, which still keeps build
+  scripts' records there.
+- `runtime`: the runtime folder the build loads (see
+  [Getting started](../tutorial/getting-started.md#where-the-compiler-finds-the-standard-library)),
+  `none found`, or `none (--no-runtime)`.
+- `running`: each program the build runs, before it runs, with its
+  arguments, quoted as the system reads them: the linker, `xcrun` and
+  `dsymutil` on Apple systems, `pep-package fetch` and `git` for
+  dependencies, and for a
+  [build script](#build-scripts-and---no-build-scripts), the build of the
+  script, the script, clang on its `[native]` sources and `pkg-config`.
+  The copies of the compiler a build starts to compile in parallel are not
+  listed.
+- `wrote`: the executable or library written (with `--emit-llvm`, the
+  `.ll` file).
+
+A build of several workspace members prints this for each member.
+`pepper build` and `pep-run` pass `-v` on to `pep-build`.
 
 Errors and warnings are printed like clang's, colored when standard error is
 a terminal; set `NO_COLOR` to turn color off. See

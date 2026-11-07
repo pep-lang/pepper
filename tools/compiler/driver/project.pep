@@ -7,6 +7,7 @@ import [Directory, File, Path] from io;
 import compiler.link;
 import process;
 import toolchain;
+import "verbose";
 
 ## What a build takes from the project it is in.
 export struct ProjectSetup {
@@ -472,7 +473,9 @@ _fetch_locked(
                 arguments.append(package.key());
             }
         }
-        var ran = process.Command(tool.value().to_string()).arguments(arguments).run();
+        var fetch = process.Command(tool.value().to_string()).arguments(arguments);
+        print_running(fetch);
+        var ran = fetch.run();
         if (ran.is_err()) {
             return Result<void, String>.err($"cannot run {tool.value()}: {ran.error().message}");
         }
@@ -551,6 +554,7 @@ _git(arguments: String[], dir: Path?): Result<void, String> {
         command.working_directory(dir.value());
     }
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    print_running(command);
     var ran = command.run();
     if (ran.is_err()) {
         return Result<void, String>.err($"cannot run git, which fetching dependencies needs: {ran.error().message}");

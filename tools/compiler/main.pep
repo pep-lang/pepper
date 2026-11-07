@@ -43,7 +43,7 @@ import compiler.ast;
 import async;
 import cli;
 import compiler.codegen;
-import [Diagnostic, ERROR_LIMIT, Location, render_all, render_errors, SourceText] from compiler.diagnostic;
+import [Diagnostic, ERROR_LIMIT, Location, render_all, render_errors, shown_path, SourceText] from compiler.diagnostic;
 import compiler.driver;
 import compiler.incremental;
 import io;
@@ -198,7 +198,11 @@ _main(args: String[]): int {
         "frame-pointers",
         help = "Keep the frame pointer in every function, even when optimizing, so profilers and stack walkers unwind the stack cheaply (clang's `-fno-omit-frame-pointer`). `pep-profile` builds with it"
     );
-    parser.flag("verbose", "v", "Accepted for compatibility; prints nothing more yet");
+    var verbose = parser.flag(
+        "verbose",
+        "v",
+        "Print on standard error the compiler, toolchain and runtime used, the build and cache folders, each external command run (the linker, a build script, clang) with its arguments, and the output written"
+    );
     var no_runtime = parser.flag("no-runtime", help = "Skip runtime discovery");
     var emit_ast = parser.option<_AstFormat>(
         "emit-ast",
@@ -303,6 +307,11 @@ _main(args: String[]): int {
         }
     } else {
         process.end_children_on_exit();
+        # The children a build starts get `-v` too, and leave the printing
+        # to it.
+        if (verbose.is_set) {
+            driver.set_verbose();
+        }
     }
     if (compile_part.is_set) {
         return _compile_part(parser, Path(compile_part.value()), parts.values());
@@ -658,6 +667,28 @@ _main(args: String[]): int {
     var sysroot_dir = driver.effective_sysroot(
         setup.target, sysroot.is_set ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
     );
+    # The program's cache, even with `--no-cache`: a script's stamp needs its
+    # program's record.
+    var cache = cache_dir.is_set ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work);
+    if (driver.is_verbose()) {
+        var executable = process.executable_path();
+        var clang = driver.find_link_driver();
+        driver.print_verbose(
+            $"compiler: {executable.is_ok() ? executable.value().to_string() : args[0]} ({version()})"
+        );
+        driver.print_verbose($"target: {codegen.target_triple(setup.target)}");
+        driver.print_verbose($"clang: {clang.is_value() ? clang.value().to_string() : "none found"}");
+        driver.print_verbose($"build folder: {build_folder}");
+        driver.print_verbose(
+            $"cache folder: {cache.dir.parent().value_or(cache.dir)}{no_cache.is_set ? " (objects not cached: --no-cache)" : ""}"
+        );
+        # Found again as `link.load_program` finds it, so a program that
+        # fails to load still names it.
+        var runtime = setup.runtime ? link.Runtime.discover() : link.Runtime();
+        driver.print_verbose(
+            $"runtime: {!setup.runtime ? "none (--no-runtime)" : runtime.sources.is_empty ? "none found" : shown_path(runtime.sources[0].parent().value_or(Path(".")).to_string())}"
+        );
+    }
     # A build script's build has what the build that runs it fetched.
     if (!(linked.is_set or checked.is_set or model.is_set or steps.is_set or ir.is_set or build_script.is_set)) {
         # A project builds with what pep.lock lists: fetch what is missing.
@@ -682,9 +713,7 @@ _main(args: String[]): int {
     inputs.opt_level = opt_level.value();
     inputs.sysroot = sysroot_dir;
     inputs.refuse = no_build_scripts.is_set or os.environment_flag("PEPPER_NO_BUILD_SCRIPTS");
-    # The program's cache, even with `--no-cache`: a script's stamp needs its
-    # program's record.
-    inputs.cache = cache_dir.is_set ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work);
+    inputs.cache = cache;
     var scripts = driver.run_build_scripts(entry, inputs);
     if (scripts.is_err()) {
         _report(scripts.error());
@@ -797,6 +826,7 @@ _main(args: String[]): int {
             _report($"cannot write {ll}: {written.error().message}");
             return 1;
         }
+        driver.print_verbose($"wrote: {ll}");
     } else if (model.is_set or steps.is_set) {
         var built = sema.merge(program.value(), errors_shown);
         if (built.is_err()) {
@@ -885,6 +915,7 @@ _main(args: String[]): int {
             }
             return 1;
         }
+        driver.print_verbose($"wrote: {out}");
         if (options.cache.is_value()) {
             var built_entry = entry;
             incremental.evict_shared(options.cache.value(), () => driver.shared_cache_limit(built_entry));

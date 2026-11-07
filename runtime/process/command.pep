@@ -311,6 +311,21 @@ export struct Command {
         return _process_sys_exec(this);
     }
 
+    ## The command line, to show a person what runs: the program, then each
+    ## argument, separated by spaces and quoted where needed. On Windows it
+    ## is the line the program receives, quoted as the C runtime splits it;
+    ## elsewhere an argument a POSIX shell would split or expand is in
+    ## single quotes. The environment, working directory and streams are
+    ## not shown.
+    ##
+    ## @returns the command line
+    ## @example
+    ##     var line = process.Command("clang").argument("-o").argument("my app").to_string();
+    ##     # "clang -o 'my app'" (on Windows, `clang -o "my app"`)
+    to_string(): String {
+        return _process_command_line(this);
+    }
+
     # The child's environment as `NAME=VALUE` entries: the parent's, or none
     # after `clear_environment`, with the changes applied.
     _environment_entries(): Array<String> {
@@ -368,4 +383,27 @@ _process_entry_names(entry: String, name: String): bool {
         return own.lower() == name.lower();
     }
     return own == name;
+}
+
+# The command line `Command.to_string` shows outside Windows: each word in
+# single quotes unless it holds only characters a POSIX shell leaves alone.
+[Target(!OS(Windows))]
+_process_command_line(command: Command): String {
+    var words = Array<String>();
+    words.append(_process_shell_word(command.program));
+    for (var argument in command._arguments) {
+        words.append(_process_shell_word(argument));
+    }
+    return " ".join(words);
+}
+
+[Target(!OS(Windows))]
+_process_shell_word(word: String): String {
+    var plain = word.size > 0;
+    ulong index = 0;
+    while (plain && index < word.size) {
+        plain = word.byte_at(index).is_alphanumeric() || "_@%+=:,./-".contains(word.substr_bytes(index, 1));
+        index = index + 1;
+    }
+    return plain ? word : "'" + word.replace("'", "'\\''") + "'";
 }
