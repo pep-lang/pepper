@@ -901,14 +901,15 @@ nested_array_literals_keep_few_methods_per_level() {
     var at_24 = _bodies_at_depth(folder, 24);
     # As many more per level at any depth: linear.
     expect_equal(at_24 - at_16, at_16 - at_8);
-    # 99 a level now: a method waiting for a use no longer makes the types
-    # its signature names (126 before). An Array of Comparable elements is Comparable (#366), so each
+    # 96 a level now, since `Array`'s sorts no longer give `compare` back to
+    # every struct (99 before #525); a method waiting for a use no longer
+    # makes the types its signature names (126 before that). An Array of Comparable elements is Comparable (#366), so each
     # level has the Comparable methods too (135 before #491 made the
     # ordering operators and Comparable's members wait for a use). 72
     # before #366 (67 before the iterators' `next(location)`, #319, and 128
     # before that).
     var per_level = (at_16 - at_8) / 8;
-    if (per_level > 105) {
+    if (per_level > 100) {
         panic($"a level of a nested array literal keeps {per_level} method bodies");
     }
 }
