@@ -32,7 +32,7 @@ _process_sys_id(): ulong {
 _process_sys_end_children_on_exit() {}
 
 [Target(OS(Wasi))]
-_process_sys_exit_with_parent() {}
+_process_sys_exit_with_parent(parent: ulong) {}
 
 [Target(OS(Wasi))]
 _process_sys_executable_path(): io.IoResult<io.Path> {

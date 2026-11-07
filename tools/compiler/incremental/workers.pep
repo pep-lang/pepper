@@ -18,6 +18,11 @@ import "cache";
 import "check";
 import "compilation_units";
 
+## The environment variable a build gives each child it starts its own
+## process id in, which the child passes to `process.exit_with_parent` so
+## that it ends even if the build ended before it started (#533).
+export const PARENT_ID_VARIABLE = "PEPC_PARENT_ID";
+
 ## Returns the file a compilation unit worker and the build pass compilation
 ## unit `k`'s `what` through, in `dir`: `<k>.<what>`.
 ##
@@ -296,6 +301,7 @@ export check_in_workers(
                     command.argument(arg);
                 }
                 command.argument("--compilation-unit-worker").argument(dir.to_string());
+                command.environment(PARENT_ID_VARIABLE, $"{process.id()}");
                 command.stdin(process.Stream.Pipe);
                 var spawned = command.spawn();
                 if (spawned.is_err()) {

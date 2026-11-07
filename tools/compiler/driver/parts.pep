@@ -9,7 +9,7 @@
 import async;
 import compiler.codegen;
 import digest;
-import [Cache, compiler_identity] from compiler.incremental;
+import [Cache, compiler_identity, PARENT_ID_VARIABLE] from compiler.incremental;
 import [Directory, File, Path] from io;
 import llvm;
 import os;
@@ -150,6 +150,7 @@ export compile_parts(
             command.argument("--part").argument($"{job.part}={job.object}");
             line = $"{line} --part {job.part}={job.object}";
         }
+        command.environment(PARENT_ID_VARIABLE, $"{process.id()}");
         var spawned = command.spawn();
         if (spawned.is_err()) {
             failure = $"cannot run {executable.value()}: {spawned.error().message}";
@@ -393,15 +394,6 @@ _keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[], parti
 ## @param jobs the parts to compile
 ## @returns nothing, or why one failed
 export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
-    # For a test that ends a build while its children run
-    # (`children_test.pep`): `PEPC_STALL_PARTS=N` holds each child N
-    # seconds first.
-    var stall = os.environment("PEPC_STALL_PARTS");
-    if (stall.is_value()) {
-        File.stderr().write_all("part stalled\n");
-        var seconds = ulong.parse(stall.value());
-        async.sleep(seconds.is_value() ? seconds.value() * 1000 : 0);
-    }
     var read = File.read_to_string(dir.join(Path(_PLAN_FILE)));
     if (read.is_err()) {
         return Result<void, String>.err($"cannot read the plan in {dir}: {read.error().message}");

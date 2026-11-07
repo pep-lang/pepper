@@ -112,13 +112,11 @@ _process_sys_end_children_on_exit() {}
 # A process whose parent ends gets a new one (init, or a subreaper), on
 # Linux and macOS alike: one check for both, where Linux's
 # PR_SET_PDEATHSIG would also fire when the thread that started it ends.
-# shortcut: a parent that ends before this reads `getppid()` goes
-# unnoticed; pass the parent's id in if that window matters.
 [Target(OS(Linux) || OS(Mac))]
-_process_sys_exit_with_parent() {
-    var parent = getppid();
+_process_sys_exit_with_parent(parent: ulong) {
+    var expected = parent == 0 ? getppid() as ulong : parent;
     async.Thread.spawn(() => {
-        while (getppid() == parent) {
+        while (getppid() as ulong == expected) {
             async.sleep(100);
         }
         _exit(1);

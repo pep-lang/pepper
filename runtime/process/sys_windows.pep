@@ -117,7 +117,7 @@ _process_sys_end_children_on_exit() {
 }
 
 [Target(OS(Windows))]
-_process_sys_exit_with_parent() {}
+_process_sys_exit_with_parent(parent: ulong) {}
 
 [Target(OS(Windows))]
 _process_sys_id(): ulong {

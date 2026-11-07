@@ -93,7 +93,7 @@ main(): int {
 ## exit_with_parent
 
 ```pepper
-exit_with_parent()
+exit_with_parent(parent: ulong = 0)
 ```
 
 Ends this process, with status 1, when the process that started it
@@ -105,6 +105,13 @@ new parent, which it gets when its parent ends; it then ends at once,
 without running `atexit` handlers or flushing the C streams. On Windows,
 where a process is not told of its parent's end, and on WASI, it does
 nothing: there the parent calls `end_children_on_exit()`.
+
+A parent that ends before this call goes unnoticed, unless the child
+knows its parent's id (`id()`, which the parent can pass it) and gives
+it as `parent`: a process whose parent is then another one ends at once.
+
+**Parameters**
+- `parent` — the id of the process that started this one, or 0 (the default) for the parent it has when it calls this
 
 **Example**
 ```pepper
