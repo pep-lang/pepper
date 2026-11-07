@@ -16,7 +16,9 @@ in the prelude, and the module passes them on as well.
 - [Child](process-child.md): a running child process, its piped streams,
   and its `ExitStatus`
 - [The running process](process-current.md): `id()`,
-  `executable_path()`, and `fork()`, which starts a copy of it
+  `executable_path()`, `fork()`, which starts a copy of it, and
+  `end_children_on_exit()` and `exit_with_parent()`, which keep a child
+  from outliving its parent
 - [Finding programs](process-find.md): `find_executable()` looks a
   program up on the `PATH`, `find_companion()` looks beside the running
   program first, and `is_executable()` checks a file

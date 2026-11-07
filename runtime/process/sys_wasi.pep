@@ -29,6 +29,12 @@ _process_sys_id(): ulong {
 }
 
 [Target(OS(Wasi))]
+_process_sys_end_children_on_exit() {}
+
+[Target(OS(Wasi))]
+_process_sys_exit_with_parent() {}
+
+[Target(OS(Wasi))]
 _process_sys_executable_path(): io.IoResult<io.Path> {
     return io.IoResult<io.Path>.err(_process_wasi_unsupported("an executable path"));
 }
