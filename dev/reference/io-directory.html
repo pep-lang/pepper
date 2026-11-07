@@ -421,9 +421,8 @@ Windows).</p>
 recursively. Symlinks are removed, never followed, so nothing outside
 the tree is touched. A file or symlink at <code>path</code> itself is simply
 removed.</p>
-<p>Stops at the first failure, leaving whatever was not yet removed; on
-Windows a read-only file inside the tree is such a failure
-(<code>is_permission_denied()</code>).</p>
+<p>A read-only file is removed too, on Windows as on POSIX. Stops at the
+first failure, leaving whatever was not yet removed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>path</code> — the file, symlink or directory tree to remove</li>
