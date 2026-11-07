@@ -37,7 +37,7 @@ export const MAX_RESPONSE_BODY: ulong = 67108864;
 ## A client is `[Shared]`: make one and use it from every thread and task.
 ## In a task, a request parks only the task while it waits.
 ##
-## @example
+## @example no-run
 ##     import http;
 ##
 ##     main(): int {
