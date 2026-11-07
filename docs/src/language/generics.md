@@ -23,6 +23,11 @@ compiled for those exact types. There is no runtime cost for using them.
 - Name the type arguments whenever you use the struct: `Stack<int>()`,
   `var s: Stack<String>;`.
 - `Stack<int>` and `Stack<String>` are different types.
+- A copy compiles only the methods the program uses, as a C++ template
+  does. So a method that is wrong for one type argument is an error only
+  where something calls it: `size(): ulong { return value.size; }` in a
+  `Box<T>` is fine in a `Box<int>` that never calls `size()`, and an error at
+  `size` (`not a struct: int`) in one that does.
 - A type argument is a type. The one exception is a number, which only
   the lane count of a [SIMD vector](simd.md) accepts (`Vector<int, 4>`), or
   a parameter that a struct or function of your own passes on as one

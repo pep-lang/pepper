@@ -957,6 +957,15 @@ comparable_members_wait_for_a_use() {
         "struct S<T> {}\nextend S<T> {\n    max() { return 2; }\n    min() { if (true) { return; } }\n}\nmain(): int {\n    return S<int>().max() + 1;\n}\n"
     );
     expect_equal(extended, "S<int>: max\n");
+    # A method no use names is not checked for its type arguments, as a C++
+    # template's is not (docs/src/language/generics.md): `size` is wrong for
+    # `int`, and nothing calls it.
+    var unchecked = _comparable_bodies(
+        folder,
+        "unchecked",
+        "struct S<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n    size(): ulong { return value.size; }\n}\nmain(): int {\n    return S<int>(3).value - 3;\n}\n"
+    );
+    expect_equal(unchecked, "S<int>: \n");
 }
 
 # The members of `Comparable` with bodies, `Array<P>`, `Optional<P>`,
