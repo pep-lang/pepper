@@ -277,6 +277,8 @@ representation (an <code>int</code> unless the enum names another).</li>
 </ul>
 <h2 id="cases-that-carry-values"><a class="header" href="#cases-that-carry-values">Cases that carry values</a></h2>
 <p>A case can carry values, declared like parameters: <code>Circle(radius: int)</code>.
+Unlike parameters, they take no default and cannot be written <code>this.x</code>
+(only a constructor takes <code>this.</code> parameters).
 An enum with such a case is a <strong>reference type</strong>: each value is an object,
 reference counted like a <a href="structs.html">struct</a>.</p>
 <pre><code class="language-pepper"># Cases that carry values: each case is a constructor, and a `match`
