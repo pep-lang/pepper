@@ -442,6 +442,26 @@ remove_all_removes_a_tree_but_not_what_links_point_to() {
     expect_true(Directory.remove_all(base.join("absent")).error().is_not_found());
 }
 
+# Windows refuses to delete a read-only file; remove_all then clears the
+# flag and tries again, so it removes one as on POSIX, in a tree or at the
+# path itself.
+[Test]
+remove_all_removes_read_only_files() {
+    var folder = TempFolder("remove_all_removes_read_only_files");
+    var tree = folder.path.join("tree");
+    expect_true(Directory.create_all(tree.join("sub")).is_ok());
+    var locked = tree.join("sub").join("locked.txt");
+    expect_true(File.write_text(locked, "x").is_ok());
+    expect_true(locked.set_read_only(true).is_ok());
+    expect_true(Directory.remove_all(tree).is_ok());
+    expect_false(tree.exists());
+    var alone = folder.path.join("alone.txt");
+    expect_true(File.write_text(alone, "x").is_ok());
+    expect_true(alone.set_read_only(true).is_ok());
+    expect_true(Directory.remove_all(alone).is_ok());
+    expect_false(alone.exists());
+}
+
 # A path over Windows' 260-character limit works like any other: on
 # Windows, io gives it the `\\?\` prefix.
 [Test]

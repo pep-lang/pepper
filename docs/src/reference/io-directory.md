@@ -320,9 +320,8 @@ recursively. Symlinks are removed, never followed, so nothing outside
 the tree is touched. A file or symlink at `path` itself is simply
 removed.
 
-Stops at the first failure, leaving whatever was not yet removed; on
-Windows a read-only file inside the tree is such a failure
-(`is_permission_denied()`).
+A read-only file is removed too, on Windows as on POSIX. Stops at the
+first failure, leaving whatever was not yet removed.
 
 **Parameters**
 - `path` — the file, symlink or directory tree to remove
