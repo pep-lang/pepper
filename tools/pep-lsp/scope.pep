@@ -170,7 +170,7 @@ export collect_struct_members(s: StructDecl): Symbol[] {
     for (var c in s.constructors) {
         var parameters = Array<String>();
         for (var p in c.parameters) {
-            parameters.append($"{p.name}: {p.type_name.to_string()}");
+            parameters.append(parameter_signature(p));
         }
         var listed = ", ".join(parameters);
         out.append(Symbol("construct", c.name_span, $"construct({listed})"));

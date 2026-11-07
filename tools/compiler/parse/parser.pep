@@ -3272,17 +3272,17 @@ struct Parser {
                 return VariableDecl();
             }
             ulong field = _position - 1;
-            _expect("=");
-            if (_failed) {
-                return VariableDecl();
-            }
-            var value = _expression();
-            if (_failed) {
-                return VariableDecl();
-            }
             var out = VariableDecl("this." + _text(field));
             out.name_span = _token_span(field);
-            out.default_value = Optional<Expression>.Value(value);
+            # Without `= value` it is a required parameter of the field's type.
+            if (_at("=")) {
+                _advance();
+                var value = _expression();
+                if (_failed) {
+                    return VariableDecl();
+                }
+                out.default_value = Optional<Expression>.Value(value);
+            }
             out.span = Span(_start(keyword), _after());
             return out;
         }

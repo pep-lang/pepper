@@ -59,9 +59,12 @@ name like a function.
 {{#include ../../examples/structs-constructors.pep}}
 ```
 
-- A parameter written `this.width = 1` stores its argument directly into the
-  field `width`, before the body runs. The `= 1` is required: it is the value
-  used when the caller omits that argument.
+- A parameter written `this.name` stores its argument directly into the
+  field `name`, before the body runs, and takes the field's type. Without a
+  default it is required, so `construct(this.name) {}` is the short form of
+  `construct(name: String) { this.name = name; }`.
+- `this.width = 1` gives the parameter a default, used when the caller
+  omits that argument. As for any parameter, put the defaulted ones last.
 - Ordinary parameters are written as in a function, `name: Type`, with an
   optional default: `fahrenheit: float = 32.0`. The C-style form,
   `float fahrenheit = 32.0`, is accepted too.
@@ -75,19 +78,13 @@ name like a function.
   [overloaded](overloading.md#constructors) function. At most one of them
   may be `[Implicit]`. A struct has at most one destructor.
 
-A `this.field` parameter must have a default. Leaving it out is an error:
-
-```pepper
-struct Point {
-    var x: int;
-    construct(this.x) {}
-}
-```
+Only a constructor takes `this.` parameters, and each must name a different
+field of the struct:
 
 ```text
-main.pep:3:21: error: expected '='
-    3 |     construct(this.x) {}
-      |                     ^
+main.pep:3:20: error: constructor parameter 'this.y' has no matching field in 'Point'
+    3 |     construct(this.y) {}
+      |                    ^
 ```
 
 A struct without a constructor accepts no arguments:

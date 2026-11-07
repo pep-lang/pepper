@@ -1280,8 +1280,14 @@ other(g: (String) => int): int {
         "# expect: main.pep:2:6: error: type alias 'A' refers to itself\ntype A = B;\ntype B = Box<A>;\nstruct Box<T> { var v: T; }\nmain(): int { return 0; }\n",
         "# expect: error: type alias 'P' takes 1 type argument(s), 2 given\ntype P<T> = Box<T>;\nstruct Box<T> { var v: T; }\nf(p: P<int, int>) {}\nmain(): int { return 0; }\n",
         "# expect: error: type alias 'P' requires a type argument for parameter 'U'\ntype P<T, U> = Box<T>;\nstruct Box<T> { var v: T; }\nf(p: P<int>) {}\nmain(): int { return 0; }\n",
-        # A constructor parameter that names no field.
-        "# expect: main.pep:2:8: error: constructor parameter 'this.y' has no matching field in 'S'\nstruct S {\n    var x: int;\n    construct(this.y = 0) {}\n}\nmain(): int { return 0; }\n",
+        # A constructor's `this.` parameter that names no field, with a
+        # default or without; one given twice; one outside a constructor
+        # (#325).
+        "# expect: main.pep:4:20: error: constructor parameter 'this.y' has no matching field in 'S'\nstruct S {\n    var x: int;\n    construct(this.y = 0) {}\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:4:28: error: constructor parameter 'this.nope' has no matching field in 'S'\nstruct S {\n    var x: int;\n    construct(this.x, this.nope) {}\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:4:28: error: redefinition of 'this.x'\nstruct S {\n    var x: int;\n    construct(this.x, this.x) {}\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:4:14: error: a 'this.x' parameter is allowed only in a constructor\nstruct S {\n    var x: int;\n    set(this.x) {}\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:2:8: error: a 'this.x' parameter is allowed only in a constructor\nf(this.x = 1) {}\nmain(): int { return 0; }\n",
         # Attributes an `[Attribute]` struct cannot take, and one that
         # cannot be an attribute.
         "# expect: main.pep:5:4: error: no case named 'B' in 'K'\nenum K { A }\n[Attribute]\nstruct T { var k: K; }\n[T(K.B)]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",

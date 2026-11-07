@@ -101,10 +101,19 @@ _symbol(
 export function_signature(f: FunctionDecl): String {
     var parameters = Array<String>();
     for (var p in f.parameters) {
-        parameters.append($"{p.name}: {p.type_name.to_string()}");
+        parameters.append(parameter_signature(p));
     }
     var listed = ", ".join(parameters);
     return $"{f.name}{generics_string(f.generic_params)}({listed}): {f.return_type.to_string()}";
+}
+
+## A parameter as declared: `a: int`, or a constructor's `this.x`, whose
+## type is its field's.
+##
+## @param p the parameter
+## @returns its spelling
+export parameter_signature(p: VariableDecl): String {
+    return p.type_name.name == ast.AUTO_TYPE ? p.name : $"{p.name}: {p.type_name.to_string()}";
 }
 
 ## Generic parameters as written, constraints and defaults included:

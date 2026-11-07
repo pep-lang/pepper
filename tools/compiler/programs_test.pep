@@ -19,8 +19,9 @@
 # deep as the parser allows, and one level deeper; the message a stack
 # overflow prints on the main thread, a `Thread` and a task; the panic
 # hook, which every other kind of panic runs first; structs named like
-# a generic's type parameters as its type arguments; and `?` anywhere in a
-# statement, run in place. The programs are in `testdata/`.
+# a generic's type parameters as its type arguments; `?` anywhere in a
+# statement, run in place; and a constructor's required `this.x`
+# parameters. The programs are in `testdata/`.
 
 import [File, Path, glob] from io;
 import os;
@@ -80,6 +81,40 @@ question_marks_run_in_place() {
         var result = run(process.Command(_build("try_in_place", folder.path, options).to_string()));
         expect_exit(result, 0);
         expect_equal(result.stdout, "0 failed\n");
+    }
+}
+
+# ── constructors ────────────────────────────────────────────────────────────
+
+# A `this.x` constructor parameter without a default is required (#325).
+[Test]
+required_this_parameters_store_their_fields() {
+    var result = _run("this_parameters");
+    expect_exit(result, 0);
+    expect_equal(result.stdout, "ok\n");
+}
+
+# A required `this.x` left out, or given a value of another type, is an
+# error at the call (#325).
+[Test]
+required_this_parameters_check_their_arguments() {
+    var folder = TempFolder("programs_this_parameters_errors");
+    var declared = "struct S {\n    var x: int;\n    var y: int;\n    construct(this.x, this.y = 0) {}\n}\n";
+    var calls = [
+        ("S()", "main.pep:7:13: error: too few arguments to 'S': expected at least 1, have 0"),
+        (
+            "S(\"a\")",
+            "main.pep:7:15: error: cannot pass a value of type 'String' as argument 1 of 'S', which has type 'int'"
+        )
+    ];
+    for (var (call, expected) in calls) {
+        var source = folder.path.join("main.pep");
+        write_file(source, declared + "main(): int {\n    var s = " + call + ";\n    return 0;\n}\n");
+        var error = build_program(
+            source, folder.path.join("main" + toolchain.executable_suffix()), folder.path.join("build")
+        );
+        expect_true(error.is_value());
+        expect_contains(error.value(), expected);
     }
 }
 

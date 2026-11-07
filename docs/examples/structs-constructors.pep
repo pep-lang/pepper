@@ -10,6 +10,15 @@ struct Rect {
     }
 }
 
+struct Player {
+    var name: String;
+    var score: int;
+
+    # Without a default, `this.name` is required and takes the field's type,
+    # `String`.
+    construct(this.name, this.score = 0) {}
+}
+
 struct Temperature {
     var celsius: float;
 
@@ -29,6 +38,11 @@ main(): int {
 
     var unit = Rect();
     assert(unit.area == 1, "every parameter has a default, so Rect() works");
+
+    var ada = Player("Ada");
+    assert(ada.name == "Ada" && ada.score == 0, "the name is required, the score is not");
+    var bob = Player(score = 3, name = "Bob");
+    assert(bob.score == 3, "a this. parameter can be named");
 
     var boiling = Temperature(212.0);
     assert(boiling.celsius == 100.0, "212 F is 100 C");
