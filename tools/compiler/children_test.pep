@@ -13,7 +13,9 @@ import toolchain;
 # The children inherit the build's standard error, so the pipe the test
 # reads it from ends only when the build and every child have ended. Each
 # child waits a minute first (`PEPC_STALL_PARTS`), so one left running
-# keeps the pipe open that long.
+# keeps the pipe open that long. The test kills the build in the second a
+# child waits before it first looks for its parent, so a child that took
+# its new parent for the build would be left running (#533).
 [Test]
 a_killed_build_leaves_no_part_running() {
     var folder = TempFolder("children");

@@ -198,9 +198,11 @@ Besides the build options (`-I`, `--import`, `-l`, `-L`, `-D`, `-o`,
   (`driver.compile_part`), run before anything else is read.
   `--compilation-unit-worker <dir>` is the other internal option, for the
   children that check and compile compilation units. Such a child calls
-  `process.exit_with_parent()` first, and any other run
-  `process.end_children_on_exit()`, so a killed build leaves no child
-  running (#530).
+  `process.exit_with_parent()` first, with the build's process id, which
+  the build gives it in `PEPC_PARENT_ID` (`incremental.PARENT_ID_VARIABLE`)
+  so that a build that ended before the child started counts too (#533),
+  and any other run `process.end_children_on_exit()`, so a killed build
+  leaves no child running (#530).
 
 The output defaults to `<cwd>/<entry stem>` with no extension.
 

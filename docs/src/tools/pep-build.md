@@ -885,9 +885,12 @@ The children end with the build, even when it is killed: on Windows every
 process a build starts is in a job object that ends with it
 (`process.end_children_on_exit`), and on Linux and macOS a
 `--compile-part` or `--compilation-unit-worker` child ends within about
-100 ms of its parent (`process.exit_with_parent`). For the compiler's tests,
-`PEPC_STALL_PARTS=<seconds>` makes each `--compile-part` child wait that
-long before it compiles.
+100 ms of its parent (`process.exit_with_parent`), and at once if its
+parent ended before it started: the build gives each child its process id
+in `PEPC_PARENT_ID`. For the compiler's tests,
+`PEPC_STALL_PARTS=<seconds>` makes each `--compile-part` child print
+`part stalled` and wait a second before it looks for its parent, then that
+many seconds before it compiles.
 
 ## Help and version
 

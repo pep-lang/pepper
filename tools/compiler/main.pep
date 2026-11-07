@@ -40,6 +40,7 @@
 # (`driver.compilation_unit_worker`).
 
 import compiler.ast;
+import async;
 import cli;
 import compiler.codegen;
 import [Diagnostic, ERROR_LIMIT, Location, render_all, render_errors, SourceText] from compiler.diagnostic;
@@ -285,9 +286,22 @@ _main(args: String[]): int {
     if (!parser.parse(args)) {
         return 2;
     }
-    # A build's children end with it, even when it is killed (#530).
+    # A build's children end with it, even when it is killed (#530), and
+    # even before they look for it (#533).
     if (compile_part.is_set or compilation_unit_worker.is_set) {
-        process.exit_with_parent();
+        # For `children_test.pep`: `PEPC_STALL_PARTS=N` holds a
+        # `--compile-part` child a second before it looks for its parent,
+        # which the test ends meanwhile, and N seconds after.
+        var stall = compile_part.is_set ? os.environment("PEPC_STALL_PARTS") : Optional<String>.Empty;
+        if (stall.is_value()) {
+            File.stderr().write_all("part stalled\n");
+            async.sleep(1000);
+        }
+        var parent = os.environment(incremental.PARENT_ID_VARIABLE);
+        process.exit_with_parent(parent.is_value() ? ulong.parse(parent.value()).value_or(0) : 0);
+        if (stall.is_value()) {
+            async.sleep(ulong.parse(stall.value()).value_or(0) * 1000);
+        }
     } else {
         process.end_children_on_exit();
     }

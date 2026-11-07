@@ -150,6 +150,12 @@ export end_children_on_exit() {
 ## where a process is not told of its parent's end, and on WASI, it does
 ## nothing: there the parent calls `end_children_on_exit()`.
 ##
+## A parent that ends before this call goes unnoticed, unless the child
+## knows its parent's id (`id()`, which the parent can pass it) and gives
+## it as `parent`: a process whose parent is then another one ends at once.
+##
+## @param parent the id of the process that started this one, or 0 (the
+##   default) for the parent it has when it calls this
 ## @example
 ##     import process;
 ##
@@ -158,8 +164,8 @@ export end_children_on_exit() {
 ##         # Work that should stop if the parent is killed.
 ##         return 0;
 ##     }
-export exit_with_parent() {
-    _process_sys_exit_with_parent();
+export exit_with_parent(parent: ulong = 0) {
+    _process_sys_exit_with_parent(parent);
 }
 
 ## Returns the running process's id, as the operating system knows it.
