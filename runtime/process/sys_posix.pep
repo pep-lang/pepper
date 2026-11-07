@@ -11,6 +11,7 @@
 # descriptors 0, 1 and 2. On macOS, POSIX_SPAWN_CLOEXEC_DEFAULT closes every
 # other descriptor in the child.
 
+import async;
 import io;
 import os;
 import "child";
@@ -64,8 +65,10 @@ extern int open(char* path, int flags, ...);
 extern long read(int descriptor, void* buffer, ulong count);
 [Target(OS(Linux) || OS(Mac))]
 extern long write(int descriptor, void* buffer, ulong count);
-[Target(OS(Linux))]
+[Target(OS(Linux) || OS(Mac))]
 extern void _exit(int status);
+[Target(OS(Linux) || OS(Mac))]
+extern int getppid();
 [Target(OS(Linux) || OS(Mac))]
 extern int kill(int pid, int signal);
 [Target(OS(Linux) || OS(Mac))]
@@ -101,6 +104,25 @@ _process_sys_error_message(code: io.ErrorCode): String {
 [Target(OS(Linux) || OS(Mac))]
 _process_sys_id(): ulong {
     return getpid() as ulong;
+}
+
+[Target(OS(Linux) || OS(Mac))]
+_process_sys_end_children_on_exit() {}
+
+# A process whose parent ends gets a new one (init, or a subreaper), on
+# Linux and macOS alike: one check for both, where Linux's
+# PR_SET_PDEATHSIG would also fire when the thread that started it ends.
+# shortcut: a parent that ends before this reads `getppid()` goes
+# unnoticed; pass the parent's id in if that window matters.
+[Target(OS(Linux) || OS(Mac))]
+_process_sys_exit_with_parent() {
+    var parent = getppid();
+    async.Thread.spawn(() => {
+        while (getppid() == parent) {
+            async.sleep(100);
+        }
+        _exit(1);
+    }, "exit with parent");
 }
 
 [Target(OS(Linux))]

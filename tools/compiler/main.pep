@@ -285,6 +285,12 @@ _main(args: String[]): int {
     if (!parser.parse(args)) {
         return 2;
     }
+    # A build's children end with it, even when it is killed (#530).
+    if (compile_part.is_set or compilation_unit_worker.is_set) {
+        process.exit_with_parent();
+    } else {
+        process.end_children_on_exit();
+    }
     if (compile_part.is_set) {
         return _compile_part(parser, Path(compile_part.value()), parts.values());
     }

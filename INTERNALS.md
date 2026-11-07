@@ -197,7 +197,10 @@ Besides the build options (`-I`, `--import`, `-l`, `-L`, `-D`, `-o`,
   `driver/parts.pep` starts to compile parts side by side
   (`driver.compile_part`), run before anything else is read.
   `--compilation-unit-worker <dir>` is the other internal option, for the
-  children that check and compile compilation units.
+  children that check and compile compilation units. Such a child calls
+  `process.exit_with_parent()` first, and any other run
+  `process.end_children_on_exit()`, so a killed build leaves no child
+  running (#530).
 
 The output defaults to `<cwd>/<entry stem>` with no extension.
 

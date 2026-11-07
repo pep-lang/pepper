@@ -59,6 +59,64 @@ main(): int {
 }
 ```
 
+## end_children_on_exit
+
+```pepper
+end_children_on_exit()
+```
+
+Makes the processes this process starts from now on end when it ends,
+however it ends: when it returns, panics, crashes or is killed.
+
+On Windows the process joins a job object that ends every process in it
+when its last handle closes, which this process's end does. Its
+children, and theirs, join the job too, unless they break away. Calling
+it again makes another job; a process that cannot make or join one runs
+on without.
+
+POSIX has nothing like it, so there it does nothing: a child that should
+not outlive its parent calls `exit_with_parent()` itself. Nor does WASI,
+which starts no processes.
+
+**Example**
+```pepper
+import process;
+
+main(): int {
+    process.end_children_on_exit();
+    var child = process.Command("sleep").argument("60").spawn();
+    # Killing this program now ends `sleep` too, on Windows.
+    return 0;
+}
+```
+
+## exit_with_parent
+
+```pepper
+exit_with_parent()
+```
+
+Ends this process, with status 1, when the process that started it
+ends, for a child that is of no use without its parent, such as a worker
+the parent hands its work to.
+
+On Linux and macOS a thread checks every 100 ms whether the process has a
+new parent, which it gets when its parent ends; it then ends at once,
+without running `atexit` handlers or flushing the C streams. On Windows,
+where a process is not told of its parent's end, and on WASI, it does
+nothing: there the parent calls `end_children_on_exit()`.
+
+**Example**
+```pepper
+import process;
+
+main(): int {
+    process.exit_with_parent();
+    # Work that should stop if the parent is killed.
+    return 0;
+}
+```
+
 ## id
 
 ```pepper

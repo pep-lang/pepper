@@ -86,6 +86,40 @@ _process_sys_error_message(code: io.ErrorCode): String {
 }
 
 [Target(OS(Windows))]
+extern void* CreateJobObjectW(void* attributes, ushort* name);
+[Target(OS(Windows))]
+extern int SetInformationJobObject(void* job, int kind, void* information, uint size);
+[Target(OS(Windows))]
+extern int AssignProcessToJobObject(void* job, void* process);
+[Target(OS(Windows))]
+extern void memset(void* destination, int value, ulong size);
+
+# Once the process is in the job, the job's handle stays open until the
+# process ends, whose end closes it and so ends the job's processes.
+[Target(OS(Windows))]
+_process_sys_end_children_on_exit() {
+    var job = CreateJobObjectW(__null, __null);
+    if (job == __null) {
+        return;
+    }
+    # A JOBOBJECT_EXTENDED_LIMIT_INFORMATION (144 bytes on 64-bit Windows)
+    # whose LimitFlags (at byte 16) is JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
+    __ptr<u8> limits = _pep_malloc(144);
+    memset(limits, 0, 144);
+    __ptr<uint> flags = limits + 16;
+    flags[0] = 0x2000;
+    # 9: JobObjectExtendedLimitInformation
+    var limited = SetInformationJobObject(job, 9, limits, 144);
+    _pep_free(limits);
+    if (limited == 0 or AssignProcessToJobObject(job, GetCurrentProcess()) == 0) {
+        CloseHandle(job);
+    }
+}
+
+[Target(OS(Windows))]
+_process_sys_exit_with_parent() {}
+
+[Target(OS(Windows))]
 _process_sys_id(): ulong {
     return GetCurrentProcessId() as ulong;
 }

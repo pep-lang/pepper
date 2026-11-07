@@ -4,9 +4,9 @@
 import async;
 import [Directory, File, Path] from io;
 import os;
+import process;
 
 extern void memcpy(void* destination, void* source, ulong size);
-extern void memset(void* destination, int value, ulong size);
 
 # How many allocations the calls to `keep_for_the_program` left behind,
 # which the leak check does not count against the test.
@@ -255,38 +255,10 @@ _end_crashes_at_once() {}
 # to their end, waits for it forever. The program starts its
 # own process tree before the test runs, and ends that tree as it ends.
 #
-# On Windows the tree is a job object that ends every process in it when
-# its last handle closes, which the program's exit does, however it exits.
-# Every process the test starts joins it, unless it breaks away. A program
-# that cannot make or join one runs without.
-[Target(OS(Windows))]
-extern void* CreateJobObjectW(void* attributes, ushort* name);
-[Target(OS(Windows))]
-extern int SetInformationJobObject(void* job, int kind, void* information, uint size);
-[Target(OS(Windows))]
-extern int AssignProcessToJobObject(void* job, void* process);
-[Target(OS(Windows))]
-extern void* GetCurrentProcess();
-
+# On Windows the tree is a job object (`process.end_children_on_exit`).
 [Target(OS(Windows))]
 _own_the_process_tree() {
-    var job = CreateJobObjectW(__null, __null);
-    if (job == __null) {
-        return;
-    }
-    # A JOBOBJECT_EXTENDED_LIMIT_INFORMATION (144 bytes on 64-bit Windows)
-    # whose LimitFlags (at byte 16) is JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
-    __ptr<u8> limits = _pep_malloc(144);
-    memset(limits, 0, 144);
-    __ptr<uint> flags = limits + 16;
-    flags[0] = 0x2000;
-    # 9: JobObjectExtendedLimitInformation
-    var limited = SetInformationJobObject(job, 9, limits, 144);
-    _pep_free(limits);
-    if (limited == 0) {
-        return;
-    }
-    AssignProcessToJobObject(job, GetCurrentProcess());
+    process.end_children_on_exit();
 }
 
 [Target(OS(Windows))]
