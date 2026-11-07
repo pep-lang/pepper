@@ -1164,6 +1164,7 @@ error_programs(): String[] {
         "# expect: main.pep:2:6: error: module-scope variable 'total' must be 'const'\nlong total = 0;\nmain(): int { return 0; }\n",
         "# expect: main.pep:2:12: error: module-scope variable 'hits' must be 'const'\nexport var hits = 0;\nmain(): int { return hits; }\n",
         "# expect: main.pep:3:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe\nstruct Plain { var x: int; }\nconst origin: Plain = Plain();\nmain(): int { return 0; }\n",
+        "# expect: main.pep:4:17: error: module-scope variable 'NAME' has type 'String', which is not thread-safe\nstruct Point { var x: int; }\nstatic {\n    const NAME: String = reflect.name<Point>();\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:3:22: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe\nstruct Plain { var x: int; }\nexport const origin: Plain = Plain();\nmain(): int { return 0; }\n",
         "# expect: main.pep:8:13: error: module-scope variable 'unit' has type 'Shape', which is not thread-safe\ntrait Shape { int area(); }\n[Shared]\nstruct Square { construct() {} }\nextend Square with Shape { int area() { return 1; } }\n\n\nconst unit: Shape = Square();\nmain(): int { return 0; }\n",
         "# expect: main.pep:10:13: error: 'make<String>' requires thread-safe type arguments; 'String' is not thread-safe\n[Shared]\nstruct Cell<T> {\n    const value: T;\n}\n\nmake<T>(): Cell<T> { return Cell<T>(); }\n\nmain(): int {\n    var c = make<String>();\n    return 0;\n}\n",
