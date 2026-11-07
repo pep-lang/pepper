@@ -901,15 +901,18 @@ nested_array_literals_keep_few_methods_per_level() {
     var at_24 = _bodies_at_depth(folder, 24);
     # As many more per level at any depth: linear.
     expect_equal(at_24 - at_16, at_16 - at_8);
-    # 96 a level now, since `Array`'s sorts no longer give `compare` back to
-    # every struct (99 before #525); a method waiting for a use no longer
-    # makes the types its signature names (126 before that). An Array of Comparable elements is Comparable (#366), so each
-    # level has the Comparable methods too (135 before #491 made the
+    # 49 a level now, since an extension's method that returns no value
+    # (`sort()`, `select_nth(nth)`) waits for a use too, and with it the
+    # sorter and closures it names (96 before). 99 before `Array`'s sorts
+    # stopped giving `compare` back to every struct (#525); a method
+    # waiting for a use no longer makes the types its signature names (126
+    # before that). An Array of Comparable elements is Comparable (#366), so
+    # each level has the Comparable methods too (135 before #491 made the
     # ordering operators and Comparable's members wait for a use). 72
     # before #366 (67 before the iterators' `next(location)`, #319, and 128
     # before that).
     var per_level = (at_16 - at_8) / 8;
-    if (per_level > 100) {
+    if (per_level > 52) {
         panic($"a level of a nested array literal keeps {per_level} method bodies");
     }
 }
@@ -945,6 +948,15 @@ comparable_members_wait_for_a_use() {
         "struct S<T> {\n    max(): int { return 1; }\n    min(): int { return 0; }\n    big(n: int, min: int): bool {\n        var max = 3;\n        return n > max and n > min;\n    }\n}\nmain(): int {\n    return S<int>().big(5, 1) ? 1 : 0;\n}\n"
     );
     expect_equal(shadowed, "S<int>: \n");
+    # An extension's method with no return type waits for a use when it
+    # returns no value (`min`); one that returns a value keeps its body,
+    # which its return type is inferred from (`max`).
+    var extended = _comparable_bodies(
+        folder,
+        "extended",
+        "struct S<T> {}\nextend S<T> {\n    max() { return 2; }\n    min() { if (true) { return; } }\n}\nmain(): int {\n    return S<int>().max() + 1;\n}\n"
+    );
+    expect_equal(extended, "S<int>: max\n");
 }
 
 # The members of `Comparable` with bodies, `Array<P>`, `Optional<P>`,

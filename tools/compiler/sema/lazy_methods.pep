@@ -133,6 +133,12 @@ export defer_methods(module: Module, specialized: StructDef, state: PassState) {
     var waiting = state.deferred.try_get(specialized.name);
     var deferred = waiting.is_value() ? waiting.value() : HashMap<String, Block>();
     for (var m in specialized.method_members) {
+        # An extension's method with no return type (`sort()`) is copied in
+        # after the base's return types were inferred: one that returns no
+        # value is `void`, as inference would make it, and can wait.
+        if (m.ty.is_auto() and m.body.is_value() and !_returns_a_value(m.body.value())) {
+            m.ty = TypeName.void();
+        }
         # A method that calls one of the struct's generic methods keeps its
         # body: a call in a body given back late would be bound without the
         # generic method's specializations (`describe([u])` to the plain
@@ -162,6 +168,45 @@ export defer_tuple_methods(module: Module, state: PassState) {
             defer_methods(module, st, state);
         }
     }
+}
+
+## Whether `block` may return a value: a `return` with one, or a `static`
+## block, whose emitted statements are not known yet. A `?` is lowered to
+## such a `return`, and a closure's returns are its own.
+_returns_a_value(block: Block): bool {
+    for (var statement in block.items) {
+        match (statement) {
+            Return(node) => {
+                if (node.expr.is_value()) {
+                    return true;
+                }
+            }
+            Block(inner) => {
+                if (_returns_a_value(inner)) {
+                    return true;
+                }
+            }
+            Branch(node) => {
+                if (_returns_a_value(node.if_block)
+                    or (node.else_block.is_value() and _returns_a_value(node.else_block.value()))) {
+                    return true;
+                }
+            }
+            While(node) => {
+                if (_returns_a_value(node.block)) {
+                    return true;
+                }
+            }
+            Static(_) => {
+                return true;
+            }
+            StaticPass(_) => {
+                return true;
+            }
+            else => {}
+        }
+    }
+    return false;
 }
 
 ## Whether `method`, a method with a body, calls one of its struct's
