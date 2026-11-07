@@ -5,12 +5,14 @@
 # (.github/workflows/stage0.yml) moves this pin: it writes the version,
 # the commit, and the build's SHA256SUMS below these comments.
 version 0.13.0-dev
-commit 78c5b6c11f703ce36d9ad7b0753066ca0c955865
-c94cb700c4d04b5b4b0c60713cb7a8a2311f5e822f0de66d3ff6dd7367f41fd3  pepper-0.13.0-dev-linux-arm64.tar.gz
-ee975b99d257e500e7a1e28ab2df534621430474bc18fba2dfb5b1c09b34c725  pepper-0.13.0-dev-linux-x64.tar.gz
-aa1ecba46bacd9aa9347deb568fd5a2d6e0502669158054618e04fcee320da02  pepper-0.13.0-dev-macos-arm64.tar.gz
-6d2b66c1a53d7e486a60c156980de6ee691de2d2df4d61d853ccfa5d4ed171ae *pepper-0.13.0-dev-windows-x64.zip
-82c4ab6dc1379b48df3c189ac88e498241af844dd64824c1f82646d0a882e137  pepper-install-0.13.0-dev-linux-arm64.tar.gz
-b46787d9b5d85e0f5bd55d21db3a91691d514630c885d1185a99f34004a87734  pepper-install-0.13.0-dev-linux-x64.tar.gz
-a56067493d40c6193a0250d52b479f816ffcb88bd1a5b32f3be8549ca4f656b2  pepper-install-0.13.0-dev-macos-arm64.tar.gz
-1a3198b4bc8acf86426138907c4f3df4dd072724e7d1067a41d73892bb32ef1f *pepper-install-0.13.0-dev-windows-x64.zip
+commit 7dd21f0cb6c308a15cd4190a2dca26b9c866ae62
+37367d8ccb7749a1d80b73466bd2a296be9ea5cc8a59fc882384095c5cfab04a  pepper-0.13.0-dev-linux-arm64.tar.gz
+9955c3cf7a4a856abdfefd3d69869d99e0d19c73a8d6131eebbb630ed052f8bb  pepper-0.13.0-dev-linux-x64.tar.gz
+ca06ce76f9ece46d49c1b3bf4303503ae793be849ec845498a682eaa9f1a26ea  pepper-0.13.0-dev-macos-arm64.tar.gz
+51553ac322fb002ddb763c98c0fd05ee3c19f8127a04ec0fdf28d1b13b4ab91e *pepper-0.13.0-dev-windows-arm64.zip
+521829ca9fae6d6025b0bd7da20bf643a8efc0de16485829fcd5d3efb6680941 *pepper-0.13.0-dev-windows-x64.zip
+982ef231014722a1533bfb286e6fc554e1da7b7249b0e224a0f60b0791ba348c  pepper-install-0.13.0-dev-linux-arm64.tar.gz
+04ae2f91ad7fa61b5d904af1f8e797bd78dc7d1de64db6a5746ef482c02275c9  pepper-install-0.13.0-dev-linux-x64.tar.gz
+7fcb185196aefba875d93e5ae52c6582392470ea7d4a8701625d2bf57d2e0d1f  pepper-install-0.13.0-dev-macos-arm64.tar.gz
+e8d47a476919c5ea433cbe2554192d3bd65faa37d9fc0f44b512ef1db925d722 *pepper-install-0.13.0-dev-windows-arm64.zip
+9546f49c3c00c611a6c90c7b3d167c3b1bfe20433b29c7eae083c0e1e60d98e3 *pepper-install-0.13.0-dev-windows-x64.zip
