@@ -1288,6 +1288,10 @@ other(g: (String) => int): int {
         "# expect: main.pep:4:28: error: redefinition of 'this.x'\nstruct S {\n    var x: int;\n    construct(this.x, this.x) {}\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:4:14: error: a 'this.x' parameter is allowed only in a constructor\nstruct S {\n    var x: int;\n    set(this.x) {}\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:2:8: error: a 'this.x' parameter is allowed only in a constructor\nf(this.x = 1) {}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:3:12: error: a 'this.x' parameter is allowed only in a constructor\ntrait T {\n    f(this.x);\n}\nmain(): int { return 0; }\n",
+        # Nor in an enum case's values (#539).
+        "# expect: main.pep:3:17: error: a 'this.r' parameter is allowed only in a constructor\nenum Shape {\n    Circle(this.r),\n}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:3:17: error: a 'this.r' parameter is allowed only in a constructor\nenum Shape {\n    Circle(this.r = 1),\n}\nmain(): int { return 0; }\n",
         # Attributes an `[Attribute]` struct cannot take, and one that
         # cannot be an attribute.
         "# expect: main.pep:5:4: error: no case named 'B' in 'K'\nenum K { A }\n[Attribute]\nstruct T { var k: K; }\n[T(K.B)]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",

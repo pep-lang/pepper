@@ -77,6 +77,8 @@ arrays and module-scope constants, and passed to and returned from functions.
 ## Cases that carry values
 
 A case can carry values, declared like parameters: `Circle(radius: int)`.
+Unlike parameters, they take no default and cannot be written `this.x`
+(only a constructor takes `this.` parameters).
 An enum with such a case is a **reference type**: each value is an object,
 reference counted like a [struct](structs.md).
 
