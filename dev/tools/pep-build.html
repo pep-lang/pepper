@@ -241,7 +241,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>--error-limit=&lt;N&gt;</code></td><td>Show at most N errors; <code>0</code> shows every one</td><td>20</td></tr>
-<tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
+<tr><td><code>-v</code>, <code>--verbose</code></td><td>Print the toolchain, runtime, folders, commands run and output</td><td>off</td></tr>
 <tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--build-script &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
@@ -879,7 +879,43 @@ a build, <code>--emit-static</code>, <code>--emit-llvm</code>, <code>--emit-mode
 finds any, one per function (see
 <a href="../language/compiler-errors.html#several-errors-at-once">Several errors at once</a>).</p>
 <h3 id="-v---verbose"><a class="header" href="#-v---verbose"><code>-v</code>, <code>--verbose</code></a></h3>
-<p>Accepted for compatibility with other compilers; it prints nothing more yet.</p>
+<p>Prints, on standard error, what to look at first when a build goes wrong:
+which compiler, toolchain and runtime it used, where it wrote, and each
+program it ran.</p>
+<pre><code class="language-text">compiler: C:\Users\me\AppData\Local\pepper\toolchains\0.13.0-dev\bin\pep-build.exe (0.13.0-dev)
+target: x86_64-pc-windows-msvc
+clang: C:\Program Files\LLVM\bin\clang.exe
+build folder: D:\app\.pep\build
+cache folder: D:\app\.pep\cache
+runtime: C:\Users\me\AppData\Local\pepper\toolchains\0.13.0-dev\runtime
+running: "C:\Program Files\LLVM\bin\clang.exe" -o app.exe --target=x86_64-pc-windows-msvc -Xlinker /DEBUG -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF @app.exe.objects -ldbghelp -lkernel32 -luser32 -lshell32
+wrote: app.exe
+</code></pre>
+<ul>
+<li><code>compiler</code>: the <code>pep-build</code> that ran, and its version.</li>
+<li><code>target</code>: the platform the build compiles for.</li>
+<li><code>clang</code>: the clang that links, as the build finds it (see
+<a href="#linking">Linking</a>), or <code>none found</code>.</li>
+<li><code>build folder</code> and <code>cache folder</code>: where intermediate files and the
+<a href="#the-build-cache">build cache</a> go; <code>(objects not cached: --no-cache)</code>
+follows the cache folder under <code>--no-cache</code>, which still keeps build
+scripts' records there.</li>
+<li><code>runtime</code>: the runtime folder the build loads (see
+<a href="../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Getting started</a>),
+<code>none found</code>, or <code>none (--no-runtime)</code>.</li>
+<li><code>running</code>: each program the build runs, before it runs, with its
+arguments, quoted as the system reads them: the linker, <code>xcrun</code> and
+<code>dsymutil</code> on Apple systems, <code>pep-package fetch</code> and <code>git</code> for
+dependencies, and for a
+<a href="#build-scripts-and---no-build-scripts">build script</a>, the build of the
+script, the script, clang on its <code>[native]</code> sources and <code>pkg-config</code>.
+The copies of the compiler a build starts to compile in parallel are not
+listed.</li>
+<li><code>wrote</code>: the executable or library written (with <code>--emit-llvm</code>, the
+<code>.ll</code> file).</li>
+</ul>
+<p>A build of several workspace members prints this for each member.
+<code>pepper build</code> and <code>pep-run</code> pass <code>-v</code> on to <code>pep-build</code>.</p>
 <p>Errors and warnings are printed like clang's, colored when standard error is
 a terminal; set <code>NO_COLOR</code> to turn color off. See
 <a href="../language/compiler-errors.html">Compiler errors</a>.</p>

@@ -480,6 +480,23 @@ main(args: String[]): int {
     return 1;
 }
 </code></pre>
+<h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>The command line, to show a person what runs: the program, then each
+argument, separated by spaces and quoted where needed. On Windows it
+is the line the program receives, quoted as the C runtime splits it;
+elsewhere an argument a POSIX shell would split or expand is in
+single quotes. The environment, working directory and streams are
+not shown.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the command line</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var line = process.Command("clang").argument("-o").argument("my app").to_string();
+# "clang -o 'my app'" (on Windows, `clang -o "my app"`)
+</code></pre>
 
                     </main>
 

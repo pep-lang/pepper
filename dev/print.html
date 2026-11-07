@@ -23174,7 +23174,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>--error-limit=&lt;N&gt;</code></td><td>Show at most N errors; <code>0</code> shows every one</td><td>20</td></tr>
-<tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
+<tr><td><code>-v</code>, <code>--verbose</code></td><td>Print the toolchain, runtime, folders, commands run and output</td><td>off</td></tr>
 <tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code>, <code>--members &lt;names&gt;</code>, <code>--member &lt;dir&gt;</code>, <code>--print-members</code>, <code>--build-script &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts, and what <code>pep-test</code> asks</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
@@ -23812,7 +23812,43 @@ a build, <code>--emit-static</code>, <code>--emit-llvm</code>, <code>--emit-mode
 finds any, one per function (see
 <a href="tools/../language/compiler-errors.html#several-errors-at-once">Several errors at once</a>).</p>
 <h3 id="-v---verbose"><a class="header" href="#-v---verbose"><code>-v</code>, <code>--verbose</code></a></h3>
-<p>Accepted for compatibility with other compilers; it prints nothing more yet.</p>
+<p>Prints, on standard error, what to look at first when a build goes wrong:
+which compiler, toolchain and runtime it used, where it wrote, and each
+program it ran.</p>
+<pre><code class="language-text">compiler: C:\Users\me\AppData\Local\pepper\toolchains\0.13.0-dev\bin\pep-build.exe (0.13.0-dev)
+target: x86_64-pc-windows-msvc
+clang: C:\Program Files\LLVM\bin\clang.exe
+build folder: D:\app\.pep\build
+cache folder: D:\app\.pep\cache
+runtime: C:\Users\me\AppData\Local\pepper\toolchains\0.13.0-dev\runtime
+running: "C:\Program Files\LLVM\bin\clang.exe" -o app.exe --target=x86_64-pc-windows-msvc -Xlinker /DEBUG -Xlinker /INCREMENTAL:NO -Xlinker /OPT:REF @app.exe.objects -ldbghelp -lkernel32 -luser32 -lshell32
+wrote: app.exe
+</code></pre>
+<ul>
+<li><code>compiler</code>: the <code>pep-build</code> that ran, and its version.</li>
+<li><code>target</code>: the platform the build compiles for.</li>
+<li><code>clang</code>: the clang that links, as the build finds it (see
+<a href="tools/pep-build.html#linking">Linking</a>), or <code>none found</code>.</li>
+<li><code>build folder</code> and <code>cache folder</code>: where intermediate files and the
+<a href="tools/pep-build.html#the-build-cache">build cache</a> go; <code>(objects not cached: --no-cache)</code>
+follows the cache folder under <code>--no-cache</code>, which still keeps build
+scripts' records there.</li>
+<li><code>runtime</code>: the runtime folder the build loads (see
+<a href="tools/../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Getting started</a>),
+<code>none found</code>, or <code>none (--no-runtime)</code>.</li>
+<li><code>running</code>: each program the build runs, before it runs, with its
+arguments, quoted as the system reads them: the linker, <code>xcrun</code> and
+<code>dsymutil</code> on Apple systems, <code>pep-package fetch</code> and <code>git</code> for
+dependencies, and for a
+<a href="tools/pep-build.html#build-scripts-and---no-build-scripts">build script</a>, the build of the
+script, the script, clang on its <code>[native]</code> sources and <code>pkg-config</code>.
+The copies of the compiler a build starts to compile in parallel are not
+listed.</li>
+<li><code>wrote</code>: the executable or library written (with <code>--emit-llvm</code>, the
+<code>.ll</code> file).</li>
+</ul>
+<p>A build of several workspace members prints this for each member.
+<code>pepper build</code> and <code>pep-run</code> pass <code>-v</code> on to <code>pep-build</code>.</p>
 <p>Errors and warnings are printed like clang's, colored when standard error is
 a terminal; set <code>NO_COLOR</code> to turn color off. See
 <a href="tools/../language/compiler-errors.html">Compiler errors</a>.</p>
@@ -51440,6 +51476,23 @@ main(args: String[]): int {
     return 1;
 }
 </code></pre>
+<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>The command line, to show a person what runs: the program, then each
+argument, separated by spaces and quoted where needed. On Windows it
+is the line the program receives, quoted as the C runtime splits it;
+elsewhere an argument a POSIX shell would split or expand is in
+single quotes. The environment, working directory and streams are
+not shown.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the command line</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var line = process.Command("clang").argument("-o").argument("my app").to_string();
+# "clang -o 'my app'" (on Windows, `clang -o "my app"`)
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/child.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="child"><a class="header" href="#child">Child</a></h1>
 <p>A running child process (<code>Child</code>), the pipes to it, and how it ended
@@ -51495,7 +51548,7 @@ process always has an exit code).</p>
 <ul>
 <li>the signal number, such as 9 for <code>SIGKILL</code>, or none when the process exited</li>
 </ul>
-<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns how the process ended as text.</p>
@@ -52311,7 +52364,7 @@ a whole nanosecond.</p>
 <ul>
 <li>true when this one is not shorter</li>
 </ul>
-<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
+<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns this duration as text in the largest unit it reaches, with
@@ -53023,7 +53076,7 @@ name.</p>
 </code></pre>
 <p>The seventh and last day of the ISO week.</p>
 <h3 id="methods-143"><a class="header" href="#methods-143">Methods</a></h3>
-<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
+<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the weekday's English name, as <code>name()</code> does: <code>Monday</code>.</p>
@@ -53311,7 +53364,7 @@ time of day is midnight, and an offset code (<code>%z</code>) panics.</p>
 <ul>
 <li>if <code>pattern</code> has an unknown code, or an offset code</li>
 </ul>
-<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
+<h4 id="to_string-32"><a class="header" href="#to_string-32">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the date in ISO 8601 form: <code>2024-02-29</code>.</p>
@@ -53501,7 +53554,7 @@ date is 1970-01-01, and an offset code (<code>%z</code>) panics.</p>
 <ul>
 <li>if <code>pattern</code> has an unknown code, or an offset code</li>
 </ul>
-<h4 id="to_string-32"><a class="header" href="#to_string-32">to_string</a></h4>
+<h4 id="to_string-33"><a class="header" href="#to_string-33">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the time in ISO 8601 form: <code>08:30:00</code>, with the fraction of a
@@ -53791,7 +53844,7 @@ codes are those of C's <code>strftime</code> (see the
 <ul>
 <li>if <code>pattern</code> has an unknown code, or an offset code</li>
 </ul>
-<h4 id="to_string-33"><a class="header" href="#to_string-33">to_string</a></h4>
+<h4 id="to_string-34"><a class="header" href="#to_string-34">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the date and time in ISO 8601 form: <code>2024-03-01T09:00:00</code>,
@@ -53892,7 +53945,7 @@ or an error when <code>text</code> is not one.</p>
 <ul>
 <li>true for <code>+00:00</code></li>
 </ul>
-<h4 id="to_string-34"><a class="header" href="#to_string-34">to_string</a></h4>
+<h4 id="to_string-35"><a class="header" href="#to_string-35">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the offset as text: <code>+02:00</code>, <code>-05:30</code>, <code>+00:00</code>, with the
@@ -54150,7 +54203,7 @@ as <code>+02:00</code>, and <code>%s</code> the Unix seconds.</p>
 <ul>
 <li>the date as an HTTP date</li>
 </ul>
-<h4 id="to_string-35"><a class="header" href="#to_string-35">to_string</a></h4>
+<h4 id="to_string-36"><a class="header" href="#to_string-36">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the date and time as an RFC 3339 timestamp:
@@ -55674,7 +55727,7 @@ position yet.</p>
 <li><code>address</code> — the return address</li>
 </ul>
 <h3 id="methods-154"><a class="header" href="#methods-154">Methods</a></h3>
-<h4 id="to_string-36"><a class="header" href="#to_string-36">to_string</a></h4>
+<h4 id="to_string-37"><a class="header" href="#to_string-37">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the frame as text: <code>function at file:line:column</code>, with the
@@ -55734,7 +55787,7 @@ the bottom, the C runtime's frames below <code>main</code>.</p>
 <ul>
 <li>the frames, innermost first</li>
 </ul>
-<h4 id="to_string-37"><a class="header" href="#to_string-37">to_string</a></h4>
+<h4 id="to_string-38"><a class="header" href="#to_string-38">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the frames as text, one per line, each numbered and indented
@@ -56786,7 +56839,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
 var parts = regex.Regex(",\\s*").split("a, b,c");
 assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
-<h4 id="to_string-38"><a class="header" href="#to_string-38">to_string</a></h4>
+<h4 id="to_string-39"><a class="header" href="#to_string-39">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
@@ -56898,7 +56951,7 @@ when it did not take part.</p>
 <ul>
 <li>if <code>index</code> is greater than <code>group_count()</code></li>
 </ul>
-<h4 id="to_string-39"><a class="header" href="#to_string-39">to_string</a></h4>
+<h4 id="to_string-40"><a class="header" href="#to_string-40">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the matched text.</p>
@@ -57264,7 +57317,7 @@ value holds, not a copy.</p>
 <ul>
 <li>the members of an <code>Object</code>, or none</li>
 </ul>
-<h4 id="to_string-40"><a class="header" href="#to_string-40">to_string</a></h4>
+<h4 id="to_string-41"><a class="header" href="#to_string-41">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the value as compact JSON text, with no spaces or line
@@ -57276,7 +57329,7 @@ JSON cannot spell) is written as <code>null</code>.</p>
 <ul>
 <li>the JSON text</li>
 </ul>
-<h4 id="to_string-41"><a class="header" href="#to_string-41">to_string</a></h4>
+<h4 id="to_string-42"><a class="header" href="#to_string-42">to_string</a></h4>
 <pre><code class="language-pepper">to_string(ascii_only: bool): String
 </code></pre>
 <p>Returns the value as compact JSON text, like <code>to_string()</code>, choosing
@@ -57377,7 +57430,7 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
 <h3 id="methods-160"><a class="header" href="#methods-160">Methods</a></h3>
-<h4 id="to_string-42"><a class="header" href="#to_string-42">to_string</a></h4>
+<h4 id="to_string-43"><a class="header" href="#to_string-43">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the error as a compiler prints one:
@@ -57495,7 +57548,7 @@ must be a whole comment, <code>// ...</code> (one line) or <code>/* ... */</code
 <ul>
 <li>if a comment does not start with <code>//</code> or <code>/*</code> ("a JSONC comment starts with '//' or '/*'")</li>
 </ul>
-<h4 id="to_string-43"><a class="header" href="#to_string-43">to_string</a></h4>
+<h4 id="to_string-44"><a class="header" href="#to_string-44">to_string</a></h4>
 <pre><code class="language-pepper">to_string(indent: int = 2, ascii_only: bool = false): String
 </code></pre>
 <p>Returns the document as indented JSONC text with its comments, each
@@ -58004,7 +58057,7 @@ writes none.</p>
 <li>the date-time</li>
 </ul>
 <h3 id="methods-162"><a class="header" href="#methods-162">Methods</a></h3>
-<h4 id="to_string-44"><a class="header" href="#to_string-44">to_string</a></h4>
+<h4 id="to_string-45"><a class="header" href="#to_string-45">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the value as TOML writes it: <code>1979-05-27T07:32:00.5-07:00</code>,
@@ -58334,7 +58387,7 @@ value holds, not a copy.</p>
 <ul>
 <li>the members of a <code>Table</code>, or none</li>
 </ul>
-<h4 id="to_string-45"><a class="header" href="#to_string-45">to_string</a></h4>
+<h4 id="to_string-46"><a class="header" href="#to_string-46">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the value as TOML writes it after a key's <code>=</code>, on one line:
@@ -58425,7 +58478,7 @@ start <code>message</code> with it.</p>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
 <h3 id="methods-164"><a class="header" href="#methods-164">Methods</a></h3>
-<h4 id="to_string-46"><a class="header" href="#to_string-46">to_string</a></h4>
+<h4 id="to_string-47"><a class="header" href="#to_string-47">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the error as a compiler prints one:
@@ -58588,7 +58641,7 @@ tables below it, and any dotted keys that define it.</p>
 <ul>
 <li>if <code>keys</code> is empty ("TomlDocument.remove needs a key")</li>
 </ul>
-<h4 id="to_string-47"><a class="header" href="#to_string-47">to_string</a></h4>
+<h4 id="to_string-48"><a class="header" href="#to_string-48">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the document's text, with every edit made.</p>
@@ -60870,7 +60923,7 @@ formats store it.</p>
 <ul>
 <li>16 bytes</li>
 </ul>
-<h4 id="to_string-48"><a class="header" href="#to_string-48">to_string</a></h4>
+<h4 id="to_string-49"><a class="header" href="#to_string-49">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the UUID as 32 lowercase hexadecimal digits in groups of 8,
@@ -63815,6 +63868,7 @@ output and exit status as a user would see them.</p>
 <tr><td><code>tools/compiler/corpus_test.pep</code></td><td><code>pep-build -I tests</code> on each <code>tests/&lt;Name&gt;/test.pep</code>, then the program from the repository's root, which must exit with 0. With <code>WASI_SDK_PATH</code> set and wasmtime on the PATH (or <code>WASMTIME</code> naming it), each again for <code>wasm32-wasip1</code> under wasmtime; it says it skipped otherwise, except under CI on Linux, which provisions both (<code>scripts/ci-provision-wasi.sh</code>) and where it fails without them. A new <code>tests/&lt;Name&gt;/test.pep</code> joins the run.</td></tr>
 <tr><td><code>tools/compiler/programs_test.pep</code></td><td><code>pep-build</code> on the programs of <code>tools/compiler/testdata/</code>, each run with the arguments and environment it needs: <code>cli</code>'s <code>parse</code> and an <code>add_options</code> error, <code>os</code>'s environment and host, <code>time</code>'s zones (TZif files under <code>TZDIR</code>, <code>TZ</code>, the system's database), and <code>process</code>'s arguments, <code>exit</code> and the <code>atexit</code> handlers it runs, <code>main</code>'s arguments, children that are copies of the program, and <code>exec</code>; and a build with a runtime copied into a package's folder, which leaves that package's files out.</td></tr>
 <tr><td><code>tools/compiler/children_test.pep</code></td><td><code>pep-build</code> killed while its <code>--compile-part</code> children run (each held a minute by <code>PEPC_STALL_PARTS</code>, and killed before the child first looks for its parent, #533): its standard error, which they share, must end within 30 seconds, so no child outlived it.</td></tr>
+<tr><td><code>tools/compiler/verbose_test.pep</code></td><td><code>pep-build -v</code> on a small program: its standard error names the runtime, the build and cache folders, the link command and the output; without <code>-v</code> the build prints nothing.</td></tr>
 <tr><td><code>tools/pep-doc/examples_test.pep</code></td><td><code>pep-build</code> on every example of the book, then the example (see <a href="contributing/docs.html">Building this documentation</a>).</td></tr>
 <tr><td><code>tools/pep-fmt/repository_test.pep</code></td><td><code>format_source</code> in the test itself on every <code>.pep</code> file under <code>runtime/</code>, <code>tools/</code>, <code>tests/</code> and <code>docs/examples/</code>: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of <code>runtime/</code> and <code>tools/</code> are already formatted (<code>pep-fmt -w</code> fixes one that is not).</td></tr>
 <tr><td><code>tools/pep-fmt/cli_test.pep</code></td><td><code>pep-fmt</code> on standard input and on files and folders (<code>--check</code>, <code>-w</code>), its syntax errors and usage errors.</td></tr>
