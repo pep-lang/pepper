@@ -233,6 +233,49 @@ main(): int {
     return status.code().value() == 3 ? 0 : 1;
 }
 </code></pre>
+<h2 id="end_children_on_exit"><a class="header" href="#end_children_on_exit">end_children_on_exit</a></h2>
+<pre><code class="language-pepper">end_children_on_exit()
+</code></pre>
+<p>Makes the processes this process starts from now on end when it ends,
+however it ends: when it returns, panics, crashes or is killed.</p>
+<p>On Windows the process joins a job object that ends every process in it
+when its last handle closes, which this process's end does. Its
+children, and theirs, join the job too, unless they break away. Calling
+it again makes another job; a process that cannot make or join one runs
+on without.</p>
+<p>POSIX has nothing like it, so there it does nothing: a child that should
+not outlive its parent calls <code>exit_with_parent()</code> itself. Nor does WASI,
+which starts no processes.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    process.end_children_on_exit();
+    var child = process.Command("sleep").argument("60").spawn();
+    # Killing this program now ends `sleep` too, on Windows.
+    return 0;
+}
+</code></pre>
+<h2 id="exit_with_parent"><a class="header" href="#exit_with_parent">exit_with_parent</a></h2>
+<pre><code class="language-pepper">exit_with_parent()
+</code></pre>
+<p>Ends this process, with status 1, when the process that started it
+ends, for a child that is of no use without its parent, such as a worker
+the parent hands its work to.</p>
+<p>On Linux and macOS a thread checks every 100 ms whether the process has a
+new parent, which it gets when its parent ends; it then ends at once,
+without running <code>atexit</code> handlers or flushing the C streams. On Windows,
+where a process is not told of its parent's end, and on WASI, it does
+nothing: there the parent calls <code>end_children_on_exit()</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    process.exit_with_parent();
+    # Work that should stop if the parent is killed.
+    return 0;
+}
+</code></pre>
 <h2 id="id"><a class="header" href="#id">id</a></h2>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>

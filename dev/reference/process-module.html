@@ -197,7 +197,9 @@ returns a <code>Child</code>, and <code>exec()</code> runs it in place of the ru
 <li><a href="process-child.html">Child</a>: a running child process, its piped streams,
 and its <code>ExitStatus</code></li>
 <li><a href="process-current.html">The running process</a>: <code>id()</code>,
-<code>executable_path()</code>, and <code>fork()</code>, which starts a copy of it</li>
+<code>executable_path()</code>, <code>fork()</code>, which starts a copy of it, and
+<code>end_children_on_exit()</code> and <code>exit_with_parent()</code>, which keep a child
+from outliving its parent</li>
 <li><a href="process-find.html">Finding programs</a>: <code>find_executable()</code> looks a
 program up on the <code>PATH</code>, <code>find_companion()</code> looks beside the running
 program first, and <code>is_executable()</code> checks a file</li>
