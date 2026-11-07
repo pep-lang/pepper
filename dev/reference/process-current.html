@@ -257,7 +257,7 @@ main(): int {
 }
 </code></pre>
 <h2 id="exit_with_parent"><a class="header" href="#exit_with_parent">exit_with_parent</a></h2>
-<pre><code class="language-pepper">exit_with_parent()
+<pre><code class="language-pepper">exit_with_parent(parent: ulong = 0)
 </code></pre>
 <p>Ends this process, with status 1, when the process that started it
 ends, for a child that is of no use without its parent, such as a worker
@@ -267,6 +267,13 @@ new parent, which it gets when its parent ends; it then ends at once,
 without running <code>atexit</code> handlers or flushing the C streams. On Windows,
 where a process is not told of its parent's end, and on WASI, it does
 nothing: there the parent calls <code>end_children_on_exit()</code>.</p>
+<p>A parent that ends before this call goes unnoticed, unless the child
+knows its parent's id (<code>id()</code>, which the parent can pass it) and gives
+it as <code>parent</code>: a process whose parent is then another one ends at once.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>parent</code> — the id of the process that started this one, or 0 (the default) for the parent it has when it calls this</li>
+</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import process;
 

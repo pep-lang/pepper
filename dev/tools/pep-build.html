@@ -909,9 +909,12 @@ nothing; <code>pep-test --all</code> and <code>-p</code> run it.</li>
 process a build starts is in a job object that ends with it
 (<code>process.end_children_on_exit</code>), and on Linux and macOS a
 <code>--compile-part</code> or <code>--compilation-unit-worker</code> child ends within about
-100 ms of its parent (<code>process.exit_with_parent</code>). For the compiler's tests,
-<code>PEPC_STALL_PARTS=&lt;seconds&gt;</code> makes each <code>--compile-part</code> child wait that
-long before it compiles.</p>
+100 ms of its parent (<code>process.exit_with_parent</code>), and at once if its
+parent ended before it started: the build gives each child its process id
+in <code>PEPC_PARENT_ID</code>. For the compiler's tests,
+<code>PEPC_STALL_PARTS=&lt;seconds&gt;</code> makes each <code>--compile-part</code> child print
+<code>part stalled</code> and wait a second before it looks for its parent, then that
+many seconds before it compiles.</p>
 <h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
 <ul>
 <li><code>-h</code>, <code>--help</code> prints every option with a line of description.</li>
