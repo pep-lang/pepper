@@ -297,8 +297,7 @@ _main(args: String[]): int {
             File.stderr().write_all("part stalled\n");
             async.sleep(1000);
         }
-        var parent = os.environment(incremental.PARENT_ID_VARIABLE);
-        process.exit_with_parent(parent.is_value() ? ulong.parse(parent.value()).value_or(0) : 0);
+        process.exit_with_parent(ulong.parse(os.environment(incremental.PARENT_ID_VARIABLE).value_or("")).value_or(0));
         if (stall.is_value()) {
             async.sleep(ulong.parse(stall.value()).value_or(0) * 1000);
         }
