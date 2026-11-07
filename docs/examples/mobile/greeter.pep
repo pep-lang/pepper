@@ -4,6 +4,8 @@
 # package with `--lib swift-package` and the Android app with `--lib aar`
 # (see docs/src/language/mobile.md).
 
+import io;
+
 # A String crosses as UTF-8, a Swift or Java String on the other side.
 [Export]
 greet(name: String): String {
@@ -60,4 +62,19 @@ tally_new(): Tally {
 tally_add(tally: Tally, n: int): long {
     tally.total += n;
     return tally.total;
+}
+
+# Writes `text` to a file in the temporary folder, inside the app's
+# container (on Android, the cache folder the app passed to
+# `pepperSetAppDirectories`), and returns what reading it back gives.
+# What it prints reaches Xcode's console, or logcat in an Android app.
+[Export]
+save_note(text: String): String {
+    var path = io.Directory.temp().join("note.txt");
+    var written = io.File.write_text(path, text);
+    if (written.is_err()) {
+        return $"cannot write {path}: {written.error().message}";
+    }
+    print($"saved a note in {path}");
+    return io.File.read_to_string(path).value();
 }

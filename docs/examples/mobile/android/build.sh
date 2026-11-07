@@ -10,7 +10,9 @@
 # whose generated class pepper.greeter.Greeter it calls, and packages an
 # APK with the SDK's own tools (javac, d8, aapt2, zipalign, apksigner; no
 # Gradle), signed with a throwaway key. With an emulator's adb
-# serial, installs it, starts the activity, and checks its log.
+# serial, installs it, starts the activity, and checks its log: what the
+# Java code logs, and what Pepper prints, which the runtime sends to
+# logcat (tag `greeter`) since an app's standard output is /dev/null.
 #
 # Needs ANDROID_HOME (the Android SDK, with an NDK, a platform and
 # build-tools) and a JDK (JAVA_HOME, else Android Studio's own).
@@ -88,6 +90,12 @@ grep -q "fibonacci(50) = 12586269025" "$out/log.txt"
 grep -q "words: 4" "$out/log.txt"
 grep -q "even: true, half: 1.25, tally: 7" "$out/log.txt"
 grep -q "utf8: true" "$out/log.txt"
+grep -q "note: kept in the cache" "$out/log.txt"
+# Pepper's own print, from an app whose standard output is /dev/null,
+# reaches logcat under the library's name, naming the cache folder.
+"$adb" -s "$serial" logcat -d -s greeter:I > "$out/pepper-log.txt"
+cat "$out/pepper-log.txt"
+grep -q "saved a note in /data/.*/cache/note.txt" "$out/pepper-log.txt"
 "$adb" -s "$serial" exec-out screencap -p > "$out/screenshot.png" || true
 "$adb" -s "$serial" uninstall dev.pepper.demo
 echo "android app: ok"

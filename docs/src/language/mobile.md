@@ -313,13 +313,10 @@ differences:
   about 4 MB to a stripped binary. An app linking a Pepper static
   library adds the libraries its header names (`-lssl -lcrypto`) from that
   folder: `-L <toolchain>/runtime/tls/android/aarch64-linux-android`.
-- **Files.** An app reads and writes inside its own container: pass the
-  path the platform gives (`FileManager`'s documents directory,
-  `Context.getFilesDir()`) to the Pepper code. `os.home_directory()` and
-  the temporary directory point into the container on iOS. Android has no
-  `/tmp`: without `TMPDIR`, `io.Directory.temp()` is `/data/local/tmp`,
-  which an app cannot write, so an app passes its cache directory. A Unix
-  socket's path is at most 104 bytes there, and the container's own path
+- **Files.** An app reads and writes inside its own container, whose
+  folders `os.app_directories()` returns (see [App folders](#app-folders)).
+  `os.home_directory()` and the temporary directory point into the
+  container on iOS. A Unix socket's path is at most 104 bytes there, and the container's own path
   takes most of them, so give a socket there a short name. On Android, an
   app creates Unix socket files in its own data folder
   (`Context.getFilesDir()`); SELinux refuses them elsewhere, and from an
@@ -328,9 +325,73 @@ differences:
   (bionic's `backtrace` needs API level 33), and both platforms name
   functions from the binary's own symbols, so strip a release build only
   after keeping a copy for symbolication.
-- **Standard output** goes to the Xcode console and the simulator's
-  `--stdout` file on iOS. On Android it goes nowhere in an app: log with the
-  platform's logger instead (`__android_log_write` through an `extern`).
+- **Standard output and error** go to the platform's log in an app (see
+  [Logging](#logging)).
+
+## Logging
+
+An app's standard output and error lead nowhere: Android and iOS point
+them at `/dev/null`. So when a Pepper program or library starts (a
+library when it is loaded), the runtime checks each: one that is
+`/dev/null`, or closed, it points at a pipe instead, which a thread of its
+own reads, writing each line to the platform's log:
+
+- **Android**: logcat, through `__android_log_write`, tagged with the
+  program's or library's file name (`greeter` for `libgreeter.so`):
+  standard output at the `I` level, standard error at `E`.
+  `adb logcat -s greeter` shows them.
+- **iOS**: the unified log, through `os_log`, with that name as the
+  subsystem (the app's own, for a static library linked into it): standard output at the default level, standard error as
+  errors. Console.app and `log show` show them (`xcrun simctl spawn booted
+  log show` in the simulator).
+
+A stream attached to anything else stays as it is: a terminal or a pipe,
+as `adb shell` and `xcrun simctl spawn` give a program, a file, or Xcode's
+console when Xcode starts the app. So `print`, the `log` module and
+anything else that writes the two streams, C code included, reach the log
+in an app, and the terminal from a shell. Nothing is checked per write: a
+`print` costs what it does on the desktop.
+
+A panic's message and its backtrace also go straight to the log, whether
+or not standard error is attached, so that they are there before the
+process aborts. At exit, and in a panic, the runtime waits (a second at
+most) for its threads to log what was printed before, so the last lines
+are not lost; output after that point goes nowhere.
+
+## App folders
+
+`os.app_directories()` returns an app's folders, each inside its
+container: `documents` for the user's files, `cache` for files the app can
+make again, and `temp` for scratch files.
+
+```pepper
+import io;
+import os;
+
+var folders = os.app_directories();
+if (folders) {
+    io.File.write_text(folders.value().documents.join("notes.txt"), "kept");
+}
+```
+
+- **iOS** finds them through Foundation (`NSSearchPathForDirectoriesInDomains`
+  and `NSTemporaryDirectory`): `Documents`, `Library/Caches` and `tmp`.
+- **Android** gives native code no way to find them, so the app passes
+  them in, once, before Pepper code needs them. A library for Android
+  exports `pepper_set_app_directories` (declared in its header), and the
+  Java bindings call it `pepperSetAppDirectories` on the library's class:
+
+  ```kotlin
+  Greeter.pepperSetAppDirectories(filesDir.path, cacheDir.path)
+  ```
+
+  Then `documents` is `Context.getFilesDir()`, and `cache` and `temp`
+  are `Context.getCacheDir()`, which `io.Directory.temp()` uses too.
+  Before the call there are none, and `io.Directory.temp()` is
+  `/data/local/tmp`, which an `adb shell` program can write but an app
+  cannot. A `TMPDIR` set in the environment comes first.
+
+On other systems `os.app_directories()` returns none.
 
 ## Shipping
 
@@ -404,7 +465,9 @@ it runs the runtime's `[Test]`s in the simulator and in the emulator with
 `pep-test --target`, builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (`xcrun simctl spawn`) and in the emulator
 (`adb shell`), then builds and runs the two apps and the Swift package's
-tests. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
+tests. On both, `scripts/mobile/log_check.pep` checks the platform's log:
+a panic reaches logcat or `log show` while standard error is a pipe, and
+printed lines do when standard output and error are `/dev/null`. On iOS it also runs `scripts/mobile/tls_check.pep` in the simulator against `openssl s_server`
 on the Mac, with a certificate authority made for the run: it trusts that
 authority, connects to `localhost` and `127.0.0.1`, checks that ALPN chose
 `http/1.1`, sends `GET /`, checks that a connector without the authority is
@@ -438,6 +501,9 @@ whenever the version the script pins has not been published.
 
 ## Not supported yet
 
+- **Logging**: the `log` module's levels in the platform's log (a line
+  logs at its stream's level), and a message longer than logcat's 4 KB,
+  which it cuts short.
 - **TLS on iOS**: servers, client certificates and TLS 1.3 (which need a
   SecIdentity and Network.framework).
 - **Bindings**: `[T]` and `Data` (an export takes no array), `Result` as
