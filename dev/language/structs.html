@@ -320,6 +320,15 @@ name like a function.</p>
     }
 }
 
+struct Player {
+    var name: String;
+    var score: int;
+
+    # Without a default, `this.name` is required and takes the field's type,
+    # `String`.
+    construct(this.name, this.score = 0) {}
+}
+
 struct Temperature {
     var celsius: float;
 
@@ -340,6 +349,11 @@ main(): int {
     var unit = Rect();
     assert(unit.area == 1, "every parameter has a default, so Rect() works");
 
+    var ada = Player("Ada");
+    assert(ada.name == "Ada" &amp;&amp; ada.score == 0, "the name is required, the score is not");
+    var bob = Player(score = 3, name = "Bob");
+    assert(bob.score == 3, "a this. parameter can be named");
+
     var boiling = Temperature(212.0);
     assert(boiling.celsius == 100.0, "212 F is 100 C");
     assert(Temperature().celsius == 0.0, "the default is 32 F");
@@ -347,9 +361,12 @@ main(): int {
 }
 </code></pre>
 <ul>
-<li>A parameter written <code>this.width = 1</code> stores its argument directly into the
-field <code>width</code>, before the body runs. The <code>= 1</code> is required: it is the value
-used when the caller omits that argument.</li>
+<li>A parameter written <code>this.name</code> stores its argument directly into the
+field <code>name</code>, before the body runs, and takes the field's type. Without a
+default it is required, so <code>construct(this.name) {}</code> is the short form of
+<code>construct(name: String) { this.name = name; }</code>.</li>
+<li><code>this.width = 1</code> gives the parameter a default, used when the caller
+omits that argument. As for any parameter, put the defaulted ones last.</li>
 <li>Ordinary parameters are written as in a function, <code>name: Type</code>, with an
 optional default: <code>fahrenheit: float = 32.0</code>. The C-style form,
 <code>float fahrenheit = 32.0</code>, is accepted too.</li>
@@ -363,15 +380,11 @@ lists; a call picks one by its arguments, as for any
 <a href="overloading.html#constructors">overloaded</a> function. At most one of them
 may be <code>[Implicit]</code>. A struct has at most one destructor.</li>
 </ul>
-<p>A <code>this.field</code> parameter must have a default. Leaving it out is an error:</p>
-<pre><code class="language-pepper">struct Point {
-    var x: int;
-    construct(this.x) {}
-}
-</code></pre>
-<pre><code class="language-text">main.pep:3:21: error: expected '='
-    3 |     construct(this.x) {}
-      |                     ^
+<p>Only a constructor takes <code>this.</code> parameters, and each must name a different
+field of the struct:</p>
+<pre><code class="language-text">main.pep:3:20: error: constructor parameter 'this.y' has no matching field in 'Point'
+    3 |     construct(this.y) {}
+      |                    ^
 </code></pre>
 <p>A struct without a constructor accepts no arguments:</p>
 <pre><code class="language-text">main.pep:7:13: error: too many arguments to 'Point': expected 0, have 2
