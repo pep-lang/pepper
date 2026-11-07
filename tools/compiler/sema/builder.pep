@@ -2402,6 +2402,19 @@ struct _Builder {
         return Built<bool>.Ok(true);
     }
 
+    ## A `this.x` parameter stores into a field, so only a constructor takes
+    ## one: in any other parameter list it is an error, at the field name.
+    reject_this_parameters(parameters: ast.VariableDecl[]): Built<bool> {
+        for (var p in parameters) {
+            if (p.name.starts_with("this.")) {
+                return Built<bool>.Err(
+                    _error($"a '{p.name}' parameter is allowed only in a constructor", loc(p.name_span))
+                );
+            }
+        }
+        return Built<bool>.Ok(true);
+    }
+
     ## `[ThreadLocal]` gives a module-scope variable one value per thread:
     ## on `what` (a field, a parameter) it is an error, at the attribute.
     reject_thread_local(attributes: ast.Attribute[], what: String): Built<bool> {
@@ -3488,13 +3501,7 @@ struct _Builder {
     ## A trait's method, whose body is optional: one without is a requirement.
     trait_method_def(decl: ast.FunctionDecl, parent: String?): Built<FunctionDef> {
         reject_implicit(decl.attributes)?;
-        for (var p in decl.parameters) {
-            if (p.name.starts_with("this.")) {
-                return Built<FunctionDef>.Err(
-                    _error($"a '{p.name}' parameter is allowed only in a constructor", loc(p.name_span))
-                );
-            }
-        }
+        reject_this_parameters(decl.parameters)?;
         return member_def(decl, parent);
     }
 
@@ -4268,6 +4275,7 @@ struct _Builder {
             }
             var payload = Array<(String, Loc)>();
             if (case.payload.is_value()) {
+                reject_this_parameters(case.payload.value())?;
                 for (var value in case.payload.value()) {
                     if (value.default_value.is_value()) {
                         var message = $"the values of case '{case.name}' cannot have defaults";
