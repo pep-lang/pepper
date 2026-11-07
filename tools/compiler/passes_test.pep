@@ -841,6 +841,17 @@ reports_literals_too_large_for_their_type() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A module-scope `static` block's constants of each kind; its string is a
+# `StringConstant`, which needs the runtime (#396).
+[Test]
+expands_module_static_block_constants() {
+    var folder = TempFolder("passes_module_static_constants");
+    var programs = [
+        "# expect: accepted\nenum Level { Low, High }\n\nstatic {\n    var n = 0;\n    for (var c in reflect.cases<Level>()) {\n        n += c.value + 1;\n    }\n    const COUNT = n;\n    const NAME = \"lvl\" + $\"{n}\";\n    const RATE = 2.5;\n    const ON = n > 1;\n    const TOP = Level.High;\n}\n\nmain(): int {\n    return COUNT;\n}\n",
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # `\x80` to `\xFF` write raw bytes (#298): a literal whose bytes are not
 # UTF-8 is a `StringConstant` or a C string, never a `String`
 # (`recovering_test` has the interpolated string's error).
@@ -1164,6 +1175,7 @@ error_programs(): String[] {
         "# expect: main.pep:2:6: error: module-scope variable 'total' must be 'const'\nlong total = 0;\nmain(): int { return 0; }\n",
         "# expect: main.pep:2:12: error: module-scope variable 'hits' must be 'const'\nexport var hits = 0;\nmain(): int { return hits; }\n",
         "# expect: main.pep:3:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe\nstruct Plain { var x: int; }\nconst origin: Plain = Plain();\nmain(): int { return 0; }\n",
+        "# expect: main.pep:4:17: error: module-scope variable 'NAME' has type 'String', which is not thread-safe\nstruct Point { var x: int; }\nstatic {\n    const NAME: String = reflect.name<Point>();\n}\nmain(): int { return 0; }\n",
         "# expect: main.pep:3:22: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe\nstruct Plain { var x: int; }\nexport const origin: Plain = Plain();\nmain(): int { return 0; }\n",
         "# expect: main.pep:8:13: error: module-scope variable 'unit' has type 'Shape', which is not thread-safe\ntrait Shape { int area(); }\n[Shared]\nstruct Square { construct() {} }\nextend Square with Shape { int area() { return 1; } }\n\n\nconst unit: Shape = Square();\nmain(): int { return 0; }\n",
         "# expect: main.pep:10:13: error: 'make<String>' requires thread-safe type arguments; 'String' is not thread-safe\n[Shared]\nstruct Cell<T> {\n    const value: T;\n}\n\nmake<T>(): Cell<T> { return Cell<T>(); }\n\nmain(): int {\n    var c = make<String>();\n    return 0;\n}\n",
@@ -1527,7 +1539,6 @@ rewritten_programs(): String[] {
         "# expect: accepted\n[Attribute]\nstruct Command {\n    var name: String;\n}\n\n[Command(\"b\")]\nrun_b(): int { return 2; }\n\n[Command(\"a\")]\nrun_a(): int { return 1; }\n\nmain(): int {\n    var total = 0;\n    static (total) {\n        for (var f in reflect.functions_with<Command>()) {\n            reflect.print($\"{f.name} {f.attribute<Command>().name}\");\n            total += f.call();\n        }\n    }\n    return total;\n}\n",
         "# expect: accepted\nmain(): int {\n    var out = 0;\n    static (out) {\n        var i = 0;\n        var s = \"\";\n        while (i < 5) {\n            i += 1;\n            if (i == 2) {\n                continue;\n            }\n            if (i == 4) {\n                break;\n            }\n            s = s + $\"{i}\";\n            out += i;\n        }\n        var list = reflect.cases<K>();\n        reflect.print(list.count);\n        reflect.print(list[1]);\n        reflect.print(s.length);\n        reflect.print(1.5 * 2);\n        reflect.print(7 / 2);\n        reflect.print(7 % 3);\n        reflect.print(-7.5 % 2);\n        reflect.print(\"a\" < \"b\");\n        reflect.print(1 < 2.5);\n        reflect.print(10.0 / 4);\n        reflect.print(1e21);\n        reflect.print(0.1 + 0.2);\n        reflect.print(s.starts_with(\"1\"));\n        reflect.print(true and false or !false);\n        reflect.print(i == 4 ? \"four\" : \"other\");\n        reflect.assert(i == 4, \"i is four\");\n        reflect.print(reflect.name<Array<int>>());\n        reflect.print(reflect.is_struct<K>());\n        reflect.print(reflect.is_enum<K>());\n        reflect.print(reflect.is_reference<String>());\n        reflect.print(reflect.is_same<int, i32>());\n        reflect.print(reflect.is_same<__ptr<int>, i32*>());\n        reflect.print(reflect.has_build_option(\"X\"));\n        reflect.print(reflect.build_option(\"X\", \"dflt\"));\n        reflect.print(\"q\\\"uote\\n\");\n    }\n    return out;\n}\n\nenum K { A, B }\n",
         "# expect: accepted\nstruct P {\n    var x: int;\n    var y: int;\n\n    sum(): int {\n        var total = 0;\n        static (total) {\n            for (var f in reflect.properties<P>()) {\n                total += f.get(this);\n            }\n        }\n        return total;\n    }\n\n    construct() {\n        static {\n            reflect.print(\"ctor\");\n        }\n    }\n}\n\nmain(): int {\n    return P().sum();\n}\n",
-        "# expect: accepted\nenum Level { Low, High }\n\nstatic {\n    var n = 0;\n    for (var c in reflect.cases<Level>()) {\n        n += c.value + 1;\n    }\n    const COUNT = n;\n    const NAME = \"lvl\" + $\"{n}\";\n    const RATE = 2.5;\n    const ON = n > 1;\n    const TOP = Level.High;\n}\n\nmain(): int {\n    return COUNT;\n}\n",
         "# expect: accepted\nstruct Point {\n    var x: int;\n    var y: double;\n    const name: String = \"p\";\n    var _hidden: int;\n    var label: String { get { return name; } }\n}\n\nmain(): int {\n    var p = Point();\n    var total = 0;\n    static (p, total) {\n        for (var field in reflect.properties<Point>()) {\n            reflect.print($\"{field.name} {field.index} {field.is_last} {field.type_name} {field.is_const} {field.is_property}\");\n            if (reflect.is_same<field.Type, int>()) {\n                total += field.get(p);\n                field.set(p, 3);\n            }\n        }\n    }\n    return total;\n}\n",
         "# expect: accepted\nenum Shape {\n    Circle(radius: double),\n    Rect(w: int, h: int),\n    Empty,\n}\n\nmain(): int {\n    var s = Shape.Circle(1.5);\n    var n = 0;\n    static (s, n) {\n        for (var k in reflect.cases<Shape>()) {\n            if (k.matches(s)) {\n                n += 1;\n            }\n            for (var v in k.values) {\n                reflect.print($\"{v.name} {v.type_name}\");\n            }\n        }\n    }\n    return n;\n}\n",
         # Enum cases, built-in and static methods, value type extensions

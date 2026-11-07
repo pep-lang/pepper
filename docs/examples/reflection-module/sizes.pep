@@ -23,4 +23,6 @@ export static {
     }
     const PIXEL_BYTES = bytes;
     const LAST_CHANNEL = reflect.cases<Channel>()[reflect.cases<Channel>().count - 1].get();
+    # A string is a `StringConstant`, as `const NAME = "text";` is.
+    const PIXEL_NAME = reflect.name<Pixel>();
 }

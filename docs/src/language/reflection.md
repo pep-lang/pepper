@@ -124,9 +124,12 @@ attributes written above the block (`[Target(...)]`) apply to them too.
 {{#include ../../examples/reflection-module/main.pep}}
 ```
 
-A constant takes a number, `bool`, character or enum case; a
-[module-scope variable](types-and-variables.md#module-level-variables) cannot be a `String`, since it must
-be thread-safe. At module scope, a case's `get()` is the case itself, and a
+A constant takes a number, `bool`, character, string or enum case. A
+string is a [`StringConstant`](types-and-variables.md#string-constants),
+as `const NAME = "text";` is; a
+[module-scope variable](types-and-variables.md#module-level-variables) must
+be thread-safe, so one declared `String` is an error. At module scope, a
+case's `get()` is the case itself, and a
 statement that would emit code is an error:
 
 ```text

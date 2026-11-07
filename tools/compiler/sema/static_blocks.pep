@@ -13,7 +13,9 @@ import compiler.ast;
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
 import [BUILD_OPTION_NAME_RULE, demangle_name, is_build_option_name, NAMESPACE_SEPARATOR] from compiler.link;
 import [attribute_arguments, attribute_name] from "attributes";
-import [getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, TAG_FIELD] from "builder";
+import [
+    getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, STRING_CONSTANT, TAG_FIELD
+] from "builder";
 import [is_checked_function] from "checked";
 import "common";
 import "confinement";
@@ -277,6 +279,11 @@ export expand_module_blocks(module: Module, state: PassState) {
     for (var (loc, value) in values) {
         for (var global in module.globals) {
             if (global.loc.same(loc)) {
+                # A string is a `StringConstant`, as `const X = "text";` is
+                # (`variable_in_context` in builder.pep).
+                if (global.ty.is_auto() and value is StringLiteral(_)) {
+                    global.ty = TypeName.named(STRING_CONSTANT);
+                }
                 global.default = Optional<Expression>.Value(value);
                 break;
             }

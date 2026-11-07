@@ -7,7 +7,8 @@
 # runs), `main`'s arguments, children that are copies of the program, and
 # `exec`; and the error for a member a value's type lacks inside an
 # interpolation or for another module's private extern; string literals
-# that hold a NUL or sit in default arguments; an imported `const` string,
+# that hold a NUL or sit in default arguments; a `const` string a
+# module-scope `static` block computes; an imported `const` string,
 # typed alike whole and in compilation units; a `match` in a generic
 # method of another module's struct, and a `match` arm in a module's file
 # whose case shares its name with a type of the module; a `[Move]`
@@ -669,6 +670,15 @@ string_literals_in_default_arguments_arrive_whole() {
     var output = run(process.Command(program.to_string()));
     expect_exit(output, 0);
     expect_equal(output.stdout, "3 default 4 5\n7 rex\n2 6 module\n");
+}
+
+# A `const` string a module-scope `static` block computes is a constant,
+# as a string literal is (#396).
+[Test]
+static_block_string_constants_print() {
+    var result = _run("static_string_const");
+    expect_exit(result, 0);
+    expect_equal(result.stdout, "Point\n");
 }
 
 # An imported `const` string types alike whole and in compilation units: a
