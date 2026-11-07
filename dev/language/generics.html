@@ -257,6 +257,11 @@ and locals can all use them.</li>
 <li>Name the type arguments whenever you use the struct: <code>Stack&lt;int&gt;()</code>,
 <code>var s: Stack&lt;String&gt;;</code>.</li>
 <li><code>Stack&lt;int&gt;</code> and <code>Stack&lt;String&gt;</code> are different types.</li>
+<li>A copy compiles only the methods the program uses, as a C++ template
+does. So a method that is wrong for one type argument is an error only
+where something calls it: <code>size(): ulong { return value.size; }</code> in a
+<code>Box&lt;T&gt;</code> is fine in a <code>Box&lt;int&gt;</code> that never calls <code>size()</code>, and an error at
+<code>size</code> (<code>not a struct: int</code>) in one that does.</li>
 <li>A type argument is a type. The one exception is a number, which only
 the lane count of a <a href="simd.html">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>), or
 a parameter that a struct or function of your own passes on as one
