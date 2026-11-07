@@ -285,9 +285,8 @@ export struct Directory {
     ## the tree is touched. A file or symlink at `path` itself is simply
     ## removed.
     ##
-    ## Stops at the first failure, leaving whatever was not yet removed; on
-    ## Windows a read-only file inside the tree is such a failure
-    ## (`is_permission_denied()`).
+    ## A read-only file is removed too, on Windows as on POSIX. Stops at the
+    ## first failure, leaving whatever was not yet removed.
     ##
     ## @param path the file, symlink or directory tree to remove
     ## @returns an Ok result on success; an error when something cannot be
@@ -309,7 +308,7 @@ export struct Directory {
             return IoResult<void>.err(m.error());
         }
         if (m.value().is_symlink || !m.value().is_directory) {
-            return _io_sys_remove_link(path, m.value().is_directory);
+            return _io_sys_remove_entry(path, m.value().is_directory);
         }
         var list = _io_list(path);
         if (list.is_err()) {
@@ -326,13 +325,13 @@ export struct Directory {
                     return r;
                 }
             } else {
-                var r = _io_sys_remove_link(entry.path, entry.is_directory);
+                var r = _io_sys_remove_entry(entry.path, entry.is_directory);
                 if (r.is_err()) {
                     return r;
                 }
             }
         }
-        return _io_sys_rmdir(path);
+        return _io_sys_remove_entry(path, true);
     }
 
     ## Returns the process's current directory, against which relative paths

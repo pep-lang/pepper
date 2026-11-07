@@ -881,9 +881,13 @@ _io_sys_unlink(path: Path): IoResult<void> {
     return _io_posix_check(unlink(path._value.c_str()));
 }
 
-# Remove a non-directory or a symlink (to anything); `unlink` handles both.
+# Removes one entry of a tree: a directory (`is_dir`, never a symlink here)
+# with `rmdir`, anything else, a symlink to anything included, with `unlink`.
 [Target(!OS(Windows))]
-_io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
+_io_sys_remove_entry(path: Path, is_dir: bool): IoResult<void> {
+    if (is_dir) {
+        return _io_sys_rmdir(path);
+    }
     return _io_sys_unlink(path);
 }
 

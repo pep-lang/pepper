@@ -589,14 +589,49 @@ _io_sys_unlink(path: Path): IoResult<void> {
     return _io_win_check_code(ok, code);
 }
 
-# A directory symlink (junction) is removed with RemoveDirectoryW, anything
-# else with DeleteFileW.
+# Removes one entry of a tree. A read-only one is removed too, as on POSIX:
+# when access is denied, FILE_ATTRIBUTE_READONLY is cleared on the entry
+# itself (never a link's target) and the removal tried once more, setting
+# the flag back if that fails as well.
 [Target(OS(Windows))]
-_io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
+_io_sys_remove_entry(path: Path, is_dir: bool): IoResult<void> {
+    var r = _io_win_remove(path, is_dir);
+    if (r.is_ok() || !r.error().is_permission_denied() || !_io_win_set_read_only(path, false)) {
+        return r;
+    }
+    var again = _io_win_remove(path, is_dir);
+    if (again.is_err()) {
+        _io_win_set_read_only(path, true);
+    }
+    return again;
+}
+
+# A directory or directory symlink (junction) is removed with
+# RemoveDirectoryW, anything else with DeleteFileW.
+[Target(OS(Windows))]
+_io_win_remove(path: Path, is_dir: bool): IoResult<void> {
     if (is_dir) {
         return _io_sys_rmdir(path);
     }
     return _io_sys_unlink(path);
+}
+
+# Sets or clears FILE_ATTRIBUTE_READONLY on `path` itself, a link and not
+# its target; true when the flag changed.
+[Target(OS(Windows))]
+_io_win_set_read_only(path: Path, read_only: bool): bool {
+    # FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES, OPEN_EXISTING,
+    # FILE_FLAG_OPEN_REPARSE_POINT
+    var h = _io_win_create(path, 384, 3, 2097152);
+    if (h.is_err()) {
+        return false;
+    }
+    var m = _io_sys_fstat(h.value());
+    var changed = m.is_ok()
+        && m.value().read_only != read_only
+        && _io_sys_fchmod(h.value(), _io_sys_read_only_mode(m.value().permissions, read_only)).is_ok();
+    CloseHandle(h.value());
+    return changed;
 }
 
 # MOVEFILE_REPLACE_EXISTING, as POSIX rename replaces.
