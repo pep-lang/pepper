@@ -39,6 +39,8 @@ extern int LLVMIsGlobalConstant(void* global);
 ## @param in_process whether to write one object in this process (for a
 ##   program that is not this compiler, which cannot run `--compile-part`)
 ## @param clock times each step (`-T time`)
+## @param keep_external whether every definition keeps its linkage, not
+##   `internalize`d
 ## @returns the objects, or why a step failed
 export optimize_whole(
     bitcode: Path[],
@@ -48,7 +50,8 @@ export optimize_whole(
     cpu: codegen.Cpu,
     opt_level: uint,
     in_process: bool,
-    clock: Clock
+    clock: Clock,
+    keep_external: bool = false
 ): Result<Path[], String> {
     var context = llvm.Context();
     var linked = link_parts(context, bitcode);
@@ -57,7 +60,12 @@ export optimize_whole(
     }
     var ir = linked.value();
     clock.lap("link-time optimization: link");
-    internalize(ir);
+    # A program that links a Pepper library keeps every definition as it is:
+    # the library's objects use the runtime's, and its link-once copies
+    # join the program's comdats (#220).
+    if (!keep_external) {
+        internalize(ir);
+    }
     var optimized = ir.run_passes($"lto<O{opt_level}>", machine);
     if (optimized.is_err()) {
         return Result<Path[], String>.err($"cannot optimize the linked program: {optimized.error().message}");
@@ -222,6 +230,8 @@ _size(value: llvm.Value): ulong {
 ## internal: nothing else outside the program calls Pepper code by name,
 ## so the optimizer may inline, specialize or drop any of it. A definition
 ## leaves its comdat, which only told the linker to keep one copy of it.
+## A Pepper library's init and release stay external, for the program
+## that links it (#220).
 ##
 ## @param ir the linked program
 export internalize(ir: llvm.Module) {
@@ -232,7 +242,11 @@ export internalize(ir: llvm.Module) {
         var linkage = value.linkage();
         bool visible = LLVMGetVisibility(value.ref) == llvm.Visibility.Default as int
             and linkage == llvm.Linkage.External;
-        if (value.is_declaration() or name == "main" or name.starts_with("llvm.") or visible) {
+        if (value.is_declaration()
+            or name == "main"
+            or name.starts_with("llvm.")
+            or name.starts_with(codegen.LIBRARY_ENTRY_PREFIX)
+            or visible) {
             continue;
         }
         if (linkage == llvm.Linkage.Appending) {

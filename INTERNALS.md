@@ -229,6 +229,20 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   `llvm.used`. Before linking, `driver.check_library_stamps` finds each
   linked library's stamps by scanning its bytes (`read_stamps`, so any
   object or library format) and reports the first `stamp_mismatch`.
+  Version 2 (`ABI_VERSION` 2) adds the CPU (`Cpu.key`), the runtime checks
+  and frame pointers (which only warn, `stamp_warnings`) and, in a
+  library, its `kind` (`pepper` for `--lib pepper`, `c` for the
+  self-contained kinds and every version 1 stamp), and for `pepper` its
+  `library` name, `init` and `release` functions, the Pepper libraries it
+  `needs` and a `module <name> <hash>` line per runtime module it loaded
+  (`driver.runtime_modules`). Only a `pepper` library is checked beyond
+  its target. `main.pep` reads the stamps of the `-l` and `[Link]`
+  libraries right after loading (`driver.linked_stamps`, the `[Link]`s
+  read from the syntax tree), and when a Pepper library loaded a runtime
+  module the program does not, loads the program again with it as an
+  extra import root (`Setup.extra_modules`, `driver.missing_modules`; not
+  a forced import, which would join the prelude); `BuildOptions.linked`
+  hands the stamps to the build, which checks them before codegen.
   `Program.level_error`, first in `check_diagnostics`, stops a runtime
   whose `_COMPILER_LEVEL` is above the compiler's `COMPILER_LEVEL`.
 - **`load_program(root, setup)`** (`link/program.pep`) is the single loader.
@@ -1543,8 +1557,16 @@ as one module, recording in `owners` the file that declares each symbol;
    library, `Build.library`, since bionic refuses initial-exec in a
    `dlopen`ed shared object; other libraries keep the faster initial-exec),
    with the constant initializer
-   `shared_type_checks.thread_local_constant` folds and no debug info. The
-   program module then defines `_pep_release_thread_locals` (a cached unit
+   `shared_type_checks.thread_local_constant` folds and no debug info.
+   A Pepper library (`--lib pepper`, `Build.library_name`) defines
+   `__pep_library_init.<lib>` instead, calling only its own files' inits,
+   with no ctor, and `__pep_library_release.<lib>` for its own
+   thread-locals; the runtime's files (`Build.runtime_files`) are the
+   program's. A build that links Pepper libraries (`Build.libraries`, in
+   `needs` order, `driver.pepper_libraries`) calls the runtime files'
+   inits, then each library's init, then its own files'; its release
+   calls the libraries' releases in reverse order after its own passes.
+   The program module then defines `_pep_release_thread_locals` (a cached unit
    only sees the runtime's `extern` for it; `partition.prepare` leaves the
    name unspelled and external): for each thread-local holding references,
    last declared first and in four passes, it stores the default and
@@ -1899,6 +1921,16 @@ a machine whose codegen level matches. The level is in every cache key.
 declared name) and the struct handles it passes, rejecting a type C cannot
 hold (`c_type`), and codegen defines its C entry point in the entry part.
 
+**Libraries for Pepper** (`--lib pepper`, #220). The same archive as
+`--lib static`, without the objects of units whose files are all the
+runtime's (`program.in_runtime`), and with `main` deleted from the IR
+(`Generator.generate`); its entry part holds the exports, the library's
+init and release (`partition._is_entry`) and the stamp. A program that
+links one skips `internalize` under `--lto=full` (`optimize_whole`),
+since the library's objects use the runtime's and its link-once copies
+join the program's comdats; `__pep_library_*` always stay external.
+`-o` naming a shared library is refused in `main.pep`.
+
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes
 beside the output, naming for a static library the system libraries a
@@ -2090,7 +2122,8 @@ changed.
   points: owned symbols become external and hidden in their unit's part,
   every other definition `linkonce_odr` in each part that uses it (private
   `unnamed_addr` constants stay private copies); `main`,
-  `__pep_global_init`, the exports and `llvm.*` stay in the entry part;
+  `__pep_global_init`, a library's `__pep_library_*`, the exports and
+  `llvm.*` stay in the entry part;
   symbols are respelled with `symbol_name` (`link/names.pep`: `_P` and the
   name, `_` doubled and other bytes as `_xx`), except externs' C symbols:
   an extern whose C symbol a Pepper function is named after (`exit`) is
@@ -2103,6 +2136,12 @@ changed.
   `globaldce`. Codegen gives every mangled declaration internal linkage
   within its part: no other object can name it, and ELF linkers read the
   `@` of a global symbol as a version.
+- **Library builds and linked Pepper libraries** (#220). The program's
+  key (`_link_text`) names `--lib pepper` and the stamp of each Pepper
+  library linked, and the last compilation unit's key, whose objects hold
+  the entry part, adds the build's stamp and those libraries' init and
+  release functions (its `files_key`, in `_build`), since the entry part
+  calls them; an ordinary build adds nothing.
 - **Keys** (`Keys`). A unit's key hashes (BLAKE3) the compiler's identity
   (its executable's path, size and modification time), the target, CPU,
   `-O` level, runtime checks and `-D` options, the unit's name and files,

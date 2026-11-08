@@ -30,10 +30,14 @@ export enum LibraryKind {
     ## An Android library (`.aar`) of a shared library for each Android ABI
     ## (`--lib aar`, `aar.pep`).
     Aar,
+    ## An archive for a Pepper program to link (`--lib pepper`), without
+    ## the runtime, which the program supplies (#220).
+    Pepper,
 }
 
-## The library's file name for `name` on `target`: `libname.a`,
-## `libname.so` or `libname.dylib`; `name.lib` or `name.dll` on Windows;
+## The library's file name for `name` on `target`: `libname.a` (static or
+## for Pepper), `libname.so` or `libname.dylib`; `name.lib` or `name.dll`
+## on Windows;
 ## `name.xcframework`, or the folder `name` for a Swift package;
 ## `name.aar`.
 ##
@@ -51,10 +55,11 @@ export library_file_name(kind: LibraryKind, name: String, target: link.Target): 
     if (kind == LibraryKind.Aar) {
         return $"{name}.aar";
     }
+    bool archive = kind == LibraryKind.Static or kind == LibraryKind.Pepper;
     if (target.os == "windows") {
-        return kind == LibraryKind.Static ? $"{name}.lib" : $"{name}.dll";
+        return archive ? $"{name}.lib" : $"{name}.dll";
     }
-    if (kind == LibraryKind.Static) {
+    if (archive) {
         return $"lib{name}.a";
     }
     return target.is_apple() ? $"lib{name}.dylib" : $"lib{name}.so";
@@ -141,7 +146,7 @@ export write_header(
     }
     # What a program linking the static library links too.
     var needs = Array<String>();
-    if (kind == LibraryKind.Static) {
+    if (kind == LibraryKind.Static or kind == LibraryKind.Pepper) {
         var all = libraries.copy();
         all.append_all(default_system_libraries(target.os));
         for (var library in all) {
@@ -600,22 +605,40 @@ _put_darwin_member(out: u8[], name: String, mode: String, data: u8[]) {
     _pad(out, 8, 0);
 }
 
-## Checks that every Pepper library this build links fits it: each of
-## `objects` (static libraries and objects build scripts made), and the
-## static or shared library each name of `libraries` finds first in
-## `dirs`, whose identity stamp (`link.Stamp`) another compiler or build
-## wrote. A file with no stamp is not Pepper's, and passes.
+## A file a build links, with the identity stamps (`link.Stamp`) another
+## build wrote in it: none for a file no Pepper build wrote.
+export struct StampedFile {
+    ## The file.
+    var file: Path;
+    ## The library name that found it (`-l`, `[Link]`); empty for a file
+    ## linked by its path.
+    var name: String;
+    ## Its stamps, one per object that has one.
+    var stamps: link.Stamp[];
+
+    ## Creates the record of `file`, found by `name`.
+    ##
+    ## @param file the file
+    ## @param name the library name that found it, or empty
+    ## @param stamps its stamps
+    construct(file: Path, name: String, stamps: link.Stamp[]) {
+        this.file = file;
+        this.name = name;
+        this.stamps = stamps;
+    }
+}
+
+## Reads the stamps of what a build links: each of `objects` (static
+## libraries and objects build scripts made), and the static or shared
+## library each name of `libraries` finds first in `dirs`. A file that
+## cannot be read is left out.
 ##
-## @param build this build's stamp
 ## @param libraries the libraries linked, by name
 ## @param dirs the folders searched for them
 ## @param objects more files linked by path
 ## @param target the compile target
-## @returns the first library that does not fit: the name that found it
-##   (empty for one of `objects`) and the error
-export check_library_stamps(
-    build: link.Stamp, libraries: String[], dirs: Path[], objects: Path[], target: link.Target
-): Result<void, (String, String)> {
+## @returns each file found, with its stamps
+export read_library_stamps(libraries: String[], dirs: Path[], objects: Path[], target: link.Target): StampedFile[] {
     # Each file, with the name that found it.
     var files = Array<(Path, String)>();
     for (var object in objects) {
@@ -638,22 +661,87 @@ export check_library_stamps(
             }
         }
     }
+    var out = Array<StampedFile>();
     for (var (file, name) in files) {
         var stamps = link.read_stamps(file);
-        if (stamps.is_err()) {
-            continue;
+        if (stamps.is_ok()) {
+            out.append(StampedFile(file, name, stamps.value()));
         }
-        for (var stamp in stamps.value()) {
+    }
+    return out;
+}
+
+## Checks that every Pepper library of `files` fits this build, whose
+## stamp is `build` (`link.stamp_mismatch`). A file with no stamp is not
+## Pepper's, and passes.
+##
+## @param build this build's stamp
+## @param files what the build links (`read_library_stamps`)
+## @returns what only warns (`link.stamp_warnings`), each with the name
+##   that found its library; or the first library that does not fit: the
+##   name that found it (empty for a file linked by path) and the error
+export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(String, String)[], (String, String)> {
+    var warnings = Array<(String, String)>();
+    for (var found in files) {
+        for (var stamp in found.stamps) {
             var mismatch = link.stamp_mismatch(stamp, build);
             if (mismatch.is_value()) {
-                return Result<void, (String, String)>.err(
+                return Result<(String, String)[], (String, String)>.err(
                     (
-                        name,
-                        $"'{file}' was built by {stamp.describe()}; {mismatch.value()}; rebuild it with this compiler"
+                        found.name,
+                        $"'{found.file}' was built by {stamp.describe()}; {mismatch.value()}; rebuild it with this compiler"
                     )
                 );
             }
+            for (var warning in link.stamp_warnings(stamp, build)) {
+                warnings.append((found.name, $"'{found.file}' was built {warning}"));
+            }
         }
     }
-    return Result<void, (String, String)>.ok();
+    return Result<(String, String)[], (String, String)>.ok(warnings);
+}
+
+## Returns the stamps of the Pepper libraries (`--lib pepper`) of
+## `files`, each once, in the order they initialize: each after the ones
+## it needs (`link.Stamp.needs`), otherwise in link order.
+##
+## @param files what the build links (`read_library_stamps`)
+## @returns the libraries' stamps
+export pepper_libraries(files: StampedFile[]): link.Stamp[] {
+    var linked = Array<link.Stamp>();
+    var names = HashSet<String>();
+    for (var found in files) {
+        for (var stamp in found.stamps) {
+            if (stamp.kind == link.KIND_PEPPER and names.insert(stamp.library)) {
+                linked.append(stamp);
+            }
+        }
+    }
+    var out = Array<link.Stamp>();
+    var placed = HashSet<String>();
+    while (out.count < linked.count) {
+        ulong before = out.count;
+        for (var stamp in linked) {
+            if (placed.contains(stamp.library)) {
+                continue;
+            }
+            bool ready = true;
+            for (var need in stamp.needs) {
+                ready = ready and (placed.contains(need) or !names.contains(need));
+            }
+            if (ready) {
+                placed.insert(stamp.library);
+                out.append(stamp);
+            }
+        }
+        # A cycle of needs: the rest in link order.
+        if (out.count == before) {
+            for (var stamp in linked) {
+                if (placed.insert(stamp.library)) {
+                    out.append(stamp);
+                }
+            }
+        }
+    }
+    return out;
 }

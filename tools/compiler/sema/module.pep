@@ -20,6 +20,7 @@ export [returns_fresh, takes_over] from "confinement";
 export [LAZY_ATTRIBUTE, READS_ATTRIBUTE] from "lazy";
 export [called_without_naming] from "lazy_methods";
 export [COLD_ATTRIBUTE] from "platform";
+export [MAIN_WITH_ARGUMENTS] from "entry_point";
 export [is_enum, is_trait, method_of] from "enums";
 export [HASH_METHOD] from "equatable";
 export [check_runtime_hash_keys] from "hash_keys";

@@ -344,6 +344,12 @@ export struct Generator {
     var separate_locations: bool = false;
     ## `Build.library`.
     var library: bool = false;
+    ## `Build.library_name`.
+    var library_name: String = "";
+    ## `Build.runtime_files`.
+    var runtime_files: bool[] = Array<bool>();
+    ## `Build.libraries`.
+    var libraries: (String, String)[] = Array<(String, String)>();
     ## How many such strings each function has used so far, by name.
     var location_counts: HashMap<String, ulong> = HashMap<String, ulong>();
 
@@ -687,6 +693,16 @@ export struct Generator {
             codegen_function(function)?;
         }
         codegen_called()?;
+        # A Pepper library's program has the one `main`, as `--entry`
+        # drops every other.
+        if (!library_name.is_empty) {
+            for (var name in ["main", sema.MAIN_WITH_ARGUMENTS]) {
+                var found = ir.function(name);
+                if (found.is_value()) {
+                    found.value().delete_function();
+                }
+            }
+        }
         var kept = Array<llvm.Value>();
         if (!stamp.is_empty) {
             kept.append(embed_stamp());
@@ -1047,6 +1063,19 @@ export struct Build {
     ## which may end up in a shared object, so on Android its thread-locals
     ## use the general-dynamic TLS model (`Generator.declare_thread_local`).
     var library: bool = false;
+    ## A Pepper library's name (`--lib pepper`), which defines
+    ## `__pep_library_init.<name>` and `__pep_library_release.<name>` for
+    ## its own files, and no `main`, ctor or runtime release; empty for a
+    ## build that owns the runtime.
+    var library_name: String = "";
+    ## Per file, whether it is the runtime's: a Pepper library leaves those
+    ## files' inits and thread-locals to the program, which runs their
+    ## inits before any library's.
+    var runtime_files: bool[] = Array<bool>();
+    ## The init and release functions of each Pepper library the build
+    ## links, in the order they initialize, which its own init and release
+    ## call.
+    var libraries: (String, String)[] = Array<(String, String)>();
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -1098,6 +1127,9 @@ export generate(
     generator.stamp = build.stamp;
     generator.separate_locations = build.separate_locations;
     generator.library = build.library;
+    generator.library_name = build.library_name;
+    generator.runtime_files = build.runtime_files;
+    generator.libraries = build.libraries;
     var generated = generator.generate(module);
     if (generated.is_err()) {
         return Result<llvm.Module, Diagnostic>.err(generated.error());

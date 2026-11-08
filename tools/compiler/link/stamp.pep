@@ -13,12 +13,27 @@ import [File, Path] from io;
 import [Ascii] from text;
 
 ## The first line of every stamp, which a reader looks for.
-export const STAMP_MAGIC = "pepper-stamp 1\n";
+export const STAMP_MAGIC = "pepper-stamp 2\n";
+
+## The first line of a stamp an older compiler wrote, which reads as a
+## self-contained library's (`KIND_C`).
+const _STAMP_MAGIC_V1 = "pepper-stamp 1\n";
+
+## What every version of `STAMP_MAGIC` starts with.
+const _STAMP_PREFIX = "pepper-stamp ";
+
+## A stamp's `kind` for a library built for a Pepper program
+## (`--lib pepper`): it leaves the runtime to the program.
+export const KIND_PEPPER = "pepper";
+
+## A stamp's `kind` for a self-contained library, which holds its own
+## runtime (`--lib static`, `--lib shared`, and any version 1 stamp).
+export const KIND_C = "c";
 
 ## The ABI the compiler writes code for. A compiler change that changes
 ## what the code of two builds relies on of each other (struct layouts,
 ## name mangling, the reference counting protocol, release hooks) bumps it.
-export const ABI_VERSION: uint = 1;
+export const ABI_VERSION: uint = 2;
 
 ## The features this compiler has, as a level the runtime can require: a
 ## compiler change the runtime may need to rely on raises it (#220).
@@ -42,14 +57,50 @@ export struct Stamp {
     var runtime: String = "";
     ## The build options defined, as `name=value`, sorted.
     var options: String[] = Array<String>();
+    ## The CPU the code is for (`codegen.Cpu.key`); empty when unknown.
+    var cpu: String = "";
+    ## The runtime checks kept, as the build writes them.
+    var checks: String = "";
+    ## Whether every function keeps its frame pointer.
+    var frame_pointers: bool = false;
+    ## A library's kind (`KIND_PEPPER`, `KIND_C`); empty for a program.
+    var kind: String = "";
+    ## A Pepper library's name; empty for any other build.
+    var library: String = "";
+    ## The function of a Pepper library that sets its globals.
+    var init: String = "";
+    ## The function of a Pepper library that releases a thread's
+    ## thread-locals.
+    var release: String = "";
+    ## The Pepper libraries a Pepper library links, by name, which the
+    ## program initializes first.
+    var needs: String[] = Array<String>();
+    ## Each runtime module the build loaded, as `name hash`, sorted; only
+    ## in a build that makes or links a Pepper library.
+    var modules: String[] = Array<String>();
 
     ## The stamp as text, as codegen writes it (without the NUL).
     text(): String {
         var out = StringBuilder();
         out.append(STAMP_MAGIC);
         out.append($"version {version}\nabi {abi}\ntarget {target}\nruntime {runtime}\n");
+        if (!cpu.is_empty) {
+            out.append($"cpu {cpu}\nchecks {checks}\nframe-pointers {frame_pointers}\n");
+        }
         for (var option in options) {
             out.append($"option {option}\n");
+        }
+        if (!kind.is_empty) {
+            out.append($"kind {kind}\n");
+        }
+        if (!library.is_empty) {
+            out.append($"library {library}\ninit {init}\nrelease {release}\n");
+        }
+        for (var name in needs) {
+            out.append($"needs {name}\n");
+        }
+        for (var module in modules) {
+            out.append($"module {module}\n");
         }
         return out.to_string();
     }
@@ -88,13 +139,18 @@ export make_stamp(
     return stamp;
 }
 
-## Parses `text`, a stamp starting with `STAMP_MAGIC`; nothing when it is
-## not one.
+## Parses `text`, a stamp starting with `STAMP_MAGIC`, or with version 1's
+## magic, which reads as a self-contained library's (`KIND_C`); nothing
+## when it is neither.
 export parse_stamp(text: String): Stamp? {
-    if (!text.starts_with(STAMP_MAGIC)) {
+    bool v1 = text.starts_with(_STAMP_MAGIC_V1);
+    if (!v1 and !text.starts_with(STAMP_MAGIC)) {
         return Optional<Stamp>.Empty;
     }
     var stamp = Stamp();
+    if (v1) {
+        stamp.kind = KIND_C;
+    }
     for (var line in text.substr_bytes(STAMP_MAGIC.size, text.size - STAMP_MAGIC.size).lines()) {
         var space = line.find(" ");
         if (space < 0) {
@@ -117,6 +173,24 @@ export parse_stamp(text: String): Stamp? {
             stamp.runtime = value;
         } else if (key == "option") {
             stamp.options.append(value);
+        } else if (key == "cpu") {
+            stamp.cpu = value;
+        } else if (key == "checks") {
+            stamp.checks = value;
+        } else if (key == "frame-pointers") {
+            stamp.frame_pointers = value == "true";
+        } else if (key == "kind") {
+            stamp.kind = value;
+        } else if (key == "library") {
+            stamp.library = value;
+        } else if (key == "init") {
+            stamp.init = value;
+        } else if (key == "release") {
+            stamp.release = value;
+        } else if (key == "needs") {
+            stamp.needs.append(value);
+        } else if (key == "module") {
+            stamp.modules.append(value);
         }
     }
     # The magic alone, as a program holding this file's constant has it, is
@@ -150,7 +224,8 @@ export read_stamps(path: Path): Result<Stamp[], String> {
         return Result<Stamp[], String>.err($"cannot read {path}: {bytes.error().message}");
     }
     var data = bytes.value();
-    var magic = STAMP_MAGIC.bytes();
+    # Any version: `parse_stamp` tells them apart.
+    var magic = _STAMP_PREFIX.bytes();
     var out = Array<Stamp>();
     var seen = HashSet<String>();
     ulong at = 0;
@@ -185,14 +260,22 @@ _starts_at(data: u8[], at: ulong, magic: u8[]): bool {
 }
 
 ## Why the code `library` stamps cannot be linked into the build `build`
-## stamps; nothing when it can. The ABI, the platform and the runtime must
-## match, and so must each build option both define. The release may
-## differ: the ABI says what changed.
+## stamps; nothing when it can. A self-contained library (any kind but
+## `KIND_PEPPER`) keeps its runtime to itself, so only its platform must
+## match. For a Pepper library the ABI, the platform, the CPU and the
+## runtime must match, and so must each runtime module and each build
+## option both define. The release may differ: the ABI says what changed.
 ##
 ## @param library the stamp read from the library
 ## @param build this build's
 ## @returns the reason, worded to follow "'libgeo.a' was built by ...;"
 export stamp_mismatch(library: Stamp, build: Stamp): String? {
+    if (library.kind != KIND_PEPPER) {
+        if (library.target != build.target) {
+            return Optional<String>.Value($"this build is for {build.target}");
+        }
+        return Optional<String>.Empty;
+    }
     if (library.abi != build.abi) {
         return Optional<String>.Value($"this build is {build.describe()}");
     }
@@ -201,6 +284,21 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
     }
     if (library.runtime != build.runtime) {
         return Optional<String>.Value($"this build's runtime differs ({library.runtime} there, {build.runtime} here)");
+    }
+    if (library.cpu != build.cpu) {
+        return Optional<String>.Value($"it is for the CPU '{library.cpu}', and this build for '{build.cpu}'");
+    }
+    var modules = HashMap<String, String>();
+    for (var module in build.modules) {
+        var (name, hash) = _split_at(module, " ");
+        modules[name] = hash;
+    }
+    for (var module in library.modules) {
+        var (name, hash) = _split_at(module, " ");
+        var mine = modules.try_get(name);
+        if (mine.is_value() and mine.value() != hash) {
+            return Optional<String>.Value($"the runtime module '{name}' differs ({hash} there, {mine.value()} here)");
+        }
     }
     var ours = HashMap<String, String>();
     for (var option in build.options) {
@@ -219,12 +317,42 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
     return Optional<String>.Empty;
 }
 
+## What differs between the code a Pepper library's stamp `library`
+## describes and the build `build` stamps that only changes the code
+## inside each side: the runtime checks and the frame pointers.
+##
+## @param library the stamp read from the library
+## @param build this build's
+## @returns each difference, worded to follow "'libgeo.a' was built "
+export stamp_warnings(library: Stamp, build: Stamp): String[] {
+    var out = Array<String>();
+    if (library.kind != KIND_PEPPER) {
+        return out;
+    }
+    if (library.checks != build.checks) {
+        out.append($"with the runtime checks '{library.checks}', and this build with '{build.checks}'");
+    }
+    if (library.frame_pointers != build.frame_pointers) {
+        out.append(
+            library.frame_pointers ?
+                "with frame pointers, and this build without" :
+                "without frame pointers, and this build with"
+        );
+    }
+    return out;
+}
+
 # `name=value` split at its `=`.
 _option(option: String): (String, String) {
-    var equals = option.find("=");
-    if (equals < 0) {
-        return (option, "");
+    return _split_at(option, "=");
+}
+
+# `text` split at its first `separator`: all of it and empty without one.
+_split_at(text: String, separator: String): (String, String) {
+    var found = text.find(separator);
+    if (found < 0) {
+        return (text, "");
     }
-    var at = equals as ulong;
-    return (option.substr_bytes(0, at), option.substr_bytes(at + 1, option.size - at - 1));
+    var at = found as ulong;
+    return (text.substr_bytes(0, at), text.substr_bytes(at + separator.size, text.size - at - separator.size));
 }

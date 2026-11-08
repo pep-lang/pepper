@@ -53,6 +53,10 @@ export struct Setup {
     ## its root and the files outside every module (`ModuleRoots.library`);
     ## empty for a program.
     var library: String = "";
+    ## Runtime modules to load beside the root, by name: those a linked
+    ## Pepper library loaded and the program does not import (#220). They
+    ## are loaded as the program's imports are, not into the prelude.
+    var extra_modules: String[] = Array<String>();
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -466,6 +470,16 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
     var runtime_dir = runtime.sources.count > 0 ?
         Optional<Path>.Value(files.dir_of(runtime.sources[0])) :
         Optional<Path>.Empty;
+    var extra = Array<Path>();
+    for (var name in setup.extra_modules) {
+        var path = files.resolve_module(name, runtime.dirs);
+        if (!path.is_value()) {
+            return Result<Program, String>.err(
+                $"a linked Pepper library needs the runtime module '{name}', which this runtime does not have; rebuild the library with this compiler"
+            );
+        }
+        extra.append(path.value());
+    }
     var loaded = load(
         root,
         prelude,
@@ -476,7 +490,8 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         setup.build_dir,
         runtime_dir,
         setup.error_limit,
-        setup.library
+        setup.library,
+        extra
     );
     if (loaded.is_err()) {
         return loaded;
@@ -534,6 +549,8 @@ struct _Queued {
 ## @param error_limit the most syntax errors to show; 0 shows every one
 ## @param library the library's name in a library build, which namespaces
 ##   its root and loose files; empty for a program
+## @param extra more files to load as the root's imports are, not into
+##   the prelude (`Setup.extra_modules`)
 ## @returns the program, or why a file cannot be read or parsed or a feature
 ##   turned on
 export load(
@@ -546,7 +563,8 @@ export load(
     build_dir: Path? = Optional<Path>.Empty,
     runtime_dir: Path? = Optional<Path>.Empty,
     error_limit: ulong = ERROR_LIMIT,
-    library: String = ""
+    library: String = "",
+    extra: Path[] = Array<Path>()
 ): Result<Program, String> {
     var program = Program();
     program.error_limit = error_limit;
@@ -591,6 +609,12 @@ export load(
             stack.append(_Queued(prelude[at], keys[at], true));
         }
         p_index -= 1;
+    }
+    for (var path in extra) {
+        var k = roots.key(path);
+        if (queued.insert(k)) {
+            stack.append(_Queued(path, k, false));
+        }
     }
     bool root_pending = true;
     while (true) {

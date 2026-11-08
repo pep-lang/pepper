@@ -26,6 +26,7 @@ short, and `pepper help build` runs it.
 | `--no-runtime` | Compile without the standard library | the runtime is used |
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
+| `--lib pepper` | Build a static library for a Pepper program, without the runtime, which the program supplies | an executable |
 | `--lib xcframework`, `--lib swift-package` | Build an iOS `.xcframework`, or a Swift package around one, for an app | an executable |
 | `--lib aar` | Build an Android library (`.aar`) holding a shared library for each ABI, for an app | an executable |
 | `--bindings swift`, `--bindings java` | With `--lib static` or `--lib shared` (`java`: `--lib shared`), also write Swift or Java bindings of the `[Export]`ed functions beside the header | none |
@@ -269,6 +270,20 @@ The header goes beside the library, named for it without the `lib` prefix
 (`libname.a` has `name.h`). A library that exports nothing is built with a
 warning. See
 [Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
+
+### `--lib pepper`
+
+Builds a static library for a Pepper program to link, named as
+`--lib static` names it (`libname.a`, `name.lib` on Windows), with the
+header beside it. It holds the objects of the program's own files only:
+the runtime, `main` and the startup code are left out, since the program
+that links it supplies them, sets the library's globals before its own,
+and releases its thread-locals when a thread ends. Its identity stamp
+lists the runtime modules it loaded, which that program then compiles
+too, and the Pepper libraries it links, which that program links and
+initializes first. A shared library cannot leave the runtime out, so `-o`
+naming one (`.so`, `.dylib` or `.dll`) is a usage error. See
+[A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made).
 
 ### `--bindings swift`, `--bindings java`
 
