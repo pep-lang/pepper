@@ -719,6 +719,89 @@ a_library_built_otherwise_is_refused() {
     );
 }
 
+# A library's root and loose files are namespaced with its name (#220), so
+# a program that declares the same private names, beside a same-named loose
+# file, gets no duplicate of them from it; a C host links it as before.
+[Test]
+a_library_namespaces_its_own_names() {
+    var folder = TempFolder("library_names");
+    var root = folder.path;
+    var host = link.Target();
+    var declarations = "struct Point {\n    var x: int = 0;\n\n    construct() {}\n\n    size(): int {\n        return x + 1;\n    }\n}\n\n_seed(): int {\n    return util_value();\n}\n\nconst SEED: int = _seed();\n";
+    var library = root.join(Path("geo"));
+    var app = root.join(Path("app"));
+    Directory.create_all(library);
+    Directory.create_all(app);
+    for (var dir in [library, app]) {
+        File.write_text(dir.join(Path("util.pep")), "export util_value(): int {\n    return 40;\n}\n");
+    }
+    var source = library.join(Path("geo.pep"));
+    File.write_text(
+        source,
+        "import \"util\";\n\n"
+            + declarations
+            + "\n[Export]\nexport geo_count(n: int): int {\n    var p = Point();\n    return SEED + n + p.size();\n}\n"
+    );
+    var setup = link.Setup();
+    setup.library = "geo";
+    var loaded = link.load_program(source, setup).value();
+    expect_equal(loaded.files[0].namespace, "geo/geo");
+    var archive = library.join(Path(driver.library_file_name(driver.LibraryKind.Static, "geo", host)));
+    var options = driver.BuildOptions(archive, root.join(Path("build")));
+    options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
+    options.in_process = true;
+    expect_true(driver.build(loaded, options).is_ok());
+    # The archive's index names each symbol, NUL-terminated (Mach-O adds a
+    # leading `_`).
+    var names = HashSet<String>();
+    for (var name in Utf8.decode_lossy(File.read_bytes(archive).value()).split("\x00")) {
+        names.insert(host.is_apple() and name.starts_with("_") ? name.substr_bytes(1, name.size - 1) : name);
+    }
+    for (var bare in ["_PPoint", "Point.size", "_P__seed", "_Putil__value"]) {
+        expect_false(names.contains(bare));
+    }
+    expect_true(names.contains("_PPoint_40geo_2fgeo"));
+
+    # A C host links it.
+    var header = File.read_to_string(library.join(Path("geo.h"))).value();
+    var c_main = root.join(Path("main.c"));
+    File.write_text(
+        c_main,
+        "#include <stdio.h>\n#include \"geo.h\"\n\nint main(void) {\n    printf(\"%d\\n\", geo_count(1));\n    return 0;\n}\n"
+    );
+    var exe = root.join(Path(host.os == "windows" ? "c_host.exe" : "c_host"));
+    var clang = process.Command(driver.find_link_driver().value().to_string());
+    clang.argument(c_main.to_string()).argument($"-I{library}").argument(archive.to_string());
+    for (var line in header.lines()) {
+        var prefix = "/* Link the static library with: ";
+        if (line.starts_with(prefix)) {
+            clang.arguments(line.substr_bytes(prefix.size, line.size - prefix.size - 3).split(" "));
+        }
+    }
+    clang.argument("-o").argument(exe.to_string());
+    _run(clang);
+    expect_equal(_run(process.Command(exe.to_string())), "42");
+
+    # A Pepper program clashes only on the entry symbols each build defines
+    # (`__pep_global_init`), which a library for Pepper leaves out (#220).
+    var program = app.join(Path("main.pep"));
+    File.write_text(
+        program,
+        "import \"util\";\n\n"
+            + declarations
+            + "\n[Link(\"geo\")]\nextern int geo_count(int n);\n\nmain(): int {\n    var p = Point();\n    return geo_count(SEED) - p.size();\n}\n"
+    );
+    var linking = driver.BuildOptions(app.join(Path("main")), root.join(Path("build2")));
+    linking.library_dirs = [library];
+    linking.in_process = true;
+    var built = driver.build(link.load_program(program, link.Setup()).value(), linking);
+    expect_true(built.is_err());
+    expect_true(built.error().contains("__pep_global_init"));
+    for (var name in ["Point", "seed", "util"]) {
+        expect_false(built.error().contains(name));
+    }
+}
+
 # A stamp reads back as written, the magic alone is none, and only the
 # ABI, the platform, the runtime and a build option both define must match.
 [Test]

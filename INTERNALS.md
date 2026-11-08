@@ -289,14 +289,20 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   compiler runs in, such as `tests/util`; the file stem only for a file
   outside both, made unique with `#2`, `#3` in load order). A namespace
   depends only on the file's path, so a file's symbols are the same in
-  every program that loads it, which the build cache relies on. Exports are
+  every program that loads it, which the build cache relies on. In a
+  library build (`--lib`, `Setup.library`: the library's name, its
+  header's) every file outside a module and the runtime has the library's
+  name in front (`geo/geo`, `geo/util`, `ModuleRoots.library`), and the
+  root is `ProgramFile.library_root`, mangled like any other file except
+  its `main`: a program that links the library then shares none of its
+  names (#220). Exports are
   mangled the same way, so two modules may export one name, except
-  those of the root file and the prelude (`prelude` or `prelude_part`;
+  those of a program's root file and the prelude (`prelude` or `prelude_part`;
   `exports_keep_names`), which every file reaches by their bare names. A
   reference to another file's mangled export that no import binds stays
   unrenamed, and the visibility check reports it as not imported. Externs
   and concrete overrides keep their names; so do
-  the root file's private names, unless another file keeps the same name
+  a program's root file's private names, unless another file keeps the same name
   (so `main` stays findable). `_Linker.keeps_name` and
   `_Linker.compute_own_names` decide
   this. Which generic functions are concrete overrides (`hash<int>`, and

@@ -335,6 +335,10 @@ export struct ModuleRoots {
     # The runtime's directory (normalized), or "": no module folder above
     # it holds its files, even when the toolchain sits in a module's folder.
     var _runtime: String = "";
+    ## The library's name in a library build (`--lib`), which prefixes the
+    ## namespace of each file outside every module and the runtime; empty
+    ## for a program.
+    var library: String = "";
 
     ## Creates the module folders of a program built in the project
     ## directory `project`.
@@ -407,7 +411,9 @@ export struct ModuleRoots {
     ## Returns the namespace of the file `path`: for a file of a module, the
     ## module's name and the file's path inside it (`io/file`); for another
     ## file under the project directory, its path from there
-    ## (`tests/util`); otherwise the file's name. Without its extension, and
+    ## (`tests/util`); otherwise the file's name. In a library build, a file
+    ## outside every module and the runtime has `library/` in front
+    ## (`geo/util`). Without its extension, and
     ## with any character a namespace cannot hold replaced by `_`.
     ##
     ## @param path the file
@@ -432,6 +438,11 @@ export struct ModuleRoots {
             } else {
                 var name = stem.file_name();
                 key = name.is_value() ? name.value() : "";
+            }
+            # A library's own files must not share names with a program's
+            # that links it (#220).
+            if (!library.is_empty and (_runtime.is_empty or !_strip_prefix(stem, Path(_runtime)).is_value())) {
+                key = $"{library}/{key}";
             }
         }
         var out = StringBuilder();

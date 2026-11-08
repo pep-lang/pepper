@@ -644,6 +644,11 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
   links the library cannot have its own.
 - Only the exported functions and their handle functions are visible
   outside a shared library; everything else in it is hidden.
+- In the objects, the names of the library's own files (its root and the
+  files outside any module) carry the library's name, so they never clash
+  with a same-named struct or function of the program that links it. Only
+  the C names of the exported and handle functions, `main` and externs
+  stay as written.
 - A program that links the **static** library must also link the C libraries
   Pepper's runtime uses. The header lists them in a comment at the top, such
   as `/* Link the static library with: -lm */` on Linux. A shared library
