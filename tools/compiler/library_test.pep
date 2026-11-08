@@ -57,6 +57,17 @@ _run(command: process.Command): String {
     return ran.value().stdout.trim();
 }
 
+# The symbols the index of the archive `archive` names: each is
+# NUL-terminated there, so this is every NUL-separated piece of its bytes,
+# without the leading `_` Mach-O adds when `apple`.
+_archive_names(archive: Path, apple: bool): HashSet<String> {
+    var names = HashSet<String>();
+    for (var name in Utf8.decode_lossy(File.read_bytes(archive).value()).split("\x00")) {
+        names.insert(apple and name.starts_with("_") ? name.substr_bytes(1, name.size - 1) : name);
+    }
+    return names;
+}
+
 # Compiles `_PROGRAM` in `root` against the library there with `link`
 # arguments, runs it, and returns what it printed.
 _run_program(root: Path, link: String[]): String {
@@ -751,12 +762,7 @@ a_library_namespaces_its_own_names() {
     options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
     options.in_process = true;
     expect_true(driver.build(loaded, options).is_ok());
-    # The archive's index names each symbol, NUL-terminated (Mach-O adds a
-    # leading `_`).
-    var names = HashSet<String>();
-    for (var name in Utf8.decode_lossy(File.read_bytes(archive).value()).split("\x00")) {
-        names.insert(host.is_apple() and name.starts_with("_") ? name.substr_bytes(1, name.size - 1) : name);
-    }
+    var names = _archive_names(archive, host.is_apple());
     for (var bare in ["_PPoint", "Point.size", "_P__seed", "_Putil__value_40util"]) {
         expect_false(names.contains(bare));
     }
@@ -796,7 +802,30 @@ a_library_namespaces_its_own_names() {
     linking.library_dirs = [library];
     linking.in_process = true;
     var built = driver.build(link.load_program(program, link.Setup()).value(), linking);
-    # Apple's linker only warns of a duplicate symbol, and keeps the first.
+    # The program, built as an archive the same way, so its names are as a
+    # program has them: it defines its own `Point`, `_seed` and `util_value`,
+    # and the library none of them (checked on every host, ld64 included).
+    var program_archive = root.join(
+        Path("names")
+    ).join(Path(driver.library_file_name(driver.LibraryKind.Static, "program", host)));
+    Directory.create_all(root.join(Path("names")));
+    var as_archive = driver.BuildOptions(program_archive, root.join(Path("build3")));
+    as_archive.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
+    as_archive.in_process = true;
+    expect_true(driver.build(link.load_program(program, link.Setup()).value(), as_archive).is_ok());
+    ulong own = 0;
+    for (var name in _archive_names(program_archive, host.is_apple())) {
+        if (name.starts_with("_PPoint")
+            or name.starts_with("Point.")
+            or name.contains("_P__seed")
+            or name.contains("_Putil__value")) {
+            own += 1;
+            expect_false(names.contains(name));
+        }
+    }
+    expect_true(own >= 3);
+    # Apple's linker only warns of a duplicate symbol and keeps the first,
+    # so there the link succeeds, with one `__pep_global_init` (#220).
     if (host.is_apple()) {
         return;
     }
