@@ -683,20 +683,21 @@ another_cpu_misses_the_cache_and_marks_every_function() {
     expect_equal(ir.key(), "x86-64-v2+popcnt");
 }
 
-# Every library carries its identity stamp (#220), and a build refuses one
-# that does not fit it: here, built with another value of a build option.
+# Every library carries its identity stamp (#220), and a build refuses a
+# Pepper library that does not fit it: here, built with another value of
+# a build option.
 [Test]
 a_library_built_otherwise_is_refused() {
     var folder = TempFolder("stamped_library");
     var root = folder.path;
     var host = link.Target();
-    var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Static, "geo", host)));
+    var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Pepper, "geo", host)));
     var source = root.join(Path("geo.pep"));
     File.write_text(source, "[Export]\nexport geo_area(side: int): int {\n    return side * side;\n}\n");
     var setup = link.Setup();
     setup.target.build_options["LEVEL"] = "1";
     var options = driver.BuildOptions(archive, root.join(Path("build")));
-    options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
+    options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Pepper);
     options.version = "1.2.3";
     options.in_process = true;
     expect_true(driver.build(link.load_program(source, setup).value(), options).is_ok());
@@ -721,7 +722,7 @@ a_library_built_otherwise_is_refused() {
     expect_true(refused.is_err());
     expect_true(
         refused.error().contains(
-            $"main.pep:1:7: error: '{archive}' was built by pepper 1.2.3 (ABI 1) for "
+            $"main.pep:1:7: error: '{archive}' was built by pepper 1.2.3 (ABI {link.ABI_VERSION}) for "
                 + host.os
                 + " "
                 + host.arch
@@ -836,14 +837,61 @@ a_library_namespaces_its_own_names() {
     }
 }
 
-# A stamp reads back as written, the magic alone is none, and only the
-# ABI, the platform, the runtime and a build option both define must match.
+# A root in a module folder has the same namespace as a program and as a
+# library, but only a library mangles its names, so a library built after
+# the program, with the same cache, gets objects of its own (#220).
+[Test]
+a_library_root_reuses_no_program_objects() {
+    var folder = TempFolder("library_cache_identity");
+    var root = folder.path;
+    var host = link.Target();
+    var module = root.join(Path("geo"));
+    Directory.create_all(module);
+    File.write_text(module.join(Path("module.pep")), "# The geo module.\n");
+    var source = module.join(Path("geo.pep"));
+    File.write_text(
+        source,
+        "struct Point {\n    var x: int = 0;\n\n    construct() {}\n}\n\n[Export]\nexport geo_x(): int {\n    return Point().x;\n}\n\nmain(): int {\n    return geo_x();\n}\n"
+    );
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var program = driver.BuildOptions(root.join(Path("main")), root.join(Path("build")));
+    program.cache = Optional<incremental.Cache>.Value(cache);
+    program.in_process = true;
+    expect_true(driver.build(link.load_program(source, link.Setup()).value(), program).is_ok());
+    var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Static, "geo", host)));
+    var options = driver.BuildOptions(archive, root.join(Path("build")));
+    options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
+    options.cache = Optional<incremental.Cache>.Value(cache);
+    options.in_process = true;
+    var setup = link.Setup();
+    setup.library = "geo";
+    var loaded = link.load_program(source, setup).value();
+    expect_equal(loaded.files[0].namespace, "geo/geo");
+    expect_true(driver.build(loaded, options).is_ok());
+    var names = _archive_names(archive, host.is_apple());
+    expect_true(names.contains("_PPoint_40geo_2fgeo"));
+    expect_false(names.contains("_PPoint"));
+}
+
+# A stamp reads back as written, the magic alone is none, and of a Pepper
+# library only the ABI, the platform, the CPU, the runtime, a runtime
+# module and a build option both define must match; the runtime checks
+# and frame pointers warn. A self-contained library, version 1's
+# included, need only be for the platform (#220).
 [Test]
 stamps_read_back_and_match() {
     var options = HashMap<String, String>();
     options["B"] = "2";
     options["A"] = "1";
     var stamp = link.make_stamp("0.1.0", "linux", "x86_64", ["prelude"], options);
+    stamp.kind = link.KIND_PEPPER;
+    stamp.cpu = "x86-64";
+    stamp.checks = "overflow";
+    stamp.library = "geo";
+    stamp.init = "__pep_library_init.geo";
+    stamp.release = "__pep_library_release.geo";
+    stamp.needs = ["base"];
+    stamp.modules = ["json 0123", "time 4567"];
     expect_equal(",".join(stamp.options), "A=1,B=2");
     var parsed = link.parse_stamp(stamp.text()).value();
     expect_equal(parsed.text(), stamp.text());
@@ -851,14 +899,40 @@ stamps_read_back_and_match() {
     expect_false(link.stamp_mismatch(parsed, stamp).is_value());
 
     var newer = link.make_stamp("0.2.0", "linux", "x86_64", ["prelude"], HashMap<String, String>());
+    newer.cpu = "x86-64";
     expect_false(link.stamp_mismatch(stamp, newer).is_value());
     var mac = link.make_stamp("0.1.0", "macos", "aarch64", ["prelude"], options);
     expect_equal(link.stamp_mismatch(stamp, mac).value(), "this build is for macos aarch64");
     var runtime = link.make_stamp("0.1.0", "linux", "x86_64", ["changed"], options);
     expect_true(link.stamp_mismatch(stamp, runtime).value().starts_with("this build's runtime differs"));
-    var abi = parsed;
+    var abi = link.parse_stamp(stamp.text()).value();
     abi.abi += 1;
-    expect_equal(link.stamp_mismatch(abi, stamp).value(), "this build is pepper 0.1.0 (ABI 1) for linux x86_64");
+    expect_equal(
+        link.stamp_mismatch(abi, stamp).value(), $"this build is pepper 0.1.0 (ABI {link.ABI_VERSION}) for linux x86_64"
+    );
+    newer.cpu = "x86-64-v3";
+    expect_equal(
+        link.stamp_mismatch(stamp, newer).value(), "it is for the CPU 'x86-64', and this build for 'x86-64-v3'"
+    );
+    newer.cpu = "x86-64";
+    newer.modules = ["json 89ab"];
+    expect_equal(
+        link.stamp_mismatch(stamp, newer).value(), "the runtime module 'json' differs (0123 there, 89ab here)"
+    );
+    newer.modules = ["json 0123", "zip 0000"];
+    expect_false(link.stamp_mismatch(stamp, newer).is_value());
+    newer.frame_pointers = true;
+    expect_equal(
+        "; ".join(link.stamp_warnings(stamp, newer)),
+        "with the runtime checks 'overflow', and this build with ''; without frame pointers, and this build with"
+    );
+
+    # Self-contained: any ABI and runtime, but not another platform.
+    var c = link.parse_stamp("pepper-stamp 1\nversion 0.12.0\nabi 1\ntarget linux x86_64\nruntime ffff\n").value();
+    expect_equal(c.kind, link.KIND_C);
+    expect_false(link.stamp_mismatch(c, newer).is_value());
+    expect_true(link.stamp_warnings(c, newer).is_empty);
+    expect_equal(link.stamp_mismatch(c, mac).value(), "this build is for macos aarch64");
 }
 
 # A runtime that needs a newer compiler says so at its constant (#220): a

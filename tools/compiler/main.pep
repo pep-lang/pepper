@@ -109,7 +109,7 @@ _main(args: String[]): int {
     );
     var library = parser.option<driver.LibraryKind>(
         "lib",
-        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`); or for Android apps, `aar` (`name.aar`: a shared library for each Android ABI, with the header); each named for the output. No `main` is needed",
+        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`); or for Android apps, `aar` (`name.aar`: a shared library for each Android ABI, with the header); each named for the output. No `main` is needed. `pepper` builds a static library for a Pepper program instead (named as `static` names it), without the runtime, `main` or startup code, which that program supplies",
         value_name = "KIND"
     );
     var bindings = parser.option<driver.BindingsKind>(
@@ -406,7 +406,17 @@ _main(args: String[]): int {
         # The output is replaced whole, so it must be one.
         return parser.usage_error("the output of '--lib xcframework' must end in '.xcframework'");
     }
-    if (bindings.is_set and (!library.is_set or for_apps)) {
+    if (library.is_set
+        and library.value() == driver.LibraryKind.Pepper
+        and output.is_set
+        and (output.value().ends_with(".so")
+            or output.value().ends_with(".dylib")
+            or output.value().ends_with(".dll"))) {
+        return parser.usage_error(
+            "'--lib pepper' cannot build a shared library: it leaves the runtime out; build a static library for a Pepper program"
+        );
+    }
+    if (bindings.is_set and (!library.is_set or for_apps or library.value() == driver.LibraryKind.Pepper)) {
         return parser.usage_error("'--bindings' needs '--lib static' or '--lib shared'");
     }
     if (bindings.is_set
@@ -745,6 +755,32 @@ _main(args: String[]): int {
         early_worker = driver.start_compilation_unit_worker(worker_args, build_folder);
     }
     var program = link.load_program(entry, setup);
+    # What the build links, by name and by folder: `-l`, the project's,
+    # the build scripts'.
+    var linked_libraries = libraries.values();
+    for (var library in project.value().libraries) {
+        if (!linked_libraries.contains(library)) {
+            linked_libraries.append(library);
+        }
+    }
+    for (var library in scripts.value().libraries) {
+        if (!linked_libraries.contains(library)) {
+            linked_libraries.append(library);
+        }
+    }
+    var linked_dirs = library_dirs.values();
+    linked_dirs.append_all(scripts.value().library_dirs);
+    # The stamps of the libraries it links, read once: a runtime module a
+    # Pepper library loaded and the program does not is loaded too (#220).
+    var linked_stamps = Array<driver.StampedFile>();
+    if (program.is_ok()) {
+        linked_stamps = driver.linked_stamps(program.value(), linked_libraries, linked_dirs, scripts.value().objects);
+        var missing = driver.missing_modules(program.value(), linked_stamps);
+        if (!missing.is_empty) {
+            setup.extra_modules = missing;
+            program = link.load_program(entry, setup);
+        }
+    }
     if (program.is_err()) {
         # A compilation unit worker loads the program as its build does,
         # which reports the error itself (#300).
@@ -876,14 +912,10 @@ _main(args: String[]): int {
         if (traces.contains("passes")) {
             options.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
         }
-        var linked_libraries = libraries.values();
-        for (var library in project.value().libraries) {
-            if (!linked_libraries.contains(library)) {
-                linked_libraries.append(library);
-            }
-        }
         options.libraries = linked_libraries;
-        options.library_dirs = library_dirs.values();
+        options.library_dirs = linked_dirs;
+        options.objects = scripts.value().objects;
+        options.linked = Optional<driver.StampedFile[]>.Value(linked_stamps);
         options.sysroot = sysroot_dir;
         # A cached unit's sema is skipped, so its expansions would not be
         # written for `--debug-static=expanded`.
@@ -904,13 +936,6 @@ _main(args: String[]): int {
             options.worker_args.append(args[k]);
         }
         options.early_worker = early_worker;
-        for (var library in scripts.value().libraries) {
-            if (!options.libraries.contains(library)) {
-                options.libraries.append(library);
-            }
-        }
-        options.library_dirs.append_all(scripts.value().library_dirs);
-        options.objects = scripts.value().objects;
         var made = driver.build(program.value(), options);
         if (made.is_err()) {
             # Empty: printed already (a syntax error read late).

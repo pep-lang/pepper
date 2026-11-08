@@ -131,6 +131,9 @@ export struct BuildOptions {
     var entry: Path? = Optional<Path>.Empty;
     ## The most errors to show (`--error-limit`); 0 shows every one.
     var error_limit: ulong = ERROR_LIMIT;
+    ## The stamps of what the build links (`linked_stamps`), which the
+    ## program's loading read; read by `build` when none.
+    var linked: StampedFile[]? = Optional<StampedFile[]>.Empty;
 
     construct(output: Path, build_dir: Path) {
         this.output = output;
@@ -201,30 +204,171 @@ _link_attributes(module: sema.Module): String {
     return out.to_string();
 }
 
-# Where the first `[Link]` attribute naming `library` names it, for an error
-# about it.
-_link_location(module: sema.Module, library: String): Location? {
-    for (var ext in module.externs) {
-        for (var attribute in ext.attributes) {
-            var name = sema.attribute_name(attribute);
-            if (!name.is_value() or name.value() != "Link") {
-                continue;
-            }
-            for (var argument in sema.attribute_arguments(attribute)) {
-                if (argument.name.is_value()) {
+# `_link_attributes`' lines read from the syntax tree, before sema: the
+# `[Link]`s on the externs of `program`'s files that platform selection
+# keeps.
+_syntax_link_attributes(program: link.Program): String {
+    var out = StringBuilder();
+    for (var (file, key, text, _) in _syntax_links(program)) {
+        if (key == "lib") {
+            out.append($"lib\t{text}\n");
+        } else if (key == "path") {
+            out.append($"path\t{file}\t{text}\n");
+        }
+    }
+    return out.to_string();
+}
+
+# Each string argument of a `[Link]` on an extern of `program`'s files
+# that platform selection keeps, read from the syntax tree: its file, its
+# name (`lib` when it has none), its text and its span.
+_syntax_links(program: link.Program): (ulong, String, String, ast.Span)[] {
+    var out = Array<(ulong, String, String, ast.Span)>();
+    for (var i in 0..program.files.count) {
+        for (var declaration in program.files[i].module.declarations) {
+            if (declaration is Function(function)) {
+                var kept = program.target.keep(function.attributes);
+                if (!function.external or !kept.is_ok() or !kept.value()) {
                     continue;
                 }
-                if (argument.value is Literal(literal, span)) {
-                    if (literal is String(text)) {
-                        if (text == library) {
-                            return Optional<Location>.Value(Location(ext.loc.file as ulong, span));
+                for (var attribute in function.attributes) {
+                    var name = sema.attribute_name(attribute);
+                    if (!name.is_value() or name.value() != "Link") {
+                        continue;
+                    }
+                    for (var argument in sema.attribute_arguments(attribute)) {
+                        if (argument.value is Literal(literal, span)) {
+                            if (literal is String(text)) {
+                                var key = argument.name.is_value() ? argument.name.value().0 : "lib";
+                                out.append((i, key, text, span));
+                            }
                         }
                     }
                 }
             }
         }
     }
-    return Optional<Location>.Empty;
+    return out;
+}
+
+# The folders of `$PEPPER_LIBRARY_PATH`, separated as in `PATH`.
+_library_path_dirs(): Path[] {
+    var dirs = Array<Path>();
+    var library_path = os.environment("PEPPER_LIBRARY_PATH");
+    if (library_path.is_value()) {
+        var separator = os.system_os() == os.OperatingSystem.Windows ? ";" : ":";
+        for (var dir in library_path.value().split(separator)) {
+            if (!dir.is_empty) {
+                dirs.append(Path(dir));
+            }
+        }
+    }
+    return dirs;
+}
+
+## Reads the identity stamps of what `program` links, right after it is
+## loaded (#220): the libraries `libraries` and its externs' `[Link]`s
+## name, found in `dirs`, the `[Link(path = ...)]` folders and
+## `$PEPPER_LIBRARY_PATH`'s, in the link's order, and `objects`.
+##
+## @param program the loaded program
+## @param libraries the libraries `-l` names
+## @param dirs the folders `-L` names
+## @param objects more files linked by path
+## @returns each file found, with its stamps
+export linked_stamps(program: link.Program, libraries: String[], dirs: Path[], objects: Path[]): StampedFile[] {
+    var (linked, linked_dirs) = _resolve_links(_syntax_link_attributes(program), program);
+    var all = libraries.copy();
+    for (var library in linked) {
+        if (!all.contains(library)) {
+            all.append(library);
+        }
+    }
+    var searched = dirs.copy();
+    searched.append_all(linked_dirs);
+    searched.append_all(_library_path_dirs());
+    return read_library_stamps(all, searched, objects, program.target);
+}
+
+## Returns the runtime modules a Pepper library of `files` loaded that
+## `program` does not, by name: the program loads them too
+## (`link.Setup.extra_modules`), so their code and inits are there.
+##
+## @param program the loaded program
+## @param files what it links (`linked_stamps`)
+## @returns the modules' names
+export missing_modules(program: link.Program, files: StampedFile[]): String[] {
+    var out = Array<String>();
+    var libraries = pepper_libraries(files);
+    if (libraries.is_empty) {
+        return out;
+    }
+    var loaded = HashSet<String>();
+    for (var (name, _) in _runtime_module_files(program)) {
+        loaded.insert(name);
+    }
+    for (var stamp in libraries) {
+        for (var module in stamp.modules) {
+            var name = module.split(" ")[0];
+            if (!loaded.contains(name) and !out.contains(name)) {
+                out.append(name);
+            }
+        }
+    }
+    return out;
+}
+
+## Returns each runtime module `program` loads, as `name hash`, sorted:
+## the module's folder name, and a hash of its files' namespaces and texts,
+## which a Pepper library's stamp lists (`link.Stamp.modules`). The
+## prelude's files are left out: the stamp's runtime hash covers them.
+##
+## @param program the loaded program
+## @returns the modules
+export runtime_modules(program: link.Program): String[] {
+    var out = Array<String>();
+    for (var (name, indices) in _runtime_module_files(program)) {
+        indices.sort((a, b) => program.files[a].namespace.compare(program.files[b].namespace));
+        var hasher = digest.Blake3();
+        for (var i in indices) {
+            hasher.update($"{program.files[i].namespace}\n{program.files[i].source.size}\n");
+            hasher.update(program.files[i].source);
+        }
+        out.append($"{name} {hasher.finish_hex().substr_bytes(0, 16)}");
+    }
+    out.sort((a, b) => a.compare(b));
+    return out;
+}
+
+# The files of each runtime module outside the prelude `program` loads, by
+# the module's folder name.
+_runtime_module_files(program: link.Program): HashMap<String, Array<ulong>> {
+    var in_runtime = program.in_runtime();
+    var files = HashMap<String, Array<ulong>>();
+    for (var i in 0..program.files.count) {
+        var f = program.files[i];
+        if (!in_runtime[i] or f.prelude or f.prelude_part or !f.module_root.is_value()) {
+            continue;
+        }
+        var name = f.module_root.value().file_name().value_or("");
+        if (!files.contains(name)) {
+            files[name] = Array<ulong>();
+        }
+        files[name].append(i);
+    }
+    return files;
+}
+
+# `diagnostic`, about the library `library` names, rendered at the first
+# `[Link]` naming it; its message alone (a warning's after `warning: `)
+# when none does (`-l`, a build script's file).
+_at_link(program: link.Program, library: String, diagnostic: Diagnostic, warning: bool = false): String {
+    for (var (file, key, text, span) in _syntax_links(program)) {
+        if (key == "lib" and text == library and !library.is_empty) {
+            return render_all([diagnostic.at(Location(file, span))], program.sources());
+        }
+    }
+    return warning ? $"warning: {diagnostic.message}" : diagnostic.message;
 }
 
 # The libraries and folders of `_link_attributes`' lines, each once: a
@@ -923,6 +1067,26 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             );
         }
     }
+    # The libraries' stamps are checked before anything is built (#220).
+    if (!options.linked.is_value()) {
+        options.linked = Optional<StampedFile[]>.Value(
+            linked_stamps(program, options.libraries, options.library_dirs, options.objects)
+        );
+    }
+    bool stamped = false;
+    for (var found in options.linked.value()) {
+        stamped = stamped or !found.stamps.is_empty;
+    }
+    if (stamped) {
+        var fits = check_library_stamps(full_stamp(program, options), options.linked.value());
+        if (fits.is_err()) {
+            var (name, message) = fits.error();
+            return Result<Built, String>.err(_at_link(program, name, Diagnostic.error(message)));
+        }
+        for (var (name, message) in fits.value()) {
+            File.stderr().write_all(_at_link(program, name, Diagnostic.warning(message), true) + "\n");
+        }
+    }
     var excluded = HashSet<ulong>();
     while (true) {
         var built = _build(program, options, excluded);
@@ -984,6 +1148,15 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
     # Link-time optimization needs an optimized build.
     bool lto = options.lto and options.opt_level > 0;
+    # A Pepper library leaves the runtime's objects to the program; a build
+    # that links one calls its init and release (#220).
+    bool pepper = _is_pepper_library(options);
+    var linked_libraries = options.linked.is_value() ? pepper_libraries(options.linked.value()) : Array<link.Stamp>();
+    var stamp = full_stamp(program, options);
+    # shortcut: `in_runtime` counts `--import`ed files as the runtime's, so a
+    # Pepper library leaves them out too; tell them apart if a library
+    # needs one the program does not import.
+    var in_runtime = program.in_runtime();
     var translation_units = link.translation_units(program);
     var keys = Optional<Keys>.Empty;
     String program_key = "";
@@ -1019,6 +1192,17 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     # instead.
     if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
         units = compilation_units(program, keys.value().base());
+        # The last unit's objects hold the entry part, which is what the
+        # stamp says and calls each Pepper library's init and release.
+        if (!units.is_empty and (pepper or !linked_libraries.is_empty)) {
+            var last = units[units.count - 1];
+            var hasher = digest.Blake3();
+            hasher.update($"{last.files_key}\n{stamp.text()}");
+            for (var library in linked_libraries) {
+                hasher.update($"{library.init} {library.release}\n");
+            }
+            last.files_key = hasher.finish_hex();
+        }
     }
     _share_runtime(options, program, translation_units, units);
     # The units whose objects the cache has: sema skips their bodies. A build
@@ -1178,8 +1362,17 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     setup.library = options.library.is_value();
     setup.debug_info = options.debug;
     setup.static_locations = static_locations;
-    var stamp = build_stamp(program, options.version);
     setup.stamp = stamp.text();
+    if (pepper) {
+        setup.library_name = stamp.library;
+    } else {
+        for (var library in linked_libraries) {
+            setup.libraries.append((library.init, library.release));
+        }
+    }
+    if (pepper or !linked_libraries.is_empty) {
+        setup.runtime_files = in_runtime;
+    }
     var runtime = _runtime_dir(program);
     if (options.debug) {
         setup.gdb_printers = gdb_printers(program);
@@ -1280,6 +1473,9 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         # Only the compilation units the program's own reads: others, files of
         # the entry's module it never reaches, are not linked.
         for (var k in last.reads) {
+            if (pepper and _all_in(units[k].files, in_runtime)) {
+                continue;
+            }
             var found = options.cache.value().reused_objects($"+{units[k].name}", object_keys[k], extension);
             if (found.is_err()) {
                 Directory.remove_all(work);
@@ -1377,6 +1573,9 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         # store in the cache.
         var stored_parts = Array<(ulong, ulong, String)>();
         for (var u in 0..translation_units.count) {
+            if (pepper and _all_in(translation_units[u].files, in_runtime)) {
+                continue;
+            }
             if (reused.is_value() and reused.value().objects[u].count > 0) {
                 if (options.trace_cache) {
                     File.stderr().write_all($"cache: hit {translation_units[u].name}\n");
@@ -1512,7 +1711,8 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             cpu,
             options.opt_level,
             options.in_process,
-            clock
+            clock,
+            !linked_libraries.is_empty
         );
         if (optimized.is_err()) {
             Directory.remove_all(work);
@@ -1540,16 +1740,8 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     for (var dir in linked_dirs) {
         dirs.append(dir);
     }
-    # Then `$PEPPER_LIBRARY_PATH`'s folders, separated as in `PATH`.
-    var library_path = os.environment("PEPPER_LIBRARY_PATH");
-    if (library_path.is_value()) {
-        var separator = os.system_os() == os.OperatingSystem.Windows ? ";" : ":";
-        for (var dir in library_path.value().split(separator)) {
-            if (!dir.is_empty) {
-                dirs.append(Path(dir));
-            }
-        }
-    }
+    # Then `$PEPPER_LIBRARY_PATH`'s folders.
+    dirs.append_all(_library_path_dirs());
     # A library gets its C header; a static one is an archive, not linked.
     if (options.library.is_value()) {
         var written = write_header(
@@ -1604,18 +1796,10 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             natvis.append(enums);
         }
     }
-    var fits = check_library_stamps(stamp, libraries, dirs, options.objects, program.target);
-    if (fits.is_err()) {
-        Directory.remove_all(work);
-        var (name, message) = fits.error();
-        var at = unit_objects or name.is_empty ? Optional<Location>.Empty : _link_location(module, name);
-        return Result<Built, String>.err(
-            at.is_value() ? render_all([Diagnostic.error(message).at(at.value())], sources) : message
-        );
-    }
     objects.append_all(options.objects);
     var made = Result<void, String>.ok();
-    if (options.library.is_value() and options.library.value() == LibraryKind.Static) {
+    bool archive = pepper or (options.library.is_value() and options.library.value() == LibraryKind.Static);
+    if (archive) {
         made = write_archive(objects, options.output, program.target);
     } else {
         made = link_objects(
@@ -1640,7 +1824,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     if (made.is_err()) {
         return Result<Built, String>.err(made.error());
     }
-    clock.lap(options.library.is_value() and options.library.value() == LibraryKind.Static ? "archive" : "link");
+    clock.lap(archive ? "archive" : "link");
     if (options.cache.is_value()) {
         # A build script's stamp hashes these (`build_scripts.pep`).
         # shortcut: prelude files (the runtime, forced imports) are left out,
@@ -1893,7 +2077,18 @@ _link_text(options: BuildOptions): String {
     var text = StringBuilder();
     text.append($"output {options.output}\ncwd {here}\n");
     if (options.library.is_value()) {
-        text.append(options.library.value() == LibraryKind.Static ? "--lib static\n" : "--lib shared\n");
+        var kind = options.library.value();
+        text.append(
+            kind == LibraryKind.Static ?
+                "--lib static\n" :
+                (kind == LibraryKind.Pepper ? "--lib pepper\n" : "--lib shared\n")
+        );
+    }
+    # The entry part calls each Pepper library linked (#220).
+    if (options.linked.is_value()) {
+        for (var stamp in pepper_libraries(options.linked.value())) {
+            text.append(stamp.text());
+        }
     }
     if (options.bindings.is_value()) {
         text.append(options.bindings.value() == BindingsKind.Swift ? "--bindings swift\n" : "--bindings java\n");
@@ -1937,4 +2132,60 @@ export build_stamp(program: link.Program, version: String): link.Stamp {
         }
     }
     return link.make_stamp(version, program.target.os, program.target.arch, prelude, options);
+}
+
+## Returns the identity stamp `build` writes for `program` with
+## `options`: `build_stamp`'s, with the CPU, the runtime checks and the
+## frame pointers; a library's kind; for a Pepper library
+## (`--lib pepper`) its name, init and release functions and the Pepper
+## libraries it links; and, in a build that makes or links a Pepper
+## library, the runtime modules it loads (`runtime_modules`).
+##
+## @param program the program
+## @param options how it is built, its `linked` stamps read
+## @returns the stamp
+export full_stamp(program: link.Program, options: BuildOptions): link.Stamp {
+    var stamp = build_stamp(program, options.version);
+    var triple = codegen.target_triple(program.target);
+    stamp.cpu = (options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple)).key();
+    var checks = options.runtime_checks;
+    var kept = Array<String>();
+    for (var (
+        name,
+        on
+    ) in [
+        ("overflow", checks.overflow),
+        ("divide", checks.divide),
+        ("shift", checks.shift),
+        ("bounds", checks.bounds),
+        ("null", checks.null)
+    ]) {
+        if (on) {
+            kept.append(name);
+        }
+    }
+    stamp.checks = kept.is_empty ? "none" : ",".join(kept);
+    stamp.frame_pointers = options.frame_pointers;
+    var linked = options.linked.is_value() ? pepper_libraries(options.linked.value()) : Array<link.Stamp>();
+    bool pepper = _is_pepper_library(options);
+    if (options.library.is_value()) {
+        stamp.kind = pepper ? link.KIND_PEPPER : link.KIND_C;
+    }
+    if (pepper) {
+        stamp.library = header_path(options.output, program.target).file_stem().value_or("");
+        stamp.init = codegen.library_init_name(stamp.library);
+        stamp.release = codegen.library_release_name(stamp.library);
+        for (var needed in linked) {
+            stamp.needs.append(needed.library);
+        }
+    }
+    if (pepper or !linked.is_empty) {
+        stamp.modules = runtime_modules(program);
+    }
+    return stamp;
+}
+
+# Whether `options` build a Pepper library (`--lib pepper`).
+_is_pepper_library(options: BuildOptions): bool {
+    return options.library.is_value() and options.library.value() == LibraryKind.Pepper;
 }

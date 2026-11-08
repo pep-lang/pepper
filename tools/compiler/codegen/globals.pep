@@ -33,6 +33,29 @@ import "types";
 ## thread-locals; `runtime/async/thread.pep` declares it `extern`.
 export const RELEASE_FUNCTION = "_pep_release_thread_locals";
 
+## Returns the function a Pepper library (`--lib pepper`) defines to set
+## its globals, which the program that links it calls (#220).
+##
+## @param library the library's name
+## @returns the function's name
+export library_init_name(library: String): String {
+    return $"__pep_library_init.{library}";
+}
+
+## Returns the function a Pepper library defines to release the calling
+## thread's values of its thread-locals, which the program's
+## `_pep_release_thread_locals` calls.
+##
+## @param library the library's name
+## @returns the function's name
+export library_release_name(library: String): String {
+    return $"__pep_library_release.{library}";
+}
+
+## What the names of `library_init_name` and `library_release_name`
+## start with.
+export const LIBRARY_ENTRY_PREFIX = "__pep_library_";
+
 ## How many times `_pep_release_thread_locals` walks the thread-locals: a
 ## destructor run by one pass may store into a thread-local again, as
 ## POSIX's `PTHREAD_DESTRUCTOR_ITERATIONS` allows for keys.
@@ -254,11 +277,12 @@ extend Generator {
         # `llvm.global_ctors`, calls them in initialization order
         # (`module.globals` is sorted by it, so a file's globals are
         # consecutive).
-        if (non_const.count == 0) {
+        if (non_const.count == 0 and library_name.is_empty and libraries.is_empty) {
             return Result<void>.ok();
         }
         var void_fn = llvm.Type.function(context.void_type(), Array<llvm.Type>(), false);
-        var file_inits = Array<llvm.Value>();
+        # Each file's init, with whether the file is the runtime's.
+        var file_inits = Array<(llvm.Value, bool)>();
         ulong start = 0;
         while (start < non_const.count) {
             var (_, _, file) = non_const[start];
@@ -288,16 +312,39 @@ extend Generator {
             frame.function = outer;
             stored?;
             builder.return_void();
-            file_inits.append(init_fn);
+            file_inits.append((init_fn, (file as ulong) < runtime_files.count and runtime_files[file as ulong]));
             start = end;
         }
-        var init_fn = ir.add_function("__pep_global_init", void_fn);
+        # A Pepper library inits only its own files, when the program calls
+        # it; a build that links Pepper libraries inits the runtime's files,
+        # then the libraries, then its own (#220).
+        var init_fn = ir.add_function(
+            library_name.is_empty ? "__pep_global_init" : library_init_name(library_name), void_fn
+        );
         var entry = context.append_block(init_fn, "entry");
         builder.position_at_end(entry);
-        for (var file_init in file_inits) {
-            builder.call(file_init.global_type(), file_init, Array<llvm.Value>(), "");
+        bool pepper_library = !library_name.is_empty;
+        bool split = !pepper_library and !libraries.is_empty;
+        for (var (file_init, runtime) in file_inits) {
+            if (pepper_library ? !runtime : !split or runtime) {
+                builder.call(file_init.global_type(), file_init, Array<llvm.Value>(), "");
+            }
+        }
+        if (split) {
+            for (var (library_init, _) in libraries) {
+                var called = declared_void(library_init);
+                builder.call(called.global_type(), called, Array<llvm.Value>(), "");
+            }
+            for (var (file_init, runtime) in file_inits) {
+                if (!runtime) {
+                    builder.call(file_init.global_type(), file_init, Array<llvm.Value>(), "");
+                }
+            }
         }
         builder.return_void();
+        if (pepper_library) {
+            return Result<void>.ok();
+        }
 
         # llvm.global_ctors = [1 x { i32 priority, ptr fn, ptr data }]
         var ctor_struct = context.const_struct(
@@ -598,23 +645,34 @@ extend Generator {
         return Result<Address?>.ok(global_addrs.try_get(id));
     }
 
-    ## Defines `_pep_release_thread_locals` in the program, releasing every
-    ## thread-local of `module` that holds references.
-    emit_thread_locals_release(module: Module): Result<void> {
-        var void_fn = llvm.Type.function(context.void_type(), Array<llvm.Type>(), false);
-        var existing = ir.function(RELEASE_FUNCTION);
-        llvm.Value function;
-        if (existing.is_value()) {
-            function = existing.value();
-        } else {
-            function = ir.add_function(RELEASE_FUNCTION, void_fn);
+    ## The function `name` taking and returning nothing: the module's, or
+    ## declared now.
+    declared_void(name: String): llvm.Value {
+        var found = ir.function(name);
+        if (found.is_value()) {
+            return found.value();
         }
+        return ir.add_function(name, llvm.Type.function(context.void_type(), Array<llvm.Type>(), false));
+    }
+
+    ## Defines `_pep_release_thread_locals` in the program, releasing every
+    ## thread-local of `module` that holds references, then calling each
+    ## linked Pepper library's release, the last initialized first. A
+    ## Pepper library defines its `library_release_name` instead, for the
+    ## thread-locals of its own files.
+    emit_thread_locals_release(module: Module): Result<void> {
+        bool pepper_library = !library_name.is_empty;
+        var function = declared_void(pepper_library ? library_release_name(library_name) : RELEASE_FUNCTION);
         if (function.block_count() != 0) {
             return Result<void>.ok();
         }
         var held = Array<(String, String)>();
         for (var variable in module.globals) {
             if (!is_thread_local(variable)) {
+                continue;
+            }
+            var file = variable.loc.file as ulong;
+            if (pepper_library and file < runtime_files.count and runtime_files[file]) {
                 continue;
             }
             var ty = variable.ty.to_string();
@@ -645,6 +703,14 @@ extend Generator {
                 }
                 addr.store(builder, zero_of(llvm_ty))?;
                 release_ref(ty, old.value())?;
+            }
+        }
+        if (!pepper_library) {
+            var index = libraries.count;
+            while (index > 0) {
+                index -= 1;
+                var called = declared_void(libraries[index].1);
+                builder.call(called.global_type(), called, Array<llvm.Value>(), "");
             }
         }
         # The runtime's `extern void` declared it first, returning Pepper's

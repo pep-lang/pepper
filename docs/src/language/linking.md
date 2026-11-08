@@ -171,23 +171,67 @@ succeeds.
 
 ### A library another Pepper build made
 
+A Pepper program links a library built with `--lib pepper` as it links a C
+one: it declares the library's `[Export]`ed functions as `extern`s, with
+`[Link("geo")]` (or `-l geo`) naming the library.
+
+```pepper
+[Link("geo")]
+extern int geo_area(int side);
+
+main(): int {
+    return geo_area(3) - 9;
+}
+```
+
+Only C types cross between them (numbers, `bool`, C strings and
+pointers), as with any C library. The program supplies the one runtime
+both use: `--lib pepper` leaves the runtime, `main` and the startup code
+out of the archive. So one heap and one set of runtime thread-locals
+serve both, and a program can link several such libraries.
+
+- **Initialization.** Before `main`, the program sets the runtime's
+  globals, then each Pepper library's (one that links another sets its own
+  after that one's), then its own. So a program global may call into a
+  library in its initializer.
+- **Thread-locals.** When a thread ends, the library's thread-locals are
+  released with the program's.
+- **Runtime modules.** A runtime module the library imports and the
+  program does not (`json`, say) is compiled into the program too.
+- **Other libraries.** A library that links another Pepper library or a C
+  one does not hold it: the program links it too (`-l`, or `[Link]`).
+- A `--lib static` archive is for C: it holds its own runtime and startup
+  code, which clash with the program's at the link.
+- `--lib pepper` writes a static library only. A shared library must hold
+  its runtime, which `--lib shared` gives it: a Pepper program links one too,
+  but then it has a second runtime of its own, so free a string it returns
+  with its own `pepper_string_free`, and pass no handle from one to the
+  other.
+
 Every program and library Pepper writes carries an identity stamp, in a
 section of its own (`.pepmeta`, `__DATA,__pepmeta` on macOS and iOS) that
 the linker keeps: the compiler's release, its ABI number, the platform, a
-hash of the runtime's core files, and the build options defined. Before it
-links, the compiler reads the stamp of each library a `[Link]` or `-l` name
-finds in the search folders, and of each file a build script links, and
-refuses one that does not fit the build:
+hash of the runtime's core files, the CPU, the runtime checks, whether
+frame pointers are kept, and the build options defined. A library for
+Pepper also lists its kind, its initializer and release functions, the
+Pepper libraries it needs, and each runtime module it loaded with a hash of
+its files. Before it builds, the compiler reads the stamp of each library a
+`[Link]` or `-l` name finds in the search folders, and of each file a build
+script links, and refuses a library for Pepper that does not fit the build:
 
 ```text
-error: './libgeo.a' was built by pepper 0.12.0 (ABI 1) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
+main.pep:1:7: error: './libgeo.a' was built by pepper 0.13.0 (ABI 2) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
 ```
 
-The ABI number, the platform and the runtime must match, and so must each
-build option both builds define (`--test` and `--entry` are left out). The
-release may differ: the ABI number is what changes when a compiler changes
-code that two builds rely on of each other. A library with no stamp, such
-as a C one, is not checked.
+The ABI number, the platform, the CPU and the runtime must match, and so
+must each runtime module both builds load and each build option both
+define (`--test` and `--entry` are left out). Different runtime checks or
+frame pointers only warn, since they change the code inside each side
+alone. The release may differ: the ABI number is what changes when a
+compiler changes code that two builds rely on of each other. A library for
+C (`--lib static` or `--lib shared`, or one an older compiler wrote) keeps
+its runtime to itself, so only its platform must match. A library with no
+stamp, such as a C one, is not checked.
 
 ## Output files
 
@@ -200,5 +244,5 @@ directory you pass to `--build`: one object per file of the program in
 initializers. Unchanged objects come from the build cache in `.pep/cache/`
 (`--no-cache` skips it).
 
-With `--lib static` or `--lib shared`, the output is a library and a C
+With `--lib static`, `--lib shared` or `--lib pepper`, the output is a library and a C
 header instead (see [Building the library](c-interop.md#building-the-library)).

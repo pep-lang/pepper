@@ -659,6 +659,12 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
 - A C program links at most one Pepper static library: each holds its own
   copy of the runtime, and two would define it twice. Shared libraries
   keep their runtimes to themselves, so a program may load several.
+- For a **Pepper** program, build the library with `--lib pepper`
+  instead: the same archive, named as `--lib static` names it, without the
+  runtime, `main` or startup code, which the program supplies (see
+  [A library another Pepper build made](linking.md#a-library-another-pepper-build-made)).
+  A program may link several of those. It is static only: `-o` naming a
+  shared library is refused.
 - A library's thread-locals (its own and the runtime's) use the
   initial-exec TLS model, as a program's do, where reading one costs a
   load, except on Android (see below). On Linux this makes a `.so` built

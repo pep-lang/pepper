@@ -18,12 +18,15 @@
 ##   address means nothing (`unnamed_addr`, such as a string's bytes) stays
 ##   private, copied into each part that uses it;
 ## - the program's own entry points (`main`, `__pep_global_init`, the C
-##   exports, the thread-locals' release, and LLVM's `llvm.*` globals such
+##   exports, the thread-locals' release, a Pepper library's init and
+##   release (`LIBRARY_ENTRY_PREFIX`), and LLVM's `llvm.*` globals such
 ##   as `llvm.global_ctors`) are in a part of their own, which depends on
 ##   the whole program and is never cached. Each export's entry point,
 ##   named `EXPORT_PREFIX` and its C symbol until then, takes its C symbol.
 ##   So does an extern a Pepper function shares its C symbol's name with,
-##   named `EXTERN_PREFIX` and its C symbol until then.
+##   named `EXTERN_PREFIX` and its C symbol until then. Every entry point
+##   but `main`, the exports and `llvm.*` is hidden, so a shared library's
+##   init and release never bind to a program's.
 ##
 ## Every symbol a definition names gets its linker spelling
 ## (`link.symbol_name`), so names with `@`, `<` or spaces survive every linker.
@@ -67,6 +70,7 @@ _is_entry(name: String): bool {
     return name == "main"
         or name == "__pep_global_init"
         or name == RELEASE_FUNCTION
+        or name.starts_with(LIBRARY_ENTRY_PREFIX)
         or name.starts_with(EXPORT_PREFIX)
         or name.starts_with("llvm.");
 }
@@ -177,6 +181,11 @@ export prepare(
                 exports.append(value);
             } else {
                 part_of[name] = entry_part;
+                # Hidden, so a shared library's ELF init and release bind
+                # to its own runtime, not a Pepper program's (#220).
+                if (name != "main" and !name.starts_with("llvm.")) {
+                    value.set_visibility(llvm.Visibility.Hidden);
+                }
             }
             sizes[entry_part] += _size(value);
             continue;

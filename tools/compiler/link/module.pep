@@ -21,13 +21,16 @@ export [absolute, path_key, Runtime] from "files";
 export [
     ABI_VERSION,
     COMPILER_LEVEL,
+    KIND_C,
+    KIND_PEPPER,
     make_stamp,
     parse_stamp,
     read_stamps,
     REQUIRED_LEVEL_NAME,
     Stamp,
     STAMP_MAGIC,
-    stamp_mismatch
+    stamp_mismatch,
+    stamp_warnings
 ] from "stamp";
 export [declares_override, translation_units, TranslationUnit, unit_inputs] from "translation_units";
 export [
