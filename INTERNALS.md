@@ -2123,7 +2123,9 @@ changed.
   every other definition `linkonce_odr` in each part that uses it (private
   `unnamed_addr` constants stay private copies); `main`,
   `__pep_global_init`, a library's `__pep_library_*`, the exports and
-  `llvm.*` stay in the entry part;
+  `llvm.*` stay in the entry part, all hidden but `main`, the exports and
+  `llvm.*` (else a shared library's init would bind to a program's on
+  ELF);
   symbols are respelled with `symbol_name` (`link/names.pep`: `_P` and the
   name, `_` doubled and other bytes as `_xx`), except externs' C symbols:
   an extern whose C symbol a Pepper function is named after (`exit`) is

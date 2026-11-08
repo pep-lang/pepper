@@ -24,7 +24,9 @@
 ##   the whole program and is never cached. Each export's entry point,
 ##   named `EXPORT_PREFIX` and its C symbol until then, takes its C symbol.
 ##   So does an extern a Pepper function shares its C symbol's name with,
-##   named `EXTERN_PREFIX` and its C symbol until then.
+##   named `EXTERN_PREFIX` and its C symbol until then. Every entry point
+##   but `main`, the exports and `llvm.*` is hidden, so a shared library's
+##   init and release never bind to a program's.
 ##
 ## Every symbol a definition names gets its linker spelling
 ## (`link.symbol_name`), so names with `@`, `<` or spaces survive every linker.
@@ -179,6 +181,11 @@ export prepare(
                 exports.append(value);
             } else {
                 part_of[name] = entry_part;
+                # Hidden, so a shared library's ELF init and release bind
+                # to its own runtime, not a Pepper program's (#220).
+                if (name != "main" and !name.starts_with("llvm.")) {
+                    value.set_visibility(llvm.Visibility.Hidden);
+                }
             }
             sizes[entry_part] += _size(value);
             continue;
