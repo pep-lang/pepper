@@ -1153,6 +1153,9 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     bool pepper = _is_pepper_library(options);
     var linked_libraries = options.linked.is_value() ? pepper_libraries(options.linked.value()) : Array<link.Stamp>();
     var stamp = full_stamp(program, options);
+    # shortcut: `in_runtime` counts `--import`ed files as the runtime's, so a
+    # Pepper library leaves them out too; tell them apart if a library
+    # needs one the program does not import.
     var in_runtime = program.in_runtime();
     var translation_units = link.translation_units(program);
     var keys = Optional<Keys>.Empty;

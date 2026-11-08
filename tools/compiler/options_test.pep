@@ -117,7 +117,7 @@ help_lists_every_option_of_the_rust_compiler() {
         expect_true(help.contains(option));
     }
     for (var values in [
-        "[possible values: static, shared, xcframework, swift-package, aar]",
+        "[possible values: static, shared, xcframework, swift-package, aar, pepper]",
         "[possible values: full, off]",
         "[possible values: expand, keep]",
         "[possible values: source, expanded]",
