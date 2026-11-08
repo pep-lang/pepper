@@ -49,6 +49,10 @@ export struct Setup {
     var build_dir: Path? = Optional<Path>.Empty;
     ## The most syntax errors to show (`--error-limit`); 0 shows every one.
     var error_limit: ulong = ERROR_LIMIT;
+    ## The library's name in a library build (`--lib`), which namespaces
+    ## its root and the files outside every module (`ModuleRoots.library`);
+    ## empty for a program.
+    var library: String = "";
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -471,7 +475,8 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         setup.defer_bodies,
         setup.build_dir,
         runtime_dir,
-        setup.error_limit
+        setup.error_limit,
+        setup.library
     );
     if (loaded.is_err()) {
         return loaded;
@@ -527,6 +532,8 @@ struct _Queued {
 ## @param runtime_dir the runtime's folder, if any: its files belong to no
 ##   module folder above it (a toolchain installed in a package's folder)
 ## @param error_limit the most syntax errors to show; 0 shows every one
+## @param library the library's name in a library build, which namespaces
+##   its root and loose files; empty for a program
 ## @returns the program, or why a file cannot be read or parsed or a feature
 ##   turned on
 export load(
@@ -538,7 +545,8 @@ export load(
     defer_bodies: bool = false,
     build_dir: Path? = Optional<Path>.Empty,
     runtime_dir: Path? = Optional<Path>.Empty,
-    error_limit: ulong = ERROR_LIMIT
+    error_limit: ulong = ERROR_LIMIT,
+    library: String = ""
 ): Result<Program, String> {
     var program = Program();
     program.error_limit = error_limit;
@@ -560,6 +568,7 @@ export load(
         }
     }
     var roots = ModuleRoots(project, runtime_dir);
+    roots.library = library;
     var script_module = target.build_script_root.is_value() and packages.project.is_value() ?
         roots.key(packages.project.value()) :
         "";
@@ -703,6 +712,7 @@ export load(
         loaded.key = next.key;
         loaded.namespace = roots.namespace_of(path);
         loaded.module_root = roots.module_of(path);
+        loaded.library_root = !library.is_empty and next.key == root_key;
         # A file of a module sees the declarations of the module's other
         # files, so loading one loads its `module.pep`, and with it the
         # files the module reaches. Spelled from the file's own path, as an

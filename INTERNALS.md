@@ -289,14 +289,20 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   compiler runs in, such as `tests/util`; the file stem only for a file
   outside both, made unique with `#2`, `#3` in load order). A namespace
   depends only on the file's path, so a file's symbols are the same in
-  every program that loads it, which the build cache relies on. Exports are
+  every program that loads it, which the build cache relies on. In a
+  library build (`--lib`, `Setup.library`: the library's name, its
+  header's) every file outside a module and the runtime has the library's
+  name in front (`geo/geo`, `geo/util`, `ModuleRoots.library`), and the
+  root is `ProgramFile.library_root`, mangled like any other file except
+  its `main`: a program that links the library then shares none of its
+  names (#220). Exports are
   mangled the same way, so two modules may export one name, except
-  those of the root file and the prelude (`prelude` or `prelude_part`;
+  those of a program's root file and the prelude (`prelude` or `prelude_part`;
   `exports_keep_names`), which every file reaches by their bare names. A
   reference to another file's mangled export that no import binds stays
   unrenamed, and the visibility check reports it as not imported. Externs
   and concrete overrides keep their names; so do
-  the root file's private names, unless another file keeps the same name
+  a program's root file's private names, unless another file keeps the same name
   (so `main` stays findable). `_Linker.keeps_name` and
   `_Linker.compute_own_names` decide
   this. Which generic functions are concrete overrides (`hash<int>`, and
@@ -2100,7 +2106,8 @@ changed.
 - **Keys** (`Keys`). A unit's key hashes (BLAKE3) the compiler's identity
   (its executable's path, size and modification time), the target, CPU,
   `-O` level, runtime checks and `-D` options, the unit's name and files,
-  and each of its inputs' name, namespace and kind, with its text when the
+  and each of its inputs' name, namespace and kind (prelude, prelude part,
+  library root), with its text when the
   input is the unit's own or its unit reaches this one back through the
   units' inputs, else its **interface hash** (`interface.pep`, early
   cutoff): the file's tokens without comments or positions, each
@@ -3580,7 +3587,7 @@ so a document other files of its module read keeps its place.
 
 **Keys.** A compilation unit's key (`compilation_unit_key`) hashes:
 
-- its `files_key`: the files' names, namespaces, preludes and texts, after
+- its `files_key`: the files' names, namespaces, kinds and texts, after
   the build's base key (compiler identity, target, options);
 - and, in the order of `reads`, the **own interface** of each compilation unit it
   reads: its first line, and each line after it whose name the compilation

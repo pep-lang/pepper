@@ -810,7 +810,8 @@ export struct Keys {
         var defined = " ".join(options);
         _base = $"{compiler_identity()}\n{build}\n{program.target.os} {program.target.arch}\n{defined}\n";
         for (var file in program.files) {
-            var identity = $"{file.name}\n{file.namespace}\n{file.prelude} {file.prelude_part}\n";
+            # A library's root mangles names a program's keeps (#220).
+            var identity = $"{file.name}\n{file.namespace}\n{file.prelude} {file.prelude_part}{file.library_root ? " library" : ""}\n";
             _identity.append(identity);
             var hasher = digest.Blake3();
             hasher.update(identity);

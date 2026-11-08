@@ -57,6 +57,10 @@ export struct ProgramFile {
     ## a forced module): its exports may repeat the runtime's, but are
     ## visible only through the module's own exports.
     var prelude_part: bool;
+    ## The root of a library build (`--lib`): its names are mangled with its
+    ## namespace, as every other file's are, except `main`; a program's
+    ## root keeps its own names.
+    var library_root: bool;
     ## For each of `module.imports`, the index of the file it names, or
     ## none when it did not resolve.
     var imports: Array<ulong?> = Array<ulong?>();
@@ -1294,9 +1298,9 @@ struct _Linker {
     }
 
     # Whether file `i`'s exports keep their names in the merged program:
-    # the root file's, and the prelude's.
+    # a program's root file's, and the prelude's.
     exports_keep_names(i: ulong): bool {
-        return i == 0 or files[i].prelude or files[i].prelude_part;
+        return (i == 0 and !files[0].library_root) or files[i].prelude or files[i].prelude_part;
     }
 
     # Whether `d` keeps its name in the merged program: an export of a file
@@ -1314,8 +1318,9 @@ struct _Linker {
         return false;
     }
 
-    # Every file's own names. The root file's private names are mangled only
-    # where another file keeps the same name; every other file's are.
+    # Every file's own names. A program's root file's private names are
+    # mangled only where another file keeps the same name; every other
+    # file's are.
     compute_own_names() {
         var kept = HashSet<String>();
         ulong i = 1;
@@ -1337,7 +1342,8 @@ struct _Linker {
                 bool keep_it = d.is_exported() and bare_exports;
                 match (d) {
                     Function(func) => {
-                        if (func.external) {
+                        # A library keeps its `main` (c-interop.md).
+                        if (func.external or (f.library_root and func.name == "main")) {
                             keep_it = true;
                         }
                     }
@@ -1360,7 +1366,7 @@ struct _Linker {
                     continue;
                 }
                 var name = d.declared_name();
-                bool mangled = !kept_here.contains(name) and (i > 0 or kept.contains(name));
+                bool mangled = !kept_here.contains(name) and (i > 0 or f.library_root or kept.contains(name));
                 names_here[name] = mangled ? names.mangle(name, f.namespace) : name;
                 var linked = names_here[name];
                 if (!declared_in.contains(linked)) {

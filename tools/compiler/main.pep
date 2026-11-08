@@ -581,6 +581,10 @@ _main(args: String[]): int {
     } else if (project.value().output.is_value()) {
         out = project.value().output.value();
     }
+    if (kind.is_value()) {
+        # The library's own names are namespaced with its name, its header's.
+        setup.library = driver.header_path(out, setup.target).file_stem().value_or("");
+    }
     var build_folder = build_dir.is_set ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
     if (for_apps) {
         # Each iOS target's static library, or each Android ABI's shared
