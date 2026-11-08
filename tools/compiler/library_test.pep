@@ -757,10 +757,11 @@ a_library_namespaces_its_own_names() {
     for (var name in Utf8.decode_lossy(File.read_bytes(archive).value()).split("\x00")) {
         names.insert(host.is_apple() and name.starts_with("_") ? name.substr_bytes(1, name.size - 1) : name);
     }
-    for (var bare in ["_PPoint", "Point.size", "_P__seed", "_Putil__value"]) {
+    for (var bare in ["_PPoint", "Point.size", "_P__seed", "_Putil__value_40util"]) {
         expect_false(names.contains(bare));
     }
     expect_true(names.contains("_PPoint_40geo_2fgeo"));
+    expect_true(names.contains("_Putil__value_40geo_2futil"));
 
     # A C host links it.
     var header = File.read_to_string(library.join(Path("geo.h"))).value();

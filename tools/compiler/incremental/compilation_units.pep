@@ -266,7 +266,9 @@ export compilation_units(program: link.Program, base: String, root_last: bool = 
         hasher.update($"\ncompilation unit {unit.name}\n");
         for (var file in unit.files) {
             var f = program.files[file];
-            hasher.update($"{f.name}\n{f.namespace}\n{f.prelude} {f.prelude_part}\n{f.source.size}\n");
+            hasher.update(
+                $"{f.name}\n{f.namespace}\n{f.prelude} {f.prelude_part}{f.library_root ? " library" : ""}\n{f.source.size}\n"
+            );
             hasher.update(f.source);
         }
         unit.files_key = hasher.finish_hex();

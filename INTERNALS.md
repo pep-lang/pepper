@@ -2106,7 +2106,8 @@ changed.
 - **Keys** (`Keys`). A unit's key hashes (BLAKE3) the compiler's identity
   (its executable's path, size and modification time), the target, CPU,
   `-O` level, runtime checks and `-D` options, the unit's name and files,
-  and each of its inputs' name, namespace and kind, with its text when the
+  and each of its inputs' name, namespace and kind (prelude, prelude part,
+  library root), with its text when the
   input is the unit's own or its unit reaches this one back through the
   units' inputs, else its **interface hash** (`interface.pep`, early
   cutoff): the file's tokens without comments or positions, each
@@ -3586,7 +3587,7 @@ so a document other files of its module read keeps its place.
 
 **Keys.** A compilation unit's key (`compilation_unit_key`) hashes:
 
-- its `files_key`: the files' names, namespaces, preludes and texts, after
+- its `files_key`: the files' names, namespaces, kinds and texts, after
   the build's base key (compiler identity, target, options);
 - and, in the order of `reads`, the **own interface** of each compilation unit it
   reads: its first line, and each line after it whose name the compilation
