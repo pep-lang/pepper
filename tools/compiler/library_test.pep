@@ -796,6 +796,10 @@ a_library_namespaces_its_own_names() {
     linking.library_dirs = [library];
     linking.in_process = true;
     var built = driver.build(link.load_program(program, link.Setup()).value(), linking);
+    # Apple's linker only warns of a duplicate symbol, and keeps the first.
+    if (host.is_apple()) {
+        return;
+    }
     expect_true(built.is_err());
     expect_true(built.error().contains("__pep_global_init"));
     for (var name in ["Point", "seed", "util"]) {
