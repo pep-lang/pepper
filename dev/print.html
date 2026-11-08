@@ -16095,6 +16095,8 @@ export static {
     }
     const PIXEL_BYTES = bytes;
     const LAST_CHANNEL = reflect.cases&lt;Channel&gt;()[reflect.cases&lt;Channel&gt;().count - 1].get();
+    # A string is a `StringConstant`, as `const NAME = "text";` is.
+    const PIXEL_NAME = reflect.name&lt;Pixel&gt;();
 }
 </code></pre>
 <pre><code class="language-pepper">import "sizes";
@@ -16102,12 +16104,16 @@ export static {
 main(): int {
     assert(PIXEL_BYTES == 4, "one byte per field of Pixel");
     assert(LAST_CHANNEL == Channel.Alpha, "the last case of Channel");
+    assert(PIXEL_NAME == "Pixel", "the name of Pixel");
     return 0;
 }
 </code></pre>
-<p>A constant takes a number, <code>bool</code>, character or enum case; a
-<a href="language/types-and-variables.html#module-level-variables">module-scope variable</a> cannot be a <code>String</code>, since it must
-be thread-safe. At module scope, a case's <code>get()</code> is the case itself, and a
+<p>A constant takes a number, <code>bool</code>, character, string or enum case. A
+string is a <a href="language/types-and-variables.html#string-constants"><code>StringConstant</code></a>,
+as <code>const NAME = "text";</code> is; a
+<a href="language/types-and-variables.html#module-level-variables">module-scope variable</a> must
+be thread-safe, so one declared <code>String</code> is an error. At module scope, a
+case's <code>get()</code> is the case itself, and a
 statement that would emit code is an error:</p>
 <pre><code class="language-text">main.pep:7:9: error: a module-scope 'static' block cannot emit code; declare a 'const' with what it computes
 </code></pre>
