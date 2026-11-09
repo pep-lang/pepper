@@ -106,6 +106,7 @@ build_all() {
       mkdir -p "$out"
       link="-L $out"
       for lib in "$libs"/*.pep; do
+        [ -f "$lib" ] || continue
         name=$(basename "$lib" .pep)
         "$0" --target "$1" "$lib" --lib pepper -o "$out/lib$name.a" --build "$2/build-lib-$3" \
           >> "$2/$3.log" 2>&1 || { echo "build failed: $3"; exit 0; }
