@@ -416,7 +416,24 @@ and releases its thread-locals when a thread ends. Its identity stamp
 lists the runtime modules it loaded, which that program then compiles
 too, and the Pepper libraries it links, which that program links and
 initializes first. A shared library cannot leave the runtime out, so <code>-o</code>
-naming one (<code>.so</code>, <code>.dylib</code> or <code>.dll</code>) is a usage error. See
+naming one (<code>.so</code>, <code>.dylib</code> or <code>.dll</code>) is a usage error.</p>
+<p>It also writes the library's <strong>interface</strong> beside the archive, named
+after it with the extension <code>.pepi</code> (<code>libgeo.a</code> has <code>libgeo.pepi</code>,
+<code>geo.lib</code> has <code>geo.pepi</code>): the compiler's own checked record of the
+library's files, the format the build cache keeps, with their resolved
+types, struct layouts, generic bodies, link summaries and expanded
+<code>static</code> blocks, and without the bodies of functions that are not generic.
+The archive's stamp names its hash (<code>interface</code>). A Pepper program will
+read it in place of the library's sources; until then it is written for
+that program, not read. Since it is the compiler's own format, a program
+reads it only when its compiler has the same record version, ABI number
+and runtime interface as the one that built the library, whatever the
+releases are (see
+<a href="../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+The interface is written from the library's files checked as one
+compilation unit on the runtime's, so <code>--lib pepper</code> checks the library
+whole on each build, with or without the build cache; it cannot be
+combined with <code>--debug-static=expanded</code>. See
 <a href="../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>.</p>
 <h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
 <p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the

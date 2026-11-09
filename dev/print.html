@@ -18353,18 +18353,28 @@ the linker keeps: the compiler's release, its ABI number, the platform, a
 hash of the runtime's core files, the CPU, the runtime checks, whether
 frame pointers are kept, and the build options defined. A library for
 Pepper also lists its kind, its initializer and release functions, the
-Pepper libraries it needs, and each runtime module it loaded with a hash of
-its files. Before it builds, the compiler reads the stamp of each library a
-<code>[Link]</code> or <code>-l</code> name finds in the search folders, and of each file a build
-script links, and refuses a library for Pepper that does not fit the build:</p>
+Pepper libraries it needs, its record version, the hash of the runtime's
+interface and of each runtime module's it loaded, and the hash of its
+interface file (<code>libgeo.pepi</code>, which <code>--lib pepper</code> writes beside the
+archive: see <a href="language/../tools/pep-build.html#--lib-pepper"><code>--lib pepper</code></a>). A
+runtime interface hash covers what other code sees of the runtime's
+files: a change inside a function body that changes no return type and
+no link summary leaves it alone. Before it builds, the compiler reads the
+stamp of each library a <code>[Link]</code> or <code>-l</code> name finds in the search folders,
+and of each file a build script links, and refuses a library for Pepper
+that does not fit the build:</p>
 <pre><code class="language-text">main.pep:1:7: error: './libgeo.a' was built by pepper 0.13.0 (ABI 2) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
 </code></pre>
-<p>The ABI number, the platform, the CPU and the runtime must match, and so
-must each runtime module both builds load and each build option both
-define (<code>--test</code> and <code>--entry</code> are left out). Different runtime checks or
+<p>The record version, the ABI number, the platform, the CPU and the
+runtime's interface must match, and so must the interface of each runtime
+module both builds load and each build option both define (<code>--test</code> and
+<code>--entry</code> are left out). The interfaces are compared once the program is
+checked, the rest before anything is built. Different runtime checks or
 frame pointers only warn, since they change the code inside each side
-alone. The release may differ: the ABI number is what changes when a
-compiler changes code that two builds rely on of each other. A library for
+alone. The compiler releases may differ: the record version is what
+changes when a compiler writes or reads the library's interface
+differently, and the ABI number when a compiler changes code that two
+builds rely on of each other. A library for
 C (<code>--lib static</code> or <code>--lib shared</code>, or one an older compiler wrote) keeps
 its runtime to itself, so only its platform must match. A library with no
 stamp, such as a C one, is not checked.</p>
@@ -23423,7 +23433,24 @@ and releases its thread-locals when a thread ends. Its identity stamp
 lists the runtime modules it loaded, which that program then compiles
 too, and the Pepper libraries it links, which that program links and
 initializes first. A shared library cannot leave the runtime out, so <code>-o</code>
-naming one (<code>.so</code>, <code>.dylib</code> or <code>.dll</code>) is a usage error. See
+naming one (<code>.so</code>, <code>.dylib</code> or <code>.dll</code>) is a usage error.</p>
+<p>It also writes the library's <strong>interface</strong> beside the archive, named
+after it with the extension <code>.pepi</code> (<code>libgeo.a</code> has <code>libgeo.pepi</code>,
+<code>geo.lib</code> has <code>geo.pepi</code>): the compiler's own checked record of the
+library's files, the format the build cache keeps, with their resolved
+types, struct layouts, generic bodies, link summaries and expanded
+<code>static</code> blocks, and without the bodies of functions that are not generic.
+The archive's stamp names its hash (<code>interface</code>). A Pepper program will
+read it in place of the library's sources; until then it is written for
+that program, not read. Since it is the compiler's own format, a program
+reads it only when its compiler has the same record version, ABI number
+and runtime interface as the one that built the library, whatever the
+releases are (see
+<a href="tools/../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+The interface is written from the library's files checked as one
+compilation unit on the runtime's, so <code>--lib pepper</code> checks the library
+whole on each build, with or without the build cache; it cannot be
+combined with <code>--debug-static=expanded</code>. See
 <a href="tools/../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>.</p>
 <h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
 <p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
@@ -63947,6 +63974,30 @@ scripts/stage0-check.sh --version 0.10.0   # with a release
 <code>pepper test</code>. Further arguments go to that <code>pepper test</code>. On macOS and
 Windows it needs LLVM's prefix, as <code>scripts/pepper-tests.sh</code> does (<code>PEPPER_LLVM_PREFIX</code>,
 or this checkout's <code>.pep/llvm-prefix</code>).</p>
+<h2 id="the-library-interfaces-record-version"><a class="header" href="#the-library-interfaces-record-version">The library interface's record version</a></h2>
+<p>A Pepper library's interface (<code>--lib pepper</code>'s <code>.pepi</code>) is the compiler's
+checked-unit record, which a program built by another compiler reads when
+their <code>RECORD_VERSION</code> (<code>tools/compiler/link/stamp.pep</code>), ABI number and
+runtime interface match. So any change to the record's encoding or to what
+it means bumps <code>RECORD_VERSION</code>, whatever the release numbering does. Two
+tests in <code>tools/compiler/</code> enforce it:</p>
+<ul>
+<li><code>record_schema_test.pep</code> fingerprints the code that writes and reads a
+record (<code>sema/record.pep</code>, the generated <code>sema/record_codec.pep</code>,
+<code>sema/pending.pep</code>, <code>CheckedUnit</code> in <code>sema/checked.pep</code>, the record's
+framing in <code>incremental/compilation_units.pep</code> and
+<code>incremental/library_interface.pep</code>), its tokens without comments or
+spacing, against the value it keeps for the current <code>RECORD_VERSION</code>. A
+change there fails with <code>the record format changed: bump RECORD_VERSION and update the fingerprint</code>, printing the new value. A model field the
+codec writes changes the generated codec, so it is caught too.</li>
+<li><code>library_interface_test.pep</code> reads a small library's interface back and
+compares what it holds (declarations, layouts, attributes, which bodies
+are kept, link summaries, the <code>static</code> block's constants) with
+<code>tools/compiler/testdata/library_interface.golden</code>: a change of meaning
+without a change of format. When it differs, bump <code>RECORD_VERSION</code> if a
+program would read the library differently, then update the file to
+what the test prints.</li>
+</ul>
 <h2 id="tests-that-run-the-tools"><a class="header" href="#tests-that-run-the-tools">Tests that run the tools</a></h2>
 <p>Some tests run programs rather than call functions: <code>pep-build</code> on
 programs, and the Pepper tools on files and folders, checking their
