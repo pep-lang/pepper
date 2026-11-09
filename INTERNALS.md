@@ -234,9 +234,21 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   library, its `kind` (`pepper` for `--lib pepper`, `c` for the
   self-contained kinds and every version 1 stamp), and for `pepper` its
   `library` name, `init` and `release` functions, the Pepper libraries it
-  `needs` and a `module <name> <hash>` line per runtime module it loaded
-  (`driver.runtime_modules`). Only a `pepper` library is checked beyond
-  its target. `main.pep` reads the stamps of the `-l` and `[Link]`
+  `needs`, its `record` version (`RECORD_VERSION`, the library
+  interface's, below) and its `interface` hash (`incremental.interface_file_hash`
+  of the `.pepi`). A build that makes or links a Pepper library adds,
+  once it is checked (`driver.add_interfaces`, after sema in `_build`),
+  `runtime-interface <hash>`, a hash of the prelude files' interface
+  hashes (`incremental.interface_hash`, which a body edit changing no
+  return type or summary leaves alone; `driver.runtime_interface`), and a
+  `module <name> <hash>` line per runtime module it loaded, the same over
+  its files (`driver.runtime_modules`). Only a `pepper` library is checked
+  beyond its target: record version, ABI, target, CPU and build options
+  before the build, and once both stamps have them, the runtime's and the
+  shared modules' interfaces, after sema (`_build` calls
+  `check_library_stamps` again with the stamp `add_interfaces` filled).
+  The compiler releases may differ; the full prelude text hash (`runtime`)
+  is kept but no longer compared for `pepper`. `main.pep` reads the stamps of the `-l` and `[Link]`
   libraries right after loading (`driver.linked_stamps`, the `[Link]`s
   read from the syntax tree), and when a Pepper library loaded a runtime
   module the program does not, loads the program again with it as an
@@ -1930,6 +1942,44 @@ links one skips `internalize` under `--lto=full` (`optimize_whole`),
 since the library's objects use the runtime's and its link-once copies
 join the program's comdats; `__pep_library_*` always stay external.
 `-o` naming a shared library is refused in `main.pep`.
+
+The library's **interface** (`incremental/library_interface.pep`, stage 2
+of #220) is the record of its files, written beside the archive
+(`interface_path`: `libgeo.a` -> `libgeo.pepi`) and named by the stamp's
+`interface` line. `_build` checks a Pepper library in two compilation
+units whatever the cache and `-g` say (`incremental.library_units`): the
+runtime's, and every other file in one, the last; without a cache the
+records go to a folder of the build's own, removed after. So
+`check_compilation_units(interface = true)` indexes the runtime's merged
+module before the last unit (`DeltaBase`) and, once it is checked, makes
+its `CheckedUnit` (`finish_checked`) and `library_interface` writes it, a
+delta on the runtime alone, after a text header: `pepper-library-interface
+<RECORD_VERSION>`, a `file <namespace>` line per library file (`root` for
+`files[0]`) with an `export <name> <linked name>` line per name an
+importer sees (`link.FileScope.exports`, the linker's export table:
+`private` only narrows within the library's module, which no program file
+is in), then `record` and the record as the cache keeps it
+(`_record_bytes`: the program's namespaces, which name the file slots, so
+the runtime's files map to the reader's, then the delta, whose locations
+in runtime files are written from `LocAnchors`). Before writing,
+`_strip` takes out (and puts back after) the bodies `sema.strip_bodies`
+would skip in a cached file, a summary standing for each: the library's
+non-generic functions and methods outside extensions whose
+`checked.summaries` entry calls through no trait; generic bodies,
+specializations, constructors, `main` and functions with a dependent or no
+summary keep theirs. `read_library_interface` reads it onto the reader's
+runtime module (`RecordIn.merging`, as `merged_module` merges a closure),
+giving each library file the reader lacks a slot after its own files
+(`LibraryInterface.files`), then `resume_checked` and `settle_merged`.
+PR 4 of #220 loads it into a program; until then only the tests read it.
+A dependent summary (`give(holder: Holder, ...)`) keeps its body so a
+reader that adds an implementation of the trait finds it stale
+(`confinement._stale`) and summarizes it again over its own
+(`library_interface_test.pep`); without the body it would fall back to the
+top, linking everything. `RECORD_VERSION` (`link/stamp.pep`) is bumped on
+any change to the record's encoding or meaning; `record_schema_test.pep`
+fingerprints the record code and `library_interface_test.pep` compares a
+library read back with `testdata/library_interface.golden`.
 
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes
@@ -3928,9 +3978,12 @@ nothing a check makes may outlive it: `run_steps_with` drops the memos of
 unit's state and the closure it reached alive, 8 GB in a worker and over 50
 GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
-**Records.** A record lives at `<cache>/v3/c17/<name>/<key>.rec`. The
+**Records.** A record lives at `<cache>/v3/c18/<name>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new
-number, so old records are never misread. Each compilation unit keeps its newest four
+number, so old records are never misread. The cache's keys name the
+compiler, so a record is read only by the compiler that wrote it; a Pepper
+library's interface (§4.1) is one record read by other compilers, which
+`link.RECORD_VERSION` versions instead. Each compilation unit keeps its newest four
 keys. A record starts with the program's files' namespaces, which its file
 slots refer to, so it loads into a program whose files sit elsewhere. Then
 comes the unit, as a **delta** on the module of its closure (`write_module_delta`

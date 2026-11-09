@@ -13,6 +13,7 @@ import os;
 import compiler.sema;
 import "cache";
 import "compilation_units";
+import [library_interface] from "library_interface";
 import "recheck";
 
 ## Whether `PEPC_VERIFY_CUTOFF` checks every compilation unit loaded by early
@@ -113,6 +114,9 @@ export struct Checked {
     ## The compilation units checked again from an earlier record of them
     ## (`recheck_compilation_unit`), by name.
     var rechecked: String[] = Array<String>();
+    ## The library interface of the last compilation unit, when asked for
+    ## (`library_interface`).
+    var interface: u8[]? = Optional<u8[]>.Empty;
 
     ## @param module the module checked
     ## @param state the state of its passes
@@ -158,6 +162,9 @@ export struct Checked {
 ## @param stop the compilation unit to check last, whose record is neither
 ##   loaded nor stored; none for the last compilation unit
 ## @param times where the time each pass took goes (`-T passes`), if anywhere
+## @param interface whether to make the last compilation unit's record a
+##   library interface (`library_interface`), a Pepper library's
+##   (`library_units`)
 ## @returns what was checked (`Checked`), or why it stopped
 export check_compilation_units(
     program: link.Program,
@@ -174,9 +181,11 @@ export check_compilation_units(
     last_extension: String = "",
     last_below: Defines[] = Array<Defines>(),
     stop: ulong? = Optional<ulong>.Empty,
-    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
+    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty,
+    interface: bool = false
 ): Result<Checked, CheckError> {
     var last = stop.is_value() ? stop.value() : units.count - 1;
+    var library = Optional<u8[]>.Empty;
     var module = sema.Module();
     var state = sema.PassState(program.target);
     # Each compilation unit's own interface and record, as loaded or checked.
@@ -282,7 +291,7 @@ export check_compilation_units(
         # What its record is a delta on, indexed before the compilation unit
         # changes it.
         var base = sema.DeltaBase();
-        if (k < last) {
+        if (k < last or interface) {
             sema.index_module(module, base);
             clock.lap("index");
         }
@@ -293,7 +302,12 @@ export check_compilation_units(
             records,
             unit,
             k < last ? Optional<Cache>.Value(cache) : Optional<Cache>.Empty,
-            reused,
+            # A library's interface records every summary, with the build
+            # cache or without (`Module.record_summaries`).
+            interface
+                and !reused.is_value() ?
+                Optional<Reused>.Value(Reused()) :
+                reused,
             sources,
             warnings,
             rechecked,
@@ -308,6 +322,12 @@ export check_compilation_units(
         checked_any = true;
         clock.lap($"compilation unit {unit.name}");
         if (k == last) {
+            if (interface) {
+                library = Optional<u8[]>.Value(
+                    library_interface(program, unit, sema.finish_checked(module, state, aliases), base)
+                );
+                clock.lap("interface");
+            }
             break;
         }
         var checked_unit = sema.finish_checked(module, state, aliases);
@@ -341,6 +361,7 @@ export check_compilation_units(
     }
     var out = Checked(module, state);
     out.rechecked = rechecked;
+    out.interface = library;
     return Result<Checked, CheckError>.ok(out);
 }
 

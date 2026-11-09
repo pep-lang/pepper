@@ -102,6 +102,11 @@ a_program_links_a_pepper_library() {
     var (optimized, _) = _build_main(folder.path, ["-O", "--lto=full"]);
     expect_exit(optimized, 0);
     expect_equal(_run_program(program), "42 1");
+    # Checked whole, without the cache, the program's runtime interface is
+    # the library's still.
+    var (whole, _) = _build_main(folder.path, ["--no-cache"]);
+    expect_exit(whole, 0);
+    expect_equal(_run_program(program), "42 1");
 }
 
 [Test]
@@ -198,6 +203,12 @@ a_shared_pepper_library_is_refused() {
         built.stderr,
         "'--lib pepper' cannot build a shared library: it leaves the runtime out; build a static library for a Pepper program"
     );
+    # Its interface comes from a check in compilation units, which records
+    # no expanded `static` blocks.
+    var archive = folder.path.join(driver.library_file_name(driver.LibraryKind.Pepper, "geo", host));
+    var expanded = _pep_build(source, archive, ["--lib", "pepper", "-g", "--debug-static=expanded"]);
+    expect_exit(expanded, 2);
+    expect_contains(expanded.stderr, "'--debug-static=expanded' cannot build '--lib pepper'");
 }
 
 # The index of the first `part` in `bytes`; `bytes.count` when none.

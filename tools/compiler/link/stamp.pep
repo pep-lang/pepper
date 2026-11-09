@@ -35,6 +35,13 @@ export const KIND_C = "c";
 ## name mangling, the reference counting protocol, release hooks) bumps it.
 export const ABI_VERSION: uint = 2;
 
+## The version of a Pepper library's interface (`--lib pepper`'s
+## `.pepi`): the checked-unit record (`sema.CheckedUnit.write`) and what it
+## means. Any change to the record's encoding or meaning bumps it, whatever
+## the release; `record_schema_test.pep` fails when the record's code
+## changes and it does not (#220).
+export const RECORD_VERSION: uint = 1;
+
 ## The features this compiler has, as a level the runtime can require: a
 ## compiler change the runtime may need to rely on raises it (#220).
 export const COMPILER_LEVEL: long = 1;
@@ -75,9 +82,20 @@ export struct Stamp {
     ## The Pepper libraries a Pepper library links, by name, which the
     ## program initializes first.
     var needs: String[] = Array<String>();
-    ## Each runtime module the build loaded, as `name hash`, sorted; only
-    ## in a build that makes or links a Pepper library.
+    ## Each runtime module the build loaded, as `name hash`, sorted, the
+    ## hash of its files' interface hashes; only in a build that makes or
+    ## links a Pepper library, once it is checked.
     var modules: String[] = Array<String>();
+    ## The `RECORD_VERSION` of the compiler that wrote it; written for a
+    ## Pepper library only.
+    var record: uint = 0;
+    ## A hash of the interface hashes of the runtime's prelude files (the
+    ## build cache's, which a body edit leaves alone unless it changes a
+    ## return type or a link summary); only in a build that makes or links
+    ## a Pepper library, once it is checked.
+    var runtime_interface: String = "";
+    ## The hash of a Pepper library's interface file (`.pepi`).
+    var interface: String = "";
 
     ## The stamp as text, as codegen writes it (without the NUL).
     text(): String {
@@ -95,6 +113,15 @@ export struct Stamp {
         }
         if (!library.is_empty) {
             out.append($"library {library}\ninit {init}\nrelease {release}\n");
+        }
+        if (kind == KIND_PEPPER) {
+            out.append($"record {record}\n");
+        }
+        if (!runtime_interface.is_empty) {
+            out.append($"runtime-interface {runtime_interface}\n");
+        }
+        if (!interface.is_empty) {
+            out.append($"interface {interface}\n");
         }
         for (var name in needs) {
             out.append($"needs {name}\n");
@@ -125,6 +152,7 @@ export make_stamp(
     var stamp = Stamp();
     stamp.version = version;
     stamp.abi = ABI_VERSION;
+    stamp.record = RECORD_VERSION;
     stamp.target = $"{os} {arch}";
     var hasher = digest.Blake3();
     for (var text in prelude) {
@@ -191,6 +219,16 @@ export parse_stamp(text: String): Stamp? {
             stamp.needs.append(value);
         } else if (key == "module") {
             stamp.modules.append(value);
+        } else if (key == "record") {
+            var record = uint.parse(value);
+            if (!record.is_value()) {
+                return Optional<Stamp>.Empty;
+            }
+            stamp.record = record.value();
+        } else if (key == "runtime-interface") {
+            stamp.runtime_interface = value;
+        } else if (key == "interface") {
+            stamp.interface = value;
         }
     }
     # The magic alone, as a program holding this file's constant has it, is
@@ -262,9 +300,12 @@ _starts_at(data: u8[], at: ulong, magic: u8[]): bool {
 ## Why the code `library` stamps cannot be linked into the build `build`
 ## stamps; nothing when it can. A self-contained library (any kind but
 ## `KIND_PEPPER`) keeps its runtime to itself, so only its platform must
-## match. For a Pepper library the ABI, the platform, the CPU and the
-## runtime must match, and so must each runtime module and each build
-## option both define. The release may differ: the ABI says what changed.
+## match. For a Pepper library the record version, the ABI, the platform
+## and the CPU must match, and so must the runtime's interface, each
+## runtime module's both load and each build option both define. The
+## interfaces are compared once both stamps hold them (a build's, once it
+## is checked). The compiler releases may differ: the record and ABI
+## versions say what changed.
 ##
 ## @param library the stamp read from the library
 ## @param build this build's
@@ -276,14 +317,23 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
         }
         return Optional<String>.Empty;
     }
+    if (library.record != build.record) {
+        return Optional<String>.Value(
+            $"its interface is record version {library.record}, and this build reads version {build.record}"
+        );
+    }
     if (library.abi != build.abi) {
         return Optional<String>.Value($"this build is {build.describe()}");
     }
     if (library.target != build.target) {
         return Optional<String>.Value($"this build is for {build.target}");
     }
-    if (library.runtime != build.runtime) {
-        return Optional<String>.Value($"this build's runtime differs ({library.runtime} there, {build.runtime} here)");
+    if (!library.runtime_interface.is_empty
+        and !build.runtime_interface.is_empty
+        and library.runtime_interface != build.runtime_interface) {
+        return Optional<String>.Value(
+            $"this build's runtime interface differs ({library.runtime_interface} there, {build.runtime_interface} here)"
+        );
     }
     if (library.cpu != build.cpu) {
         return Optional<String>.Value($"it is for the CPU '{library.cpu}', and this build for '{build.cpu}'");
