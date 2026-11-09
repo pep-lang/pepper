@@ -268,7 +268,7 @@ timeouts).</li>
 runs in parallel, each in a process of its own.</li>
 <li><strong>Compile time, platforms and C:</strong> calling C (including C callbacks), and
 being called from C (<code>[Export]</code>ed functions in a static or shared
-library, with a generated header), importing a Pepper library another
+library, with a generated header), importing a <a href="language/libraries.html">Pepper library</a> another
 build made, with no source for it (<code>--lib pepper</code>), and <a href="language/simd.html">SIMD vectors</a>
 (<code>simd.Vector&lt;T, N&gt;</code>).</li>
 <li><strong>Standard library:</strong> strings (with a <code>StringBuilder</code>, <code>StringConstant</code>
@@ -14231,7 +14231,7 @@ library</strong> of that name built with <code>--lib pepper</code>: its interfac
 and then <code>PEPPER_LIBRARY_PATH</code>'s. Its exports are then imported as a
 module's, with no source for it, and the build links the library beside it
 (see
-<a href="language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+<a href="language/libraries.html">Pepper libraries</a>).
 A module that is not found is reported with the places the compiler looked:</p>
 <pre><code class="language-text">main.pep:1:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, /home/you/pepper/runtime
     1 | import nowhere;
@@ -14360,6 +14360,239 @@ export linux_open as open;
 [Target(OS(Windows))]
 export * from "windows";
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="pepper-libraries"><a class="header" href="#pepper-libraries">Pepper libraries</a></h1>
+<p>A <strong>Pepper library</strong> is Pepper code built once, with <code>--lib pepper</code>, and
+shipped without its source. A Pepper program imports it as it imports a
+module, <code>import geo;</code>, and uses everything the library exports: functions,
+structs, value structs, enums, traits and their default methods,
+generics, and extensions.</p>
+<p>To call Pepper from C, or from Swift, Kotlin or Java, build a C library
+instead (<code>--lib static</code> or <code>--lib shared</code>, see
+<a href="language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>).</p>
+<h2 id="building-a-library"><a class="header" href="#building-a-library">Building a library</a></h2>
+<p>The library <a href="language/../../examples/library/lib/geo.pep"><code>lib/geo.pep</code></a> exports a
+trait with a default method, a struct that takes it, and a generic
+function:</p>
+<pre><code class="language-pepper"># A library for Pepper programs, built with
+# `pepper build --lib pepper geo.pep -o lib/libgeo.a`.
+
+export trait Shape {
+    area(): int;
+
+    describe(): String {
+        return $"a shape of area {area()}";
+    }
+}
+
+export struct Square {
+    var side: int;
+
+    construct(side: int) {
+        this.side = side;
+    }
+}
+
+extend Square with Shape {
+    area(): int {
+        return side * side;
+    }
+}
+
+export pair&lt;T&gt;(value: T): T[] {
+    return [value, value];
+}
+</code></pre>
+<p>Build it with <code>--lib pepper</code>:</p>
+<pre><code class="language-bash">pepper build --lib pepper geo.pep -o lib/libgeo.a
+</code></pre>
+<p>This writes three files into <code>lib</code>:</p>
+<div class="table-wrapper"><table><thead><tr><th>File</th><th>What it is</th></tr></thead><tbody>
+<tr><td><code>libgeo.a</code> (<code>geo.lib</code> on Windows)</td><td>the archive: the objects of the library's own files, without the runtime, <code>main</code> or startup code, which the program supplies</td></tr>
+<tr><td><code>libgeo.pepi</code> (<code>geo.pepi</code> on Windows)</td><td>the <strong>interface</strong>: the library's checked declarations, which a program compiles against</td></tr>
+<tr><td><code>geo.h</code></td><td>a C header for the library's <code>[Export]</code>ed functions, as <code>--lib static</code> writes</td></tr>
+</tbody></table>
+</div>
+<p>The archive carries an identity stamp, which names the compiler, the
+platform, the runtime and the interface it was built with (see
+<a href="language/libraries.html#what-must-match">What must match</a>). Ship the archive and the interface
+together, in one folder; the program needs no source.</p>
+<p>The library's name is the archive's (<code>geo</code> for <code>libgeo.a</code>), and a program
+imports it by that name. The library is checked whole on every build, with
+or without the build cache.</p>
+<h2 id="importing-it"><a class="header" href="#importing-it">Importing it</a></h2>
+<p>The program <a href="language/../../examples/library/main.pep"><code>main.pep</code></a> imports <code>geo</code>,
+gives a struct of its own the library's trait, and calls the library's
+generic at that struct:</p>
+<pre><code class="language-pepper"># Imports the library `geo` (`lib/geo.pep`), built with `--lib pepper`,
+# with no source for it: `pepper build main.pep -L lib -o main`.
+import geo;
+
+struct Circle {
+    var radius: int;
+
+    construct(radius: int) {
+        this.radius = radius;
+    }
+}
+
+# A program's struct takes the library's trait, and its default method.
+extend Circle with geo.Shape {
+    area(): int {
+        return 3 * radius * radius;
+    }
+}
+
+main(): int {
+    var shapes = Array&lt;geo.Shape&gt;();
+    shapes.append(geo.Square(3));
+    shapes.append(Circle(1));
+    for (var shape in shapes) {
+        print(shape.describe());
+    }
+    # The library's generic, at the program's type.
+    print($"{geo.pair(Circle(2)).count} circles");
+    return 0;
+}
+
+# Output:
+# a shape of area 9
+# a shape of area 3
+# 2 circles
+</code></pre>
+<pre><code class="language-bash">pepper build main.pep -L lib -o main
+</code></pre>
+<p>The import finds <code>lib/libgeo.pepi</code> and links <code>lib/libgeo.a</code> beside it, so
+the program needs no <code>[Link]</code> or <code>-l</code>. The library's names are used as a
+source module's are (<code>geo.Square</code>, or <code>import [Square] from geo;</code>), and
+its exported extensions apply in the files that import it.</p>
+<h3 id="where-the-compiler-looks"><a class="header" href="#where-the-compiler-looks">Where the compiler looks</a></h3>
+<p><code>import geo;</code> looks for a source module first, as any identifier import
+does: a folder <code>geo/module.pep</code> in the <code>-I</code> folders, then the runtime's
+(see <a href="language/modules.html#dependencies-and-search-paths">Dependencies and search paths</a>).
+Only when none answers does it look for a library's interface, <code>libgeo.pepi</code>
+(<code>geo.pepi</code> on Windows), in these folders, in order:</p>
+<ol>
+<li>each <code>-L</code> folder;</li>
+<li>the folders the project's packages add for linking (a build script's
+<code>pep:link-path</code>, a <code>pkg-config</code> library's <code>-L</code>; see
+<a href="language/../tools/projects.html#build-scripts">build scripts</a>);</li>
+<li>each folder of <code>PEPPER_LIBRARY_PATH</code>.</li>
+</ol>
+<p>The first interface found wins. Its archive must be beside it; an interface
+alone is an error at the import. A dotted import (<code>import geo.shapes;</code>)
+never finds a library.</p>
+<h2 id="generics-1"><a class="header" href="#generics-1">Generics</a></h2>
+<p>The interface holds the bodies of the library's generic functions, of its
+generic structs' methods and of its traits' default methods. The program
+compiles each instantiation it uses, as C++ compiles a template from a
+header: <code>geo.pair(Circle(2))</code> above is compiled into the program, at the
+program's own type, and so is <code>describe()</code> for <code>Circle</code>. The program
+never compiles the library's other functions: the archive defines them,
+and they are not inlined into the program.</p>
+<h2 id="changing-a-library"><a class="header" href="#changing-a-library">Changing a library</a></h2>
+<p>A change inside the body of a function that is not generic usually leaves
+the interface as it was: the program links the new archive without compiling
+anything again. Any other change (a signature, a field, a generic's body, a
+new declaration) writes a new interface, and the program's files that
+import the library are checked again.</p>
+<p>An archive and an interface from different builds of the library are
+refused at the import:</p>
+<pre><code class="language-text">main.pep:1:8: error: the archive lib/libgeo.a was not built with the interface lib/libgeo.pepi; rebuild the library 'geo'
+</code></pre>
+<h2 id="what-must-match"><a class="header" href="#what-must-match">What must match</a></h2>
+<p>The interface is the compiler's own record of the checked library, the
+format its build cache keeps, so a program loads a library only when it
+agrees with the library on:</p>
+<ul>
+<li>the <strong>record version</strong>, which a compiler changes when it writes or reads
+the interface differently;</li>
+<li>the <strong>ABI number</strong>, which a compiler changes when it changes how two
+builds' code calls into each other (object layouts, names, reference
+counting);</li>
+<li>the <strong>runtime's interface</strong>: what other code sees of the runtime the
+library was checked against, and of each runtime module both load. A
+runtime change inside a function body leaves it alone;</li>
+<li>the platform and the CPU, and each build option both define.</li>
+</ul>
+<p>The compiler releases may differ: any compiler whose record version, ABI
+number and runtime interface match the library's loads it. A library that
+does not fit is refused, naming what differs; rebuild it with the
+program's compiler. Different runtime checks or frame pointers only warn.
+The archive's stamp, which holds all of this, is described in
+<a href="language/linking.html#identity-stamps">Identity stamps</a>.</p>
+<h2 id="one-runtime"><a class="header" href="#one-runtime">One runtime</a></h2>
+<p>The program supplies the one runtime the program and its libraries use, so
+one heap and one set of runtime thread-locals serve them all, and a program
+can import several libraries.</p>
+<ul>
+<li><strong>Initialization.</strong> Before <code>main</code>, the program sets the runtime's
+globals, then each library's (one that links another sets its own after
+that one's), then its own. So a program global may call into a library
+in its initializer.</li>
+<li><strong>Thread-locals.</strong> When a thread ends, the library's thread-locals are
+released with the program's.</li>
+<li><strong>Runtime modules.</strong> A runtime module the library imports and the
+program does not (<code>json</code>, say) is compiled into the program too.</li>
+<li><strong>C libraries.</strong> The archive does not hold the C libraries the
+library's externs name with <code>[Link]</code>: the program links them, found in
+its own search folders (see <a href="language/linking.html">Linking</a>).</li>
+</ul>
+<h2 id="deep-chains"><a class="header" href="#deep-chains">Deep chains</a></h2>
+<p>A chain of objects that runs through a library's structs and the
+program's in turn, such as a library <code>Box</code> holding a trait value that is
+the program's <code>Wrap</code>, which holds a <code>Box</code>, is released in a loop, as one
+in a program built from source is (see <a href="language/memory.html">Memory</a>): however
+long it is, it does not run out of stack. The library was compiled
+without knowing the program's structs, so the program compiles its own
+release of each library struct its chains run through, and the linker
+keeps the program's copy, which comes ahead of the library's archive.</p>
+<h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
+<ul>
+<li>
+<p><strong>A library that imports a library.</strong> Only an executable or a shared
+library can import a Pepper library; a static library (<code>--lib pepper</code>
+or <code>--lib static</code>) can still call another one's <code>[Export]</code>ed functions
+through <code>extern</code>s:</p>
+<pre><code class="language-text">main.pep:1:8: error: only an executable or a shared library can import the Pepper library 'geo' yet
+</code></pre>
+</li>
+<li>
+<p><strong>Shared libraries.</strong> <code>--lib pepper</code> writes a static library only:
+a shared library must hold a runtime of its own (<code>--lib shared</code>), and
+then only C types cross between it and the program.</p>
+</li>
+<li>
+<p><strong>A module both use from source.</strong> A library carries the source modules
+it imports, other than the runtime's (an <code>-I</code> module, a package), in its
+interface and archive. A program that imports the library and the same
+module from source is refused:</p>
+<pre><code class="language-text">error: ../deps/shapes/module.pep has the namespace 'shapes/module' of a file of a Pepper library this program imports; a program cannot import a library built from its own files
+</code></pre>
+</li>
+<li>
+<p><strong><code>[Link(path = ...)]</code> in a library.</strong> The folder is relative to the
+library's source file, which the program does not have: in the program
+it names a folder inside the interface, which never exists. Pass the
+folder to the program's build with <code>-L</code> or <code>PEPPER_LIBRARY_PATH</code>
+instead.</p>
+</li>
+<li>
+<p><strong>Checking a program whole.</strong> <code>--emit-llvm</code>, <code>--emit-model</code>,
+<code>--emit-steps</code> and <code>--emit-static</code> refuse a program that imports a
+library, since they need every file's source.</p>
+</li>
+<li>
+<p><strong>Checking in parallel.</strong> A program that imports a library is checked in
+one process, one compilation unit at a time, whatever
+<code>PEPC_COMPILATION_UNIT_JOBS</code> says (see
+<a href="language/../tools/pep-build.html#the-build-cache">The build cache</a>).</p>
+</li>
+<li>
+<p><strong>The language server.</strong> pep-lsp does not look for interfaces, so it
+reports a library's import as <code>cannot find module</code>, and shows nothing
+from the library.</p>
+</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="visibility"><a class="header" href="#visibility">Visibility</a></h1>
 <p>Visibility decides which declarations other files may use. A top-level
 declaration has one of three levels:</p>
@@ -16649,7 +16882,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
+<h2 id="not-supported-yet-1"><a class="header" href="#not-supported-yet-1">Not supported yet</a></h2>
 <ul>
 <li>Calling functions other than the <code>reflect</code> functions at compile time.</li>
 <li>Limiting where an attribute may be used (<code>[AttributeTargets(...)]</code>).</li>
@@ -18136,7 +18369,7 @@ keep their runtimes to themselves, so a program may load several.</li>
 <li>For a <strong>Pepper</strong> program, build the library with <code>--lib pepper</code>
 instead: the same archive, named as <code>--lib static</code> names it, without the
 runtime, <code>main</code> or startup code, which the program supplies (see
-<a href="language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+<a href="language/libraries.html">Pepper libraries</a>).
 The program imports it (<code>import name;</code>) and uses its Pepper
 declarations, with the interface <code>--lib pepper</code> writes beside it. A
 program may link several of those. It is static only: <code>-o</code> naming a
@@ -18323,40 +18556,8 @@ manager) or the Xcode Command Line Tools on macOS.</p>
 succeeds.</p>
 <h3 id="a-library-another-pepper-build-made"><a class="header" href="#a-library-another-pepper-build-made">A library another Pepper build made</a></h3>
 <p>A Pepper program imports a library built with <code>--lib pepper</code> as it
-imports a module, with no source for it: <code>import geo;</code> that finds no
-source module <code>geo</code> reads the library's interface, <code>libgeo.pepi</code>
-(<code>geo.pepi</code> on Windows), from the folders <code>-L</code> names and then
-<code>PEPPER_LIBRARY_PATH</code>'s, and links <code>libgeo.a</code> beside it, so no <code>[Link]</code>
-is needed. Everything the library's root exports is the program's to
-use: functions, structs, value structs, enums, traits and their default
-methods, generics, and exported extensions (of the program's files that
-import it, as with a source module's). See
-<a href="language/../../examples/library/main.pep"><code>main.pep</code></a>, which imports the library
-<a href="language/../../examples/library/lib/geo.pep"><code>lib/geo.pep</code></a>.</p>
-<pre><code class="language-bash">pepper build --lib pepper geo.pep -o lib/libgeo.a
-pepper build main.pep -L lib -o main
-</code></pre>
-<pre><code class="language-pepper">import geo;
-
-main(): int {
-    var square = geo.Square(3);
-    return geo.pair(square).count - 2;
-}
-</code></pre>
-<p>The interface is the library's checked declarations, so the program
-checks against them without checking the library again, and links to
-them by the names the library build gave them. It holds none of the
-library's source text. The program
-compiles the instantiations of the library's generics it uses (and of
-its traits' default methods for its own structs), as C++ compiles a
-template from a header; everything else the archive defines. A change
-inside the body of one of the library's functions that is not generic
-leaves the interface as it was, so the program only links the new
-archive; any other change makes a new interface, and the program's code
-that imports it is checked again. An archive that is not the one built
-with the interface beside it is refused at the import:</p>
-<pre><code class="language-text">main.pep:1:8: error: the archive lib/libgeo.a was not built with the interface lib/libgeo.pepi; rebuild the library 'geo'
-</code></pre>
+imports a module, <code>import geo;</code>, which finds the library's interface and
+links its archive, with no <code>[Link]</code> (see <a href="language/libraries.html">Pepper libraries</a>).</p>
 <p>A program can also declare a library's <code>[Export]</code>ed functions as
 <code>extern</code>s, with <code>[Link("geo")]</code> (or <code>-l geo</code>) naming the library, as it
 links a C one; then only C types cross between them.</p>
@@ -18368,22 +18569,8 @@ main(): int {
 }
 </code></pre>
 <p>Either way, the program supplies the one runtime both use: <code>--lib pepper</code> leaves the runtime, <code>main</code> and the startup code out of the
-archive. So one heap and one set of runtime thread-locals serve both, and
-a program can link several such libraries.</p>
+archive (see <a href="language/libraries.html#one-runtime">One runtime</a>).</p>
 <ul>
-<li><strong>Initialization.</strong> Before <code>main</code>, the program sets the runtime's
-globals, then each Pepper library's (one that links another sets its own
-after that one's), then its own. So a program global may call into a
-library in its initializer.</li>
-<li><strong>Thread-locals.</strong> When a thread ends, the library's thread-locals are
-released with the program's.</li>
-<li><strong>Runtime modules.</strong> A runtime module the library imports and the
-program does not (<code>json</code>, say) is compiled into the program too.</li>
-<li><strong>Other libraries.</strong> A library that links another Pepper library or a C
-one does not hold it: the program links it too (<code>-l</code>, or <code>[Link]</code>). Only
-an executable or a shared library can import a Pepper library's
-interface yet; a static library (<code>--lib pepper</code> or <code>--lib static</code>) can
-link one through <code>extern</code>s.</li>
 <li>A <code>--lib static</code> archive is for C: it holds its own runtime and startup
 code, which clash with the program's at the link.</li>
 <li><code>--lib pepper</code> writes a static library only. A shared library must hold
@@ -18392,6 +18579,7 @@ but then it has a second runtime of its own, so free a string it returns
 with its own <code>pepper_string_free</code>, and pass no handle from one to the
 other.</li>
 </ul>
+<h3 id="identity-stamps"><a class="header" href="#identity-stamps">Identity stamps</a></h3>
 <p>Every program and library Pepper writes carries an identity stamp, in a
 section of its own (<code>.pepmeta</code>, <code>__DATA,__pepmeta</code> on macOS and iOS) that
 the linker keeps: the compiler's release, its ABI number, the platform, a
@@ -18800,7 +18988,7 @@ OpenSSL in the runtime first, which the toolchain already carries:</p>
 (OpenSSL 3.5, for each ABI, with the NDK's clang), and the
 <code>openssl-android</code> workflow publishes it on the <code>openssl-&lt;version&gt;</code> release
 whenever the version the script pins has not been published.</p>
-<h2 id="not-supported-yet-1"><a class="header" href="#not-supported-yet-1">Not supported yet</a></h2>
+<h2 id="not-supported-yet-2"><a class="header" href="#not-supported-yet-2">Not supported yet</a></h2>
 <ul>
 <li><strong>TLS on iOS</strong>: servers, client certificates and TLS 1.3 (which need a
 SecIdentity and Network.framework).</li>
@@ -23495,7 +23683,7 @@ the library's sources, and links <code>libgeo.a</code> beside it. Since it is th
 compiler's own format, a program reads it only when its compiler has the
 same record version, ABI number and runtime interface as the one that
 built the library, whatever the releases are (see
-<a href="tools/../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+<a href="tools/../language/libraries.html">Pepper libraries</a>).
 The root's <code>main</code>, if it has one, is named like the library's other
 private functions, so the program's own is the only <code>main</code>. Only an
 executable or a shared library can import a Pepper library's interface
@@ -23507,7 +23695,7 @@ The interface is written from the library's files checked as one
 compilation unit on the runtime's, so <code>--lib pepper</code> checks the library
 whole on each build, with or without the build cache; it cannot be
 combined with <code>--debug-static=expanded</code>. See
-<a href="tools/../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>.</p>
+<a href="tools/../language/libraries.html">Pepper libraries</a>.</p>
 <h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
 <p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
 header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed
@@ -23912,8 +24100,11 @@ and each file's own object: a file whose sources, and whose imports'
 declarations, did not change is not compiled or checked again.
 <code>PEPC_COMPILATION_UNIT_JOBS</code> sets how many compilation units are checked at
 once (one per processor by default; <code>PEPC_LAYER_JOBS</code>, its old name, still
-works). The optimization level, link-time optimization, debug info,
-CPU, removed runtime checks and build options are part of each object's
+works), except in a program that imports a
+<a href="tools/../language/libraries.html">Pepper library</a>, which is checked one
+compilation unit at a time, in its own process. The optimization level,
+link-time optimization, debug info, CPU, removed runtime checks and build
+options are part of each object's
 key. Deleting the cache folder is always safe.</p>
 <h3 id="--no-cache"><a class="header" href="#--no-cache"><code>--no-cache</code></a></h3>
 <p>Compiles every file without reading or writing the build cache.</p>
@@ -26685,6 +26876,9 @@ completion, go to definition, document outlines and inlay hints. It checks
 code with the compiler's own front end, and finds the standard library the
 way the compiler does (see
 <a href="tools/../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a>).</p>
+<p>It does not read a <a href="tools/../language/libraries.html">Pepper library</a>'s interface
+yet, so it reports an import of a library built with <code>--lib pepper</code> as
+<code>cannot find module</code>.</p>
 <p>Warnings in the files a document imports show on those files too, such as
 a use of a deprecated function in a library the document calls. A file open
 in the editor shows its own analysis instead.</p>

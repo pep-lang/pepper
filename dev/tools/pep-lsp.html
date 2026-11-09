@@ -191,6 +191,9 @@ completion, go to definition, document outlines and inlay hints. It checks
 code with the compiler's own front end, and finds the standard library the
 way the compiler does (see
 <a href="../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a>).</p>
+<p>It does not read a <a href="../language/libraries.html">Pepper library</a>'s interface
+yet, so it reports an import of a library built with <code>--lib pepper</code> as
+<code>cannot find module</code>.</p>
 <p>Warnings in the files a document imports show on those files too, such as
 a use of a deprecated function in a library the document calls. A file open
 in the editor shows its own analysis instead.</p>
