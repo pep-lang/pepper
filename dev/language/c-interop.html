@@ -1159,6 +1159,12 @@ folders.</li>
 <li>A C program links at most one Pepper static library: each holds its own
 copy of the runtime, and two would define it twice. Shared libraries
 keep their runtimes to themselves, so a program may load several.</li>
+<li>For a <strong>Pepper</strong> program, build the library with <code>--lib pepper</code>
+instead: the same archive, named as <code>--lib static</code> names it, without the
+runtime, <code>main</code> or startup code, which the program supplies (see
+<a href="linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+A program may link several of those. It is static only: <code>-o</code> naming a
+shared library is refused.</li>
 <li>A library's thread-locals (its own and the runtime's) use the
 initial-exec TLS model, as a program's do, where reading one costs a
 load, except on Android (see below). On Linux this makes a <code>.so</code> built

@@ -268,7 +268,8 @@ timeouts).</li>
 runs in parallel, each in a process of its own.</li>
 <li><strong>Compile time, platforms and C:</strong> calling C (including C callbacks), and
 being called from C (<code>[Export]</code>ed functions in a static or shared
-library, with a generated header), and <a href="language/simd.html">SIMD vectors</a>
+library, with a generated header), linking a Pepper library another
+build made through its C functions (<code>--lib pepper</code>), and <a href="language/simd.html">SIMD vectors</a>
 (<code>simd.Vector&lt;T, N&gt;</code>).</li>
 <li><strong>Standard library:</strong> strings (with a <code>StringBuilder</code>, <code>StringConstant</code>
 for literals' constant bytes, <code>to_string</code> and a <code>ToString</code> trait,
@@ -18125,6 +18126,12 @@ folders.</li>
 <li>A C program links at most one Pepper static library: each holds its own
 copy of the runtime, and two would define it twice. Shared libraries
 keep their runtimes to themselves, so a program may load several.</li>
+<li>For a <strong>Pepper</strong> program, build the library with <code>--lib pepper</code>
+instead: the same archive, named as <code>--lib static</code> names it, without the
+runtime, <code>main</code> or startup code, which the program supplies (see
+<a href="language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+A program may link several of those. It is static only: <code>-o</code> naming a
+shared library is refused.</li>
 <li>A library's thread-locals (its own and the runtime's) use the
 initial-exec TLS model, as a program's do, where reading one costs a
 load, except on Android (see below). On Linux this makes a <code>.so</code> built
@@ -18306,20 +18313,61 @@ manager) or the Xcode Command Line Tools on macOS.</p>
 <p>Warnings from the linker are passed through unchanged, even when the link
 succeeds.</p>
 <h3 id="a-library-another-pepper-build-made"><a class="header" href="#a-library-another-pepper-build-made">A library another Pepper build made</a></h3>
+<p>A Pepper program links a library built with <code>--lib pepper</code> as it links a C
+one: it declares the library's <code>[Export]</code>ed functions as <code>extern</code>s, with
+<code>[Link("geo")]</code> (or <code>-l geo</code>) naming the library.</p>
+<pre><code class="language-pepper">[Link("geo")]
+extern int geo_area(int side);
+
+main(): int {
+    return geo_area(3) - 9;
+}
+</code></pre>
+<p>Only C types cross between them (numbers, <code>bool</code>, C strings and
+pointers), as with any C library. The program supplies the one runtime
+both use: <code>--lib pepper</code> leaves the runtime, <code>main</code> and the startup code
+out of the archive. So one heap and one set of runtime thread-locals
+serve both, and a program can link several such libraries.</p>
+<ul>
+<li><strong>Initialization.</strong> Before <code>main</code>, the program sets the runtime's
+globals, then each Pepper library's (one that links another sets its own
+after that one's), then its own. So a program global may call into a
+library in its initializer.</li>
+<li><strong>Thread-locals.</strong> When a thread ends, the library's thread-locals are
+released with the program's.</li>
+<li><strong>Runtime modules.</strong> A runtime module the library imports and the
+program does not (<code>json</code>, say) is compiled into the program too.</li>
+<li><strong>Other libraries.</strong> A library that links another Pepper library or a C
+one does not hold it: the program links it too (<code>-l</code>, or <code>[Link]</code>).</li>
+<li>A <code>--lib static</code> archive is for C: it holds its own runtime and startup
+code, which clash with the program's at the link.</li>
+<li><code>--lib pepper</code> writes a static library only. A shared library must hold
+its runtime, which <code>--lib shared</code> gives it: a Pepper program links one too,
+but then it has a second runtime of its own, so free a string it returns
+with its own <code>pepper_string_free</code>, and pass no handle from one to the
+other.</li>
+</ul>
 <p>Every program and library Pepper writes carries an identity stamp, in a
 section of its own (<code>.pepmeta</code>, <code>__DATA,__pepmeta</code> on macOS and iOS) that
 the linker keeps: the compiler's release, its ABI number, the platform, a
-hash of the runtime's core files, and the build options defined. Before it
-links, the compiler reads the stamp of each library a <code>[Link]</code> or <code>-l</code> name
-finds in the search folders, and of each file a build script links, and
-refuses one that does not fit the build:</p>
-<pre><code class="language-text">error: './libgeo.a' was built by pepper 0.12.0 (ABI 1) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
+hash of the runtime's core files, the CPU, the runtime checks, whether
+frame pointers are kept, and the build options defined. A library for
+Pepper also lists its kind, its initializer and release functions, the
+Pepper libraries it needs, and each runtime module it loaded with a hash of
+its files. Before it builds, the compiler reads the stamp of each library a
+<code>[Link]</code> or <code>-l</code> name finds in the search folders, and of each file a build
+script links, and refuses a library for Pepper that does not fit the build:</p>
+<pre><code class="language-text">main.pep:1:7: error: './libgeo.a' was built by pepper 0.13.0 (ABI 2) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
 </code></pre>
-<p>The ABI number, the platform and the runtime must match, and so must each
-build option both builds define (<code>--test</code> and <code>--entry</code> are left out). The
-release may differ: the ABI number is what changes when a compiler changes
-code that two builds rely on of each other. A library with no stamp, such
-as a C one, is not checked.</p>
+<p>The ABI number, the platform, the CPU and the runtime must match, and so
+must each runtime module both builds load and each build option both
+define (<code>--test</code> and <code>--entry</code> are left out). Different runtime checks or
+frame pointers only warn, since they change the code inside each side
+alone. The release may differ: the ABI number is what changes when a
+compiler changes code that two builds rely on of each other. A library for
+C (<code>--lib static</code> or <code>--lib shared</code>, or one an older compiler wrote) keeps
+its runtime to itself, so only its platform must match. A library with no
+stamp, such as a C one, is not checked.</p>
 <h2 id="output-files"><a class="header" href="#output-files">Output files</a></h2>
 <p>With no <code>-o</code>, the executable is named after the first source file, in the
 directory where you run the compiler: <code>main</code> for <code>main.pep</code>, and <code>main.exe</code>
@@ -18329,7 +18377,7 @@ directory you pass to <code>--build</code>: one object per file of the program i
 <code>&lt;name&gt;.units/</code>, and <code>&lt;name&gt;.o</code>, which runs the program's global
 initializers. Unchanged objects come from the build cache in <code>.pep/cache/</code>
 (<code>--no-cache</code> skips it).</p>
-<p>With <code>--lib static</code> or <code>--lib shared</code>, the output is a library and a C
+<p>With <code>--lib static</code>, <code>--lib shared</code> or <code>--lib pepper</code>, the output is a library and a C
 header instead (see <a href="language/c-interop.html#building-the-library">Building the library</a>).</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="ios-and-android"><a class="header" href="#ios-and-android">iOS and Android</a></h1>
 <p>Pepper compiles natively for iOS and Android through the same LLVM backend
@@ -23160,6 +23208,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--lib pepper</code></td><td>Build a static library for a Pepper program, without the runtime, which the program supplies</td><td>an executable</td></tr>
 <tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
 <tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
 <tr><td><code>--bindings swift</code>, <code>--bindings java</code></td><td>With <code>--lib static</code> or <code>--lib shared</code> (<code>java</code>: <code>--lib shared</code>), also write Swift or Java bindings of the <code>[Export]</code>ed functions beside the header</td><td>none</td></tr>
@@ -23364,6 +23413,18 @@ goes beside it as <code>LICENSE-OpenSSL.txt</code>.</li>
 (<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
 warning. See
 <a href="tools/../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--lib-pepper"><a class="header" href="#--lib-pepper"><code>--lib pepper</code></a></h3>
+<p>Builds a static library for a Pepper program to link, named as
+<code>--lib static</code> names it (<code>libname.a</code>, <code>name.lib</code> on Windows), with the
+header beside it. It holds the objects of the program's own files only:
+the runtime, <code>main</code> and the startup code are left out, since the program
+that links it supplies them, sets the library's globals before its own,
+and releases its thread-locals when a thread ends. Its identity stamp
+lists the runtime modules it loaded, which that program then compiles
+too, and the Pepper libraries it links, which that program links and
+initializes first. A shared library cannot leave the runtime out, so <code>-o</code>
+naming one (<code>.so</code>, <code>.dylib</code> or <code>.dll</code>) is a usage error. See
+<a href="tools/../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>.</p>
 <h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
 <p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
 header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed

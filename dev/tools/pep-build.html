@@ -201,6 +201,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--lib pepper</code></td><td>Build a static library for a Pepper program, without the runtime, which the program supplies</td><td>an executable</td></tr>
 <tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
 <tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
 <tr><td><code>--bindings swift</code>, <code>--bindings java</code></td><td>With <code>--lib static</code> or <code>--lib shared</code> (<code>java</code>: <code>--lib shared</code>), also write Swift or Java bindings of the <code>[Export]</code>ed functions beside the header</td><td>none</td></tr>
@@ -405,6 +406,18 @@ goes beside it as <code>LICENSE-OpenSSL.txt</code>.</li>
 (<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
 warning. See
 <a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--lib-pepper"><a class="header" href="#--lib-pepper"><code>--lib pepper</code></a></h3>
+<p>Builds a static library for a Pepper program to link, named as
+<code>--lib static</code> names it (<code>libname.a</code>, <code>name.lib</code> on Windows), with the
+header beside it. It holds the objects of the program's own files only:
+the runtime, <code>main</code> and the startup code are left out, since the program
+that links it supplies them, sets the library's globals before its own,
+and releases its thread-locals when a thread ends. Its identity stamp
+lists the runtime modules it loaded, which that program then compiles
+too, and the Pepper libraries it links, which that program links and
+initializes first. A shared library cannot leave the runtime out, so <code>-o</code>
+naming one (<code>.so</code>, <code>.dylib</code> or <code>.dll</code>) is a usage error. See
+<a href="../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>.</p>
 <h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
 <p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
 header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed
