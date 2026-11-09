@@ -301,9 +301,10 @@ same record version, ABI number and runtime interface as the one that
 built the library, whatever the releases are (see
 [A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made)).
 The root's `main`, if it has one, is named like the library's other
-private functions, so the program's own is the only `main`. A library
-built with `--lib pepper` cannot import another Pepper library's
-interface yet (one linked through `extern`s works), and the options that
+private functions, so the program's own is the only `main`. Only an
+executable or a shared library can import a Pepper library's interface
+yet (a static library, `--lib pepper`'s included, can link one through
+`extern`s), and the options that
 check a program whole from source (`--emit-llvm`, `--emit-model`,
 `--emit-steps`, `--emit-static`) refuse a program that imports one.
 The interface is written from the library's files checked as one

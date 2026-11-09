@@ -239,9 +239,10 @@ a program can link several such libraries.
 - **Runtime modules.** A runtime module the library imports and the
   program does not (`json`, say) is compiled into the program too.
 - **Other libraries.** A library that links another Pepper library or a C
-  one does not hold it: the program links it too (`-l`, or `[Link]`). A
-  library built with `--lib pepper` cannot import another Pepper library's
-  interface yet; it can link one through `extern`s.
+  one does not hold it: the program links it too (`-l`, or `[Link]`). Only
+  an executable or a shared library can import a Pepper library's
+  interface yet; a static library (`--lib pepper` or `--lib static`) can
+  link one through `extern`s.
 - A `--lib static` archive is for C: it holds its own runtime and startup
   code, which clash with the program's at the link.
 - `--lib pepper` writes a static library only. A shared library must hold

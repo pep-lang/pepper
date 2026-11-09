@@ -1124,8 +1124,29 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 )
             );
         }
-        options.objects.append(interface.archive);
-        options.linked.value().append(StampedFile(interface.archive, interface.name, found));
+        # An archive holds objects, not the library's archive; a Pepper
+        # library's unit would take the other library's files in.
+        # shortcut: give such a library units of its own (and `needs` the
+        # other) when libraries build on libraries.
+        if (options.library.is_value() and options.library.value() != LibraryKind.Shared) {
+            return Result<Built, String>.err(
+                _at_link(
+                    program,
+                    interface.name,
+                    Diagnostic.error(
+                        $"only an executable or a shared library can import the Pepper library '{interface.name}' yet"
+                    )
+                )
+            );
+        }
+        bool added = false;
+        for (var object in options.objects) {
+            added = added or object.to_string() == interface.archive.to_string();
+        }
+        if (!added) {
+            options.objects.append(interface.archive);
+            options.linked.value().append(StampedFile(interface.archive, interface.name, found));
+        }
     }
     bool stamped = false;
     for (var found in options.linked.value()) {
@@ -1261,20 +1282,6 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         # `main` is mangled, so a program that imports it has its own.
         if (program.files[0].library_root and !program.files[0].mangles_main) {
             return Result<Built, String>.err("'--lib pepper' needs the program loaded with 'Setup.pepper_library'");
-        }
-        if (!interfaces.is_empty) {
-            # shortcut: the library's unit would take the other library's
-            # files in; give it units of its own (and `needs` the other)
-            # when libraries build on libraries.
-            return Result<Built, String>.err(
-                _at_link(
-                    program,
-                    interfaces[0].name,
-                    Diagnostic.error(
-                        $"a library built with '--lib pepper' cannot import the Pepper library '{interfaces[0].name}' yet"
-                    )
-                )
-            );
         }
         units = library_units(program, keys.is_value() ? keys.value().base() : _build_text(options, triple));
         if (units.is_empty) {

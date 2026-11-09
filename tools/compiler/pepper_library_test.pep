@@ -322,7 +322,7 @@ an_imported_pepper_library_is_checked_against() {
     expect_exit(library, 1);
     expect_contains(
         library.stderr,
-        "top.pep:1:8: error: a library built with '--lib pepper' cannot import the Pepper library 'geo' yet"
+        "top.pep:1:8: error: only an executable or a shared library can import the Pepper library 'geo' yet"
     );
     # A library's own names are mangled with its namespace; its errors
     # name them as written.

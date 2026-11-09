@@ -2011,7 +2011,9 @@ structs' symbols), its translation units compile nothing, and
 the program's init and release; instantiations of the library's generics
 are the program's, `linkonce_odr`. `--emit-llvm`, `--emit-model`,
 `--emit-steps` and `--emit-static` check a program whole and refuse one
-that imports a library (`main.pep`); so does a `--lib pepper` build.
+that imports a library (`main.pep`); `driver.build` refuses it in a
+static library (`--lib pepper` or `--lib static`), whose archive would
+hold the library's archive.
 A dependent summary (`give(holder: Holder, ...)`) keeps its body so a
 reader that adds an implementation of the trait finds it stale
 (`confinement._stale`) and summarizes it again over its own
