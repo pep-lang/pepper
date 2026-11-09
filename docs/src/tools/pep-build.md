@@ -53,7 +53,7 @@ short, and `pepper help build` runs it.
 | `--target <triple>` | Compile for another platform | the machine compiling |
 | `--sysroot <dir>` | The target's system libraries | `PEPPER_SYSROOT_<TRIPLE>` |
 | `-l <lib>` | Link a C library | the platform's defaults |
-| `-L <dir>` | Add a folder the linker searches | `PEPPER_LIBRARY_PATH` |
+| `-L <dir>` | Add a folder the linker, and an import of a Pepper library, searches | `PEPPER_LIBRARY_PATH` |
 | `--MSVC` | Use the MSVC linker (not ported) | off |
 | `-D <name>[=<value>]` | Define a build option | none |
 | `-F <names>`, `--features <names>` | Turn on features of the project's package | its `default` feature |
@@ -290,13 +290,23 @@ after it with the extension `.pepi` (`libgeo.a` has `libgeo.pepi`,
 library's files, the format the build cache keeps, with their resolved
 types, struct layouts, generic bodies, link summaries and expanded
 `static` blocks, and without the bodies of functions that are not generic.
-The archive's stamp names its hash (`interface`). A Pepper program will
-read it in place of the library's sources; until then it is written for
-that program, not read. Since it is the compiler's own format, a program
-reads it only when its compiler has the same record version, ABI number
-and runtime interface as the one that built the library, whatever the
-releases are (see
+Beside the record, for linking, it keeps each library file's declarations
+as written, every function body and comment blanked. The archive's stamp
+names its hash (`interface`). A Pepper program that writes `import geo;`
+and finds no source module `geo` reads `libgeo.pepi` (`geo.pepi` on
+Windows) from the `-L` folders and `PEPPER_LIBRARY_PATH`'s in place of
+the library's sources, and links `libgeo.a` beside it. Since it is the
+compiler's own format, a program reads it only when its compiler has the
+same record version, ABI number and runtime interface as the one that
+built the library, whatever the releases are (see
 [A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made)).
+The root's `main`, if it has one, is named like the library's other
+private functions, so the program's own is the only `main`. Only an
+executable or a shared library can import a Pepper library's interface
+yet (a static library, `--lib pepper`'s included, can link one through
+`extern`s), and the options that
+check a program whole from source (`--emit-llvm`, `--emit-model`,
+`--emit-steps`, `--emit-static`) refuse a program that imports one.
 The interface is written from the library's files checked as one
 compilation unit on the runtime's, so `--lib pepper` checks the library
 whole on each build, with or without the build cache; it cannot be
@@ -686,7 +696,10 @@ source instead. See [Linking](../language/linking.md).
 
 Adds a folder the linker searches for libraries. Folders given with `-L`
 come first, then those of `[Link(path = ...)]`, then those in
-`PEPPER_LIBRARY_PATH` (separated like `PATH`: `:`, or `;` on Windows). See
+`PEPPER_LIBRARY_PATH` (separated like `PATH`: `:`, or `;` on Windows). An
+`import` that no source module answers looks in the `-L` folders, then
+`PEPPER_LIBRARY_PATH`'s, for a Pepper library's interface (`libname.pepi`,
+see [`--lib pepper`](#--lib-pepper)). See
 [Library search directories](../language/linking.md#library-search-directories-in-the-source-and-the-environment).
 
 ```bash
@@ -974,7 +987,7 @@ many seconds before it compiles.
 | --- | --- | --- |
 | `PEPPER_RUNTIME` | The folder holding the standard library; nothing else is searched | `--no-runtime` skips the runtime |
 | `PEPPER_OPT_LEVEL` | The optimization level (`0` to `3`) without `-O`; also the level the test suite's JIT uses | `-O<level>` |
-| `PEPPER_LIBRARY_PATH` | More folders the linker searches, after `-L` and `[Link(path = ...)]` | `-L` comes first |
+| `PEPPER_LIBRARY_PATH` | More folders the linker searches, after `-L` and `[Link(path = ...)]`, and an `import` searches for a Pepper library's interface | `-L` comes first |
 | `PEPPER_SYSROOT_<TRIPLE>` | The system libraries for linking with `--target <triple>` | `--sysroot` |
 | `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT` | The Android NDK for linking with an Android `--target`, when neither `--sysroot` nor `PEPPER_SYSROOT_<TRIPLE>` names one | `--sysroot` |
 | `ANDROID_HOME`, `ANDROID_SDK_ROOT` | The Android SDK, whose newest `ndk/<version>` links an Android `--target` when nothing above names an NDK | `--sysroot` |

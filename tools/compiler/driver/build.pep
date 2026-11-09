@@ -15,7 +15,6 @@ import [
     Clock,
     every_file,
     find_checked,
-    interface_file_hash,
     interface_hash,
     interface_path,
     library_units,
@@ -256,21 +255,6 @@ _syntax_links(program: link.Program): (ulong, String, String, ast.Span)[] {
     return out;
 }
 
-# The folders of `$PEPPER_LIBRARY_PATH`, separated as in `PATH`.
-_library_path_dirs(): Path[] {
-    var dirs = Array<Path>();
-    var library_path = os.environment("PEPPER_LIBRARY_PATH");
-    if (library_path.is_value()) {
-        var separator = os.system_os() == os.OperatingSystem.Windows ? ";" : ":";
-        for (var dir in library_path.value().split(separator)) {
-            if (!dir.is_empty) {
-                dirs.append(Path(dir));
-            }
-        }
-    }
-    return dirs;
-}
-
 ## Reads the identity stamps of what `program` links, right after it is
 ## loaded (#220): the libraries `libraries` and its externs' `[Link]`s
 ## name, found in `dirs`, the `[Link(path = ...)]` folders and
@@ -291,7 +275,7 @@ export linked_stamps(program: link.Program, libraries: String[], dirs: Path[], o
     }
     var searched = dirs.copy();
     searched.append_all(linked_dirs);
-    searched.append_all(_library_path_dirs());
+    searched.append_all(link.library_path_dirs());
     return read_library_stamps(all, searched, objects, program.target);
 }
 
@@ -394,12 +378,25 @@ _runtime_module_files(program: link.Program): HashMap<String, Array<ulong>> {
 }
 
 # `diagnostic`, about the library `library` names, rendered at the first
-# `[Link]` naming it; its message alone (a warning's after `warning: `)
-# when none does (`-l`, a build script's file).
+# `[Link]` naming it, else at the first import of its interface; its
+# message alone (a warning's after `warning: `) when none does (`-l`, a
+# build script's file).
 _at_link(program: link.Program, library: String, diagnostic: Diagnostic, warning: bool = false): String {
     for (var (file, key, text, span) in _syntax_links(program)) {
         if (key == "lib" and text == library and !library.is_empty) {
             return render_all([diagnostic.at(Location(file, span))], program.sources());
+        }
+    }
+    for (var file in 0..program.files.count) {
+        var f = program.files[file];
+        for (var m in 0..f.imports.count) {
+            var target = f.imports[m];
+            if (target.is_value()
+                and !f.interface.is_value()
+                and program.files[target.value()].interface.is_value()
+                and program.files[target.value()].interface.value().name == library) {
+                return render_all([diagnostic.at(Location(file, f.module.imports[m].name_span))], program.sources());
+            }
         }
     }
     return warning ? $"warning: {diagnostic.message}" : diagnostic.message;
@@ -879,9 +876,13 @@ _compilation_unit_jobs(options: BuildOptions): ulong {
 }
 
 # Whether the build checks and compiles `units` in compilation unit workers
-# (`_check_in_workers`).
-_in_workers(options: BuildOptions, units: CompilationUnit[]): bool {
+# (`_check_in_workers`). Not a program that imports a Pepper library: the
+# library's objects are its archive, which no compilation unit's are.
+# shortcut: such a program is checked in its own process; give workers the
+# interface's record and the archive's symbols if those programs grow.
+_in_workers(options: BuildOptions, program: link.Program, units: CompilationUnit[]): bool {
     return units.count > 2
+        and program.interfaces().is_empty
         and _compilation_unit_jobs(options) > 1
         and !options.in_process
         and !options.worker_args.is_empty;
@@ -1107,6 +1108,46 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             linked_stamps(program, options.libraries, options.library_dirs, options.objects)
         );
     }
+    # A Pepper library an import found links its archive, which must be
+    # the one built with the interface read.
+    for (var interface in program.interfaces()) {
+        var stamps = link.read_stamps(interface.archive);
+        var found = stamps.is_ok() ? stamps.value() : Array<link.Stamp>();
+        if (found.is_empty or found[0].kind != link.KIND_PEPPER or found[0].interface != interface.hash) {
+            return Result<Built, String>.err(
+                _at_link(
+                    program,
+                    interface.name,
+                    Diagnostic.error(
+                        $"the archive {interface.archive} was not built with the interface {interface.path}; rebuild the library '{interface.name}'"
+                    )
+                )
+            );
+        }
+        # An archive holds objects, not the library's archive; a Pepper
+        # library's unit would take the other library's files in.
+        # shortcut: give such a library units of its own (and `needs` the
+        # other) when libraries build on libraries.
+        if (options.library.is_value() and options.library.value() != LibraryKind.Shared) {
+            return Result<Built, String>.err(
+                _at_link(
+                    program,
+                    interface.name,
+                    Diagnostic.error(
+                        $"only an executable or a shared library can import the Pepper library '{interface.name}' yet"
+                    )
+                )
+            );
+        }
+        bool added = false;
+        for (var object in options.objects) {
+            added = added or object.to_string() == interface.archive.to_string();
+        }
+        if (!added) {
+            options.objects.append(interface.archive);
+            options.linked.value().append(StampedFile(interface.archive, interface.name, found));
+        }
+    }
     bool stamped = false;
     for (var found in options.linked.value()) {
         stamped = stamped or !found.stamps.is_empty;
@@ -1227,17 +1268,32 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     # build's own, removed after.
     var records = options.cache;
     var own_records = Optional<Path>.Empty;
+    # A program that imports a Pepper library takes the library's files
+    # checked, from its interface's record, so it is checked in compilation
+    # units whatever the cache and `-g` say (#220).
+    var interfaces = program.interfaces();
+    if ((pepper or !interfaces.is_empty) and (!records.is_value() or options.debug)) {
+        own_records = Optional<Path>.Value(options.build_dir.join(Path($"library-records.{process.id()}")));
+        records = Optional<Cache>.Value(Cache(own_records.value()));
+    }
     if (pepper) {
         # A Pepper library is checked as the runtime and one compilation
-        # unit of its own, whose record is its interface (#220).
-        if (!records.is_value()) {
-            own_records = Optional<Path>.Value(options.build_dir.join(Path($"library-records.{process.id()}")));
-            records = Optional<Cache>.Value(Cache(own_records.value()));
+        # unit of its own, whose record is its interface (#220). Its root's
+        # `main` is mangled, so a program that imports it has its own.
+        if (program.files[0].library_root and !program.files[0].mangles_main) {
+            return Result<Built, String>.err("'--lib pepper' needs the program loaded with 'Setup.pepper_library'");
         }
         units = library_units(program, keys.is_value() ? keys.value().base() : _build_text(options, triple));
         if (units.is_empty) {
             return Result<Built, String>.err(
                 "'--lib pepper' needs the runtime checked on its own, and a runtime file imports one outside it"
+            );
+        }
+    } else if (!interfaces.is_empty) {
+        units = compilation_units(program, keys.is_value() ? keys.value().base() : _build_text(options, triple));
+        if (units.is_empty) {
+            return Result<Built, String>.err(
+                $"a program that imports the Pepper library '{interfaces[0].name}' must be checked in compilation units, and this one cannot be: a runtime file imports one outside it, or a file of the root's module reads the root"
             );
         }
     } else if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
@@ -1264,7 +1320,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     var reused = Optional<Reused>.Empty;
     if (keys.is_value()) {
         reused = Optional<Reused>.Value(
-            _in_workers(options, units) ?
+            _in_workers(options, program, units) ?
                 nothing_reused(program, translation_units) :
                 reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension, excluded)
         );
@@ -1298,7 +1354,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     var interface = Optional<u8[]>.Empty;
     if (units.count > 1) {
         var prechecked = HashMap<ulong, (u8[], String, String)>();
-        if (_in_workers(options, units)) {
+        if (_in_workers(options, program, units)) {
             var jobs = _compilation_unit_jobs(options);
             var parallel = _check_in_workers(program, units, options, jobs, prechecked, object_keys, last_below);
             if (parallel.is_err()) {
@@ -1411,7 +1467,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             }
         }
         if (interface.is_value()) {
-            stamp.interface = interface_file_hash(interface.value());
+            stamp.interface = link.interface_hash(interface.value());
         }
         clock.lap("interfaces of the runtime");
     }
@@ -1455,6 +1511,15 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     }
     if (pepper or !linked_libraries.is_empty) {
         setup.runtime_files = in_runtime;
+    }
+    # The files of the Pepper libraries imported: their archives define
+    # what they own, and their inits run in the library's.
+    var library_files = Array<bool>();
+    for (var f in program.files) {
+        library_files.append(f.interface.is_value());
+    }
+    if (!interfaces.is_empty) {
+        setup.library_files = library_files;
     }
     var runtime = _runtime_dir(program);
     if (options.debug) {
@@ -1585,8 +1650,14 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         objects.append_all(found);
         clock.lap("objects");
     } else {
-        # The bodies of units whose objects the cache holds are only declared.
+        # The bodies of units whose objects the cache holds, or a Pepper
+        # library's archive, are only declared.
         var cached_files = HashSet<uint>();
+        for (var i in 0..library_files.count) {
+            if (library_files[i]) {
+                cached_files.insert(i as uint);
+            }
+        }
         if (reused.is_value()) {
             for (var u in 0..translation_units.count) {
                 if (reused.value().objects[u].count > 0) {
@@ -1656,7 +1727,8 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         # store in the cache.
         var stored_parts = Array<(ulong, ulong, String)>();
         for (var u in 0..translation_units.count) {
-            if (pepper and _all_in(translation_units[u].files, in_runtime)) {
+            if ((pepper and _all_in(translation_units[u].files, in_runtime))
+                or _all_in(translation_units[u].files, library_files)) {
                 continue;
             }
             if (reused.is_value() and reused.value().objects[u].count > 0) {
@@ -1824,7 +1896,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         dirs.append(dir);
     }
     # Then `$PEPPER_LIBRARY_PATH`'s folders.
-    dirs.append_all(_library_path_dirs());
+    dirs.append_all(link.library_path_dirs());
     # A library gets its C header; a static one is an archive, not linked.
     if (options.library.is_value()) {
         var written = write_header(

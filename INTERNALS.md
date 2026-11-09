@@ -293,7 +293,9 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     the import is reported as belonging to another module, or as outside
     this module or folder.
   - `import m` goes through `files.resolve_module`, which returns the
-    first `<search path>/m/module.pep`.
+    first `<search path>/m/module.pep`; failing that, a Pepper library's
+    interface `libm.pepi` in `Setup.library_dirs` (§4.1, *Libraries for
+    Pepper*), whose files join the program with their own namespaces.
   - Files reached from prelude files through local imports are marked
     `prelude_part`, which exempts their functions from duplicate-export
     checks (types and variables never are: two prelude files exporting one
@@ -1935,9 +1937,11 @@ hold (`c_type`), and codegen defines its C entry point in the entry part.
 
 **Libraries for Pepper** (`--lib pepper`, #220). The same archive as
 `--lib static`, without the objects of units whose files are all the
-runtime's (`program.in_runtime`), and with `main` deleted from the IR
-(`Generator.generate`); its entry part holds the exports, the library's
-init and release (`partition._is_entry`) and the stamp. A program that
+runtime's (`program.in_runtime`); its root's `main` is mangled like its
+other names (`ProgramFile.mangles_main`, from `Setup.pepper_library`, so
+the program that imports it keeps the one `main`); its entry part holds
+the exports, the library's init and release (`partition._is_entry`) and
+the stamp. A program that
 links one skips `internalize` under `--lto=full` (`optimize_whole`),
 since the library's objects use the runtime's and its link-once copies
 join the program's comdats; `__pep_library_*` always stay external.
@@ -1953,12 +1957,17 @@ records go to a folder of the build's own, removed after. So
 `check_compilation_units(interface = true)` indexes the runtime's merged
 module before the last unit (`DeltaBase`) and, once it is checked, makes
 its `CheckedUnit` (`finish_checked`) and `library_interface` writes it, a
-delta on the runtime alone, after a text header: `pepper-library-interface
-<RECORD_VERSION>`, a `file <namespace>` line per library file (`root` for
-`files[0]`) with an `export <name> <linked name>` line per name an
-importer sees (`link.FileScope.exports`, the linker's export table:
-`private` only narrows within the library's module, which no program file
-is in), then `record` and the record as the cache keeps it
+delta on the runtime alone, after a text header (`link/interface_file.pep`
+reads it): `pepper-library-interface <RECORD_VERSION>`, then per library
+file a `file <namespace>` line (`root` for `files[0]`), an `imports` line
+naming, per import of the file, the library file it reaches or `-` (one
+the program resolves, a runtime module), an `export <name> <linked name>`
+line per name an importer sees (`link.FileScope.exports`, the linker's
+export table: `private` only narrows within the library's module, which
+no program file is in), and `text <size>` with the file's source, every
+function body's inside and every comment blanked to spaces, line breaks
+kept (`_declarations_text`, from the tokens outside the bodies the syntax
+tree spans), then `record` and the record as the cache keeps it
 (`_record_bytes`: the program's namespaces, which name the file slots, so
 the runtime's files map to the reader's, then the delta, whose locations
 in runtime files are written from `LocAnchors`). Before writing,
@@ -1966,12 +1975,45 @@ in runtime files are written from `LocAnchors`). Before writing,
 would skip in a cached file, a summary standing for each: the library's
 non-generic functions and methods outside extensions whose
 `checked.summaries` entry calls through no trait; generic bodies,
-specializations, constructors, `main` and functions with a dependent or no
-summary keep theirs. `read_library_interface` reads it onto the reader's
-runtime module (`RecordIn.merging`, as `merged_module` merges a closure),
-giving each library file the reader lacks a slot after its own files
-(`LibraryInterface.files`), then `resume_checked` and `settle_merged`.
-PR 4 of #220 loads it into a program; until then only the tests read it.
+specializations, constructors and functions with a dependent or no
+summary keep theirs.
+
+A program **imports** it (`import geo;`): `link.load` resolves a module
+import that no dependency or search path answers, and whose name has no
+`.`, with `find_library_interface` over `Setup.library_dirs` (`-L`, the
+build scripts' folders, `PEPPER_LIBRARY_PATH`; `interface_file_name`), and
+queues every file of the interface (`_Queued.interface`) at a path inside
+the `.pepi` (`libgeo.pepi/geo/geo.pep`, which diagnostics show). Each
+loads from its `text` as a source file does, with the header's
+namespace, `library_root` and `mangles_main` for the root, no module
+root, and `ProgramFile.interface`; its imports of library files resolve by
+the `imports` line, the others as a program file's would. So linking and
+the visibility check treat the library as a source module (an exported
+extension is visible to its importers only), and give its declarations
+the linked names the record holds. A program file whose namespace is a
+library file's is refused (`load`). `compilation_units` makes the
+interface's files one compilation unit (`_import_cycles` joins them), and
+`check_compilation_units` takes its record as checked
+(`interface_records`: the record, and the interface's hash as its own
+interface), so `merged_module` merges it, `sort_globals` included, into
+every unit that reads it. A program that imports one is checked in
+compilation units with or without the cache and `-g` (records in a
+folder of the build's own when there is no cache, or with `-g`), in its
+own process (`_in_workers`), recording every summary as the library did
+(its runtime interface must match). `driver.build` refuses an archive
+whose stamp's `interface` is not the `.pepi`'s hash (`link.interface_hash`),
+at the import (`_at_link`), then adds the archive to the link and its
+stamp to `BuildOptions.linked`, which calls its init and release.
+Codegen declares what the library's files own (`cached_files`: stripped
+functions, kept bodies, synthesized `__dtor` and copies, globals' and
+structs' symbols), its translation units compile nothing, and
+`Build.library_files` keeps their globals' inits and thread-locals out of
+the program's init and release; instantiations of the library's generics
+are the program's, `linkonce_odr`. `--emit-llvm`, `--emit-model`,
+`--emit-steps` and `--emit-static` check a program whole and refuse one
+that imports a library (`main.pep`); `driver.build` refuses it in a
+static library (`--lib pepper` or `--lib static`), whose archive would
+hold the library's archive.
 A dependent summary (`give(holder: Holder, ...)`) keeps its body so a
 reader that adds an implementation of the trait finds it stale
 (`confinement._stale`) and summarizes it again over its own

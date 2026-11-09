@@ -350,6 +350,8 @@ export struct Generator {
     var runtime_files: bool[] = Array<bool>();
     ## `Build.libraries`.
     var libraries: (String, String)[] = Array<(String, String)>();
+    ## `Build.library_files`.
+    var library_files: bool[] = Array<bool>();
     ## How many such strings each function has used so far, by name.
     var location_counts: HashMap<String, ulong> = HashMap<String, ulong>();
 
@@ -693,16 +695,6 @@ export struct Generator {
             codegen_function(function)?;
         }
         codegen_called()?;
-        # A Pepper library's program has the one `main`, as `--entry`
-        # drops every other.
-        if (!library_name.is_empty) {
-            for (var name in ["main", sema.MAIN_WITH_ARGUMENTS]) {
-                var found = ir.function(name);
-                if (found.is_value()) {
-                    found.value().delete_function();
-                }
-            }
-        }
         var kept = Array<llvm.Value>();
         if (!stamp.is_empty) {
             kept.append(embed_stamp());
@@ -1076,6 +1068,10 @@ export struct Build {
     ## links, in the order they initialize, which its own init and release
     ## call.
     var libraries: (String, String)[] = Array<(String, String)>();
+    ## Per file, whether it is a file of an imported Pepper library's
+    ## interface: the library's init and release cover its globals, and
+    ## its archive defines what it owns.
+    var library_files: bool[] = Array<bool>();
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -1130,6 +1126,7 @@ export generate(
     generator.library_name = build.library_name;
     generator.runtime_files = build.runtime_files;
     generator.libraries = build.libraries;
+    generator.library_files = build.library_files;
     var generated = generator.generate(module);
     if (generated.is_err()) {
         return Result<llvm.Module, Diagnostic>.err(generated.error());

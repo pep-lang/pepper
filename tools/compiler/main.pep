@@ -603,6 +603,7 @@ _main(args: String[]): int {
     if (kind.is_value()) {
         # The library's own names are namespaced with its name, its header's.
         setup.library = driver.header_path(out, setup.target).file_stem().value_or("");
+        setup.pepper_library = kind.value() == driver.LibraryKind.Pepper;
     }
     var build_folder = build_dir.is_set ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
     if (for_apps) {
@@ -763,6 +764,11 @@ _main(args: String[]): int {
         }
         early_worker = driver.start_compilation_unit_worker(worker_args, build_folder);
     }
+    # An import no source module answers looks for a Pepper library's
+    # interface here (#220).
+    setup.library_dirs.append_all(library_dirs.values());
+    setup.library_dirs.append_all(scripts.value().library_dirs);
+    setup.library_dirs.append_all(link.library_path_dirs());
     var program = link.load_program(entry, setup);
     # What the build links, by name and by folder: `-l`, the project's,
     # the build scripts'.
@@ -796,6 +802,17 @@ _main(args: String[]): int {
         if (!compilation_unit_worker.is_set) {
             _report(program.error());
         }
+        return 1;
+    }
+    # These check the program whole, from source, which a Pepper library
+    # imported has none of.
+    # shortcut: they could check in compilation units, as a build does,
+    # if someone needs them for such a program.
+    var interfaces = program.value().interfaces();
+    if (!interfaces.is_empty and (emit_static.is_set or ir.is_set or model.is_set or steps.is_set)) {
+        _report(
+            $"cannot check the program whole: it imports the Pepper library '{interfaces[0].name}', which has no source; build it instead"
+        );
         return 1;
     }
     # An executable starts in `main`; without one the linker's own error

@@ -1,8 +1,8 @@
 # A Pepper library's interface (`--lib pepper`'s `.pepi`, #220): the checked
 # record of its files, written beside its archive and named by its stamp,
-# reads back into a program that does not have the library's files, and a
-# link summary that calls through a trait is joined again over a program's
-# own implementation.
+# reads back into a program that imports the library without its files,
+# and a link summary that calls through a trait is joined again over a
+# program's own implementation.
 
 import [Diagnostic] from compiler.diagnostic;
 import compiler.driver;
@@ -12,7 +12,6 @@ import [JsonValue] from json;
 import compiler.link;
 import compiler.sema;
 import [TempFolder] from testing;
-import [Utf8] from text;
 
 # A library with a trait, a value struct, a shared struct, a generic, a
 # plain function, a function whose summary calls through the trait, and a
@@ -28,6 +27,7 @@ _build_library(root: Path): Path {
     var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Pepper, "geo", link.Target())));
     var setup = link.Setup();
     setup.library = "geo";
+    setup.pepper_library = true;
     var options = driver.BuildOptions(archive, root.join(Path("build")));
     options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Pepper);
     options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
@@ -40,13 +40,9 @@ _build_library(root: Path): Path {
     return archive;
 }
 
-# Checks `program` in compilation units in `cache`, the records in
-# `prechecked` taking the place of theirs; the diagnostics when it fails.
-_check(
-    program: link.Program,
-    cache: incremental.Cache,
-    prechecked: HashMap<ulong, (u8[], String, String)> = HashMap<ulong, (u8[], String, String)>()
-): Result<incremental.Checked, String> {
+# Checks `program` in compilation units in `cache`; the diagnostics when
+# it fails.
+_check(program: link.Program, cache: incremental.Cache): Result<incremental.Checked, String> {
     var checked = incremental.check_compilation_units(
         program,
         incremental.compilation_units(program, "base"),
@@ -57,8 +53,7 @@ _check(
         Array<String>(),
         incremental.Clock(false),
         false,
-        false,
-        prechecked
+        false
     );
     if (checked.is_ok()) {
         return Result<incremental.Checked, String>.ok(checked.value());
@@ -77,21 +72,27 @@ _check(
     }
 }
 
-# A program of `main.pep` alone in `root`, which has none of the library's
-# files, and the module of its runtime, checked in `root/cache`.
-_program_without_library(root: Path): (link.Program, sema.Module) {
+# The program of `main` (a file's text) in `root`, which imports the
+# library whose archive is in `library`, and has none of its files.
+_importer(root: Path, library: Path, main: String): link.Program {
     Directory.create_all(root);
-    var main = root.join(Path("main.pep"));
-    File.write_text(main, "main(): int {\n    return 0;\n}\n");
-    var program = link.load_program(main, link.Setup()).value();
-    var cache = incremental.Cache(root.join(Path("cache")));
-    expect_true(_check(program, cache).is_ok());
-    var units = incremental.compilation_units(program, "base");
-    units[0].key = incremental.compilation_unit_key(units, 0, ["", ""]);
-    var (bytes, _, _) = incremental.find_checked(cache, program, units[0]).value();
-    var records = HashMap<ulong, u8[]>();
-    records[0] = bytes;
-    return (program, incremental.merged_module(program, records, [0 as ulong]).value());
+    var path = root.join(Path("main.pep"));
+    File.write_text(path, main);
+    var setup = link.Setup();
+    setup.library_dirs.append(library);
+    var program = link.load_program(path, setup).value();
+    expect_true(program.errors.is_empty);
+    return program;
+}
+
+# The index of the root file of the library `program` imports.
+_library_root(program: link.Program): uint {
+    for (var i in 0..program.files.count) {
+        if (program.files[i].interface.is_value() and program.files[i].library_root) {
+            return i as uint;
+        }
+    }
+    return 0;
 }
 
 [Test]
@@ -99,10 +100,10 @@ a_pepper_library_writes_its_interface_beside_its_archive() {
     var folder = TempFolder("library_interface");
     var archive = _build_library(folder.path);
     var path = incremental.interface_path(archive);
-    expect_equal(path.extension().value_or(""), incremental.INTERFACE_EXTENSION);
+    expect_equal(path.extension().value_or(""), link.INTERFACE_EXTENSION);
     var bytes = File.read_bytes(path).value();
     var stamp = link.read_stamps(archive).value()[0];
-    expect_equal(stamp.interface, incremental.interface_file_hash(bytes));
+    expect_equal(stamp.interface, link.interface_hash(bytes));
     expect_equal(stamp.record, link.RECORD_VERSION);
     expect_false(stamp.runtime_interface.is_empty);
     expect_true(stamp.text().contains($"\nrecord {link.RECORD_VERSION}\n"));
@@ -121,33 +122,38 @@ a_pepper_library_writes_its_interface_beside_its_archive() {
     expect_true(link.read_stamps(static_archive).value()[0].interface.is_empty);
 }
 
-# Read into a program that has none of its files, the interface gives back
-# the library's declarations: their files as slots of their own, the root's
-# exports, the layouts and attributes of its structs, generic bodies, the
-# expanded `static` block, and the link summaries that stand for the bodies
-# it leaves out.
+# Imported by a program that has none of its files, the interface gives
+# back the library's declarations: its files as files of the program under
+# their own namespaces, the root's exports, the layouts and attributes of
+# its structs, generic bodies, the expanded `static` block, and the link
+# summaries that stand for the bodies it leaves out. The text that links
+# the program keeps the declarations and none of the bodies.
 [Test]
 the_interface_reads_back_into_a_program_without_the_library() {
     var folder = TempFolder("library_interface_read");
     var archive = _build_library(folder.path.join(Path("geo")));
-    var (program, runtime) = _program_without_library(folder.path.join(Path("app")));
-    var bytes = File.read_bytes(incremental.interface_path(archive)).value();
-    var read = incremental.read_library_interface(program, runtime, bytes);
-    if (read.is_err()) {
-        print(read.error());
-    }
-    var interface = read.value();
+    var app = folder.path.join(Path("app"));
+    var program = _importer(app, archive.parent().value(), "import geo;\n\nmain(): int {\n    return 0;\n}\n");
+    var file = _library_root(program);
+    var interface = program.files[file].interface.value();
     expect_equal(interface.files.count, 1 as ulong);
     var geo = interface.files[0];
     expect_equal(geo.namespace, "geo/geo");
+    expect_equal(program.files[file].namespace, "geo/geo");
     expect_true(geo.root);
-    expect_equal(geo.file as ulong, program.files.count);
     expect_true(geo.exports.contains("Point") and geo.exports.contains("give") and geo.exports.contains("SIDES"));
     expect_false(geo.exports.contains("_hidden"));
+    expect_true(geo.text.contains("export shout(text: String): String {"));
+    expect_false(geo.text.contains("return text + \"!\";"));
+    expect_equal(geo.text.size, _GEO.size);
+    var checked = _check(program, incremental.Cache(app.join(Path("cache"))));
+    if (checked.is_err()) {
+        print(checked.error());
+    }
     var read_golden = File.read_to_string(Path("compiler/testdata/library_interface.golden"));
     # A checkout may give it CRLF line ends.
     var golden = read_golden.is_ok() ? read_golden.value().replace("\r\n", "\n") : "";
-    var dump = _dump(interface.module, geo.file);
+    var dump = _dump(checked.value().module, file);
     if (golden != dump) {
         print(
             "the library interface reads back otherwise: if a program reads it differently, bump link.RECORD_VERSION; then update compiler/testdata/library_interface.golden to:"
@@ -157,9 +163,10 @@ the_interface_reads_back_into_a_program_without_the_library() {
     expect_true(golden == dump);
 
     # A record of another version, or none, is refused.
-    var other = $"{incremental.INTERFACE_MAGIC}{link.RECORD_VERSION + 1}\nrecord\n".bytes();
-    expect_true(incremental.read_library_interface(program, runtime, other).is_err());
-    expect_true(incremental.read_library_interface(program, runtime, "geo".bytes()).is_err());
+    var other = $"{link.INTERFACE_MAGIC}{link.RECORD_VERSION + 1}\nrecord\n".bytes();
+    var empty = link.LibraryInterface("geo", Path("libgeo.pepi"), Path("libgeo.a"));
+    expect_true(link.read_interface_bytes(empty, other).is_value());
+    expect_true(link.read_interface_bytes(empty, "geo".bytes()).is_value());
 }
 
 # A library function whose link summary calls through a trait (`give`)
@@ -172,30 +179,18 @@ the_interface_reads_back_into_a_program_without_the_library() {
 a_program_joins_a_library_summary_over_its_own_implementation() {
     var folder = TempFolder("library_interface_join");
     var archive = _build_library(folder.path.join(Path("geo")));
-    var bytes = File.read_bytes(incremental.interface_path(archive)).value();
-    var text = Utf8.decode_lossy(bytes);
-    var record = bytes.slice((text.find("\nrecord\n") as ulong) + 8, bytes.count).to_array();
     for (var (name, body, fails) in [("quiet", "count += 1;", false), ("keeper", "items.append(item);", true)]) {
         var root = folder.path.join(Path(name));
-        Directory.create_all(root);
-        File.write_text(root.join(Path("geo.pep")), _GEO);
-        File.write_text(
-            root.join(Path("main.pep")),
-            $"import async;\nimport \"geo\";\n\nstruct Keeper {{\n    var count: int = 0;\n    var items: Array<String> = Array<String>();\n}}\n\nextend Keeper with Holder {{\n    hold(item: String) {{\n        {body}\n    }}\n}}\n\nconst keepers = async.Mutex<Keeper>(Keeper());\n\nmain(): int {{\n    var line = shout(\"x\");\n    with (var keeper = keepers.lock()) {{\n        give(keeper, line);\n    }}\n    return 0;\n}}\n"
+        var program = _importer(
+            root,
+            archive.parent().value(),
+            $"import async;\nimport [give, Holder, shout] from geo;\n\nstruct Keeper {{\n    var count: int = 0;\n    var items: Array<String> = Array<String>();\n}}\n\nextend Keeper with Holder {{\n    hold(item: String) {{\n        {body}\n    }}\n}}\n\nconst keepers = async.Mutex<Keeper>(Keeper());\n\nmain(): int {{\n    var line = shout(\"x\");\n    with (var keeper = keepers.lock()) {{\n        give(keeper, line);\n    }}\n    return 0;\n}}\n"
         );
-        # Named as the library build named them, so the interface's
-        # namespaces are this program's files'.
-        var setup = link.Setup();
-        setup.library = "geo";
-        var program = link.load_program(root.join(Path("main.pep")), setup).value();
+        # The library's compilation unit comes from its interface.
         var units = incremental.compilation_units(program, "base");
         expect_equal(units.count, 3 as ulong);
         expect_equal(units[1].name, "geo/geo");
-        # The library's compilation unit comes from its interface, as a
-        # program that links the library would have it.
-        var prechecked = HashMap<ulong, (u8[], String, String)>();
-        prechecked[1] = (record, "interface", "");
-        var checked = _check(program, incremental.Cache(root.join(Path("cache"))), prechecked);
+        var checked = _check(program, incremental.Cache(root.join(Path("cache"))));
         print($"{name}: {checked.is_ok() ? "checked" : checked.error()}");
         if (fails) {
             expect_true(

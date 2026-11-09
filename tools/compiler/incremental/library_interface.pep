@@ -1,21 +1,20 @@
 ## A Pepper library's interface (#220): the checked record of the library's
 ## files, which `--lib pepper` writes beside its archive (`<lib>.pepi`) and
-## a program reads instead of the library's sources, as it reads a
-## compilation unit's record from the build cache.
+## a program that imports the library reads instead of its sources, as it
+## reads a compilation unit's record from the build cache.
 ##
-## The file is a text header, then the record. The header's first line is
-## `INTERFACE_MAGIC` and `link.RECORD_VERSION`; then, for each of the
-## library's files, `file <namespace>`, with `root` after it for the
-## library's root, and a line `export <name> <declaration>` for each name
-## an importer of the file sees and the linked name of the declaration it
-## denotes; then `record`. The record is the one the build cache keeps
-## (`_record_bytes`): the program's files' namespaces, which its file slots
-## name, then the library's files checked as one compilation unit, a delta
-## on the runtime's alone (`library_units`). Each file of the library reads
-## as a file index of its own after the reading program's files
-## (`read_library_interface`); the runtime's files are the program's
-## own, so the runtime the library was checked on must be the program's
-## (`link.Stamp.runtime_interface`).
+## The file is a text header, then the record (`link.interface_file`
+## describes the header). For each of the library's files the header holds
+## its namespace, what its imports name, its exports, and its declarations
+## as text with every function body and comment blanked: program loading
+## links them as it links a source file (`link.load`). The record is the
+## one the build cache keeps (`_record_bytes`): the program's files'
+## namespaces, which its file slots name, then the library's files checked
+## as one compilation unit, a delta on the runtime's alone
+## (`library_units`). A program's compilation unit of the library's files
+## takes it as checked (`interface_records`); the runtime's files are the
+## program's own, so the runtime the library was checked on must be the
+## program's (`link.Stamp.runtime_interface`).
 ##
 ## The record holds what a program checks against and instantiates:
 ## declarations and their resolved types, field layouts, attributes,
@@ -25,65 +24,26 @@
 ## when a link summary that calls through no trait value stands in for
 ## them; one whose summary does keeps its body, so a program that adds an
 ## implementation of the trait summarizes it again over its own
-## (`sema.check_confinement`'s stale summaries).
+## (`sema.check_confinement`'s stale summaries). The program compiles none
+## of them: the archive defines them.
 
-import digest;
+import compiler.ast;
+import [Block, Declaration, FunctionDecl, PropertyDecl, Span] from compiler.ast;
 import [File, Path] from io;
 import compiler.link;
 import compiler.sema;
+import syntax;
 import [Utf8] from text;
 import "compilation_units";
 
-## The first line of a library interface, before its record version.
-export const INTERFACE_MAGIC = "pepper-library-interface ";
-
-## The extension of a library interface file.
-export const INTERFACE_EXTENSION = "pepi";
-
-## A file of a library, as its interface names it.
-export struct LibraryFile {
-    ## Its namespace, which the library's mangled names carry.
-    var namespace: String;
-    ## Its file index in the module read (`read_library_interface`): after
-    ## the reading program's own files.
-    var file: uint;
-    ## Whether it is the library's root, whose exports an importer of the
-    ## library sees.
-    var root: bool = false;
-    ## Each name an importer of the file sees -> the linked name of the
-    ## declaration it denotes (`link.FileScope.exports`).
-    var exports: HashMap<String, String> = HashMap<String, String>();
-
-    ## @param namespace the file's namespace
-    ## @param file its index in the program
-    construct(namespace: String, file: uint) {
-        this.namespace = namespace;
-        this.file = file;
-    }
-}
-
-## A library interface read back (`read_library_interface`).
-export struct LibraryInterface {
-    ## The library's files.
-    var files: LibraryFile[] = Array<LibraryFile>();
-    ## The module: the runtime the interface was read onto, with the
-    ## library's declarations.
-    var module: sema.Module;
-
-    ## @param module the module read
-    construct(module: sema.Module) {
-        this.module = module;
-    }
-}
-
 ## Returns the path of the interface of the library at `archive`: beside
-## it, with the extension `INTERFACE_EXTENSION` (`libgeo.a` ->
+## it, with the extension `link.INTERFACE_EXTENSION` (`libgeo.a` ->
 ## `libgeo.pepi`).
 ##
 ## @param archive the library's archive
 ## @returns the interface's path
 export interface_path(archive: Path): Path {
-    return archive.with_extension(INTERFACE_EXTENSION);
+    return archive.with_extension(link.INTERFACE_EXTENSION);
 }
 
 ## Returns the interface of the library `program` builds: `unit`'s files
@@ -99,12 +59,19 @@ export library_interface(
     program: link.Program, unit: CompilationUnit, checked_unit: sema.CheckedUnit, base: sema.DeltaBase
 ): u8[] {
     var header = StringBuilder();
-    header.append($"{INTERFACE_MAGIC}{link.RECORD_VERSION}\n");
+    header.append($"{link.INTERFACE_MAGIC}{link.RECORD_VERSION}\n");
     var files = HashSet<uint>();
     for (var file in unit.files) {
         files.insert(file as uint);
+    }
+    for (var file in unit.files) {
         var f = program.files[file];
-        header.append($"file {f.namespace}{file == 0 ? " root" : ""}\n");
+        header.append($"file {f.namespace}{file == 0 ? " root" : ""}\nimports");
+        for (var target in f.imports) {
+            bool own = target.is_value() and files.contains(target.value() as uint);
+            header.append(own ? $" {program.files[target.value()].namespace}" : " -");
+        }
+        header.append("\n");
         var names = Array<String>();
         if (file < program.scopes.count) {
             for (var (name, _) in program.scopes[file].exports) {
@@ -117,6 +84,8 @@ export library_interface(
         for (var name in names) {
             header.append($"export {name} {program.scopes[file].exports[name]}\n");
         }
+        var text = _declarations_text(f.source, f.module);
+        header.append($"text {text.size}\n{text}\n");
     }
     header.append("record\n");
     var stripped = _strip(checked_unit.module, files);
@@ -129,58 +98,25 @@ export library_interface(
     return out;
 }
 
-## Reads the library interface `bytes` onto `base`, the module of
-## `program`'s runtime, checked (as `merged_module` merges a record).
+## Returns the records of the compilation units of `units` that hold the
+## files of a Pepper library's interface (`link.ProgramFile.interface`),
+## by compilation unit, as `check_compilation_units` takes records made
+## already: the interface's record, its hash as the unit's own interface,
+## and no warnings.
 ##
-## @param program the program reading it
-## @param base its runtime's module, which the read changes: the caller
-##   drops it
-## @param bytes the interface file's bytes
-## @returns the interface, or why it cannot be read
-export read_library_interface(program: link.Program, base: sema.Module, bytes: u8[]): Result<LibraryInterface, String> {
-    # The header is text, so its offsets are the bytes' in the decoded text.
-    var marker = "\nrecord\n";
-    var text = Utf8.decode_lossy(bytes);
-    var end = text.find(marker);
-    if (end < 0) {
-        return Result<LibraryInterface, String>.err("not a Pepper library interface");
-    }
-    var record_start = end as ulong + marker.size;
-    var lines = text.substr_bytes(0, end as ulong).split("\n");
-    if (lines.is_empty or lines[0] != $"{INTERFACE_MAGIC}{link.RECORD_VERSION}") {
-        return Result<LibraryInterface, String>.err(
-            $"not a Pepper library interface of record version {link.RECORD_VERSION}"
-        );
-    }
-    var slots = _record_slots(program);
-    var files = Array<LibraryFile>();
-    for (var i in 1..lines.count) {
-        var parts = lines[i].split(" ");
-        if (parts.count >= 2 and parts[0] == "file") {
-            # The library's own, even when a file of the program has its
-            # namespace.
-            uint file = (program.files.count + files.count) as uint;
-            slots[parts[1]] = file;
-            var library_file = LibraryFile(parts[1], file);
-            library_file.root = parts.count == 3 and parts[2] == "root";
-            files.append(library_file);
-        } else if (parts.count == 3 and parts[0] == "export" and !files.is_empty) {
-            files[files.count - 1].exports[parts[1]] = parts[2];
-        } else {
-            return Result<LibraryInterface, String>.err($"a malformed library interface line: '{lines[i]}'");
+## @param program the program
+## @param units its compilation units
+## @returns the records
+export interface_records(program: link.Program, units: CompilationUnit[]): HashMap<ulong, (u8[], String, String)> {
+    var out = HashMap<ulong, (u8[], String, String)>();
+    for (var k in 0..units.count) {
+        var files = units[k].files;
+        if (!files.is_empty and program.files[files[0]].interface.is_value()) {
+            var interface = program.files[files[0]].interface.value();
+            out[k] = (interface.record, interface.hash, "");
         }
     }
-    var read = _read_record(
-        slots, bytes.slice(record_start, bytes.count).to_array(), Optional<sema.Module>.Value(base), true
-    );
-    if (read.is_err()) {
-        return Result<LibraryInterface, String>.err(read.error());
-    }
-    var module = sema.resume_checked(read.value());
-    sema.settle_merged(module);
-    var out = LibraryInterface(module);
-    out.files = files;
-    return Result<LibraryInterface, String>.ok(out);
+    return out;
 }
 
 ## Writes the interface `bytes` beside the library archive `archive`
@@ -198,15 +134,87 @@ export write_library_interface(archive: Path, bytes: u8[]): Result<void, String>
     return Result<void, String>.ok();
 }
 
-## Returns the hash of a library interface's bytes, which its library's
-## stamp names (`link.Stamp.interface`).
-##
-## @param bytes the interface
-## @returns the hash, in hexadecimal
-export interface_file_hash(bytes: u8[]): String {
-    var hasher = digest.Blake3();
-    hasher.update(bytes);
-    return hasher.finish_hex().substr_bytes(0, 16);
+# `source` with every comment, and the inside of every function body
+# `module` (its syntax tree) declares, blanked to spaces, line breaks kept:
+# the declarations, at the places the library's diagnostics name.
+_declarations_text(source: String, module: ast.Module): String {
+    var bodies = Array<Span>();
+    for (var declaration in module.declarations) {
+        match (declaration) {
+            Function(function) => {
+                _add_body(bodies, function);
+            }
+            Struct(st) => {
+                for (var method in st.methods) {
+                    _add_body(bodies, method);
+                }
+                for (var constructor in st.constructors) {
+                    _add_body(bodies, constructor);
+                }
+                if (st.destructor.is_value()) {
+                    bodies.append(st.destructor.value().span);
+                }
+                _add_accessors(bodies, st.properties);
+            }
+            Trait(t) => {
+                for (var method in t.methods) {
+                    _add_body(bodies, method);
+                }
+                _add_accessors(bodies, t.properties);
+            }
+            Extend(e) => {
+                for (var method in e.methods) {
+                    _add_body(bodies, method);
+                }
+                _add_accessors(bodies, e.properties);
+            }
+            else => {}
+        }
+    }
+    var out = source.bytes();
+    for (var i in 0..out.count) {
+        if (out[i] != '\n') {
+            out[i] = ' ';
+        }
+    }
+    var tokens = syntax.lex(source, false);
+    if (tokens.is_err()) {
+        return source;
+    }
+    # The bodies do not nest, and the tokens come in order.
+    bodies.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0));
+    ulong at = 0;
+    for (var token in tokens.value()) {
+        while (at < bodies.count and bodies[at].end <= token.offset) {
+            at += 1;
+        }
+        bool inside = at < bodies.count and token.offset > bodies[at].start and token.offset + 1 < bodies[at].end;
+        if (!inside) {
+            for (var i in token.offset..token.offset + token.size) {
+                out[i] = source.byte_at(i);
+            }
+        }
+    }
+    return Utf8.decode_lossy(out);
+}
+
+# Adds the span of `function`'s body, if it has one, to `bodies`.
+_add_body(bodies: Span[], function: FunctionDecl) {
+    if (function.body.is_value()) {
+        bodies.append(function.body.value().span);
+    }
+}
+
+# Adds the spans of the bodies of `properties`' accessors to `bodies`.
+_add_accessors(bodies: Span[], properties: PropertyDecl[]) {
+    for (var property in properties) {
+        if (property.getter.is_value()) {
+            _add_body(bodies, property.getter.value().function);
+        }
+        if (property.setter.is_value()) {
+            _add_body(bodies, property.setter.value().function);
+        }
+    }
 }
 
 # Takes the bodies of the library's non-generic functions and methods
@@ -218,7 +226,6 @@ _strip(module: sema.Module, files: HashSet<uint>): Array<(sema.FunctionDef, sema
     var strip = (key: String, function: sema.FunctionDef) => {
         if (function.loc.is_none()
             or !files.contains(function.loc.file)
-            or function.name == "main"
             or !function.owner.is_none()
             or function.is_generic_func
             or function.generic_params.count > 0

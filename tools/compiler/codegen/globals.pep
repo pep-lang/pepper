@@ -253,7 +253,10 @@ extend Generator {
                     }
                     else => {}
                 }
-                if (!constant) {
+                # An imported Pepper library's init stores its own.
+                bool library = (variable.loc.file as ulong) < library_files.count
+                    and library_files[variable.loc.file as ulong];
+                if (!constant and !library) {
                     non_const.append((variable.name, initializer, variable.loc.file));
                 }
             }
@@ -672,7 +675,8 @@ extend Generator {
                 continue;
             }
             var file = variable.loc.file as ulong;
-            if (pepper_library and file < runtime_files.count and runtime_files[file]) {
+            if ((pepper_library and file < runtime_files.count and runtime_files[file])
+                or (file < library_files.count and library_files[file])) {
                 continue;
             }
             var ty = variable.ty.to_string();

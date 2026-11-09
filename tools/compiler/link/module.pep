@@ -19,6 +19,17 @@ export [
 ] from "platform";
 export [absolute, path_key, Runtime] from "files";
 export [
+    find_library_interface,
+    interface_file_name,
+    interface_hash,
+    library_path_dirs,
+    read_interface_bytes,
+    InterfaceFile,
+    LibraryInterface,
+    INTERFACE_EXTENSION,
+    INTERFACE_MAGIC
+] from "interface_file";
+export [
     ABI_VERSION,
     COMPILER_LEVEL,
     KIND_C,

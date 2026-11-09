@@ -231,8 +231,15 @@ directory. If `geometry` lives in a `deps` folder, compile with:
 pepper build main.pep -I deps -o main
 ```
 
-An identifier import never looks next to the importing file. A module that is
-not found is reported with the places the compiler looked:
+An identifier import never looks next to the importing file. When no folder
+on the search paths holds the module, the import looks for a **Pepper
+library** of that name built with `--lib pepper`: its interface,
+`libgeometry.pepi` (`geometry.pepi` on Windows), in the folders `-L` names
+and then `PEPPER_LIBRARY_PATH`'s. Its exports are then imported as a
+module's, with no source for it, and the build links the library beside it
+(see
+[A library another Pepper build made](linking.md#a-library-another-pepper-build-made)).
+A module that is not found is reported with the places the compiler looked:
 
 ```text
 main.pep:1:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, /home/you/pepper/runtime
