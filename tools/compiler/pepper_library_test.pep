@@ -102,6 +102,11 @@ a_program_links_a_pepper_library() {
     var (optimized, _) = _build_main(folder.path, ["-O", "--lto=full"]);
     expect_exit(optimized, 0);
     expect_equal(_run_program(program), "42 1");
+    # Checked whole, without the cache, the program's runtime interface is
+    # the library's still.
+    var (whole, _) = _build_main(folder.path, ["--no-cache"]);
+    expect_exit(whole, 0);
+    expect_equal(_run_program(program), "42 1");
 }
 
 [Test]

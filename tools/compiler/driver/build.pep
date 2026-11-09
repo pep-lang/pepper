@@ -1360,6 +1360,11 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             module.cached_files = reused.value().files;
             module.recorded_summaries = reused.value().summaries;
         }
+        # The runtime's interface hash (`add_interfaces`) takes every
+        # function's summary, as a build with the cache makes them.
+        if (!linked_libraries.is_empty) {
+            module.record_summaries = true;
+        }
         state.sources = sources;
         state.lazy_methods = true;
         state.pass_times = options.pass_times;
