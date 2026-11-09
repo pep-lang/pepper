@@ -808,8 +808,9 @@ declarations, did not change is not compiled or checked again.
 once (one per processor by default; `PEPC_LAYER_JOBS`, its old name, still
 works), except in a program that imports a
 [Pepper library](../language/libraries.md), which is checked one
-compilation unit at a time, in its own process. The optimization level, link-time optimization, debug info,
-CPU, removed runtime checks and build options are part of each object's
+compilation unit at a time, in its own process. The optimization level,
+link-time optimization, debug info, CPU, removed runtime checks and build
+options are part of each object's
 key. Deleting the cache folder is always safe.
 
 ### `--no-cache`
