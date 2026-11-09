@@ -13,7 +13,7 @@ import os;
 import compiler.sema;
 import "cache";
 import "compilation_units";
-import [library_interface] from "library_interface";
+import [interface_records, library_interface] from "library_interface";
 import "recheck";
 
 ## Whether `PEPC_VERIFY_CUTOFF` checks every compilation unit loaded by early
@@ -200,6 +200,14 @@ export check_compilation_units(
     var rechecked = Array<String>();
     bool verify_cutoff = verify or _verify_cutoff();
     bool trace_compilation_units = _trace_compilation_units();
+    # A Pepper library's files are checked already: its interface's record
+    # (#220).
+    var interfaces = interface_records(program, units);
+    for (var (k, record) in interfaces) {
+        if (!prechecked.contains(k)) {
+            prechecked[k] = record;
+        }
+    }
     for (var k in 0..last + 1) {
         units[k].key = compilation_unit_key(units, k, owns);
         var unit = units[k];
@@ -222,7 +230,7 @@ export check_compilation_units(
                 if (!warned.is_empty) {
                     replayed.append(warned);
                 }
-                if (verify_cutoff and checked_any) {
+                if (verify_cutoff and checked_any and !interfaces.contains(k)) {
                     var wrong = _verify_reuse_merged(program, units, records, k, bytes, reused, sources, warnings);
                     if (wrong.is_value()) {
                         return Result<Checked, CheckError>.err(
@@ -303,8 +311,10 @@ export check_compilation_units(
             unit,
             k < last ? Optional<Cache>.Value(cache) : Optional<Cache>.Empty,
             # A library's interface records every summary, with the build
-            # cache or without (`Module.record_summaries`).
-            interface
+            # cache or without (`Module.record_summaries`), and so does a
+            # program that imports one, whose runtime interface must be the
+            # library's.
+            (interface or !interfaces.is_empty)
                 and !reused.is_value() ?
                 Optional<Reused>.Value(Reused()) :
                 reused,

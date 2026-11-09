@@ -667,11 +667,29 @@ _components(reads: Array<HashSet<ulong>>, skip: bool[]): Array<ulong[]> {
 _import_cycles(program: link.Program): Array<ulong[]> {
     var imports = Array<HashSet<ulong>>();
     var skip = Array<bool>();
+    # A Pepper library's files are one compilation unit, as its interface's
+    # record holds them (#220): each reads every other.
+    var libraries = HashMap<String, ulong[]>();
+    for (var i in 0..program.files.count) {
+        var interface = program.files[i].interface;
+        if (interface.is_value()) {
+            var key = interface.value().path.to_string();
+            if (!libraries.contains(key)) {
+                libraries[key] = Array<ulong>();
+            }
+            libraries[key].append(i);
+        }
+    }
     for (var file in program.files) {
         var targets = HashSet<ulong>();
         for (var target in file.imports) {
             if (target.is_value()) {
                 targets.insert(target.value());
+            }
+        }
+        if (file.interface.is_value()) {
+            for (var other in libraries[file.interface.value().path.to_string()]) {
+                targets.insert(other);
             }
         }
         imports.append(targets);

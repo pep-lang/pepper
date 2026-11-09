@@ -1,8 +1,10 @@
 # The book's examples (`docs/examples/`) are real programs: each is built
 # with `pep-build`, run, and must exit with 0. An example is a single
 # `name.pep`, or a folder `name/` whose entry point is `main.pep` (for
-# examples of several files, such as modules). The book includes the files
-# verbatim, so what a reader sees is what was tested here.
+# examples of several files, such as modules), whose `lib/<name>.pep`
+# files, if any, are Pepper libraries (`--lib pepper`) built first for
+# `main.pep` to import. The book includes the files verbatim, so what a
+# reader sees is what was tested here.
 #
 # An example that ends with an `# Output:` comment block must also print
 # exactly that: each following `# ` line is a line of its standard output.
@@ -454,6 +456,41 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
     var label = options.is_empty ? example.name : $"{example.name} ({" ".join(options)})";
     var folder = TempFolder($"docs_example_{example.name}{"".join(options)}");
     var program = folder.path.join(example.name);
+    # A folder example's `lib/<name>.pep` files are Pepper libraries
+    # (`--lib pepper`) its `main.pep` imports, built first into `lib/`.
+    var libraries = folder.path.join("lib");
+    var sources = example.entry.parent().value_or(Path(".")).join("lib");
+    var linking = Array<String>();
+    if (sources.is_directory()) {
+        linking = ["-L", libraries.to_string()];
+        for (var entry in Directory.open(sources).value().entries().value()) {
+            if (!entry.name.ends_with(".pep")) {
+                continue;
+            }
+            var name = entry.name.substr_bytes(0, entry.name.size - 4);
+            var archive = libraries.join(os.system_os() == os.OperatingSystem.Windows ? $"{name}.lib" : $"lib{name}.a");
+            var library = process
+                .Command(compiler.value().to_string())
+                .argument(sources.join(entry.name).to_string())
+                .argument("--lib")
+                .argument("pepper")
+                .argument("-o")
+                .argument(archive.to_string())
+                .argument("--build")
+                .argument(folder.path.join("build-lib").to_string())
+                .arguments(options)
+                .stdout(process.Stream.Pipe)
+                .stderr(process.Stream.Pipe)
+                .run();
+            if (library.is_err() or !library.value().status.success()) {
+                var why = library.is_err() ?
+                    library.error().message :
+                    $"{library.value().stdout}{library.value().stderr}";
+                fail(failures, example.failure(label, $"its library {name} does not build:\n{why}"));
+                return;
+            }
+        }
+    }
     var build = process
         .Command(compiler.value().to_string())
         .argument(example.entry.to_string())
@@ -461,6 +498,7 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         .argument(program.to_string())
         .argument("--build")
         .argument(folder.path.join("build").to_string())
+        .arguments(linking)
         .arguments(options)
         .stdout(process.Stream.Pipe)
         .stderr(process.Stream.Pipe)

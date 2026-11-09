@@ -18,6 +18,7 @@ import process;
 import [check_uses] from "deprecation";
 import "files" as files;
 import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
+import [find_library_interface, LibraryInterface] from "interface_file";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
 import [demangle_name] from "names";
@@ -57,6 +58,13 @@ export struct Setup {
     ## Pepper library loaded and the program does not import (#220). They
     ## are loaded as the program's imports are, not into the prelude.
     var extra_modules: String[] = Array<String>();
+    ## The folders a module import that no source module answers looks in
+    ## for a Pepper library's interface (`-L`, then `$PEPPER_LIBRARY_PATH`'s,
+    ## #220).
+    var library_dirs: Path[] = Array<Path>();
+    ## Whether the library build (`library`) is `--lib pepper`'s, whose
+    ## root's `main` is mangled like its other names.
+    var pepper_library: bool = false;
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -251,6 +259,19 @@ export struct Program {
                 }
             }
             out.append(inside);
+        }
+        return out;
+    }
+
+    ## Returns each Pepper library interface the program's imports loaded.
+    ##
+    ## @returns the interfaces, in load order
+    interfaces(): LibraryInterface[] {
+        var out = Array<LibraryInterface>();
+        for (var f in files) {
+            if (f.interface.is_value() and f.library_root) {
+                out.append(f.interface.value());
+            }
         }
         return out;
     }
@@ -491,7 +512,9 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         runtime_dir,
         setup.error_limit,
         setup.library,
-        extra
+        extra,
+        setup.library_dirs,
+        setup.pepper_library
     );
     if (loaded.is_err()) {
         return loaded;
@@ -523,12 +546,22 @@ struct _Queued {
     var path: Path;
     var key: String;
     var prelude: bool;
+    # A file of a library interface, and its index there.
+    var interface: LibraryInterface? = Optional<LibraryInterface>.Empty;
+    var index: ulong = 0;
 
     construct(path: Path, key: String, prelude: bool) {
         this.path = path;
         this.key = key;
         this.prelude = prelude;
     }
+}
+
+# Where the file of namespace `namespace` of the library interface
+# `interface` loads from: a path inside the interface file, which names it
+# in diagnostics.
+_interface_path(interface: LibraryInterface, namespace: String): Path {
+    return Path($"{interface.path}/{namespace}.pep");
 }
 
 ## Loads `root`, the `prelude` files, and everything their imports reach,
@@ -551,6 +584,9 @@ struct _Queued {
 ##   its root and loose files; empty for a program
 ## @param extra more files to load as the root's imports are, not into
 ##   the prelude (`Setup.extra_modules`)
+## @param library_dirs where a module import no source module answers
+##   looks for a Pepper library's interface (`Setup.library_dirs`)
+## @param pepper_library whether the library build is `--lib pepper`'s
 ## @returns the program, or why a file cannot be read or parsed or a feature
 ##   turned on
 export load(
@@ -564,7 +600,9 @@ export load(
     runtime_dir: Path? = Optional<Path>.Empty,
     error_limit: ulong = ERROR_LIMIT,
     library: String = "",
-    extra: Path[] = Array<Path>()
+    extra: Path[] = Array<Path>(),
+    library_dirs: Path[] = Array<Path>(),
+    pepper_library: bool = false
 ): Result<Program, String> {
     var program = Program();
     program.error_limit = error_limit;
@@ -616,6 +654,8 @@ export load(
             stack.append(_Queued(path, k, false));
         }
     }
+    # The library interfaces loaded, by the library's name.
+    var interfaces = HashMap<String, LibraryInterface>();
     bool root_pending = true;
     while (true) {
         _Queued next = _Queued(root, root_key, prelude_keys.contains(root_key));
@@ -627,9 +667,9 @@ export load(
         }
         root_pending = false;
         var path = next.path;
-        var source = sources.contains(next.key) ?
-            Result<String, io.IoError>.ok(sources[next.key]) :
-            File.read_to_string(path);
+        var source = next.interface.is_value() ?
+            Result<String, io.IoError>.ok(next.interface.value().files[next.index].text) :
+            sources.contains(next.key) ? Result<String, io.IoError>.ok(sources[next.key]) : File.read_to_string(path);
         if (source.is_err()) {
             return Result<Program, String>.err($"cannot read {path}: {source.error().message}");
         }
@@ -646,6 +686,18 @@ export load(
         var folders = Array<bool>();
         for (var imp in module.imports) {
             folders.append(false);
+            # An interface file's import of another file of its library
+            # names it (`InterfaceFile.imports`).
+            if (next.interface.is_value()) {
+                var named = next.interface.value().files[next.index].imports;
+                var at = targets.count;
+                if (at < named.count and named[at] != "-") {
+                    targets.append(
+                        Optional<String>.Value(roots.key(_interface_path(next.interface.value(), named[at])))
+                    );
+                    continue;
+                }
+            }
             # An import platform selection drops is never resolved.
             var kept = target.keep(imp.attributes);
             if (kept.is_err()) {
@@ -698,6 +750,39 @@ export load(
                     }
                     NotADependency => {
                         found = files.resolve_module(imp.name, search_paths);
+                        # No source module: a Pepper library's interface
+                        # (#220), all its files queued with its root.
+                        if (!found.is_value() and !imp.name.contains(".") and !next.interface.is_value()) {
+                            var known = interfaces.try_get(imp.name);
+                            if (!known.is_value()) {
+                                var read = find_library_interface(imp.name, library_dirs, target);
+                                if (read.is_value() and read.value().is_err()) {
+                                    program.errors.append(ModuleError(file, imp.name_span, read.value().error()));
+                                    targets.append(Optional<String>.Empty);
+                                    continue;
+                                }
+                                if (read.is_value()) {
+                                    known = Optional<LibraryInterface>.Value(read.value().value());
+                                    interfaces[imp.name] = known.value();
+                                    for (var i in 0..known.value().files.count) {
+                                        var at = _interface_path(known.value(), known.value().files[i].namespace);
+                                        var entry = _Queued(at, roots.key(at), false);
+                                        entry.interface = known;
+                                        entry.index = i;
+                                        if (queued.insert(entry.key)) {
+                                            stack.append(entry);
+                                        }
+                                    }
+                                }
+                            }
+                            if (known.is_value()) {
+                                for (var f in known.value().files) {
+                                    if (f.root) {
+                                        found = Optional<Path>.Value(_interface_path(known.value(), f.namespace));
+                                    }
+                                }
+                            }
+                        }
                     }
                     Missing(message) => {
                         # Fetching the dependency, or fixing the `pep.toml`,
@@ -734,9 +819,20 @@ export load(
         resolved.append(targets);
         var loaded = ProgramFile(path.to_string(), source.value(), module);
         loaded.key = next.key;
-        loaded.namespace = roots.namespace_of(path);
-        loaded.module_root = roots.module_of(path);
-        loaded.library_root = !library.is_empty and next.key == root_key;
+        if (next.interface.is_value()) {
+            # Named, and mangled, as the library build named it.
+            var named = next.interface.value().files[next.index];
+            loaded.namespace = named.namespace;
+            loaded.module_root = Optional<Path>.Empty;
+            loaded.library_root = named.root;
+            loaded.mangles_main = true;
+            loaded.interface = next.interface;
+        } else {
+            loaded.namespace = roots.namespace_of(path);
+            loaded.module_root = roots.module_of(path);
+            loaded.library_root = !library.is_empty and next.key == root_key;
+            loaded.mangles_main = pepper_library;
+        }
         # A file of a module sees the declarations of the module's other
         # files, so loading one loads its `module.pep`, and with it the
         # files the module reaches. Spelled from the file's own path, as an
@@ -799,9 +895,26 @@ export load(
         }
     }
     # Namespaces must be unique: two files outside the project and any
-    # module, named by their file names, are told apart by load order.
+    # module, named by their file names, are told apart by load order. A
+    # library interface's keep theirs, which its record and mangled names
+    # carry, so a program file may not share one.
     var taken = HashSet<String>();
+    var library_namespaces = HashSet<String>();
     for (var f in program.files) {
+        if (f.interface.is_value()) {
+            taken.insert(f.namespace);
+            library_namespaces.insert(f.namespace);
+        }
+    }
+    for (var f in program.files) {
+        if (f.interface.is_value()) {
+            continue;
+        }
+        if (library_namespaces.contains(f.namespace)) {
+            return Result<Program, String>.err(
+                $"{f.name} has the namespace '{f.namespace}' of a file of a Pepper library this program imports; a program cannot import a library built from its own files"
+            );
+        }
         var base = f.namespace;
         ulong n = 1;
         while (!taken.insert(f.namespace)) {

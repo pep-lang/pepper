@@ -27,6 +27,7 @@ import [
 import [Diagnostic, Location, shown_path] from compiler.diagnostic;
 import io;
 import [Path] from io;
+import [LibraryInterface] from "interface_file";
 import "names" as names;
 import [Target] from "platform";
 import [Scope, ScopeKind, ScopeWalk, Scopes] from "walk";
@@ -57,10 +58,18 @@ export struct ProgramFile {
     ## a forced module): its exports may repeat the runtime's, but are
     ## visible only through the module's own exports.
     var prelude_part: bool;
-    ## The root of a library build (`--lib`): its names are mangled with its
-    ## namespace, as every other file's are, except `main`; a program's
-    ## root keeps its own names.
+    ## The root of a library build (`--lib`), or of a Pepper library's
+    ## interface: its names are mangled with its namespace, as every other
+    ## file's are, except a library for C's `main`; a program's root keeps
+    ## its own names.
     var library_root: bool;
+    ## A library root whose `main` is mangled too (`--lib pepper`, an
+    ## interface): the program that links the library has its own.
+    var mangles_main: bool;
+    ## A file of a Pepper library's interface (`.pepi`), not of source: its
+    ## text is the library file's declarations without bodies, and its
+    ## checked declarations come from the interface's record.
+    var interface: LibraryInterface? = Optional<LibraryInterface>.Empty;
     ## For each of `module.imports`, the index of the file it names, or
     ## none when it did not resolve.
     var imports: Array<ulong?> = Array<ulong?>();
@@ -1347,7 +1356,7 @@ struct _Linker {
                 match (d) {
                     Function(func) => {
                         # A library keeps its `main` (c-interop.md).
-                        if (func.external or (f.library_root and func.name == "main")) {
+                        if (func.external or (f.library_root and !f.mangles_main and func.name == "main")) {
                             keep_it = true;
                         }
                     }

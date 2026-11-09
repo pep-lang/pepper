@@ -121,7 +121,8 @@ export place_openssl_license(library: Path, libraries: String[], runtime: Path?)
 ## Writes the C header of a library to `path`: the declarations of
 ## `exports`, and for a static library the libraries a program linking it
 ## must link too (`libraries`, then the target's system libraries). Warns
-## when nothing is exported.
+## when a library for C exports nothing (a Pepper program calls a Pepper
+## library through its interface instead).
 ##
 ## @param path where the header goes (`header_path`)
 ## @param exports what the program exports
@@ -139,7 +140,7 @@ export write_header(
     target: link.Target
 ): Result<void, String> {
     var declarations = sema.header_declarations(exports, representations);
-    if (declarations.is_empty) {
+    if (declarations.is_empty and kind != LibraryKind.Pepper) {
         File.stderr().write_all(
             "warning: the library exports no functions; mark the functions C calls with '[Export]'\n"
         );

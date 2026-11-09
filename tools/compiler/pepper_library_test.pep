@@ -211,6 +211,132 @@ a_shared_pepper_library_is_refused() {
     expect_contains(expanded.stderr, "'--debug-static=expanded' cannot build '--lib pepper'");
 }
 
+# Builds `testdata/imported_library/geo.pep` as the Pepper library `geo`
+# into `root/lib`, with `geo.pep`'s text changed by `edit` (old -> new),
+# then removes its source; returns its archive.
+_build_imported_geo(root: Path, edit: (String, String)? = Optional<(String, String)>.Empty): Path {
+    var text = File.read_to_string(Path("compiler/testdata/imported_library/geo.pep")).value();
+    if (edit.is_value()) {
+        var (old, now) = edit.value();
+        expect_true(text.contains(old));
+        text = text.replace(old, now);
+    }
+    var source = root.join("src").join("geo.pep");
+    write_file(source, text);
+    var archive = _archive(root.join("lib"), "geo");
+    expect_exit(_pep_build(source, archive, ["--lib", "pepper"]), 0);
+    File.remove(source);
+    return archive;
+}
+
+# Builds `main` (a file's text) in `root/app` against the library in
+# `root/lib`, with `options` after; returns how it went and the program.
+_build_importer(root: Path, main: String, options: Array<String> = Array<String>()): (process.Output, Path) {
+    var source = root.join("app").join("main.pep");
+    write_file(source, main);
+    var program = root.join("app").join("main" + toolchain.executable_suffix());
+    var all = ["-L", root.join("lib").to_string()];
+    all.append_all(options);
+    return (_pep_build(source, program, all), program);
+}
+
+# A program imports a Pepper library's Pepper declarations with no source
+# for it: its interface (`.pepi`) is checked already, the program
+# instantiates its generics, and its archive defines the rest.
+[Test]
+a_program_imports_a_pepper_library() {
+    var folder = TempFolder("pepper_library_import");
+    var root = folder.path;
+    var archive = _build_imported_geo(root);
+    var interface = archive.with_extension(link.INTERFACE_EXTENSION);
+    var before = link.interface_hash(File.read_bytes(interface).value());
+    var main = File.read_to_string(Path("compiler/testdata/imported_library/main.pep")).value();
+    var (built, program) = _build_importer(root, main);
+    expect_exit(built, 0);
+    expect_false(built.stderr.contains("duplicate"));
+    # A trait's default method on a library struct and a program one, a
+    # value struct, a shared object on another thread, a generic at a
+    # program type and at one the library instantiates too, the library's
+    # global and its extension of `String`.
+    expect_equal(_run_program(program), "area 9,area 3 10 1 2 12 42 x!");
+    # Without the cache, and optimized as one module.
+    expect_exit(_build_importer(root, main, ["--no-cache"]).0, 0);
+    expect_equal(_run_program(program), "area 9,area 3 10 1 2 12 42 x!");
+    expect_exit(_build_importer(root, main, ["-O", "--lto=full"]).0, 0);
+    expect_equal(_run_program(program), "area 9,area 3 10 1 2 12 42 x!");
+
+    # A body edit leaves the interface as it was: the program links the
+    # new archive.
+    _build_imported_geo(root, Optional<(String, String)>.Value(("total += p.x + p.y;", "total += p.x * p.y;")));
+    expect_equal(link.interface_hash(File.read_bytes(interface).value()), before);
+    expect_exit(_build_importer(root, main).0, 0);
+    expect_equal(_run_program(program), "area 9,area 3 14 1 2 12 42 x!");
+
+    # A generic's body is in the interface, which the program compiles.
+    var old_archive = File.read_bytes(archive).value();
+    _build_imported_geo(root, Optional<(String, String)>.Value(("return [value, value];", "return [value];")));
+    expect_true(link.interface_hash(File.read_bytes(interface).value()) != before);
+    expect_exit(_build_importer(root, main).0, 0);
+    expect_equal(_run_program(program), "area 9,area 3 10 1 1 12 21 x!");
+
+    # An archive built with another interface is refused at the import.
+    File.write_bytes(archive, old_archive);
+    var (stale, _) = _build_importer(root, main);
+    expect_exit(stale, 1);
+    expect_contains(stale.stderr, "main.pep:5:8: error: the archive ");
+    expect_contains(stale.stderr, "rebuild the library 'geo'");
+}
+
+# What a program cannot do with an imported Pepper library: call it
+# wrongly (the error names the library's declaration as written, in its
+# interface), use its extension from a file that does not import it,
+# check the program whole, or build another Pepper library on it.
+[Test]
+an_imported_pepper_library_is_checked_against() {
+    var folder = TempFolder("pepper_library_import_errors");
+    var root = folder.path;
+    _build_imported_geo(root);
+    var (wrong, _) = _build_importer(root, "import geo;\n\nmain(): int {\n    return geo.sum(1);\n}\n");
+    expect_exit(wrong, 1);
+    expect_contains(
+        wrong.stderr,
+        "main.pep:4:12: error: cannot pass a value of type 'int' as argument 1 of 'sum', which has type 'Array<Point>'"
+    );
+    write_file(root.join("app").join("util.pep"), "export loud(): String {\n    return \"y\".shout();\n}\n");
+    var (
+        unseen, _
+    ) = _build_importer(root, "import geo;\nimport \"util\";\n\nmain(): int {\n    print(loud());\n    return 0;\n}\n");
+    expect_exit(unseen, 1);
+    expect_contains(unseen.stderr, "util.pep:2:16: error: 'shout' is declared in an extension in ");
+    expect_contains(unseen.stderr, "which this file does not import");
+    # The note shows the declaration in the interface's text.
+    expect_contains(unseen.stderr, "    shout(): String {");
+    var (whole, _) = _build_importer(root, "import geo;\n\nmain(): int {\n    return 0;\n}\n", ["--emit-llvm"]);
+    expect_exit(whole, 1);
+    expect_contains(whole.stderr, "cannot check the program whole: it imports the Pepper library 'geo'");
+    var top = root.join("top").join("top.pep");
+    write_file(top, "import geo;\n\nexport twice(): int {\n    return geo.sum([geo.Point(1, 1)]) * 2;\n}\n");
+    var library = _pep_build(
+        top, _archive(root.join("top"), "top"), ["--lib", "pepper", "-L", root.join("lib").to_string()]
+    );
+    expect_exit(library, 1);
+    expect_contains(
+        library.stderr,
+        "top.pep:1:8: error: a library built with '--lib pepper' cannot import the Pepper library 'geo' yet"
+    );
+    # A library's own names are mangled with its namespace; its errors
+    # name them as written.
+    var locked = root.join("locked").join("locked.pep");
+    write_file(
+        locked,
+        "import async;\n\nconst keepers = async.Mutex<Array<String>>(Array<String>());\n\nexport keep() {\n    var line = \"x\";\n    with (var kept = keepers.lock()) {\n        kept.append(line);\n    }\n}\n"
+    );
+    var keeping = _pep_build(locked, _archive(root.join("locked"), "locked"), ["--lib", "pepper"]);
+    expect_exit(keeping, 1);
+    expect_contains(keeping.stderr, "error: 'line' cannot move into the value locked by 'keepers'");
+    expect_false(keeping.stderr.contains("@"));
+}
+
 # The index of the first `part` in `bytes`; `bytes.count` when none.
 _find(bytes: u8[], part: u8[]): ulong {
     for (var i in 0..bytes.count) {

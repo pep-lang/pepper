@@ -11,10 +11,10 @@ import compiler.link;
 import syntax;
 
 ## The `link.RECORD_VERSION` the fingerprint below was taken at.
-const _VERSION: uint = 1;
+const _VERSION: uint = 2;
 
 ## The fingerprint of the record's code at `_VERSION`.
-const _FINGERPRINT = "8a36a5542523ea9166dd66a5dc85fbb4";
+const _FINGERPRINT = "f7334a1879f55adab44290f7b235dc86";
 
 [Test]
 the_record_format_matches_its_version() {
@@ -27,7 +27,8 @@ the_record_format_matches_its_version() {
         ("compiler/sema/pending.pep", "", ""),
         ("compiler/sema/checked.pep", "export struct CheckedUnit {", "## Marks everything `module` declares"),
         ("compiler/incremental/compilation_units.pep", "_record_bytes(program: link.Program", ""),
-        ("compiler/incremental/library_interface.pep", "", "")
+        ("compiler/incremental/library_interface.pep", "", ""),
+        ("compiler/link/interface_file.pep", "", "")
     ];
     var hasher = digest.Blake3();
     for (var (path, start, end) in code) {
