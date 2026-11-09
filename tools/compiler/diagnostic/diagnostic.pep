@@ -214,7 +214,11 @@ export struct Diagnostic {
             var source = sources[at.file];
             var (line, column) = _position(source.text, at.span.start);
             out.append($"{shown_path(source.name)}:{line}:{column}: {label}: {as_written(message)}{suffix}\n");
-            _snippet(source.text, at.span, _fix_on_line(at, source.text), out);
+            # A file with no text (a Pepper library interface's) has no
+            # line to show.
+            if (!source.text.is_empty) {
+                _snippet(source.text, at.span, _fix_on_line(at, source.text), out);
+            }
         } else {
             out.append($"{label}: {as_written(message)}{suffix}\n");
         }

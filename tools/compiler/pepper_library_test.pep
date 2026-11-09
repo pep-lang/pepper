@@ -5,7 +5,7 @@
 # not fit it.
 
 import compiler.driver;
-import [File, Path] from io;
+import [Directory, File, Path] from io;
 import compiler.link;
 import process;
 import [TempFolder] from testing;
@@ -309,8 +309,16 @@ an_imported_pepper_library_is_checked_against() {
     expect_exit(unseen, 1);
     expect_contains(unseen.stderr, "util.pep:2:16: error: 'shout' is declared in an extension in ");
     expect_contains(unseen.stderr, "which this file does not import");
-    # The note shows the declaration in the interface's text.
-    expect_contains(unseen.stderr, "    shout(): String {");
+    # The note names the interface's file, which has no text to show.
+    expect_contains(unseen.stderr, $"geo.{link.INTERFACE_EXTENSION}/geo/geo.pep:1:1: note: declared here");
+    expect_false(unseen.stderr.contains("    1 |"));
+    # A use of its deprecated function warns, as its link table keeps the
+    # attribute.
+    var (
+        deprecated, _
+    ) = _build_importer(root, "import geo;\n\nmain(): int {\n    return geo.old_sum([geo.Point(1, 1)]) - 2;\n}\n");
+    expect_exit(deprecated, 0);
+    expect_contains(deprecated.stderr, "main.pep:4:16: warning: 'old_sum' is deprecated: use 'sum' instead");
     var (whole, _) = _build_importer(root, "import geo;\n\nmain(): int {\n    return 0;\n}\n", ["--emit-llvm"]);
     expect_exit(whole, 1);
     expect_contains(whole.stderr, "cannot check the program whole: it imports the Pepper library 'geo'");
@@ -335,6 +343,52 @@ an_imported_pepper_library_is_checked_against() {
     expect_exit(keeping, 1);
     expect_contains(keeping.stderr, "error: 'line' cannot move into the value locked by 'keepers'");
     expect_false(keeping.stderr.contains("@"));
+}
+
+# A program links a library's names exactly as the library build named
+# them, which its interface's link tables carry: a generic the program
+# instantiates calls a private helper of another file of the library, two
+# files' private helpers share a name with each other and with the
+# program's, and the root re-exports another file's declarations and
+# exports an overload set. A name taken otherwise would be undefined in the
+# library's archive.
+[Test]
+a_program_links_a_library_of_two_files_by_its_names() {
+    var folder = TempFolder("pepper_library_split");
+    var root = folder.path;
+    var source = root.join("src").join("geo.pep");
+    for (var name in ["geo", "util"]) {
+        write_file(
+            root.join("src").join($"{name}.pep"),
+            File.read_to_string(Path($"compiler/testdata/split_library/{name}.pep")).value()
+        );
+    }
+    expect_exit(_pep_build(source, _archive(root.join("lib"), "geo"), ["--lib", "pepper"]), 0);
+    Directory.remove_all(root.join("src"));
+    var main = "import geo;\n\n_secret(): int {\n    return 1;\n}\n\nmain(): int {\n    print($\"{geo.scale([1, 2, 3])} {geo.total(geo.Grid(4))} {geo.twice(\"x\")} {geo.area(3)} {geo.area(2, 5)} {_secret()}\");\n    return 0;\n}\n";
+    var (built, program) = _build_importer(root, main);
+    expect_exit(built, 0);
+    expect_equal(_run_program(program), "15 9 14 9 10 1");
+}
+
+# A library's interface holds no source text: not a comment, nor a name
+# used only inside a function body it leaves out (`sum`'s local), nor a
+# string only such a body holds.
+[Test]
+an_interface_holds_no_source_text() {
+    var folder = TempFolder("pepper_library_no_text");
+    var root = folder.path;
+    var archive = _build_imported_geo(root, Optional<(String, String)>.Value(("total", "zebra_tally")));
+    var bytes = File.read_bytes(archive.with_extension(link.INTERFACE_EXTENSION)).value();
+    expect_true(_find(bytes, "declare function sum@geo/geo".bytes()) < bytes.count);
+    for (var text in ["zebra_tally", "A Pepper library a program imports", "a global set by a call"]) {
+        expect_equal(_find(bytes, text.bytes()), bytes.count);
+    }
+    # The program links and runs as before.
+    var main = File.read_to_string(Path("compiler/testdata/imported_library/main.pep")).value();
+    var (built, program) = _build_importer(root, main);
+    expect_exit(built, 0);
+    expect_equal(_run_program(program), "area 9,area 3 10 1 2 12 42 x!");
 }
 
 # The index of the first `part` in `bytes`; `bytes.count` when none.

@@ -120,6 +120,10 @@ export struct Program {
                 continue;
             }
             var f = files[i];
+            # A library interface's file has no bodies.
+            if (f.interface.is_value()) {
+                continue;
+            }
             var parsed = parse.parse(f.source);
             if (parsed.is_err()) {
                 var error = parsed.error();
@@ -667,15 +671,23 @@ export load(
         }
         root_pending = false;
         var path = next.path;
+        # A file of a library interface has no text: its declarations
+        # come from its link table.
         var source = next.interface.is_value() ?
-            Result<String, io.IoError>.ok(next.interface.value().files[next.index].text) :
+            Result<String, io.IoError>.ok("") :
             sources.contains(next.key) ? Result<String, io.IoError>.ok(sources[next.key]) : File.read_to_string(path);
         if (source.is_err()) {
             return Result<Program, String>.err($"cannot read {path}: {source.error().message}");
         }
+        var interface_names = Array<String>();
         # Deferred, only the declarations: `link_bodies` reads the bodies
         # it links.
         var parsed = defer_bodies ? parse.parse_declarations(source.value()) : parse.parse(source.value());
+        if (next.interface.is_value()) {
+            var (declared, linked) = next.interface.value().files[next.index].declarations();
+            parsed = Result<ast.Module, parse.ParseError>.ok(declared);
+            interface_names = linked;
+        }
         if (parsed.is_err()) {
             var error = parsed.error();
             return Result<Program, String>.err(_render(path.to_string(), source.value(), error, error_limit));
@@ -686,18 +698,6 @@ export load(
         var folders = Array<bool>();
         for (var imp in module.imports) {
             folders.append(false);
-            # An interface file's import of another file of its library
-            # names it (`InterfaceFile.imports`).
-            if (next.interface.is_value()) {
-                var named = next.interface.value().files[next.index].imports;
-                var at = targets.count;
-                if (at < named.count and named[at] != "-") {
-                    targets.append(
-                        Optional<String>.Value(roots.key(_interface_path(next.interface.value(), named[at])))
-                    );
-                    continue;
-                }
-            }
             # An import platform selection drops is never resolved.
             var kept = target.keep(imp.attributes);
             if (kept.is_err()) {
@@ -827,6 +827,8 @@ export load(
             loaded.library_root = named.root;
             loaded.mangles_main = true;
             loaded.interface = next.interface;
+            loaded.interface_names = interface_names;
+            loaded.interface_exports = named.exports;
         } else {
             loaded.namespace = roots.namespace_of(path);
             loaded.module_root = roots.module_of(path);

@@ -1,7 +1,8 @@
 # A Pepper library a program imports (`pepper_library_test.pep`, #220):
 # a trait with a default method, a value struct, a struct that conforms in
 # an extension, a shared struct, an exported extension of a runtime type,
-# a generic the library instantiates too, and a global set by a call.
+# a generic the library instantiates too, a global set by a call, and a
+# deprecated function.
 
 import async;
 
@@ -59,6 +60,11 @@ export sum(points: Point[]): int {
         total += p.x + p.y;
     }
     return total;
+}
+
+[Deprecated("use 'sum' instead", "sum")]
+export old_sum(points: Point[]): int {
+    return sum(points);
 }
 
 const ANSWER: int = _answer();

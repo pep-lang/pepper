@@ -242,7 +242,7 @@ struct _Decl {
     var span: Span;
     # A function's generic parameters as spelled.
     var generics: String[] = Array<String>();
-    # A concrete override (see `_is_function_override`).
+    # A concrete override (see `names.is_function_override`).
     var is_override: bool;
     # A function, which may share its name with another file's.
     var is_function: bool;
@@ -268,23 +268,6 @@ struct _Decl {
         }
         return $"#{generics.count}";
     }
-}
-
-# A concrete override: one for primitives or `String` (`hash<int>`), or one
-# linking marked (`hash<Point>`).
-_is_function_override(f: FunctionDecl): bool {
-    var params = Array<String>();
-    bool any_argument = false;
-    for (var g in f.generic_params) {
-        if (g.bounds.count > 0) {
-            return false;
-        }
-        params.append(g.name);
-        if (g.is_argument) {
-            any_argument = true;
-        }
-    }
-    return names.is_override(params) or any_argument;
 }
 
 # Where a member name is declared, and whether that is exported or
@@ -393,20 +376,6 @@ _struct_member_names(s: StructDecl): String[] {
         out.append(m.name);
     }
     return out;
-}
-
-# `type_name` names, or has among its type arguments, a name in `params`
-# (`X`, `X[]`, `Array<X>`).
-_mentions(type_name: TypeName, params: HashSet<String>): bool {
-    if (params.contains(names.base_type_name(type_name.name))) {
-        return true;
-    }
-    for (var g in type_name.generic_types) {
-        if (_mentions(g, params)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 # The name a chain of accesses and calls starts from (`x` in `x.f().g`).
@@ -554,7 +523,7 @@ export check_visibility(
                     for (var g in f.generic_params) {
                         decl.generics.append(g.name);
                     }
-                    decl.is_override = _is_function_override(f);
+                    decl.is_override = names.is_function_override(f);
                     decl.is_function = true;
                     _add_name(decls, decl_names, f.name, decl);
                 }
@@ -567,7 +536,7 @@ export check_visibility(
                     }
                     var fields = HashSet<String>();
                     for (var field in s.fields) {
-                        if (_mentions(field.type_name, params)) {
+                        if (names.mentions(field.type_name, params)) {
                             fields.insert(field.name);
                         }
                     }
@@ -771,7 +740,7 @@ export check_visibility(
                     skip = true;
                 }
                 Function(func) => {
-                    skip = _is_function_override(func);
+                    skip = names.is_function_override(func);
                     function = true;
                     external = func.external;
                 }
@@ -871,8 +840,9 @@ export check_visibility(
     i = 0;
     while (i < files.count) {
         # A file whose bodies were not linked is as it was when it last
-        # checked clean (`Program.link_bodies`).
-        if (i < bodies.count and !bodies[i]) {
+        # checked clean (`Program.link_bodies`); a library interface's was
+        # checked when the library was built.
+        if ((i < bodies.count and !bodies[i]) or files[i].interface.is_value()) {
             i += 1;
             continue;
         }
@@ -888,7 +858,7 @@ export check_visibility(
                     declares = false;
                 }
                 Function(f) => {
-                    declares = !_is_function_override(f);
+                    declares = !names.is_function_override(f);
                 }
                 else => {}
             }

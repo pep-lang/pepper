@@ -5,10 +5,11 @@
 ##
 ## The file is a text header, then the record (`link.interface_file`
 ## describes the header). For each of the library's files the header holds
-## its namespace, what its imports name, its exports, and its declarations
-## as text with every function body and comment blanked: program loading
-## links them as it links a source file (`link.load`). The record is the
-## one the build cache keeps (`_record_bytes`): the program's files'
+## its namespace, the runtime modules it imports, its exports, and its link
+## table (`link.link_table`): the names its declarations took and what
+## linking reads of them, from which program loading links the file
+## (`link.load`). No source text. The record is the one the build cache
+## keeps (`_record_bytes`): the program's files'
 ## namespaces, which its file slots name, then the library's files checked
 ## as one compilation unit, a delta on the runtime's alone
 ## (`library_units`). A program's compilation unit of the library's files
@@ -27,13 +28,9 @@
 ## (`sema.check_confinement`'s stale summaries). The program compiles none
 ## of them: the archive defines them.
 
-import compiler.ast;
-import [Block, Declaration, FunctionDecl, PropertyDecl, Span] from compiler.ast;
 import [File, Path] from io;
 import compiler.link;
 import compiler.sema;
-import syntax;
-import [Utf8] from text;
 import "compilation_units";
 
 ## Returns the path of the interface of the library at `archive`: beside
@@ -66,12 +63,16 @@ export library_interface(
     }
     for (var file in unit.files) {
         var f = program.files[file];
-        header.append($"file {f.namespace}{file == 0 ? " root" : ""}\nimports");
-        for (var target in f.imports) {
-            bool own = target.is_value() and files.contains(target.value() as uint);
-            header.append(own ? $" {program.files[target.value()].namespace}" : " -");
+        header.append($"file {f.namespace}{file == 0 ? " root" : ""}\n");
+        # The modules it imports or re-exports from that the program
+        # loads: the runtime's.
+        for (var m in 0..f.imports.count) {
+            var target = f.imports[m];
+            var imp = f.module.imports[m];
+            if (target.is_value() and !files.contains(target.value() as uint) and !imp.is_local) {
+                header.append($"import {imp.name}\n");
+            }
         }
-        header.append("\n");
         var names = Array<String>();
         if (file < program.scopes.count) {
             for (var (name, _) in program.scopes[file].exports) {
@@ -84,8 +85,7 @@ export library_interface(
         for (var name in names) {
             header.append($"export {name} {program.scopes[file].exports[name]}\n");
         }
-        var text = _declarations_text(f.source, f.module);
-        header.append($"text {text.size}\n{text}\n");
+        header.append(link.link_table(f.module, program.target));
     }
     header.append("record\n");
     var stripped = _strip(checked_unit.module, files);
@@ -132,89 +132,6 @@ export write_library_interface(archive: Path, bytes: u8[]): Result<void, String>
         return Result<void, String>.err($"cannot write {path}: {written.error().message}");
     }
     return Result<void, String>.ok();
-}
-
-# `source` with every comment, and the inside of every function body
-# `module` (its syntax tree) declares, blanked to spaces, line breaks kept:
-# the declarations, at the places the library's diagnostics name.
-_declarations_text(source: String, module: ast.Module): String {
-    var bodies = Array<Span>();
-    for (var declaration in module.declarations) {
-        match (declaration) {
-            Function(function) => {
-                _add_body(bodies, function);
-            }
-            Struct(st) => {
-                for (var method in st.methods) {
-                    _add_body(bodies, method);
-                }
-                for (var constructor in st.constructors) {
-                    _add_body(bodies, constructor);
-                }
-                if (st.destructor.is_value()) {
-                    bodies.append(st.destructor.value().span);
-                }
-                _add_accessors(bodies, st.properties);
-            }
-            Trait(t) => {
-                for (var method in t.methods) {
-                    _add_body(bodies, method);
-                }
-                _add_accessors(bodies, t.properties);
-            }
-            Extend(e) => {
-                for (var method in e.methods) {
-                    _add_body(bodies, method);
-                }
-                _add_accessors(bodies, e.properties);
-            }
-            else => {}
-        }
-    }
-    var out = source.bytes();
-    for (var i in 0..out.count) {
-        if (out[i] != '\n') {
-            out[i] = ' ';
-        }
-    }
-    var tokens = syntax.lex(source, false);
-    if (tokens.is_err()) {
-        return source;
-    }
-    # The bodies do not nest, and the tokens come in order.
-    bodies.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0));
-    ulong at = 0;
-    for (var token in tokens.value()) {
-        while (at < bodies.count and bodies[at].end <= token.offset) {
-            at += 1;
-        }
-        bool inside = at < bodies.count and token.offset > bodies[at].start and token.offset + 1 < bodies[at].end;
-        if (!inside) {
-            for (var i in token.offset..token.offset + token.size) {
-                out[i] = source.byte_at(i);
-            }
-        }
-    }
-    return Utf8.decode_lossy(out);
-}
-
-# Adds the span of `function`'s body, if it has one, to `bodies`.
-_add_body(bodies: Span[], function: FunctionDecl) {
-    if (function.body.is_value()) {
-        bodies.append(function.body.value().span);
-    }
-}
-
-# Adds the spans of the bodies of `properties`' accessors to `bodies`.
-_add_accessors(bodies: Span[], properties: PropertyDecl[]) {
-    for (var property in properties) {
-        if (property.getter.is_value()) {
-            _add_body(bodies, property.getter.value().function);
-        }
-        if (property.setter.is_value()) {
-            _add_body(bodies, property.setter.value().function);
-        }
-    }
 }
 
 # Takes the bodies of the library's non-generic functions and methods

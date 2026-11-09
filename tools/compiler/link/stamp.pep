@@ -40,7 +40,7 @@ export const ABI_VERSION: uint = 2;
 ## means. Any change to the record's encoding or meaning bumps it, whatever
 ## the release; `record_schema_test.pep` fails when the record's code
 ## changes and it does not (#220).
-export const RECORD_VERSION: uint = 2;
+export const RECORD_VERSION: uint = 3;
 
 ## The features this compiler has, as a level the runtime can require: a
 ## compiler change the runtime may need to rely on raises it (#220).

@@ -23,6 +23,7 @@ export [
     interface_file_name,
     interface_hash,
     library_path_dirs,
+    link_table,
     read_interface_bytes,
     InterfaceFile,
     LibraryInterface,
