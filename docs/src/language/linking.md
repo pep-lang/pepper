@@ -172,47 +172,8 @@ succeeds.
 ### A library another Pepper build made
 
 A Pepper program imports a library built with `--lib pepper` as it
-imports a module, with no source for it: `import geo;` that finds no
-source module `geo` reads the library's interface, `libgeo.pepi`
-(`geo.pepi` on Windows), from the folders `-L` names and then
-`PEPPER_LIBRARY_PATH`'s, and links `libgeo.a` beside it, so no `[Link]`
-is needed. Everything the library's root exports is the program's to
-use: functions, structs, value structs, enums, traits and their default
-methods, generics, and exported extensions (of the program's files that
-import it, as with a source module's). See
-[`main.pep`](../../examples/library/main.pep), which imports the library
-[`lib/geo.pep`](../../examples/library/lib/geo.pep).
-
-```bash
-pepper build --lib pepper geo.pep -o lib/libgeo.a
-pepper build main.pep -L lib -o main
-```
-
-```pepper
-import geo;
-
-main(): int {
-    var square = geo.Square(3);
-    return geo.pair(square).count - 2;
-}
-```
-
-The interface is the library's checked declarations, so the program
-checks against them without checking the library again, and links to
-them by the names the library build gave them. It holds none of the
-library's source text. The program
-compiles the instantiations of the library's generics it uses (and of
-its traits' default methods for its own structs), as C++ compiles a
-template from a header; everything else the archive defines. A change
-inside the body of one of the library's functions that is not generic
-leaves the interface as it was, so the program only links the new
-archive; any other change makes a new interface, and the program's code
-that imports it is checked again. An archive that is not the one built
-with the interface beside it is refused at the import:
-
-```text
-main.pep:1:8: error: the archive lib/libgeo.a was not built with the interface lib/libgeo.pepi; rebuild the library 'geo'
-```
+imports a module, `import geo;`, which finds the library's interface and
+links its archive, with no `[Link]` (see [Pepper libraries](libraries.md)).
 
 A program can also declare a library's `[Export]`ed functions as
 `extern`s, with `[Link("geo")]` (or `-l geo`) naming the library, as it
@@ -229,22 +190,8 @@ main(): int {
 
 Either way, the program supplies the one runtime both use: `--lib
 pepper` leaves the runtime, `main` and the startup code out of the
-archive. So one heap and one set of runtime thread-locals serve both, and
-a program can link several such libraries.
+archive (see [One runtime](libraries.md#one-runtime)).
 
-- **Initialization.** Before `main`, the program sets the runtime's
-  globals, then each Pepper library's (one that links another sets its own
-  after that one's), then its own. So a program global may call into a
-  library in its initializer.
-- **Thread-locals.** When a thread ends, the library's thread-locals are
-  released with the program's.
-- **Runtime modules.** A runtime module the library imports and the
-  program does not (`json`, say) is compiled into the program too.
-- **Other libraries.** A library that links another Pepper library or a C
-  one does not hold it: the program links it too (`-l`, or `[Link]`). Only
-  an executable or a shared library can import a Pepper library's
-  interface yet; a static library (`--lib pepper` or `--lib static`) can
-  link one through `extern`s.
 - A `--lib static` archive is for C: it holds its own runtime and startup
   code, which clash with the program's at the link.
 - `--lib pepper` writes a static library only. A shared library must hold
@@ -252,6 +199,8 @@ a program can link several such libraries.
   but then it has a second runtime of its own, so free a string it returns
   with its own `pepper_string_free`, and pass no handle from one to the
   other.
+
+### Identity stamps
 
 Every program and library Pepper writes carries an identity stamp, in a
 section of its own (`.pepmeta`, `__DATA,__pepmeta` on macOS and iOS) that

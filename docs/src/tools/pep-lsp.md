@@ -9,6 +9,10 @@ code with the compiler's own front end, and finds the standard library the
 way the compiler does (see
 [Where the compiler finds the standard library](../tutorial/getting-started.md#where-the-compiler-finds-the-standard-library)).
 
+It does not read a [Pepper library](../language/libraries.md)'s interface
+yet, so it reports an import of a library built with `--lib pepper` as
+`cannot find module`.
+
 Warnings in the files a document imports show on those files too, such as
 a use of a deprecated function in a library the document calls. A file open
 in the editor shows its own analysis instead.
