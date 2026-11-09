@@ -18344,7 +18344,9 @@ main(): int {
 }
 </code></pre>
 <p>The interface is the library's checked declarations, so the program
-checks against them without checking the library again. The program
+checks against them without checking the library again, and links to
+them by the names the library build gave them. It holds none of the
+library's source text. The program
 compiles the instantiations of the library's generics it uses (and of
 its traits' default methods for its own structs), as C++ compiles a
 template from a header; everything else the archive defines. A change
@@ -23483,8 +23485,9 @@ after it with the extension <code>.pepi</code> (<code>libgeo.a</code> has <code>
 library's files, the format the build cache keeps, with their resolved
 types, struct layouts, generic bodies, link summaries and expanded
 <code>static</code> blocks, and without the bodies of functions that are not generic.
-Beside the record, for linking, it keeps each library file's declarations
-as written, every function body and comment blanked. The archive's stamp
+Beside the record, for linking, it keeps each library file's link table:
+the names its declarations took and what linking reads of them, with no
+source text (no bodies, comments, parameters or types). The archive's stamp
 names its hash (<code>interface</code>). A Pepper program that writes <code>import geo;</code>
 and finds no source module <code>geo</code> reads <code>libgeo.pepi</code> (<code>geo.pepi</code> on
 Windows) from the <code>-L</code> folders and <code>PEPPER_LIBRARY_PATH</code>'s in place of
@@ -64042,7 +64045,8 @@ tests in <code>tools/compiler/</code> enforce it:</p>
 record (<code>sema/record.pep</code>, the generated <code>sema/record_codec.pep</code>,
 <code>sema/pending.pep</code>, <code>CheckedUnit</code> in <code>sema/checked.pep</code>, the record's
 framing in <code>incremental/compilation_units.pep</code> and
-<code>incremental/library_interface.pep</code>), its tokens without comments or
+<code>incremental/library_interface.pep</code>, and the header with its link tables
+in <code>link/interface_file.pep</code>), its tokens without comments or
 spacing, against the value it keeps for the current <code>RECORD_VERSION</code>. A
 change there fails with <code>the record format changed: bump RECORD_VERSION and update the fingerprint</code>, printing the new value. A model field the
 codec writes changes the generated codec, so it is caught too.</li>

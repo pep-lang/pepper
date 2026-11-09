@@ -357,7 +357,9 @@ main(): int {
 }
 </code></pre>
 <p>The interface is the library's checked declarations, so the program
-checks against them without checking the library again. The program
+checks against them without checking the library again, and links to
+them by the names the library build gave them. It holds none of the
+library's source text. The program
 compiles the instantiations of the library's generics it uses (and of
 its traits' default methods for its own structs), as C++ compiles a
 template from a header; everything else the archive defines. A change

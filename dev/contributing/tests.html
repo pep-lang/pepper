@@ -398,7 +398,8 @@ tests in <code>tools/compiler/</code> enforce it:</p>
 record (<code>sema/record.pep</code>, the generated <code>sema/record_codec.pep</code>,
 <code>sema/pending.pep</code>, <code>CheckedUnit</code> in <code>sema/checked.pep</code>, the record's
 framing in <code>incremental/compilation_units.pep</code> and
-<code>incremental/library_interface.pep</code>), its tokens without comments or
+<code>incremental/library_interface.pep</code>, and the header with its link tables
+in <code>link/interface_file.pep</code>), its tokens without comments or
 spacing, against the value it keeps for the current <code>RECORD_VERSION</code>. A
 change there fails with <code>the record format changed: bump RECORD_VERSION and update the fingerprint</code>, printing the new value. A model field the
 codec writes changes the generated codec, so it is caught too.</li>

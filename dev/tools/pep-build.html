@@ -423,8 +423,9 @@ after it with the extension <code>.pepi</code> (<code>libgeo.a</code> has <code>
 library's files, the format the build cache keeps, with their resolved
 types, struct layouts, generic bodies, link summaries and expanded
 <code>static</code> blocks, and without the bodies of functions that are not generic.
-Beside the record, for linking, it keeps each library file's declarations
-as written, every function body and comment blanked. The archive's stamp
+Beside the record, for linking, it keeps each library file's link table:
+the names its declarations took and what linking reads of them, with no
+source text (no bodies, comments, parameters or types). The archive's stamp
 names its hash (<code>interface</code>). A Pepper program that writes <code>import geo;</code>
 and finds no source module <code>geo</code> reads <code>libgeo.pepi</code> (<code>geo.pepi</code> on
 Windows) from the <code>-L</code> folders and <code>PEPPER_LIBRARY_PATH</code>'s in place of
