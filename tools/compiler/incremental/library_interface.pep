@@ -64,11 +64,12 @@ export library_interface(
     for (var file in unit.files) {
         var f = program.files[file];
         header.append($"file {f.namespace}{file == 0 ? " root" : ""}\n");
-        # The modules it imports that the program loads: the runtime's.
+        # The modules it imports or re-exports from that the program
+        # loads: the runtime's.
         for (var m in 0..f.imports.count) {
             var target = f.imports[m];
             var imp = f.module.imports[m];
-            if (target.is_value() and !files.contains(target.value() as uint) and !imp.is_local and !imp.reexport) {
+            if (target.is_value() and !files.contains(target.value() as uint) and !imp.is_local) {
                 header.append($"import {imp.name}\n");
             }
         }

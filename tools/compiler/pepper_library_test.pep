@@ -312,6 +312,13 @@ an_imported_pepper_library_is_checked_against() {
     # The note names the interface's file, which has no text to show.
     expect_contains(unseen.stderr, $"geo.{link.INTERFACE_EXTENSION}/geo/geo.pep:1:1: note: declared here");
     expect_false(unseen.stderr.contains("    1 |"));
+    # A use of its deprecated function warns, as its link table keeps the
+    # attribute.
+    var (
+        deprecated, _
+    ) = _build_importer(root, "import geo;\n\nmain(): int {\n    return geo.old_sum([geo.Point(1, 1)]) - 2;\n}\n");
+    expect_exit(deprecated, 0);
+    expect_contains(deprecated.stderr, "main.pep:4:16: warning: 'old_sum' is deprecated: use 'sum' instead");
     var (whole, _) = _build_importer(root, "import geo;\n\nmain(): int {\n    return 0;\n}\n", ["--emit-llvm"]);
     expect_exit(whole, 1);
     expect_contains(whole.stderr, "cannot check the program whole: it imports the Pepper library 'geo'");
