@@ -90,7 +90,7 @@ the order this book covers them:
   runs in parallel, each in a process of its own.
 - **Compile time, platforms and C:** calling C (including C callbacks), and
   being called from C (`[Export]`ed functions in a static or shared
-  library, with a generated header), importing a Pepper library another
+  library, with a generated header), importing a [Pepper library](language/libraries.md) another
   build made, with no source for it (`--lib pepper`), and [SIMD vectors](language/simd.md)
   (`simd.Vector<T, N>`).
 - **Standard library:** strings (with a `StringBuilder`, `StringConstant`

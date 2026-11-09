@@ -662,7 +662,7 @@ executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
 - For a **Pepper** program, build the library with `--lib pepper`
   instead: the same archive, named as `--lib static` names it, without the
   runtime, `main` or startup code, which the program supplies (see
-  [A library another Pepper build made](linking.md#a-library-another-pepper-build-made)).
+  [Pepper libraries](libraries.md)).
   The program imports it (`import name;`) and uses its Pepper
   declarations, with the interface `--lib pepper` writes beside it. A
   program may link several of those. It is static only: `-o` naming a

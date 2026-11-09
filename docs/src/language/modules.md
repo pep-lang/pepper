@@ -238,7 +238,7 @@ library** of that name built with `--lib pepper`: its interface,
 and then `PEPPER_LIBRARY_PATH`'s. Its exports are then imported as a
 module's, with no source for it, and the build links the library beside it
 (see
-[A library another Pepper build made](linking.md#a-library-another-pepper-build-made)).
+[Pepper libraries](libraries.md)).
 A module that is not found is reported with the places the compiler looked:
 
 ```text

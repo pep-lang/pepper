@@ -53,6 +53,7 @@
 # Organizing a program
 
 - [Modules and imports](language/modules.md)
+- [Pepper libraries](language/libraries.md)
 - [Visibility](language/visibility.md)
 - [Naming conventions](language/naming.md)
 - [Documentation comments](language/doc-comments.md)

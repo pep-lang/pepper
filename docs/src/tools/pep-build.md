@@ -300,7 +300,7 @@ the library's sources, and links `libgeo.a` beside it. Since it is the
 compiler's own format, a program reads it only when its compiler has the
 same record version, ABI number and runtime interface as the one that
 built the library, whatever the releases are (see
-[A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made)).
+[Pepper libraries](../language/libraries.md)).
 The root's `main`, if it has one, is named like the library's other
 private functions, so the program's own is the only `main`. Only an
 executable or a shared library can import a Pepper library's interface
@@ -312,7 +312,7 @@ The interface is written from the library's files checked as one
 compilation unit on the runtime's, so `--lib pepper` checks the library
 whole on each build, with or without the build cache; it cannot be
 combined with `--debug-static=expanded`. See
-[A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made).
+[Pepper libraries](../language/libraries.md).
 
 ### `--bindings swift`, `--bindings java`
 
@@ -806,8 +806,11 @@ and each file's own object: a file whose sources, and whose imports'
 declarations, did not change is not compiled or checked again.
 `PEPC_COMPILATION_UNIT_JOBS` sets how many compilation units are checked at
 once (one per processor by default; `PEPC_LAYER_JOBS`, its old name, still
-works). The optimization level, link-time optimization, debug info,
-CPU, removed runtime checks and build options are part of each object's
+works), except in a program that imports a
+[Pepper library](../language/libraries.md), which is checked one
+compilation unit at a time, in its own process. The optimization level,
+link-time optimization, debug info, CPU, removed runtime checks and build
+options are part of each object's
 key. Deleting the cache folder is always safe.
 
 ### `--no-cache`
