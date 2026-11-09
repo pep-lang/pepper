@@ -2,6 +2,8 @@
 ## declarations apart, and the rule that decides when a generic function's
 ## parameters are types (a concrete override, `hash<int>`).
 
+import [FunctionDecl, TypeName] from compiler.ast;
+
 ## Separates a name from the namespace of the file that declares it:
 ## `helper@io/file`.
 export const NAMESPACE_SEPARATOR = "@";
@@ -133,4 +135,43 @@ _is_plain(b: u8): bool {
         or (b >= 'A' as u8 and b <= 'Z' as u8)
         or b == '_' as u8
         or b == '.' as u8;
+}
+
+## Returns whether `f` is a concrete override: one for primitives or
+## `String` (`hash<int>`), or one linking marked (`hash<Point>`). A
+## constrained parameter makes it a generic base.
+##
+## @param f the function, linked
+## @returns true for an override
+export is_function_override(f: FunctionDecl): bool {
+    var params = Array<String>();
+    bool any_argument = false;
+    for (var g in f.generic_params) {
+        if (g.bounds.count > 0) {
+            return false;
+        }
+        params.append(g.name);
+        if (g.is_argument) {
+            any_argument = true;
+        }
+    }
+    return is_override(params) or any_argument;
+}
+
+## Returns whether `type_name` names, or has among its type arguments, a
+## name in `params` (`X`, `X[]`, `Array<X>`).
+##
+## @param type_name the type
+## @param params the names
+## @returns true when it does
+export mentions(type_name: TypeName, params: HashSet<String>): bool {
+    if (params.contains(base_type_name(type_name.name))) {
+        return true;
+    }
+    for (var g in type_name.generic_types) {
+        if (mentions(g, params)) {
+            return true;
+        }
+    }
+    return false;
 }

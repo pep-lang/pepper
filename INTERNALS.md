@@ -1959,15 +1959,21 @@ module before the last unit (`DeltaBase`) and, once it is checked, makes
 its `CheckedUnit` (`finish_checked`) and `library_interface` writes it, a
 delta on the runtime alone, after a text header (`link/interface_file.pep`
 reads it): `pepper-library-interface <RECORD_VERSION>`, then per library
-file a `file <namespace>` line (`root` for `files[0]`), an `imports` line
-naming, per import of the file, the library file it reaches or `-` (one
-the program resolves, a runtime module), an `export <name> <linked name>`
-line per name an importer sees (`link.FileScope.exports`, the linker's
-export table: `private` only narrows within the library's module, which
-no program file is in), and `text <size>` with the file's source, every
-function body's inside and every comment blanked to spaces, line breaks
-kept (`_declarations_text`, from the tokens outside the bodies the syntax
-tree spans), then `record` and the record as the cache keeps it
+file a `file <namespace>` line (`root` for `files[0]`), an `import
+<module>` line per module it imports that is not a library file (a
+runtime module, which the program loads and the record reads), an
+`export <name> <linked name>` line per name an importer sees (`link.FileScope.exports`,
+the linker's export table: `private` only narrows within the library's
+module, which no program file is in), and its link table
+(`link.link_table`, from the linked syntax tree): a `declare <kind>
+<linked name>` line per top-level declaration platform selection keeps,
+with words for what linking, the visibility check and the deprecation
+check read of it (`export`, `private`, `extern`, `override`, generic
+parameters, field, property, method and case names, a constructor count,
+an alias's or extension's linked target, an extension's traits), and an
+`attribute` line per `[Deprecated]` or `[Link]` it carries, its string
+arguments escaped. No source text: no bodies, comments, parameters or
+types. Then `record` and the record as the cache keeps it
 (`_record_bytes`: the program's namespaces, which name the file slots, so
 the runtime's files map to the reader's, then the delta, whose locations
 in runtime files are written from `LocAnchors`). Before writing,
@@ -1984,13 +1990,24 @@ import that no dependency or search path answers, and whose name has no
 build scripts' folders, `PEPPER_LIBRARY_PATH`; `interface_file_name`), and
 queues every file of the interface (`_Queued.interface`) at a path inside
 the `.pepi` (`libgeo.pepi/geo/geo.pep`, which diagnostics show). Each
-loads from its `text` as a source file does, with the header's
-namespace, `library_root` and `mangles_main` for the root, no module
-root, and `ProgramFile.interface`; its imports of library files resolve by
-the `imports` line, the others as a program file's would. So linking and
-the visibility check treat the library as a source module (an exported
-extension is visible to its importers only), and give its declarations
-the linked names the record holds. A program file whose namespace is a
+has no text: its syntax tree is its link table's declarations
+(`InterfaceFile.declarations`: each named as the library wrote it, the
+demangled linked name, with no bodies, parameters or types, and an
+import binding no name per `import` line),
+with the header's namespace, `library_root` and `mangles_main` for the
+root, no module root, `ProgramFile.interface`, and the linked names and
+exports the library build gave it (`interface_names`,
+`interface_exports`). Linking takes those as they are: its own names are
+the table's (`_Linker._interface_own_names`, never mangled again), its
+exports the header's, its overrides the ones the table marks; it neither
+rewrites the file (`finish_file` only renames its declarations to their
+linked names) nor runs the overload check on it, and the visibility and
+deprecation checks walk none of it, the library build having checked it.
+So the program sees the library as a source module of those
+declarations (an exported extension is visible to its importers only),
+and every name it links is the one the archive defines. A diagnostic
+located in such a file (a "declared here" note) shows its place and no
+source line (`Diagnostic.render`). A program file whose namespace is a
 library file's is refused (`load`). `compilation_units` makes the
 interface's files one compilation unit (`_import_cycles` joins them), and
 `check_compilation_units` takes its record as checked

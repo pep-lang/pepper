@@ -126,8 +126,8 @@ a_pepper_library_writes_its_interface_beside_its_archive() {
 # back the library's declarations: its files as files of the program under
 # their own namespaces, the root's exports, the layouts and attributes of
 # its structs, generic bodies, the expanded `static` block, and the link
-# summaries that stand for the bodies it leaves out. The text that links
-# the program keeps the declarations and none of the bodies.
+# summaries that stand for the bodies it leaves out. Its link table names
+# each declaration as the library build named it.
 [Test]
 the_interface_reads_back_into_a_program_without_the_library() {
     var folder = TempFolder("library_interface_read");
@@ -143,9 +143,10 @@ the_interface_reads_back_into_a_program_without_the_library() {
     expect_true(geo.root);
     expect_true(geo.exports.contains("Point") and geo.exports.contains("give") and geo.exports.contains("SIDES"));
     expect_false(geo.exports.contains("_hidden"));
-    expect_true(geo.text.contains("export shout(text: String): String {"));
-    expect_false(geo.text.contains("return text + \"!\";"));
-    expect_equal(geo.text.size, _GEO.size);
+    var (declared, linked) = geo.declarations();
+    expect_equal(declared.declarations.count, linked.count);
+    expect_true(linked.contains("shout@geo/geo") and linked.contains("_hidden@geo/geo"));
+    expect_true(program.files[file].source.is_empty);
     var checked = _check(program, incremental.Cache(app.join(Path("cache"))));
     if (checked.is_err()) {
         print(checked.error());

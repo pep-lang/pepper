@@ -67,9 +67,17 @@ export struct ProgramFile {
     ## interface): the program that links the library has its own.
     var mangles_main: bool;
     ## A file of a Pepper library's interface (`.pepi`), not of source: its
-    ## text is the library file's declarations without bodies, and its
-    ## checked declarations come from the interface's record.
+    ## syntax tree is its link table's declarations, without bodies
+    ## (`InterfaceFile.declarations`), and its checked declarations come
+    ## from the interface's record. Linking takes its names and exports as
+    ## the library build made them, and neither rewrites nor checks it.
     var interface: LibraryInterface? = Optional<LibraryInterface>.Empty;
+    ## For a file of an interface, the linked name of each of its
+    ## declarations (empty for an extension).
+    var interface_names: String[] = Array<String>();
+    ## For a file of an interface, its exports, as the library build made
+    ## them.
+    var interface_exports: HashMap<String, String> = HashMap<String, String>();
     ## For each of `module.imports`, the index of the file it names, or
     ## none when it did not resolve.
     var imports: Array<ulong?> = Array<ulong?>();
@@ -834,6 +842,10 @@ struct _Linker {
     # `f`, declared in `file`, is a concrete override. A constrained name
     # (`describe<T: Shape>`) is always a parameter.
     is_override(f: FunctionDecl, file: ulong): bool {
+        # A library interface marks its overrides.
+        if (files[file].interface.is_value()) {
+            return names.is_function_override(f);
+        }
         var params = Array<String>();
         for (var g in f.generic_params) {
             if (g.bounds.count > 0) {
@@ -1081,7 +1093,9 @@ struct _Linker {
         for (var d in named_decls(files[i].module)) {
             match (d) {
                 Function(f) => {
-                    if ((exported_only and !f.is_exported) or (shared_only and f.is_private)) {
+                    if ((exported_only and !f.is_exported)
+                        or (shared_only and f.is_private)
+                        or (files[i].interface.is_value() and names.is_function_override(f))) {
                         continue;
                     }
                     bool base = false;
@@ -1348,6 +1362,11 @@ struct _Linker {
         i = 0;
         while (i < files.count) {
             var f = files[i];
+            if (f.interface.is_value()) {
+                own.append(_interface_own_names(i));
+                i += 1;
+                continue;
+            }
             bool bare_exports = exports_keep_names(i);
             var kept_here = HashSet<String>();
             var decls = named_decls(f.module);
@@ -1392,6 +1411,31 @@ struct _Linker {
         }
     }
 
+    # The own names of file `i`, of a library interface: each declared
+    # name -> the linked name the library build gave it.
+    _interface_own_names(i: ulong): HashMap<String, String> {
+        var f = files[i];
+        var out = HashMap<String, String>();
+        for (var k in 0..f.module.declarations.count) {
+            var d = f.module.declarations[k];
+            if (d is Extend(_)) {
+                continue;
+            }
+            if (d is Function(func)) {
+                if (is_override(func, i)) {
+                    continue;
+                }
+            }
+            var linked = f.interface_names[k];
+            out[d.declared_name()] = linked;
+            if (!declared_in.contains(linked)) {
+                declared_in[linked] = Array<ulong>();
+            }
+            declared_in[linked].append(i);
+        }
+        return out;
+    }
+
     compute_unions() {
         ulong i = 0;
         while (i < files.count) {
@@ -1422,6 +1466,10 @@ struct _Linker {
     # The names of a file's exported concrete overrides.
     exported_overrides(i: ulong): String[] {
         var out = Array<String>();
+        # A library interface's exports are as the library build made them.
+        if (files[i].interface.is_value()) {
+            return out;
+        }
         for (var d in named_decls(files[i].module)) {
             match (d) {
                 Function(f) => {
@@ -2044,9 +2092,9 @@ struct _Linker {
         var direct = Array<HashMap<String, String>>();
         ulong i = 0;
         while (i < n) {
-            var table = HashMap<String, String>();
+            var table = files[i].interface_exports.copy();
             for (var d in named_decls(files[i].module)) {
-                if (d.is_exported()) {
+                if (d.is_exported() and !files[i].interface.is_value()) {
                     table[d.declared_name()] = own[i].try_get(d.declared_name()).value_or(d.declared_name());
                 }
             }
@@ -2116,9 +2164,14 @@ struct _Linker {
         }
         ulong max_rounds = settling * (any_reexport_lines ? direct_total.max(1) : 1) + 1;
         # Two functions of one name in one file overload each other, unless
-        # a generic and another function have the same parameters.
+        # a generic and another function have the same parameters. A
+        # library interface was checked when the library was built.
         i = 0;
         while (i < n) {
+            if (files[i].interface.is_value()) {
+                i += 1;
+                continue;
+            }
             var functions = Array<FunctionDecl>();
             for (var d in named_decls(files[i].module)) {
                 match (d) {
@@ -2368,11 +2421,21 @@ struct _Linker {
     finish_file(i: ulong, bodies: bool): FileScope {
         var bindings = prepared_bindings[i];
         var named = named_bindings(i, bindings);
-        var rewriter = _Rewriter(this, i, bindings, prepared_extensions[i]);
-        rewriter.bodies = bodies;
-        rewriter.module(files[i].module);
         var scope = FileScope();
-        scope.imported = rewriter.imported;
+        var f = files[i];
+        if (f.interface.is_value()) {
+            # Named as the library build named it, and checked then.
+            for (var k in 0..f.module.declarations.count) {
+                if (!f.interface_names[k].is_empty) {
+                    f.module.declarations[k].rename(f.interface_names[k]);
+                }
+            }
+        } else {
+            var rewriter = _Rewriter(this, i, bindings, prepared_extensions[i]);
+            rewriter.bodies = bodies;
+            rewriter.module(f.module);
+            scope.imported = rewriter.imported;
+        }
         scope.named = named;
         scope.extensions = prepared_extensions[i];
         scope.extended_by = _extended_by[i];

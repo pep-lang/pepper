@@ -310,8 +310,9 @@ export check_uses(
     i = 0;
     while (i < files.count) {
         # A file whose bodies were not linked is as it was when it last
-        # checked without a warning (`Program.link_bodies`).
-        if (i < bodies.count and !bodies[i]) {
+        # checked without a warning (`Program.link_bodies`); a library
+        # interface's was checked when the library was built.
+        if ((i < bodies.count and !bodies[i]) or files[i].interface.is_value()) {
             i += 1;
             continue;
         }

@@ -263,7 +263,8 @@ tests in `tools/compiler/` enforce it:
   record (`sema/record.pep`, the generated `sema/record_codec.pep`,
   `sema/pending.pep`, `CheckedUnit` in `sema/checked.pep`, the record's
   framing in `incremental/compilation_units.pep` and
-  `incremental/library_interface.pep`), its tokens without comments or
+  `incremental/library_interface.pep`, and the header with its link tables
+  in `link/interface_file.pep`), its tokens without comments or
   spacing, against the value it keeps for the current `RECORD_VERSION`. A
   change there fails with `the record format changed: bump RECORD_VERSION
   and update the fingerprint`, printing the new value. A model field the

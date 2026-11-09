@@ -8,23 +8,45 @@
 ## library's files:
 ##
 ## - `file <namespace>`, with ` root` after it for the library's root;
-## - `imports` and, per import of the file in order, the namespace of the
-##   library file it names, or `-` for one the program resolves (a runtime
-##   module);
+## - `import <module>` for each module the file imports that is not one of
+##   the library's files (a runtime module), which the program loads;
 ## - `export <name> <declaration>` for each name an importer of the file
 ##   sees, and the linked name of the declaration it denotes;
-## - `text <size>`, a line break, and that many bytes: the file's
-##   declarations as the library wrote them, with every function body and
-##   comment blanked to spaces (line breaks kept), so positions in it are
-##   the library source's. Linking reads it as it reads a source file;
-##   the declarations' checked form comes from the record.
+## - its link table (`link_table`): a `declare` line per top-level
+##   declaration, with what linking reads of it, and the `[Deprecated]`
+##   and `[Link]` attributes it carries.
 ##
-## Then `record`, a line break, and the record.
+## Then `record`, a line break, and the record. The file holds no source
+## text: the program links the library's files from their link tables, as
+## declarations without bodies named as the library build named them, and
+## checks against the record.
 
+import [
+    Attribute,
+    Declaration,
+    EnumBody,
+    EnumCase,
+    Expression,
+    ExtendDecl,
+    FunctionDecl,
+    GenericParam,
+    Import,
+    ImportedSymbol,
+    Literal,
+    Module,
+    PropertyDecl,
+    Span,
+    StructDecl,
+    TraitDecl,
+    TypeAliasDecl,
+    TypeName,
+    VariableDecl
+] from compiler.ast;
 import digest;
 import [File, Path] from io;
 import os;
 import [Utf8] from text;
+import "names" as names;
 import [Target] from "platform";
 import [RECORD_VERSION] from "stamp";
 
@@ -41,18 +63,46 @@ export struct InterfaceFile {
     ## Whether it is the library's root, which an import of the library
     ## names.
     var root: bool = false;
-    ## Per import of the file: the namespace of the library file it names,
-    ## or `-` for one the program resolves.
-    var imports: String[] = Array<String>();
     ## Each name an importer of the file sees -> the linked name of the
     ## declaration it denotes.
     var exports: HashMap<String, String> = HashMap<String, String>();
-    ## Its declarations, bodies and comments blanked.
-    var text: String = "";
+    ## The modules it imports that are not files of the library.
+    var imports: String[] = Array<String>();
+    # Its link table's `declare` lines, each with the attribute lines
+    # after it.
+    var _declared: Array<String[]> = Array<String[]>();
 
     ## @param namespace the file's namespace
     construct(namespace: String) {
         this.namespace = namespace;
+    }
+
+    ## Returns the file's declarations as linking reads them, built anew
+    ## from its link table: no bodies, parameters or types, each named as
+    ## the library declared it (`names.demangle_name` of its linked name),
+    ## with the names it refers to (an extension's target, a type alias's,
+    ## an override's type arguments) linked already.
+    ##
+    ## Its imports are those of `imports`, each binding no name: the
+    ## program loads those modules, which the library's record reads.
+    ##
+    ## @returns the declarations, and the linked name of each (empty for
+    ##   an extension)
+    declarations(): (Module, String[]) {
+        var module = Module();
+        for (var name in imports) {
+            var imp = Import();
+            imp.name = name;
+            imp.symbols = Optional<ImportedSymbol[]>.Value(Array<ImportedSymbol>());
+            module.imports.append(imp);
+        }
+        var linked = Array<String>();
+        for (var lines in _declared) {
+            var (declaration, name) = _declaration(lines);
+            module.declarations.append(declaration);
+            linked.append(name);
+        }
+        return (module, linked);
     }
 }
 
@@ -196,24 +246,328 @@ export read_interface_bytes(out: LibraryInterface, bytes: u8[]): String? {
             return Optional<String>.Value($"a malformed library interface line: '{line}'");
         }
         var file = out.files[out.files.count - 1];
-        if (parts[0] == "imports") {
-            for (var i in 1..parts.count) {
-                file.imports.append(parts[i]);
-            }
-        } else if (parts[0] == "export" and parts.count == 3) {
+        if (parts[0] == "export" and parts.count == 3) {
             file.exports[parts[1]] = parts[2];
-        } else if (parts[0] == "text" and parts.count == 2) {
-            var size = ulong.parse(parts[1]);
-            if (!size.is_value() or at + size.value() + 1 > bytes.count or bytes[at + size.value()] != '\n') {
-                return Optional<String>.Value("a library file's text is cut short");
-            }
-            file.text = Utf8.decode_lossy(bytes.slice(at, at + size.value()).to_array());
-            at += size.value() + 1;
+        } else if (parts[0] == "import" and parts.count == 2) {
+            file.imports.append(parts[1]);
+        } else if (parts[0] == "declare" and parts.count >= 3 and _is_kind(parts[1])) {
+            file._declared.append([line]);
+        } else if ((parts[0] == "attribute" or parts[0] == "constructor-attribute")
+            and parts.count >= 2
+            and !file._declared.is_empty) {
+            file._declared[file._declared.count - 1].append(line);
         } else {
             return Optional<String>.Value($"a malformed library interface line: '{line}'");
         }
     }
     return Optional<String>.Empty;
+}
+
+# Whether `kind` is a kind of declaration a `declare` line names.
+_is_kind(kind: String): bool {
+    match (kind) {
+        "function", "struct", "trait", "alias", "var", "extend" => {
+            return true;
+        }
+        else => {
+            return false;
+        }
+    }
+}
+
+## Returns the link table of a library file, its declarations as linking
+## left them (`module`, linked): a `declare` line for each that `target`
+## keeps, with its kind, its linked name (an extension's target's), and
+## `key` or `key=value` words for what linking and the checks that follow
+## it read: `export`, `private`, `extern`, `override`, `generic=` (`bounded=`
+## for a constrained one), `field=` (`generic-field=` for one whose type
+## names a generic parameter), `property=`, `method=`, `constructors=`,
+## `enum`, `case=`, `target=` and `trait=`. Each `[Deprecated]` or `[Link]`
+## attribute follows on an `attribute` line (`constructor-attribute` for a
+## struct's lone constructor's), with its string arguments, each
+## `name=value` (`=value` for a positional one), the value escaped
+## (`Uri.encode`). No bodies, parameters or types.
+##
+## @param module the file's declarations, linked
+## @param target the target, whose platform selection the table follows
+## @returns the lines, each ending in a line break
+export link_table(module: Module, target: Target): String {
+    var out = StringBuilder();
+    for (var d in module.declarations) {
+        if (!target.keeps(d.attributes())) {
+            continue;
+        }
+        var words = Array<String>();
+        var extra = Array<String>();
+        match (d) {
+            Function(f) => {
+                words.append_all(["function", f.name]);
+                if (f.external) {
+                    words.append("extern");
+                }
+                bool is_override = names.is_function_override(f);
+                if (is_override) {
+                    words.append("override");
+                }
+                _generics(words, f.generic_params, !is_override);
+            }
+            Struct(s) => {
+                words.append_all(["struct", s.name]);
+                _generics(words, s.generic_params, true);
+                var params = HashSet<String>();
+                for (var p in s.generic_params) {
+                    params.insert(p.name);
+                }
+                for (var field in s.fields) {
+                    words.append(
+                        names.mentions(field.type_name, params) ? $"generic-field={field.name}" : $"field={field.name}"
+                    );
+                }
+                _members(words, s.properties, s.methods, target);
+                words.append($"constructors={s.constructors.count}");
+                if (s.constructors.count == 1) {
+                    _attributes(extra, "constructor-attribute", s.constructors[0].attributes);
+                }
+                if (s.enumeration.is_value()) {
+                    words.append("enum");
+                    for (var c in s.enumeration.value().cases) {
+                        words.append($"case={c.name}");
+                    }
+                }
+            }
+            Trait(t) => {
+                words.append_all(["trait", t.name]);
+                _generics(words, t.generic_params, true);
+                _members(words, t.properties, t.methods, target);
+            }
+            TypeAlias(t) => {
+                words.append_all(["alias", t.name]);
+                _generics(words, t.generic_params, true);
+                words.append($"target={t.target.name}");
+            }
+            Variable(v) => {
+                words.append_all(["var", v.name]);
+            }
+            Extend(e) => {
+                words.append_all(["extend", e.target.name]);
+                for (var t in e.traits) {
+                    words.append($"trait={t.name}");
+                }
+                _members(words, e.properties, e.methods, target);
+            }
+            Static(_) => {
+                continue;
+            }
+        }
+        if (d.is_exported()) {
+            words.append("export");
+        }
+        if (d.is_private()) {
+            words.append("private");
+        }
+        out.append($"declare {" ".join(words)}\n");
+        _attributes(extra, "attribute", d.attributes());
+        for (var line in extra) {
+            out.append($"{line}\n");
+        }
+    }
+    return out.to_string();
+}
+
+# Adds the words of `params` to `words`: each `generic=`, or `bounded=`
+# for a constrained one when `bounds` says to tell them apart.
+_generics(words: String[], params: GenericParam[], bounds: bool) {
+    for (var p in params) {
+        words.append(bounds and p.bounds.count > 0 ? $"bounded={p.name}" : $"generic={p.name}");
+    }
+}
+
+# Adds the words of a body's properties and of the methods `target` keeps.
+_members(words: String[], properties: PropertyDecl[], methods: FunctionDecl[], target: Target) {
+    for (var p in properties) {
+        words.append($"property={p.name}");
+    }
+    for (var m in methods) {
+        if (target.keeps(m.attributes)) {
+            words.append($"method={m.name}");
+        }
+    }
+}
+
+# Adds an `attribute`-like line per kept attribute of `attributes` to
+# `lines`: its name, then its string arguments.
+_attributes(lines: String[], what: String, attributes: Attribute[]) {
+    for (var a in attributes) {
+        # What linking and the checks after it read of a declaration the
+        # program does not check.
+        if (a.name() != "Deprecated" and a.name() != "Link") {
+            continue;
+        }
+        var words = [what, a.name()];
+        if (a.body is FunctionCall(_, arguments, _)) {
+            for (var argument in arguments) {
+                var key = "";
+                var value = argument;
+                if (argument is NamedArgument(name, _, named, _)) {
+                    key = name;
+                    value = named;
+                }
+                if (value is Literal(literal, _)) {
+                    if (literal is String(text)) {
+                        words.append($"{key}={Uri.encode(text)}");
+                    }
+                }
+            }
+        }
+        lines.append(" ".join(words));
+    }
+}
+
+# The declaration a `declare` line and its attribute lines stand for, and
+# its linked name.
+_declaration(lines: String[]): (Declaration, String) {
+    var words = lines[0].split(" ");
+    var kind = words[1];
+    var linked = words[2];
+    var name = names.demangle_name(linked);
+    var flags = HashSet<String>();
+    var values = Array<(String, String)>();
+    for (var i in 3..words.count) {
+        var split = words[i].split_once("=");
+        if (split.is_value()) {
+            values.append(split.value());
+        } else {
+            flags.insert(words[i]);
+        }
+    }
+    var attributes = Array<Attribute>();
+    var constructor_attributes = Array<Attribute>();
+    for (var i in 1..lines.count) {
+        var parts = lines[i].split(" ");
+        var arguments = Array<Expression>();
+        for (var j in 2..parts.count) {
+            var (key, escaped) = parts[j].split_once("=").value_or(("", ""));
+            var text = Expression.Literal(Literal.String(_decoded(escaped)), Span());
+            arguments.append(key.is_empty ? text : Expression.NamedArgument(key, Span(), text, Span()));
+        }
+        var body = Expression.FunctionCall(Expression.SymbolRef(parts[1], Span()), arguments, Span());
+        if (parts[0] == "attribute") {
+            attributes.append(Attribute(body, Span()));
+        } else {
+            constructor_attributes.append(Attribute(body, Span()));
+        }
+    }
+    var generics = Array<GenericParam>();
+    var methods = Array<FunctionDecl>();
+    var properties = Array<PropertyDecl>();
+    for (var (key, value) in values) {
+        if (key == "generic" or key == "bounded") {
+            var param = GenericParam(value, Span());
+            if (key == "bounded") {
+                param.bounds.append(TypeName(value));
+            }
+            # An override's type arguments, linked.
+            param.is_argument = flags.contains("override");
+            generics.append(param);
+        } else if (key == "method") {
+            methods.append(FunctionDecl(value));
+        } else if (key == "property") {
+            var property = PropertyDecl();
+            property.name = value;
+            properties.append(property);
+        }
+    }
+    bool exported = flags.contains("export");
+    bool file_private = flags.contains("private");
+    if (kind == "function") {
+        var f = FunctionDecl(name);
+        f.generic_params = generics;
+        f.external = flags.contains("extern");
+        f.attributes = attributes;
+        f.is_exported = exported;
+        f.is_private = file_private;
+        return (Declaration.Function(f), linked);
+    }
+    if (kind == "struct") {
+        var s = StructDecl();
+        s.name = name;
+        s.generic_params = generics;
+        s.methods = methods;
+        s.properties = properties;
+        s.attributes = attributes;
+        s.is_exported = exported;
+        s.is_private = file_private;
+        for (var (key, value) in values) {
+            if (key == "field" or key == "generic-field") {
+                var field = VariableDecl(value);
+                # Only whether its type names a generic parameter is kept.
+                field.type_name = TypeName(key == "field" or generics.is_empty ? "int" : generics[0].name);
+                s.fields.append(field);
+            } else if (key == "constructors") {
+                for (var _ in 0..ulong.parse(value).value_or(0)) {
+                    var constructor = FunctionDecl("construct");
+                    constructor.attributes = constructor_attributes;
+                    s.constructors.append(constructor);
+                }
+            } else if (key == "case") {
+                var c = EnumCase();
+                c.name = value;
+                if (!s.enumeration.is_value()) {
+                    s.enumeration = Optional<EnumBody>.Value(EnumBody());
+                }
+                s.enumeration.value().cases.append(c);
+            }
+        }
+        if (flags.contains("enum") and !s.enumeration.is_value()) {
+            s.enumeration = Optional<EnumBody>.Value(EnumBody());
+        }
+        return (Declaration.Struct(s), linked);
+    }
+    if (kind == "trait") {
+        var t = TraitDecl();
+        t.name = name;
+        t.generic_params = generics;
+        t.methods = methods;
+        t.properties = properties;
+        t.attributes = attributes;
+        t.is_exported = exported;
+        t.is_private = file_private;
+        return (Declaration.Trait(t), linked);
+    }
+    if (kind == "alias") {
+        var t = TypeAliasDecl();
+        t.name = name;
+        t.generic_params = generics;
+        t.attributes = attributes;
+        t.is_exported = exported;
+        t.is_private = file_private;
+        for (var (key, value) in values) {
+            if (key == "target") {
+                t.target = TypeName(value);
+            }
+        }
+        return (Declaration.TypeAlias(t), linked);
+    }
+    if (kind == "var") {
+        var v = VariableDecl(name);
+        v.attributes = attributes;
+        v.is_exported = exported;
+        v.is_private = file_private;
+        return (Declaration.Variable(v), linked);
+    }
+    var e = ExtendDecl();
+    e.target = TypeName(linked);
+    e.methods = methods;
+    e.properties = properties;
+    e.attributes = attributes;
+    e.is_exported = exported;
+    e.is_private = file_private;
+    for (var (key, value) in values) {
+        if (key == "trait") {
+            e.traits.append(TypeName(value));
+        }
+    }
+    return (Declaration.Extend(e), "");
 }
 
 # The line of `bytes` at `at`, and where the next starts; none at the end.
@@ -227,4 +581,11 @@ _line(bytes: u8[], at: ulong): (String, ulong)? {
     }
     var line = Utf8.decode_lossy(bytes.slice(at, end).to_array());
     return Optional<(String, ulong)>.Value((line, end < bytes.count ? end + 1 : end));
+}
+
+# `escaped` with its percent-escapes decoded (`Uri.decode`); as it is when
+# one is malformed.
+_decoded(escaped: String): String {
+    var decoded = Uri.decode(escaped);
+    return decoded.is_ok() ? decoded.value() : escaped;
 }
