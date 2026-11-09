@@ -140,12 +140,13 @@ export library_interface(
 export read_library_interface(program: link.Program, base: sema.Module, bytes: u8[]): Result<LibraryInterface, String> {
     # The header is text, so its offsets are the bytes' in the decoded text.
     var marker = "\nrecord\n";
-    var end = Utf8.decode_lossy(bytes).find(marker);
+    var text = Utf8.decode_lossy(bytes);
+    var end = text.find(marker);
     if (end < 0) {
         return Result<LibraryInterface, String>.err("not a Pepper library interface");
     }
     var record_start = end as ulong + marker.size;
-    var lines = Utf8.decode_lossy(bytes.slice(0, end as ulong).to_array()).split("\n");
+    var lines = text.substr_bytes(0, end as ulong).split("\n");
     if (lines.is_empty or lines[0] != $"{INTERFACE_MAGIC}{link.RECORD_VERSION}") {
         return Result<LibraryInterface, String>.err(
             $"not a Pepper library interface of record version {link.RECORD_VERSION}"

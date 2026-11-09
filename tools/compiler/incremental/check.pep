@@ -304,7 +304,10 @@ export check_compilation_units(
             k < last ? Optional<Cache>.Value(cache) : Optional<Cache>.Empty,
             # A library's interface records every summary, with the build
             # cache or without (`Module.record_summaries`).
-            interface and !reused.is_value() ? Optional<Reused>.Value(Reused()) : reused,
+            interface
+                and !reused.is_value() ?
+                Optional<Reused>.Value(Reused()) :
+                reused,
             sources,
             warnings,
             rechecked,

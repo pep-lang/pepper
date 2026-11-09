@@ -316,23 +316,11 @@ export library_units(program: link.Program, base: String): CompilationUnit[] {
         var unit = units[k];
         library.files.append_all(unit.files);
         hasher.update($"{unit.files_key}\n");
-        for (var name in unit.mentions) {
-            library.mentions.insert(name);
-        }
-        for (var name in unit.shown) {
-            library.shown.insert(name);
-        }
-        for (var (name, names) in unit.shown_by) {
-            if (!library.shown_by.contains(name)) {
-                library.shown_by[name] = HashSet<String>();
-            }
-            for (var shown_name in names) {
-                library.shown_by[name].insert(shown_name);
-            }
-        }
     }
     library.files.sort((a, b) => _compare(program.files[a].namespace, program.files[b].namespace));
     library.files_key = hasher.finish_hex();
+    # The last compilation unit's record is never stored under its key, so
+    # it needs none of the names the key reads (`mentions`, `shown`).
     var out = [units[0], library];
     _share_shown_in(out);
     return out;
