@@ -214,21 +214,31 @@ the linker keeps: the compiler's release, its ABI number, the platform, a
 hash of the runtime's core files, the CPU, the runtime checks, whether
 frame pointers are kept, and the build options defined. A library for
 Pepper also lists its kind, its initializer and release functions, the
-Pepper libraries it needs, and each runtime module it loaded with a hash of
-its files. Before it builds, the compiler reads the stamp of each library a
-`[Link]` or `-l` name finds in the search folders, and of each file a build
-script links, and refuses a library for Pepper that does not fit the build:
+Pepper libraries it needs, its record version, the hash of the runtime's
+interface and of each runtime module's it loaded, and the hash of its
+interface file (`libgeo.pepi`, which `--lib pepper` writes beside the
+archive: see [`--lib pepper`](../tools/pep-build.md#--lib-pepper)). A
+runtime interface hash covers what other code sees of the runtime's
+files: a change inside a function body that changes no return type and
+no link summary leaves it alone. Before it builds, the compiler reads the
+stamp of each library a `[Link]` or `-l` name finds in the search folders,
+and of each file a build script links, and refuses a library for Pepper
+that does not fit the build:
 
 ```text
 main.pep:1:7: error: './libgeo.a' was built by pepper 0.13.0 (ABI 2) for linux x86_64; it defines the build option 'LEVEL' as '1', and this build as '2'; rebuild it with this compiler
 ```
 
-The ABI number, the platform, the CPU and the runtime must match, and so
-must each runtime module both builds load and each build option both
-define (`--test` and `--entry` are left out). Different runtime checks or
+The record version, the ABI number, the platform, the CPU and the
+runtime's interface must match, and so must the interface of each runtime
+module both builds load and each build option both define (`--test` and
+`--entry` are left out). The interfaces are compared once the program is
+checked, the rest before anything is built. Different runtime checks or
 frame pointers only warn, since they change the code inside each side
-alone. The release may differ: the ABI number is what changes when a
-compiler changes code that two builds rely on of each other. A library for
+alone. The compiler releases may differ: the record version is what
+changes when a compiler writes or reads the library's interface
+differently, and the ABI number when a compiler changes code that two
+builds rely on of each other. A library for
 C (`--lib static` or `--lib shared`, or one an older compiler wrote) keeps
 its runtime to itself, so only its platform must match. A library with no
 stamp, such as a C one, is not checked.

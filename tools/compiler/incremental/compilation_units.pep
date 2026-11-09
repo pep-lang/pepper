@@ -290,17 +290,67 @@ export compilation_units(program: link.Program, base: String, root_last: bool = 
             }
         }
     }
+    _share_shown_in(out);
+    return out;
+}
+
+## Returns the two compilation units a Pepper library (`--lib pepper`) is
+## checked in: the runtime's, and one of every other file, the last, whose
+## record is the library's interface (`write_library_interface`), a delta
+## on the runtime's alone; none when the runtime cannot be checked alone.
+##
+## @param program the linked program
+## @param base what every key starts from (`Keys`' base)
+## @returns the compilation units
+export library_units(program: link.Program, base: String): CompilationUnit[] {
+    var units = compilation_units(program, base, false);
+    if (units.count < 2 or units[0].name != "runtime") {
+        return Array<CompilationUnit>();
+    }
+    var library = CompilationUnit(units[units.count - 1].name);
+    library.base = base;
+    library.reads = [0 as ulong];
+    var hasher = digest.Blake3();
+    hasher.update("library compilation unit\n");
+    for (var k in 1..units.count) {
+        var unit = units[k];
+        library.files.append_all(unit.files);
+        hasher.update($"{unit.files_key}\n");
+        for (var name in unit.mentions) {
+            library.mentions.insert(name);
+        }
+        for (var name in unit.shown) {
+            library.shown.insert(name);
+        }
+        for (var (name, names) in unit.shown_by) {
+            if (!library.shown_by.contains(name)) {
+                library.shown_by[name] = HashSet<String>();
+            }
+            for (var shown_name in names) {
+                library.shown_by[name].insert(shown_name);
+            }
+        }
+    }
+    library.files.sort((a, b) => _compare(program.files[a].namespace, program.files[b].namespace));
+    library.files_key = hasher.finish_hex();
+    var out = [units[0], library];
+    _share_shown_in(out);
+    return out;
+}
+
+# Gives `units` one map of the compilation units whose `shown_by` has each
+# name (`CompilationUnit.shown_in`).
+_share_shown_in(units: CompilationUnit[]) {
     var shown_in = HashMap<String, ulong[]>();
-    for (var u in 0..out.count) {
-        out[u].shown_in = shown_in;
-        for (var (name, _) in out[u].shown_by) {
+    for (var u in 0..units.count) {
+        units[u].shown_in = shown_in;
+        for (var (name, _) in units[u].shown_by) {
             if (!shown_in.contains(name)) {
                 shown_in[name] = Array<ulong>();
             }
             shown_in[name].append(u);
         }
     }
-    return out;
 }
 
 ## Returns the key of compilation unit `k`'s record: its files and what it is

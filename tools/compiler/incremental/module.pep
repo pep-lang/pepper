@@ -10,5 +10,6 @@ export * from "cache";
 export * from "check";
 export * from "interface";
 export * from "compilation_units";
+export * from "library_interface";
 export * from "recheck";
 export * from "workers";

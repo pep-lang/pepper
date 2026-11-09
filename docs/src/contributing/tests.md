@@ -250,6 +250,32 @@ It installs stage 0 with
 Windows it needs LLVM's prefix, as `scripts/pepper-tests.sh` does (`PEPPER_LLVM_PREFIX`,
 or this checkout's `.pep/llvm-prefix`).
 
+## The library interface's record version
+
+A Pepper library's interface (`--lib pepper`'s `.pepi`) is the compiler's
+checked-unit record, which a program built by another compiler reads when
+their `RECORD_VERSION` (`tools/compiler/link/stamp.pep`), ABI number and
+runtime interface match. So any change to the record's encoding or to what
+it means bumps `RECORD_VERSION`, whatever the release numbering does. Two
+tests in `tools/compiler/` enforce it:
+
+- `record_schema_test.pep` fingerprints the code that writes and reads a
+  record (`sema/record.pep`, the generated `sema/record_codec.pep`,
+  `sema/pending.pep`, `CheckedUnit` in `sema/checked.pep`, the record's
+  framing in `incremental/compilation_units.pep` and
+  `incremental/library_interface.pep`), its tokens without comments or
+  spacing, against the value it keeps for the current `RECORD_VERSION`. A
+  change there fails with `the record format changed: bump RECORD_VERSION
+  and update the fingerprint`, printing the new value. A model field the
+  codec writes changes the generated codec, so it is caught too.
+- `library_interface_test.pep` reads a small library's interface back and
+  compares what it holds (declarations, layouts, attributes, which bodies
+  are kept, link summaries, the `static` block's constants) with
+  `tools/compiler/testdata/library_interface.golden`: a change of meaning
+  without a change of format. When it differs, bump `RECORD_VERSION` if a
+  program would read the library differently, then update the file to
+  what the test prints.
+
 ## Tests that run the tools
 
 Some tests run programs rather than call functions: `pep-build` on

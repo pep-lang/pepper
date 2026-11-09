@@ -359,6 +359,15 @@ _main(args: String[]): int {
     if (debug_static.is_set and !debug.is_set) {
         return parser.usage_error("'--debug-static' needs '-g'");
     }
+    # shortcut: the expanded copies come from a whole-program check, and a
+    # Pepper library is checked in compilation units for its interface;
+    # record the expansions there if a library needs them.
+    if (debug_static.is_set
+        and debug_static.value() == _DebugStatic.Expanded
+        and library.is_set
+        and library.value() == driver.LibraryKind.Pepper) {
+        return parser.usage_error("'--debug-static=expanded' cannot build '--lib pepper'");
+    }
     if (!path.is_value()
         and (emit_ast.is_set
             or linked.is_set

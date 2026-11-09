@@ -154,6 +154,9 @@ export struct FileScope {
     var extended_by: HashSet<ulong> = HashSet<ulong>();
     ## The declarations the file's imports bind, by their linked names.
     var bound: HashSet<String> = HashSet<String>();
+    ## The file's exports, re-exports included: each name an importer
+    ## sees -> the linked name of the declaration it denotes.
+    var exports: HashMap<String, String> = HashMap<String, String>();
 
     ## Creates an empty scope.
     construct() {}
@@ -213,6 +216,7 @@ export struct PendingLink {
             var scope = FileScope();
             scope.extensions = extensions;
             scope.extended_by = extended_by[i];
+            scope.exports = _linker.exports[i];
             out.scopes.append(scope);
             i += 1;
         }
@@ -2363,6 +2367,7 @@ struct _Linker {
         scope.named = named;
         scope.extensions = prepared_extensions[i];
         scope.extended_by = _extended_by[i];
+        scope.exports = exports[i];
         for (var (_, c) in bindings.unqualified) {
             if (c.is_value()) {
                 scope.bound.insert(c.value());

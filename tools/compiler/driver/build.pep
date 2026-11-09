@@ -15,6 +15,11 @@ import [
     Clock,
     every_file,
     find_checked,
+    interface_file_hash,
+    interface_hash,
+    interface_path,
+    library_units,
+    write_library_interface,
     Keys,
     CompilationUnit,
     compilation_unit_key,
@@ -319,25 +324,54 @@ export missing_modules(program: link.Program, files: StampedFile[]): String[] {
 }
 
 ## Returns each runtime module `program` loads, as `name hash`, sorted:
-## the module's folder name, and a hash of its files' namespaces and texts,
-## which a Pepper library's stamp lists (`link.Stamp.modules`). The
-## prelude's files are left out: the stamp's runtime hash covers them.
+## the module's folder name, and a hash of its files' namespaces and
+## interface hashes (`incremental.interface_hash`), which a Pepper
+## library's stamp lists (`link.Stamp.modules`). The prelude's files are
+## left out: `runtime_interface` covers them.
 ##
-## @param program the loaded program
+## @param program the checked program
+## @param facts each checked function's return type and link summary
+##   (`sema.function_facts`)
 ## @returns the modules
-export runtime_modules(program: link.Program): String[] {
+export runtime_modules(program: link.Program, facts: HashMap<sema.Loc, String>): String[] {
     var out = Array<String>();
     for (var (name, indices) in _runtime_module_files(program)) {
-        indices.sort((a, b) => program.files[a].namespace.compare(program.files[b].namespace));
-        var hasher = digest.Blake3();
-        for (var i in indices) {
-            hasher.update($"{program.files[i].namespace}\n{program.files[i].source.size}\n");
-            hasher.update(program.files[i].source);
-        }
-        out.append($"{name} {hasher.finish_hex().substr_bytes(0, 16)}");
+        out.append($"{name} {_interfaces_hash(program, indices, facts)}");
     }
     out.sort((a, b) => a.compare(b));
     return out;
+}
+
+## Returns a hash of the interface hashes (`incremental.interface_hash`) of
+## the runtime's prelude files `program` loads, which a Pepper library's
+## stamp names (`link.Stamp.runtime_interface`): a body edit that changes
+## no return type or link summary leaves it alone.
+##
+## @param program the checked program
+## @param facts each checked function's return type and link summary
+##   (`sema.function_facts`)
+## @returns the hash
+export runtime_interface(program: link.Program, facts: HashMap<sema.Loc, String>): String {
+    var in_runtime = program.in_runtime();
+    var prelude = Array<ulong>();
+    for (var i in 0..program.files.count) {
+        if (in_runtime[i] and (program.files[i].prelude or program.files[i].prelude_part)) {
+            prelude.append(i);
+        }
+    }
+    return _interfaces_hash(program, prelude, facts);
+}
+
+# A hash of the namespaces and interface hashes of `program`'s files
+# `indices`, in their namespaces' order.
+_interfaces_hash(program: link.Program, indices: ulong[], facts: HashMap<sema.Loc, String>): String {
+    indices.sort((a, b) => program.files[a].namespace.compare(program.files[b].namespace));
+    var hasher = digest.Blake3();
+    for (var i in indices) {
+        var file = program.files[i];
+        hasher.update($"{file.namespace}\n{interface_hash(file, i as uint, facts)}\n");
+    }
+    return hasher.finish_hex().substr_bytes(0, 16);
 }
 
 # The files of each runtime module outside the prelude `program` loads, by
@@ -1172,6 +1206,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)
             and (!header.is_value() or header.value().is_file())
+            and (!pepper or interface_path(options.output).is_file())
             and _bindings_written(options, header)) {
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: {options.output} is up to date\n");
@@ -1187,22 +1222,41 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     # object.
     var triple_extension = _object_extension(options, triple);
     var units = Array<CompilationUnit>();
-    # Debug info holds the positions a compilation unit's key leaves out, so a
-    # build with `-g` keys each unit by its text (`Keys.exact_positions`)
-    # instead.
-    if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
-        units = compilation_units(program, keys.value().base());
-        # The last unit's objects hold the entry part, which is what the
-        # stamp says and calls each Pepper library's init and release.
-        if (!units.is_empty and (pepper or !linked_libraries.is_empty)) {
-            var last = units[units.count - 1];
-            var hasher = digest.Blake3();
-            hasher.update($"{last.files_key}\n{stamp.text()}");
-            for (var library in linked_libraries) {
-                hasher.update($"{library.init} {library.release}\n");
-            }
-            last.files_key = hasher.finish_hex();
+    # Where the records of the compilation units checked go: the build
+    # cache, or for a Pepper library built without one, a folder of the
+    # build's own, removed after.
+    var records = options.cache;
+    var own_records = Optional<Path>.Empty;
+    if (pepper) {
+        # A Pepper library is checked as the runtime and one compilation
+        # unit of its own, whose record is its interface (#220).
+        if (!records.is_value()) {
+            own_records = Optional<Path>.Value(options.build_dir.join(Path($"library-records.{process.id()}")));
+            records = Optional<Cache>.Value(Cache(own_records.value()));
         }
+        units = library_units(program, keys.is_value() ? keys.value().base() : _build_text(options, triple));
+        if (units.is_empty) {
+            return Result<Built, String>.err(
+                "'--lib pepper' needs the runtime checked on its own, and a runtime file imports one outside it"
+            );
+        }
+    } else if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
+        # Debug info holds the positions a compilation unit's key leaves
+        # out, so a build with `-g` keys each unit by its text
+        # (`Keys.exact_positions`) instead.
+        units = compilation_units(program, keys.value().base());
+    }
+    # The last unit's objects hold the entry part, which is what the stamp
+    # says and calls each Pepper library's init and release.
+    if (!units.is_empty and (pepper or !linked_libraries.is_empty)) {
+        var last = units[units.count - 1];
+        var hasher = digest.Blake3();
+        hasher.update($"{last.files_key}\n{stamp.text()}");
+        # Whole: a cached last unit's link was checked against them.
+        for (var library in linked_libraries) {
+            hasher.update(library.text());
+        }
+        last.files_key = hasher.finish_hex();
     }
     _share_runtime(options, program, translation_units, units);
     # The units whose objects the cache has: sema skips their bodies. A build
@@ -1240,6 +1294,8 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     # The cache's folder of the last compilation unit's objects, when it has
     # them (`_store_last`).
     var last_folder = Optional<Path>.Empty;
+    # A Pepper library's interface (`incremental.library_interface`).
+    var interface = Optional<u8[]>.Empty;
     if (units.count > 1) {
         var prechecked = HashMap<ulong, (u8[], String, String)>();
         if (_in_workers(options, units)) {
@@ -1257,7 +1313,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         var checked = check_compilation_units(
             program,
             units,
-            options.cache.value(),
+            records.value(),
             reused,
             sources,
             warnings,
@@ -1268,8 +1324,12 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             prechecked,
             unit_objects ? triple_extension : "",
             last_below = last_below,
-            times = options.pass_times
+            times = options.pass_times,
+            interface = pepper
         );
+        if (own_records.is_value()) {
+            Directory.remove_all(own_records.value());
+        }
         # The warnings of the compilation units loaded, as checking them gave
         # them.
         for (var warned in replayed) {
@@ -1284,6 +1344,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         module = checked.value().module;
         state = checked.value().state;
         last_folder = checked.value().last;
+        interface = checked.value().interface;
         report.rechecked = checked.value().rechecked;
         report_warnings(quiet ? Array<Diagnostic>() : warnings, sources);
     } else {
@@ -1332,6 +1393,23 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         }
     }
     clock.lap("sema");
+    # The interfaces of the runtime and its modules, known now, go in the
+    # stamp, and must be the Pepper libraries' it links (#220). The last
+    # compilation unit's objects from the cache were checked so when stored.
+    if ((pepper or !linked_libraries.is_empty) and !last_folder.is_value()) {
+        add_interfaces(stamp, program, module, state);
+        if (!linked_libraries.is_empty) {
+            var fits = check_library_stamps(stamp, options.linked.value());
+            if (fits.is_err()) {
+                var (name, message) = fits.error();
+                return Result<Built, String>.err(_at_link(program, name, Diagnostic.error(message)));
+            }
+        }
+        if (interface.is_value()) {
+            stamp.interface = interface_file_hash(interface.value());
+        }
+        clock.lap("interfaces of the runtime");
+    }
     if (options.pass_times.is_value()) {
         File.stderr().write_all(options.pass_times.value().report());
     }
@@ -1801,6 +1879,9 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     bool archive = pepper or (options.library.is_value() and options.library.value() == LibraryKind.Static);
     if (archive) {
         made = write_archive(objects, options.output, program.target);
+        if (made.is_ok() and interface.is_value()) {
+            made = write_library_interface(options.output, interface.value());
+        }
     } else {
         made = link_objects(
             objects,
@@ -2138,8 +2219,8 @@ export build_stamp(program: link.Program, version: String): link.Stamp {
 ## `options`: `build_stamp`'s, with the CPU, the runtime checks and the
 ## frame pointers; a library's kind; for a Pepper library
 ## (`--lib pepper`) its name, init and release functions and the Pepper
-## libraries it links; and, in a build that makes or links a Pepper
-## library, the runtime modules it loads (`runtime_modules`).
+## libraries it links. The interfaces of the runtime and its modules come
+## once the program is checked (`add_interfaces`).
 ##
 ## @param program the program
 ## @param options how it is built, its `linked` stamps read
@@ -2179,10 +2260,21 @@ export full_stamp(program: link.Program, options: BuildOptions): link.Stamp {
             stamp.needs.append(needed.library);
         }
     }
-    if (pepper or !linked.is_empty) {
-        stamp.modules = runtime_modules(program);
-    }
     return stamp;
+}
+
+## Adds to `stamp` the runtime's interface and its modules' (`runtime_interface`,
+## `runtime_modules`), which a build that makes or links a Pepper library
+## knows once `module` is checked.
+##
+## @param stamp the stamp (`full_stamp`)
+## @param program the program
+## @param module the checked module
+## @param state the passes' state
+export add_interfaces(stamp: link.Stamp, program: link.Program, module: sema.Module, state: sema.PassState) {
+    var facts = sema.function_facts(module, state);
+    stamp.runtime_interface = runtime_interface(program, facts);
+    stamp.modules = runtime_modules(program, facts);
 }
 
 # Whether `options` build a Pepper library (`--lib pepper`).

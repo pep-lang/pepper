@@ -1,0 +1,30 @@
+struct Point@geo/geo [Value] traits
+  field var x: int
+  field var y: int
+  constructor Point@geo/geo(): Point@geo/geo body summary 0;0;-
+struct Tally@geo/geo [Shared] traits
+  field var __refcount: u32
+  field var __weakcount: u32
+  field const total: int
+  method __release(): void body summary 0,1;0;-
+  method __acquire(): void body summary 0,1;0;-
+  method __dtor(): void stripped summary 0,1;0;-
+  constructor Tally@geo/geo(total: int): Tally@geo/geo body summary 0,1;0;-
+struct Box@geo/geo [] traits Holder@geo/geo
+  field var __refcount: u32
+  field var __weakcount: u32
+  field var count: int
+  method __release(): void body summary 0,1;0;-
+  method __acquire(): void body summary 0,1;0;-
+  method __dtor(): void stripped summary 0,1;0;-
+  method hold(item: String): void stripped summary 0,1,2;0;-
+  method _pep_copy_trait(copies: _Copies): Box@geo/geo stripped summary 0,0,0;0;-
+  method __copy(): Box@geo/geo stripped summary 0,1;0;-
+  constructor Box@geo/geo(): Box@geo/geo body summary 0;0;-
+trait Holder@geo/geo
+function twice@geo/geo(value: T): Array<T> body summary none
+function shout@geo/geo(text: String): String stripped summary 0,1;0;-
+function give@geo/geo(holder: Holder@geo/geo, item: String): void body summary 0,1,2;0;- | Holder@geo/geo	hold	2	1	0,1,2;0
+function _hidden@geo/geo(): int stripped summary 0;0;-
+global const SIDES@geo/geo: i32 = {"IntLiteral":4}
+global const NAME@geo/geo: StringConstant = {"FunctionCall":{"function":"StringConstant","args":[{"StringLiteral":{"value":"Point","is_raw":true}},{"IntLiteral":5},{"IntLiteral":5}],"labeled":null,"bare":false}}

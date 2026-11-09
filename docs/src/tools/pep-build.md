@@ -282,7 +282,25 @@ and releases its thread-locals when a thread ends. Its identity stamp
 lists the runtime modules it loaded, which that program then compiles
 too, and the Pepper libraries it links, which that program links and
 initializes first. A shared library cannot leave the runtime out, so `-o`
-naming one (`.so`, `.dylib` or `.dll`) is a usage error. See
+naming one (`.so`, `.dylib` or `.dll`) is a usage error.
+
+It also writes the library's **interface** beside the archive, named
+after it with the extension `.pepi` (`libgeo.a` has `libgeo.pepi`,
+`geo.lib` has `geo.pepi`): the compiler's own checked record of the
+library's files, the format the build cache keeps, with their resolved
+types, struct layouts, generic bodies, link summaries and expanded
+`static` blocks, and without the bodies of functions that are not generic.
+The archive's stamp names its hash (`interface`). A Pepper program will
+read it in place of the library's sources; until then it is written for
+that program, not read. Since it is the compiler's own format, a program
+reads it only when its compiler has the same record version, ABI number
+and runtime interface as the one that built the library, whatever the
+releases are (see
+[A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made)).
+The interface is written from the library's files checked as one
+compilation unit on the runtime's, so `--lib pepper` checks the library
+whole on each build, with or without the build cache; it cannot be
+combined with `--debug-static=expanded`. See
 [A library another Pepper build made](../language/linking.md#a-library-another-pepper-build-made).
 
 ### `--bindings swift`, `--bindings java`

@@ -26,6 +26,7 @@ export [
     make_stamp,
     parse_stamp,
     read_stamps,
+    RECORD_VERSION,
     REQUIRED_LEVEL_NAME,
     Stamp,
     STAMP_MAGIC,

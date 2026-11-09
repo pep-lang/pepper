@@ -903,8 +903,30 @@ stamps_read_back_and_match() {
     expect_false(link.stamp_mismatch(stamp, newer).is_value());
     var mac = link.make_stamp("0.1.0", "macos", "aarch64", ["prelude"], options);
     expect_equal(link.stamp_mismatch(stamp, mac).value(), "this build is for macos aarch64");
+    # The runtime's text may differ; its interface may not, once both
+    # stamps have it.
     var runtime = link.make_stamp("0.1.0", "linux", "x86_64", ["changed"], options);
-    expect_true(link.stamp_mismatch(stamp, runtime).value().starts_with("this build's runtime differs"));
+    runtime.cpu = "x86-64";
+    expect_false(link.stamp_mismatch(stamp, runtime).is_value());
+    stamp.runtime_interface = "aaaa";
+    expect_false(link.stamp_mismatch(stamp, runtime).is_value());
+    runtime.runtime_interface = "bbbb";
+    expect_equal(
+        link.stamp_mismatch(stamp, runtime).value(), "this build's runtime interface differs (aaaa there, bbbb here)"
+    );
+    runtime.runtime_interface = "aaaa";
+    expect_false(link.stamp_mismatch(stamp, runtime).is_value());
+    stamp.interface = "cccc";
+    expect_equal(link.parse_stamp(stamp.text()).value().text(), stamp.text());
+    expect_true(stamp.text().contains($"\nrecord {link.RECORD_VERSION}\nruntime-interface aaaa\ninterface cccc\n"));
+    var record = link.parse_stamp(stamp.text()).value();
+    record.record += 1;
+    expect_equal(
+        link.stamp_mismatch(record, stamp).value(),
+        $"its interface is record version {link.RECORD_VERSION + 1}, and this build reads version {link.RECORD_VERSION}"
+    );
+    # A program's stamp names no record version.
+    expect_false(newer.text().contains("record"));
     var abi = link.parse_stamp(stamp.text()).value();
     abi.abi += 1;
     expect_equal(
