@@ -335,9 +335,42 @@ manager) or the Xcode Command Line Tools on macOS.</p>
 <p>Warnings from the linker are passed through unchanged, even when the link
 succeeds.</p>
 <h3 id="a-library-another-pepper-build-made"><a class="header" href="#a-library-another-pepper-build-made">A library another Pepper build made</a></h3>
-<p>A Pepper program links a library built with <code>--lib pepper</code> as it links a C
-one: it declares the library's <code>[Export]</code>ed functions as <code>extern</code>s, with
-<code>[Link("geo")]</code> (or <code>-l geo</code>) naming the library.</p>
+<p>A Pepper program imports a library built with <code>--lib pepper</code> as it
+imports a module, with no source for it: <code>import geo;</code> that finds no
+source module <code>geo</code> reads the library's interface, <code>libgeo.pepi</code>
+(<code>geo.pepi</code> on Windows), from the folders <code>-L</code> names and then
+<code>PEPPER_LIBRARY_PATH</code>'s, and links <code>libgeo.a</code> beside it, so no <code>[Link]</code>
+is needed. Everything the library's root exports is the program's to
+use: functions, structs, value structs, enums, traits and their default
+methods, generics, and exported extensions (of the program's files that
+import it, as with a source module's). See
+<a href="../../examples/library/main.pep"><code>main.pep</code></a>, which imports the library
+<a href="../../examples/library/lib/geo.pep"><code>lib/geo.pep</code></a>.</p>
+<pre><code class="language-bash">pepper build --lib pepper geo.pep -o lib/libgeo.a
+pepper build main.pep -L lib -o main
+</code></pre>
+<pre><code class="language-pepper">import geo;
+
+main(): int {
+    var square = geo.Square(3);
+    return geo.pair(square).count - 2;
+}
+</code></pre>
+<p>The interface is the library's checked declarations, so the program
+checks against them without checking the library again. The program
+compiles the instantiations of the library's generics it uses (and of
+its traits' default methods for its own structs), as C++ compiles a
+template from a header; everything else the archive defines. A change
+inside the body of one of the library's functions that is not generic
+leaves the interface as it was, so the program only links the new
+archive; any other change makes a new interface, and the program's code
+that imports it is checked again. An archive that is not the one built
+with the interface beside it is refused at the import:</p>
+<pre><code class="language-text">main.pep:1:8: error: the archive lib/libgeo.a was not built with the interface lib/libgeo.pepi; rebuild the library 'geo'
+</code></pre>
+<p>A program can also declare a library's <code>[Export]</code>ed functions as
+<code>extern</code>s, with <code>[Link("geo")]</code> (or <code>-l geo</code>) naming the library, as it
+links a C one; then only C types cross between them.</p>
 <pre><code class="language-pepper">[Link("geo")]
 extern int geo_area(int side);
 
@@ -345,11 +378,9 @@ main(): int {
     return geo_area(3) - 9;
 }
 </code></pre>
-<p>Only C types cross between them (numbers, <code>bool</code>, C strings and
-pointers), as with any C library. The program supplies the one runtime
-both use: <code>--lib pepper</code> leaves the runtime, <code>main</code> and the startup code
-out of the archive. So one heap and one set of runtime thread-locals
-serve both, and a program can link several such libraries.</p>
+<p>Either way, the program supplies the one runtime both use: <code>--lib pepper</code> leaves the runtime, <code>main</code> and the startup code out of the
+archive. So one heap and one set of runtime thread-locals serve both, and
+a program can link several such libraries.</p>
 <ul>
 <li><strong>Initialization.</strong> Before <code>main</code>, the program sets the runtime's
 globals, then each Pepper library's (one that links another sets its own
@@ -360,7 +391,10 @@ released with the program's.</li>
 <li><strong>Runtime modules.</strong> A runtime module the library imports and the
 program does not (<code>json</code>, say) is compiled into the program too.</li>
 <li><strong>Other libraries.</strong> A library that links another Pepper library or a C
-one does not hold it: the program links it too (<code>-l</code>, or <code>[Link]</code>).</li>
+one does not hold it: the program links it too (<code>-l</code>, or <code>[Link]</code>). Only
+an executable or a shared library can import a Pepper library's
+interface yet; a static library (<code>--lib pepper</code> or <code>--lib static</code>) can
+link one through <code>extern</code>s.</li>
 <li>A <code>--lib static</code> archive is for C: it holds its own runtime and startup
 code, which clash with the program's at the link.</li>
 <li><code>--lib pepper</code> writes a static library only. A shared library must hold

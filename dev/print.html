@@ -268,8 +268,8 @@ timeouts).</li>
 runs in parallel, each in a process of its own.</li>
 <li><strong>Compile time, platforms and C:</strong> calling C (including C callbacks), and
 being called from C (<code>[Export]</code>ed functions in a static or shared
-library, with a generated header), linking a Pepper library another
-build made through its C functions (<code>--lib pepper</code>), and <a href="language/simd.html">SIMD vectors</a>
+library, with a generated header), importing a Pepper library another
+build made, with no source for it (<code>--lib pepper</code>), and <a href="language/simd.html">SIMD vectors</a>
 (<code>simd.Vector&lt;T, N&gt;</code>).</li>
 <li><strong>Standard library:</strong> strings (with a <code>StringBuilder</code>, <code>StringConstant</code>
 for literals' constant bytes, <code>to_string</code> and a <code>ToString</code> trait,
@@ -14224,8 +14224,15 @@ paths</strong>: first each directory you pass with <code>-I</code>, in order, th
 directory. If <code>geometry</code> lives in a <code>deps</code> folder, compile with:</p>
 <pre><code class="language-sh">pepper build main.pep -I deps -o main
 </code></pre>
-<p>An identifier import never looks next to the importing file. A module that is
-not found is reported with the places the compiler looked:</p>
+<p>An identifier import never looks next to the importing file. When no folder
+on the search paths holds the module, the import looks for a <strong>Pepper
+library</strong> of that name built with <code>--lib pepper</code>: its interface,
+<code>libgeometry.pepi</code> (<code>geometry.pepi</code> on Windows), in the folders <code>-L</code> names
+and then <code>PEPPER_LIBRARY_PATH</code>'s. Its exports are then imported as a
+module's, with no source for it, and the build links the library beside it
+(see
+<a href="language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+A module that is not found is reported with the places the compiler looked:</p>
 <pre><code class="language-text">main.pep:1:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, /home/you/pepper/runtime
     1 | import nowhere;
       |        ^~~~~~~
@@ -18130,8 +18137,10 @@ keep their runtimes to themselves, so a program may load several.</li>
 instead: the same archive, named as <code>--lib static</code> names it, without the
 runtime, <code>main</code> or startup code, which the program supplies (see
 <a href="language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
-A program may link several of those. It is static only: <code>-o</code> naming a
-shared library is refused.</li>
+The program imports it (<code>import name;</code>) and uses its Pepper
+declarations, with the interface <code>--lib pepper</code> writes beside it. A
+program may link several of those. It is static only: <code>-o</code> naming a
+shared library is refused. Its <code>main</code>, if any, is left out.</li>
 <li>A library's thread-locals (its own and the runtime's) use the
 initial-exec TLS model, as a program's do, where reading one costs a
 load, except on Android (see below). On Linux this makes a <code>.so</code> built
@@ -18313,9 +18322,42 @@ manager) or the Xcode Command Line Tools on macOS.</p>
 <p>Warnings from the linker are passed through unchanged, even when the link
 succeeds.</p>
 <h3 id="a-library-another-pepper-build-made"><a class="header" href="#a-library-another-pepper-build-made">A library another Pepper build made</a></h3>
-<p>A Pepper program links a library built with <code>--lib pepper</code> as it links a C
-one: it declares the library's <code>[Export]</code>ed functions as <code>extern</code>s, with
-<code>[Link("geo")]</code> (or <code>-l geo</code>) naming the library.</p>
+<p>A Pepper program imports a library built with <code>--lib pepper</code> as it
+imports a module, with no source for it: <code>import geo;</code> that finds no
+source module <code>geo</code> reads the library's interface, <code>libgeo.pepi</code>
+(<code>geo.pepi</code> on Windows), from the folders <code>-L</code> names and then
+<code>PEPPER_LIBRARY_PATH</code>'s, and links <code>libgeo.a</code> beside it, so no <code>[Link]</code>
+is needed. Everything the library's root exports is the program's to
+use: functions, structs, value structs, enums, traits and their default
+methods, generics, and exported extensions (of the program's files that
+import it, as with a source module's). See
+<a href="language/../../examples/library/main.pep"><code>main.pep</code></a>, which imports the library
+<a href="language/../../examples/library/lib/geo.pep"><code>lib/geo.pep</code></a>.</p>
+<pre><code class="language-bash">pepper build --lib pepper geo.pep -o lib/libgeo.a
+pepper build main.pep -L lib -o main
+</code></pre>
+<pre><code class="language-pepper">import geo;
+
+main(): int {
+    var square = geo.Square(3);
+    return geo.pair(square).count - 2;
+}
+</code></pre>
+<p>The interface is the library's checked declarations, so the program
+checks against them without checking the library again. The program
+compiles the instantiations of the library's generics it uses (and of
+its traits' default methods for its own structs), as C++ compiles a
+template from a header; everything else the archive defines. A change
+inside the body of one of the library's functions that is not generic
+leaves the interface as it was, so the program only links the new
+archive; any other change makes a new interface, and the program's code
+that imports it is checked again. An archive that is not the one built
+with the interface beside it is refused at the import:</p>
+<pre><code class="language-text">main.pep:1:8: error: the archive lib/libgeo.a was not built with the interface lib/libgeo.pepi; rebuild the library 'geo'
+</code></pre>
+<p>A program can also declare a library's <code>[Export]</code>ed functions as
+<code>extern</code>s, with <code>[Link("geo")]</code> (or <code>-l geo</code>) naming the library, as it
+links a C one; then only C types cross between them.</p>
 <pre><code class="language-pepper">[Link("geo")]
 extern int geo_area(int side);
 
@@ -18323,11 +18365,9 @@ main(): int {
     return geo_area(3) - 9;
 }
 </code></pre>
-<p>Only C types cross between them (numbers, <code>bool</code>, C strings and
-pointers), as with any C library. The program supplies the one runtime
-both use: <code>--lib pepper</code> leaves the runtime, <code>main</code> and the startup code
-out of the archive. So one heap and one set of runtime thread-locals
-serve both, and a program can link several such libraries.</p>
+<p>Either way, the program supplies the one runtime both use: <code>--lib pepper</code> leaves the runtime, <code>main</code> and the startup code out of the
+archive. So one heap and one set of runtime thread-locals serve both, and
+a program can link several such libraries.</p>
 <ul>
 <li><strong>Initialization.</strong> Before <code>main</code>, the program sets the runtime's
 globals, then each Pepper library's (one that links another sets its own
@@ -18338,7 +18378,10 @@ released with the program's.</li>
 <li><strong>Runtime modules.</strong> A runtime module the library imports and the
 program does not (<code>json</code>, say) is compiled into the program too.</li>
 <li><strong>Other libraries.</strong> A library that links another Pepper library or a C
-one does not hold it: the program links it too (<code>-l</code>, or <code>[Link]</code>).</li>
+one does not hold it: the program links it too (<code>-l</code>, or <code>[Link]</code>). Only
+an executable or a shared library can import a Pepper library's
+interface yet; a static library (<code>--lib pepper</code> or <code>--lib static</code>) can
+link one through <code>extern</code>s.</li>
 <li>A <code>--lib static</code> archive is for C: it holds its own runtime and startup
 code, which clash with the program's at the link.</li>
 <li><code>--lib pepper</code> writes a static library only. A shared library must hold
@@ -23245,7 +23288,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
 <tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target's system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library</td><td>the platform's defaults</td></tr>
-<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
+<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker, and an import of a Pepper library, searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
 <tr><td><code>--MSVC</code></td><td>Use the MSVC linker (not ported)</td><td>off</td></tr>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
@@ -23440,13 +23483,23 @@ after it with the extension <code>.pepi</code> (<code>libgeo.a</code> has <code>
 library's files, the format the build cache keeps, with their resolved
 types, struct layouts, generic bodies, link summaries and expanded
 <code>static</code> blocks, and without the bodies of functions that are not generic.
-The archive's stamp names its hash (<code>interface</code>). A Pepper program will
-read it in place of the library's sources; until then it is written for
-that program, not read. Since it is the compiler's own format, a program
-reads it only when its compiler has the same record version, ABI number
-and runtime interface as the one that built the library, whatever the
-releases are (see
+Beside the record, for linking, it keeps each library file's declarations
+as written, every function body and comment blanked. The archive's stamp
+names its hash (<code>interface</code>). A Pepper program that writes <code>import geo;</code>
+and finds no source module <code>geo</code> reads <code>libgeo.pepi</code> (<code>geo.pepi</code> on
+Windows) from the <code>-L</code> folders and <code>PEPPER_LIBRARY_PATH</code>'s in place of
+the library's sources, and links <code>libgeo.a</code> beside it. Since it is the
+compiler's own format, a program reads it only when its compiler has the
+same record version, ABI number and runtime interface as the one that
+built the library, whatever the releases are (see
 <a href="tools/../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+The root's <code>main</code>, if it has one, is named like the library's other
+private functions, so the program's own is the only <code>main</code>. Only an
+executable or a shared library can import a Pepper library's interface
+yet (a static library, <code>--lib pepper</code>'s included, can link one through
+<code>extern</code>s), and the options that
+check a program whole from source (<code>--emit-llvm</code>, <code>--emit-model</code>,
+<code>--emit-steps</code>, <code>--emit-static</code>) refuse a program that imports one.
 The interface is written from the library's files checked as one
 compilation unit on the runtime's, so <code>--lib pepper</code> checks the library
 whole on each build, with or without the build cache; it cannot be
@@ -23774,7 +23827,10 @@ source instead. See <a href="tools/../language/linking.html">Linking</a>.</p>
 <h3 id="-l-dir"><a class="header" href="#-l-dir"><code>-L &lt;dir&gt;</code></a></h3>
 <p>Adds a folder the linker searches for libraries. Folders given with <code>-L</code>
 come first, then those of <code>[Link(path = ...)]</code>, then those in
-<code>PEPPER_LIBRARY_PATH</code> (separated like <code>PATH</code>: <code>:</code>, or <code>;</code> on Windows). See
+<code>PEPPER_LIBRARY_PATH</code> (separated like <code>PATH</code>: <code>:</code>, or <code>;</code> on Windows). An
+<code>import</code> that no source module answers looks in the <code>-L</code> folders, then
+<code>PEPPER_LIBRARY_PATH</code>'s, for a Pepper library's interface (<code>libname.pepi</code>,
+see <a href="tools/pep-build.html#--lib-pepper"><code>--lib pepper</code></a>). See
 <a href="tools/../language/linking.html#library-search-directories-in-the-source-and-the-environment">Library search directories</a>.</p>
 <pre><code class="language-bash">pepper build main.pep -L libs -l foo        # links libs/libfoo
 </code></pre>
@@ -24007,7 +24063,7 @@ many seconds before it compiles.</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th><th>Option that overrides it</th></tr></thead><tbody>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The folder holding the standard library; nothing else is searched</td><td><code>--no-runtime</code> skips the runtime</td></tr>
 <tr><td><code>PEPPER_OPT_LEVEL</code></td><td>The optimization level (<code>0</code> to <code>3</code>) without <code>-O</code>; also the level the test suite's JIT uses</td><td><code>-O&lt;level&gt;</code></td></tr>
-<tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code></td><td><code>-L</code> comes first</td></tr>
+<tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code>, and an <code>import</code> searches for a Pepper library's interface</td><td><code>-L</code> comes first</td></tr>
 <tr><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td><td>The system libraries for linking with <code>--target &lt;triple&gt;</code></td><td><code>--sysroot</code></td></tr>
 <tr><td><code>ANDROID_NDK_HOME</code>, <code>ANDROID_NDK_ROOT</code></td><td>The Android NDK for linking with an Android <code>--target</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>ANDROID_HOME</code>, <code>ANDROID_SDK_ROOT</code></td><td>The Android SDK, whose newest <code>ndk/&lt;version&gt;</code> links an Android <code>--target</code> when nothing above names an NDK</td><td><code>--sysroot</code></td></tr>

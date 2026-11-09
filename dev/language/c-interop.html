@@ -1163,8 +1163,10 @@ keep their runtimes to themselves, so a program may load several.</li>
 instead: the same archive, named as <code>--lib static</code> names it, without the
 runtime, <code>main</code> or startup code, which the program supplies (see
 <a href="linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
-A program may link several of those. It is static only: <code>-o</code> naming a
-shared library is refused.</li>
+The program imports it (<code>import name;</code>) and uses its Pepper
+declarations, with the interface <code>--lib pepper</code> writes beside it. A
+program may link several of those. It is static only: <code>-o</code> naming a
+shared library is refused. Its <code>main</code>, if any, is left out.</li>
 <li>A library's thread-locals (its own and the runtime's) use the
 initial-exec TLS model, as a program's do, where reading one costs a
 load, except on Android (see below). On Linux this makes a <code>.so</code> built

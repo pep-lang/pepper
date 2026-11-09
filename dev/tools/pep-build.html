@@ -228,7 +228,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--target &lt;triple&gt;</code></td><td>Compile for another platform</td><td>the machine compiling</td></tr>
 <tr><td><code>--sysroot &lt;dir&gt;</code></td><td>The target's system libraries</td><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td></tr>
 <tr><td><code>-l &lt;lib&gt;</code></td><td>Link a C library</td><td>the platform's defaults</td></tr>
-<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
+<tr><td><code>-L &lt;dir&gt;</code></td><td>Add a folder the linker, and an import of a Pepper library, searches</td><td><code>PEPPER_LIBRARY_PATH</code></td></tr>
 <tr><td><code>--MSVC</code></td><td>Use the MSVC linker (not ported)</td><td>off</td></tr>
 <tr><td><code>-D &lt;name&gt;[=&lt;value&gt;]</code></td><td>Define a build option</td><td>none</td></tr>
 <tr><td><code>-F &lt;names&gt;</code>, <code>--features &lt;names&gt;</code></td><td>Turn on features of the project's package</td><td>its <code>default</code> feature</td></tr>
@@ -423,13 +423,23 @@ after it with the extension <code>.pepi</code> (<code>libgeo.a</code> has <code>
 library's files, the format the build cache keeps, with their resolved
 types, struct layouts, generic bodies, link summaries and expanded
 <code>static</code> blocks, and without the bodies of functions that are not generic.
-The archive's stamp names its hash (<code>interface</code>). A Pepper program will
-read it in place of the library's sources; until then it is written for
-that program, not read. Since it is the compiler's own format, a program
-reads it only when its compiler has the same record version, ABI number
-and runtime interface as the one that built the library, whatever the
-releases are (see
+Beside the record, for linking, it keeps each library file's declarations
+as written, every function body and comment blanked. The archive's stamp
+names its hash (<code>interface</code>). A Pepper program that writes <code>import geo;</code>
+and finds no source module <code>geo</code> reads <code>libgeo.pepi</code> (<code>geo.pepi</code> on
+Windows) from the <code>-L</code> folders and <code>PEPPER_LIBRARY_PATH</code>'s in place of
+the library's sources, and links <code>libgeo.a</code> beside it. Since it is the
+compiler's own format, a program reads it only when its compiler has the
+same record version, ABI number and runtime interface as the one that
+built the library, whatever the releases are (see
 <a href="../language/linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+The root's <code>main</code>, if it has one, is named like the library's other
+private functions, so the program's own is the only <code>main</code>. Only an
+executable or a shared library can import a Pepper library's interface
+yet (a static library, <code>--lib pepper</code>'s included, can link one through
+<code>extern</code>s), and the options that
+check a program whole from source (<code>--emit-llvm</code>, <code>--emit-model</code>,
+<code>--emit-steps</code>, <code>--emit-static</code>) refuse a program that imports one.
 The interface is written from the library's files checked as one
 compilation unit on the runtime's, so <code>--lib pepper</code> checks the library
 whole on each build, with or without the build cache; it cannot be
@@ -757,7 +767,10 @@ source instead. See <a href="../language/linking.html">Linking</a>.</p>
 <h3 id="-l-dir"><a class="header" href="#-l-dir"><code>-L &lt;dir&gt;</code></a></h3>
 <p>Adds a folder the linker searches for libraries. Folders given with <code>-L</code>
 come first, then those of <code>[Link(path = ...)]</code>, then those in
-<code>PEPPER_LIBRARY_PATH</code> (separated like <code>PATH</code>: <code>:</code>, or <code>;</code> on Windows). See
+<code>PEPPER_LIBRARY_PATH</code> (separated like <code>PATH</code>: <code>:</code>, or <code>;</code> on Windows). An
+<code>import</code> that no source module answers looks in the <code>-L</code> folders, then
+<code>PEPPER_LIBRARY_PATH</code>'s, for a Pepper library's interface (<code>libname.pepi</code>,
+see <a href="#--lib-pepper"><code>--lib pepper</code></a>). See
 <a href="../language/linking.html#library-search-directories-in-the-source-and-the-environment">Library search directories</a>.</p>
 <pre><code class="language-bash">pepper build main.pep -L libs -l foo        # links libs/libfoo
 </code></pre>
@@ -990,7 +1003,7 @@ many seconds before it compiles.</p>
 <div class="table-wrapper"><table><thead><tr><th>Variable</th><th>What it does</th><th>Option that overrides it</th></tr></thead><tbody>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The folder holding the standard library; nothing else is searched</td><td><code>--no-runtime</code> skips the runtime</td></tr>
 <tr><td><code>PEPPER_OPT_LEVEL</code></td><td>The optimization level (<code>0</code> to <code>3</code>) without <code>-O</code>; also the level the test suite's JIT uses</td><td><code>-O&lt;level&gt;</code></td></tr>
-<tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code></td><td><code>-L</code> comes first</td></tr>
+<tr><td><code>PEPPER_LIBRARY_PATH</code></td><td>More folders the linker searches, after <code>-L</code> and <code>[Link(path = ...)]</code>, and an <code>import</code> searches for a Pepper library's interface</td><td><code>-L</code> comes first</td></tr>
 <tr><td><code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code></td><td>The system libraries for linking with <code>--target &lt;triple&gt;</code></td><td><code>--sysroot</code></td></tr>
 <tr><td><code>ANDROID_NDK_HOME</code>, <code>ANDROID_NDK_ROOT</code></td><td>The Android NDK for linking with an Android <code>--target</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>ANDROID_HOME</code>, <code>ANDROID_SDK_ROOT</code></td><td>The Android SDK, whose newest <code>ndk/&lt;version&gt;</code> links an Android <code>--target</code> when nothing above names an NDK</td><td><code>--sysroot</code></td></tr>

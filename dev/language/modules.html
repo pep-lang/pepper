@@ -456,8 +456,15 @@ paths</strong>: first each directory you pass with <code>-I</code>, in order, th
 directory. If <code>geometry</code> lives in a <code>deps</code> folder, compile with:</p>
 <pre><code class="language-sh">pepper build main.pep -I deps -o main
 </code></pre>
-<p>An identifier import never looks next to the importing file. A module that is
-not found is reported with the places the compiler looked:</p>
+<p>An identifier import never looks next to the importing file. When no folder
+on the search paths holds the module, the import looks for a <strong>Pepper
+library</strong> of that name built with <code>--lib pepper</code>: its interface,
+<code>libgeometry.pepi</code> (<code>geometry.pepi</code> on Windows), in the folders <code>-L</code> names
+and then <code>PEPPER_LIBRARY_PATH</code>'s. Its exports are then imported as a
+module's, with no source for it, and the build links the library beside it
+(see
+<a href="linking.html#a-library-another-pepper-build-made">A library another Pepper build made</a>).
+A module that is not found is reported with the places the compiler looked:</p>
 <pre><code class="language-text">main.pep:1:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, /home/you/pepper/runtime
     1 | import nowhere;
       |        ^~~~~~~
