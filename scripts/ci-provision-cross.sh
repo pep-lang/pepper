@@ -21,6 +21,10 @@
 set -euo pipefail
 
 XWIN_VERSION=0.6.5
+# The Windows SDK xwin fetches. Its default, 10.0.26100, stopped splatting
+# on 2026-11-10 ("unable to find x86_64 headers"), and the xwin releases
+# that might fix it ship no macOS binary.
+WINDOWS_SDK=10.0.22621
 # The LLVM major the setup scripts pin.
 LLVM_MAJOR=20
 
@@ -114,10 +118,10 @@ if [ "$host" != windows ]; then
     mv "$cache/$xwin_name/xwin" "$xwin"
     rm -rf "$cache/$xwin_name"
   fi
-  winsysroot="$cache/winsysroot-$XWIN_VERSION"
+  winsysroot="$cache/winsysroot-$XWIN_VERSION-$WINDOWS_SDK"
   if [ ! -f "$winsysroot/.complete" ]; then
     rm -rf "$winsysroot"
-    "$xwin" --accept-license --arch x86_64 --cache-dir "$cache/xwin-cache" \
+    "$xwin" --accept-license --arch x86_64 --sdk-version "$WINDOWS_SDK" --cache-dir "$cache/xwin-cache" \
       splat --use-winsysroot-style --preserve-ms-arch-notation --output "$winsysroot" >&2
     touch "$winsysroot/.complete"
     rm -rf "$cache/xwin-cache"
