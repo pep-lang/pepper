@@ -115,7 +115,8 @@ export optimize_whole(
 ## objects to be written in parallel. Every definition is in one part; a
 ## local one (`internalize` made nearly all of them local) becomes
 ## external with hidden visibility, since another part may call it, and
-## gets a name if it has none. A local constant whose address means
+## gets a name if it has none, and a link-once one becomes weak, since
+## its part may not use it. A local constant whose address means
 ## nothing (a string's bytes) stays local, copied into each part that
 ## uses it; `llvm.*` globals such as `llvm.global_ctors` are in part 0.
 ##
@@ -166,6 +167,10 @@ export split(ir: llvm.Module, count: uint): codegen.Partition {
             value.set_linkage(llvm.Linkage.External);
             value.set_visibility(llvm.Visibility.Hidden);
         }
+        # A link-once one (kept, not internalized, when the program links a
+        # Pepper library) would be dropped from its part when only other
+        # parts call it.
+        _weaken(value);
         var part = total == 0 ? 0 : (done * count as ulong / total) as uint;
         part_of[name] = part;
         sizes[part as ulong] += _size(value);
@@ -211,12 +216,17 @@ _keep_link_once(part: llvm.Module) {
     var values = part.functions();
     values.append_all(part.globals());
     for (var value in values) {
-        var linkage = value.linkage();
-        if (linkage == llvm.Linkage.LinkOnceOdr) {
-            value.set_linkage(llvm.Linkage.WeakOdr);
-        } else if (linkage == llvm.Linkage.LinkOnceAny) {
-            value.set_linkage(llvm.Linkage.WeakAny);
-        }
+        _weaken(value);
+    }
+}
+
+# Makes `value`, when link-once, weak: kept even where nothing uses it.
+_weaken(value: llvm.Value) {
+    var linkage = value.linkage();
+    if (linkage == llvm.Linkage.LinkOnceOdr) {
+        value.set_linkage(llvm.Linkage.WeakOdr);
+    } else if (linkage == llvm.Linkage.LinkOnceAny) {
+        value.set_linkage(llvm.Linkage.WeakAny);
     }
 }
 
