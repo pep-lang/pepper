@@ -340,7 +340,10 @@ runtime change inside a function body leaves it alone;</li>
 number and runtime interface match the library's loads it. A library that
 does not fit is refused, naming what differs; rebuild it with the
 program's compiler. Different runtime checks or frame pointers only warn.
-The archive's stamp, which holds all of this, is described in
+An interface of another record version is refused at the import:</p>
+<pre><code class="language-text">main.pep:1:8: error: lib/libgeo.pepi: the interface is record version 7, and this compiler reads version 8; rebuild the library 'geo' with this compiler
+</code></pre>
+<p>The archive's stamp, which holds all of this, is described in
 <a href="linking.html#identity-stamps">Identity stamps</a>.</p>
 <h2 id="one-runtime"><a class="header" href="#one-runtime">One runtime</a></h2>
 <p>The program supplies the one runtime the program and its libraries use, so
@@ -387,8 +390,9 @@ then only C types cross between it and the program.</p>
 <p><strong>A module both use from source.</strong> A library carries the source modules
 it imports, other than the runtime's (an <code>-I</code> module, a package), in its
 interface and archive. A program that imports the library and the same
-module from source is refused:</p>
-<pre><code class="language-text">error: ../deps/shapes/module.pep has the namespace 'shapes/module' of a file of a Pepper library this program imports; a program cannot import a library built from its own files
+module from source is refused at its import of the module:</p>
+<pre><code class="language-text">main.pep:2:8: error: module 'shapes' is already part of the Pepper library 'geo'; drop this import and use what 'geo' exports, or rebuild 'geo' without it
+main.pep:1:8: note: the Pepper library 'geo' is imported here
 </code></pre>
 </li>
 <li>
