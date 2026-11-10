@@ -64105,7 +64105,8 @@ holding <code>zlib.lib</code>, and is skipped without it);</li>
 <code>pep-run</code>, <code>pep-new</code> and <code>pep-init</code>) are
 built, and runs beside the runtime's runs. Its output is interleaved with
 theirs as it comes, each line starting <code>tools| </code>, so a slow test shows
-while it runs.</p>
+while it runs. The <code>compiler</code> part builds only <code>pepper</code>, <code>pep-test</code> and
+<code>pep-package</code>, since the compiler's tests run no tool but <code>pep-build</code>.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
 <pre><code class="language-bash">cd runtime
 pepper test                       # every runtime test
