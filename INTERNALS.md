@@ -1484,7 +1484,10 @@ names a generic method. Between its runs it keeps, in
 `PassState.implicit` (`ImplicitMemo`), what each callable looked up and its
 fingerprint (`_Worklist`, keyed by the struct's name, since a
 specialization `Walk<K>` of `Walk<K>` has its base's type), so a run walks only the callables whose code or
-lookups changed since; the declarations as the last round that took them
+lookups changed since (what no lookup key covers, such as the extensions,
+walks them all, so its fingerprint leaves out what the walks never read:
+an extension's `resolved`, which `resolve_resolvables` sets after the
+first run); the declarations as the last round that took them
 saw them, so the next run announces what changed since, this run's own
 changes included, without taking them again at the end; and which
 callables' last walk left a call settling by arity could pick, the only
@@ -3525,8 +3528,9 @@ through `tools/compiler`; these notes add what the modules do beyond that.
   (`closure_sites.pep`, `generic_values.pep`) and named arguments of
   method calls, repeated while anything changes (the value-binding passes
   walk only the code holding a candidate, which one walk finds for all
-  three while none of them changes the module, `select_sites_each`, and
-  share one `ModuleTables` per round meanwhile; `sync_closures` keeps
+  three while none of them changes the module, `select_sites_each`, the
+  same walk `sync_closures_selecting` makes for the closures when they do
+  not change, and share one `ModuleTables` per round meanwhile; `sync_closures` keeps
   closure types in step only in the code creating a closure; every
   table of a round shares one search for the trait types the module uses,
   `used_trait_types`, a walk over every function, which replays what it
