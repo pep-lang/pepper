@@ -125,6 +125,12 @@ The compiler releases may differ: any compiler whose record version, ABI
 number and runtime interface match the library's loads it. A library that
 does not fit is refused, naming what differs; rebuild it with the
 program's compiler. Different runtime checks or frame pointers only warn.
+An interface of another record version is refused at the import:
+
+```text
+main.pep:1:8: error: lib/libgeo.pepi: the interface is record version 7, and this compiler reads version 8; rebuild the library 'geo' with this compiler
+```
+
 The archive's stamp, which holds all of this, is described in
 [Identity stamps](linking.md#identity-stamps).
 
@@ -174,10 +180,11 @@ keeps the program's copy, which comes ahead of the library's archive.
 - **A module both use from source.** A library carries the source modules
   it imports, other than the runtime's (an `-I` module, a package), in its
   interface and archive. A program that imports the library and the same
-  module from source is refused:
+  module from source is refused at its import of the module:
 
   ```text
-  error: ../deps/shapes/module.pep has the namespace 'shapes/module' of a file of a Pepper library this program imports; a program cannot import a library built from its own files
+  main.pep:2:8: error: module 'shapes' is already part of the Pepper library 'geo'; drop this import and use what 'geo' exports, or rebuild 'geo' without it
+  main.pep:1:8: note: the Pepper library 'geo' is imported here
   ```
 
 - **`[Link(path = ...)]` in a library.** The folder is relative to the
