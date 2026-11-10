@@ -110,6 +110,11 @@ puts them in apt's archive, so apt downloads none it already has. A miss,
 or a set the image has moved past, downloads from the mirror, retrying a
 download that stalls for 30 seconds, and refills the cache; only main's
 runs save it, under a new key, so the newest set is the one restored.
+On Windows, extracting the LLVM package takes about a minute, so the
+action caches the installed tree (`%LOCALAPPDATA%\pepper\llvm`, keyed on
+`scripts/setup-llvm.ps1` and the architecture) and a hit installs
+nothing. It is saved only after the package was installed, never after
+the fallback to the upstream archive, whose tree is several GB.
 
 Only the Windows archive path is large: budget roughly **5 GB** of disk for
 the tree plus its cached archive, and a few minutes for the first run.

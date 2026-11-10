@@ -50,23 +50,10 @@ outputs:
 runs:
   using: composite
   steps:
-    # Windows is the one platform with no package manager that ships a usable
-    # LLVM, so it installs the minimal package published by the llvm-package
-    # workflow (~450 MB) and falls back to the upstream archive (4 GB
-    # extracted) if none exists yet. The cache covers whichever download
-    # happens; its key tracks the setup script's hash, not a hardcoded
-    # version, because a hardcoded key keeps hitting exactly after a version
-    # bump and actions/cache skips its save on an exact hit -- so the new
-    # archive would never be cached and every later run would re-download.
-    - name: Cache LLVM download
-      if: runner.os == 'Windows'
-      uses: actions/cache@v6
-      with:
-        path: ~/AppData/Local/pepper/cache
-        key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-${{ runner.arch }}
-
-    # apt and Homebrew serve the others in seconds, Linux from a cache of
-    # apt's packages when it can (.github/actions/provision-llvm).
+    # Windows installs the minimal LLVM package the llvm-package workflow
+    # publishes, from a cache of its install when it can; apt and Homebrew
+    # serve the others, Linux from a cache of apt's packages
+    # when it can (.github/actions/provision-llvm).
     - uses: ./.github/actions/provision-llvm
       with:
         token: ${{ inputs.token }}

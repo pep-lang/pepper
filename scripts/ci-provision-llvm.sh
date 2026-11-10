@@ -117,7 +117,8 @@ case "${PROCESSOR_IDENTIFIER:-}" in ARM*) platform=windows-arm64 ;; esac
 tag="llvm-$version"
 asset="llvm-$version-$platform.tar.xz"
 
-# A self-hosted runner keeps the prefix from its last job, and re-downloading
+# A self-hosted runner keeps the prefix from its last job, and a hosted one
+# restores it from .github/actions/provision-llvm's cache; re-downloading
 # and re-extracting it cost about a minute a job. The marker is written only
 # after an extraction succeeds, so a job killed mid-extract leaves no marker and
 # the next one installs afresh. setup-llvm.ps1 still validates the tree below.
@@ -136,6 +137,9 @@ if download_error=$(gh release download "$tag" --pattern "$asset" --dir "$stagin
   (cd "$prefix" && tar -xf "$archive")
   touch "$marker"
   rm -rf "$staging"
+  # .github/actions/provision-llvm caches the prefix only when it was
+  # installed here, never the upstream archive's multi-GB tree.
+  [ -z "${GITHUB_OUTPUT:-}" ] || echo "filled=true" >> "$GITHUB_OUTPUT"
 else
   rm -rf "$staging"
   # Only an absent release or asset justifies the fallback. An auth failure,

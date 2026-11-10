@@ -10,9 +10,19 @@
 # so, and only then is it saved. Only main saves it, so pull requests cannot fill
 # the repository's 10 GB of caches with copies.
 #
+# Windows installs the package llvm-package.yml publishes, which
+# downloads in seconds but takes about a minute to extract (424 MB, 185
+# files), so the cache holds the installed tree instead: about 130 MB
+# (TODO), keyed on the setup script (which pins the LLVM) and the arch.
+# A hit leaves the script's marker in place, so it installs nothing. The
+# script says when it installed the package, and only then is it saved,
+# so the multi-GB upstream archive it falls back to when no package is
+# published is never cached. A pull request saves only on a miss, which
+# needs a new key: one that changes the setup script.
+#
 # The caller bounds it with timeout-minutes; a composite step cannot.
 name: Provision LLVM
-description: Provision LLVM with scripts/ci-provision-llvm.sh, caching Linux's apt packages
+description: Provision LLVM with scripts/ci-provision-llvm.sh, caching Linux's apt packages and Windows' install
 
 inputs:
   token:
@@ -40,8 +50,17 @@ runs:
         key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}
         restore-keys: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-
 
+    - name: Restore LLVM's install
+      id: restore-windows
+      if: runner.os == 'Windows' && runner.environment == 'github-hosted'
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/AppData/Local/pepper/llvm
+        key: llvm-windows-${{ hashFiles('scripts/setup-llvm.ps1') }}-${{ runner.arch }}
+
     # Writes filled=true when it (re)filled the folder: on a miss, or when
-    # apt had to download what the restored set lacked.
+    # apt had to download what the restored set lacked; on Windows, when it
+    # installed the package.
     - name: Provision LLVM
       id: provision
       shell: bash
@@ -56,3 +75,10 @@ runs:
       with:
         path: ${{ runner.temp }}/llvm-debs
         key: llvm-debs-${{ hashFiles('scripts/setup-llvm.sh') }}-ubuntu-${{ steps.ubuntu.outputs.version }}-${{ runner.arch }}-${{ github.run_id }}
+
+    - name: Save LLVM's install
+      if: runner.os == 'Windows' && runner.environment == 'github-hosted' && steps.provision.outputs.filled == 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ~/AppData/Local/pepper/llvm
+        key: llvm-windows-${{ hashFiles('scripts/setup-llvm.ps1') }}-${{ runner.arch }}
