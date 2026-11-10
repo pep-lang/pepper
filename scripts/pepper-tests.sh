@@ -44,7 +44,8 @@
 # none uses the shared cache of the runtime's units (PEPPER_SHARED_CACHE,
 # docs/src/tools/pep-build.md): a test that expects to check the runtime
 # would find it there, and the tests would fill the user's cache folder.
-# The test of the shared cache sets its own.
+# The test of the shared cache sets its own, and so do the docs
+# examples' builds (tools/pep-doc/examples_test.pep), in a folder of their own.
 set -euo pipefail
 export PEPC_VERIFY_INJECTED="${PEPC_VERIFY_INJECTED:-1}"
 export PEPPER_SHARED_CACHE=off
