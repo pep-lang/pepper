@@ -225,10 +225,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
+        id: prepare
         timeout-minutes: 30
         with:
           compiler: ${{ needs.changes.outputs.build }}
           token: ${{ github.token }}
+          cache: ${{ matrix.part }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`, with the runner's memory, disk and biggest
@@ -252,6 +254,19 @@ jobs:
         run: |
           bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
             bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1
+
+      # The tests' builds, for the next run with this compiler (see
+      # .github/actions/prepare-tests), also after failed tests, so a rerun
+      # starts warm. Not after a rerun that restored this very key.
+      - name: Save the tests' build cache
+        if: ${{ !cancelled() && steps.prepare.outputs.cache-key != '' && steps.prepare.outputs.cache-hit != 'true' }}
+        timeout-minutes: 15
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ runner.workspace }}/pepper-cache
+            ${{ runner.workspace }}/target-test/pepper-tests
+          key: ${{ steps.prepare.outputs.cache-key }}
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`pep-doc reference`) in the same
@@ -293,10 +308,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
+        id: prepare
         timeout-minutes: 30
         with:
           compiler: ${{ needs.changes.outputs.build }}
           token: ${{ github.token }}
+          cache: ${{ matrix.part }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`, with the runner's memory, disk and biggest
@@ -320,6 +337,19 @@ jobs:
         run: |
           bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
             bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1 -j 3
+
+      # The tests' builds, for the next run with this compiler (see
+      # .github/actions/prepare-tests), also after failed tests, so a rerun
+      # starts warm. Not after a rerun that restored this very key.
+      - name: Save the tests' build cache
+        if: ${{ !cancelled() && steps.prepare.outputs.cache-key != '' && steps.prepare.outputs.cache-hit != 'true' }}
+        timeout-minutes: 15
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ runner.workspace }}/pepper-cache
+            ${{ runner.workspace }}/target-test/pepper-tests
+          key: ${{ steps.prepare.outputs.cache-key }}
 
       # A failed, cancelled or timed-out job: the samples with the least
       # memory free, and every process, its age and size, the disks, and
@@ -399,10 +429,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/prepare-tests
+        id: prepare
         timeout-minutes: 30
         with:
           compiler: ${{ needs.changes.outputs.build }}
           token: ${{ github.token }}
+          cache: ${{ matrix.part }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`, with the runner's memory, disk and biggest
@@ -423,6 +455,19 @@ jobs:
         run: |
           bash scripts/ci-monitor.sh 60 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- \
             bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" --build-environment PEPC_NO_COMPILATION_UNITS=1
+
+      # The tests' builds, for the next run with this compiler (see
+      # .github/actions/prepare-tests), also after failed tests, so a rerun
+      # starts warm. Not after a rerun that restored this very key.
+      - name: Save the tests' build cache
+        if: ${{ !cancelled() && steps.prepare.outputs.cache-key != '' && steps.prepare.outputs.cache-hit != 'true' }}
+        timeout-minutes: 15
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ runner.workspace }}/pepper-cache
+            ${{ runner.workspace }}/target-test/pepper-tests
+          key: ${{ steps.prepare.outputs.cache-key }}
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and

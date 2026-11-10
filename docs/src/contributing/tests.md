@@ -106,7 +106,12 @@ CI runs `scripts/pepper-tests.sh` with the installed build of main on
 Linux, macOS and Windows, in two jobs on each: one runs the compiler's
 tests (`PEPPER_TESTS_PART=compiler`), the other everything else
 (`PEPPER_TESTS_PART=others`), and every build in a job shares one build
-cache. A PR that changes the compiler (`tools/compiler/`) or stage 0's
+cache. CI keeps that cache, with the Pepper tools, between runs, keyed on
+the compiler's contents (`.github/actions/prepare-tests`), so a rerun or a
+PR's next push with the same compiler starts warm. pep-build's own keys
+name the compiler and every source's contents, so a kept entry is reused
+only for the same build; `scripts/pepper-tests.sh` keeps the time of an
+unchanged compiler's copy, which those keys include. A PR that changes the compiler (`tools/compiler/`) or stage 0's
 pin (`.github/stage0`) is tested with that compiler instead: CI builds it
 with stage 0 first (`scripts/ci-build-compiler.sh`, from a build cache CI
 keeps between runs, keyed on stage 0's contents) and runs the suite with
