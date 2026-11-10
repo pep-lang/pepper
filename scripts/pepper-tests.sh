@@ -150,8 +150,12 @@ export PEPPER_RUNTIME="$root/runtime"
 # `pep-package`, `pep-run`, `pep-new` and `pep-init` end to end (finding
 # them on the PATH, below), and `pep-doc check` reads every tool's `--help`.
 # The tests wait for the first eight; the rest are waited for at the end.
+# The compiler's tests run only `pep-build`, so their part builds only the
+# tools that run and fetch for them, and starts its test program sooner.
+names=(pepper pep-test pep-fmt pep-profile pep-package pep-run pep-new pep-init pep-install pep-doc)
+[ "$part" != compiler ] || names=(pepper pep-test pep-package)
 pids=()
-for tool in pepper pep-test pep-fmt pep-profile pep-package pep-run pep-new pep-init pep-install pep-doc; do
+for tool in "${names[@]}"; do
   "$bin/pep-build$exe" -O "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done
