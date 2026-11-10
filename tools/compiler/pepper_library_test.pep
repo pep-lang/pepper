@@ -376,7 +376,8 @@ a_program_links_a_library_of_two_files_by_its_names() {
 # library struct the chain runs through, and links it ahead of the
 # archive's (`testdata/library_chain`). Linked with the archive's copy
 # first, the release recurses, and overflows Windows' 1 MB main stack by
-# 2,000 links: 1,000,000 is far past what the 8 MB of Linux and macOS hold.
+# 2,000 links, about 500 bytes a link: 100,000 needs some 50 MB, far past
+# the 8 MB of a Linux or macOS main thread.
 [Test]
 a_chain_through_a_library_releases_without_overflow() {
     var folder = TempFolder("pepper_library_chain");
@@ -388,7 +389,7 @@ a_chain_through_a_library_releases_without_overflow() {
     var main = File.read_to_string(Path("compiler/testdata/library_chain/main.pep")).value();
     var (built, program) = _build_importer(root, main);
     expect_exit(built, 0);
-    for (var depth in ["10", "1000000"]) {
+    for (var depth in ["10", "100000"]) {
         var ran = run(process.Command(program.to_string()).argument(depth));
         expect_exit(ran, 0);
         expect_equal(ran.stdout, "wrap chain released true\npair chain released true\n");

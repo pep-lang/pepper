@@ -2,23 +2,26 @@
 # the program's `Wrap` in turn, at the depth given, shallow and deep enough
 # to overflow the stack if each release recursed into the next: `Box ->
 # Wrap -> Box`, and `Box -> Pair -> Box -> Wrap -> Box`, which extends the
-# library's own cycle. Prints how many `Wrap`s each released.
+# library's own cycle. Prints whether each released every `Wrap`. It loads
+# no runtime module beyond the prelude, which keeps its build short.
 
-import async;
 import chain;
-import process;
 
-const released = async.Atomic<int>(0);
+struct Counter {
+    var count: int = 0;
+}
 
 struct Wrap {
     var box: chain.Box;
+    var released: Counter;
 
-    construct(box: chain.Box) {
+    construct(box: chain.Box, released: Counter) {
         this.box = box;
+        this.released = released;
     }
 
     destruct {
-        released.fetch_add(1);
+        released.count += 1;
     }
 }
 
@@ -28,25 +31,28 @@ extend Wrap with chain.Item {
     }
 }
 
-wrap_chain(depth: int) {
+# Builds the chain and releases it, at the local's scope exit.
+wrap_chain(depth: int, released: Counter) {
     chain.Item item = chain.End();
     for (var i in 0..depth) {
-        item = Wrap(chain.Box(item));
+        item = Wrap(chain.Box(item), released);
     }
 }
 
-pair_chain(depth: int) {
+pair_chain(depth: int, released: Counter) {
     chain.Item item = chain.End();
     for (var i in 0..depth) {
-        item = Wrap(chain.Box(chain.Pair(chain.Box(item))));
+        item = Wrap(chain.Box(chain.Pair(chain.Box(item))), released);
     }
 }
 
-main(): int {
-    var depth = int.parse(process.arguments()[1]).value();
-    wrap_chain(depth);
-    print($"wrap chain released {released.exchange(0) == depth}");
-    pair_chain(depth);
-    print($"pair chain released {released.exchange(0) == depth}");
+main(args: String[]): int {
+    var depth = int.parse(args[1]).value();
+    var wraps = Counter();
+    wrap_chain(depth, wraps);
+    var pairs = Counter();
+    pair_chain(depth, pairs);
+    print($"wrap chain released {wraps.count == depth}");
+    print($"pair chain released {pairs.count == depth}");
     return 0;
 }
