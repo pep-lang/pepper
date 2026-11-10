@@ -448,10 +448,8 @@ all_examples(): Array<Example> {
 # The shared cache (`PEPPER_SHARED_CACHE`) the examples' builds keep the
 # runtime's checked units and objects in, one folder for every part. The
 # runtime is checked as one compilation unit of the runtime files a program
-# reaches, so the examples give it about twenty shapes. The build cache keeps
-# only a compilation unit's newest 4 records, so with the parts and the
-# other tools' tests building side by side, most builds checked the runtime
-# again (about 20 s each); the shared cache keeps every shape.
+# reaches, so the examples give it about twenty shapes, which one folder
+# keeps for every part, and the other tools' tests' builds do not use.
 const RUNTIME_CACHE = ".pep/docs-examples-runtime";
 
 # Builds `example` with `options`, runs it in a folder of its own, and adds

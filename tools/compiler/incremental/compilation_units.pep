@@ -25,8 +25,11 @@ import compiler.sema;
 import "cache";
 import [file_names] from "interface";
 
-## How many keys' records each compilation unit keeps.
-const _KEEP_RECORDS = 4;
+## How many keys' records each compilation unit keeps, the least recently
+## used leaving first: the runtime is one compilation unit of the runtime
+## files a program reaches, and the docs examples alone give it about 20
+## shapes of about 5 MB each, which builds that alternate between them reuse.
+const _KEEP_RECORDS = 32;
 
 ## One compilation unit: files checked together, on top of the
 ## compilation units they read.
@@ -807,10 +810,8 @@ export find_checked(cache: Cache, program: link.Program, unit: CompilationUnit):
     if (bytes.is_err()) {
         return Optional<(u8[], String, String)>.Empty;
     }
-    if (cache.dir_holding(path).to_string() != cache.dir.to_string()) {
-        # The shared cache removes the least recently used records first.
-        path.set_modified(os.SystemTime.now().unix_nanoseconds());
-    }
+    # Both caches remove the least recently used records first.
+    path.set_modified(os.SystemTime.now().unix_nanoseconds());
     var found = (bytes.value(), own.value(), warned.value());
     return Optional<(u8[], String, String)>.Value(found);
 }
@@ -940,7 +941,8 @@ _record_slots(program: link.Program): HashMap<String, uint> {
     return out;
 }
 
-# Keeps the newest `_KEEP_RECORDS` records in `folder`.
+# Keeps the `_KEEP_RECORDS` most recently used records in `folder`
+# (`find_checked` marks a record it finds used).
 _prune_records(folder: Path) {
     # The shared cache removes the least recently used instead
     # (`evict_shared`).
@@ -975,12 +977,7 @@ _prune_records(folder: Path) {
     });
     for (var i in (_KEEP_RECORDS as ulong)..found.count) {
         var (name, _) = found[i];
-        var path = folder.join(Path(name));
-        File.remove(path);
-        File.remove(_own_path(path));
-        File.remove(_warn_path(path));
-        File.remove(Path($"{path}.src"));
-        File.remove(_fields_path(path));
+        _remove_record(folder.join(Path(name)));
     }
 }
 

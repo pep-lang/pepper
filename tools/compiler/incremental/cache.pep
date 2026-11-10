@@ -1529,7 +1529,8 @@ const _EVICT_EVERY: long = 86400000000000;
 
 ## Removes the least recently used keys of the shared cache `cache.shared`
 ## until it holds at most `limit` bytes: a key's folder of objects, or a
-## compilation unit's record with the files beside it. A key stored or
+## compilation unit's record with the files beside it, in any record
+## format, so an older compiler's records do not stay forever. A key stored or
 ## reused within the last ten minutes stays, since a build may be linking
 ## it. Runs when this build stored in the shared cache, or a day after the
 ## last run; else it costs one look at a file.
@@ -1561,7 +1562,15 @@ export evict_shared(cache: Cache, limit: () => ulong) {
             }
         }
     }
-    for (var unit in _children(root.join(Path(_RECORDS_FOLDER)))) {
+    # Every record format's folder (`c<n>`): an older compiler's records
+    # count toward the size too, and leave first once no build uses them.
+    var units = Array<Path>();
+    for (var folder in _children(root)) {
+        if (folder.file_name().value_or("").starts_with("c") and folder.is_directory()) {
+            units.append_all(_children(folder));
+        }
+    }
+    for (var unit in units) {
         for (var file in _children(unit)) {
             var metadata = file.metadata();
             if (metadata.is_ok() and file.to_string().ends_with(".rec")) {
