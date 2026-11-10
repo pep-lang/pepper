@@ -343,6 +343,47 @@ an_imported_pepper_library_is_checked_against() {
     expect_exit(keeping, 1);
     expect_contains(keeping.stderr, "error: 'line' cannot move into the value locked by 'keepers'");
     expect_false(keeping.stderr.contains("@"));
+    # An interface of another record version names the library to rebuild.
+    var interface = _archive(root.join("lib"), "geo").with_extension(link.INTERFACE_EXTENSION);
+    var bytes = File.read_bytes(interface).value();
+    var renumbered = $"{link.INTERFACE_MAGIC}999".bytes();
+    renumbered.append_all(bytes.slice(_find(bytes, "\n".bytes()), bytes.count).to_array());
+    File.write_bytes(interface, renumbered);
+    var (old, _) = _build_importer(root, "import geo;\n\nmain(): int {\n    return 0;\n}\n");
+    expect_exit(old, 1);
+    expect_contains(old.stderr, "main.pep:1:8: error: ");
+    expect_contains(
+        old.stderr,
+        $"the interface is record version 999, and this compiler reads version {link.RECORD_VERSION}; rebuild the library 'geo' with this compiler"
+    );
+}
+
+# A program cannot import from source a module a library it imports
+# carries: the error is at the program's import of the module, with a note
+# at its import of the library.
+[Test]
+a_module_a_library_carries_is_not_imported_again() {
+    var folder = TempFolder("pepper_library_shared_module");
+    var root = folder.path;
+    var deps = root.join("deps");
+    write_file(deps.join("shapes").join("module.pep"), "export const SIDE: int = 3;\n");
+    var source = root.join("src").join("geo.pep");
+    write_file(source, "import shapes;\n\nexport side(): int {\n    return shapes.SIDE;\n}\n");
+    expect_exit(_pep_build(source, _archive(root.join("lib"), "geo"), ["--lib", "pepper", "-I", deps.to_string()]), 0);
+    var (
+        built,
+        _
+    ) = _build_importer(
+        root,
+        "import geo;\nimport shapes;\n\nmain(): int {\n    return geo.side() - shapes.SIDE;\n}\n",
+        ["-I", deps.to_string()]
+    );
+    expect_exit(built, 1);
+    expect_contains(
+        built.stderr,
+        "main.pep:2:8: error: module 'shapes' is already part of the Pepper library 'geo'; drop this import and use what 'geo' exports, or rebuild 'geo' without it"
+    );
+    expect_contains(built.stderr, "main.pep:1:8: note: the Pepper library 'geo' is imported here");
 }
 
 # A program links a library's names exactly as the library build named

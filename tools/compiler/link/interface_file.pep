@@ -221,6 +221,12 @@ export read_interface_bytes(out: LibraryInterface, bytes: u8[]): String? {
     ulong at = 0;
     var first = _line(bytes, at);
     if (!first.is_value() or first.value().0 != $"{INTERFACE_MAGIC}{RECORD_VERSION}") {
+        var line = first.is_value() ? first.value().0 : "";
+        if (line.starts_with(INTERFACE_MAGIC)) {
+            return Optional<String>.Value(
+                $"the interface is record version {line.substr_bytes(INTERFACE_MAGIC.size, line.size - INTERFACE_MAGIC.size)}, and this compiler reads version {RECORD_VERSION}; rebuild the library '{out.name}' with this compiler"
+            );
+        }
         return Optional<String>.Value($"not a Pepper library interface of record version {RECORD_VERSION}");
     }
     at = first.value().1;

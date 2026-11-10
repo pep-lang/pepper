@@ -901,20 +901,27 @@ export load(
     # library interface's keep theirs, which its record and mangled names
     # carry, so a program file may not share one.
     var taken = HashSet<String>();
-    var library_namespaces = HashSet<String>();
+    # The library each interface file's namespace belongs to.
+    var library_of = HashMap<String, String>();
     for (var f in program.files) {
         if (f.interface.is_value()) {
             taken.insert(f.namespace);
-            library_namespaces.insert(f.namespace);
+            library_of[f.namespace] = f.interface.value().name;
         }
+    }
+    var clash = _library_clash(program.files, library_of);
+    if (clash.is_value()) {
+        return Result<Program, String>.err(render_all([clash.value()], program.sources()));
     }
     for (var f in program.files) {
         if (f.interface.is_value()) {
             continue;
         }
-        if (library_namespaces.contains(f.namespace)) {
+        # Only a file no program file imports (a forced import) is left.
+        var owner = library_of.try_get(f.namespace);
+        if (owner.is_value()) {
             return Result<Program, String>.err(
-                $"{f.name} has the namespace '{f.namespace}' of a file of a Pepper library this program imports; a program cannot import a library built from its own files"
+                $"{f.name} has the namespace '{f.namespace}' of a file of the Pepper library '{owner.value()}'; a program cannot import a library built from its own files"
             );
         }
         var base = f.namespace;
@@ -935,6 +942,58 @@ export load(
     }
     program._take_linked(link.link(program.files, target));
     return Result<Program, String>.ok(program);
+}
+
+# The error for a file of the program that shares its namespace with a
+# file of a Pepper library the program imports (`library_of`, by
+# namespace): located at the import that reaches it from a file of the
+# program's own, with a note at the program's import of the library.
+# Nothing when no import reaches such a file.
+_library_clash(files: ProgramFile[], library_of: HashMap<String, String>): Diagnostic? {
+    for (var file in 0..files.count) {
+        var g = files[file];
+        if (g.interface.is_value() or library_of.contains(g.namespace)) {
+            continue;
+        }
+        for (var m in 0..g.imports.count) {
+            var t = g.imports[m];
+            if (!t.is_value() or files[t.value()].interface.is_value()) {
+                continue;
+            }
+            var clash = files[t.value()];
+            var library = library_of.try_get(clash.namespace);
+            if (!library.is_value()) {
+                continue;
+            }
+            var name = library.value();
+            var imported = g.module.imports[m].describe_as(g.folder_imports[m]);
+            # A module (an `-I` module, a package) is a dependency the two
+            # share; any other file is one of the library's own.
+            var message = clash.module_root.is_value() ?
+                $"{imported} is already part of the Pepper library '{name}'; drop this import and use what '{name}' exports, or rebuild '{name}' without it" :
+                $"{imported} has the namespace '{clash.namespace}' of a file of the Pepper library '{name}'; a program cannot import a library built from its own files";
+            var out = Diagnostic.error(message).at(Location(file, g.module.imports[m].name_span));
+            for (var other in 0..files.count) {
+                var h = files[other];
+                for (var k in 0..h.imports.count) {
+                    var u = h.imports[k];
+                    if (!h.interface.is_value()
+                        and u.is_value()
+                        and files[u.value()].interface.is_value()
+                        and files[u.value()].interface.value().name == name) {
+                        return Optional<Diagnostic>.Value(
+                            out.with_note(
+                                $"the Pepper library '{name}' is imported here",
+                                Optional<Location>.Value(Location(other, h.module.imports[k].name_span))
+                            )
+                        );
+                    }
+                }
+            }
+            return Optional<Diagnostic>.Value(out);
+        }
+    }
+    return Optional<Diagnostic>.Empty;
 }
 
 _describe_paths(paths: Path[]): String {
