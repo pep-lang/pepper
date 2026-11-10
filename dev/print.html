@@ -17352,8 +17352,10 @@ Linking reads only its <code>SDKSettings.json</code> and the library stubs in
 <p><strong>Windows:</strong> a directory laid out like a Visual Studio install, with the
 MSVC libraries and the Windows SDK, as
 <a href="https://github.com/Jake-Shadle/xwin">xwin</a> writes it:</p>
-<pre><code class="language-sh">xwin --accept-license --arch x86_64 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
+<pre><code class="language-sh">xwin --accept-license --arch x86_64 --sdk-version 10.0.22621 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
 </code></pre>
+<p>(xwin 0.6.5's default SDK, 10.0.26100, fails with "unable to find x86_64
+headers"; CI pins 10.0.22621.)</p>
 </li>
 </ul>
 <p>CI links each of these from the other two (from Linux x64, macOS arm64 and
