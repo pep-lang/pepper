@@ -231,6 +231,24 @@ runs_passes(part: ulong) {
     expect_equal(rejected, 0 as ulong);
 }
 
+# A method no use names is checked only with `eager`, which the corpus's
+# tests run with: `share` cannot capture a `P` in a `shared` closure, and
+# nothing calls it.
+[Test]
+checks_an_unused_method_only_eagerly() {
+    var folder = TempFolder("passes_eager");
+    var root = folder.path.join("main.pep");
+    File.write_text(
+        root,
+        "struct P {}\nstruct S<T> {\n    var value: T;\n    construct(value: T) { this.value = value; }\n    share() {\n        var v = value;\n        var f: shared () => T = () => v;\n    }\n}\nmain(): int {\n    var s = S<P>(P());\n    return 0;\n}\n"
+    );
+    expect_equal(outcome(root, false), "accepted");
+    expect_equal(
+        outcome(root, false, eager = true),
+        "main.pep:7:39: error: closure stored as 'shared () => P' captures 'v' of type 'P', which is not thread-safe"
+    );
+}
+
 # Source nested as deep as the parser allows checks on half the stack the
 # compiler runs on (`parse.STACK_SIZE`), whether this test is built
 # optimized or not, and one level deeper is the parser's error.
