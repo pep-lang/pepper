@@ -2347,8 +2347,11 @@ changed.
   removes the least recently used keys past `[cache]`'s `shared-size`
   (`shared_cache_limit`), skipping those used within `_GRACE`, when this
   build stored there (`Cache.stored_shared`) or a day after its last run
-  (the `evicted` file's time). A record found there is marked used
-  (`find_checked`). `--verify-cache` keeps it off, comparing its own
+  (the `evicted` file's time). It counts the records of every format
+  folder (`c<n>`), so an older compiler's records, which this one never
+  reads, leave once unused rather than staying past the size (they were
+  1.5 GB of a 6.5 GB cache). A record found in either cache is marked
+  used (`find_checked`). `--verify-cache` keeps it off, comparing its own
   cache's objects with a fresh one's.
 - **Steering.** A recursive struct's last release steers into the
   conformers of a trait it holds and the closures of a function type
@@ -4048,8 +4051,12 @@ folder's number is the format's version: a format change takes a new
 number, so old records are never misread. The cache's keys name the
 compiler, so a record is read only by the compiler that wrote it; a Pepper
 library's interface (§4.1) is one record read by other compilers, which
-`link.RECORD_VERSION` versions instead. Each compilation unit keeps its newest four
-keys. A record starts with the program's files' namespaces, which its file
+`link.RECORD_VERSION` versions instead. Each compilation unit keeps the
+records of its 32 most recently used keys (`_KEEP_RECORDS`; `find_checked`
+marks a record it loads used): the runtime is one compilation unit of the
+runtime files a program reaches, and builds that alternate between its
+shapes (the docs examples give it about 20, of about 5 MB each) reuse
+them rather than check it again. A record starts with the program's files' namespaces, which its file
 slots refer to, so it loads into a program whose files sit elsewhere. Then
 comes the unit, as a **delta** on the module of its closure (`write_module_delta`
 and the rest of `record_codec.pep`, generated from the model by

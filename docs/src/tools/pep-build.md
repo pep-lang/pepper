@@ -811,7 +811,10 @@ works), except in a program that imports a
 compilation unit at a time, in its own process. The optimization level,
 link-time optimization, debug info, CPU, removed runtime checks and build
 options are part of each object's
-key. Deleting the cache folder is always safe.
+key. The cache keeps the checked results of each compilation unit's 32
+most recently used versions and the objects of each file's 8, so builds
+that switch between programs, options or edits reuse them. Deleting the
+cache folder is always safe.
 
 ### `--no-cache`
 
@@ -852,8 +855,8 @@ The shared cache keeps at most 5 GB, or what `[cache]`'s `shared-size`
 sets in the project's `pep.toml` or in the Pepper home's (see
 [Projects](projects.md#cache)). A build that stored in it, or that runs a
 day after the last check, removes the least recently used keys until it
-fits; a key used in the last ten minutes stays, since another build may be
-linking it. Deleting the folder is always safe.
+fits, records an older compiler wrote there included; a key used in the
+last ten minutes stays, since another build may be linking it. Deleting the folder is always safe.
 
 ### `--verify-cache`, `--no-verify-cache`
 

@@ -556,6 +556,78 @@ prunes_neither_reused_nor_recent_keys() {
     }
 }
 
+# A compilation unit keeps the records of many keys, and one a build loads
+# counts as its newest: builds that alternate between more than a few
+# versions of a unit, as the docs examples do between the runtime's
+# shapes, load its records rather than check it again.
+[Test]
+keeps_many_records_the_least_recently_used_leaving_first() {
+    var folder = TempFolder("records_kept");
+    var root = folder.path;
+    _write_program(root);
+    for (var i in [1, 2, 3, 4, 5, 0]) {
+        File.write_text(root.join(Path("a.pep")), "export a_value(): int {\n" + $"    return {i} - {i} + 1;\n" + "}\n");
+        _build(root);
+    }
+    var unit = incremental.CompilationUnit("a");
+    unit.key = "0";
+    var records = incremental.record_path(incremental.Cache(root.join(Path("cache"))), unit).parent().value();
+    var names = _records_in(records);
+    expect_equal(names.count, 6 as ulong);
+
+    # Version 0's record, the newest, made the oldest: building version 0
+    # again loads it and makes it the newest.
+    var version_0 = records.join(Path(names[0]));
+    for (var name in names) {
+        var path = records.join(Path(name));
+        if (path.metadata().value().modified > version_0.metadata().value().modified) {
+            version_0 = path;
+        }
+    }
+    var hour: long = 3600000000000;
+    var now = os.SystemTime.now().unix_nanoseconds();
+    for (var name in names) {
+        records.join(Path(name)).set_modified(now - hour);
+    }
+    version_0.set_modified(now - 10 * hour);
+    File.remove(root.join(Path("main")));
+    _build(root);
+    expect_true(version_0.metadata().value().modified > now - hour);
+    expect_equal(_records_in(records).count, 6 as ulong);
+}
+
+# The shared cache's eviction counts the records of an older format, which
+# this compiler never reads, so they leave rather than outlast the size.
+[Test]
+evicts_an_older_formats_records_from_the_shared_cache() {
+    var folder = TempFolder("shared_old_records");
+    var cache = incremental.Cache(folder.path.join(Path("own")));
+    var shared = folder.path.join(Path("shared"));
+    var units = HashSet<String>();
+    cache.share(shared, units);
+    var old = cache.shared.value().join(Path("c1")).join(Path("runtime"));
+    Directory.create_all(old);
+    var record = old.join(Path("key.rec"));
+    File.write_text(record, "old");
+    File.write_text(Path($"{record}.own"), "own");
+    record.set_modified(os.SystemTime.now().unix_nanoseconds() - 3600000000000);
+    cache.stored_shared = true;
+    incremental.evict_shared(cache, () => 0 as ulong);
+    expect_false(record.exists());
+    expect_false(Path($"{record}.own").exists());
+}
+
+# The names of the records in `folder`.
+_records_in(folder: Path): String[] {
+    var names = Array<String>();
+    for (var entry in Directory.open(folder).value().entries().value()) {
+        if (entry.name.ends_with(".rec")) {
+            names.append(entry.name);
+        }
+    }
+    return names;
+}
+
 # Pruning a unit's keys leaves the units named below it alone: unit
 # `process` (`process.pep`) beside units `process/test/...` (the files of
 # `process/test/`) once removed their folders whole, objects a build was
