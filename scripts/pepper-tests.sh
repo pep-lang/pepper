@@ -127,12 +127,16 @@ fi
 # ignores the tests' PEPPER_HOME. The copy keeps the compiler's time: the
 # build cache keys on the compiler's path, size and time
 # (`compiler_identity`), so a fresh time would rebuild everything on every
-# pass.
+# pass. An identical copy already there keeps its own time, so a freshly
+# installed compiler (CI installs one in every job) still finds the cache
+# an earlier run left.
 bin="$target/pepper-tests/bin"
 mkdir -p "$bin"
 if [ "$compiler" != "$bin" ]; then
-  rm -f "$bin/pep-build$exe"  # an older run's symlink, which cp would write through
-  cp -fp "$compiler/pep-build$exe" "$bin/"
+  if [ -L "$bin/pep-build$exe" ] || ! cmp -s "$compiler/pep-build$exe" "$bin/pep-build$exe"; then
+    rm -f "$bin/pep-build$exe"  # an older run's symlink, which cp would write through
+    cp -fp "$compiler/pep-build$exe" "$bin/"
+  fi
   if [ -f "$compiler/LLVM-C.dll" ]; then
     cp -fp "$compiler/LLVM-C.dll" "$bin/"
   fi

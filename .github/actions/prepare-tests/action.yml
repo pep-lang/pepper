@@ -4,13 +4,18 @@
 # (ci.yml's `changes` job decides, and its summary says why), the
 # checkout's compiler is built, and PEPPER_COMPILER_DIR names it.
 #
-# Only the changed compiler's own build cache is carried between runs, a
-# few hundred MB, so a rerun, or a run whose compiler sources a run before
-# it built, takes seconds (scripts/ci-build-compiler.sh). The tests' builds start from
-# an empty cache: their keys name the compiler that builds them, new in
-# nearly every run (a PR's own, or the build of main a merge publishes),
-# so carrying them saved no time, while restoring and saving 0.5 to 2 GB
-# per OS cost minutes and evicted the other caches.
+# Two build caches are carried between runs. The changed compiler's own,
+# a few hundred MB, keyed on stage 0, so a rerun, or a run whose compiler
+# sources a run before it built, takes seconds
+# (scripts/ci-build-compiler.sh). And, with `cache`, the tests' builds
+# (PEPPER_CACHE_DIR, and the Pepper tools in target-test/pepper-tests),
+# keyed on the compiler that builds them, by its contents, which ci.yml
+# saves after the tests. pep-build's own keys name that compiler too (its
+# path, size and time: scripts/pepper-tests.sh keeps the time of an
+# unchanged one) and every source's contents, so an entry from another
+# compiler or other sources is never reused, only rebuilt. A rerun, or a
+# pull request's next push with the same compiler, starts warm; a new
+# compiler starts empty.
 name: Prepare the Pepper tests
 description: Provision a runner for scripts/pepper-tests.sh
 
@@ -25,6 +30,18 @@ inputs:
   token:
     description: a GitHub token, for the release downloads
     required: true
+  cache:
+    description: a name for the tests' build cache (ci.yml's part), restored here; empty for none
+    required: false
+    default: ""
+
+outputs:
+  cache-key:
+    description: the key to save the tests' build cache under, when `cache` is set
+    value: ${{ steps.tests-cache.outputs.key }}
+  cache-hit:
+    description: "'true' when the tests' build cache was restored under that very key (a rerun)"
+    value: ${{ steps.restore-tests.outputs.cache-hit }}
 
 runs:
   using: composite
@@ -151,3 +168,28 @@ runs:
       with:
         path: ${{ runner.workspace }}/target-test/compiler
         key: pepper-compiler-${{ runner.os }}-${{ steps.stage0.outputs.hash }}-${{ github.run_id }}
+
+    # The tests' build cache (see the top), for the compiler the tests use.
+    - name: Name the tests' build cache
+      id: tests-cache
+      if: inputs.cache != ''
+      shell: bash
+      env:
+        PART: ${{ inputs.cache }}
+      run: |
+        set -euxo pipefail
+        compiler="$PEPPER_COMPILER_DIR/pep-build"
+        [ ! -f "$compiler.exe" ] || compiler="$compiler.exe"
+        prefix="pepper-tests-$RUNNER_OS-$RUNNER_ARCH-$PART-$(git hash-object "$compiler")-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix$GITHUB_RUN_ID" >> "$GITHUB_OUTPUT"
+    - name: Restore the tests' build cache
+      id: restore-tests
+      if: inputs.cache != ''
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          ${{ runner.workspace }}/pepper-cache
+          ${{ runner.workspace }}/target-test/pepper-tests
+        key: ${{ steps.tests-cache.outputs.key }}
+        restore-keys: ${{ steps.tests-cache.outputs.prefix }}
