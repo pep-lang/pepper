@@ -15,6 +15,12 @@ import compiler.sema;
 import [TempFolder] from testing;
 import [check_programs as check_expected, headline, headlines, nesting_programs] from "expected_outcomes";
 
+# The corpus and the documentation's programs, with every method of every
+# struct specialization given its body and checked, whether a use names
+# it or not: the one place those unused bodies are checked, as the
+# curated programs below, and the builds of these programs
+# (`corpus_test`, pep-doc's examples test), give a method its body only
+# once a use names it.
 # The programs are split in parts, each a test of its own, to keep each
 # within the time a test may take. The programs that use much of the
 # runtime take the longest, so each is a test of its own.
@@ -158,7 +164,7 @@ slow_programs(): String[] {
 # Runs the passes over `program`, which they must accept.
 runs_passes_over(program: Path) {
     expect_true(program.is_file(), "the program is found from tools/");
-    expect_equal(outcome(program, true), "accepted");
+    expect_equal(outcome(program, true, eager = true), "accepted");
 }
 
 # Runs the passes over every `PARTS`th program of the corpus and the
@@ -215,7 +221,7 @@ runs_passes(part: ulong) {
     ulong rejected = 0;
     ulong i = part;
     while (i < programs.count) {
-        var ended = outcome(programs[i], true);
+        var ended = outcome(programs[i], true, eager = true);
         if (ended != "accepted") {
             print($"{programs[i]}: {ended}");
             rejected += 1;
@@ -1138,8 +1144,10 @@ check_programs(folder: TempFolder, programs: String[], runtime: bool = false): u
 # first line of the error that loading, merging or a pass reports, its
 # file named from the program's folder (`main.pep`) or the runtime's
 # (`runtime/...`), and with `notes` each note of a pass's error that has
-# no location.
-outcome(root: Path, runtime: bool, notes: bool = false): String {
+# no location. A struct specialization's method gets its body once a use
+# names it, as in a build; `eager` gives every method its body, so that
+# methods no use names are checked too.
+outcome(root: Path, runtime: bool, notes: bool = false, eager: bool = false): String {
     var setup = link.Setup();
     setup.runtime = runtime;
     var program = link.load_program(root, setup);
@@ -1150,7 +1158,10 @@ outcome(root: Path, runtime: bool, notes: bool = false): String {
     if (built.is_err()) {
         return headline(built.error(), root);
     }
-    var ran = sema.run_steps(built.value(), program.value().target, ALL_STEPS, program.value().sources());
+    var state = sema.PassState(program.value().target);
+    state.sources = program.value().sources();
+    state.lazy_methods = !eager;
+    var ran = sema.run_steps_with(built.value(), state, ALL_STEPS);
     if (ran.is_err()) {
         # Each error, with its notes.
         var lines = Array<String>();
