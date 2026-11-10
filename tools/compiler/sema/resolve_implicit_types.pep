@@ -1021,7 +1021,7 @@ struct _TypeScopes {
 
     ## A local or parameter declared in the code being walked (not a
     ## global), innermost scope first: a block's local hides a parameter of
-    ## the function around it, as a closure's parameter hides a local.
+    ## the function around it.
     local(name: String): TypeName? {
         ulong i = symbols.count;
         while (i > 1) {
