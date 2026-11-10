@@ -60,7 +60,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tests/` | `.pep` corpus: `hello.pep` plus one `tests/<Feature.Case>/test.pep` per folder, which `compiler/corpus_test.pep` builds and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
 | `scripts/` | The version every tool reports (`set-version.sh`), the release build (`release-build.sh`, `release-smoke-test.sh`), CI's toolchain install (`ci-install-toolchain.sh`), the pull requests Release and Stage 0 push branches for (`ci-open-pull-request.sh`), LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, and `build-llvm-manylinux.sh` for the Linux release's LLVM), the linux-arm64 release's stage 0 (`cross-stage0-linux-arm64.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`, and `ci-provision-android.sh` for an emulator on a Linux runner), the static OpenSSL for Android (`openssl-android.sh`), the Pepper tests (`pepper-tests.sh`), the sema model's generators (`gen-sema-model.py`, `gen-sema-record.py`), and `install-vscode-extension.ps1`. |
-| `.github/workflows/` | `ci.yml`, `platform-test.yml`, `release.yml`, `docs.yml`, `llvm-package.yml`, `openssl-android.yml` (see [section 11](#11-ci)). |
+| `.github/workflows/` | `ci.yml`, `platform-test.yml`, `release.yml`, `docs.yml`, `llvm-package.yml`, `openssl-android.yml`, `cache-cleanup.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
 Dependency direction: `syntax ← ast/parse/desugar ← link ← sema ←
@@ -4433,11 +4433,11 @@ the checkout (`PEPPER_TARGET_DIR`).
     publishes on each merge, or a release with a higher version, through
     `install.sh` / `install.ps1`), or stage 0 when the compiler changed, name `PEPPER_CACHE_DIR` (one build
     cache every build in the job shares, the tools' tests' own builds
-    included; it starts empty, since its keys name the compiler, new in
-    nearly every run), and build `tools/compiler` when it changed
+    included; actions/cache carries it between runs with the same
+    compiler, keyed on its contents), and build `tools/compiler` when it changed
     (`ci-build-compiler.sh`, from its own build cache, which actions/cache
     carries between runs keyed on stage 0's contents, the same until the
-    pin moves). Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
+    pin moves; only main's runs save it, when the build changed it). Then `scripts/pepper-tests.sh` runs, beside `scripts/ci-monitor.sh`,
     which prints the runner's memory, disk and biggest processes each
     minute; a job that fails, is cancelled or times out ends with its
     `--report` (Diagnostics). The Windows `others` job also runs `pep-doc
@@ -4461,6 +4461,10 @@ the checkout (`PEPPER_TARGET_DIR`).
     (`scripts/ci-cross-link.sh build`); `cross-run` runs what the others
     built for its OS and diffs the output with its native build's
     (`ci-cross-link.sh run`).
+  - `prune-caches` runs after the test jobs and deletes the entries of
+    their two caches on this branch or pull request that a newer entry
+    replaced (one per OS, and per OS and part), so the repository's 10 GB
+    of Actions caches holds no entry no run would restore.
   - `changes` runs first. On a push it diffs the merge against its parent;
     one that changed only prose (`*.md` other than `docs/src/SUMMARY.md` and
     `docs/src/reference/`, or `.agents/`/`.claude/`) skips the test jobs. A
@@ -4527,6 +4531,9 @@ the checkout (`PEPPER_TARGET_DIR`).
   request of this repository or a push to main that changes the script or
   the workflow, or by dispatch with `force` to replace it.
   `release-build.sh` fetches it into each toolchain's runtime.
+- **`cache-cleanup.yml`**: when a pull request closes, deletes its Actions
+  caches (`pull_request_target`, so a fork's has a token that may; it
+  checks nothing out).
 
 ---
 

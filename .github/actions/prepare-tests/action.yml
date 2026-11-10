@@ -5,9 +5,10 @@
 # checkout's compiler is built, and PEPPER_COMPILER_DIR names it.
 #
 # Two build caches are carried between runs. The changed compiler's own,
-# a few hundred MB, keyed on stage 0, so a rerun, or a run whose compiler
-# sources a run before it built, takes seconds
-# (scripts/ci-build-compiler.sh). And, with `cache`, the tests' builds
+# 350 MB to 1.2 GB, keyed on stage 0 and saved by main's runs only, so a
+# run whose compiler sources main built takes seconds, and a pull
+# request's rebuilds only what it changed (scripts/ci-build-compiler.sh).
+# And, with `cache`, the tests' builds
 # (PEPPER_CACHE_DIR, and the Pepper tools in target-test/pepper-tests),
 # keyed on the compiler that builds them, by its contents, which ci.yml
 # saves after the tests. pep-build's own keys name that compiler too (its
@@ -15,7 +16,10 @@
 # unchanged one) and every source's contents, so an entry from another
 # compiler or other sources is never reused, only rebuilt. A rerun, or a
 # pull request's next push with the same compiler, starts warm; a new
-# compiler starts empty.
+# compiler starts empty. ci.yml's prune-caches job keeps only the newest
+# entry of each per branch or pull request, and cache-cleanup.yml deletes
+# a pull request's when it closes, so they stay well under the
+# repository's 10 GB.
 name: Prepare the Pepper tests
 description: Provision a runner for scripts/pepper-tests.sh
 
@@ -154,16 +158,20 @@ runs:
     # the installed one (scripts/ci-build-compiler.sh, the release's stage
     # 1).
     - name: Build the changed compiler
+      id: build-compiler
       if: inputs.compiler == 'true'
       shell: bash
       run: bash scripts/ci-monitor.sh 15 "$RUNNER_TEMP/monitor.txt" "$RUNNER_WORKSPACE" -- bash -euxo pipefail scripts/ci-build-compiler.sh
 
-    # Saved by every run, pull requests' too, since it is small: the
-    # repository keeps 10 GB of caches, which the tests' caches used to fill.
-    # Not after a rerun, which restored this very key, and only from CI:
-    # the mobile workflow's jobs would save the same caches again.
+    # Saved only by CI's runs on main, and only when the build changed it:
+    # an entry is about 1.2 GB on Windows and 350 MB elsewhere, and the
+    # repository keeps 10 GB of caches. A pull request restores main's
+    # newest (actions/cache falls back to the base branch's entries), and
+    # ci.yml's prune-caches job deletes the entries it replaced. Not after
+    # a rerun, which restored this very key, and not from the mobile
+    # workflow, whose jobs would save the same caches again.
     - name: Save the compiler's build cache
-      if: inputs.compiler == 'true' && steps.restore.outputs.cache-hit != 'true' && github.workflow == 'CI'
+      if: inputs.compiler == 'true' && steps.restore.outputs.cache-hit != 'true' && steps.build-compiler.outputs.changed == 'true' && github.workflow == 'CI' && github.ref == 'refs/heads/main'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.workspace }}/target-test/compiler

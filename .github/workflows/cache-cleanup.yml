@@ -1,0 +1,28 @@
+# Deletes a closed pull request's Actions caches (the test jobs' build
+# caches, .github/actions/prepare-tests): no run restores them again, and
+# left to age out they would fill the repository's 10 GB, evicting the
+# caches main's runs use. pull_request_target, so a fork's pull request
+# gets a token that may delete them; nothing is checked out or run from
+# the pull request.
+name: Cache cleanup
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  actions: write
+
+jobs:
+  delete:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          set -euxo pipefail
+          gh cache list --ref "$REF" --limit 100 --json id --jq '.[].id' | xargs -r -n1 gh cache delete
