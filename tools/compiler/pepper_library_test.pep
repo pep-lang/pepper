@@ -371,6 +371,30 @@ a_program_links_a_library_of_two_files_by_its_names() {
     expect_equal(_run_program(program), "15 9 14 9 10 1");
 }
 
+# A chain that runs through a library's structs and the program's in turn
+# is released in a loop: the program compiles its own release of each
+# library struct the chain runs through, and links it ahead of the
+# archive's (`testdata/library_chain`). Linked with the archive's copy
+# first, the release recurses, and overflows Windows' 1 MB main stack by
+# 2,000 links: 1,000,000 is far past what the 8 MB of Linux and macOS hold.
+[Test]
+a_chain_through_a_library_releases_without_overflow() {
+    var folder = TempFolder("pepper_library_chain");
+    var root = folder.path;
+    var source = root.join("src").join("chain.pep");
+    write_file(source, File.read_to_string(Path("compiler/testdata/library_chain/chain.pep")).value());
+    expect_exit(_pep_build(source, _archive(root.join("lib"), "chain"), ["--lib", "pepper"]), 0);
+    File.remove(source);
+    var main = File.read_to_string(Path("compiler/testdata/library_chain/main.pep")).value();
+    var (built, program) = _build_importer(root, main);
+    expect_exit(built, 0);
+    for (var depth in ["10", "1000000"]) {
+        var ran = run(process.Command(program.to_string()).argument(depth));
+        expect_exit(ran, 0);
+        expect_equal(ran.stdout, "wrap chain released true\npair chain released true\n");
+    }
+}
+
 # A library's interface holds no source text: not a comment, nor a name
 # used only inside a function body it leaves out (`sum`'s local), nor a
 # string only such a body holds.
