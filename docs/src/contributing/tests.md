@@ -75,7 +75,8 @@ The tools' run, the longest, starts as soon as the tools its tests run
 `pep-run`, `pep-new` and `pep-init`) are
 built, and runs beside the runtime's runs. Its output is interleaved with
 theirs as it comes, each line starting `tools| `, so a slow test shows
-while it runs.
+while it runs. The `compiler` part builds only `pepper`, `pep-test` and
+`pep-package`, since the compiler's tests run no tool but `pep-build`.
 
 Once `pepper` is built, run any part of them by hand:
 

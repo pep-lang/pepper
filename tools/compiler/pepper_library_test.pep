@@ -21,7 +21,11 @@ const _GEO = "import async;\nimport json;\n\nconst released = async.Atomic<int>(
 const _MAIN = "import [Thread] from async;\n\n[Link(\"geo\")]\nextern int geo_seed();\n\n[Link(\"geo\")]\nextern void geo_badge(int n);\n\n[Link(\"geo\")]\nextern int geo_released();\n\nconst FROM_LIBRARY: int = geo_seed() + 1;\n\nwork() {\n    geo_badge(7);\n}\n\nmain(): int {\n    var thread = Thread.spawn(work);\n    thread.join();\n    print($\"{FROM_LIBRARY} {geo_released()}\");\n    return 0;\n}\n";
 
 # Runs `pep-build` on `source`, writing `output`, with `options` after the
-# build's own; the build and cache folders are beside `source`.
+# build's own; the build and cache folders are beside `source`. The
+# runtime's units go to a shared cache (`PEPPER_SHARED_CACHE`) that every
+# test here uses, `.pep/pepper_library_runtime` where the tests run, so the
+# runtime is checked and compiled once per optimization level rather than
+# in each build's own cache.
 _pep_build(source: Path, output: Path, options: Array<String>): process.Output {
     var folder = source.parent().value();
     return run(
@@ -35,6 +39,10 @@ _pep_build(source: Path, output: Path, options: Array<String>): process.Output {
             .argument("--cache")
             .argument(folder.join("cache").to_string())
             .arguments(options)
+            .environment(
+                "PEPPER_SHARED_CACHE",
+                Directory.current().value().join(".pep").join("pepper_library_runtime").to_string()
+            )
     );
 }
 
