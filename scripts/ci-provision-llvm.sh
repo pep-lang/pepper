@@ -11,7 +11,10 @@
 # dev packages, and setup-llvm.sh prefers them. Measured on the runner images:
 #
 #   ubuntu-24.04   apt llvm-20-dev + libpolly   4-8s, 400-750 MB
-#   macos-latest   brew llvm@20                 preinstalled
+#   macos-15       brew llvm@20 + lld@20        about 35s, 1.4 GB
+#
+# (the macos-15 image ships llvm@18, so brew pours llvm@20's bottle each
+# job; .github/actions/provision-llvm caches the kegs).
 #
 # which is why nothing here downloads an 11.6 GB tarball any more.
 #
