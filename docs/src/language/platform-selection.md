@@ -179,8 +179,11 @@ or set `PEPPER_SYSROOT_<TRIPLE>`, the triple in capitals with `_` for each
   [xwin](https://github.com/Jake-Shadle/xwin) writes it:
 
   ```sh
-  xwin --accept-license --arch x86_64 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
+  xwin --accept-license --arch x86_64 --sdk-version 10.0.22621 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
   ```
+
+  (xwin 0.6.5's default SDK, 10.0.26100, fails with "unable to find x86_64
+  headers"; CI pins 10.0.22621.)
 
 CI links each of these from the other two (from Linux x64, macOS arm64 and
 Windows x64, for `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` and
