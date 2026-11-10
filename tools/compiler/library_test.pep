@@ -598,6 +598,31 @@ links_a_link_once_function_only_a_later_part_calls() {
     expect_true(function.is_value() and !function.value().is_declaration());
 }
 
+# A link-once function the whole program keeps (a program that links a
+# Pepper library is not internalized) stays in its part when only another
+# part calls it (a program lost `Error.__last_release` this way).
+[Test]
+keeps_a_link_once_function_in_its_part_when_only_another_calls_it() {
+    var context = llvm.Context();
+    var i32 = context.int32_type();
+    var signature = llvm.Type.function(i32, Array<llvm.Type>());
+    var builder = llvm.Builder(context);
+    var ir = llvm.Module(context, "program");
+    var answer = ir.add_function("answer", signature);
+    answer.set_linkage(llvm.Linkage.LinkOnceOdr);
+    builder.position_at_end(context.append_block(answer, "entry"));
+    builder.return_value(i32.const_int(42));
+    var main = ir.add_function("main", signature);
+    builder.position_at_end(context.append_block(main, "entry"));
+    builder.return_value(builder.call(signature, answer, Array<llvm.Value>()));
+    var partition = driver.split(ir, 2);
+    expect_equal(partition.part_of["answer"], 0 as uint);
+    expect_equal(partition.part_of["main"], 1 as uint);
+    expect_true(codegen.keep_part(ir, partition, 0).is_ok());
+    var function = ir.function("answer");
+    expect_true(function.is_value() and !function.value().is_declaration());
+}
+
 # Whether `dir`, or a folder in it, holds a file named `name`.
 _holds(dir: Path, name: String): bool {
     var opened = Directory.open(dir);

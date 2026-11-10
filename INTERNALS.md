@@ -2089,7 +2089,9 @@ definition but `main` and the default-visible C exports is made internal
 and leaves its comdat, and `lto<On>` runs over the whole program. Writing
 the objects is then split across the CPUs (`lto.split`): the optimized
 module is cut into one run of its definitions per logical CPU, its local
-definitions made external and hidden, and `compile_parts` writes each
+definitions made external and hidden (and, in a program that links a
+Pepper library and so keeps its link-once ones, those made weak: `keep_part`'s
+`globaldce` would drop one its part does not call itself), and `compile_parts` writes each
 run's object in a `--compile-part` child without optimizing it again (the
 plan's mode line says `optimized`); the constructors move to
 `.init_array` in part 0. In process (`in_process`), one object is written.
