@@ -63782,7 +63782,12 @@ On Windows, extracting the LLVM package takes about a minute, so the
 action caches the installed tree (<code>%LOCALAPPDATA%\pepper\llvm</code>, keyed on
 <code>scripts/setup-llvm.ps1</code> and the architecture) and a hit installs
 nothing. It is saved only after the package was installed, never after
-the fallback to the upstream archive, whose tree is several GB.</p>
+the fallback to the upstream archive, whose tree is several GB.
+On macOS, the runner image ships <code>llvm@18</code>, so Homebrew pours the 1.4 GB
+<code>llvm@20</code> bottle in each job, about 30 seconds; the action caches the
+<code>llvm@20</code> and <code>lld@20</code> kegs and clang's config files instead (keyed on <code>scripts/setup-llvm.sh</code> and
+the runner image's version), and with them restored brew installs
+nothing.</p>
 <p>Only the Windows archive path is large: budget roughly <strong>5 GB</strong> of disk for
 the tree plus its cached archive, and a few minutes for the first run.
 Everything lands outside the repository, under <code>%LOCALAPPDATA%\pepper</code> or
