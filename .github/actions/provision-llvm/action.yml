@@ -12,13 +12,13 @@
 #
 # Windows installs the package llvm-package.yml publishes, which
 # downloads in seconds but takes about a minute to extract (424 MB, 185
-# files), so the cache holds the installed tree instead: about 130 MB
-# (TODO), keyed on the setup script (which pins the LLVM) and the arch.
+# files), so the cache holds the installed tree instead: 113 MB on x64
+# compressed, keyed on the setup script (which pins the LLVM) and the arch.
 # A hit leaves the script's marker in place, so it installs nothing. The
 # script says when it installed the package, and only then is it saved,
 # so the multi-GB upstream archive it falls back to when no package is
-# published is never cached. A pull request saves only on a miss, which
-# needs a new key: one that changes the setup script.
+# published is never cached. A pull request saves only on a miss: when
+# it changes the setup script, or main has no entry yet.
 #
 # The caller bounds it with timeout-minutes; a composite step cannot.
 name: Provision LLVM
