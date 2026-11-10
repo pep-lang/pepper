@@ -445,6 +445,15 @@ all_examples(): Array<Example> {
     return examples;
 }
 
+# The shared cache (`PEPPER_SHARED_CACHE`) the examples' builds keep the
+# runtime's checked units and objects in, one folder for every part. The
+# runtime is checked as one compilation unit of the runtime files a program
+# reaches, so the examples give it about twenty shapes. The build cache keeps
+# only a compilation unit's newest 4 records, so with the parts and the
+# other tools' tests building side by side, most builds checked the runtime
+# again (about 20 s each); the shared cache keeps every shape.
+const RUNTIME_CACHE = ".pep/docs-examples-runtime";
+
 # Builds `example` with `options`, runs it in a folder of its own, and adds
 # what went wrong to `failures`.
 check(example: Example, options: Array<String>, failures: Array<String>) {
@@ -479,6 +488,7 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
                 .argument("--build")
                 .argument(folder.path.join("build-lib").to_string())
                 .arguments(options)
+                .environment("PEPPER_SHARED_CACHE", RUNTIME_CACHE)
                 .stdout(process.Stream.Pipe)
                 .stderr(process.Stream.Pipe)
                 .run();
@@ -500,6 +510,7 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         .argument(folder.path.join("build").to_string())
         .arguments(linking)
         .arguments(options)
+        .environment("PEPPER_SHARED_CACHE", RUNTIME_CACHE)
         .stdout(process.Stream.Pipe)
         .stderr(process.Stream.Pipe)
         .run();
