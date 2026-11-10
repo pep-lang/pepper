@@ -64131,7 +64131,9 @@ cache. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0'
 pin (<code>.github/stage0</code>) is tested with that compiler instead: CI builds it
 with stage 0 first (<code>scripts/ci-build-compiler.sh</code>, from a build cache CI
 keeps between runs, keyed on stage 0's contents) and runs the suite with
-it.</p>
+it. So is a merge into main that publishes the build of main
+(<code>release.yml</code>): its tests run beside the release with the merge's own
+compiler, rather than wait for the release to publish it.</p>
 <p>On a pull request, the docs examples (<code>tools/pep-doc/examples_test.pep</code>)
 build and run in full only on Linux. The macOS and Windows jobs set
 <code>PEPPER_DOCS_EXAMPLES=platform</code>, which keeps only the examples that select
