@@ -63772,7 +63772,12 @@ step's 15 minutes, so the action caches the <code>.deb</code> files apt download
 puts them in apt's archive, so apt downloads none it already has. A miss,
 or a set the image has moved past, downloads from the mirror, retrying a
 download that stalls for 30 seconds, and refills the cache; only main's
-runs save it, under a new key, so the newest set is the one restored.</p>
+runs save it, under a new key, so the newest set is the one restored.
+On Windows, extracting the LLVM package takes about a minute, so the
+action caches the installed tree (<code>%LOCALAPPDATA%\pepper\llvm</code>, keyed on
+<code>scripts/setup-llvm.ps1</code> and the architecture) and a hit installs
+nothing. It is saved only after the package was installed, never after
+the fallback to the upstream archive, whose tree is several GB.</p>
 <p>Only the Windows archive path is large: budget roughly <strong>5 GB</strong> of disk for
 the tree plus its cached archive, and a few minutes for the first run.
 Everything lands outside the repository, under <code>%LOCALAPPDATA%\pepper</code> or
@@ -64142,7 +64147,9 @@ tests, CI's <code>prune-caches</code> job deletes every entry of these two cache
 the branch or PR that a newer one replaced, and
 <code>.github/workflows/cache-cleanup.yml</code> deletes a PR's caches when it
 closes. In steady state that is about 2 GB of compiler cache and 0.7 GB of
-tests' caches for main, and 0.7 GB per open PR whose tests ran. So is a merge into main that publishes the build of main
+tests' caches for main, and 0.7 GB per open PR whose tests ran. Windows'
+installed LLVM adds about 113 MB per architecture, one entry per
+<code>scripts/setup-llvm.ps1</code> (see <a href="contributing/building.html">Building</a>). So is a merge into main that publishes the build of main
 (<code>release.yml</code>): its tests run beside the release with the merge's own
 compiler, rather than wait for the release to publish it.</p>
 <p>On a pull request, the docs examples (<code>tools/pep-doc/examples_test.pep</code>)

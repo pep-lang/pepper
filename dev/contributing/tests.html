@@ -285,7 +285,9 @@ tests, CI's <code>prune-caches</code> job deletes every entry of these two cache
 the branch or PR that a newer one replaced, and
 <code>.github/workflows/cache-cleanup.yml</code> deletes a PR's caches when it
 closes. In steady state that is about 2 GB of compiler cache and 0.7 GB of
-tests' caches for main, and 0.7 GB per open PR whose tests ran. So is a merge into main that publishes the build of main
+tests' caches for main, and 0.7 GB per open PR whose tests ran. Windows'
+installed LLVM adds about 113 MB per architecture, one entry per
+<code>scripts/setup-llvm.ps1</code> (see <a href="building.html">Building</a>). So is a merge into main that publishes the build of main
 (<code>release.yml</code>): its tests run beside the release with the merge's own
 compiler, rather than wait for the release to publish it.</p>
 <p>On a pull request, the docs examples (<code>tools/pep-doc/examples_test.pep</code>)
