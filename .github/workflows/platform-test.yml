@@ -127,19 +127,9 @@ jobs:
         shell: bash
         run: uname -a || true
 
-      # Keying on the setup script's hash rather than a hardcoded version:
-      # a hardcoded key still hits exactly after the pinned LLVM version is
-      # bumped, and actions/cache skips its save on an exact hit, so the new
-      # archive would never be cached and every run would re-download it.
-      # Self-hosted runners keep the download cache on disk, so restoring and
-      # saving it through actions/cache is pure cost there.
-      - name: Cache LLVM download (Windows)
-        if: runner.os == 'Windows' && runner.environment == 'github-hosted' && inputs.provision != 'false'
-        uses: actions/cache@v6
-        with:
-          path: ~/AppData/Local/pepper/cache
-          key: llvm-archive-${{ hashFiles('scripts/setup-llvm.ps1') }}-windows-x64
-
+      # Keyed on the setup script's hash, not a hardcoded version, which
+      # would keep hitting exactly after a version bump, so the new archive
+      # would never be saved. Windows' cache is in .github/actions/provision-llvm.
       - name: Cache LLVM download (Unix)
         if: runner.os != 'Windows' && runner.environment == 'github-hosted' && inputs.provision != 'false'
         uses: actions/cache@v6
