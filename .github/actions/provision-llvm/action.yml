@@ -20,9 +20,17 @@
 # published is never cached. A pull request saves only on a miss: when
 # it changes the setup script, or main has no entry yet.
 #
+# macOS installs Homebrew's llvm@20 and lld@20: the macos-15 image ships
+# llvm@18, so each job downloaded and poured a 1.4 GB bottle, about 30s.
+# The cache holds both kegs and their opt/ links instead, keyed on the
+# setup script and the runner image's version, since the kegs link
+# against libraries the image's Homebrew installed. With them in place
+# setup-llvm.sh finds the LLVM and brew installs nothing. It is saved on a
+# miss, on a pull request too, like Windows' cache.
+#
 # The caller bounds it with timeout-minutes; a composite step cannot.
 name: Provision LLVM
-description: Provision LLVM with scripts/ci-provision-llvm.sh, caching Linux's apt packages and Windows' install
+description: Provision LLVM with scripts/ci-provision-llvm.sh, caching Linux's apt packages and the macOS and Windows installs
 
 inputs:
   token:
@@ -58,6 +66,28 @@ runs:
         path: ~/AppData/Local/pepper/llvm
         key: llvm-windows-${{ hashFiles('scripts/setup-llvm.ps1') }}-${{ runner.arch }}
 
+    - name: Name the macOS image
+      id: macos
+      if: runner.os == 'macOS' && runner.environment == 'github-hosted'
+      shell: bash
+      run: |
+        set -euxo pipefail
+        echo "image=$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+    # shortcut: the formulas' major is spelled out here; change it with the
+    # LLVM pin in setup-llvm.sh (whose hash in the key then misses anyway).
+    - name: Restore LLVM's kegs
+      id: restore-macos
+      if: runner.os == 'macOS' && runner.environment == 'github-hosted'
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          /opt/homebrew/Cellar/llvm@20
+          /opt/homebrew/opt/llvm@20
+          /opt/homebrew/Cellar/lld@20
+          /opt/homebrew/opt/lld@20
+        key: llvm-macos-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ steps.macos.outputs.image }}-${{ runner.arch }}
+
     # Writes filled=true when it (re)filled the folder: on a miss, or when
     # apt had to download what the restored set lacked; on Windows, when it
     # installed the package.
@@ -82,3 +112,14 @@ runs:
       with:
         path: ~/AppData/Local/pepper/llvm
         key: llvm-windows-${{ hashFiles('scripts/setup-llvm.ps1') }}-${{ runner.arch }}
+
+    - name: Save LLVM's kegs
+      if: runner.os == 'macOS' && runner.environment == 'github-hosted' && steps.restore-macos.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          /opt/homebrew/Cellar/llvm@20
+          /opt/homebrew/opt/llvm@20
+          /opt/homebrew/Cellar/lld@20
+          /opt/homebrew/opt/lld@20
+        key: llvm-macos-${{ hashFiles('scripts/setup-llvm.sh') }}-${{ steps.macos.outputs.image }}-${{ runner.arch }}
