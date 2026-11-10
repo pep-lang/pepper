@@ -12,7 +12,14 @@ import [binary_result, conditional_result, int_literal_type, is_numeric_type] fr
 import [BRANCH_LOCAL, enum_method_name, FOR_ITERATOR, getter_name] from "builder";
 import [has_body, is_checked_function, unit_decls] from "checked";
 import [
-    ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
+    ModuleTables,
+    rewrite_module,
+    select_sites,
+    select_sites_each,
+    SiteFilter,
+    SiteSelection,
+    sync_closures,
+    sync_closures_selecting
 ] from "closure_sites";
 import "closures";
 import [entry_function, MAIN_WITH_ARGUMENTS] from "entry_point";
@@ -507,10 +514,11 @@ struct _Declarations {
     }
 
     ## Adds what `x` declares to `into`: its methods' signatures, not their
-    ## code, which the walks never look up.
+    ## code, which the walks never look up. Nor `resolved`, which only the
+    ## passes applying extensions read: `resolve_resolvables` sets it after
+    ## the first run, and taking it made the next run walk everything.
     into_extension(x: ExtensionDef, into: Fingerprint) {
         x.target.fingerprint(into);
-        into.add_text(x.resolved.is_value() ? x.resolved.value() : "");
         into.add(x.traits.count);
         for (var t in x.traits) {
             t.fingerprint(into);
@@ -2851,35 +2859,57 @@ _method_sites(module: Module, search: GenericMethodSearch?): SiteSelection? {
     return Optional<SiteSelection>.Value(select_sites(module, search.value().filter, false));
 }
 
+## What the three binding passes look for in the module as it is: the
+## trait types one walk over every function finds, the tables they share,
+## and each pass's search, with the filters that select its code.
+struct _BindSearch {
+    var trait_types: TypeName[];
+    var tables: ModuleTables;
+    var values: FunctionValueSearch?;
+    var functions: GenericFunctionSearch?;
+    var methods: GenericMethodSearch?;
+    var filters: Array<SiteFilter> = Array<SiteFilter>();
+    ## Per filter, whether it skips the extensions' own copies of methods.
+    var applied: Array<bool> = Array<bool>();
+
+    construct(module: Module, state: PassState) {
+        trait_types = used_trait_types(module, state.trait_types_memo());
+        tables = ModuleTables(module, state, Optional<TypeName[]>.Value(trait_types));
+        values = function_value_search(module, state, tables);
+        functions = generic_function_search(module, state);
+        methods = generic_method_search(module, state);
+        if (values.is_value()) {
+            filters.append(values.value().filter);
+            applied.append(false);
+        }
+        if (functions.is_value()) {
+            filters.append(functions.value().filter);
+            applied.append(true);
+        }
+        if (methods.is_value()) {
+            filters.append(methods.value().filter);
+            applied.append(false);
+        }
+    }
+}
+
 ## Runs the three binding passes: overloaded names, generic functions and
 ## generic methods used as values. They share tables while none of them
-## changes the module, and the tables share the trait types one walk over
-## every function finds; one more walk finds the code each pass needs.
+## changes the module; one more walk finds the code each pass needs,
+## unless `sync_closures_selecting` found it in its own.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
+## @param search what to look for, found in the module as it is now
+## @param found the code each of `search.filters` selects, if already found
 ## @returns what changed
-_bind_values(module: Module, state: PassState): _Bindings {
-    var result = _Bindings(used_trait_types(module, state.trait_types_memo()));
-    var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(result.trait_types));
-    var values = function_value_search(module, state, tables);
-    var functions = generic_function_search(module, state);
-    var methods = generic_method_search(module, state);
-    var filters = Array<SiteFilter>();
-    var applied = Array<bool>();
-    if (values.is_value()) {
-        filters.append(values.value().filter);
-        applied.append(false);
-    }
-    if (functions.is_value()) {
-        filters.append(functions.value().filter);
-        applied.append(true);
-    }
-    if (methods.is_value()) {
-        filters.append(methods.value().filter);
-        applied.append(false);
-    }
-    var selections = select_sites_each(module, filters, applied);
+_bind_values(module: Module, state: PassState, search: _BindSearch, found: SiteSelection[]?): _Bindings {
+    var result = _Bindings(search.trait_types);
+    var tables = search.tables;
+    var values = search.values;
+    var functions = search.functions;
+    var methods = search.methods;
+    var selections = found.is_value() ? found.value() : select_sites_each(module, search.filters, search.applied);
     ulong at = 0;
     var function_sites = Optional<SiteSelection>.Empty;
     var method_sites = Optional<SiteSelection>.Empty;
@@ -2947,8 +2977,14 @@ export resolve_implicit_types(module: Module, state: PassState) {
     # Whether the last run changed nothing since its closures were synced.
     bool quiet = false;
     while (round < 8) {
-        bool synced = sync_closures(module, state);
-        var bindings = _bind_values(module, state);
+        # The closures' walk also selects the code the bindings look
+        # through, which stays as it was unless the closures changed.
+        var search = _BindSearch(module, state);
+        var (synced, found) = sync_closures_selecting(module, state, search.filters, search.applied);
+        if (synced) {
+            search = _BindSearch(module, state);
+        }
+        var bindings = _bind_values(module, state, search, found);
         bool bound = bindings.bound or bindings.specialized or bindings.methods;
         # Code and declarations other passes changed: any before the first
         # run, and what closures and bindings changed before the others.

@@ -1221,6 +1221,24 @@ extend _Signatures with Rewriter;
 ## @param state the passes' state
 ## @returns whether anything changed
 export sync_closures(module: Module, state: PassState): bool {
+    var (changed, _) = sync_closures_selecting(module, state, Array<SiteFilter>(), Array<bool>());
+    return changed;
+}
+
+## `sync_closures`, whose walk over the code also selects the code each of
+## `filters` wants, as `select_sites_each` would: one walk for both.
+##
+## @param module the model, changed in place
+## @param state the passes' state
+## @param filters which expressions each caller's visitor acts on
+## @param applied per filter, whether to skip the extensions' own copies of
+##     their methods
+## @returns whether anything changed, and the code each filter selects
+##     when the walk ran and nothing changed after it (else none)
+export sync_closures_selecting(
+    module: Module, state: PassState, filters: Array<SiteFilter>, applied: Array<bool>
+): (bool, SiteSelection[]?) {
+    var none = Optional<SiteSelection[]>.Empty;
     # A checked unit's closures are in step already, and no code walked
     # here creates one: only the compilation unit's own closures can change.
     var own = unit_decls(module).structs;
@@ -1231,7 +1249,7 @@ export sync_closures(module: Module, state: PassState): bool {
         }
     }
     if (!any) {
-        return false;
+        return (false, none);
     }
     # Only functions creating a closure with an unknown type have anything
     # to teach.
@@ -1243,14 +1261,17 @@ export sync_closures(module: Module, state: PassState): bool {
         }
     }
     # One walk finds both the code creating a closure, whose types the
-    # end of this keeps in step, and the code creating one of those.
-    var filters = Array<SiteFilter>();
-    filters.append(_CreatesClosure(unknown));
-    filters.append(_CreatesAnyClosure());
-    var applied = Array<bool>();
-    applied.append(false);
-    applied.append(false);
-    var walks = _select_each(module, filters, applied);
+    # end of this keeps in step, and the code creating one of those, and
+    # what the caller's filters want.
+    var all_filters = Array<SiteFilter>();
+    all_filters.append(_CreatesClosure(unknown));
+    all_filters.append(_CreatesAnyClosure());
+    all_filters.append_all(filters);
+    var all_applied = Array<bool>();
+    all_applied.append(false);
+    all_applied.append(false);
+    all_applied.append_all(applied);
+    var walks = _select_each(module, all_filters, all_applied);
     var learned = HashMap<String, _Learned>();
     if (unknown.count > 0 and walks[0].contains(true)) {
         var learner = _Learner(SiteTable(module, state));
@@ -1301,5 +1322,12 @@ export sync_closures(module: Module, state: PassState): bool {
     # Nothing above creates a closure or moves a creation.
     var keeper = _Signatures(signatures);
     _rewrite_selected(module, walks[1], keeper);
-    return changed or keeper.changed;
+    if (changed or keeper.changed) {
+        return (true, none);
+    }
+    var selections = Array<SiteSelection>();
+    for (var i in 0..filters.count) {
+        selections.append(SiteSelection(walks[i + 2], applied[i]));
+    }
+    return (false, Optional<SiteSelection[]>.Value(selections));
 }
