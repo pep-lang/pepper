@@ -16,8 +16,8 @@
 #
 # The script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
 # `pep-profile`, `pep-package`, `pep-run`, `pep-new`, `pep-init`,
-# `pep-install`, `pep-doc`) from this
-# checkout with that `pep-build`, into target/pepper-tests/bin (under
+# `pep-install`, `pep-doc`; the `compiler` part only `pepper`, `pep-test`
+# and `pep-package`) from this checkout with that `pep-build`, into target/pepper-tests/bin (under
 # $PEPPER_TARGET_DIR when it is set), beside a link to the `pep-build`, so
 # `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
 # `pep-doc check` finds every tool's `--help` there. Further arguments go
