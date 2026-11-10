@@ -64127,7 +64127,12 @@ files uses a fresh folder under the system's temporary folder
 Linux, macOS and Windows, in two jobs on each: one runs the compiler's
 tests (<code>PEPPER_TESTS_PART=compiler</code>), the other everything else
 (<code>PEPPER_TESTS_PART=others</code>), and every build in a job shares one build
-cache. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0's
+cache. CI keeps that cache, with the Pepper tools, between runs, keyed on
+the compiler's contents (<code>.github/actions/prepare-tests</code>), so a rerun or a
+PR's next push with the same compiler starts warm. pep-build's own keys
+name the compiler and every source's contents, so a kept entry is reused
+only for the same build; <code>scripts/pepper-tests.sh</code> keeps the time of an
+unchanged compiler's copy, which those keys include. A PR that changes the compiler (<code>tools/compiler/</code>) or stage 0's
 pin (<code>.github/stage0</code>) is tested with that compiler instead: CI builds it
 with stage 0 first (<code>scripts/ci-build-compiler.sh</code>, from a build cache CI
 keeps between runs, keyed on stage 0's contents) and runs the suite with
