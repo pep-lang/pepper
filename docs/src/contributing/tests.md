@@ -113,9 +113,16 @@ name the compiler and every source's contents, so a kept entry is reused
 only for the same build; `scripts/pepper-tests.sh` keeps the time of an
 unchanged compiler's copy, which those keys include. A PR that changes the compiler (`tools/compiler/`) or stage 0's
 pin (`.github/stage0`) is tested with that compiler instead: CI builds it
-with stage 0 first (`scripts/ci-build-compiler.sh`, from a build cache CI
-keeps between runs, keyed on stage 0's contents) and runs the suite with
-it. So is a merge into main that publishes the build of main
+with stage 0 first (`scripts/ci-build-compiler.sh`, from a build cache
+keyed on stage 0's contents, which only main's runs save, since it is
+up to 1.2 GB, and a PR restores) and runs the suite with it.
+
+The repository keeps 10 GB of Actions caches, so CI keeps few: after the
+tests, CI's `prune-caches` job deletes every entry of these two caches on
+the branch or PR that a newer one replaced, and
+`.github/workflows/cache-cleanup.yml` deletes a PR's caches when it
+closes. In steady state that is about 2 GB of compiler cache and 0.7 GB of
+tests' caches for main, and 0.7 GB per open PR whose tests ran. So is a merge into main that publishes the build of main
 (`release.yml`): its tests run beside the release with the merge's own
 compiler, rather than wait for the release to publish it.
 

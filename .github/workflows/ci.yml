@@ -34,7 +34,9 @@
 # macos-15 (arm64). Hosted runners start clean, so each job provisions LLVM
 # (apt, Homebrew, or the llvm-package archive on Windows). A test job that
 # builds the compiler restores the compiler's build cache main's last run
-# saved; the tests' own builds start empty (.github/actions/prepare-tests).
+# saved, and the tests' own builds restore the last run's with the same
+# compiler (.github/actions/prepare-tests); `prune-caches` then keeps only
+# the newest entry of each.
 #
 # CI runs on each pull request, on each push to main (a merge), and by
 # hand (workflow_dispatch: `gh workflow run ci.yml --ref <branch>`). main's
@@ -661,6 +663,30 @@ jobs:
         run: |
           set -euxo pipefail
           bash scripts/ci-cross-link.sh run "$RUNNER_TEMP/cross"
+
+  # The test jobs' caches (.github/actions/prepare-tests) on this branch or
+  # pull request: the newest entry of each, by its key without the
+  # compiler's hash and the run id, stays, and the ones it replaced go, so
+  # the repository's 10 GB of caches is not filled by entries no run will
+  # restore. A fork's pull request has no token that may delete them.
+  prune-caches:
+    if: ${{ always() && needs.changes.outputs.code == 'true' && github.event.pull_request.head.repo.fork != true }}
+    needs: [changes, test-windows, test-linux, test-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euxo pipefail
+          for prefix in pepper-compiler- pepper-tests-; do
+            gh cache list --ref "$GITHUB_REF" --key "$prefix" --limit 100 --json id,key,createdAt \
+              --jq 'group_by(.key | sub("-[^-]+-[^-]+$"; "")) | .[] | sort_by(.createdAt) | .[:-1][] | .id'
+          done | xargs -r -n1 gh cache delete
 
   # The gate. It always runs, even when the run is cancelled, so it can never
   # report the success a skipped job does: it passes only when test-windows,

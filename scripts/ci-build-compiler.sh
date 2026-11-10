@@ -65,6 +65,14 @@ grep '^time:' "$log" || true
 grep -E '^cache: [0-9]+ of [0-9]+ compilation units' "$log" || true
 # The largest worker's peak memory (each worker's `-T time` stages end with it).
 find "$out/build" -name '*.stages' -exec grep -h '^peak ' {} + | sort -n -k2 | tail -1 | sed 's/^/workers: /' || true
+# What CI's cache of this folder holds, and whether this build changed it
+# (`-T cache` says the output was up to date when it did not), so CI saves
+# it again only then (.github/actions/prepare-tests).
+du -sh "$out/build" "$out/cache" | sed 's/^/size: /' || true
+changed=true
+! grep -q ' is up to date$' "$log" || changed=false
+echo "=== changed: $changed"
+[ -z "${GITHUB_OUTPUT:-}" ] || echo "changed=$changed" >> "$GITHUB_OUTPUT"
 # pepc loads LLVM-C.dll from its own folder.
 if [ -n "$exe" ]; then
   cp -f "$stage0/LLVM-C.dll" "$out/"
