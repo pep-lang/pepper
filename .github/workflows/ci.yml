@@ -8,12 +8,7 @@
 #
 # Every job tests with the published build of main: the toolchain
 # release.yml builds on each merge, installed with the install scripts as a
-# user installs it (scripts/ci-install-toolchain.sh). On a push, this
-# workflow runs Release itself (`release`) and the jobs that install the
-# toolchain wait for it, so they install this merge's build, not the one
-# before it; Docs (`docs`) waits the same way. A failed release does not
-# stop them: they test with the newest build that did publish, and the run
-# shows the release's failure beside their results. A commit that changes
+# user installs it (scripts/ci-install-toolchain.sh). A commit that changes
 # the compiler (tools/compiler/) or stage 0's pin (.github/stage0), a
 # dispatch on a branch other than main, or a commit whose compiler the
 # published build lacks (main's run that would have published it was
@@ -25,6 +20,16 @@
 # (.github/workflows/stage0.yml), so the compiler's build cache, keyed on
 # it, carries between runs.
 #
+# On a push that publishes the build of main, this workflow runs Release
+# itself (`release`), and the test and cross-link jobs build the commit's
+# compiler the same way, beside the release instead of waiting for it to
+# install what it publishes: the suite tests this merge's compiler and
+# runtime either way, and waiting added the release's 30-40 minutes to
+# every merge. Docs (`docs`) and the arm64 examples (`examples-arm64`),
+# which need the published build itself, still wait for it; a failed
+# release does not stop them: they use the newest build that did publish,
+# and the run shows the release's failure beside their results.
+#
 # Every job runs on a GitHub-hosted runner: windows-2025, ubuntu-24.04 and
 # macos-15 (arm64). Hosted runners start clean, so each job provisions LLVM
 # (apt, Homebrew, or the llvm-package archive on Windows). A test job that
@@ -35,7 +40,9 @@
 # hand (workflow_dispatch: `gh workflow run ci.yml --ref <branch>`). main's
 # ruleset requires `test` to pass on a pull request before it merges, so
 # auto-merge waits for it. A newer push to a pull request cancels its run
-# in progress; on main and by hand, runs queue.
+# in progress. On main and by hand, a run in progress always finishes (its
+# release may be publishing); GitHub keeps one run waiting behind it and
+# replaces that with a newer one, whose release publishes both merges.
 #
 # A skipped job reports success, so `test` is never a job that can be
 # skipped: it always runs and fails unless `test-windows`, `test-linux` and
@@ -48,8 +55,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A pull request's newer push replaces its run in progress; other runs
-# queue instead of cancelling, so each one finishes with a result.
+# A pull request's newer push replaces its run in progress; another run
+# that has started finishes, and only the one waiting behind it is replaced.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -74,6 +81,7 @@ jobs:
     outputs:
       code: ${{ steps.classify.outputs.code }}
       compiler: ${{ steps.classify.outputs.compiler }}
+      build: ${{ steps.classify.outputs.build }}
       release: ${{ steps.classify.outputs.release }}
     steps:
       # Merges into main are squashed, and a pull request's checkout is a
@@ -154,17 +162,28 @@ jobs:
               [ -n "$why" ] || why="build the commit's compiler: the published build could not be checked (see the log)"
             fi
           fi
+          # The tests and cross-link of a merge that publishes the build of
+          # main use its compiler built with stage 0, so they need not wait
+          # for the release. `compiler` stays as it was for examples-arm64,
+          # which tests the published arm64 builds.
+          build=$compiler
+          if [ "$code" = true ] && [ "$build" = false ] && [ "$EVENT" = push ] && [ "$release" = true ]; then
+            build=true
+            why="build the commit's compiler: it is tested beside the release that publishes it"
+          fi
           [ "$code" = true ] || why="no tests: the commit changes only prose"
           echo "$why"
           printf '### Compiler\n\n```\n%s\n```\n' "$why" >> "$GITHUB_STEP_SUMMARY"
-          echo "code=$code compiler=$compiler release=$release"
+          echo "code=$code compiler=$compiler build=$build release=$release"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "compiler=$compiler" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
           echo "release=$release" >> "$GITHUB_OUTPUT"
 
   # A merge that changes what the toolchain is built from publishes the
-  # build of main (release.yml) before any job below installs it. A skipped
-  # or failed release lets them go on with the newest published build.
+  # build of main (release.yml). Docs and examples-arm64 wait for it; a
+  # skipped or failed release lets them go on with the newest published
+  # build. The test jobs build the commit's compiler instead (`build`).
   release:
     needs: changes
     if: github.event_name == 'push' && needs.changes.outputs.release == 'true'
@@ -197,9 +216,8 @@ jobs:
       fail-fast: false
       matrix:
         part: [compiler, others]
-    needs: [changes, release]
-    # Runs after `release` whether it published, failed or was skipped.
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # A 4-core runner (3 on macOS). The bounds are the slowest passing
     # runs plus a fifth (scripts/ci-monitor.sh's samples and the
     # Diagnostics step say what a job that hit one was doing).
@@ -209,8 +227,7 @@ jobs:
       - uses: ./.github/actions/prepare-tests
         timeout-minutes: 30
         with:
-          compiler: ${{ needs.changes.outputs.compiler }}
-          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          compiler: ${{ needs.changes.outputs.build }}
           token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
@@ -267,9 +284,8 @@ jobs:
       fail-fast: false
       matrix:
         part: [compiler, others]
-    needs: [changes, release]
-    # Runs after `release` whether it published, failed or was skipped.
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # A 4-core runner (3 on macOS). The bounds are the slowest passing
     # runs plus a fifth (scripts/ci-monitor.sh's samples and the
     # Diagnostics step say what a job that hit one was doing).
@@ -279,8 +295,7 @@ jobs:
       - uses: ./.github/actions/prepare-tests
         timeout-minutes: 30
         with:
-          compiler: ${{ needs.changes.outputs.compiler }}
-          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          compiler: ${{ needs.changes.outputs.build }}
           token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
@@ -375,9 +390,8 @@ jobs:
       fail-fast: false
       matrix:
         part: [compiler, others]
-    needs: [changes, release]
-    # Runs after `release` whether it published, failed or was skipped.
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # A 4-core runner (3 on macOS). The bounds are the slowest passing
     # runs plus a fifth (scripts/ci-monitor.sh's samples and the
     # Diagnostics step say what a job that hit one was doing).
@@ -387,8 +401,7 @@ jobs:
       - uses: ./.github/actions/prepare-tests
         timeout-minutes: 30
         with:
-          compiler: ${{ needs.changes.outputs.compiler }}
-          expect-commit: ${{ needs.release.result == 'success' && github.sha || '' }}
+          compiler: ${{ needs.changes.outputs.build }}
           token: ${{ github.token }}
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
@@ -491,7 +504,7 @@ jobs:
           retention-days: 1
 
   cross-link:
-    needs: [changes, release, cross-sysroots]
+    needs: [changes, cross-sysroots]
     if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.cross-sysroots.result == 'success' }}
     strategy:
       fail-fast: false
@@ -540,14 +553,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PEPPER_EXPECT_COMMIT: ${{ needs.release.result == 'success' && github.sha || '' }}
-          # The build of main, or stage 0 to build the changed compiler with.
-          NEWEST: ${{ needs.changes.outputs.compiler != 'true' && '--newest' || '' }}
+          # The build of main, or stage 0 to build the commit's compiler with.
+          NEWEST: ${{ needs.changes.outputs.build != 'true' && '--newest' || '' }}
         run: bash -euxo pipefail scripts/ci-install-toolchain.sh $NEWEST
 
       # See test-windows.
       - name: Build the changed compiler
-        if: needs.changes.outputs.compiler == 'true'
+        if: needs.changes.outputs.build == 'true'
         timeout-minutes: 20
         shell: bash
         run: |
@@ -584,9 +596,7 @@ jobs:
 
   cross-run:
     needs: [changes, cross-link]
-    # A skipped `release` upstream would skip this job without the explicit
-    # result check.
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.cross-link.result == 'success' }}
+    if: needs.changes.outputs.code == 'true' && needs.cross-link.result == 'success'
     strategy:
       fail-fast: false
       matrix:
