@@ -526,6 +526,19 @@ lets_an_untyped_local_shadow_a_sibling_method() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A block's local hides the parameter of its name in every use, a generic
+# call's inference and an interpolated string's included: `x` there is the
+# local's `String`, not the parameter's `int`. So does a local of a closure
+# written in the function.
+[Test]
+types_a_local_that_hides_a_parameter() {
+    var folder = TempFolder("passes_local_hides_parameter");
+    var programs = [
+        "# expect: accepted\nshow<T>(value: T): T { return value; }\nf(x: int): String {\n    var g = (): String => {\n        var x = \"t\";\n        return show(x);\n    };\n    if (x > 0) {\n        var x = \"s\";\n        String y = show(x);\n        return $\"{x}{y}\" + g();\n    }\n    return \"\";\n}\nmain(): int { return f(1).size as int - 3; }\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # A value type's operator is named as written, not as the function it
 # becomes (`i32::{`) (#527).
 [Test]

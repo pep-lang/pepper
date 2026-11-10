@@ -1019,7 +1019,9 @@ struct _TypeScopes {
         symbols.pop();
     }
 
-    ## A local declared in the code being walked (not a global).
+    ## A local or parameter declared in the code being walked (not a
+    ## global), innermost scope first: a block's local hides a parameter of
+    ## the function around it, as a closure's parameter hides a local.
     local(name: String): TypeName? {
         ulong i = symbols.count;
         while (i > 1) {
@@ -1027,6 +1029,11 @@ struct _TypeScopes {
             for (var (symbol, ty) in symbols[i]) {
                 if (symbol == name) {
                     return Optional<TypeName>.Value(ty);
+                }
+            }
+            for (var p in params[i]) {
+                if (p.name == name) {
+                    return Optional<TypeName>.Value(p.ty);
                 }
             }
         }
@@ -1046,19 +1053,6 @@ struct _TypeScopes {
         for (var (symbol, ty) in symbols[0]) {
             if (symbol == name) {
                 return Optional<TypeName>.Value(ty);
-            }
-        }
-        return Optional<TypeName>.Empty;
-    }
-
-    param(name: String): TypeName? {
-        ulong i = params.count;
-        while (i > 0) {
-            i -= 1;
-            for (var p in params[i]) {
-                if (p.name == name) {
-                    return Optional<TypeName>.Value(p.ty);
-                }
             }
         }
         return Optional<TypeName>.Empty;
@@ -1306,14 +1300,13 @@ struct _TypeScopes {
     ## a call of `name` is then the variable's, not a method's or a free
     ## function's (#527).
     declared(name: String): TypeName? {
-        var found = param(name);
-        return found.is_value() ? found : local(name);
+        return local(name);
     }
 
     ## Function type of the free function `name`, when a bare `name` in
     ## value position refers to it.
     function_value(name: String, current: TypeName?): TypeName? {
-        if (param(name).is_value() or symbol(name).is_value()) {
+        if (symbol(name).is_value()) {
             return Optional<TypeName>.Empty;
         }
         if (current.is_value()) {
@@ -1328,10 +1321,7 @@ struct _TypeScopes {
     ## When a call `name(args)` calls through a function value, the callee
     ## expression and its function type.
     value_callee(name: String, current: TypeName?): (Expression, TypeName)? {
-        var declared = param(name);
-        if (!declared.is_value()) {
-            declared = symbol(name);
-        }
+        var declared = symbol(name);
         if (declared.is_value()) {
             var ty = declared.value();
             if (!ty.is_callable()) {
@@ -1736,12 +1726,8 @@ struct _TypeScopes {
         if (id == "this" and current.is_value()) {
             return current.value();
         }
-        # Parameters shadow globals.
-        var found = param(id);
-        if (found.is_value()) {
-            return found.value();
-        }
-        found = local(id);
+        # Parameters and locals shadow fields and globals.
+        var found = local(id);
         if (found.is_value()) {
             return found.value();
         }
@@ -2070,7 +2056,7 @@ struct _PropertyAt {
     }
 
     is_local(name: String): bool {
-        return scopes.param(name).is_value() or scopes.symbol(name).is_value();
+        return scopes.symbol(name).is_value();
     }
 }
 

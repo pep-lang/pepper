@@ -20,6 +20,17 @@ sum_below(count: int): int {
     return total + count;
 }
 
+# Every use of the name means the inner variable, an interpolated string's
+# included, whatever the outer one's type.
+describe(count: int): String {
+    var text = "";
+    {
+        var count = "inner";
+        text = $"{count}";
+    }
+    return $"{text} {count}";
+}
+
 # A match arm binds its names in the arm's scope.
 size(radius: int, shape: Shape): int {
     match (shape) {
@@ -49,6 +60,7 @@ twice_plus(offset: int): int {
 
 main(): int {
     assert(sum_below(5) == 108, "0 + 1 + 2, the block's 100, and the parameter's 5");
+    assert(describe(2) == "inner 2", "the block's String, then the parameter's int");
     assert(size(1, Shape.Circle(7)) == 7, "the arm's radius hides the parameter");
     assert(size(1, Shape.Square(2)) == 3, "the parameter is visible in the other arm");
     assert(first_or(1, Optional<int>.Value(9)) == 9, "the pattern's value hides the parameter");
