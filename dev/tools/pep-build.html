@@ -855,7 +855,10 @@ works), except in a program that imports a
 compilation unit at a time, in its own process. The optimization level,
 link-time optimization, debug info, CPU, removed runtime checks and build
 options are part of each object's
-key. Deleting the cache folder is always safe.</p>
+key. The cache keeps the checked results of each compilation unit's 32
+most recently used versions and the objects of each file's 8, so builds
+that switch between programs, options or edits reuse them. Deleting the
+cache folder is always safe.</p>
 <h3 id="--no-cache"><a class="header" href="#--no-cache"><code>--no-cache</code></a></h3>
 <p>Compiles every file without reading or writing the build cache.</p>
 <h3 id="--cache-dir"><a class="header" href="#--cache-dir"><code>--cache &lt;dir&gt;</code></a></h3>
@@ -887,8 +890,8 @@ the build's own cache, so a build reads only what it would have made.</p>
 sets in the project's <code>pep.toml</code> or in the Pepper home's (see
 <a href="projects.html#cache">Projects</a>). A build that stored in it, or that runs a
 day after the last check, removes the least recently used keys until it
-fits; a key used in the last ten minutes stays, since another build may be
-linking it. Deleting the folder is always safe.</p>
+fits, records an older compiler wrote there included; a key used in the
+last ten minutes stays, since another build may be linking it. Deleting the folder is always safe.</p>
 <h3 id="--verify-cache---no-verify-cache"><a class="header" href="#--verify-cache---no-verify-cache"><code>--verify-cache</code>, <code>--no-verify-cache</code></a></h3>
 <p><code>--verify-cache</code> checks the cache, for testing the compiler: every file the
 cache would reuse is compiled anyway, and the build fails if its code
