@@ -68,7 +68,7 @@ find "$out/build" -name '*.stages' -exec grep -h '^peak ' {} + | sort -n -k2 | t
 # What CI's cache of this folder holds, and whether this build changed it
 # (`-T cache` says the output was up to date when it did not), so CI saves
 # it again only then (.github/actions/prepare-tests).
-du -sh "$out/build" "$out/cache" | sed 's/^/size: /'
+du -sh "$out/build" "$out/cache" | sed 's/^/size: /' || true
 changed=true
 ! grep -q ' is up to date$' "$log" || changed=false
 echo "=== changed: $changed"
