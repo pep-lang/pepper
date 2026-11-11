@@ -40,7 +40,8 @@
 # runs both.
 #
 # Every build the tests make checks that sema left no injected construct
-# half resolved (PEPC_VERIFY_INJECTED, INTERNALS.md "Debugging"), and
+# half resolved (PEPC_VERIFY_INJECTED, INTERNALS.md "Debugging"), that the
+# tables sema keeps between builds equal fresh ones (PEPC_CHECK_TABLES), and
 # none uses the shared cache of the runtime's units (PEPPER_SHARED_CACHE,
 # docs/src/tools/pep-build.md): a test that expects to check the runtime
 # would find it there, and the tests would fill the user's cache folder.
@@ -48,6 +49,7 @@
 # examples' builds (tools/pep-doc/examples_test.pep), in a folder of their own.
 set -euo pipefail
 export PEPC_VERIFY_INJECTED="${PEPC_VERIFY_INJECTED:-1}"
+export PEPC_CHECK_TABLES="${PEPC_CHECK_TABLES:-1}"
 export PEPPER_SHARED_CACHE=off
 part="${PEPPER_TESTS_PART:-all}"
 case "$part" in

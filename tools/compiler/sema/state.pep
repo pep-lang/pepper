@@ -4,6 +4,7 @@
 
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
+import os;
 import [Exports] from "export_table";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, FunctionDef, GenericParam, StructDef, TypeName] from "model";
@@ -99,6 +100,16 @@ export struct PassTimes {
         }
         return out;
     }
+}
+
+## Whether `PEPC_CHECK_TABLES` asks for the tables a pass keeps between
+## builds (`TraitTypeCache`, the checked structs' static properties) to be
+## checked against a fresh build, failing at the first that differs.
+##
+## @returns whether to check
+export checks_tables(): bool {
+    var check = os.environment("PEPC_CHECK_TABLES");
+    return check.is_value() and !check.value().is_empty;
 }
 
 ## The name of the pass step `call` runs: its function, and the file it is
