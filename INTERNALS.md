@@ -3947,7 +3947,9 @@ the cache has one. Otherwise it checks the compilation unit:
    the checked structs. What `Callees`, `Overloads` and `ImplicitTables` make
    of each trait type the module uses (its methods' callees, overload members
    and return types) their per-unit base keeps too (`traits.TraitTypeCache`),
-   while the trait is the same declaration with the same method signatures (a fingerprint of the whole trait, its default bodies included, cost as much as making them again). A table a pass rebuilds each round
+   while the trait is the same declaration with the same method signatures
+   (a fingerprint of the whole trait, its default bodies included, cost as
+   much as making them again). A table a pass rebuilds each round
    over lists that only grow (`gather_generics`' symbol table and the specs'
    spellings, `specialize_structs`' and `specialize_functions`' names, bases
    and the specs done) keeps itself for the unit and takes in only what was

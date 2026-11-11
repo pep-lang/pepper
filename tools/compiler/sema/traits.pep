@@ -3,8 +3,8 @@
 
 import [checked_member_counts, copy_without_body, unit_decls] from "checked";
 import [Fingerprint] from "fingerprint";
-import [_signature] from "resolve_implicit_types";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
+import [_signature] from "resolve_implicit_types";
 import [checks_tables, TraitTypeMemo] from "state";
 import [type_ids] from "type_ids";
 import [parse_type_string] from "type_name";
