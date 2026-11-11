@@ -26,6 +26,15 @@ import [GenericSignature, record_conformances, specialization] from "type_argume
 import [AUTO, parse_type_string, replace_map, VOID_PTR] from "type_name";
 import [Rewriter] from "walk";
 
+# Spells `members`, in order, for `Overloads.describe`.
+_describe_member_list(members: Array<Member>): String {
+    var parts = Array<String>();
+    for (var member in members) {
+        parts.append(member.describe());
+    }
+    return ";".join(parts);
+}
+
 # Spells a trait type's members, for `TraitTypeCache`'s check.
 _describe_members(members: Array<(String, Member)>): String {
     var parts = Array<String>();
@@ -706,6 +715,88 @@ export struct Overloads {
             }
         }
         conforms[key].append_all(more);
+    }
+
+    ## Takes in that `function`'s return type was inferred: its member, if
+    ## it is one, is made again, as a fresh build makes it.
+    ##
+    ## @param function the function or method
+    ## @param owner the struct type of a method
+    refresh(function: FunctionDef, owner: TypeName?) {
+        if (owner.is_value()) {
+            var set = set_name(function.name);
+            var sets_of = methods.try_get(_canonical(owner.value()).to_string());
+            if (set != function.name and sets_of.is_value()) {
+                var members = sets_of.value().try_get(set);
+                if (members.is_value()) {
+                    _remake(members.value(), function);
+                }
+            }
+            return;
+        }
+        # A function's set is not named after it (`f#set18` of a private
+        # `f`): every set is looked through.
+        for (var (_, members) in sets) {
+            _remake(members, function);
+        }
+    }
+
+    # Makes `function`'s member in `members` again, if it has one.
+    _remake(members: Array<Member>, function: FunctionDef) {
+        ulong i = 0;
+        while (i < members.count) {
+            if (members[i].name == function.name and members[i].loc == function.loc) {
+                members[i] = Member(function, state);
+            }
+            i += 1;
+        }
+    }
+
+    ## Spells these sets (not the base's), for a check comparing tables
+    ## with a fresh build (`PEPC_CHECK_TABLES`).
+    ##
+    ## @returns the spelling
+    describe(): String {
+        var lines = Array<String>();
+        for (var (set, members) in sets) {
+            lines.append($"set {set} {_describe_member_list(members)}");
+        }
+        for (var (key, sets_of) in methods) {
+            for (var (set, members) in sets_of) {
+                lines.append($"method set {key}.{set} {_describe_member_list(members)}");
+            }
+        }
+        for (var name in constructors) {
+            lines.append($"constructors {name}");
+        }
+        for (var name in method_set_names) {
+            lines.append($"method set name {name}");
+        }
+        for (var (key, ty) in implicit) {
+            lines.append($"implicit {key}:{ty.to_string()}");
+        }
+        for (var (key, traits_of) in conforms) {
+            var parts = Array<String>();
+            for (var t in traits_of) {
+                parts.append(t.to_string());
+            }
+            lines.append($"conforms {key}:{",".join(parts)}");
+        }
+        for (var name in traits) {
+            lines.append($"trait {name}");
+        }
+        for (var (at, (is_exported, is_private)) in extension_methods) {
+            lines.append($"extension method {at.file}:{at.span.start} {is_exported} {is_private}");
+        }
+        for (var at in hidden) {
+            lines.append($"hidden {at.file}:{at.span.start}");
+        }
+        for (var at in file_private) {
+            lines.append($"file private {at.file}:{at.span.start}");
+        }
+        lines.sort((a, b) => a.compare(b));
+        lines.append($"settle by arity {settle_by_arity}");
+        return "\n".join(lines);
     }
 
     ## Returns whether `name` names an overload set.

@@ -74,7 +74,7 @@ import [
     Overloads
 ] from "overload_select";
 import [lower_property, Properties, PropertySite] from "properties";
-import [ImplicitMemo, PassMemo, PassState] from "state";
+import [checks_tables, ImplicitMemo, PassMemo, PassState] from "state";
 import [instance, trait_def, trait_types_of, TraitTypeCache, used_trait_types] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels, tuple_literal_type] from "tuple_literals";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
@@ -602,6 +602,19 @@ _describe_methods(methods: Array<(String, TypeName)>): String {
     return "\n".join(parts);
 }
 
+# Spells `signature`, for `ImplicitTables.describe`.
+_describe_signature(signature: GenericSignature): String {
+    var params = Array<String>();
+    for (var p in signature.params) {
+        params.append(p.name);
+    }
+    var types = Array<String>();
+    for (var ty in signature.parameter_types) {
+        types.append(ty.to_string());
+    }
+    return $"<{",".join(params)}>({",".join(types)}):{signature.returns.to_string()}/{signature.required}";
+}
+
 ## The tables of `module`'s checked declarations, built once per unit and
 ## kept in `state.checked_implicit`.
 _checked_implicit(module: Module, state: PassState, callees: Callees): ImplicitTables {
@@ -656,10 +669,11 @@ export struct ImplicitTables {
     ## The tables of the checked declarations, built once per unit
     ## (`PassState.checked_implicit`) and read under this run's own.
     var base: ImplicitTables? = Optional<ImplicitTables>.Empty;
-    ## In a base: each struct entry's declaration (parallel to `structs`),
-    ## and each struct's declaration with how many fields and methods it
-    ## had, by name. An entry holds while its struct is the same, unchanged
-    ## and not extended in this unit.
+    ## Each struct entry's declaration (parallel to `structs`, and to the
+    ## struct entries of `methods`), and in a base each struct's
+    ## declaration with how many fields and methods it had, by name. A
+    ## base's entry holds while its struct is the same, unchanged and not
+    ## extended in this unit.
     var _struct_defs: Array<StructDef> = Array<StructDef>();
     var _covered: HashMap<String, (StructDef, ulong, ulong)> = HashMap<String, (StructDef, ulong, ulong)>();
     ## In a base: its structs by the name before their type arguments.
@@ -712,6 +726,17 @@ export struct ImplicitTables {
             }
         }
         _index();
+        _add_functions(module);
+    }
+
+    # The free functions', externs' and globals' entries: a run's walks
+    # change their types (inferred return types, typed globals).
+    _add_functions(module: Module) {
+        functions = HashMap<String, TypeName>();
+        function_types = HashMap<String, TypeName>();
+        generic_functions = HashMap<String, GenericSignature>();
+        globals = HashMap<String, TypeName>();
+        var own = unit_decls(module);
         for (var f in own.functions) {
             _first_wins(functions, f.name, f.ty);
         }
@@ -720,16 +745,104 @@ export struct ImplicitTables {
         }
         for (var f in own.functions) {
             if (f.is_generic_func and !generic_functions.contains(f.name)) {
-                generic_functions[f.name] = GenericSignature(f, state);
+                generic_functions[f.name] = GenericSignature(f, _state);
             }
         }
-        var which = checked ? Optional<bool>.Value(false) : Optional<bool>.Empty;
-        for (var (name, ty) in _referenceable_functions(module, state, which)) {
+        var which = base.is_value() ? Optional<bool>.Value(false) : Optional<bool>.Empty;
+        for (var (name, ty) in _referenceable_functions(module, _state, which)) {
             _first_wins(function_types, name, ty);
         }
         for (var g in module.globals) {
             _first_wins(globals, g.name, g.ty);
         }
+    }
+
+    ## Takes in what the last run's walks changed, when nothing else
+    ## changed the module since these were built: the fields and method
+    ## types of the structs named in `changed`, and the functions' and
+    ## globals' types. The tables are then as a fresh build makes them.
+    ##
+    ## @param module the model
+    ## @param changed the names of the structs whose fields were typed or
+    ##     whose methods' return types were inferred
+    refresh(module: Module, changed: HashSet<String>) {
+        if (changed.count > 0) {
+            ulong i = 0;
+            while (i < _struct_defs.count) {
+                var st = _struct_defs[i];
+                if (changed.contains(st.name)) {
+                    var key = st.ty.to_string();
+                    structs[i] = (
+                        key, module.checked.structs.contains(st.name) ? st.field_members : st.field_members.copy()
+                    );
+                    var (own, _) = _struct_parts(module, st, _state.implicit);
+                    methods[i] = (key, own);
+                }
+                i += 1;
+            }
+        }
+        _add_functions(module);
+    }
+
+    ## Spells every entry, for a check comparing these with a fresh build
+    ## (`PEPC_CHECK_TABLES`).
+    ##
+    ## @returns the spelling
+    describe(): String {
+        var lines = Array<String>();
+        for (var (key, fields) in structs) {
+            var parts = Array<String>();
+            for (var f in fields) {
+                parts.append($"{f.name}:{f.ty.to_string()}");
+            }
+            lines.append($"struct {key} {",".join(parts)}");
+        }
+        for (var (key, own) in methods) {
+            lines.append($"methods {key} {_describe_methods(own).replace("\n", ",")}");
+        }
+        var sorted = Array<String>();
+        for (var (key, own) in arities) {
+            var parts = Array<String>();
+            for (var (name, fewest, most) in own) {
+                parts.append($"{name}/{fewest}/{most}");
+            }
+            sorted.append($"arities {key} {",".join(parts)}");
+        }
+        for (var (name, ty) in functions) {
+            sorted.append($"function {name}:{ty.to_string()}");
+        }
+        for (var (name, ty) in function_types) {
+            sorted.append($"function type {name}:{ty.to_string()}");
+        }
+        for (var (key, generic) in generic_methods) {
+            for (var (name, signature) in generic) {
+                sorted.append($"generic method {key}.{name}{_describe_signature(signature)}");
+            }
+        }
+        for (var name in generic_method_names) {
+            sorted.append($"generic method name {name}");
+        }
+        for (var (name, signature) in generic_functions) {
+            sorted.append($"generic function {name}{_describe_signature(signature)}");
+        }
+        for (var (name, ty) in globals) {
+            sorted.append($"global {name}:{ty.to_string()}");
+        }
+        for (var (name, ty) in struct_types) {
+            sorted.append($"struct type {name}:{ty.to_string()}");
+        }
+        for (var name in struct_names) {
+            sorted.append($"struct name {name}");
+        }
+        for (var name in struct_bases) {
+            sorted.append($"struct base {name}");
+        }
+        sorted.sort((a, b) => a.compare(b));
+        lines.append_all(sorted);
+        lines.append($"traits {traits.count}");
+        lines.append(properties.describe());
+        lines.append(callees.describe());
+        return "\n".join(lines);
     }
 
     ## The tables of `module`'s checked declarations alone: the structs no
@@ -741,7 +854,6 @@ export struct ImplicitTables {
                 continue;
             }
             out._add_struct(module, st, state);
-            out._struct_defs.append(st);
             out._covered[st.name] = (st, st.field_members.count, st.method_members.count);
             var name = _before_angle(st.ty.to_string());
             if (!out._by_base.contains(name)) {
@@ -788,6 +900,7 @@ export struct ImplicitTables {
         # A checked unit's fields are final: no copy to keep apart from
         # what this run types.
         structs.append((key, module.checked.structs.contains(st.name) ? st.field_members : st.field_members.copy()));
+        _struct_defs.append(st);
         var (own, own_arities) = _struct_parts(module, st, state.implicit);
         methods.append((key, own));
         struct_names.insert(key);
@@ -2647,16 +2760,84 @@ _resolve_body(function: FunctionDef, scopes: _TypeScopes, current: TypeName?) {
     scopes.pop();
 }
 
-## One run of the pass over the callables `work` needs, after `bindings`;
-## returns whether a function's return type was inferred or a call
-## resolved.
-_resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bindings): bool {
+## The tables a run of the pass looks up, and what its walks changed that
+## they hold: the next run takes that in rather than build them again,
+## while nothing else changed the module (`next`).
+struct _RunTables {
+    var tables: ImplicitTables;
+    var overloads: Overloads;
+    ## The trait types they were built for, spelled.
+    var trait_types: String;
+    ## The structs whose fields the walks typed or whose methods' return
+    ## types they inferred, by name.
+    var structs: HashSet<String> = HashSet<String>();
+    ## The functions and methods whose return types the walks inferred,
+    ## with a method's struct type.
+    var inferred: Array<(FunctionDef, TypeName?)> = Array<(FunctionDef, TypeName?)>();
+
+    ## Builds the tables of `module` after `bindings`.
+    construct(module: Module, state: PassState, bindings: _Bindings) {
+        trait_types = _spell_types(bindings.trait_types);
+        tables = ImplicitTables(module, state, bindings.trait_types);
+        overloads = bindings.overloads.is_value() ?
+            bindings.overloads.value() :
+            Overloads(module, state, Optional<TypeName[]>.Value(bindings.trait_types));
+    }
+
+    ## The tables of the next run, after `bindings`: these, with what this
+    ## run's walks changed taken in, while only those walks changed the
+    ## module (not `changed`) and the module uses the same trait types;
+    ## else built again.
+    ##
+    ## @panics with `PEPC_CHECK_TABLES` set, when the tables taken on
+    ##     differ from a fresh build
+    next(module: Module, state: PassState, bindings: _Bindings, changed: bool): _RunTables {
+        if (changed or _spell_types(bindings.trait_types) != trait_types) {
+            return _RunTables(module, state, bindings);
+        }
+        tables.refresh(module, structs);
+        if (bindings.overloads.is_value()) {
+            overloads = bindings.overloads.value();
+        } else {
+            for (var (function, owner) in inferred) {
+                overloads.refresh(function, owner);
+            }
+        }
+        structs = HashSet<String>();
+        inferred = Array<(FunctionDef, TypeName?)>();
+        if (checks_tables()) {
+            var fresh = _RunTables(module, state, bindings);
+            _check_same("ImplicitTables", tables.describe(), fresh.tables.describe());
+            _check_same("Overloads", overloads.describe(), fresh.overloads.describe());
+        }
+        return this;
+    }
+}
+
+# `types`, spelled.
+_spell_types(types: TypeName[]): String {
+    var parts = Array<String>();
+    for (var ty in types) {
+        parts.append(ty.to_string());
+    }
+    return ",".join(parts);
+}
+
+# Panics when the spellings of table `name` taken on from the last run and
+# built afresh differ.
+_check_same(name: String, kept: String, fresh: String) {
+    if (kept != fresh) {
+        panic($"{name} taken on from the last run differ from a fresh build:\n{kept}\n----\n{fresh}");
+    }
+}
+
+## One run of the pass over the callables `work` needs, with the tables of
+## `run`, which notes what the walks change in them; returns whether a
+## function's return type was inferred or a call resolved.
+_resolve_once(module: Module, state: PassState, work: _Worklist, run: _RunTables): bool {
     bool inferred = false;
-    var trait_types = bindings.trait_types;
-    var tables = ImplicitTables(module, state, trait_types);
-    var overloads = bindings.overloads.is_value() ?
-        bindings.overloads.value() :
-        Overloads(module, state, Optional<TypeName[]>.Value(trait_types));
+    var tables = run.tables;
+    var overloads = run.overloads;
     var resolved = Array<(Loc, String)>();
     # Structs first: methods see field types.
     ulong s = 0;
@@ -2691,6 +2872,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bind
                     field.ty = ty.copy();
                     work.changing.insert(struct_read);
                     work.changing.insert(struct_base);
+                    run.structs.insert(st.name);
                 }
             }
             # A default calling an overloaded constructor or function picks
@@ -2758,6 +2940,8 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bind
                 inferred = true;
                 work.changing.insert(_method_read(st.ty.to_string(), method.name));
                 work.changing.insert(struct_base);
+                run.structs.insert(st.name);
+                run.inferred.append((method, Optional<TypeName>.Value(st.ty)));
             }
             work.finish(at, method, tables, scopes);
         }
@@ -2788,6 +2972,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bind
         if (_finish_return_inference(function, scopes)) {
             inferred = true;
             work.changing.insert(_function_read(function.name));
+            run.inferred.append((function, Optional<TypeName>.Empty));
         }
         work.finish(at, function, tables, scopes);
     }
@@ -3001,6 +3186,7 @@ export resolve_implicit_types(module: Module, state: PassState) {
     ulong round = 0;
     # Whether the last run changed nothing since its closures were synced.
     bool quiet = false;
+    var run = Optional<_RunTables>.Empty;
     while (round < 8) {
         # The closures' walk also selects the code the bindings look
         # through, which stays as it was unless the closures changed.
@@ -3021,7 +3207,13 @@ export resolve_implicit_types(module: Module, state: PassState) {
             }
             declarations.keep(memo);
         }
-        bool inferred = _resolve_once(module, state, work, bindings);
+        # A run after one that changed only what its walks did takes on
+        # that run's tables.
+        var tables = run.is_value() ?
+            run.value().next(module, state, bindings, work.checks_code) :
+            _RunTables(module, state, bindings);
+        run = Optional<_RunTables>.Value(tables);
+        bool inferred = _resolve_once(module, state, work, tables);
         if (!inferred and !synced and !bound) {
             quiet = work.edits == 0 and work.changing.count == 0;
             break;

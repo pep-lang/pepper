@@ -103,7 +103,8 @@ export struct PassTimes {
 }
 
 ## Whether `PEPC_CHECK_TABLES` asks for the tables a pass keeps between
-## builds (`TraitTypeCache`, the checked structs' static properties) to be
+## builds (`TraitTypeCache`, the checked structs' static properties,
+## `resolve_implicit_types`' tables taken on from the last round) to be
 ## checked against a fresh build, failing at the first that differs.
 ##
 ## @returns whether to check
