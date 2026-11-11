@@ -374,7 +374,7 @@ _print(f: FunctionDef): ulong {
 }
 
 ## The fingerprint of what callers of `f` see: everything but its code.
-_signature(f: FunctionDef): ulong {
+export _signature(f: FunctionDef): ulong {
     var into = Fingerprint();
     into.add_text(f.name);
     f.ty.fingerprint(into);
