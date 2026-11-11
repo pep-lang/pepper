@@ -537,7 +537,9 @@ export struct Overloads {
             if (_methods_of(key).is_value()) {
                 continue;
             }
-            var members = made.fetch(def.value(), key, () => {
+            # Kept by spelling, not `key`: whichever spelling of a type comes
+            # first is filed, and two spellings make their own members.
+            var members = made.fetch(def.value(), ty.to_string(), () => {
                 var fresh = Array<(String, Member)>();
                 for (var method in instance(def.value(), ty).methods) {
                     var set = set_name(method.name);
