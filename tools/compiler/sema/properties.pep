@@ -15,6 +15,7 @@
 
 import [Location] from compiler.diagnostic;
 import [getter_name, SHARED_ATTRIBUTE, setter_name] from "builder";
+import [unit_decls] from "checked";
 import "closures";
 import [error_at, location_of] from "common";
 import [method_of] from "enums";
@@ -29,13 +30,14 @@ import [
     MethodCallExpression,
     Module,
     PropertyDef,
+    StructDef,
     SubjectExpression,
     SymbolRefExpression,
     TypeName,
     UnaryOp,
     WithSubject
 ] from "model";
-import [PassState] from "state";
+import [checks_tables, PassMemo, PassState] from "state";
 import "type_name";
 
 ## The program's properties, by owner (struct or trait base name).
@@ -53,10 +55,15 @@ export struct Properties {
     ## it has a `set`.
     var statics: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
 
+    ## No properties.
+    construct() {}
+
     ## Returns the properties of `module`.
     ##
     ## @param module the model
-    construct(module: Module) {
+    ## @param state the passes' state, which keeps the checked structs'
+    ##     static properties once per compilation unit
+    construct(module: Module, state: PassState) {
         for (var property in module.properties) {
             if (!by_owner.contains(property.owner)) {
                 by_owner[property.owner] = Array<PropertyDef>();
@@ -69,10 +76,44 @@ export struct Properties {
                 _add_static(ext.target.name, m);
             }
         }
-        for (var st in module.structs) {
-            for (var m in st.method_members) {
-                _add_static(st.name, m);
+        if (module.checked.structs.count == 0) {
+            for (var st in module.structs) {
+                _add_statics(st);
             }
+            return;
+        }
+        # The checked structs are looked through once per unit; the rest
+        # are the unit's own, with the checked ones it changed.
+        var checked = _checked_statics(module, state);
+        for (var (owner, names) in checked.statics) {
+            if (checked.covers(owner, state)) {
+                for (var name in names) {
+                    _add_static_name(owner, name);
+                }
+            }
+        }
+        for (var st in unit_decls(module).structs) {
+            _add_statics(st);
+        }
+        if (checks_tables()) {
+            var fresh = Properties();
+            for (var ext in module.extensions) {
+                for (var m in ext.methods) {
+                    fresh._add_static(ext.target.name, m);
+                }
+            }
+            for (var st in module.structs) {
+                fresh._add_statics(st);
+            }
+            if (_spell(statics) != _spell(fresh.statics)) {
+                panic($"static properties differ from a fresh build:\n{_spell(statics)}\n{_spell(fresh.statics)}");
+            }
+        }
+    }
+
+    _add_statics(st: StructDef) {
+        for (var m in st.method_members) {
+            _add_static(st.name, m);
         }
     }
 
@@ -80,10 +121,14 @@ export struct Properties {
         if (!m.is_static or !m.name.starts_with(getter_name(""))) {
             return;
         }
+        _add_static_name(owner, m.name.substr_bytes(getter_name("").size, m.name.size - getter_name("").size));
+    }
+
+    _add_static_name(owner: String, name: String) {
         if (!statics.contains(owner)) {
             statics[owner] = HashSet<String>();
         }
-        statics[owner].insert(m.name.substr_bytes(getter_name("").size, m.name.size - getter_name("").size));
+        statics[owner].insert(name);
     }
 
     ## Returns whether the program has no properties.
@@ -121,6 +166,68 @@ export struct Properties {
         }
         return Optional<PropertyDef>.Empty;
     }
+}
+
+# `statics` in order, for the check.
+_spell(statics: HashMap<String, HashSet<String>>): String {
+    var parts = Array<String>();
+    for (var (owner, names) in statics) {
+        for (var name in names) {
+            parts.append($"{owner}.{name}");
+        }
+    }
+    parts.sort((a, b) => a.compare(b));
+    return ",".join(parts);
+}
+
+## The static properties of a compilation unit's checked structs, found
+## once per unit (`PassState.unit_memos`): the struct's methods were final
+## when it was checked.
+struct _CheckedStatics {
+    ## Each checked struct looked through, with how many methods it had.
+    var covered: HashMap<String, (StructDef, ulong)> = HashMap<String, (StructDef, ulong)>();
+    ## Their static properties, by struct name.
+    var statics: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
+
+    construct() {}
+
+    ## Whether the entry of struct `name` still stands: the struct has as
+    ## many methods, and no extension of the unit changed it (which makes it
+    ## one of the unit's own, `unit_decls`).
+    covers(name: String, state: PassState): bool {
+        var found = covered.try_get(name);
+        if (!found.is_value()) {
+            return false;
+        }
+        var (st, methods) = found.value();
+        return st.method_members.count == methods and !state.extended_checked.contains(name);
+    }
+}
+
+extend _CheckedStatics with PassMemo;
+
+## The static properties of `module`'s checked structs, kept in
+## `state.unit_memos`.
+_checked_statics(module: Module, state: PassState): _CheckedStatics {
+    var kept = state.unit_memos.try_get("properties");
+    if (kept.is_value()) {
+        var found = kept.value() as? _CheckedStatics;
+        if (found.is_value()) {
+            return found.value();
+        }
+    }
+    var out = _CheckedStatics();
+    var found = Properties();
+    for (var st in module.structs) {
+        if (!module.checked.structs.contains(st.name) or state.extended_checked.contains(st.name)) {
+            continue;
+        }
+        out.covered[st.name] = (st, st.method_members.count);
+        found._add_statics(st);
+    }
+    out.statics = found.statics;
+    state.unit_memos["properties"] = out;
+    return out;
 }
 
 ## Where an access is written, and how to type expressions there.

@@ -2,8 +2,10 @@
 ## ask about them. A module with no checked runtime is assumed.
 
 import [checked_member_counts, copy_without_body, unit_decls] from "checked";
+import [Fingerprint] from "fingerprint";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
-import [TraitTypeMemo] from "state";
+import [_signature] from "resolve_implicit_types";
+import [checks_tables, TraitTypeMemo] from "state";
 import [type_ids] from "type_ids";
 import [parse_type_string] from "type_name";
 
@@ -23,6 +25,93 @@ export trait_def(traits: TraitDef[], ty: TypeName): TraitDef? {
         }
     }
     return Optional<TraitDef>.Empty;
+}
+
+## What a table makes of each trait type it files (its callees, its overload
+## members), kept by its once-per-unit base while the trait stays as it
+## was: the same declaration, with the same signatures (`_trait_print`).
+## With `PEPC_CHECK_TABLES` set, each reuse is checked against a fresh make.
+##
+## @typeParam T what is made of one trait type
+export struct TraitTypeCache<T> {
+    var _made: HashMap<String, (TraitDef, ulong, T)> = HashMap<String, (TraitDef, ulong, T)>();
+    # Each trait's fingerprint in this build of the table: a pass may
+    # change a trait between two builds.
+    var _prints: HashMap<String, ulong> = HashMap<String, ulong>();
+    var _name: String;
+    var _checking: bool;
+
+    ## An empty cache.
+    ##
+    ## @param name what it holds, for the check's message
+    construct(name: String) {
+        _name = name;
+        _checking = checks_tables();
+    }
+
+    ## Starts a build of the table: each trait is fingerprinted again.
+    start() {
+        _prints = HashMap<String, ulong>();
+    }
+
+    ## What `make` makes of trait type `key` (its `to_string()`) of trait
+    ## `def`: what it made before, while `def` is as it was then.
+    ##
+    ## @param def the trait
+    ## @param key the trait type
+    ## @param make makes it afresh
+    ## @param describe spells what is made, for the check
+    ## @returns what was made
+    ## @panics with `PEPC_CHECK_TABLES` set, when what was made before
+    ##     differs from a fresh make
+    fetch(def: TraitDef, key: String, make: () => T, describe: (T) => String): T {
+        var found = _made.try_get(key);
+        if (found.is_value()) {
+            var (was, print, made) = found.value();
+            if (was === def and print == _print(def)) {
+                if (_checking) {
+                    var kept = describe(made);
+                    var fresh = describe(make());
+                    if (kept != fresh) {
+                        panic($"{_name} of '{key}' differs from a fresh build:\n{kept}\n{fresh}");
+                    }
+                }
+                return made;
+            }
+        }
+        var fresh = make();
+        _made[key] = (def, _print(def), fresh);
+        return fresh;
+    }
+
+    _print(def: TraitDef): ulong {
+        var known = _prints.try_get(def.name);
+        if (known.is_value()) {
+            return known.value();
+        }
+        var print = _trait_print(def);
+        _prints[def.name] = print;
+        return print;
+    }
+}
+
+# The fingerprint of what instancing `def` reads: its parameters and its
+# methods' signatures, not their code, which a fingerprint of the whole
+# trait spent most of its time on.
+_trait_print(def: TraitDef): ulong {
+    var into = Fingerprint();
+    into.add_text(def.name);
+    into.add(def.generic_params.count);
+    for (var p in def.generic_params) {
+        p.fingerprint(into);
+    }
+    into.add(def.methods.count);
+    for (var m in def.methods) {
+        into.add(_signature(m));
+        into.add(m.attributes.count);
+        m.loc.fingerprint(into);
+    }
+    return into.value;
 }
 
 ## Returns whether a trait member can be called through a value of the

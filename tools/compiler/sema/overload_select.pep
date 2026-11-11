@@ -21,10 +21,19 @@ import [set_name] from "names";
 import "overloads";
 import [PassMemo, PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
-import [instance, trait_def, trait_types_of] from "traits";
+import [instance, trait_def, trait_types_of, TraitTypeCache] from "traits";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
 import [AUTO, parse_type_string, replace_map, VOID_PTR] from "type_name";
 import [Rewriter] from "walk";
+
+# Spells a trait type's members, for `TraitTypeCache`'s check.
+_describe_members(members: Array<(String, Member)>): String {
+    var parts = Array<String>();
+    for (var (set, member) in members) {
+        parts.append($"{set}={member.describe()}");
+    }
+    return "\n".join(parts);
+}
 
 ## One member of an overload set, as resolution needs it.
 export struct Member {
@@ -59,6 +68,19 @@ export struct Member {
             Optional<GenericSignature>.Value(GenericSignature(function, state)) :
             Optional<GenericSignature>.Empty;
         key = _parameter_key(function);
+    }
+
+    ## Spells this member, for a check comparing tables
+    ## (`TraitTypeCache`).
+    ##
+    ## @returns the spelling
+    describe(): String {
+        var parts = Array<String>();
+        for (var p in params) {
+            parts.append(p.to_string());
+        }
+        var generic_part = generic.is_value() ? "<generic>" : "";
+        return $"{name}{generic_part}@{loc.file}:{loc.span.start}({",".join(parts)}):{ret.to_string()}/{required}/{key}";
     }
 
     ## The member's type as a value: `(params) => return`.
@@ -363,6 +385,10 @@ export struct Overloads {
     # In a base: each struct it filed, with how many methods, generic
     # methods and constructors it had then.
     var _covered: HashMap<String, (StructDef, ulong, ulong, ulong)> = HashMap<String, (StructDef, ulong, ulong, ulong)>();
+    # In a base: each trait type's members, kept for the unit's builds.
+    var _trait_members: TraitTypeCache<Array<(String, Member)>> = TraitTypeCache<Array<(String, Member)>>(
+        "trait members"
+    );
     # In a base: the checked functions' members, as lookups made them.
     var _members_of: HashMap<String, Member?> = HashMap<String, Member?>();
 
@@ -485,10 +511,14 @@ export struct Overloads {
         }
         # A value of trait type calls the trait's members: every instance
         # the module uses, and each trait's base.
+        # Each trait type's are made once per unit, while its trait stays
+        # as it was.
         var trait_types = trait_types_of(module, known_trait_types, state.trait_types_memo());
         for (var t in module.traits) {
             trait_types.append(TypeName.named(t.name));
         }
+        var made = _base.is_value() ? _base.value()._trait_members : _trait_members;
+        made.start();
         for (var ty in trait_types) {
             var def = trait_def(module.traits, ty);
             if (!def.is_value()) {
@@ -498,11 +528,20 @@ export struct Overloads {
             if (_methods_of(key).is_value()) {
                 continue;
             }
-            for (var method in instance(def.value(), ty).methods) {
-                var set = set_name(method.name);
-                if (set != method.name) {
-                    _add_method(key, set, Member(method, state));
+            # Kept by spelling, not `key`: whichever spelling of a type comes
+            # first is filed, and two spellings make their own members.
+            var members = made.fetch(def.value(), ty.to_string(), () => {
+                var fresh = Array<(String, Member)>();
+                for (var method in instance(def.value(), ty).methods) {
+                    var set = set_name(method.name);
+                    if (set != method.name) {
+                        fresh.append((set, Member(method, state)));
+                    }
                 }
+                return fresh;
+            }, _describe_members);
+            for (var (set, member) in members) {
+                _add_method(key, set, member);
             }
         }
         # Only the sets' members are looked up.

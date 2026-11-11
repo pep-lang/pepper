@@ -75,7 +75,7 @@ import [
 ] from "overload_select";
 import [lower_property, Properties, PropertySite] from "properties";
 import [ImplicitMemo, PassMemo, PassState] from "state";
-import [instance, trait_def, trait_types_of, used_trait_types] from "traits";
+import [instance, trait_def, trait_types_of, TraitTypeCache, used_trait_types] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels, tuple_literal_type] from "tuple_literals";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
 import [FUNCTION, parse_type_string, replace_map, VOID, without_pointer_names] from "type_name";
@@ -374,7 +374,7 @@ _print(f: FunctionDef): ulong {
 }
 
 ## The fingerprint of what callers of `f` see: everything but its code.
-_signature(f: FunctionDef): ulong {
+export _signature(f: FunctionDef): ulong {
     var into = Fingerprint();
     into.add_text(f.name);
     f.ty.fingerprint(into);
@@ -593,6 +593,15 @@ _names(names: String[]): ulong {
     return into.value;
 }
 
+## Spells a trait type's methods, for `TraitTypeCache`'s check.
+_describe_methods(methods: Array<(String, TypeName)>): String {
+    var parts = Array<String>();
+    for (var (name, returns) in methods) {
+        parts.append($"{name}:{returns.to_string()}");
+    }
+    return "\n".join(parts);
+}
+
 ## The tables of `module`'s checked declarations, built once per unit and
 ## kept in `state.checked_implicit`.
 _checked_implicit(module: Module, state: PassState, callees: Callees): ImplicitTables {
@@ -655,12 +664,16 @@ export struct ImplicitTables {
     var _covered: HashMap<String, (StructDef, ulong, ulong)> = HashMap<String, (StructDef, ulong, ulong)>();
     ## In a base: its structs by the name before their type arguments.
     var _by_base: HashMap<String, Array<StructDef>> = HashMap<String, Array<StructDef>>();
+    ## In a base: each trait type's methods, kept for the unit's runs.
+    var _trait_methods: TraitTypeCache<Array<(String, TypeName)>> = TraitTypeCache<Array<(String, TypeName)>>(
+        "trait methods"
+    );
     var _state: PassState;
 
     construct(module: Module, state: PassState, trait_types: TypeName[]) {
         _state = state;
         callees = Callees(module, state, Optional<TypeName[]>.Value(trait_types));
-        properties = Properties(module);
+        properties = Properties(module, state);
         traits = module.traits;
         bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         if (checked) {
@@ -675,15 +688,27 @@ export struct ImplicitTables {
             }
             _add_struct(module, st, state);
         }
-        # Trait types used as values: what `var x = s.take()` returns.
+        # Trait types used as values: what `var x = s.take()` returns. Each
+        # one's are made once per unit, while its trait stays as it was.
+        var made = checked ? base.value()._trait_methods : _trait_methods;
+        made.start();
         for (var ty in trait_types_of(module, Optional<TypeName[]>.Value(trait_types))) {
             var def = trait_def(module.traits, ty);
             if (def.is_value()) {
-                var own = Array<(String, TypeName)>();
-                for (var m in instance(def.value(), ty).methods) {
-                    own.append((m.name, m.ty));
+                var key = ty.to_string();
+                var own = made.fetch(def.value(), key, () => {
+                    var fresh = Array<(String, TypeName)>();
+                    for (var m in instance(def.value(), ty).methods) {
+                        fresh.append((m.name, m.ty));
+                    }
+                    return fresh;
+                }, _describe_methods);
+                # Copies: the walk may keep a type it looked up.
+                var copies = Array<(String, TypeName)>();
+                for (var (name, returns) in own) {
+                    copies.append((name, returns.copy()));
                 }
-                methods.append((ty.to_string(), own));
+                methods.append((key, copies));
             }
         }
         _index();
@@ -710,7 +735,7 @@ export struct ImplicitTables {
     ## The tables of `module`'s checked declarations alone: the structs no
     ## extension of this unit changed yet, and the checked functions.
     static checked(module: Module, state: PassState, callees: Callees): ImplicitTables {
-        var out = ImplicitTables(callees, Properties(module), state);
+        var out = ImplicitTables(callees, Properties(module, state), state);
         for (var st in module.structs) {
             if (!module.checked.structs.contains(st.name) or state.extended_checked.contains(st.name)) {
                 continue;

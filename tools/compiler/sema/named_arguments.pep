@@ -27,7 +27,7 @@ import [
 ] from "model";
 import [set_name] from "names";
 import [PassMemo, PassState] from "state";
-import [instance, trait_def, trait_types_of] from "traits";
+import [instance, trait_def, trait_types_of, TraitTypeCache] from "traits";
 import "type_name";
 import [method_is_static, value_type_key] from "value_types";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
@@ -399,6 +399,21 @@ export struct Callee {
             }
         }
         return Callee(display, params, others, function.loc);
+    }
+
+    ## Spells this callee, for a check comparing tables
+    ## (`TraitTypeCache`).
+    ##
+    ## @returns the spelling
+    describe(): String {
+        var parts = Array<String>();
+        for (var p in params) {
+            parts.append($"{p.name}{p.has_default ? "=" : ""}:{p.ty.to_string()}");
+        }
+        for (var o in renames) {
+            parts.append($"{o.name}>{o.parameter}{o.deprecated ? "!" : ""}");
+        }
+        return $"{display}@{loc.file}:{loc.span.start}({",".join(parts)})";
     }
 
     ## The parameter a call names `name`, and whether that is a former name.
@@ -870,6 +885,15 @@ _checked_callees(module: Module, state: PassState): Callees {
     return built;
 }
 
+# Spells a trait type's callees, for `TraitTypeCache`'s check.
+_describe_callees(callees: Array<(String, Callee)>): String {
+    var parts = Array<String>();
+    for (var (name, callee) in callees) {
+        parts.append($"{name}={callee.describe()}");
+    }
+    return "\n".join(parts);
+}
+
 ## The callees of a module, by how calls name them, over a module with no
 ## checked runtime. Trait types' methods are not gathered: only
 ## `bind_method_call` reads them.
@@ -898,6 +922,11 @@ export struct Callees {
     var _by_name: HashMap<String, Array<(ulong, StructDef)>> = HashMap<String, Array<(ulong, StructDef)>>();
     var _by_spelling: HashMap<String, Array<(ulong, StructDef)>> = HashMap<String, Array<(ulong, StructDef)>>();
     var _made_receivers: HashSet<String> = HashSet<String>();
+    # A unit's checked callees: each trait type's callees, kept for the
+    # unit's builds.
+    var trait_callees: TraitTypeCache<Array<(String, Callee)>> = TraitTypeCache<Array<(String, Callee)>>(
+        "trait callees"
+    );
     var _made_constructors: HashSet<String> = HashSet<String>();
 
     ## The callees of `module`.
@@ -927,7 +956,7 @@ export struct Callees {
         for (var e in module.externs) {
             externs.insert(e.name);
         }
-        _add_trait_types(module, trait_types_of(module, trait_types, state.trait_types_memo()));
+        _add_trait_types(module, trait_types_of(module, trait_types, state.trait_types_memo()), state);
     }
 
     # The callees of `module`'s checked declarations alone, made as lookups
@@ -1119,8 +1148,11 @@ export struct Callees {
         }
     }
 
-    # A value of trait type calls the trait's methods, by name.
-    _add_trait_types(module: Module, trait_types: TypeName[]) {
+    # A value of trait type calls the trait's methods, by name. Each trait
+    # type's are made once per unit, while its trait stays as it was.
+    _add_trait_types(module: Module, trait_types: TypeName[], state: PassState) {
+        var made = base.is_value() ? base.value().trait_callees : trait_callees;
+        made.start();
         for (var ty in trait_types) {
             var def = trait_def(module.traits, ty);
             if (!def.is_value()) {
@@ -1131,8 +1163,15 @@ export struct Callees {
                 methods[key] = HashMap<String, Callee[]>();
             }
             var own = methods[key];
-            for (var method in instance(def.value(), ty).methods) {
-                _push(own, method.name, Callee.of(method, $"{ty.display()}.{method.name}", 0, Array<String>()));
+            var callees = made.fetch(def.value(), key, () => {
+                var fresh = Array<(String, Callee)>();
+                for (var method in instance(def.value(), ty).methods) {
+                    fresh.append((method.name, Callee.of(method, $"{ty.display()}.{method.name}", 0, Array<String>())));
+                }
+                return fresh;
+            }, _describe_callees);
+            for (var (name, callee) in callees) {
+                _push(own, name, callee);
             }
         }
     }

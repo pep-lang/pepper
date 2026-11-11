@@ -3943,7 +3943,13 @@ the cache has one. Otherwise it checks the compilation unit:
    structs' methods, constructor sets, `[Implicit]` constructors and traits
    (and each checked function's member, made when a set first names it), the
    names `bind_function_values` and `bind_generic_method_values` look for,
-   and the checked structs' conformances. A table a pass rebuilds each round
+   the checked structs' conformances, and `Properties`' static properties of
+   the checked structs. What `Callees`, `Overloads` and `ImplicitTables` make
+   of each trait type the module uses (its methods' callees, overload members
+   and return types) their per-unit base keeps too (`traits.TraitTypeCache`),
+   while the trait is the same declaration with the same method signatures
+   (a fingerprint of the whole trait, its default bodies included, cost as
+   much as making them again). A table a pass rebuilds each round
    over lists that only grow (`gather_generics`' symbol table and the specs'
    spellings, `specialize_structs`' and `specialize_functions`' names, bases
    and the specs done) keeps itself for the unit and takes in only what was
@@ -4215,6 +4221,11 @@ that should be cut off.
   recorded below, and reports each that differs
   (`verify-summaries: <key> <used> fresh <made>`), then the counts. A
   self-build with it set reports none.
+- `PEPC_CHECK_TABLES`: each time a sema table reuses what it kept for the
+  compilation unit (`TraitTypeCache`, `Properties`' checked static
+  properties), makes it afresh as well and panics, naming the table and the
+  two spellings, when they differ (`sema.checks_tables`).
+  `scripts/pepper-tests.sh` sets it.
 - `PEPC_VERIFY_INJECTED`: after the last sema pass, fails the build at the
   first injected construct left in its placeholder form
   (`injected.verify_injected`, section 3). `scripts/pepper-tests.sh` sets it.
