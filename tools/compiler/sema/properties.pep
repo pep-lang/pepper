@@ -131,6 +131,23 @@ export struct Properties {
         statics[owner].insert(name);
     }
 
+    ## Spells these properties, for a check comparing tables with a fresh
+    ## build (`PEPC_CHECK_TABLES`).
+    ##
+    ## @returns the spelling
+    describe(): String {
+        var owners = Array<String>();
+        for (var (owner, owned) in by_owner) {
+            var names = Array<String>();
+            for (var p in owned) {
+                names.append(p.name);
+            }
+            owners.append($"{owner}:{",".join(names)}");
+        }
+        owners.sort((a, b) => a.compare(b));
+        return $"properties {";".join(owners)} statics {_spell(statics)} extension methods {extension_methods.count}";
+    }
+
     ## Returns whether the program has no properties.
     is_empty(): bool {
         return by_owner.count == 0 and statics.count == 0;

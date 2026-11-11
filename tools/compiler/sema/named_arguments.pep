@@ -885,6 +885,15 @@ _checked_callees(module: Module, state: PassState): Callees {
     return built;
 }
 
+# Spells `callees`, in order, for `Callees.describe`.
+_describe_list(callees: Callee[]): String {
+    var parts = Array<String>();
+    for (var callee in callees) {
+        parts.append(callee.describe());
+    }
+    return ";".join(parts);
+}
+
 # Spells a trait type's callees, for `TraitTypeCache`'s check.
 _describe_callees(callees: Array<(String, Callee)>): String {
     var parts = Array<String>();
@@ -1146,6 +1155,30 @@ export struct Callees {
                 own[set].append(Callee.of(method, $"{st.name}.{set}", 0, generic));
             }
         }
+    }
+
+    ## Spells these callees (not the base's), for a check comparing tables
+    ## with a fresh build (`PEPC_CHECK_TABLES`).
+    ##
+    ## @returns the spelling
+    describe(): String {
+        var lines = Array<String>();
+        for (var (set, callees) in functions) {
+            lines.append($"callee {set} {_describe_list(callees)}");
+        }
+        for (var name in externs) {
+            lines.append($"extern {name}");
+        }
+        for (var (name, callees) in constructors) {
+            lines.append($"constructor {name} {_describe_list(callees)}");
+        }
+        for (var (receiver, sets) in methods) {
+            for (var (set, callees) in sets) {
+                lines.append($"method {receiver}.{set} {_describe_list(callees)}");
+            }
+        }
+        lines.sort((a, b) => a.compare(b));
+        return "\n".join(lines);
     }
 
     # A value of trait type calls the trait's methods, by name. Each trait

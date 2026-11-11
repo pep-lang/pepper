@@ -3553,7 +3553,13 @@ through `tools/compiler`; these notes add what the modules do beyond that.
   its keys when it differs; a change to what no key covers, traits,
   extensions (their methods by signature, not code), enums and the like,
   walks everything; a run whose last round changed nothing keeps that
-  round's closures and declarations rather than taking them again); the
+  round's closures and declarations rather than taking them again; a
+  round after one in which only its own walks changed the module, with
+  the same trait types, takes on that round's `ImplicitTables` and
+  `Overloads` (`_RunTables.next`): the walks note the structs whose fields
+  they typed or whose methods' return types they inferred, whose entries
+  are made again, and the inferred functions and methods, whose overload
+  members are, and the functions' and globals' entries are rebuilt); the
   model and errors they give do not depend on that); then the `?` checks
   (`check_tries.pep`), extension targets (`resolve_resolvables.pep`)
   and extensions applied to their structs, with each declared trait's
@@ -4223,8 +4229,9 @@ that should be cut off.
   self-build with it set reports none.
 - `PEPC_CHECK_TABLES`: each time a sema table reuses what it kept for the
   compilation unit (`TraitTypeCache`, `Properties`' checked static
-  properties), makes it afresh as well and panics, naming the table and the
-  two spellings, when they differ (`sema.checks_tables`).
+  properties) or from the last round (`resolve_implicit_types`'
+  `_RunTables`), makes it afresh as well and panics, naming the table and
+  the two spellings, when they differ (`sema.checks_tables`).
   `scripts/pepper-tests.sh` sets it.
 - `PEPC_VERIFY_INJECTED`: after the last sema pass, fails the build at the
   first injected construct left in its placeholder form
