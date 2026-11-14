@@ -52,6 +52,16 @@ runs every example, and every runtime `@example` that declares `main`. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
 
+## Keep functions simple
+
+- Keep each new or changed function in `runtime/` and `tools/` at a
+  cognitive complexity of 25 or less; split it otherwise. CI's complexity
+  gate (`scripts/complexity-check.sh`) enforces this, and the functions
+  already over 25 that `.github/complexity-baseline.txt` lists may not get
+  worse. Raise or add a baseline entry only when the function cannot
+  sensibly be split, and say why in the PR (see
+  `docs/src/contributing/complexity.md`).
+
 ## Tests
 
 - The suite is the Pepper `[Test]` functions of `runtime/` and `tools/`,
