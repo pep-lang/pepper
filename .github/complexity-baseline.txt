@@ -273,7 +273,7 @@ tools/compiler/sema/function_types.pep synthesize_function_types 40
 tools/compiler/sema/function_types_check.pep _FunctionTypes.block 52
 tools/compiler/sema/function_types_check.pep _FunctionTypes.check_node 58
 tools/compiler/sema/function_types_check.pep _FunctionTypes.constructor_hint 29
-tools/compiler/sema/function_types_check.pep _FunctionTypes.value_flows_into 39
+tools/compiler/sema/function_types_check.pep _FunctionTypes.value_flows_into 33
 tools/compiler/sema/generic_methods.pep specialize_methods 54
 tools/compiler/sema/generic_values.pep _MethodValueBinder.visit 26
 tools/compiler/sema/generics.pep gather_generics 86

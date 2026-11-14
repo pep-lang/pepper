@@ -231,6 +231,19 @@ enum _TypeKind {
     Pointer,
 }
 
+## How a value of kind `actual` converts to `expected`, of kind `kind`, as
+## the end of a mismatch message; empty when no hint applies.
+_conversion_hint(expected: TypeName, kind: _TypeKind, actual: _TypeKind): String {
+    if (actual is Pointer and expected.to_string() == "String") {
+        return "; use 'String(...)' to copy a C string";
+    }
+    # A number and a pointer convert only with `unsafe_cast`.
+    if ((kind is Numeric and actual is Pointer) or (kind is Pointer and actual is Numeric)) {
+        return $"; use 'unsafe_cast<{expected.display()}>(...)' to reinterpret";
+    }
+    return "";
+}
+
 ## How a slot reads in a message.
 enum _SlotKind {
     Argument,
@@ -602,10 +615,9 @@ struct _FunctionTypes {
                     mismatch = _canonical(expected).name != _canonical(actual).name;
                 }
             }
+            # A number and a pointer convert only with `unsafe_cast`.
             Numeric => {
-                if (actual_kind.value() is Numeric or actual_kind.value() is Pointer) {
-                    mismatch = false;
-                }
+                mismatch = !(actual_kind.value() is Numeric);
             }
             Struct => {
                 if (actual_kind.value() is Struct) {
@@ -625,7 +637,7 @@ struct _FunctionTypes {
                 }
             }
             Pointer => {
-                if (actual_kind.value() is Pointer or actual_kind.value() is Numeric) {
+                if (actual_kind.value() is Pointer) {
                     mismatch = false;
                 } else if (actual_kind.value() is Struct) {
                     mismatch = !_is_void_ptr(expected);
@@ -635,14 +647,10 @@ struct _FunctionTypes {
         if (!mismatch) {
             return;
         }
-        var message = slot.mismatch(expected.display(), actual.display());
-        var c_string = actual_kind.value() is Pointer and expected.to_string() == "String";
-        if (c_string) {
-            message = $"{message}; use 'String(...)' to copy a C string";
-        }
-        # The C-string hint already names the constructor.
-        var note = c_string ? Optional<(String, Loc)>.Empty : constructor_hint(expected, actual);
-        report_with(message, note, value, slot);
+        var hint = _conversion_hint(expected, expected_kind.value(), actual_kind.value());
+        # A hint already says how to convert.
+        var note = hint.size == 0 ? constructor_hint(expected, actual) : Optional<(String, Loc)>.Empty;
+        report_with($"{slot.mismatch(expected.display(), actual.display())}{hint}", note, value, slot);
     }
 
     ## A call that returns nothing used as a value: reports it and returns

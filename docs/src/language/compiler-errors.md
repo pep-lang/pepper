@@ -279,7 +279,9 @@ and a value converts to a struct whose constructor from its type is
 [`[Implicit]`](structs.md#implicit-conversions).
 A raw pointer is never a struct either: a `__ptr<char>` is not a `String`
 (copy it with `String(p)`), and a `String` is not a `__ptr<char>` (pass its
-`c_str()`).
+`c_str()`). Nor is a pointer a number: an `int` is not a `__ptr<char>`, and
+the two convert only with
+[`unsafe_cast`](types-and-variables.md#reinterpreting-with-unsafe_cast).
 Two specializations of one generic struct are different types: `Array<int>`
 is not `Array<String>` and `Array<Derived>` is not `Array<Base>`. Type
 arguments compare exactly, at every depth, after aliases resolve and omitted
