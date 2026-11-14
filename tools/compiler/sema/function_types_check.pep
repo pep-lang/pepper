@@ -916,11 +916,11 @@ struct _FunctionTypes {
     ## not declare, which code generation would find only once every other
     ## error is fixed (#344).
     missing_method(node: MethodCallExpression, this_type: TypeName) {
-        # A tuple's members (`compare`, `hash`) and the operators of the
-        # built-in types (`String`'s `+`) are built in.
         if (node.method.is_empty) {
             return;
         }
+        # A tuple's members (`compare`, `hash`) and the operators of the
+        # built-in types (`String`'s `+`) are built in.
         var first = node.method.byte_at(0);
         bool named = first == '_' or (first >= 'a' and first <= 'z') or (first >= 'A' and first <= 'Z');
         if (!named or node.method.starts_with("__") or this_type.is_tuple() or mentions_unbound(this_type)) {
