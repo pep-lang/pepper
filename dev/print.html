@@ -64346,6 +64346,86 @@ released by the time it returns. What the program keeps for good, such as
 a global made on first use (<code>async.Lazy</code>), is made inside
 <code>keep_for_the_program(() =&gt; { ... })</code> at the start of the test, which
 leaves it out of the count.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="the-complexity-gate"><a class="header" href="#the-complexity-gate">The complexity gate</a></h1>
+<p>CI keeps every function in <code>runtime/</code> and <code>tools/</code> at a cognitive
+complexity of 25 or less. The score comes from
+<a href="https://github.com/pep-lang/pepper-complexity">pep-complexity</a>, which
+follows SonarSource's "Cognitive Complexity" white paper, as gocognit
+does for Go. Each <code>if</code>, loop, <code>match</code> and <code>?:</code> adds 1, plus 1 for each
+level it is nested at; each <code>else</code>, run of <code>&amp;&amp;</code> or <code>||</code>, and labeled
+<code>break</code> or <code>continue</code> adds 1. Its README has the full table for every
+Pepper construct. A function over 25 is hard to read and to test,
+and is better split.</p>
+<h2 id="what-it-checks"><a class="header" href="#what-it-checks">What it checks</a></h2>
+<p><code>scripts/complexity-check.sh</code> runs the gate. It builds pep-complexity at
+the release tag or commit the script's <code>VERSION</code> names, checking that it
+is the commit <code>COMMIT</code> names, with this checkout's own parser
+(<code>tools/compiler/parse</code>) and runtime, so it reads the syntax this
+checkout's compiler reads, never an older release's. It then runs</p>
+<pre><code class="language-bash">pep-complexity --max 25 --baseline .github/complexity-baseline.txt \
+  --exclude '**/*_test.pep' --exclude 'runtime/**/test/**' --exclude '**/testdata/**' \
+  --exclude tools/compiler/sema/record_codec.pep runtime tools
+</code></pre>
+<p>Test files (<code>*_test.pep</code>, and the files in the runtime's <code>test/</code>
+folders), test data and the generated record codec
+(<code>scripts/gen-sema-record.py</code>) are not checked. The helpers tests share,
+such as <code>tools/tool_testing/</code> and <code>tools/compiler/expected_outcomes.pep</code>,
+are.</p>
+<p>The gate fails on:</p>
+<ul>
+<li>a function over 25 that the baseline does not list, such as a new one;</li>
+<li>a listed function whose score went over the one in the baseline.</li>
+</ul>
+<p>The baseline, <code>.github/complexity-baseline.txt</code>, lists the functions that
+were already over 25 when the gate started. Each line is <code>path name score</code>,
+and a function may stay at its score or go down, but not up. When a listed
+function improves, or is no longer over 25, the gate passes and prints a
+note saying which line to lower or remove.</p>
+<p>CI runs it in the <code>others</code> part of <code>test-linux</code>, after the Pepper tests,
+with the <code>pep-build</code> those tests used. It adds about half a minute when its
+build is cold, and a few seconds once the tests' build cache holds it.</p>
+<h2 id="running-it-1"><a class="header" href="#running-it-1">Running it</a></h2>
+<pre><code class="language-bash">scripts/complexity-check.sh                 # with the installed toolchain's pep-build
+scripts/complexity-check.sh path/to/folder  # with the pep-build in that folder
+</code></pre>
+<h2 id="when-it-fails"><a class="header" href="#when-it-fails">When it fails</a></h2>
+<p>Split the function: move a loop body, a <code>match</code> arm or a group of checks
+into a function of its own with a name that says what it does. The output
+names each failing function with its file, line, cognitive score and
+cyclomatic score.</p>
+<h2 id="when-pep-complexity-does-not-build"><a class="header" href="#when-pep-complexity-does-not-build">When pep-complexity does not build</a></h2>
+<p>pep-complexity reads the compiler's syntax tree (<code>compiler.ast</code>) and
+matches each kind of node by its fields in order. So a change to
+<code>compiler.ast</code>, such as a new statement or a field added to a node, can
+make the Complexity step fail with a compile error in
+<code>target/complexity/package</code> (<code>target-test/complexity/package</code> in CI),
+not in this repository's code.</p>
+<p>Fix it in pep-lang/pepper-complexity: update <code>score.pep</code> for the new tree
+(and its README's table for a new construct) in a pull request there.
+Then, in the same pepper pull request as the AST change, set <code>VERSION</code> in
+<code>scripts/complexity-check.sh</code> to that fix: a commit SHA works before the
+fix is released, and a release tag once it is. Set <code>COMMIT</code> to the same
+commit; the script fails when the two do not match. Building
+pep-complexity with this checkout's parser is what lets the fix and the
+change land together.</p>
+<h2 id="updating-the-baseline"><a class="header" href="#updating-the-baseline">Updating the baseline</a></h2>
+<pre><code class="language-bash">scripts/complexity-check.sh --write-baseline
+</code></pre>
+<p>rewrites <code>.github/complexity-baseline.txt</code> from the current sources: every
+function over 25, each at its current score. Do this for two reasons only:</p>
+<ul>
+<li>to shrink it, after functions got simpler (the gate's notes say which
+ones), so they cannot get worse again;</li>
+<li>to raise or add an entry when a function over 25 cannot sensibly be
+split, such as a dispatch over every case of a large enum, or generated
+code that grows with what it is generated from: the sema model's
+<code>Module.copy</code>, <code>fingerprint</code> and <code>to_json</code> (<code>sema/model.pep</code>, from
+<code>scripts/gen-sema-model.py</code>) gain a branch for each array field. Say
+why in the pull request, which then shows the line it adds or raises.</li>
+</ul>
+<p>Never raise an entry only to get a change past the gate. Since the file is
+sorted with one function per line, its diff shows exactly which functions
+changed.</p>
 
                     </main>
 
