@@ -19,6 +19,8 @@ struct PepperDemoApp: App {
         print("fibonacci(50) = \(fibonacci(50))")
         print("words: \(countWords("Pepper runs on iOS"))")
         print("even: \(isEven(10)), half: \(half(2.5)), tally: \(tallied())")
+        // A file in the app's tmp folder, written and read by Pepper.
+        print("note: \(saveNote("kept in tmp"))")
         fflush(stdout)
     }
 

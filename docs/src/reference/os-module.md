@@ -20,6 +20,7 @@ environment variables, clocks and time, and the machine and user.
   `page_size()`
 - [User](os-user.md): `user_name()`, `home_directory()`,
   `temp_directory()`, `is_elevated()`
+- [App folders](os-app.md): `app_directories()`, an iOS or Android app's folders
 
 **Example**
 ```pepper

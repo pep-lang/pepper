@@ -52,7 +52,8 @@ export home_directory(): io.Path? {
 }
 
 ## Returns the directory for temporary files: `TMPDIR` or `/tmp` on POSIX
-## (`/data/local/tmp` on Android), `GetTempPathW` on Windows. The same as `io.Directory.temp()`.
+## (on Android, the app's cache folder, else `/data/local/tmp`),
+## `GetTempPathW` on Windows. The same as `io.Directory.temp()`.
 ##
 ## @returns the temporary directory
 export temp_directory(): io.Path {
