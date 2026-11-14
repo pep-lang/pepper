@@ -15826,9 +15826,10 @@ unclosed <code>(</code> or <code>[</code> can hide the errors after it. Past the
 the first error in each function (or other declaration) only: a second one there is usually caused by the first. Errors in how a
 declaration is written, such as an empty <code>[]</code> with no element type or a <code>?</code>
 outside a function body, come first, from every file together; the type
-errors and undeclared names are found once those are fixed. An error a later
-stage would find shows up only once these are fixed: a <code>match</code> that misses a
-case, for one, is found after the type errors and undeclared names. The
+errors, undeclared names, missing fields and methods, and calls with the
+wrong number of arguments are found together once those are fixed. An error
+a later stage would find shows up only once these are fixed: a <code>match</code> that
+misses a case, for one, is found after them. The
 compiler never produces an executable from a program with an error.</p>
 <p>A build shows at most 20 errors, then <code>error: too many errors emitted, stopping now</code>. <code>pep-build --error-limit=N</code> shows at most <code>N</code> instead, and
 <code>--error-limit=0</code> shows every one (see <a href="language/../tools/pep-build.html">pep-build</a>).
