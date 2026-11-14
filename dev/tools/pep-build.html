@@ -926,7 +926,8 @@ skipped.</li>
 The default is 20. It applies to every command that checks the program:
 a build, <code>--emit-static</code>, <code>--emit-llvm</code>, <code>--emit-model-step</code> and
 <code>--emit-steps</code>. The compiler reports the errors of the first stage that
-finds any, one per function (see
+finds any, and of the later ones while those errors are all inside function
+bodies, one per function (see
 <a href="../language/compiler-errors.html#several-errors-at-once">Several errors at once</a>).</p>
 <h3 id="-v---verbose"><a class="header" href="#-v---verbose"><code>-v</code>, <code>--verbose</code></a></h3>
 <p>Prints, on standard error, what to look at first when a build goes wrong:
