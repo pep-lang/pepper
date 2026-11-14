@@ -12,9 +12,10 @@ and is better split.
 
 ## What it checks
 
-`scripts/complexity-check.sh` runs the gate. It builds pep-complexity from
-its release tag (the `VERSION` the script names) with this checkout's own
-parser (`tools/compiler/parse`) and runtime, so it reads the syntax this
+`scripts/complexity-check.sh` runs the gate. It builds pep-complexity at
+the release tag or commit the script's `VERSION` names, checking that it
+is the commit `COMMIT` names, with this checkout's own parser
+(`tools/compiler/parse`) and runtime, so it reads the syntax this
 checkout's compiler reads, never an older release's. It then runs
 
 ```bash
@@ -23,8 +24,11 @@ pep-complexity --max 25 --baseline .github/complexity-baseline.txt \
   --exclude tools/compiler/sema/record_codec.pep runtime tools
 ```
 
-Tests, test data and the generated record codec
-(`scripts/gen-sema-record.py`) are not checked.
+Test files (`*_test.pep`, and the files in the runtime's `test/`
+folders), test data and the generated record codec
+(`scripts/gen-sema-record.py`) are not checked. The helpers tests share,
+such as `tools/tool_testing/` and `tools/compiler/expected_outcomes.pep`,
+are.
 
 The gate fails on:
 
@@ -55,6 +59,24 @@ into a function of its own with a name that says what it does. The output
 names each failing function with its file, line, cognitive score and
 cyclomatic score.
 
+## When pep-complexity does not build
+
+pep-complexity reads the compiler's syntax tree (`compiler.ast`) and
+matches each kind of node by its fields in order. So a change to
+`compiler.ast`, such as a new statement or a field added to a node, can
+make the Complexity step fail with a compile error in
+`target/complexity/package` (`target-test/complexity/package` in CI),
+not in this repository's code.
+
+Fix it in pep-lang/pepper-complexity: update `score.pep` for the new tree
+(and its README's table for a new construct) in a pull request there.
+Then, in the same pepper pull request as the AST change, set `VERSION` in
+`scripts/complexity-check.sh` to that fix: a commit SHA works before the
+fix is released, and a release tag once it is. Set `COMMIT` to the same
+commit; the script fails when the two do not match. Building
+pep-complexity with this checkout's parser is what lets the fix and the
+change land together.
+
 ## Updating the baseline
 
 ```bash
@@ -67,8 +89,11 @@ function over 25, each at its current score. Do this for two reasons only:
 - to shrink it, after functions got simpler (the gate's notes say which
   ones), so they cannot get worse again;
 - to raise or add an entry when a function over 25 cannot sensibly be
-  split, such as a dispatch over every case of a large enum. Say why in
-  the pull request, which then shows the line it adds or raises.
+  split, such as a dispatch over every case of a large enum, or generated
+  code that grows with what it is generated from: the sema model's
+  `Module.copy`, `fingerprint` and `to_json` (`sema/model.pep`, from
+  `scripts/gen-sema-model.py`) gain a branch for each array field. Say
+  why in the pull request, which then shows the line it adds or raises.
 
 Never raise an entry only to get a change past the gate. Since the file is
 sorted with one function per line, its diff shows exactly which functions
