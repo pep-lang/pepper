@@ -21,16 +21,25 @@ const _GEO = "export trait Holder {\n    hold(item: String);\n}\n\n[Value]\nexpo
 # Builds `_GEO` as `geo.pep` into a Pepper library in `root`, in process,
 # and returns its archive.
 _build_library(root: Path): Path {
+    return _build_named(root, "geo", [("geo", _GEO)], root.join(Path("cache")));
+}
+
+# Builds the Pepper library `name` of `files` (each a name and its text,
+# the root first) in `root`, in process, with its build cache in `cache`,
+# and returns its archive.
+_build_named(root: Path, name: String, files: Array<(String, String)>, cache: Path): Path {
     Directory.create_all(root);
-    var source = root.join(Path("geo.pep"));
-    File.write_text(source, _GEO);
-    var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Pepper, "geo", link.Target())));
+    for (var (file, text) in files) {
+        File.write_text(root.join(Path($"{file}.pep")), text);
+    }
+    var source = root.join(Path($"{name}.pep"));
+    var archive = root.join(Path(driver.library_file_name(driver.LibraryKind.Pepper, name, link.Target())));
     var setup = link.Setup();
-    setup.library = "geo";
+    setup.library = name;
     setup.pepper_library = true;
     var options = driver.BuildOptions(archive, root.join(Path("build")));
     options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Pepper);
-    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(cache));
     options.in_process = true;
     var built = driver.build(link.load_program(source, setup).value(), options);
     if (built.is_err()) {
@@ -120,6 +129,31 @@ a_pepper_library_writes_its_interface_beside_its_archive() {
     expect_true(static_archive.is_file());
     expect_false(incremental.interface_path(static_archive).is_file());
     expect_true(link.read_stamps(static_archive).value()[0].interface.is_empty);
+}
+
+# The interface is a delta on the runtime's record, which a cache keeps for
+# every program whose runtime compilation unit has the same key: one another
+# library wrote, with other files and namespaces, gives the same bytes as
+# the library's own (#571).
+[Test]
+the_interface_does_not_depend_on_which_library_wrote_the_runtime_record() {
+    var folder = TempFolder("library_interface_runtime_record");
+    var alone = _build_library(folder.path.join(Path("alone")));
+    var cache = folder.path.join(Path("cache"));
+    _build_named(
+        folder.path.join(Path("other")),
+        "other",
+        [
+            ("other", "import \"helper\";\n\nexport other(x: int): int {\n    return helper(x);\n}\n"),
+            ("helper", "export helper(x: int): int {\n    return x + 1;\n}\n")
+        ],
+        cache
+    );
+    var after = _build_named(folder.path.join(Path("after")), "geo", [("geo", _GEO)], cache);
+    expect_equal(
+        link.interface_hash(File.read_bytes(incremental.interface_path(after)).value()),
+        link.interface_hash(File.read_bytes(incremental.interface_path(alone)).value())
+    );
 }
 
 # Imported by a program that has none of its files, the interface gives

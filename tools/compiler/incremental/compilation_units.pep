@@ -500,7 +500,9 @@ _names_reached(units: CompilationUnit[], unit: CompilationUnit): HashSet<String>
 
 ## Returns the module the compilation units `reads` leave, their records merged
 ## in order (`sema.RecordIn.merging`), each compilation unit's new declarations
-## after those of the compilation units before; or why a record does not merge.
+## after those of the compilation units before, with what it holds of the
+## program taken from `program` (`sema.take_program`), not from whichever
+## program wrote the records; or why a record does not merge.
 ##
 ## @param program the program
 ## @param records each compilation unit's record, by index: those of `reads` set
@@ -530,6 +532,7 @@ export merged_module(
         }
         module = sema.resume_checked(read.value());
     }
+    sema.take_program(program, module);
     sema.settle_merged(module);
     sema.sort_globals(program, module);
     return Result<sema.Module, String>.ok(module);
@@ -553,6 +556,7 @@ export merged_onto(
         return Result<sema.Module, String>.err(read.error());
     }
     var out = sema.resume_checked(read.value());
+    sema.take_program(program, out);
     sema.settle_merged(out);
     sema.sort_globals(program, out);
     return Result<sema.Module, String>.ok(out);
