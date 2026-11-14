@@ -15963,7 +15963,9 @@ and a value converts to a struct whose constructor from its type is
 <a href="language/structs.html#implicit-conversions"><code>[Implicit]</code></a>.
 A raw pointer is never a struct either: a <code>__ptr&lt;char&gt;</code> is not a <code>String</code>
 (copy it with <code>String(p)</code>), and a <code>String</code> is not a <code>__ptr&lt;char&gt;</code> (pass its
-<code>c_str()</code>).
+<code>c_str()</code>). Nor is a pointer a number: an <code>int</code> is not a <code>__ptr&lt;char&gt;</code>, and
+the two convert only with
+<a href="language/types-and-variables.html#reinterpreting-with-unsafe_cast"><code>unsafe_cast</code></a>.
 Two specializations of one generic struct are different types: <code>Array&lt;int&gt;</code>
 is not <code>Array&lt;String&gt;</code> and <code>Array&lt;Derived&gt;</code> is not <code>Array&lt;Base&gt;</code>. Type
 arguments compare exactly, at every depth, after aliases resolve and omitted
