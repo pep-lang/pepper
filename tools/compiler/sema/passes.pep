@@ -270,22 +270,12 @@ _position(file: ulong, offset: ulong): ulong {
 # is not one, as its body is part of its function's.
 _declaration_starts(module: Module): ulong[] {
     var starts = Array<ulong>();
-    for (var function in module.functions) {
+    _each_function(module, (function: FunctionDef) => {
         _add_start(starts, function.loc);
-    }
+    });
     for (var st in module.structs) {
-        if (is_closure_struct(st.name)) {
-            continue;
-        }
-        _add_start(starts, st.loc);
-        for (var method in st.method_members) {
-            _add_start(starts, method.loc);
-        }
-        for (var method in st.generic_methods) {
-            _add_start(starts, method.loc);
-        }
-        for (var constructor in st.constructors) {
-            _add_start(starts, constructor.loc);
+        if (!is_closure_struct(st.name)) {
+            _add_start(starts, st.loc);
         }
     }
     for (var t in module.traits) {
@@ -296,9 +286,6 @@ _declaration_starts(module: Module): ulong[] {
     }
     for (var extension in module.extensions) {
         _add_start(starts, extension.loc);
-        for (var method in extension.methods) {
-            _add_start(starts, method.loc);
-        }
     }
     for (var e in module.enums) {
         _add_start(starts, e.loc);
@@ -308,6 +295,33 @@ _declaration_starts(module: Module): ulong[] {
     }
     starts.sort();
     return starts;
+}
+
+# Calls `visit` with each function, method and constructor of `module`,
+# outside closures' structs, whose code is part of their functions'.
+_each_function(module: Module, visit: (FunctionDef) => void) {
+    for (var function in module.functions) {
+        visit(function);
+    }
+    for (var st in module.structs) {
+        if (is_closure_struct(st.name)) {
+            continue;
+        }
+        for (var method in st.method_members) {
+            visit(method);
+        }
+        for (var method in st.generic_methods) {
+            visit(method);
+        }
+        for (var constructor in st.constructors) {
+            visit(constructor);
+        }
+    }
+    for (var extension in module.extensions) {
+        for (var method in extension.methods) {
+            visit(method);
+        }
+    }
 }
 
 _add_start(starts: ulong[], at: Loc) {
@@ -450,7 +464,7 @@ _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
     var none = Optional<FunctionDef[]>.Empty;
     var starts = _declaration_starts(module);
     var at_start = HashMap<ulong, FunctionDef[]>();
-    var add = (function: FunctionDef) => {
+    _each_function(module, (function: FunctionDef) => {
         if (!function.loc.is_none()) {
             var start = _position(function.loc.file as ulong, function.loc.span.start);
             if (!at_start.contains(start)) {
@@ -458,26 +472,9 @@ _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
             }
             at_start[start].append(function);
         }
-    };
-    for (var function in module.functions) {
-        add(function);
-    }
-    for (var st in module.structs) {
-        for (var method in st.method_members) {
-            add(method);
-        }
-        for (var method in st.generic_methods) {
-            add(method);
-        }
-        for (var constructor in st.constructors) {
-            add(constructor);
-        }
-    }
-    for (var extension in module.extensions) {
-        for (var method in extension.methods) {
-            add(method);
-        }
-    }
+    });
+    # Each declaration's body span, walked once however many errors it has.
+    var spans = HashMap<ulong, (ulong, ulong)>();
     var out = Array<FunctionDef>();
     for (var error in errors) {
         if (!error.location.is_value() or error.location.value().file == NO_FILE as ulong) {
@@ -488,22 +485,26 @@ _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
         if (after == 0 or starts[after - 1] >> _FILE_SHIFT != at.file) {
             return none;
         }
-        var functions = at_start.try_get(starts[after - 1]);
+        var start = starts[after - 1];
+        var functions = at_start.try_get(start);
         if (!functions.is_value()) {
             return none;
         }
-        bool inside = false;
-        for (var function in functions.value()) {
-            if (function.body.is_value()) {
-                var span = _BodySpan(at.file);
-                rewrite_block(function.body.value(), span);
-                inside = inside or (span.first <= at.span.start and at.span.start <= span.last);
+        if (!spans.contains(start)) {
+            # Across the specializations too: their bodies are the same code.
+            var span = _BodySpan(at.file);
+            for (var function in functions.value()) {
+                if (function.body.is_value()) {
+                    rewrite_block(function.body.value(), span);
+                }
             }
+            spans[start] = (span.first, span.last);
+            out.append_all(functions.value());
         }
-        if (!inside) {
+        var (first, last) = spans[start];
+        if (at.span.start < first or at.span.start > last) {
             return none;
         }
-        out.append_all(functions.value());
     }
     return Optional<FunctionDef[]>.Value(out);
 }
