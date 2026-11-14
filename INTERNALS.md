@@ -1505,7 +1505,16 @@ alias the cycle passes through). Because `check_function_types` is a
 transform step, the driver and the LSP both run it.
 
 Error reporting inside passes goes through `state.report(diag)`, which
-collects them; the pass carries on, and the run stops after it.
+collects them; the pass carries on, and the run stops after it, unless
+every error it reported lies inside a function body (#344,
+`_Steps.carry_on`): between the first and the last located expression of
+the body of the function whose declaration it falls in
+(`_failed_bodies`, `_BodySpan`; it runs only after an error). Those
+functions' bodies are dropped (`drop_body`, specializations too), their
+errors are kept, and the later steps run, so one build also shows what a
+later pass finds elsewhere. An error in a signature, an attribute, a
+struct or a global stops the run as before: a later step would meet the
+declaration half checked.
 `take_errors` hands them over (with none it allocates nothing), and the
 runner (`run_steps_with`, `run_steps`, `run_passes`) returns them as a
 `Diagnostic[]`, as `_reportable` (`passes.pep`) keeps them: each place and
@@ -4669,7 +4678,8 @@ the checkout (`PEPPER_TARGET_DIR`).
   the syntax errors of the first file that fails to parse (all that
   `parse_recovering` reads past and `_render` trusts, §2.2), else the
   builder's (every file's, one per top-level declaration), else the
-  first failing pass's (`PassState.take_errors`), one per declaration, and
+  failing passes' (`PassState.take_errors`; past a pass only when all its
+  errors are inside function bodies), one per declaration, and
   code generation reports one error.
 - **Unused CLI flags**: `-T` channels other than `time`,
   `passes` and `cache`. Naming a second source file is an error (except under

@@ -900,7 +900,8 @@ now`, as clang's `-ferror-limit` does; `--error-limit=0` shows every error.
 The default is 20. It applies to every command that checks the program:
 a build, `--emit-static`, `--emit-llvm`, `--emit-model-step` and
 `--emit-steps`. The compiler reports the errors of the first stage that
-finds any, one per function (see
+finds any, and of the later ones while those errors are all inside function
+bodies, one per function (see
 [Several errors at once](../language/compiler-errors.md#several-errors-at-once)).
 
 ### `-v`, `--verbose`

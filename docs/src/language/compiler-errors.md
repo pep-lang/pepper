@@ -83,7 +83,8 @@ main.pep:1:13: note: to match this '{'
 ## Several errors at once
 
 The compiler checks a program in stages, and stops after the first stage that
-finds an error, with exit status 1. It reports every error that stage found,
+finds an error (unless all its errors are inside function bodies, below),
+with exit status 1. It reports every error that stage found,
 in the order of their places in the files, so one build can show several
 mistakes. Syntax errors come first: the compiler reads on past each one to
 the end of the broken statement or declaration, so it reports every syntax
@@ -96,9 +97,14 @@ the first error in each function (or other declaration) only: a second one there
 declaration is written, such as an empty `[]` with no element type or a `?`
 outside a function body, come first, from every file together; the type
 errors, undeclared names, missing fields and methods, and calls with the
-wrong number of arguments are found together once those are fixed. An error
-a later stage would find shows up only once these are fixed: a `match` that
-misses a case, for one, is found after them. The
+wrong number of arguments are found together once those are fixed. Some
+errors are found by a later stage than these: a `match` that misses a case,
+for one. When every error found so far is inside a function body, the
+compiler leaves those functions' bodies out and checks on, so the same build
+also shows what the later stages find in the rest of the program. An error
+outside a body, in a declaration's signature, a struct or a module-scope
+variable, stops the checks after its stage: a later error shows up only once
+it is fixed. The
 compiler never produces an executable from a program with an error.
 
 A build shows at most 20 errors, then `error: too many errors emitted,

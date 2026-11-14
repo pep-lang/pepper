@@ -15,8 +15,9 @@ import [check_bindings] from "bindings";
 import [check_casts] from "casts";
 import [check_bounds] from "check_bounds";
 import [check_tries] from "check_tries";
-import [restore_bodies, stash_bodies] from "checked";
+import [drop_body, restore_bodies, stash_bodies] from "checked";
 import [check_closures, is_closure_struct, lift_closures] from "closures";
+import [expression_loc] from "common";
 import [check_conditions] from "conditions";
 import [check_confinement] from "confinement";
 import [check_constraints, check_specializations] from "constraints";
@@ -44,7 +45,7 @@ import [defer_tuple_methods, drop_unused_methods, specialize_used_methods] from 
 import [check_string_bytes, resolve_literals] from "literals";
 import [Loc, NO_FILE] from "loc";
 import [lower_matches] from "matches";
-import [Module] from "model";
+import [Expression, FunctionDef, Module] from "model";
 import [bind_calls, check_link_attributes, check_named_attributes] from "named_arguments";
 import [check_overloads] from "overload_checks";
 import [has_overloads] from "overload_select";
@@ -70,6 +71,7 @@ import [resolve_type_aliases] from "type_aliases";
 import [check_type_arguments] from "type_argument_checks";
 import [begin_type_ids, end_type_ids] from "type_ids";
 import [check_value_structs] from "value_structs";
+import [Rewriter, rewrite_block] from "walk";
 import [lower_with_blocks] from "with_blocks";
 import [check_withheld] from "withheld";
 
@@ -126,13 +128,13 @@ _step_name(index: ulong): String {
 
 ## Runs the first `limit` steps of the passes over `module` (all of them,
 ## through the specialization loop, when `limit` is larger), stopping at the
-## first that reports an error.
+## first that reports an error outside a function body (`run_steps_with`).
 ##
 ## @param module the model `merge` built, changed in place
 ## @param target the compile target
 ## @param limit how many steps to run
 ## @param sources the program's files' text, by file index
-## @returns how many steps ran, or the errors the step that failed reported
+## @returns how many steps ran, or the errors the steps that failed reported
 export run_steps(
     module: Module, target: Target, limit: ulong, sources: SourceText[] = Array<SourceText>()
 ): Result<ulong, Diagnostic[]> {
@@ -147,7 +149,7 @@ export run_steps(
 ## @param target the compile target
 ## @param sources the program's files' text, by file index
 ## @returns the passes' state, which code generation reads, or the errors
-##   the step that failed reported
+##   the steps that failed reported
 export run_passes(module: Module, target: Target, sources: SourceText[]): Result<PassState, Diagnostic[]> {
     var state = PassState(target);
     state.sources = sources;
@@ -160,12 +162,15 @@ export run_passes(module: Module, target: Target, sources: SourceText[]): Result
 }
 
 ## `run_steps` with the passes' state given. A step that fails stops the
-## run, which returns every error it reported, as `_reportable` keeps them.
+## run, unless every error it reported lies inside a function body: then
+## those bodies are dropped and the later steps run, so they can report
+## errors elsewhere (#344). A failed run returns the errors of every step
+## that failed, as `_reportable` keeps them.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
 ## @param limit how many steps to run
-## @returns how many steps ran, or the errors the step that failed reported
+## @returns how many steps ran, or the errors the steps that failed reported
 export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic[]> {
     # The passes ask the same deep types the same questions: the table
     # answers each once per distinct type (#210).
@@ -176,13 +181,15 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
 }
 
 _run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic[]> {
-    var steps = _Steps(limit, state);
+    var steps = _Steps(limit, state, module);
     while (steps.ran < limit and steps.ran < PORTED_STEPS) {
         var errors = _step(steps.ran, module, state);
         steps.record_step(_step_name(steps.ran), steps.ran >= 6);
         if (!errors.is_empty) {
             steps.errors = errors;
-            break;
+            if (!steps.carry_on()) {
+                break;
+            }
         }
         steps.lap();
         steps.ran += 1;
@@ -194,6 +201,10 @@ _run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagno
         }
     }
     steps.report();
+    if (!steps.kept.is_empty) {
+        steps.kept.append_all(steps.errors);
+        steps.errors = steps.kept;
+    }
     # The checked declarations' tables and members hold signatures
     # (`GenericSignature`) that hold the state: let them go with the run, or
     # the cycle keeps the state, and every checked declaration it reaches,
@@ -207,7 +218,7 @@ _run_steps(module: Module, state: PassState, limit: ulong): Result<ulong, Diagno
     return Result<ulong, Diagnostic[]>.Ok(steps.ran);
 }
 
-# The errors a failed step reported, as the user is shown them: those with
+# The errors the failed steps reported, as the user is shown them: those with
 # a place (all when none has one), each place and message once, and of
 # those in one declaration only the first reported, as a later one there is
 # usually its fallout (even one earlier in the source), in source order. An
@@ -259,22 +270,12 @@ _position(file: ulong, offset: ulong): ulong {
 # is not one, as its body is part of its function's.
 _declaration_starts(module: Module): ulong[] {
     var starts = Array<ulong>();
-    for (var function in module.functions) {
+    _each_function(module, (function: FunctionDef) => {
         _add_start(starts, function.loc);
-    }
+    });
     for (var st in module.structs) {
-        if (is_closure_struct(st.name)) {
-            continue;
-        }
-        _add_start(starts, st.loc);
-        for (var method in st.method_members) {
-            _add_start(starts, method.loc);
-        }
-        for (var method in st.generic_methods) {
-            _add_start(starts, method.loc);
-        }
-        for (var constructor in st.constructors) {
-            _add_start(starts, constructor.loc);
+        if (!is_closure_struct(st.name)) {
+            _add_start(starts, st.loc);
         }
     }
     for (var t in module.traits) {
@@ -285,9 +286,6 @@ _declaration_starts(module: Module): ulong[] {
     }
     for (var extension in module.extensions) {
         _add_start(starts, extension.loc);
-        for (var method in extension.methods) {
-            _add_start(starts, method.loc);
-        }
     }
     for (var e in module.enums) {
         _add_start(starts, e.loc);
@@ -299,18 +297,50 @@ _declaration_starts(module: Module): ulong[] {
     return starts;
 }
 
+# Calls `visit` with each function, method and constructor of `module`,
+# outside closures' structs, whose code is part of their functions'.
+_each_function(module: Module, visit: (FunctionDef) => void) {
+    for (var function in module.functions) {
+        visit(function);
+    }
+    for (var st in module.structs) {
+        if (is_closure_struct(st.name)) {
+            continue;
+        }
+        for (var method in st.method_members) {
+            visit(method);
+        }
+        for (var method in st.generic_methods) {
+            visit(method);
+        }
+        for (var constructor in st.constructors) {
+            visit(constructor);
+        }
+    }
+    for (var extension in module.extensions) {
+        for (var method in extension.methods) {
+            visit(method);
+        }
+    }
+}
+
 _add_start(starts: ulong[], at: Loc) {
     if (!at.is_none()) {
         starts.append(_position(at.file as ulong, at.span.start));
     }
 }
 
-## Counts the steps, and stops at the first error or at the limit.
+## Counts the steps, and stops at the first error that is not inside a
+## function body, or at the limit.
 struct _Steps {
     var ran: ulong = 0;
     var limit: ulong;
     var state: PassState;
+    var module: Module;
+    ## The errors of the step that stopped the run.
     var errors: Diagnostic[] = Array<Diagnostic>();
+    ## The errors of the steps the run carried on past (`carry_on`).
+    var kept: Diagnostic[] = Array<Diagnostic>();
     # With `PEPC_TRACE_STEPS` set, the time each step took, by step.
     var timed: bool = false;
     var mark: os.Instant = os.Instant.now();
@@ -321,9 +351,10 @@ struct _Steps {
     # With `-T passes`, when the last step ended.
     var pass_mark: os.Instant = os.Instant.now();
 
-    construct(limit: ulong, state: PassState) {
+    construct(limit: ulong, state: PassState, module: Module) {
         this.limit = limit;
         this.state = state;
+        this.module = module;
         state.step_names = Array<String>();
         var trace = os.environment("PEPC_TRACE_STEPS");
         timed = trace.is_value() and !trace.value().is_empty;
@@ -400,9 +431,105 @@ struct _Steps {
             return false;
         }
         errors = taken;
+        return !carry_on();
+    }
+
+    ## After a step reported `errors`: whether the later steps run too.
+    ## They do when every error lies inside a function body (#344): those
+    ## bodies go (`drop_body`), so a later step reports nothing of them, and
+    ## the errors are kept for the end of the run. An error anywhere else
+    ## (a signature, an attribute, a struct, a global) stops the run as
+    ## before, since a later step would meet the declaration half checked.
+    ## Runs only after an error.
+    ##
+    ## @returns whether to run the later steps
+    carry_on(): bool {
+        var bodies = _failed_bodies(module, errors);
+        if (!bodies.is_value()) {
+            return false;
+        }
+        for (var function in bodies.value()) {
+            drop_body(function);
+        }
+        kept.append_all(errors);
+        errors = Array<Diagnostic>();
         return true;
     }
 }
+
+# The functions (specializations too) whose bodies hold `errors`, or none
+# when one of them is not inside a function body: before the first or past
+# the last located expression of the body of the declaration it falls in.
+_failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
+    var none = Optional<FunctionDef[]>.Empty;
+    var starts = _declaration_starts(module);
+    var at_start = HashMap<ulong, FunctionDef[]>();
+    _each_function(module, (function: FunctionDef) => {
+        if (!function.loc.is_none()) {
+            var start = _position(function.loc.file as ulong, function.loc.span.start);
+            if (!at_start.contains(start)) {
+                at_start[start] = Array<FunctionDef>();
+            }
+            at_start[start].append(function);
+        }
+    });
+    # Each declaration's body span, walked once however many errors it has.
+    var spans = HashMap<ulong, (ulong, ulong)>();
+    var out = Array<FunctionDef>();
+    for (var error in errors) {
+        if (!error.location.is_value() or error.location.value().file == NO_FILE as ulong) {
+            return none;
+        }
+        var at = error.location.value();
+        var after = starts.upper_bound(_position(at.file, at.span.start));
+        if (after == 0 or starts[after - 1] >> _FILE_SHIFT != at.file) {
+            return none;
+        }
+        var start = starts[after - 1];
+        var functions = at_start.try_get(start);
+        if (!functions.is_value()) {
+            return none;
+        }
+        if (!spans.contains(start)) {
+            # Across the specializations too: their bodies are the same code.
+            var span = _BodySpan(at.file);
+            for (var function in functions.value()) {
+                if (function.body.is_value()) {
+                    rewrite_block(function.body.value(), span);
+                }
+            }
+            spans[start] = (span.first, span.last);
+            out.append_all(functions.value());
+        }
+        var (first, last) = spans[start];
+        if (at.span.start < first or at.span.start > last) {
+            return none;
+        }
+    }
+    return Optional<FunctionDef[]>.Value(out);
+}
+
+# Where a body's located expressions in `file` start and end.
+struct _BodySpan {
+    var file: ulong;
+    var first: ulong = 0xffffffffffffffff;
+    var last: ulong = 0;
+
+    construct(file: ulong) {
+        this.file = file;
+    }
+
+    rewrite(e: Expression): Expression {
+        var at = expression_loc(e);
+        if (!at.is_none() and at.file as ulong == file) {
+            first = first < at.span.start ? first : at.span.start;
+            last = last > at.span.end ? last : at.span.end;
+        }
+        return e;
+    }
+}
+
+extend _BodySpan with Rewriter;
 
 ## The second pass: specializing can expose further generic uses, so the
 ## specializations repeat until no new one appears.
