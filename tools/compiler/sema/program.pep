@@ -83,11 +83,33 @@ _build_into(out: Module, program: Program, i: ulong, errors: Diagnostic[]) {
     }
 }
 
+## Gives `module`, merged from checked units' records, what it holds of
+## `program` itself rather than of a compilation unit: the namespaces of
+## its files, its extension scopes and its overload unions. A record holds
+## them as the program that wrote it had them, and the shared cache keeps
+## one record for every program whose compilation unit has the same key,
+## so a delta written on a module that had not taken them would depend on
+## which program wrote the records it read (#571).
+##
+## @param program the linked program
+## @param module the merged module, changed in place
+export take_program(program: Program, module: Module) {
+    var fresh = Module(extension_scopes = _extension_scopes(program));
+    for (var (name, groups) in program.overload_unions) {
+        fresh.overload_unions[name] = groups;
+    }
+    for (var file in program.files) {
+        fresh.namespaces.append(file.namespace);
+    }
+    module.extension_scopes = fresh.extension_scopes;
+    module.overload_unions = fresh.overload_unions;
+    module.namespaces = fresh.namespaces;
+}
+
 ## Builds the model of `files`, some of `program`'s, on top of `base`, a
 ## module whose declarations are checked already (a checked unit's record,
-## loaded): `base` takes `program`'s file list, namespaces, extension
-## scopes and overload unions, then the files' declarations. Without a
-## base, a new module.
+## loaded) and which has taken `program` (`take_program`): the files'
+## declarations.
 ##
 ## @param program the linked program
 ## @param base the checked module, changed in place
@@ -95,16 +117,6 @@ _build_into(out: Module, program: Program, i: ulong, errors: Diagnostic[]) {
 ## @returns `base` with the files, or the error of each declaration that
 ##   failed to build, in source order
 export build_on(program: Program, base: Module, files: ulong[]): Result<Module, Diagnostic[]> {
-    var fresh = Module(linked = true, extension_scopes = _extension_scopes(program));
-    for (var (name, groups) in program.overload_unions) {
-        fresh.overload_unions[name] = groups;
-    }
-    for (var file in program.files) {
-        fresh.namespaces.append(file.namespace);
-    }
-    base.extension_scopes = fresh.extension_scopes;
-    base.overload_unions = fresh.overload_unions;
-    base.namespaces = fresh.namespaces;
     base.linked = true;
     var errors = Array<Diagnostic>();
     for (var i in files) {

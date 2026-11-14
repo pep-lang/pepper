@@ -3933,7 +3933,11 @@ the cache has one. Otherwise it checks the compilation unit:
    record (`Program.link_bodies`), and runs the program checks.
 2. `merged_module` builds the module of the compilation unit's closure: the closure's
    records read in order onto an empty module (see *Merging* below), then
-   `sema.settle_merged` and `sema.sort_globals`. The compilation unit is checked on its
+   `sema.take_program` (the program's file namespaces, extension scopes and
+   overload unions replace those of the programs that wrote the records, so
+   a delta written on the module does not depend on which program wrote a
+   record the shared cache kept, #571), `sema.settle_merged` and
+   `sema.sort_globals`. The compilation unit is checked on its
    closure only, not on every compilation unit before it in the order. Otherwise its
    result would depend on unrelated compilation units: specializations they made, or
    overloads they added.
