@@ -1247,6 +1247,35 @@ other(g: (String) => int): int {
     return g(1, 2);
 }
 ",
+        # Missing members and wrong argument counts, with the type errors
+        # rather than by code generation once those are fixed (#344).
+        "# expect: main.pep:13:14: error: no member named 'y' in 'P'
+# expect: main.pep:16:12: error: too many arguments to 'f': expected 1, have 2
+# expect: main.pep:19:7: error: no member named 'grow' in 'P'
+# expect: main.pep:22:14: error: too few arguments to 'P.scale': expected at least 1, have 0
+struct P {
+    var x: int = 0;
+    scale(by: int, extra: int = 0): int { return x * by + extra; }
+}
+f(x: int): int {
+    return x;
+}
+a(p: P): int {
+    return p.y;
+}
+b(): int {
+    return f(1, 2);
+}
+c(p: P) {
+    p.grow();
+}
+d(p: P): int {
+    return p.scale();
+}
+main(): int {
+    return 0;
+}
+",
         "# expect: main.pep:5:12: error: too many arguments to function of type '(int) => int': expected 1, have 2\nsquare(x: int): int { return x * x; }\nmain(): int {\n    var f = square;\n    return f(1, 2);\n}\n",
         "# expect: main.pep:4:9: error: non-void function 'f' should return a value\nf(x: int): int {\n    if (x > 0) {\n        return;\n    }\n    return 1;\n}\nmain(): int {\n    return f(1);\n}\n",
         "# expect: main.pep:5:11: error: cannot initialize variable 's' of type 'S' with a value of type '__ptr<void>'\nstruct S { int x = 0; }\nmain(): int {\n    var p: __ptr<void> = __null;\n    S s = p;\n    return 0;\n}\n",
@@ -1503,7 +1532,7 @@ other(g: (String) => int): int {
         "# expect: main.pep:4:16: error: cannot infer the type arguments of '_range' from its arguments; write them: _range<T>(...)\n_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = \"a\"..>\"z\";\n    return 0;\n}\n",
         # A generic method's constraints, at its specialization.
         "# expect: main.pep:10:23: error: 'int' does not conform to trait 'Named', required by 'T' in 'get'\ntrait Named {\n    name(): int;\n}\nstruct Box {\n    get<T: Named>(x: T): int { return 0; }\n}\nmain(): int {\n    var b = Box();\n    return b.get<int>(1);\n}\n",
-        "# expect: accepted\nstruct Box {\n    get<T>(x: T): T { return x; }\n}\nmain(): int {\n    var b = Box();\n    var f = b.get<int>;\n    return b.get<int>(1) + f(2) + b.missing<int>(3);\n}\n",
+        "# expect: main.pep:8:37: error: no member named 'missing<int>' in 'Box'\nstruct Box {\n    get<T>(x: T): T { return x; }\n}\nmain(): int {\n    var b = Box();\n    var f = b.get<int>;\n    return b.get<int>(1) + f(2) + b.missing<int>(3);\n}\n",
         # A specialization's `static` block emits a lowered string.
         "# expect: accepted\npick<T>(x: T): T {\n    var s = x;\n    static (s) {\n        var t = \"ab\";\n        s = t;\n    }\n    return s;\n}\nmain(): int {\n    var p = pick<int>(1);\n    return 0;\n}\n",
         # Intrinsics: function pointers, `__ptr<T>`, typed intrinsics and SIMD arity.
