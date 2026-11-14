@@ -602,10 +602,9 @@ struct _FunctionTypes {
                     mismatch = _canonical(expected).name != _canonical(actual).name;
                 }
             }
+            # A number and a pointer convert only with `unsafe_cast`.
             Numeric => {
-                if (actual_kind.value() is Numeric or actual_kind.value() is Pointer) {
-                    mismatch = false;
-                }
+                mismatch = !(actual_kind.value() is Numeric);
             }
             Struct => {
                 if (actual_kind.value() is Struct) {
@@ -625,7 +624,7 @@ struct _FunctionTypes {
                 }
             }
             Pointer => {
-                if (actual_kind.value() is Pointer or actual_kind.value() is Numeric) {
+                if (actual_kind.value() is Pointer) {
                     mismatch = false;
                 } else if (actual_kind.value() is Struct) {
                     mismatch = !_is_void_ptr(expected);
