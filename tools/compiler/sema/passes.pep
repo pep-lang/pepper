@@ -463,16 +463,7 @@ struct _Steps {
 _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
     var none = Optional<FunctionDef[]>.Empty;
     var starts = _declaration_starts(module);
-    var at_start = HashMap<ulong, FunctionDef[]>();
-    _each_function(module, (function: FunctionDef) => {
-        if (!function.loc.is_none()) {
-            var start = _position(function.loc.file as ulong, function.loc.span.start);
-            if (!at_start.contains(start)) {
-                at_start[start] = Array<FunctionDef>();
-            }
-            at_start[start].append(function);
-        }
-    });
+    var at_start = _functions_by_start(module);
     # Each declaration's body span, walked once however many errors it has.
     var spans = HashMap<ulong, (ulong, ulong)>();
     var out = Array<FunctionDef>();
@@ -491,14 +482,7 @@ _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
             return none;
         }
         if (!spans.contains(start)) {
-            # Across the specializations too: their bodies are the same code.
-            var span = _BodySpan(at.file);
-            for (var function in functions.value()) {
-                if (function.body.is_value()) {
-                    rewrite_block(function.body.value(), span);
-                }
-            }
-            spans[start] = (span.first, span.last);
+            spans[start] = _body_span(at.file, functions.value());
             out.append_all(functions.value());
         }
         var (first, last) = spans[start];
@@ -507,6 +491,33 @@ _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
         }
     }
     return Optional<FunctionDef[]>.Value(out);
+}
+
+# The functions (specializations too) declared at each position.
+_functions_by_start(module: Module): HashMap<ulong, FunctionDef[]> {
+    var at_start = HashMap<ulong, FunctionDef[]>();
+    _each_function(module, (function: FunctionDef) => {
+        if (!function.loc.is_none()) {
+            var start = _position(function.loc.file as ulong, function.loc.span.start);
+            if (!at_start.contains(start)) {
+                at_start[start] = Array<FunctionDef>();
+            }
+            at_start[start].append(function);
+        }
+    });
+    return at_start;
+}
+
+# Where the located expressions in `file` of `functions`' bodies start and
+# end, across the specializations too: their bodies are the same code.
+_body_span(file: ulong, functions: FunctionDef[]): (ulong, ulong) {
+    var span = _BodySpan(file);
+    for (var function in functions) {
+        if (function.body.is_value()) {
+            rewrite_block(function.body.value(), span);
+        }
+    }
+    return (span.first, span.last);
 }
 
 # Where a body's located expressions in `file` start and end.
