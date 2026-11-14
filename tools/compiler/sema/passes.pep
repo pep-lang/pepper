@@ -70,8 +70,8 @@ import [synthesize] from "synthesize";
 import [resolve_type_aliases] from "type_aliases";
 import [check_type_arguments] from "type_argument_checks";
 import [begin_type_ids, end_type_ids] from "type_ids";
-import [Rewriter, rewrite_block] from "walk";
 import [check_value_structs] from "value_structs";
+import [Rewriter, rewrite_block] from "walk";
 import [lower_with_blocks] from "with_blocks";
 import [check_withheld] from "withheld";
 
@@ -480,9 +480,10 @@ _failed_bodies(module: Module, errors: Diagnostic[]): FunctionDef[]? {
     }
     var out = Array<FunctionDef>();
     for (var error in errors) {
-        if (!(error.location is Value(at)) or at.file == NO_FILE as ulong) {
+        if (!error.location.is_value() or error.location.value().file == NO_FILE as ulong) {
             return none;
         }
+        var at = error.location.value();
         var after = starts.upper_bound(_position(at.file, at.span.start));
         if (after == 0 or starts[after - 1] >> _FILE_SHIFT != at.file) {
             return none;

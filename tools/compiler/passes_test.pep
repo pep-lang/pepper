@@ -1247,6 +1247,11 @@ other(g: (String) => int): int {
     return g(1, 2);
 }
 ",
+        # A pass whose errors all lie inside function bodies lets the later
+        # passes run, so a later pass's error elsewhere shows too (#344).
+        "# expect: main.pep:5:19: error: cannot initialize variable 'x' of type 'int' with a value of type 'Color'\n# expect: main.pep:9:5: error: match on 'Color' does not handle 'Green'\nenum Color { Red, Green }\nf(): int {\n    int x = Color.Red;\n    return x;\n}\ng(c: Color): int {\n    match (c) {\n        Red => {\n            return 1;\n        }\n    }\n    return 0;\n}\nmain(): int {\n    return f() + g(Color.Red);\n}\n",
+        # An error outside a body (a global) stops the passes after its pass.
+        "# expect: main.pep:3:5: error: module-scope variable 'hits' must be 'const'\nenum Color { Red, Green }\nvar hits = 0;\ng(c: Color): int {\n    match (c) {\n        Red => {\n            return 1;\n        }\n    }\n    return 0;\n}\nmain(): int {\n    return g(Color.Red);\n}\n",
         # Missing members and wrong argument counts, with the type errors
         # rather than by code generation once those are fixed (#344).
         "# expect: main.pep:13:14: error: no member named 'y' in 'P'
