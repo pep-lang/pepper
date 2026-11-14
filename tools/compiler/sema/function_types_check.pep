@@ -22,6 +22,8 @@ import [
     Expression,
     FunctionDef,
     GenericParam,
+    MemberRefExpression,
+    MethodCallExpression,
     Module,
     StructDef,
     SymbolRefExpression,
@@ -314,6 +316,22 @@ _declares_method(st: StructDef, method: String): bool {
     return false;
 }
 
+## Whether `st` declares a method, generic or not, named `name` (a generic
+## one's type arguments, as in `map<String>`, left out).
+_declares_member(st: StructDef, name: String): bool {
+    var at = name.find("<");
+    var base = set_name(at > 0 ? name.substr_bytes(0, at as ulong) : name);
+    if (_declares_method(st, base)) {
+        return true;
+    }
+    for (var m in st.generic_methods) {
+        if (set_name(m.name) == base) {
+            return true;
+        }
+    }
+    return false;
+}
+
 ## Collects the calls, operators and ternaries of an expression, in order.
 struct _FlowNodes {
     var nodes: Array<Expression> = Array<Expression>();
@@ -338,6 +356,9 @@ struct _FlowNodes {
                 nodes.append(e);
             }
             Ternary(node) => {
+                nodes.append(e);
+            }
+            MemberRef(node) => {
                 nodes.append(e);
             }
             SymbolRef(node) => {
@@ -830,17 +851,91 @@ struct _FunctionTypes {
         return Optional<(String, Array<TypeName>)>.Value((label, _parameter_types(ctor.parameters)));
     }
 
-    parameters_of_method(this_type: TypeName, method: String): Array<TypeName>? {
+    ## The method `method` of the struct `this_type` names, if it declares one.
+    method_named(this_type: TypeName, method: String): FunctionDef? {
         var st = named_structs.try_get(this_type.to_string());
         if (!st.is_value()) {
-            return Optional<Array<TypeName>>.Empty;
+            return Optional<FunctionDef>.Empty;
         }
         for (var m in st.value().method_members) {
             if (m.name == method) {
-                return Optional<Array<TypeName>>.Value(_parameter_types(m.parameters));
+                return Optional<FunctionDef>.Value(m);
             }
         }
-        return Optional<Array<TypeName>>.Empty;
+        return Optional<FunctionDef>.Empty;
+    }
+
+    ## Reports a call of `shown` with more arguments than `parameters`, or
+    ## fewer than those without a default, as code generation would once
+    ## every other error is fixed (#344). Only a call whose count differs
+    ## gets here.
+    ##
+    ## @param shown the callee, as code generation names it
+    ## @param parameters the callee's parameters
+    ## @param provided how many arguments the call passes
+    ## @param at the call
+    arity(shown: String, parameters: VariableDef[], provided: ulong, at: Loc) {
+        ulong count = parameters.count;
+        # Parameters from the last one without a default on are optional.
+        ulong required = 0;
+        for (var i in 0..count) {
+            if (!parameters[i].default.is_value()) {
+                required = i + 1;
+            }
+        }
+        if (provided > count) {
+            var expected = required == count ? $"{count}" : $"at most {count}";
+            state.report(error_at($"too many arguments to '{shown}': expected {expected}, have {provided}", at));
+        } else if (provided < required) {
+            var expected = required == count ? $"{required}" : $"at least {required}";
+            state.report(error_at($"too few arguments to '{shown}': expected {expected}, have {provided}", at));
+        }
+    }
+
+    ## Reports `lhs.name` when `lhs` is a struct that has no such field or
+    ## method, which code generation would find only once every other error
+    ## is fixed (#344).
+    missing_field(node: MemberRefExpression, e: Expression) {
+        if (static_type_of(e, table, current, state).is_value()) {
+            return;
+        }
+        var lhs = static_type_of(node.lhs, table, current, state);
+        if (!lhs.is_value() or lhs.value().is_tuple() or mentions_unbound(lhs.value()) or is_trait(lhs.value())) {
+            return;
+        }
+        var st = named_structs.try_get(lhs.value().to_string());
+        if (!st.is_value()
+            or _declares_member(st.value(), node.name)
+            or table.method_return(lhs.value(), node.name).is_value()) {
+            return;
+        }
+        state.report(error_at($"no member named '{node.name}' in '{lhs.value().display()}'", node.loc));
+    }
+
+    ## Reports `node`, a call of a method that the struct `this_type` does
+    ## not declare, which code generation would find only once every other
+    ## error is fixed (#344).
+    missing_method(node: MethodCallExpression, this_type: TypeName) {
+        if (node.method.is_empty) {
+            return;
+        }
+        # A tuple's members (`compare`, `hash`) and the operators of the
+        # built-in types (`String`'s `+`) are built in.
+        var first = node.method.byte_at(0);
+        bool named = first == '_' or (first >= 'a' and first <= 'z') or (first >= 'A' and first <= 'Z');
+        if (!named or node.method.starts_with("__") or this_type.is_tuple() or mentions_unbound(this_type)) {
+            return;
+        }
+        var st = named_structs.try_get(this_type.to_string());
+        if (!st.is_value() or _declares_member(st.value(), node.method)) {
+            return;
+        }
+        var info = table.lookup(this_type);
+        if (table.method_return(this_type, node.method).is_value()
+            or (info.is_value() and info.value().field(node.method).is_value())) {
+            return;
+        }
+        state.report(error_at($"no member named '{node.method}' in '{this_type.display()}'", node.loc));
     }
 
     ## Checks each argument whose parameter `checked` keeps (all when
@@ -882,7 +977,17 @@ struct _FunctionTypes {
             SymbolRef(node) => {
                 undeclared(node);
             }
+            MemberRef(node) => {
+                missing_field(node, e);
+            }
             FunctionCall(node) => {
+                var callee = functions.try_get(node.function);
+                if (callee.is_value()
+                    and node.args.count != callee.value().parameters.count
+                    and !node.function.contains("::")) {
+                    arity(node.function, callee.value().parameters, node.args.count, node.loc);
+                    return;
+                }
                 var found = parameters_of_call(node.function);
                 if (found.is_value()) {
                     var (label, params) = found.value();
@@ -911,18 +1016,27 @@ struct _FunctionTypes {
                 }
                 var this_type = static_type_of(node.this_value, table, current, state);
                 if (this_type.is_value()) {
-                    var params = parameters_of_method(this_type.value(), node.method);
-                    if (params.is_value()
-                        and _is_indexer(node.method)
-                        and node.args.count > 0
-                        and params.value().count > 0) {
+                    var method = method_named(this_type.value(), node.method);
+                    if (!method.is_value()) {
+                        missing_method(node, this_type.value());
+                        return;
+                    }
+                    if (node.args.count != method.value().parameters.count and !_is_indexer(node.method)) {
+                        arity(
+                            $"{this_type.value().to_string()}.{node.method}",
+                            method.value().parameters,
+                            node.args.count,
+                            node.loc
+                        );
+                        return;
+                    }
+                    var params = _parameter_types(method.value().parameters);
+                    if (_is_indexer(node.method) and node.args.count > 0 and params.count > 0) {
                         # `a[i]` and `a[i] = v`: the index, by the operator.
                         var slot = _FlowSlot(_SlotKind.Index, "", this_type.value().display(), node.loc);
-                        flows_into(node.args[0], params.value()[0], slot);
-                    } else if (params.is_value()) {
-                        check_arguments(
-                            $"argument {{}} of '{node.method}'", params.value(), node.args, node.loc, false
-                        );
+                        flows_into(node.args[0], params[0], slot);
+                    } else {
+                        check_arguments($"argument {{}} of '{node.method}'", params, node.args, node.loc, false);
                     }
                 }
             }
@@ -1122,11 +1236,13 @@ struct _FunctionTypes {
                     if (declaration is Variable(variable)) {
                         # A constructor's synthesized `this` is initialized
                         # from the raw allocation.
-                        if (variable.name != "this" and variable.default.is_value()) {
+                        # A `with` block's `scope.enter()` is checked by
+                        # `lower_with_blocks`, which says what `with` needs.
+                        if (variable.name != "this"
+                            and variable.default.is_value()
+                            and !(with_value.is_value() and with_value.value() == variable.name)) {
                             expression(variable.default.value());
-                            if (!(with_value.is_value() and with_value.value() == variable.name)) {
-                                this.variable(variable, variable.default.value());
-                            }
+                            this.variable(variable, variable.default.value());
                         }
                     }
                 }

@@ -95,9 +95,10 @@ unclosed `(` or `[` can hide the errors after it. Past the syntax, it shows
 the first error in each function (or other declaration) only: a second one there is usually caused by the first. Errors in how a
 declaration is written, such as an empty `[]` with no element type or a `?`
 outside a function body, come first, from every file together; the type
-errors and undeclared names are found once those are fixed. An error a later
-stage would find shows up only once these are fixed: a `match` that misses a
-case, for one, is found after the type errors and undeclared names. The
+errors, undeclared names, missing fields and methods, and calls with the
+wrong number of arguments are found together once those are fixed. An error
+a later stage would find shows up only once these are fixed: a `match` that
+misses a case, for one, is found after them. The
 compiler never produces an executable from a program with an error.
 
 A build shows at most 20 errors, then `error: too many errors emitted,
