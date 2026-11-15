@@ -1168,20 +1168,20 @@ export enum Expression {
             MemberRef(node) => {
                 return Expression.MemberRef(node.copy());
             }
-            BoolLiteral(v0, v1) => {
-                return Expression.BoolLiteral(v0, v1);
+            BoolLiteral => {
+                return this;
             }
-            IntLiteral(v0, v1) => {
-                return Expression.IntLiteral(v0, v1);
+            IntLiteral => {
+                return this;
             }
-            FloatLiteral(v0, v1) => {
-                return Expression.FloatLiteral(v0, v1);
+            FloatLiteral => {
+                return this;
             }
             StringLiteral(node) => {
                 return Expression.StringLiteral(node.copy());
             }
-            PointerLiteral(value) => {
-                return Expression.PointerLiteral(value);
+            PointerLiteral => {
+                return this;
             }
             Binary(node) => {
                 return Expression.Binary(node.copy());
@@ -1270,8 +1270,8 @@ export enum Expression {
             MakeClosure(node) => {
                 return Expression.MakeClosure(node.copy());
             }
-            MethodAddress(value) => {
-                return Expression.MethodAddress(value);
+            MethodAddress => {
+                return this;
             }
             CallPointer(node) => {
                 return Expression.CallPointer(node.copy());
@@ -4128,17 +4128,17 @@ export enum StaticConstant {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): StaticConstant {
         match (this) {
-            Int(value) => {
-                return StaticConstant.Int(value);
+            Int => {
+                return this;
             }
-            Float(value) => {
-                return StaticConstant.Float(value);
+            Float => {
+                return this;
             }
-            Bool(value) => {
-                return StaticConstant.Bool(value);
+            Bool => {
+                return this;
             }
-            String(value) => {
-                return StaticConstant.String(value);
+            String => {
+                return this;
             }
             Record(node) => {
                 return StaticConstant.Record(node.copy());
@@ -4443,8 +4443,8 @@ export enum StaticItem {
             Var(node) => {
                 return StaticItem.Var(node.copy());
             }
-            Evaluate(value) => {
-                return StaticItem.Evaluate(value);
+            Evaluate => {
+                return this;
             }
             Emit(v0, v1) => {
                 return StaticItem.Emit(v0.copy(), v1);
