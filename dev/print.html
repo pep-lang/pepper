@@ -8412,9 +8412,9 @@ is no object and no vtable.</p>
 <li>
 <p>It is never a trait value. A number or such an enum cannot be stored in a
 <code>Describe</code> variable, passed as one, or added to an <code>Array&lt;Describe&gt;</code>:</p>
-<pre><code class="language-text">main.pep:7:15: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values
+<pre><code class="language-text">main.pep:7:27: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values
     7 | main(): int { Doubled d = 3; return 0; }
-      |               ^~~~~~~
+      |                           ^
 main.pep:4:8: note: 'int' conforms to 'Doubled' here, which makes it meet the constraint, not a trait value
     4 | extend int with Doubled {
       |        ^~~
@@ -15977,9 +15977,9 @@ initializer, an assignment, an argument, a <code>return</code>, and each arm of
     2 |     int x = "hello";
       |             ^~~~~~~
 </code></pre>
-<pre><code class="language-text">main.pep:3:12: error: cannot pass a value of type 'int' as argument 1 of 'g', which has type 'String'
+<pre><code class="language-text">main.pep:3:14: error: cannot pass a value of type 'int' as argument 1 of 'g', which has type 'String'
     3 |     return g(5);
-      |            ^
+      |              ^
 </code></pre>
 <pre><code class="language-text">main.pep:3:19: error: cannot pass a value of type '__ptr&lt;char&gt;' as argument 2 of 'assert', which has type 'String'; use 'String(...)' to copy a C string
     3 |     assert(false, p);
