@@ -315,7 +315,6 @@ struct _BoundsWalk {
 
 struct _BoundsChecker {
     var traits: TraitDef[];
-    var literal_args: Array<(Loc, ulong, Loc)>;
     var table: StructTable;
     ## Each generic struct's parameter names, to read its members' types
     ## at a specialization.
@@ -325,7 +324,6 @@ struct _BoundsChecker {
     construct(module: Module, state: PassState) {
         this.state = state;
         traits = module.traits;
-        literal_args = module.literal_args;
         table = StructTable(module, memo = state.trait_types_memo());
         for (var st in module.structs) {
             if (st.generic_params.count != 0 and !st.name.contains("<")) {
@@ -956,12 +954,6 @@ struct _BoundsChecker {
             var at = _expression_loc(arg);
             if (at.is_none()) {
                 at = loc;
-                for (var (call_loc, j, written) in literal_args) {
-                    if (call_loc == loc and j == i - 1) {
-                        at = written;
-                        break;
-                    }
-                }
             }
             _report(
                 error_at(

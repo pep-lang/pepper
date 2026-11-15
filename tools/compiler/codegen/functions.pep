@@ -508,7 +508,7 @@ extend Generator {
     # `call_function_result` sees a constant size.
     _patch_allocation(var_def: VariableDef, struct_size: long) {
         if (var_def.name == "__alloc_size") {
-            var_def.default = Optional<Expression>.Value(Expression.IntLiteral(struct_size));
+            var_def.default = Optional<Expression>.Value(Expression.IntLiteral(struct_size, Loc.none()));
             return;
         }
         if (var_def.name != "this" or !var_def.default.is_value()) {
@@ -516,7 +516,7 @@ extend Generator {
         }
         if (var_def.default.value() is FunctionCall(call)) {
             if (call.function == "_pep_malloc") {
-                call.args = [Expression.IntLiteral(struct_size)];
+                call.args = [Expression.IntLiteral(struct_size, Loc.none())];
             }
         }
     }

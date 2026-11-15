@@ -394,7 +394,7 @@ _typed(subject: Expression, ty: TypeName): Expression {
 ## `subject.__tag == case`, for a reference enum's object.
 _tag_is(subject: Expression, c: EnumCaseDef, at: Loc): Expression {
     var tag = Expression.MemberRef(MemberRefExpression(subject.copy(), TAG_FIELD, at));
-    return Expression.Binary(BinaryExpression(tag, Expression.IntLiteral(c.value), BinaryOp.Equal, at));
+    return Expression.Binary(BinaryExpression(tag, Expression.IntLiteral(c.value, Loc.none()), BinaryOp.Equal, at));
 }
 
 ## The payload field a pattern's binding reads: `subject.Text.text`.
@@ -671,7 +671,7 @@ struct _MatchLowering {
             var not_null = Expression.Binary(
                 BinaryExpression(
                     Expression.SymbolRef(SymbolRefExpression(variable.name, variable.ty, variable.loc)),
-                    Expression.PointerLiteral,
+                    Expression.PointerLiteral(Loc.none()),
                     BinaryOp.NotIdentical,
                     variable.loc
                 )
@@ -908,7 +908,7 @@ struct _MatchLowering {
             }
             MatchArm(test) => {
                 var lowered = lower_arm(test, Array<String>());
-                return lowered.is_value() ? lowered.value() : Expression.BoolLiteral(false);
+                return lowered.is_value() ? lowered.value() : Expression.BoolLiteral(false, Loc.none());
             }
             CaseValue(value) => {
                 var lowered = lower_case_value(value);
@@ -1152,7 +1152,9 @@ struct _MatchLowering {
         if (!resolve_element_names(test, names, cases)) {
             return none;
         }
-        return Optional<Expression>.Value(condition.is_value() ? condition.value() : Expression.BoolLiteral(false));
+        return Optional<Expression>.Value(
+            condition.is_value() ? condition.value() : Expression.BoolLiteral(false, Loc.none())
+        );
     }
 
     ## The test of an arm over a trait value: whether the value is one of
@@ -1192,7 +1194,9 @@ struct _MatchLowering {
             var is = Expression.FromTrait(FromTraitExpression(subject.copy(), ty, to, candidates, true, p.loc));
             condition = Optional<Expression>.Value(_either(condition, is, BinaryOp.LogicalOr, p.loc));
         }
-        return Optional<Expression>.Value(condition.is_value() ? condition.value() : Expression.BoolLiteral(false));
+        return Optional<Expression>.Value(
+            condition.is_value() ? condition.value() : Expression.BoolLiteral(false, Loc.none())
+        );
     }
 
     ## The test of a case pattern over an enum, or none after reporting an
@@ -1345,13 +1349,15 @@ struct _MatchLowering {
             if (!test.guarded) {
                 tuple.rows.append(space);
             }
-            var this_test = tested.test.is_value() ? tested.test.value() : Expression.BoolLiteral(true);
+            var this_test = tested.test.is_value() ? tested.test.value() : Expression.BoolLiteral(true, Loc.none());
             condition = Optional<Expression>.Value(_either(condition, this_test, BinaryOp.LogicalOr, p.loc));
         }
         if (!resolve_element_names(test, names, cases)) {
             return none;
         }
-        return Optional<Expression>.Value(condition.is_value() ? condition.value() : Expression.BoolLiteral(false));
+        return Optional<Expression>.Value(
+            condition.is_value() ? condition.value() : Expression.BoolLiteral(false, Loc.none())
+        );
     }
 
     ## Checks the arm's bare names in tuple elements and case values: one

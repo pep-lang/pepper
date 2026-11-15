@@ -175,9 +175,9 @@ the value:
   `Describe` variable, passed as one, or added to an `Array<Describe>`:
 
   ```text
-  main.pep:7:15: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values
+  main.pep:7:27: error: 'int' cannot be converted to trait 'Doubled': only structs and enums whose cases carry values can be trait values
       7 | main(): int { Doubled d = 3; return 0; }
-        |               ^~~~~~~
+        |                           ^
   main.pep:4:8: note: 'int' conforms to 'Doubled' here, which makes it meet the constraint, not a trait value
       4 | extend int with Doubled {
         |        ^~~

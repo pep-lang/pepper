@@ -247,8 +247,8 @@ _derive_struct(st: StructDef, module: Module): Diagnostic? {
             compared.append(field);
         }
     }
-    Expression equal = Expression.BoolLiteral(true);
-    Expression hash = Expression.IntLiteral(0);
+    Expression equal = Expression.BoolLiteral(true, Loc.none());
+    Expression hash = Expression.IntLiteral(0, Loc.none());
     if (compared.count > 0) {
         equal = Expression.Binary(
             BinaryExpression(
@@ -374,7 +374,7 @@ _compare_method(st: StructDef, compared: VariableDef[], at: Loc): FunctionDef {
             items.append(Statement.Declaration(Declaration.Variable(declared)));
             var read = Expression.SymbolRef(SymbolRefExpression(local, TypeName.named("int"), Loc.none()));
             var differs = Expression.Binary(
-                BinaryExpression(read.copy(), Expression.IntLiteral(0), BinaryOp.NotEqual, Loc.none())
+                BinaryExpression(read.copy(), Expression.IntLiteral(0, Loc.none()), BinaryOp.NotEqual, Loc.none())
             );
             var early = Statement.Return(ReturnStatement(Optional<Expression>.Value(read), Loc.none()));
             items.append(Statement.Branch(Branch(differs, Block("if", [early]))));
@@ -382,7 +382,9 @@ _compare_method(st: StructDef, compared: VariableDef[], at: Loc): FunctionDef {
         i += 1;
     }
     if (compared.count == 0) {
-        items.append(Statement.Return(ReturnStatement(Optional<Expression>.Value(Expression.IntLiteral(0)), at)));
+        items.append(
+            Statement.Return(ReturnStatement(Optional<Expression>.Value(Expression.IntLiteral(0, Loc.none())), at))
+        );
     }
     return FunctionDef(
         name = "compare",
@@ -403,7 +405,7 @@ _tuple(compared: VariableDef[], lhs: Expression): Expression {
         args.append(Expression.MemberRef(MemberRefExpression(lhs.copy(), field.name, Loc.none())));
     }
     if (args.count == 1) {
-        args.append(Expression.BoolLiteral(true));
+        args.append(Expression.BoolLiteral(true, Loc.none()));
     }
     return Expression.FunctionCall(FunctionCallExpression(TUPLE, args, Loc.none()));
 }

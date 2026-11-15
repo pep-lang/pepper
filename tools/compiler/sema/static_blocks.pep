@@ -1705,7 +1705,7 @@ struct _Expander {
                         return Result<Expression, Diagnostic>.Err(arity_error(method, 1, args.count, span));
                     }
                     var subject = args[0];
-                    Expression test = c.is_value ? _case_value(c) : Expression.IntLiteral(c.value);
+                    Expression test = c.is_value ? _case_value(c) : Expression.IntLiteral(c.value, Loc.none());
                     Expression lhs = c.is_value ?
                         subject :
                         Expression.MemberRef(MemberRefExpression(subject, TAG_FIELD, loc));
@@ -1740,13 +1740,13 @@ struct _Expander {
     emitted(value: _CtValue, written: ast.Expression, loc: Loc): Result<Expression, Diagnostic> {
         match (value) {
             Int(v) => {
-                return Result<Expression, Diagnostic>.Ok(Expression.IntLiteral(v));
+                return Result<Expression, Diagnostic>.Ok(Expression.IntLiteral(v, loc));
             }
             Float(v) => {
-                return Result<Expression, Diagnostic>.Ok(Expression.FloatLiteral(v));
+                return Result<Expression, Diagnostic>.Ok(Expression.FloatLiteral(v, loc));
             }
             Bool(v) => {
-                return Result<Expression, Diagnostic>.Ok(Expression.BoolLiteral(v));
+                return Result<Expression, Diagnostic>.Ok(Expression.BoolLiteral(v, loc));
             }
             Text(v) => {
                 var literal = Expression.StringLiteral(StringLiteralExpression(v, false, loc));
@@ -3028,7 +3028,9 @@ struct _AttributeName {
 
 _case_value(c: _CtCase): Expression {
     return Expression.Cast(
-        CastExpression(Expression.IntLiteral(c.value), c.enumeration.copy(), Loc.none(), CastKind.Synthesized)
+        CastExpression(
+            Expression.IntLiteral(c.value, Loc.none()), c.enumeration.copy(), Loc.none(), CastKind.Synthesized
+        )
     );
 }
 
@@ -3106,13 +3108,13 @@ _find_attribute_struct(module: Module, name: String, file: uint): StructDef? {
 ## initializer.
 _model_constant(module: Module, e: Expression): _CtValue? {
     match (e) {
-        IntLiteral(v) => {
+        IntLiteral(v, _) => {
             return Optional<_CtValue>.Value(_CtValue.Int(v));
         }
-        FloatLiteral(v) => {
+        FloatLiteral(v, _) => {
             return Optional<_CtValue>.Value(_CtValue.Float(v));
         }
-        BoolLiteral(v) => {
+        BoolLiteral(v, _) => {
             return Optional<_CtValue>.Value(_CtValue.Bool(v));
         }
         StringLiteral(node) => {
@@ -3150,7 +3152,7 @@ _model_constant(module: Module, e: Expression): _CtValue? {
             }
         }
         Cast(node) => {
-            if (node.expr is IntLiteral(v)) {
+            if (node.expr is IntLiteral(v, _)) {
                 for (var def in module.enums) {
                     if (def.name != node.ty.name) {
                         continue;

@@ -1646,7 +1646,9 @@ struct _Builder {
     var context: UseContext = UseContext();
     ## The index of `context` in `use_contexts`, once a use recorded it.
     var context_index: ulong? = Optional<ulong>.Empty;
-    ## Where each literal argument of the calls built so far is written.
+    ## Where each literal argument of the calls built so far is written, for
+    ## the parameter-name hints `record_argument_names` gives the language
+    ## server.
     var literal_args: Array<(Loc, ulong, Loc)> = Array<(Loc, ulong, Loc)>();
     ## The properties built so far.
     var properties: PropertyDef[] = Array<PropertyDef>();
@@ -1966,22 +1968,22 @@ struct _Builder {
                         );
                     }
                     Integer(v) => {
-                        return Built<Expression>.Ok(Expression.IntLiteral(v));
+                        return Built<Expression>.Ok(Expression.IntLiteral(v, loc(span)));
                     }
                     Unsigned(v) => {
                         return Built<Expression>.Ok(make_unsigned_literal(v, loc(span)));
                     }
                     Float(v) => {
-                        return Built<Expression>.Ok(Expression.FloatLiteral(v));
+                        return Built<Expression>.Ok(Expression.FloatLiteral(v, loc(span)));
                     }
                     Bool(v) => {
-                        return Built<Expression>.Ok(Expression.BoolLiteral(v));
+                        return Built<Expression>.Ok(Expression.BoolLiteral(v, loc(span)));
                     }
                     Char(v) => {
                         # A `byte`: the cast gives it that type where nothing
                         # else does.
                         var cast = CastExpression(
-                            Expression.IntLiteral(v as long),
+                            Expression.IntLiteral(v as long, Loc.none()),
                             ty = TypeName.named("byte"),
                             loc = loc(span),
                             kind = CastKind.Synthesized
@@ -1989,7 +1991,7 @@ struct _Builder {
                         return Built<Expression>.Ok(Expression.Cast(cast));
                     }
                     Null => {
-                        return Built<Expression>.Ok(Expression.PointerLiteral);
+                        return Built<Expression>.Ok(Expression.PointerLiteral(loc(span)));
                     }
                 }
             }
@@ -2051,7 +2053,7 @@ struct _Builder {
                     var high = expression(rhs)?;
                     var at = loc(ast.Span(span.start, span.start + op.size));
                     return Built<Expression>.Ok(
-                        _call(RANGE_FUNCTION, [low, high, Expression.BoolLiteral(op == "..>")], at)
+                        _call(RANGE_FUNCTION, [low, high, Expression.BoolLiteral(op == "..>", Loc.none())], at)
                     );
                 }
                 var binary = _binary_op(op);
@@ -2078,7 +2080,7 @@ struct _Builder {
                         var start = expression(low)?;
                         Expression end = expression(high)?;
                         if (op == "..>") {
-                            end = _binary(BinaryOp.Add, end, Expression.IntLiteral(1), loc(high.span()));
+                            end = _binary(BinaryOp.Add, end, Expression.IntLiteral(1, Loc.none()), loc(high.span()));
                         }
                         return Built<Expression>.Ok(
                             Expression.MethodCall(MethodCallExpression(left, "slice", [start, end], loc(span)))
@@ -3010,7 +3012,7 @@ struct _Builder {
                 value, keyword_span, arms, Optional<(Loc, Block)>.Value((Loc.none(), stop)), true
             )?;
             var loop = Statement.While(
-                While(Expression.BoolLiteral(true), block = _block_of([lowered]), label = label)
+                While(Expression.BoolLiteral(true, Loc.none()), block = _block_of([lowered]), label = label)
             );
             return Built<Statement?>.Ok(Optional<Statement>.Value(loop));
         }
@@ -4362,7 +4364,7 @@ struct _Builder {
                     case_parameters.append(built);
                 }
             }
-            var args = [Expression.IntLiteral(case.value)];
+            var args = [Expression.IntLiteral(case.value, Loc.none())];
             ulong i = 1;
             while (i < st.field_members.count) {
                 var f = st.field_members[i];
@@ -4405,7 +4407,7 @@ struct _Builder {
         var items = Array<Statement>();
         for (var case in cases) {
             var tag_ref = _member(Expression.ThisRef, TAG_FIELD, Loc.none());
-            var test = _binary(BinaryOp.Equal, tag_ref, Expression.IntLiteral(case.value), Loc.none());
+            var test = _binary(BinaryOp.Equal, tag_ref, Expression.IntLiteral(case.value, Loc.none()), Loc.none());
             items.append(Statement.Branch(Branch(test, if_block = _block_of([_returns(_text(case.name))]))));
         }
         items.append(_returns(_text("")));
@@ -4950,7 +4952,7 @@ struct _Builder {
         wrapper.span = body.span;
         var built = block(wrapper)?;
         return Built<Statement[]>.Ok(
-            [Statement.While(While(Expression.BoolLiteral(true), block = built, label = label))]
+            [Statement.While(While(Expression.BoolLiteral(true, Loc.none()), block = built, label = label))]
         );
     }
 
@@ -5132,7 +5134,7 @@ struct _Builder {
     ): Built<ast.Expression> {
         var name = $"{VALUE_LOCAL}{tries}";
         tries += 1;
-        items.append(_declare(_hidden(name, Expression.BoolLiteral(false), loc(span))));
+        items.append(_declare(_hidden(name, Expression.BoolLiteral(false, Loc.none()), loc(span))));
         var holds = _branch_block(
             Optional<String>.Value(name), ast.Expression.Literal(ast.Literal.Bool(true), rhs.span())
         );

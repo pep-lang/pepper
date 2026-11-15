@@ -1189,7 +1189,7 @@ _spec_site(module: Module, spec: TypeName, unmet: Unmet, state: PassState): Loc 
             break;
         }
     }
-    var finder = _SpecCallFinder(module, spec.to_string(), base, unmet.param);
+    var finder = _SpecCallFinder(spec.to_string(), base, unmet.param);
     _for_each_expression(module, finder);
     if (finder.found.is_value()) {
         return finder.found.value();
@@ -1208,13 +1208,12 @@ _spec_site(module: Module, spec: TypeName, unmet: Unmet, state: PassState): Loc 
 ## The argument of a call to `base` that fixes `param`: the first whose
 ## parameter's declared type mentions it.
 ##
-## @param module the model
 ## @param base the generic function called, if known
 ## @param param the type parameter
 ## @param args the call's arguments
 ## @param call where the call is
 ## @returns where to report
-export argument_site(module: Module, base: FunctionDef?, param: String, args: Expression[], call: Loc): Loc {
+export argument_site(base: FunctionDef?, param: String, args: Expression[], call: Loc): Loc {
     if (!base.is_value()) {
         return call;
     }
@@ -1222,15 +1221,7 @@ export argument_site(module: Module, base: FunctionDef?, param: String, args: Ex
     while (i < base.value().parameters.count and i < args.count) {
         if (_mentions_name(base.value().parameters[i].ty, param)) {
             var own = _expression_loc(args[i]);
-            if (!own.is_none()) {
-                return own;
-            }
-            for (var (c, j, at) in module.literal_args) {
-                if (c == call and j == i) {
-                    return at;
-                }
-            }
-            return call;
+            return own.is_none() ? call : own;
         }
         i += 1;
     }
@@ -1251,14 +1242,12 @@ _mentions_name(ty: TypeName, name: String): bool {
 
 ## Finds the first call to a specialization.
 struct _SpecCallFinder {
-    var module: Module;
     var name: String;
     var base: FunctionDef?;
     var param: String;
     var found: Loc? = Optional<Loc>.Empty;
 
-    construct(module: Module, name: String, base: FunctionDef?, param: String) {
-        this.module = module;
+    construct(name: String, base: FunctionDef?, param: String) {
         this.name = name;
         this.base = base;
         this.param = param;
@@ -1270,7 +1259,7 @@ struct _SpecCallFinder {
         }
         if (e is FunctionCall(call)) {
             if (call.function == name) {
-                found = Optional<Loc>.Value(argument_site(module, base, param, call.args, call.loc));
+                found = Optional<Loc>.Value(argument_site(base, param, call.args, call.loc));
             }
         }
         return e;
@@ -1468,7 +1457,7 @@ export check_method_call(
     if (!unmet.is_value()) {
         return Optional<Diagnostic>.Empty;
     }
-    var at = argument_site(module, Optional<FunctionDef>.Value(base), unmet.value().param, args, call);
+    var at = argument_site(Optional<FunctionDef>.Value(base), unmet.value().param, args, call);
     return Optional<Diagnostic>.Value(
         conformance._error(unmet.value(), set_name(base.name), at, module, HashMap<String, _InScope>())
     );

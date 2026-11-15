@@ -669,12 +669,18 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   `[Target(...)]` removes on this platform (`platform.keep`), as the
   platform filters remove its code. A concrete override records its own
   arguments as a use of the generic it overrides.
-- **Literal arguments.** A model literal (`IntLiteral`, ...) carries no
-  `Loc`, so the builder records where each literal argument of a call is
-  written in `Module.literal_args` (call location, position, literal
-  location), where the passes that report an error about an argument
-  look up a literal's own location (constraint errors at an inferred call,
-  `check_bounds`). Each generic parameter keeps the `Loc`
+- **Literal locations.** A model literal (`BoolLiteral`, `IntLiteral`,
+  `FloatLiteral`, `PointerLiteral`, and `StringLiteral`'s node) carries
+  the `Loc` of its token when the builder made it from source, and
+  `Loc.none()` when a pass synthesized it (sizes, counters, defaults);
+  `-1` folds into one literal at the `-` (`literals.pep`). An error about
+  an argument is located at it through `Expression.loc()`. The builder
+  also records where each literal argument of a call is written in
+  `Module.literal_args` (call location, position, literal location), for
+  the parameter-name inlay hints alone (`argument_names.pep`): by then
+  named arguments are bound into place and literals converted, so the
+  model no longer shows which arguments were written as literals by
+  position. Each generic parameter keeps the `Loc`
   of its name, of each constraint (`Bound`), and of its default.
 - `type_name_from` lowers `T[]` to `Array<T>`.
 - `variable_def` gives a variable or field of type `Optional<T>` with no
@@ -985,8 +991,8 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   `ForIterator`, `WithEntered`, `Destructure`, `Move`, `ToTrait`, `ClosureLiteral`, `MakeClosure`,
   `NamedArgument`, `DefaultArgument`,
   `MethodAddress`, `CallPointer`), and `Statement`. Each node that names something has a
-  `Loc`; `Expression.loc()` returns it (`Loc.none()` for literals and
-  synthesized nodes).
+  `Loc`; `Expression.loc()` returns it (`Loc.none()` for synthesized
+  nodes, a literal a pass made among them).
 - **Types**: `TypeName { name, sub_types, flags, labels }` (`model.pep`,
   its methods in `type_name.pep`), with constants `AUTO` (`__auto`),
   `VOID`, and `FUNCTION` (`__function`), and `replace_map` (generic
@@ -4072,7 +4078,7 @@ nothing a check makes may outlive it: `run_steps_with` drops the memos of
 unit's state and the closure it reached alive, 8 GB in a worker and over 50
 GB with one job (#167). The compiler's tests catch such a cycle as a leak.
 
-**Records.** A record lives at `<cache>/v3/c18/<name>/<key>.rec`. The
+**Records.** A record lives at `<cache>/v3/c19/<name>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new
 number, so old records are never misread. The cache's keys name the
 compiler, so a record is read only by the compiler that wrote it; a Pepper

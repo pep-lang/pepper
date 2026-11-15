@@ -435,20 +435,12 @@ export struct Callee {
 }
 
 ## The location of argument `index` of `args` (its name, if named).
-_argument_loc(args: Expression[], index: ulong, call: Loc, literals: Array<(Loc, ulong, Loc)>): Loc {
+_argument_loc(args: Expression[], index: ulong, call: Loc): Loc {
     if (args[index] is NamedArgument(named)) {
         return named.loc;
     }
     var loc = _expression_loc(args[index]);
-    if (!loc.is_none()) {
-        return loc;
-    }
-    for (var (c, i, at) in literals) {
-        if (c.same(call) and i == index) {
-            return at;
-        }
-    }
-    return call;
+    return loc.is_none() ? call : loc;
 }
 
 ## Where each parameter's argument comes from (the index written, or none
@@ -481,7 +473,7 @@ struct _Plan {
 }
 
 ## Binds `args` to `callee`'s parameters.
-_plan(callee: Callee, args: Expression[], call: Loc, literals: Array<(Loc, ulong, Loc)>): Result<_Plan, Diagnostic> {
+_plan(callee: Callee, args: Expression[], call: Loc): Result<_Plan, Diagnostic> {
     var slots = Array<ulong?>();
     for (var _ in callee.params) {
         slots.append(Optional<ulong>.Empty);
@@ -519,7 +511,7 @@ _plan(callee: Callee, args: Expression[], call: Loc, literals: Array<(Loc, ulong
             return Result<_Plan, Diagnostic>.Err(
                 error_at(
                     $"too many arguments to '{callee.display}': expected at most {callee.params.count}, have {args.count}",
-                    _argument_loc(args, written, call, literals)
+                    _argument_loc(args, written, call)
                 ).with_note("declared here", declared)
             );
         }
@@ -527,12 +519,8 @@ _plan(callee: Callee, args: Expression[], call: Loc, literals: Array<(Loc, ulong
             var first = slots[index].value();
             return Result<_Plan, Diagnostic>.Err(
                 error_at(
-                    $"argument for '{callee.params[index].name}' given twice",
-                    _argument_loc(args, written, call, literals)
-                ).with_note(
-                    "first given here",
-                    Optional<Location>.Value(location_of(_argument_loc(args, first, call, literals)))
-                )
+                    $"argument for '{callee.params[index].name}' given twice", _argument_loc(args, written, call)
+                ).with_note("first given here", Optional<Location>.Value(location_of(_argument_loc(args, first, call))))
             );
         }
         slots[index] = Optional<ulong>.Value(written);
@@ -650,7 +638,7 @@ _is_constant(e: Expression): bool {
         return true;
     }
     match (e) {
-        MakeClosure(_), BoolLiteral(_), IntLiteral(_), FloatLiteral(_), StringLiteral(_), PointerLiteral, ClosureLiteral(_), FunctionRef(_) => {
+        MakeClosure(_), BoolLiteral(_, _), IntLiteral(_, _), FloatLiteral(_, _), StringLiteral(_), PointerLiteral, ClosureLiteral(_), FunctionRef(_) => {
             return true;
         }
         Unary(node) => {
@@ -690,12 +678,9 @@ _is_string_literal(e: Expression): bool {
 ##
 ## @param call the call
 ## @param callees the functions it may call
-## @param literals `Module.literal_args`
 ## @param state the passes' state
 ## @returns the bound call, wrapped in what it evaluates first
-export bind_call(
-    call: Expression, callees: Callee[], literals: Array<(Loc, ulong, Loc)>, state: PassState
-): Expression {
+export bind_call(call: Expression, callees: Callee[], state: PassState): Expression {
     var args = Array<Expression>();
     var at = Loc.none();
     match (call) {
@@ -716,7 +701,7 @@ export bind_call(
     }
     var results = Array<Result<_Plan, Diagnostic>>();
     for (var c in callees) {
-        results.append(_plan(c, args, at, literals));
+        results.append(_plan(c, args, at));
     }
     var viable = Array<ulong>();
     ulong r = 0;
@@ -916,8 +901,6 @@ export struct Callees {
     var constructors: HashMap<String, Callee[]> = HashMap<String, Callee[]>();
     ## Methods by receiver type, then by overload set.
     var methods: HashMap<String, HashMap<String, Callee[]>> = HashMap<String, HashMap<String, Callee[]>>();
-    ## `Module.literal_args`.
-    var literals: Array<(Loc, ulong, Loc)>;
 
     ## The callees of the checked declarations, when nothing in the unit
     ## changed them: built once per unit (`PassState.checked_callees`), and
@@ -945,7 +928,6 @@ export struct Callees {
     ##     callees
     ## @param trait_types the module's trait types, when already found
     construct(module: Module, state: PassState, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
-        literals = module.literal_args;
         bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         if (checked) {
             base = Optional<Callees>.Value(_checked_callees(module, state));
@@ -972,7 +954,6 @@ export struct Callees {
     # reach them: their structs by name and by spelling and their functions
     # by overload set, each in the module's order.
     construct(module: Module) {
-        literals = Array<(Loc, ulong, Loc)>();
         for (var function in module.functions) {
             if (is_checked_function(module, function)) {
                 var set = set_name(_before_type_arguments(function.name));
@@ -1467,7 +1448,7 @@ struct _Binder {
             found = callees.constructors_of(base);
         }
         if (found.is_value()) {
-            return bind_call(e, found.value(), callees.literals, state);
+            return bind_call(e, found.value(), state);
         }
         if (callees.externs.contains(base)) {
             _report_extern(state, base, call.args);
@@ -1502,7 +1483,7 @@ struct _GlobalBinder {
             found = callees.constructors_of(base);
         }
         if (found.is_value()) {
-            return bind_call(e, found.value(), callees.literals, state);
+            return bind_call(e, found.value(), state);
         }
         if (callees.externs.contains(base)) {
             _report_extern(state, base, call.args);
@@ -1585,11 +1566,11 @@ export bind_method_call(e: Expression, receiver: TypeName, callees: Callees, sta
             }
             shifted.append(Callee(c.display, params, renames, c.loc));
         }
-        return bind_call(e, shifted, callees.literals, state);
+        return bind_call(e, shifted, state);
     }
     var list = callees.methods_of(receiver_name, node.method);
     if (list.is_value()) {
-        return bind_call(e, list.value(), callees.literals, state);
+        return bind_call(e, list.value(), state);
     }
     return e;
 }

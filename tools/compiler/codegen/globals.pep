@@ -202,19 +202,19 @@ extend Generator {
                 bool constant = false;
                 match (initializer) {
                     # The literal at the global's own width.
-                    IntLiteral(v) => {
+                    IntLiteral(v, _) => {
                         if (kind == llvm.TypeKind.Integer) {
                             global.set_initializer(llvm_ty.const_int(v));
                             constant = true;
                         }
                     }
-                    FloatLiteral(v) => {
+                    FloatLiteral(v, _) => {
                         if (is_float_type_kind(kind)) {
                             global.set_initializer(llvm_ty.const_real(v));
                             constant = true;
                         }
                     }
-                    BoolLiteral(v) => {
+                    BoolLiteral(v, _) => {
                         if (kind == llvm.TypeKind.Integer) {
                             global.set_initializer(llvm_ty.const_uint(v ? 1 : 0));
                             constant = true;
@@ -543,17 +543,17 @@ extend Generator {
     ): llvm.Value? {
         var kind = llvm_ty.kind();
         match (expression) {
-            IntLiteral(v) => {
+            IntLiteral(v, _) => {
                 if (kind == llvm.TypeKind.Integer) {
                     return Optional<llvm.Value>.Value(llvm_ty.const_int(v));
                 }
             }
-            FloatLiteral(v) => {
+            FloatLiteral(v, _) => {
                 if (is_float_type_kind(kind)) {
                     return Optional<llvm.Value>.Value(llvm_ty.const_real(v));
                 }
             }
-            BoolLiteral(v) => {
+            BoolLiteral(v, _) => {
                 if (kind == llvm.TypeKind.Integer) {
                     return Optional<llvm.Value>.Value(llvm_ty.const_uint(v ? 1 : 0));
                 }
@@ -565,7 +565,7 @@ extend Generator {
             Cast(node) => {
                 if (node.kind == sema.CastKind.Synthesized and kind == llvm.TypeKind.Integer) {
                     match (node.expr) {
-                        IntLiteral(v) => {
+                        IntLiteral(v, _) => {
                             return Optional<llvm.Value>.Value(llvm_ty.const_int(v));
                         }
                         else => {}

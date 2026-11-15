@@ -348,7 +348,7 @@ _destructor(parent: String): FunctionDef {
     var condition = Expression.Unary(
         UnaryExpression(
             Expression.Binary(
-                BinaryExpression(_destroy_ref(), Expression.PointerLiteral, BinaryOp.Identical, Loc.none())
+                BinaryExpression(_destroy_ref(), Expression.PointerLiteral(Loc.none()), BinaryOp.Identical, Loc.none())
             ),
             UnaryOp.LogicalNot,
             Loc.none()
@@ -400,7 +400,7 @@ _comparable_tuple(ty: TypeName, name: String): ExtensionDef {
             var differs = Expression.Binary(
                 BinaryExpression(
                     Expression.SymbolRef(SymbolRefExpression(local, TypeName.named("int"), Loc.none())),
-                    Expression.IntLiteral(0),
+                    Expression.IntLiteral(0, Loc.none()),
                     BinaryOp.NotEqual,
                     Loc.none()
                 )
@@ -493,10 +493,10 @@ _is_zero_store(item: Statement): bool {
                     return false;
                 }
                 match (node.rhs) {
-                    PointerLiteral, Default(_), FloatLiteral(_) => {
+                    PointerLiteral, Default(_), FloatLiteral(_, _) => {
                         return true;
                     }
-                    IntLiteral(value) => {
+                    IntLiteral(value, _) => {
                         return value == 0;
                     }
                     else => {

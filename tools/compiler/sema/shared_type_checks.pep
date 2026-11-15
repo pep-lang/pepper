@@ -49,13 +49,13 @@ export enum ThreadLocalConstant {
 export thread_local_constant(e: Expression, state: PassState): ThreadLocalConstant? {
     var none = Optional<ThreadLocalConstant>.Empty;
     match (e) {
-        IntLiteral(v) => {
+        IntLiteral(v, _) => {
             return Optional<ThreadLocalConstant>.Value(ThreadLocalConstant.Int(v));
         }
-        BoolLiteral(v) => {
+        BoolLiteral(v, _) => {
             return Optional<ThreadLocalConstant>.Value(ThreadLocalConstant.Int(v ? 1 : 0));
         }
-        FloatLiteral(v) => {
+        FloatLiteral(v, _) => {
             return Optional<ThreadLocalConstant>.Value(ThreadLocalConstant.Float(v));
         }
         PointerLiteral => {

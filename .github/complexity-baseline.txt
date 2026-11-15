@@ -218,7 +218,7 @@ tools/compiler/sema/builder.pep _has_effect 46
 tools/compiler/sema/builder.pep _has_try 57
 tools/compiler/sema/builder.pep _only_compile_time 32
 tools/compiler/sema/builder.pep _symbols 42
-tools/compiler/sema/check_bounds.pep _BoundsChecker.call 45
+tools/compiler/sema/check_bounds.pep _BoundsChecker.call 37
 tools/compiler/sema/check_bounds.pep _BoundsChecker.expression 37
 tools/compiler/sema/check_bounds.pep _BoundsChecker.type_of 61
 tools/compiler/sema/check_bounds.pep _Constrained.construct 37

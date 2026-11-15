@@ -114,10 +114,10 @@ extend Generator {
     ## The value of `expr`: one case per kind of expression.
     codegen_expr_unlocated(expr: Expression): Result<llvm.Value> {
         match (expr) {
-            BoolLiteral(value) => {
+            BoolLiteral(value, _) => {
                 return Result<llvm.Value>.ok(context.int1_type().const_uint(value ? 1 : 0));
             }
-            IntLiteral(value) => {
+            IntLiteral(value, _) => {
                 # C 6.4.4.1: an integer literal is `int` when it fits in the
                 # signed-int range, else `long`. Emitting i32 for int-range
                 # literals keeps mixed-type ops on the int path (`ulong * 1`
@@ -128,7 +128,7 @@ extend Generator {
                 }
                 return Result<llvm.Value>.ok(context.int64_type().const_int(value));
             }
-            FloatLiteral(value) => {
+            FloatLiteral(value, _) => {
                 return Result<llvm.Value>.ok(context.double_type().const_real(value));
             }
             StringLiteral(node) => {

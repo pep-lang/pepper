@@ -204,7 +204,9 @@ export default_expression(state: PassState, ty: TypeName): Expression? {
     }
     return Optional<Expression>.Value(
         Expression.Cast(
-            CastExpression(Expression.IntLiteral(value.value()), ty.copy(), Loc.none(), CastKind.Synthesized)
+            CastExpression(
+                Expression.IntLiteral(value.value(), Loc.none()), ty.copy(), Loc.none(), CastKind.Synthesized
+            )
         )
     );
 }
@@ -213,7 +215,7 @@ export default_expression(state: PassState, ty: TypeName): Expression? {
 ## `0 as Color`.
 _case_expression(e: EnumDef, c: EnumCaseDef, loc: Loc): Expression {
     return Expression.Cast(
-        CastExpression(Expression.IntLiteral(c.value), TypeName.named(e.name), loc, CastKind.Synthesized)
+        CastExpression(Expression.IntLiteral(c.value, Loc.none()), TypeName.named(e.name), loc, CastKind.Synthesized)
     );
 }
 
@@ -450,7 +452,10 @@ _add_built_in_methods(module: Module) {
         for (var c in e.cases) {
             var literal = Expression.Cast(
                 CastExpression(
-                    Expression.IntLiteral(c.value), e.representation.copy(), Loc.none(), CastKind.Synthesized
+                    Expression.IntLiteral(c.value, Loc.none()),
+                    e.representation.copy(),
+                    Loc.none(),
+                    CastKind.Synthesized
                 )
             );
             var value = Expression.SymbolRef(SymbolRefExpression("value", e.representation.copy(), Loc.none()));
