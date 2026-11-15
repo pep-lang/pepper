@@ -1625,7 +1625,7 @@ export split_type_arguments(function: String): (String, TypeName[]?) {
 export arg_info(arg: Expression, overloads: Overloads, ty: TypeName?): ArgInfo {
     var kind = ArgKind.Plain;
     match (arg) {
-        IntLiteral(value) => {
+        IntLiteral(value, _) => {
             return ArgInfo(
                 Optional<TypeName>.Value(TypeName.named(int_literal_type(value))), ArgKind.IntLiteral(value)
             );

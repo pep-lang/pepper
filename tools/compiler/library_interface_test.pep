@@ -311,7 +311,11 @@ _without_locs(value: JsonValue): JsonValue {
         Object(members) => {
             var out = JsonValue.object();
             for (var (key, member) in members) {
-                if (!key.ends_with("loc")) {
+                # A literal is `[value, loc]`.
+                var pair = member.as_array();
+                if (key.ends_with("Literal") and pair.is_value() and pair.value().count == 2) {
+                    out[key] = pair.value()[0];
+                } else if (!key.ends_with("loc")) {
                     out[key] = _without_locs(member);
                 }
             }

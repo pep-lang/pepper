@@ -192,7 +192,7 @@ struct _DeprecatedUses {
             Cast(node) => {
                 # A value enum's `E.Case` is already its value, cast to `E`
                 # at the case's name.
-                if (node.kind == CastKind.Synthesized and node.expr is IntLiteral(_) and !node.loc.is_none()) {
+                if (node.kind == CastKind.Synthesized and node.expr is IntLiteral(_, _) and !node.loc.is_none()) {
                     var owner = Expression.SymbolRef(
                         SymbolRefExpression(node.ty.to_string(), TypeName.auto(), Loc.none())
                     );

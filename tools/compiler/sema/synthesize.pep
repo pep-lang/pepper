@@ -77,7 +77,9 @@ _return_nothing(): Statement {
 
 ## `if (this === __null) { return; }`
 export null_guard(): Statement {
-    return _if_block(_binary(BinaryOp.Identical, Expression.ThisRef, Expression.PointerLiteral), [_return_nothing()]);
+    return _if_block(
+        _binary(BinaryOp.Identical, Expression.ThisRef, Expression.PointerLiteral(Loc.none())), [_return_nothing()]
+    );
 }
 
 ## Returns one step of a head count of `this`; its value is the new count.
@@ -110,7 +112,7 @@ _count_ref(): Expression {
 
 ## `<value> == 0`
 export is_zero(value: Expression): Expression {
-    return _binary(BinaryOp.Equal, value, Expression.IntLiteral(0));
+    return _binary(BinaryOp.Equal, value, Expression.IntLiteral(0, Loc.none()));
 }
 
 ## Returns the zero value of a field of type `ty`: an enum's default, the
@@ -125,7 +127,9 @@ export zero_for(state: PassState, ty: TypeName): Expression {
     var default = state.enum_default(spelled);
     if (default.is_value()) {
         return Expression.Cast(
-            CastExpression(Expression.IntLiteral(default.value()), ty.copy(), Loc.none(), CastKind.Synthesized)
+            CastExpression(
+                Expression.IntLiteral(default.value(), Loc.none()), ty.copy(), Loc.none(), CastKind.Synthesized
+            )
         );
     }
     # A tuple or a value struct is a value: its zero holds a zero of each
@@ -137,14 +141,14 @@ export zero_for(state: PassState, ty: TypeName): Expression {
     bool pointer = ty.is_pointer();
     bool is_struct = scalar and !state.is_integral(ty.name) and ty.name != SIMD;
     if (pointer or is_struct) {
-        return Expression.PointerLiteral;
+        return Expression.PointerLiteral(Loc.none());
     }
     match (ty.name) {
         "f32", "float", "f64", "double" => {
-            return Expression.FloatLiteral(0.0);
+            return Expression.FloatLiteral(0.0, Loc.none());
         }
         else => {
-            return Expression.IntLiteral(0);
+            return Expression.IntLiteral(0, Loc.none());
         }
     }
 }
@@ -162,13 +166,23 @@ export apply_synthesized(st: StructDef) {
     if (!_has_field(st, "__refcount")) {
         st.field_members.insert(
             0,
-            _var_def("__refcount", TypeName.named("u32"), Optional<Expression>.Value(Expression.IntLiteral(0)), false)
+            _var_def(
+                "__refcount",
+                TypeName.named("u32"),
+                Optional<Expression>.Value(Expression.IntLiteral(0, Loc.none())),
+                false
+            )
         );
     }
     if (!_has_field(st, "__weakcount")) {
         st.field_members.insert(
             1,
-            _var_def("__weakcount", TypeName.named("u32"), Optional<Expression>.Value(Expression.IntLiteral(1)), false)
+            _var_def(
+                "__weakcount",
+                TypeName.named("u32"),
+                Optional<Expression>.Value(Expression.IntLiteral(1, Loc.none())),
+                false
+            )
         );
     }
     # A `[Shared]` struct (or a shared function type) steps its counts
@@ -223,7 +237,9 @@ export skip_static_objects(st: StructDef) {
             continue;
         }
         var guard = _if_block(
-            _binary(BinaryOp.GreaterEqual, _member_ref("__refcount"), Expression.IntLiteral(STATIC_REFCOUNT)),
+            _binary(
+                BinaryOp.GreaterEqual, _member_ref("__refcount"), Expression.IntLiteral(STATIC_REFCOUNT, Loc.none())
+            ),
             [_return_nothing()]
         );
         var items = method.body.value().items;
@@ -336,12 +352,12 @@ export finish(state: PassState, st: StructDef): Diagnostic? {
         # storage, so it sets only the tag and the named case's values.
         var fields = st.has_union_layout() ? Array<VariableDef>() : st.field_members;
         for (var field in fields) {
-            Expression value = Expression.PointerLiteral;
+            Expression value = Expression.PointerLiteral(Loc.none());
             if (field.name == "__refcount") {
                 # `this` owns the object's first reference for the whole
                 # constructor; its scope exit releases it after `return
                 # this` acquires the caller's.
-                value = Expression.IntLiteral(1);
+                value = Expression.IntLiteral(1, Loc.none());
             } else if (field.default.is_value()) {
                 value = field.default.value().copy();
             } else if (field.ty.sub_types.count == 0 and _names_parameter(st.ty, field.ty.name)) {
@@ -447,7 +463,7 @@ _case_assignments(cases: Array<EnumCaseDef>, init_params: Array<(ulong, String, 
             }
         }
         var tag = Expression.SymbolRef(SymbolRefExpression($"__init_{TAG_FIELD}", tag_ty.value().copy(), Loc.none()));
-        items.append(_if_block(_binary(BinaryOp.Equal, tag, Expression.IntLiteral(case.value)), stores));
+        items.append(_if_block(_binary(BinaryOp.Equal, tag, Expression.IntLiteral(case.value, Loc.none())), stores));
     }
     return items;
 }

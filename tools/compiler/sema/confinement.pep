@@ -3417,7 +3417,7 @@ _describe(e: Expression): String {
             }
             return $"{_describe(node.lhs)}.{node.name}";
         }
-        IntLiteral(value) => {
+        IntLiteral(value, _) => {
             return $"{value}";
         }
         StringLiteral(node) => {

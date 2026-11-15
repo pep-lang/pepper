@@ -367,7 +367,7 @@ export lower_property(e: Expression, properties: Properties, site: PropertySite,
             }
             properties.lowered += 1;
             return _read_modify_write(
-                member.lhs, property, base, Expression.IntLiteral(1), at, node.loc, site, properties, state
+                member.lhs, property, base, Expression.IntLiteral(1, Loc.none()), at, node.loc, site, properties, state
             );
         }
         SymbolRef(_) => {
@@ -455,7 +455,7 @@ _static_access(e: Expression, properties: Properties, site: PropertySite): Expre
             var step = Expression.Binary(
                 BinaryExpression(
                     _static_get(target.value()),
-                    Expression.IntLiteral(1),
+                    Expression.IntLiteral(1, Loc.none()),
                     increment ? BinaryOp.Add : BinaryOp.Sub,
                     node.loc
                 )

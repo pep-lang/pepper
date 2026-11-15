@@ -308,7 +308,7 @@ an_imported_pepper_library_is_checked_against() {
     expect_exit(wrong, 1);
     expect_contains(
         wrong.stderr,
-        "main.pep:4:12: error: cannot pass a value of type 'int' as argument 1 of 'sum', which has type 'Array<Point>'"
+        "main.pep:4:20: error: cannot pass a value of type 'int' as argument 1 of 'sum', which has type 'Array<Point>'"
     );
     write_file(root.join("app").join("util.pep"), "export loud(): String {\n    return \"y\".shout();\n}\n");
     var (

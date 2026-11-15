@@ -500,13 +500,19 @@ for name in [k for k in items if k in reach]:
                     lines.append('                return this;')
                 elif vv['kind']=='tuple':
                     ns=['value'] if len(vv['types'])==1 else [f'v{i}' for i in range(len(vv['types']))]
-                    lines.append(f'            {vv["name"]}({", ".join(ns)}) => {{')
-                    vals=[]
-                    for nn,t in zip(ns,vv['types']):
-                        setup,val=copy_of(nn,parse_type(t))
-                        lines+=['                '+l for l in setup]
-                        vals.append(val)
-                    lines.append(f'                return {name}.{vv["name"]}({", ".join(vals)});')
+                    copies=[copy_of(nn,parse_type(t)) for nn,t in zip(ns,vv['types'])]
+                    if all(not setup and val==nn for nn,(setup,val) in zip(ns,copies)):
+                        # Every value is shared as it is, and an enum value
+                        # never changes: the copy is the value itself.
+                        lines.append(f'            {vv["name"]} => {{')
+                        lines.append('                return this;')
+                    else:
+                        lines.append(f'            {vv["name"]}({", ".join(ns)}) => {{')
+                        vals=[]
+                        for setup,val in copies:
+                            lines+=['                '+l for l in setup]
+                            vals.append(val)
+                        lines.append(f'                return {name}.{vv["name"]}({", ".join(vals)});')
                 else:
                     lines.append(f'            {vv["name"]}(node) => {{')
                     lines.append(f'                return {name}.{vv["name"]}(node.copy());')

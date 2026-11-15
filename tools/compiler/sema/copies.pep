@@ -664,7 +664,10 @@ _copy_value_method(st: StructDef, safe: ThreadSafeStructs): FunctionDef {
         }
         var is_case = Expression.Binary(
             BinaryExpression(
-                _member(Expression.ThisRef, TAG_FIELD), Expression.IntLiteral(case.value), BinaryOp.Equal, Loc.none()
+                _member(Expression.ThisRef, TAG_FIELD),
+                Expression.IntLiteral(case.value, Loc.none()),
+                BinaryOp.Equal,
+                Loc.none()
             )
         );
         items.append(Statement.Branch(Branch(is_case, Block("", stores))));

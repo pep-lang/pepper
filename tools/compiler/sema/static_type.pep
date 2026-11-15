@@ -440,13 +440,13 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
         PointerLiteral => {
             return _known(TypeName.void_pointer());
         }
-        BoolLiteral(_) => {
+        BoolLiteral(_, _) => {
             return _known(TypeName.boolean());
         }
-        IntLiteral(value) => {
+        IntLiteral(value, _) => {
             return _known(TypeName.named(int_literal_type(value)));
         }
-        FloatLiteral(_) => {
+        FloatLiteral(_, _) => {
             return _known(TypeName.named("f64"));
         }
         Destructure(node) => {

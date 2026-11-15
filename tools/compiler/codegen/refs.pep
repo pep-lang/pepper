@@ -58,7 +58,7 @@ export count_field_offset(field: CountField): ulong {
 ## first.
 export is_float_valued(expr: Expression): bool {
     match (expr) {
-        FloatLiteral(_) => {
+        FloatLiteral(_, _) => {
             return true;
         }
         Unary(node) => {
@@ -150,16 +150,16 @@ extend Generator {
             # Literals carry C's type directly: a bool literal is `bool`, an
             # int-range integer literal is `int` (else `long`), a float
             # literal is `double`.
-            BoolLiteral(_) => {
+            BoolLiteral(_, _) => {
                 return _some("bool");
             }
-            IntLiteral(v) => {
+            IntLiteral(v, _) => {
                 if (-2147483648 <= v and v <= 2147483647) {
                     return _some("int");
                 }
                 return _some("long");
             }
-            FloatLiteral(_) => {
+            FloatLiteral(_, _) => {
                 return _some("double");
             }
             # A bare struct name that no local or global shadows is a type

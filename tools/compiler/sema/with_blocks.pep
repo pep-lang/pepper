@@ -179,7 +179,10 @@ _lower_with_block(block: Block, types: _WithTypes, state: PassState) {
     }
     if (types.nullable(ty)) {
         var identical = BinaryExpression(
-            Expression.SymbolRef(SymbolRefExpression(name, ty, at)), Expression.PointerLiteral, BinaryOp.Identical, at
+            Expression.SymbolRef(SymbolRefExpression(name, ty, at)),
+            Expression.PointerLiteral(Loc.none()),
+            BinaryOp.Identical,
+            at
         );
         branch.condition = Expression.Unary(UnaryExpression(Expression.Binary(identical), UnaryOp.LogicalNot, at));
         return;

@@ -1175,10 +1175,10 @@ _zeroes_field(lhs: Expression, name: String): bool {
 
 _is_zero(e: Expression): bool {
     match (e) {
-        IntLiteral(value) => {
+        IntLiteral(value, _) => {
             return value == 0;
         }
-        FloatLiteral(_) => {
+        FloatLiteral(_, _) => {
             return true;
         }
         PointerLiteral => {

@@ -61,11 +61,11 @@ struct _NegationFolder {
         if (e is Unary(node)) {
             if (node.op == UnaryOp.Neg) {
                 match (node.operand) {
-                    IntLiteral(value) => {
-                        return Expression.IntLiteral((0 as long).wrapping_sub(value));
+                    IntLiteral(value, _) => {
+                        return Expression.IntLiteral((0 as long).wrapping_sub(value), node.loc);
                     }
-                    FloatLiteral(value) => {
-                        return Expression.FloatLiteral(-value);
+                    FloatLiteral(value, _) => {
+                        return Expression.FloatLiteral(-value, node.loc);
                     }
                     else => {}
                 }
@@ -84,7 +84,7 @@ extend _NegationFolder with Rewriter;
 ## @param loc where the literal is
 ## @returns the cast
 export make_unsigned_literal(value: ulong, loc: Loc): Expression {
-    var bits = Expression.IntLiteral(unsafe_cast<long>(value));
+    var bits = Expression.IntLiteral(unsafe_cast<long>(value), Loc.none());
     return Expression.Cast(CastExpression(bits, TypeName.named("ulong"), loc, CastKind.Synthesized));
 }
 
@@ -98,7 +98,7 @@ export unsigned_literal(e: Expression): CastExpression? {
         # Only these synthesized casts to `ulong` are located, and their
         # bits, 2^63 and up, read as a negative `long`.
         if (cast.kind == CastKind.Synthesized and !cast.loc.is_none() and cast.ty.to_string() == "ulong") {
-            if (cast.expr is IntLiteral(bits)) {
+            if (cast.expr is IntLiteral(bits, _)) {
                 if (bits < 0) {
                     return Optional<CastExpression>.Value(cast);
                 }
@@ -122,7 +122,9 @@ export convert_string_literal(e: Expression): Expression {
         }
         var raw = Expression.StringLiteral(StringLiteralExpression(literal.value, true, literal.loc));
         var args = [
-            raw, Expression.IntLiteral(literal.value.size as long), Expression.IntLiteral(literal.value.length as long)
+            raw,
+            Expression.IntLiteral(literal.value.size as long, Loc.none()),
+            Expression.IntLiteral(literal.value.length as long, Loc.none())
         ];
         return Expression.FunctionCall(FunctionCallExpression("String", args, literal.loc));
     }

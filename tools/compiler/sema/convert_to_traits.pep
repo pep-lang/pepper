@@ -644,7 +644,7 @@ struct _TraitConversions {
             var facts = _facts(actual.to_string());
             return facts.is_value() and _conforms_to(facts.value(), to);
         }
-        if (value is IntLiteral(v)) {
+        if (value is IntLiteral(v, _)) {
             return _literal_fits(v, to_name);
         }
         return _promotes(from_name, to_name);

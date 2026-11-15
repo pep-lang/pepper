@@ -110,7 +110,9 @@ export lower_main_arguments(module: Module, state: PassState) {
     if (is_void) {
         items.append(Statement.Expression(call));
         items.append(
-            Statement.Return(ReturnStatement(Optional<Expression>.Value(Expression.IntLiteral(0)), Loc.none()))
+            Statement.Return(
+                ReturnStatement(Optional<Expression>.Value(Expression.IntLiteral(0, Loc.none())), Loc.none())
+            )
         );
     } else {
         items.append(Statement.Return(ReturnStatement(Optional<Expression>.Value(call), Loc.none())));

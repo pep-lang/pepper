@@ -136,6 +136,9 @@ _expression_loc(e: Expression): Loc {
         StringLiteral(node) => {
             return node.loc;
         }
+        BoolLiteral(_, at), IntLiteral(_, at), FloatLiteral(_, at), PointerLiteral(at) => {
+            return at;
+        }
         StaticString(node) => {
             return node.loc;
         }

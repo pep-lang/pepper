@@ -1773,13 +1773,13 @@ struct _TypeScopes {
             Binary(node) => {
                 return _binary_type(node, current);
             }
-            IntLiteral(value) => {
+            IntLiteral(value, _) => {
                 return TypeName.named(int_literal_type(value));
             }
-            FloatLiteral(_) => {
+            FloatLiteral(_, _) => {
                 return TypeName.named("f64");
             }
-            BoolLiteral(_) => {
+            BoolLiteral(_, _) => {
                 return TypeName.boolean();
             }
             StringLiteral(_) => {

@@ -11,10 +11,10 @@ import compiler.link;
 import syntax;
 
 ## The `link.RECORD_VERSION` the fingerprint below was taken at.
-const _VERSION: uint = 3;
+const _VERSION: uint = 4;
 
 ## The fingerprint of the record's code at `_VERSION`.
-const _FINGERPRINT = "2b151b06b5ddac13b19614402cb776e6";
+const _FINGERPRINT = "264dfba794842ba2d91563a12d097c42";
 
 [Test]
 the_record_format_matches_its_version() {
