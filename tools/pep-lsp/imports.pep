@@ -345,7 +345,8 @@ export library_function(program: link.Program, model: sema.Module, target: Targe
 export checked_signature(f: sema.FunctionDef): String {
     var parameters = Array<String>();
     for (var p in f.parameters) {
-        if (!p.hidden) {
+        # An enum's method takes `this` as a parameter of its own.
+        if (!p.hidden and p.name != "this") {
             parameters.append($"{p.name}: {p.ty.to_string()}");
         }
     }

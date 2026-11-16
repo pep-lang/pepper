@@ -854,6 +854,21 @@ all_passed(failed: String[]) {
 
 const ALIAS = "import geometry as g;\ntest(): int {\n    var p: g.Point = g.make(1, 2);\n    var b = g.Box<int>();\n    b.value = g.rect_area(2, 5);\n    return p.y + b.value;\n}\n";
 
+# After `g.` of `import geometry as g`, completion offers what the module
+# exports, re-exports included, and nothing else.
+[Test]
+completion_after_a_qualifier_offers_its_module_exports() {
+    var uri = tree("qualified_completion", ALIAS, "main.pep");
+    var analysis = Optional<Analysis>.Value(analyze(uri, ALIAS));
+    var typed = ALIAS.replace("g.make(1, 2)", "g.");
+    var found = labels(completion_at(lsp.TextDocument(uri, typed), analysis, analysis, at(typed, "g.;", 2)));
+    for (var name in ["make", "Point", "Box", "rect_area"]) {
+        expect_true(found.contains(name));
+    }
+    expect_false(found.contains("half"));
+    expect_false(found.contains("return"));
+}
+
 [Test]
 qualified_function_leads_to_its_module_file() {
     var c = loaded("qualified_fn", ALIAS, "main.pep");
