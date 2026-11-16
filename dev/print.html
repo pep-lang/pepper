@@ -14604,9 +14604,11 @@ one process, one compilation unit at a time, whatever
 <a href="language/../tools/pep-build.html#the-build-cache">The build cache</a>).</p>
 </li>
 <li>
-<p><strong>The language server.</strong> pep-lsp does not look for interfaces, so it
-reports a library's import as <code>cannot find module</code>, and shows nothing
-from the library.</p>
+<p><strong>Going to a library's definitions.</strong> The interface holds no source,
+so in the <a href="language/../tools/pep-lsp.html">language server</a> go to definition finds
+nothing in a library, and hover shows its signatures without their doc
+comments. pep-lsp finds the library in its <code>libraryPath</code> folders and
+<code>PEPPER_LIBRARY_PATH</code>'s, not in the folders a build script adds.</p>
 </li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="visibility"><a class="header" href="#visibility">Visibility</a></h1>
@@ -26907,9 +26909,17 @@ completion, go to definition, document outlines and inlay hints. It checks
 code with the compiler's own front end, and finds the standard library the
 way the compiler does (see
 <a href="tools/../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a>).</p>
-<p>It does not read a <a href="tools/../language/libraries.html">Pepper library</a>'s interface
-yet, so it reports an import of a library built with <code>--lib pepper</code> as
-<code>cannot find module</code>.</p>
+<p>An import of a <a href="tools/../language/libraries.html">Pepper library</a> built with
+<code>--lib pepper</code> finds its interface the way the compiler does: in the
+folders of the <code>libraryPath</code> option (the compiler's <code>-L</code>), then in those of
+<code>PEPPER_LIBRARY_PATH</code>. The server does not run the project's build
+scripts, so a folder only a build script adds (<code>pep:link-path</code>) belongs in
+<code>libraryPath</code>. The library's names are checked, and hover and completion
+after <code>geo.</code> show each function's signature from the interface; the
+interface holds no source or doc comments, so go to definition finds
+nothing and hover shows no documentation. A program that imports a
+library is checked one compilation unit at a time in the server's own
+process, as <code>pepper build</code> checks it.</p>
 <p>Warnings in the files a document imports show on those files too, such as
 a use of a deprecated function in a library the document calls. A file open
 in the editor shows its own analysis instead.</p>
@@ -26998,12 +27008,14 @@ starting.</p>
 <code>initialize</code> request, read once when it starts:</p>
 <pre><code class="language-json">{
   "inlayHints": { "implicitConversions": true, "parameterNames": true },
-  "buildOptions": ["USE_ZLIB", "LOG_LEVEL=2"]
+  "buildOptions": ["USE_ZLIB", "LOG_LEVEL=2"],
+  "libraryPath": ["lib"]
 }
 </code></pre>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>What it does</th></tr></thead><tbody>
 <tr><td><code>inlayHints.implicitConversions</code></td><td>boolean</td><td><code>true</code></td><td>Show the constructor call an <a href="tools/../language/structs.html#implicit-conversions"><code>[Implicit]</code> conversion</a> inserts, such as <code>Path(</code> ... <code>)</code> around a <code>String</code> passed where a <code>Path</code> is expected</td></tr>
 <tr><td><code>inlayHints.parameterNames</code></td><td>boolean</td><td><code>true</code></td><td>Show the parameter name before a literal argument passed by position (<code>resize(width: 800, height: 600)</code>)</td></tr>
+<tr><td><code>libraryPath</code></td><td>array of strings</td><td><code>[]</code></td><td>The folders an import looks for a <a href="tools/../language/libraries.html">Pepper library</a>'s interface in, as the compiler's <code>-L</code> takes them, before <code>PEPPER_LIBRARY_PATH</code>'s. A relative folder is in the document's project folder (the folder holding its <code>pep.toml</code>, else the document's own)</td></tr>
 <tr><td><code>buildOptions</code></td><td>array of strings</td><td><code>[]</code></td><td>The <a href="tools/../language/build-options.html">build options</a> to analyze with, as the compiler's <code>-D</code> takes them: <code>NAME</code> or <code>NAME=VALUE</code>. One that does not parse is left out. A document that declares a <code>[Test]</code> function is also analyzed with <code>TEST</code>, and <code>testing</code> loaded, as <a href="tools/pep-test.html"><code>pep-test</code></a> builds it</td></tr>
 </tbody></table>
 </div>

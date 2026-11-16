@@ -414,9 +414,11 @@ one process, one compilation unit at a time, whatever
 <a href="../tools/pep-build.html#the-build-cache">The build cache</a>).</p>
 </li>
 <li>
-<p><strong>The language server.</strong> pep-lsp does not look for interfaces, so it
-reports a library's import as <code>cannot find module</code>, and shows nothing
-from the library.</p>
+<p><strong>Going to a library's definitions.</strong> The interface holds no source,
+so in the <a href="../tools/pep-lsp.html">language server</a> go to definition finds
+nothing in a library, and hover shows its signatures without their doc
+comments. pep-lsp finds the library in its <code>libraryPath</code> folders and
+<code>PEPPER_LIBRARY_PATH</code>'s, not in the folders a build script adds.</p>
 </li>
 </ul>
 
