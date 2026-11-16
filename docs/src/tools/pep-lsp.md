@@ -9,9 +9,17 @@ code with the compiler's own front end, and finds the standard library the
 way the compiler does (see
 [Where the compiler finds the standard library](../tutorial/getting-started.md#where-the-compiler-finds-the-standard-library)).
 
-It does not read a [Pepper library](../language/libraries.md)'s interface
-yet, so it reports an import of a library built with `--lib pepper` as
-`cannot find module`.
+An import of a [Pepper library](../language/libraries.md) built with
+`--lib pepper` finds its interface the way the compiler does: in the
+folders of the `libraryPath` option (the compiler's `-L`), then in those of
+`PEPPER_LIBRARY_PATH`. The server does not run the project's build
+scripts, so a folder only a build script adds (`pep:link-path`) belongs in
+`libraryPath`. The library's names are checked, and hover and completion
+after `geo.` show each function's signature from the interface; the
+interface holds no source or doc comments, so go to definition finds
+nothing and hover shows no documentation. A program that imports a
+library is checked one compilation unit at a time in the server's own
+process, as `pepper build` checks it.
 
 Warnings in the files a document imports show on those files too, such as
 a use of a deprecated function in a library the document calls. A file open
@@ -120,7 +128,8 @@ The server's settings arrive in the `initializationOptions` of the LSP
 ```json
 {
   "inlayHints": { "implicitConversions": true, "parameterNames": true },
-  "buildOptions": ["USE_ZLIB", "LOG_LEVEL=2"]
+  "buildOptions": ["USE_ZLIB", "LOG_LEVEL=2"],
+  "libraryPath": ["lib"]
 }
 ```
 
@@ -128,6 +137,7 @@ The server's settings arrive in the `initializationOptions` of the LSP
 | --- | --- | --- | --- |
 | `inlayHints.implicitConversions` | boolean | `true` | Show the constructor call an [`[Implicit]` conversion](../language/structs.md#implicit-conversions) inserts, such as `Path(` ... `)` around a `String` passed where a `Path` is expected |
 | `inlayHints.parameterNames` | boolean | `true` | Show the parameter name before a literal argument passed by position (`resize(width: 800, height: 600)`) |
+| `libraryPath` | array of strings | `[]` | The folders an import looks for a [Pepper library](../language/libraries.md)'s interface in, as the compiler's `-L` takes them, before `PEPPER_LIBRARY_PATH`'s. A relative folder is in the document's project folder (the folder holding its `pep.toml`, else the document's own) |
 | `buildOptions` | array of strings | `[]` | The [build options](../language/build-options.md) to analyze with, as the compiler's `-D` takes them: `NAME` or `NAME=VALUE`. One that does not parse is left out. A document that declares a `[Test]` function is also analyzed with `TEST`, and `testing` loaded, as [`pep-test`](pep-test.md) builds it |
 
 ## VS Code settings

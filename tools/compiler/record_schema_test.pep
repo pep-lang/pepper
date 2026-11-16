@@ -14,7 +14,7 @@ import syntax;
 const _VERSION: uint = 4;
 
 ## The fingerprint of the record's code at `_VERSION`.
-const _FINGERPRINT = "264dfba794842ba2d91563a12d097c42";
+const _FINGERPRINT = "239d43926cd0afdaab5f5cfd9f9f072e";
 
 [Test]
 the_record_format_matches_its_version() {

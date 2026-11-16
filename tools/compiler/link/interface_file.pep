@@ -476,17 +476,18 @@ _declaration(lines: String[]): (Declaration, String) {
             param.is_argument = flags.contains("override");
             generics.append(param);
         } else if (key == "method") {
-            methods.append(FunctionDecl(value));
+            methods.append(_untyped_function(value));
         } else if (key == "property") {
             var property = PropertyDecl();
             property.name = value;
+            property.type_name = TypeName.auto();
             properties.append(property);
         }
     }
     bool exported = flags.contains("export");
     bool file_private = flags.contains("private");
     if (kind == "function") {
-        var f = FunctionDecl(name);
+        var f = _untyped_function(name);
         f.generic_params = generics;
         f.external = flags.contains("extern");
         f.attributes = attributes;
@@ -511,7 +512,7 @@ _declaration(lines: String[]): (Declaration, String) {
                 s.fields.append(field);
             } else if (key == "constructors") {
                 for (var _ in 0..ulong.parse(value).value_or(0)) {
-                    var constructor = FunctionDecl("construct");
+                    var constructor = _untyped_function("construct");
                     constructor.attributes = constructor_attributes;
                     s.constructors.append(constructor);
                 }
@@ -543,6 +544,7 @@ _declaration(lines: String[]): (Declaration, String) {
     if (kind == "alias") {
         var t = TypeAliasDecl();
         t.name = name;
+        t.target = TypeName.auto();
         t.generic_params = generics;
         t.attributes = attributes;
         t.is_exported = exported;
@@ -594,4 +596,12 @@ _line(bytes: u8[], at: ulong): (String, ulong)? {
 _decoded(escaped: String): String {
     var decoded = Uri.decode(escaped);
     return decoded.is_ok() ? decoded.value() : escaped;
+}
+
+# A function of the link table, which writes no types: its return type is
+# `auto`, as a tool that reads the declarations (pep-lsp) expects one.
+_untyped_function(name: String): FunctionDecl {
+    var f = FunctionDecl(name);
+    f.return_type = TypeName.auto();
+    return f;
 }

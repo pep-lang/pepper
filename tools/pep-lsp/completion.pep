@@ -11,6 +11,7 @@ import compiler.parse;
 import compiler.sema;
 import "analysis";
 import "edits";
+import "imports";
 import "scope";
 import "symbols";
 
@@ -37,6 +38,11 @@ export completion_at(
     var cases = enum_cases_before(module.value(), program, document.text, offset);
     if (cases.is_value()) {
         return cases.value();
+    }
+    # After `q.` of an import, what its module exports.
+    var exported = _exports_before(module.value(), program, ready, document.text, offset);
+    if (!exported.is_empty) {
+        return exported;
     }
     _keywords(items);
     var site = _Site(document, module.value(), program, ready, offset);
@@ -112,6 +118,19 @@ export enum_cases_before(module: Module, program: link.Program?, text: String, o
         items.append(item);
     }
     return Optional<Array<lsp.CompletionItem>>.Value(items);
+}
+
+# The names the module of the import whose qualifier ends the text before
+# `offset` with a `.` (`geo.|`) exports; empty when none does.
+_exports_before(
+    module: Module, program: link.Program?, ready: Analysis?, text: String, offset: ulong
+): lsp.CompletionItem[] {
+    if (program.is_empty() or offset == 0 or offset > text.size or text.byte_at(offset - 1) != '.') {
+        return Array<lsp.CompletionItem>();
+    }
+    var start = _name_start(text, offset - 1);
+    var model = ready.is_value() ? ready.value().model : Optional<sema.Module>.Empty;
+    return qualified_exports(program.value(), module, model, text.substr_bytes(start, offset - 1 - start));
 }
 
 ## The top-level declarations of the other files of the module of
