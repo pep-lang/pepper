@@ -5,6 +5,7 @@
 
 import async;
 import [Channel] from async;
+import [Path] from io;
 import json;
 import [JsonValue] from json;
 import compiler.link;
@@ -93,7 +94,11 @@ extend PepperServer with lsp.LanguageServer {
         refreshes_hints = json_flag(params.capabilities, ["workspace", "inlayHint", "refreshSupport"], false);
         conversion_hints = json_flag(params.initialization_options, ["inlayHints", "implicitConversions"], true);
         parameter_hints = json_flag(params.initialization_options, ["inlayHints", "parameterNames"], true);
-        _jobs.send(copy(Job.Configure(build_options(params.initialization_options))));
+        _jobs.send(
+            copy(
+                Job.Configure(build_options(params.initialization_options), library_dirs(params.initialization_options))
+            )
+        );
         var result = lsp.InitializeResult();
         result.capabilities.text_document_sync = Optional<lsp.TextDocumentSyncOptions>.Value(
             lsp.TextDocumentSyncOptions(lsp.SYNC_FULL)
@@ -297,6 +302,29 @@ export build_options(options: JsonValue?): HashMap<String, String> {
         var value = equals < 0 ? "1" : option.substr_bytes(equals as ulong + 1, option.size - equals as ulong - 1);
         if (link.is_build_option_name(name)) {
             out[name] = value;
+        }
+    }
+    return out;
+}
+
+## The folders to look for Pepper libraries in, from the `libraryPath`
+## array of strings in the initialization options, as the compiler's `-L`
+## takes them; a relative one is in the document's project folder. One
+## that is not a string is left out.
+##
+## @param options the initialization options, if any
+## @returns the folders, in search order
+export library_dirs(options: JsonValue?): Path[] {
+    var out = Array<Path>();
+    if (options.is_empty() or !options.value().contains("libraryPath")) {
+        return out;
+    }
+    if (options.value()["libraryPath"] is Array(listed)) {
+        for (var item in listed) {
+            var text = item.as_string();
+            if (text.is_value() and !text.value().is_empty) {
+                out.append(Path(text.value()));
+            }
         }
     }
     return out;

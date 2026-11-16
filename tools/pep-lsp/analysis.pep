@@ -41,8 +41,9 @@ export enum Job {
     Analyze(uri: String, text: String),
     ## The document closed: drop its pending analysis.
     Close(uri: String),
-    ## Analyze with these build options (`-D`), by name, from now on.
-    Configure(build_options: HashMap<String, String>),
+    ## Analyze with these build options (`-D`), by name, and these folders
+    ## to look for Pepper libraries in (`-L`), from now on.
+    Configure(build_options: HashMap<String, String>, library_dirs: Path[]),
     ## Stop the thread.
     Stop,
 }
@@ -74,6 +75,7 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
     var pending = HashMap<String, String>();
     var order = Array<String>();
     var build_options = HashMap<String, String>();
+    var library_dirs = Array<Path>();
     # The documents open in the editor, each showing its own analysis.
     var open = HashSet<String>();
     # By document, the other files its last analysis showed warnings in.
@@ -94,11 +96,13 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
                     pending.remove(uri);
                     open.remove(uri);
                 }
-                Configure(options) => {
+                Configure(options, dirs) => {
                     build_options.clear();
                     for (var (name, value) in options) {
                         build_options[name] = value;
                     }
+                    library_dirs.clear();
+                    library_dirs.append_all(dirs);
                 }
                 Stop => {
                     return;
@@ -120,10 +124,12 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         var start = os.Instant.now();
         # Copies, so the analysis shares nothing with `pending` and can move
         # to the server's thread.
-        var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true, filling = filling);
+        var analysis = analyze(
+            copy(uri), copy(text.value()), build_options, library_dirs, workers = true, filling = filling
+        );
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
-        var newer = _take_jobs(jobs, pending, order, build_options, open);
+        var newer = _take_jobs(jobs, pending, order, build_options, library_dirs, open);
         if (newer.is_value()) {
             return;
         }
@@ -162,6 +168,7 @@ _take_jobs(
     pending: HashMap<String, String>,
     order: String[],
     build_options: HashMap<String, String>,
+    library_dirs: Path[],
     open: HashSet<String>
 ): bool? {
     while (true) {
@@ -181,11 +188,13 @@ _take_jobs(
                 pending.remove(uri);
                 open.remove(uri);
             }
-            Configure(options) => {
+            Configure(options, dirs) => {
                 build_options.clear();
                 for (var (name, value) in options) {
                     build_options[name] = value;
                 }
+                library_dirs.clear();
+                library_dirs.append_all(dirs);
             }
             Stop => {
                 return Optional<bool>.Value(true);
@@ -365,6 +374,9 @@ _parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diag
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
 ## @param build_options the build options (`-D`) to analyze with, by name
+## @param library_dirs the folders an import looks for a Pepper library's
+##   interface in (`-L`), before `$PEPPER_LIBRARY_PATH`'s; a relative one
+##   is in the document's project folder
 ## @param workers whether compilation units the cache lacks may be checked in
 ##   `--compilation-unit-worker` children of this executable: only when it is
 ##   pep-lsp
@@ -375,6 +387,7 @@ export analyze(
     uri: String,
     text: String,
     build_options: HashMap<String, String> = HashMap<String, String>(),
+    library_dirs: Path[] = Array<Path>(),
     workers: bool = false,
     filling: Filling = Filling()
 ): Analysis {
@@ -405,7 +418,8 @@ export analyze(
         host.build_options[name] = value;
     }
     out.os = analysis_os(text, parsed, host);
-    var loaded = _load(Path(path.value()), text, target_for(host, out.os));
+    var folder = _project_folder(Path(path.value()));
+    var loaded = _load(Path(path.value()), text, target_for(host, out.os), _library_dirs(folder, library_dirs));
     if (loaded.is_err()) {
         out.diagnostics.append(lsp.Diagnostic(lsp.Range(), loaded.error()));
         return out;
@@ -435,18 +449,7 @@ export analyze(
     }
     var warnings = Array<Diagnostic>();
     var result = _check(
-        program,
-        units,
-        own,
-        _project_folder(Path(path.value())),
-        path.value(),
-        text,
-        out.os,
-        options,
-        workers,
-        filling,
-        warnings,
-        out.bodies_read
+        program, units, own, folder, path.value(), text, out.os, options, workers, filling, warnings, out.bodies_read
     );
     # Warnings of the program's files, and of its own compilation unit's
     # checking.
@@ -537,12 +540,26 @@ _add_program_errors(reporter: _Reporter, program: link.Program) {
     }
 }
 
+# Where an import looks for a Pepper library's interface, as `pepc` looks:
+# the `-L` folders `dirs`, a relative one in the project `folder`, then
+# `$PEPPER_LIBRARY_PATH`'s.
+_library_dirs(folder: Path, dirs: Path[]): Path[] {
+    var out = Array<Path>();
+    for (var dir in dirs) {
+        out.append(folder.join(dir));
+    }
+    out.append_all(link.library_path_dirs());
+    return out;
+}
+
 # Loads the program rooted at `root`, whose text is `text`, for `target`, its
 # bodies deferred: `incremental.check_compilation_units` links those of the
-# compilation units it checks.
-_load(root: Path, text: String, target: link.Target): Result<link.Program, String> {
+# compilation units it checks. An import no source module answers looks for
+# a Pepper library in `library_dirs`.
+_load(root: Path, text: String, target: link.Target, library_dirs: Path[]): Result<link.Program, String> {
     var setup = link.Setup();
     setup.target = target;
+    setup.library_dirs = library_dirs;
     setup.sources[link.path_key(root)] = text;
     setup.defer_bodies = true;
     # As in a test build, which loads `testing` (its `TempFolder`) into every
@@ -662,7 +679,9 @@ _check(
     var cache = incremental.default_cache(folder);
     var below = own.is_value() ? own.value() : units.count - 1;
     var prechecked = HashMap<ulong, (u8[], String, String)>();
-    if (!workers or below <= 1) {
+    # A program that imports a Pepper library is checked here, one
+    # compilation unit after another, as `pepc` checks it (`_in_workers`).
+    if (!workers or below <= 1 or !program.interfaces().is_empty) {
         return _check_compilation_units(program, units, own, cache, prechecked, warnings);
     }
     var inputs = _whole_inputs(units, root, os_name, build_options);
@@ -998,7 +1017,9 @@ _load_job(dir: Path): Result<(link.Program, Path), String> {
             host.build_options[lines[i].substr_bytes(0, at)] = lines[i].substr_bytes(at + 1, lines[i].size - at - 1);
         }
     }
-    var loaded = _load(root, text.value(), target_for(host, lines[1]));
+    # No library folders: a program that imports a Pepper library is never
+    # checked in workers (`_check`).
+    var loaded = _load(root, text.value(), target_for(host, lines[1]), Array<Path>());
     if (loaded.is_err()) {
         return Result<(link.Program, Path), String>.err(loaded.error());
     }

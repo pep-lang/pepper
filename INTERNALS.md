@@ -3250,7 +3250,13 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   `}` with its `{` as related information), `Program.warnings`, linking errors (unresolved
   imports as warnings; one in another file at the document's start with
   that file's name), `Program.check_diagnostics`, then the first error
-  checking finds. The program loads with `Setup.defer_bodies`, and
+  checking finds. An import of a Pepper library looks for its interface
+  (§7) in `Setup.library_dirs`: the `libraryPath` initialization option's
+  folders (`server.library_dirs`, a relative one in the project folder),
+  then `link.library_path_dirs()`; the server runs no build scripts. Such a
+  program skips the whole-program check and the workers below, as `pepc`'s
+  `_in_workers` does, and is checked one compilation unit after another in
+  the analysis thread. The program loads with `Setup.defer_bodies`, and
   `incremental.check_compilation_units` checks it as a build does (§8.1), keyed on
   `Keys(program, units, "pep-lsp")` with the server's own compiler
   identity, in the build cache of the document's project
@@ -3293,7 +3299,11 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
 - `navigate.pep`: hover and definition. A `Context` is the current text's parse, plus the last
   analysis's program and model when that analysis is of the same text;
   without them, only what the parse says answers (locals, parameters,
-  the file's own declarations). `scope.pep` finds names in the syntax
+  the file's own declarations). A library interface's file has no source or
+  typed syntax (`Context._source`, `_module`, `_location` give none), so
+  hover and completion after `q.` (`imports.qualified_exports`) sign its
+  functions from the model (`library_function`, `checked_signature`), and
+  definition finds nothing there. `scope.pep` finds names in the syntax
   tree (scopes, the expression or type under the cursor); `imports.pep`
   follows names through imports with `link.FileScope`'s `imported` and
   `named`; `compiler.sema`'s `member_at` and `local_type`

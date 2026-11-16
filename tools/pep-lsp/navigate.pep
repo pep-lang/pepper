@@ -48,13 +48,14 @@ export struct Context {
         this.state = Optional<sema.PassState>.Empty;
     }
 
-    # The source of program file `file`: the document's text for file 0.
+    # The source of program file `file`: the document's text for file 0;
+    # none for a Pepper library's interface, which has no source.
     _source(file: ulong): String? {
         if (file == 0) {
             return Optional<String>.Value(document.text);
         }
         if (program is Value(p)) {
-            if (file < p.files.count) {
+            if (file < p.files.count and p.files[file].interface.is_empty()) {
                 return Optional<String>.Value(p.files[file].source);
             }
         }
@@ -62,13 +63,14 @@ export struct Context {
     }
 
     # The syntax tree of program file `file`: the document's own parse for
-    # file 0, whose names linking did not rewrite.
+    # file 0, whose names linking did not rewrite; none for a Pepper
+    # library's interface, whose declarations have no parameters or types.
     _module(file: ulong): Module? {
         if (file == 0) {
             return Optional<Module>.Value(module);
         }
         if (program is Value(p)) {
-            if (file < p.files.count) {
+            if (file < p.files.count and p.files[file].interface.is_empty()) {
                 return Optional<Module>.Value(p.files[file].module);
             }
         }
@@ -80,13 +82,14 @@ export struct Context {
         return program.is_value() ? program.value().files.count : 1;
     }
 
-    # Where `span` of program file `file` is.
+    # Where `span` of program file `file` is; nowhere in a Pepper library's
+    # interface, which has no source to open.
     _location(file: ulong, span: Span): lsp.Location? {
         if (file == 0) {
             return Optional<lsp.Location>.Value(lsp.Location(document.uri, document.range_of(span.start, span.end)));
         }
         if (program is Value(p)) {
-            if (file < p.files.count) {
+            if (file < p.files.count and p.files[file].interface.is_empty()) {
                 var f = p.files[file];
                 var other = lsp.TextDocument(lsp.path_to_uri(f.name), f.source);
                 return Optional<lsp.Location>.Value(lsp.Location(other.uri, other.range_of(span.start, span.end)));
@@ -467,6 +470,10 @@ _method_hover(context: Context, method: sema.FunctionDef, others: ulong = 0): St
         var doc = _markdown(comment);
         return with_doc(_head(name, function_signature(f)) + more, doc);
     }
+    # A Pepper library's function, as its interface's record has it.
+    if (context._source(file).is_empty()) {
+        return _head(name, checked_signature(method)) + more;
+    }
     return _head(name, method.ty.to_string()) + more;
 }
 
@@ -510,6 +517,12 @@ _target_hover(context: Context, found: Found): String? {
     var target = found.target;
     var from = target.file == 0 ? "" : $"\n\nfrom `{_file_label(context, target.file)}`";
     if (target.symbol is Value(symbol)) {
+        if (context.program.is_value() and context.model.is_value()) {
+            var checked = library_function(context.program.value(), context.model.value(), target);
+            if (checked is Value(f)) {
+                return Optional<String>.Value(_head(found.spelled, checked_signature(f)) + from);
+            }
+        }
         var doc = _declaration_doc_at(context, target.file, symbol.name_span);
         return Optional<String>.Value(with_doc(_head(found.spelled, symbol.type_text) + from, doc));
     }

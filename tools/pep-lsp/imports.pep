@@ -7,6 +7,8 @@
 import compiler.ast;
 import [Expression, Module, Span] from compiler.ast;
 import compiler.link;
+import lsp;
+import compiler.sema;
 import "scope";
 
 ## Where a name reached through an import leads: a top-level declaration
@@ -275,6 +277,79 @@ export named_type(program: link.Program, document: Module, offset: ulong): Found
     }
     var linked = _linked(program, t.span);
     return _found(base, linked.is_value() ? linked : declaration_named(program, base));
+}
+
+## The completions after `q.` (`geo.|`), where `q` is the qualifier of an
+## import of `document`: the names its module exports, each with its
+## signature or type.
+##
+## @param program the loaded program
+## @param document the document's syntax tree
+## @param model the checked model, which signs a Pepper library's functions
+## @param q the qualifier
+## @returns the items; empty when `q` is no import's qualifier
+export qualified_exports(
+    program: link.Program, document: Module, model: sema.Module?, q: String
+): lsp.CompletionItem[] {
+    var out = Array<lsp.CompletionItem>();
+    var imported = _qualifier_import(program, document, q);
+    if (imported.is_empty()) {
+        return out;
+    }
+    for (var (name, linked) in program.scopes[imported.value().file].exports) {
+        var declared = declaration_named(program, linked);
+        if (declared is Value(target)) {
+            var detail = target.symbol.value().type_text;
+            if (model is Value(m)) {
+                var checked = library_function(program, m, target);
+                if (checked is Value(f)) {
+                    detail = checked_signature(f);
+                }
+            }
+            var item = lsp.CompletionItem(
+                name, detail.contains("(") ? lsp.COMPLETION_FUNCTION : lsp.COMPLETION_VARIABLE
+            );
+            item.detail = Optional<String>.Value(detail);
+            out.append(item);
+        }
+    }
+    return out;
+}
+
+## The function of a Pepper library's interface `target` leads to, as the
+## interface's record has it: the interface's syntax has no parameters or
+## types.
+##
+## @param program the loaded program
+## @param model the checked model, which holds the library's record
+## @param target where a name leads
+## @returns the function; empty when `target` is no function of an interface
+export library_function(program: link.Program, model: sema.Module, target: Target): sema.FunctionDef? {
+    var none = Optional<sema.FunctionDef>.Empty;
+    if (program.files[target.file].interface.is_empty() or target.symbol.is_empty()) {
+        return none;
+    }
+    var name = target.symbol.value().name;
+    for (var f in model.functions) {
+        if (f.name == name) {
+            return Optional<sema.FunctionDef>.Value(f);
+        }
+    }
+    return none;
+}
+
+## A function as sema checked it, as declared: `twice(x: int): int`.
+##
+## @param f the function
+## @returns its signature
+export checked_signature(f: sema.FunctionDef): String {
+    var parameters = Array<String>();
+    for (var p in f.parameters) {
+        if (!p.hidden) {
+            parameters.append($"{p.name}: {p.ty.to_string()}");
+        }
+    }
+    return $"{link.demangle_name(f.name)}({", ".join(parameters)}): {f.ty.to_string()}";
 }
 
 ## A type's name without the array brackets after it.

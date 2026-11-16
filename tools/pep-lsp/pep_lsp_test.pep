@@ -9,8 +9,12 @@ import json;
 import [JsonValue] from json;
 import compiler.link;
 import lsp;
+import os;
 import compiler.parse;
+import process;
 import compiler.sema;
+import [TempFolder] from testing;
+import [expect_exit, run, tool, write_file] from tool_testing;
 import "actions";
 import "analysis";
 import "arguments";
@@ -668,6 +672,83 @@ build_options_come_from_the_initialization_options() {
     expect_equal(parsed["USE_ZLIB"], "1");
     expect_equal(parsed["LOG_LEVEL"], "2");
     expect_equal(build_options(Optional<JsonValue>.Empty).count, 0 as ulong);
+}
+
+[Test]
+library_folders_come_from_the_initialization_options() {
+    var options = json.parse("{\"libraryPath\": [\"lib\", \"\", 3]}").value();
+    var dirs = library_dirs(Optional<JsonValue>.Value(options));
+    expect_equal(dirs.count, 1 as ulong);
+    expect_equal(dirs[0].to_string(), "lib");
+    expect_equal(library_dirs(Optional<JsonValue>.Empty).count, 0 as ulong);
+}
+
+# A Pepper library, `--lib pepper` (#220): an import of it is found in the
+# library folders, and checked, hovered and completed from its interface.
+[Test]
+an_imported_pepper_library_is_checked_from_its_interface() {
+    var folder = TempFolder("pep_lsp_library");
+    var lib = folder.path.join("lib");
+    write_file(
+        lib.join("geo.pep"),
+        "## Doubles `x`.
+##
+## @param x the value
+export twice(x: int): int {
+    return x * 2;
+}
+
+export struct Box {
+    var size: int;
+}
+"
+    );
+    var built = run(
+        process
+            .Command(tool("pep-build").to_string())
+            .argument(lib.join("geo.pep").to_string())
+            .arguments(["--lib", "pepper", "-o", lib.join(_archive_name()).to_string()])
+    );
+    expect_exit(built, 0);
+    var text = "import geo;
+
+main(): int {
+    var box = geo.Box();
+    return geo.twice(box.size);
+}
+";
+    var uri = lsp.path_to_uri(folder.path.join("main.pep").to_string());
+    write_file(folder.path.join("main.pep"), text);
+    # Without the folder the import is not found.
+    var lost = analyze(uri, text);
+    expect_true(lost.diagnostics.count > 0);
+    expect_true(lost.diagnostics[0].message.contains("cannot find module 'geo'"));
+    var analysis = analyze(uri, text, library_dirs = [Path("lib")]);
+    expect_equal(analysis.outcome, "passed");
+    var context = Context(lsp.TextDocument(uri, text), parse.parse(text).value());
+    context.program = analysis.program;
+    context.model = analysis.model;
+    context.state = analysis.state;
+    # The signature is the record's; there is no source to go to.
+    expect_true(hover_text(context, at(text, "twice(", 0)).starts_with("`twice` — `twice(x: int): int`"));
+    expect_equal(definition_at(context, at(text, "twice(", 0)).count, 0 as ulong);
+    var ready = Optional<Analysis>.Value(analysis);
+    var typed = text.replace("geo.twice(box.size)", "geo.");
+    var found = labels(completion_at(lsp.TextDocument(uri, typed), ready, ready, at(typed, "geo.;", 4)));
+    expect_true(found.contains("twice"));
+    expect_true(found.contains("Box"));
+    var wrong = text.replace("geo.twice(box.size)", "geo.twice(\"x\")");
+    var refused = analyze(uri, wrong, library_dirs = [Path("lib")]);
+    expect_equal(refused.outcome, "found an error");
+    expect_equal(
+        refused.diagnostics[0].message,
+        "cannot pass a value of type 'String' as argument 1 of 'twice', which has type 'int'"
+    );
+}
+
+# The archive `--lib pepper` writes for `geo`.
+_archive_name(): String {
+    return os.system_os() == os.OperatingSystem.Windows ? "geo.lib" : "libgeo.a";
 }
 
 # Each test collects its failed checks (label: actual value) and reports

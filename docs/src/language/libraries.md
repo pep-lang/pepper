@@ -199,6 +199,8 @@ keeps the program's copy, which comes ahead of the library's archive.
   one process, one compilation unit at a time, whatever
   `PEPC_COMPILATION_UNIT_JOBS` says (see
   [The build cache](../tools/pep-build.md#the-build-cache)).
-- **The language server.** pep-lsp does not look for interfaces, so it
-  reports a library's import as `cannot find module`, and shows nothing
-  from the library.
+- **Going to a library's definitions.** The interface holds no source,
+  so in the [language server](../tools/pep-lsp.md) go to definition finds
+  nothing in a library, and hover shows its signatures without their doc
+  comments. pep-lsp finds the library in its `libraryPath` folders and
+  `PEPPER_LIBRARY_PATH`'s, not in the folders a build script adds.
