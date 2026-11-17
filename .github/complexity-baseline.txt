@@ -112,7 +112,6 @@ tools/compiler/driver/build.pep _build 347
 tools/compiler/driver/build.pep _link_attributes 32
 tools/compiler/driver/build.pep _resolve_links 27
 tools/compiler/driver/build.pep _syntax_links 47
-tools/compiler/driver/build.pep build 31
 tools/compiler/driver/build_scripts.pep _apply 27
 tools/compiler/driver/build_scripts.pep run_build_scripts 42
 tools/compiler/driver/emit_static.pep _expand_file 47
@@ -146,7 +145,6 @@ tools/compiler/link/deprecation.pep check_uses 77
 tools/compiler/link/files.pep ModuleRoots.namespace_of 27
 tools/compiler/link/interface_file.pep _declaration 59
 tools/compiler/link/interface_file.pep link_table 40
-tools/compiler/link/interface_file.pep read_interface_bytes 29
 tools/compiler/link/link.pep _Linker._bases_of 26
 tools/compiler/link/link.pep _Linker.bind_imports 79
 tools/compiler/link/link.pep _Linker.compute_members 65
@@ -160,7 +158,7 @@ tools/compiler/link/platform.pep _Evaluator._compare 48
 tools/compiler/link/platform.pep _Evaluator._compare_options 27
 tools/compiler/link/platform.pep _Evaluator._predicate 38
 tools/compiler/link/program.pep _library_clash 29
-tools/compiler/link/program.pep load 202
+tools/compiler/link/program.pep load 194
 tools/compiler/link/project.pep Packages._apply_declared_options 27
 tools/compiler/link/project.pep Packages._as_fetched 26
 tools/compiler/link/project.pep Packages.resolve 43

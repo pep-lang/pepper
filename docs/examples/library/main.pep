@@ -1,6 +1,8 @@
 # Imports the library `geo` (`lib/geo.pep`), built with `--lib pepper`,
-# with no source for it: `pepper build main.pep -L lib -o main`.
+# and `scene` (`lib/scene.pep`), built on `geo`, with no source for
+# either: `pepper build main.pep -L lib -o main`.
 import geo;
+import scene;
 
 struct Circle {
     var radius: int;
@@ -26,6 +28,8 @@ main(): int {
     }
     # The library's generic, at the program's type.
     print($"{geo.pair(Circle(2)).count} circles");
+    # A library that imports `geo`, called with the program's shapes.
+    print($"total area {scene.total_area(shapes)}");
     return 0;
 }
 
@@ -33,3 +37,4 @@ main(): int {
 # a shape of area 9
 # a shape of area 3
 # 2 circles
+# total area 12

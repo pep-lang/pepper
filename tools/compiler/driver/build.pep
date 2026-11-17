@@ -1108,45 +1108,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             linked_stamps(program, options.libraries, options.library_dirs, options.objects)
         );
     }
-    # A Pepper library an import found links its archive, which must be
-    # the one built with the interface read.
-    for (var interface in program.interfaces()) {
-        var stamps = link.read_stamps(interface.archive);
-        var found = stamps.is_ok() ? stamps.value() : Array<link.Stamp>();
-        if (found.is_empty or found[0].kind != link.KIND_PEPPER or found[0].interface != interface.hash) {
-            return Result<Built, String>.err(
-                _at_link(
-                    program,
-                    interface.name,
-                    Diagnostic.error(
-                        $"the archive {interface.archive} was not built with the interface {interface.path}; rebuild the library '{interface.name}'"
-                    )
-                )
-            );
-        }
-        # An archive holds objects, not the library's archive; a Pepper
-        # library's unit would take the other library's files in.
-        # shortcut: give such a library units of its own (and `needs` the
-        # other) when libraries build on libraries.
-        if (options.library.is_value() and options.library.value() != LibraryKind.Shared) {
-            return Result<Built, String>.err(
-                _at_link(
-                    program,
-                    interface.name,
-                    Diagnostic.error(
-                        $"only an executable or a shared library can import the Pepper library '{interface.name}' yet"
-                    )
-                )
-            );
-        }
-        bool added = false;
-        for (var object in options.objects) {
-            added = added or object.to_string() == interface.archive.to_string();
-        }
-        if (!added) {
-            options.objects.append(interface.archive);
-            options.linked.value().append(StampedFile(interface.archive, interface.name, found));
-        }
+    var imported = _link_interfaces(program, options);
+    if (imported.is_value()) {
+        return Result<Built, String>.err(imported.value());
     }
     bool stamped = false;
     for (var found in options.linked.value()) {
@@ -1172,6 +1136,78 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             excluded.insert(u);
         }
     }
+}
+
+# Adds the archive of each Pepper library an import found to `options`'
+# link (`objects`) and its stamp to `options.linked`, which calls its
+# init and release; returns the error, rendered, for an archive not built
+# with the interface read, or a library built against another interface
+# of a library it imports (`_built_against`).
+_link_interfaces(program: link.Program, options: BuildOptions): String? {
+    var archives = Array<StampedFile>();
+    for (var interface in program.interfaces()) {
+        var stamps = link.read_stamps(interface.archive);
+        var found = stamps.is_ok() ? stamps.value() : Array<link.Stamp>();
+        if (found.is_empty or found[0].kind != link.KIND_PEPPER or found[0].interface != interface.hash) {
+            return Optional<String>.Value(
+                _at_link(
+                    program,
+                    interface.name,
+                    Diagnostic.error(
+                        $"the archive {interface.archive} was not built with the interface {interface.path}; rebuild the library '{interface.name}'"
+                    )
+                )
+            );
+        }
+        var mismatch = _built_against(program, interface);
+        if (mismatch.is_value()) {
+            return mismatch;
+        }
+        bool added = false;
+        for (var object in options.objects) {
+            added = added or object.to_string() == interface.archive.to_string();
+        }
+        if (!added) {
+            archives.append(StampedFile(interface.archive, interface.name, found));
+        }
+    }
+    options.linked.value().append_all(archives);
+    # A static library's archive holds its own objects, not another's: the
+    # program links each library's archive itself. GNU ld reads archives
+    # left to right, so each comes before the ones it needs.
+    if (!options.library.is_value() or options.library.value() == LibraryKind.Shared) {
+        var by_library = HashMap<String, Path>();
+        for (var archive in archives) {
+            by_library[archive.stamps[0].library] = archive.file;
+        }
+        var ordered = pepper_libraries(archives);
+        for (var i in 0..ordered.count) {
+            options.objects.append(by_library[ordered[ordered.count - 1 - i].library]);
+        }
+    }
+    return Optional<String>.Empty;
+}
+
+# The error, rendered, when `interface`'s library was built against
+# another interface of a library it imports than the one the program
+# loads, located at the program's import of `interface`'s library.
+_built_against(program: link.Program, interface: link.LibraryInterface): String? {
+    for (var (name, hash) in interface.libraries) {
+        for (var other in program.interfaces()) {
+            if (other.name == name and other.hash != hash) {
+                return Optional<String>.Value(
+                    _at_link(
+                        program,
+                        interface.name,
+                        Diagnostic.error(
+                            $"the Pepper library '{interface.name}' was built against another interface of the library '{name}' than {other.path}; rebuild '{interface.name}' against it, or put the '{name}' it was built with on the library path"
+                        )
+                    )
+                );
+            }
+        }
+    }
+    return Optional<String>.Empty;
 }
 
 # Keeps the keys of the runtime's units, those whose files are all the

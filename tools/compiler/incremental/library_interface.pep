@@ -8,11 +8,14 @@
 ## its namespace, the runtime modules it imports, its exports, and its link
 ## table (`link.link_table`): the names its declarations took and what
 ## linking reads of them, from which program loading links the file
-## (`link.load`). No source text. The record is the one the build cache
-## keeps (`_record_bytes`): the program's files'
+## (`link.load`). No source text. Another Pepper library it imports is
+## named, not copied: a `library` line with its name and interface hash,
+## and an `import` line in each file that imports it, so the program loads
+## that library's own interface and archive. The record is the one the
+## build cache keeps (`_record_bytes`): the program's files'
 ## namespaces, which its file slots name, then the library's files checked
-## as one compilation unit, a delta on the runtime's alone
-## (`library_units`). A program's compilation unit of the library's files
+## as one compilation unit, a delta on the runtime's and the libraries'
+## it imports (`library_units`). A program's compilation unit of the library's files
 ## takes it as checked (`interface_records`); the runtime's files are the
 ## program's own, so the runtime the library was checked on must be the
 ## program's (`link.Stamp.runtime_interface`).
@@ -57,6 +60,11 @@ export library_interface(
 ): u8[] {
     var header = StringBuilder();
     header.append($"{link.INTERFACE_MAGIC}{link.RECORD_VERSION}\n");
+    # The libraries it was built against, by reference: a program loads
+    # each from its own library folders, and must find this interface.
+    for (var other in program.interfaces()) {
+        header.append($"library {other.name} {other.hash}\n");
+    }
     var files = HashSet<uint>();
     for (var file in unit.files) {
         files.insert(file as uint);
@@ -65,11 +73,15 @@ export library_interface(
         var f = program.files[file];
         header.append($"file {f.namespace}{file == 0 ? " root" : ""}\n");
         # The modules it imports or re-exports from that the program
-        # loads: the runtime's.
+        # loads: the runtime's, and other Pepper libraries'; each once.
+        var imported = HashSet<String>();
         for (var m in 0..f.imports.count) {
             var target = f.imports[m];
             var imp = f.module.imports[m];
-            if (target.is_value() and !files.contains(target.value() as uint) and !imp.is_local) {
+            if (target.is_value()
+                and !files.contains(target.value() as uint)
+                and !imp.is_local
+                and imported.insert(imp.name)) {
                 header.append($"import {imp.name}\n");
             }
         }

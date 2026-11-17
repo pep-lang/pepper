@@ -751,8 +751,9 @@ export load(
                     NotADependency => {
                         found = files.resolve_module(imp.name, search_paths);
                         # No source module: a Pepper library's interface
-                        # (#220), all its files queued with its root.
-                        if (!found.is_value() and !imp.name.contains(".") and !next.interface.is_value()) {
+                        # (#220), all its files queued with its root; an
+                        # interface's file names another library this way.
+                        if (!found.is_value() and !imp.name.contains(".")) {
                             var known = interfaces.try_get(imp.name);
                             if (!known.is_value()) {
                                 var read = find_library_interface(imp.name, library_dirs, target);
@@ -801,18 +802,11 @@ export load(
                 targets.append(Optional<String>.Value(k));
                 continue;
             }
-            var message = "";
-            if (imp.is_local) {
-                message = $"cannot find '{imp.stem()}.pep' or the module folder '{imp.stem()}' next to this file";
-            } else {
-                var ungenerated = ungenerated_module(path, imp.name);
-                message = ungenerated.is_value() ?
-                    ungenerated.value() :
-                    $"cannot find module '{imp.name}': no {imp.name.replace(".", "/")}/module.pep in {_describe_paths(search_paths)}";
-            }
             # Only a module search depends on `-I`; a missing file is
             # missing everywhere.
-            program.errors.append(ModuleError(file, imp.name_span, message, !imp.is_local));
+            program.errors.append(
+                ModuleError(file, imp.name_span, _not_found(imp, path, next.interface, search_paths), !imp.is_local)
+            );
             targets.append(Optional<String>.Empty);
         }
         index[next.key] = file;
@@ -994,6 +988,21 @@ _library_clash(files: ProgramFile[], library_of: HashMap<String, String>): Diagn
         }
     }
     return Optional<Diagnostic>.Empty;
+}
+
+# Why `imp`, an import of the file at `path` (of the library interface
+# `interface`, if one), found nothing in `search_paths`.
+_not_found(imp: ast.Import, path: Path, interface: LibraryInterface?, search_paths: Path[]): String {
+    if (imp.is_local) {
+        return $"cannot find '{imp.stem()}.pep' or the module folder '{imp.stem()}' next to this file";
+    }
+    if (interface.is_value()) {
+        return $"the Pepper library '{interface.value().name}' imports '{imp.name}', which is no runtime module and no Pepper library in the library folders; add the folder of the library '{imp.name}' with '-L' or PEPPER_LIBRARY_PATH";
+    }
+    var ungenerated = ungenerated_module(path, imp.name);
+    return ungenerated.is_value() ?
+        ungenerated.value() :
+        $"cannot find module '{imp.name}': no {imp.name.replace(".", "/")}/module.pep in {_describe_paths(search_paths)}";
 }
 
 _describe_paths(paths: Path[]): String {

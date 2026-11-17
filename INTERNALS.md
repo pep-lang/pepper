@@ -1968,18 +1968,23 @@ join the program's comdats; `__pep_library_*` always stay external.
 The library's **interface** (`incremental/library_interface.pep`, stage 2
 of #220) is the record of its files, written beside the archive
 (`interface_path`: `libgeo.a` -> `libgeo.pepi`) and named by the stamp's
-`interface` line. `_build` checks a Pepper library in two compilation
+`interface` line. `_build` checks a Pepper library in compilation
 units whatever the cache and `-g` say (`incremental.library_units`): the
-runtime's, and every other file in one, the last; without a cache the
+runtime's, those of the Pepper libraries it imports (their interfaces',
+checked already), and every other file in one, the last; without a cache the
 records go to a folder of the build's own, removed after. So
-`check_compilation_units(interface = true)` indexes the runtime's merged
-module before the last unit (`DeltaBase`) and, once it is checked, makes
+`check_compilation_units(interface = true)` indexes the merged module of
+the runtime and those libraries before the last unit (`DeltaBase`) and,
+once it is checked, makes
 its `CheckedUnit` (`finish_checked`) and `library_interface` writes it, a
-delta on the runtime alone, after a text header (`link/interface_file.pep`
-reads it): `pepper-library-interface <RECORD_VERSION>`, then per library
+delta on that module, after a text header (`link/interface_file.pep`
+reads it): `pepper-library-interface <RECORD_VERSION>`, a `library <name>
+<hash>` line per Pepper library the build loaded (`LibraryInterface.libraries`),
+then per library
 file a `file <namespace>` line (`root` for `files[0]`), an `import
 <module>` line per module it imports that is not a library file (a
-runtime module, which the program loads and the record reads), an
+runtime module or another Pepper library, which the program loads and
+the record reads), an
 `export <name> <linked name>` line per name an importer sees (`link.FileScope.exports`,
 the linker's export table: `private` only narrows within the library's
 module, which no program file is in), and its link table
@@ -2046,9 +2051,19 @@ structs' symbols), its translation units compile nothing, and
 the program's init and release; instantiations of the library's generics
 are the program's, `linkonce_odr`. `--emit-llvm`, `--emit-model`,
 `--emit-steps` and `--emit-static` check a program whole and refuse one
-that imports a library (`main.pep`); `driver.build` refuses it in a
-static library (`--lib pepper` or `--lib static`), whose archive would
-hold the library's archive.
+that imports a library (`main.pep`).
+
+A **library that imports a library** refers to it, never copies it in.
+`link.load` resolves an interface file's `import` lines like a program
+file's, so a program that imports `scene` loads `geo`'s interface from
+its own library folders too, and `driver._link_interfaces` adds every
+interface's archive, dependents first for GNU ld (`pepper_libraries`
+reversed). It refuses, at the program's import (`_built_against`), an
+interface whose `library` line names another hash than the interface of
+that library the program loaded. A static library's build (`--lib pepper`
+or `--lib static`) links no archive of the libraries it imports, only
+takes their stamps, so a Pepper library's stamp `needs` them and the
+program initializes them first.
 A dependent summary (`give(holder: Holder, ...)`) keeps its body so a
 reader that adds an implementation of the trait finds it stale
 (`confinement._stale`) and summarizes it again over its own

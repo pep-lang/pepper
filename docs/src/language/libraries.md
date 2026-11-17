@@ -45,7 +45,8 @@ or without the build cache.
 
 ## Importing it
 
-The program [`main.pep`](../../examples/library/main.pep) imports `geo`,
+The program [`main.pep`](../../examples/library/main.pep) imports `geo`
+(and `scene`, a library built on it, [below](#a-library-that-imports-a-library)),
 gives a struct of its own the library's trait, and calls the library's
 generic at that struct:
 
@@ -79,6 +80,44 @@ Only when none answers does it look for a library's interface, `libgeo.pepi`
 The first interface found wins. Its archive must be beside it; an interface
 alone is an error at the import. A dotted import (`import geo.shapes;`)
 never finds a library.
+
+## A library that imports a library
+
+A library can import another, as a program does. The library
+[`lib/scene.pep`](../../examples/library/lib/scene.pep) imports `geo`:
+
+```pepper
+{{#include ../../examples/library/lib/scene.pep}}
+```
+
+Build it against `geo`'s interface, found as a program finds it:
+
+```bash
+pepper build --lib pepper scene.pep -L lib -o lib/libscene.a
+```
+
+`libscene.a` holds only `scene`'s own code, and `libscene.pepi` names
+`geo` rather than copying it: the library's name and the hash of the
+interface `scene` was built against. So a program that imports `scene`
+needs both libraries on its library path (`-L lib` above), whether or not
+it imports `geo` itself. The import of `scene` finds `geo`'s interface
+there too, and the program links both archives, each once, and sets
+`geo`'s globals before `scene`'s. As with source modules, the program
+sees what `scene` exports, `geo`'s names it re-exports among them
+(`export [Square] from geo;`), and the rest of `geo` only by importing
+`geo` itself.
+
+A `--lib static` library for C can import a Pepper library the same way;
+its archive holds the runtime but not `geo`, so a C program links
+`libgeo.a` as well.
+
+The `geo` the program finds must be the one `scene` was built against.
+Another build of `geo` that changed its interface is refused at the
+import of `scene`, until `scene` is rebuilt against it:
+
+```text
+main.pep:3:8: error: the Pepper library 'scene' was built against another interface of the library 'geo' than lib/libgeo.pepi; rebuild 'scene' against it, or put the 'geo' it was built with on the library path
+```
 
 ## Generics
 
@@ -165,15 +204,10 @@ keeps the program's copy, which comes ahead of the library's archive.
 
 ## Not supported yet
 
-- **A library that imports a library.** Only an executable or a shared
-  library can import a Pepper library; a static library (`--lib pepper`
-  or `--lib static`) can still call another one's `[Export]`ed functions
-  through `extern`s:
-
-  ```text
-  main.pep:1:8: error: only an executable or a shared library can import the Pepper library 'geo' yet
-  ```
-
+- **Extending a library's type.** A program or a library that extends a
+  type of a library it imports (`extend geo.Square { ... }`) does not
+  build: it reports `has no body` errors in the library's interface.
+  Give the type the method in the library itself.
 - **Shared libraries.** `--lib pepper` writes a static library only:
   a shared library must hold a runtime of its own (`--lib shared`), and
   then only C types cross between it and the program.
