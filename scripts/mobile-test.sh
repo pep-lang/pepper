@@ -94,7 +94,8 @@ examples() {
 # `$2`, eight at a time. Prints one line
 # per failure; the build logs stay in `$2/<name>.log`. A folder example's
 # `lib/<name>.pep` files are Pepper libraries (`--lib pepper`) its `main.pep`
-# imports, built first into `$2/lib-<example>`, as tools/pep-doc/examples_test.pep does.
+# imports, built first into `$2/lib-<example>` in name order (a library may
+# import one built before it), as tools/pep-doc/examples_test.pep does.
 build_all() {
   local triple=$1 dir=$2
   mkdir -p "$dir"
@@ -108,7 +109,7 @@ build_all() {
       for lib in "$libs"/*.pep; do
         [ -f "$lib" ] || continue
         name=$(basename "$lib" .pep)
-        "$0" --target "$1" "$lib" --lib pepper -o "$out/lib$name.a" --build "$2/build-lib-$3" \
+        "$0" --target "$1" "$lib" -L "$out" --lib pepper -o "$out/lib$name.a" --build "$2/build-lib-$3" \
           >> "$2/$3.log" 2>&1 || { echo "build failed: $3"; exit 0; }
       done
     fi
