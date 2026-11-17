@@ -200,6 +200,7 @@ tools/compiler/parse_bench.pep main 60
 tools/compiler/sema/apply_extensions.pep _conform 65
 tools/compiler/sema/apply_extensions.pep apply_extensions 31
 tools/compiler/sema/apply_extensions.pep check_parameter_names 67
+tools/compiler/sema/argument_names.pep record_argument_names 32
 tools/compiler/sema/builder.pep _Builder.case_pattern 29
 tools/compiler/sema/builder.pep _Builder.declare 36
 tools/compiler/sema/builder.pep _Builder.enum_def 29

@@ -37,7 +37,9 @@ export [begin_type_ids, end_type_ids] from "type_ids";
 export [
     CheckedUnit, drop_body, finish_checked, full_body, function_facts, interface_hash, resume_checked, settle_merged
 ] from "checked";
-export [anchors_of, DeltaBase, function_name, MergeAnchors, RecordIn, RecordOut, summary_without_place] from "record";
+export [
+    anchors_of, DeltaBase, function_name, merge_by_place, MergeAnchors, RecordIn, RecordOut, summary_without_place
+] from "record";
 export [index_module, index_resumed, interface_fields, read_module, write_module] from "record_codec";
 export [method_key, PassState, PassTimes, pass_name] from "state";
 export [StaticExpansion, StaticRecording, substitute_names] from "static_source";

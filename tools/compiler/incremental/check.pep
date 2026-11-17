@@ -647,7 +647,8 @@ export recheck_compilation_unit(
         }
         dropped.append(span.value());
     }
-    after.argument_names = _names_kept(after.argument_names, base, dropped);
+    var kept_names = _names_kept(after.argument_names, base, dropped);
+    after.argument_names = kept_names;
     # The closures the old bodies made went with them; the new ones are
     # numbered after every closure of their files.
     var counts = HashMap<long, ulong>();
@@ -716,6 +717,9 @@ export recheck_compilation_unit(
             return _not_rechecked($"the facts of {owner}.{name}: {facts} became {now}");
         }
     }
+    # The passes leave only the names they found: the record's others stay,
+    # as a check from the files would find them.
+    after.argument_names = sema.merge_by_place(kept_names, after.argument_names);
     if (report is Value(out)) {
         out.append_all(state.notes);
     }
