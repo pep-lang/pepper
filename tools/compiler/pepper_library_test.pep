@@ -379,6 +379,18 @@ a_pepper_library_imports_a_pepper_library() {
     expect_exit(built, 0);
     expect_false(built.stderr.contains("duplicate"));
     expect_equal(_run_program(program), "84 6 2");
+    # Without `geo` in its library folders, the error names both.
+    var alone_folder = root.join("alone");
+    Directory.create_all(alone_folder);
+    for (var file in [top, top.with_extension(link.INTERFACE_EXTENSION)]) {
+        expect_true(File.copy(file, alone_folder.join(file.file_name().value())).is_ok());
+    }
+    var missing = _pep_build(root.join("app").join("main.pep"), program, ["-L", alone_folder.to_string()]);
+    expect_exit(missing, 1);
+    expect_contains(
+        missing.stderr,
+        "error: the Pepper library 'top' imports 'geo', which is no runtime module and no Pepper library in the library folders"
+    );
     var both = "import geo;\nimport top;\n\nmain(): int {\n    print($\"{geo.answer()} {top.scaled()} {geo.sum([top.Point(3, 4)])}\");\n    return 0;\n}\n";
     var (together, linked) = _build_importer(root, both);
     expect_exit(together, 0);

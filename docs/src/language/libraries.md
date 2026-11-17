@@ -204,6 +204,10 @@ keeps the program's copy, which comes ahead of the library's archive.
 
 ## Not supported yet
 
+- **Extending a library's type.** A program or a library that extends a
+  type of a library it imports (`extend geo.Square { ... }`) does not
+  build: it reports `has no body` errors in the library's interface.
+  Give the type the method in the library itself.
 - **Shared libraries.** `--lib pepper` writes a static library only:
   a shared library must hold a runtime of its own (`--lib shared`), and
   then only C types cross between it and the program.

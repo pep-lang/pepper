@@ -73,11 +73,15 @@ export library_interface(
         var f = program.files[file];
         header.append($"file {f.namespace}{file == 0 ? " root" : ""}\n");
         # The modules it imports or re-exports from that the program
-        # loads: the runtime's, and other Pepper libraries'.
+        # loads: the runtime's, and other Pepper libraries'; each once.
+        var imported = HashSet<String>();
         for (var m in 0..f.imports.count) {
             var target = f.imports[m];
             var imp = f.module.imports[m];
-            if (target.is_value() and !files.contains(target.value() as uint) and !imp.is_local) {
+            if (target.is_value()
+                and !files.contains(target.value() as uint)
+                and !imp.is_local
+                and imported.insert(imp.name)) {
                 header.append($"import {imp.name}\n");
             }
         }

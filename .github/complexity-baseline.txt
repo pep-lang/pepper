@@ -158,7 +158,7 @@ tools/compiler/link/platform.pep _Evaluator._compare 48
 tools/compiler/link/platform.pep _Evaluator._compare_options 27
 tools/compiler/link/platform.pep _Evaluator._predicate 38
 tools/compiler/link/program.pep _library_clash 29
-tools/compiler/link/program.pep load 202
+tools/compiler/link/program.pep load 194
 tools/compiler/link/project.pep Packages._apply_declared_options 27
 tools/compiler/link/project.pep Packages._as_fetched 26
 tools/compiler/link/project.pep Packages.resolve 43
