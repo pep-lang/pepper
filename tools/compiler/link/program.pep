@@ -751,8 +751,9 @@ export load(
                     NotADependency => {
                         found = files.resolve_module(imp.name, search_paths);
                         # No source module: a Pepper library's interface
-                        # (#220), all its files queued with its root.
-                        if (!found.is_value() and !imp.name.contains(".") and !next.interface.is_value()) {
+                        # (#220), all its files queued with its root; an
+                        # interface's file names another library this way.
+                        if (!found.is_value() and !imp.name.contains(".")) {
                             var known = interfaces.try_get(imp.name);
                             if (!known.is_value()) {
                                 var read = find_library_interface(imp.name, library_dirs, target);

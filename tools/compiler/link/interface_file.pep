@@ -4,12 +4,15 @@
 ##
 ## The file is a text header, then the checked record of the library's
 ## files (`incremental.library_interface` writes it). The header's first
-## line is `INTERFACE_MAGIC` and `RECORD_VERSION`; then, for each of the
-## library's files:
+## line is `INTERFACE_MAGIC` and `RECORD_VERSION`; then a `library <name>
+## <hash>` line for each other Pepper library the library was built
+## against, with the hash of the interface it read (`interface_hash`),
+## which the program must load too; then, for each of the library's files:
 ##
 ## - `file <namespace>`, with ` root` after it for the library's root;
 ## - `import <module>` for each module the file imports that is not one of
-##   the library's files (a runtime module), which the program loads;
+##   the library's files (a runtime module, or another Pepper library),
+##   which the program loads;
 ## - `export <name> <declaration>` for each name an importer of the file
 ##   sees, and the linked name of the declaration it denotes;
 ## - its link table (`link_table`): a `declare` line per top-level
@@ -121,6 +124,9 @@ export struct LibraryInterface {
     var files: InterfaceFile[] = Array<InterfaceFile>();
     ## The record of the library's files.
     var record: u8[] = Array<u8>();
+    ## The other Pepper libraries it was built against: each one's name
+    ## and the hash of the interface it read.
+    var libraries: (String, String)[] = Array<(String, String)>();
 
     ## @param name the library's name
     ## @param path the interface file
@@ -242,31 +248,40 @@ export read_interface_bytes(out: LibraryInterface, bytes: u8[]): String? {
             return Optional<String>.Empty;
         }
         var parts = line.split(" ");
+        if (parts[0] == "library" and parts.count == 3 and out.files.is_empty) {
+            out.libraries.append((parts[1], parts[2]));
+            continue;
+        }
         if (parts[0] == "file" and (parts.count == 2 or (parts.count == 3 and parts[2] == "root"))) {
             var file = InterfaceFile(parts[1]);
             file.root = parts.count == 3;
             out.files.append(file);
             continue;
         }
-        if (out.files.is_empty) {
-            return Optional<String>.Value($"a malformed library interface line: '{line}'");
-        }
-        var file = out.files[out.files.count - 1];
-        if (parts[0] == "export" and parts.count == 3) {
-            file.exports[parts[1]] = parts[2];
-        } else if (parts[0] == "import" and parts.count == 2) {
-            file.imports.append(parts[1]);
-        } else if (parts[0] == "declare" and parts.count >= 3 and _is_kind(parts[1])) {
-            file._declared.append([line]);
-        } else if ((parts[0] == "attribute" or parts[0] == "constructor-attribute")
-            and parts.count >= 2
-            and !file._declared.is_empty) {
-            file._declared[file._declared.count - 1].append(line);
-        } else {
+        if (out.files.is_empty or !_read_file_line(out.files[out.files.count - 1], line, parts)) {
             return Optional<String>.Value($"a malformed library interface line: '{line}'");
         }
     }
     return Optional<String>.Empty;
+}
+
+# Reads `line` (split into `parts`) of the header into `file`, the file
+# it follows; whether it is one a file's lines may be.
+_read_file_line(file: InterfaceFile, line: String, parts: String[]): bool {
+    if (parts[0] == "export" and parts.count == 3) {
+        file.exports[parts[1]] = parts[2];
+    } else if (parts[0] == "import" and parts.count == 2) {
+        file.imports.append(parts[1]);
+    } else if (parts[0] == "declare" and parts.count >= 3 and _is_kind(parts[1])) {
+        file._declared.append([line]);
+    } else if ((parts[0] == "attribute" or parts[0] == "constructor-attribute")
+        and parts.count >= 2
+        and !file._declared.is_empty) {
+        file._declared[file._declared.count - 1].append(line);
+    } else {
+        return false;
+    }
+    return true;
 }
 
 # Whether `kind` is a kind of declaration a `declare` line names.

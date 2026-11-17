@@ -464,23 +464,29 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
     var folder = TempFolder($"docs_example_{example.name}{"".join(options)}");
     var program = folder.path.join(example.name);
     # A folder example's `lib/<name>.pep` files are Pepper libraries
-    # (`--lib pepper`) its `main.pep` imports, built first into `lib/`.
+    # (`--lib pepper`) its `main.pep` imports, built first into `lib/` in
+    # name order, each able to import those before it.
     var libraries = folder.path.join("lib");
     var sources = example.entry.parent().value_or(Path(".")).join("lib");
     var linking = Array<String>();
     if (sources.is_directory()) {
         linking = ["-L", libraries.to_string()];
+        var names = Array<String>();
         for (var entry in Directory.open(sources).value().entries().value()) {
-            if (!entry.name.ends_with(".pep")) {
-                continue;
+            if (entry.name.ends_with(".pep")) {
+                names.append(entry.name);
             }
-            var name = entry.name.substr_bytes(0, entry.name.size - 4);
+        }
+        names.sort((a, b) => a.compare(b));
+        for (var file in names) {
+            var name = file.substr_bytes(0, file.size - 4);
             var archive = libraries.join(os.system_os() == os.OperatingSystem.Windows ? $"{name}.lib" : $"lib{name}.a");
             var library = process
                 .Command(compiler.value().to_string())
-                .argument(sources.join(entry.name).to_string())
+                .argument(sources.join(file).to_string())
                 .argument("--lib")
                 .argument("pepper")
+                .arguments(linking)
                 .argument("-o")
                 .argument(archive.to_string())
                 .argument("--build")

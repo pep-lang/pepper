@@ -298,7 +298,7 @@ a_program_imports_a_pepper_library() {
 # What a program cannot do with an imported Pepper library: call it
 # wrongly (the error names the library's declaration as written, in its
 # interface), use its extension from a file that does not import it,
-# check the program whole, or build another Pepper library on it.
+# or check the program whole.
 [Test]
 an_imported_pepper_library_is_checked_against() {
     var folder = TempFolder("pepper_library_import_errors");
@@ -330,16 +330,6 @@ an_imported_pepper_library_is_checked_against() {
     var (whole, _) = _build_importer(root, "import geo;\n\nmain(): int {\n    return 0;\n}\n", ["--emit-llvm"]);
     expect_exit(whole, 1);
     expect_contains(whole.stderr, "cannot check the program whole: it imports the Pepper library 'geo'");
-    var top = root.join("top").join("top.pep");
-    write_file(top, "import geo;\n\nexport twice(): int {\n    return geo.sum([geo.Point(1, 1)]) * 2;\n}\n");
-    var library = _pep_build(
-        top, _archive(root.join("top"), "top"), ["--lib", "pepper", "-L", root.join("lib").to_string()]
-    );
-    expect_exit(library, 1);
-    expect_contains(
-        library.stderr,
-        "top.pep:1:8: error: only an executable or a shared library can import the Pepper library 'geo' yet"
-    );
     # A library's own names are mangled with its namespace; its errors
     # name them as written.
     var locked = root.join("locked").join("locked.pep");
@@ -364,6 +354,69 @@ an_imported_pepper_library_is_checked_against() {
         old.stderr,
         $"the interface is record version 999, and this compiler reads version {link.RECORD_VERSION}; rebuild the library 'geo' with this compiler"
     );
+}
+
+# A Pepper library that imports another (`top.pep` on `geo`) names it in
+# its interface with the hash of the interface it read, and its stamp
+# needs it. A program that imports `top`, alone or with `geo`, loads `geo`
+# from its library folders and links both archives, setting `geo`'s
+# globals first; `top`'s re-export is `geo`'s struct. A `geo` with another
+# interface is refused at the import of `top` until `top` is rebuilt.
+[Test]
+a_pepper_library_imports_a_pepper_library() {
+    var folder = TempFolder("pepper_library_imports_library");
+    var root = folder.path;
+    _build_imported_geo(root);
+    var geo_interface = _archive(root.join("lib"), "geo").with_extension(link.INTERFACE_EXTENSION);
+    var geo_hash = link.interface_hash(File.read_bytes(geo_interface).value());
+    var top = _build_imported_top(root);
+    var interface = File.read_bytes(top.with_extension(link.INTERFACE_EXTENSION)).value();
+    expect_true(_find(interface, $"\nlibrary geo {geo_hash}\n".bytes()) < interface.count);
+    expect_true(_find(interface, "\nimport geo\n".bytes()) < interface.count);
+    expect_true(link.read_stamps(top).value()[0].needs.contains("geo"));
+    var alone = "import top;\n\nmain(): int {\n    print($\"{top.scaled()} {top.twice([top.Point(1, 2)])} {top.twin(\"x\")}\");\n    return 0;\n}\n";
+    var (built, program) = _build_importer(root, alone);
+    expect_exit(built, 0);
+    expect_false(built.stderr.contains("duplicate"));
+    expect_equal(_run_program(program), "84 6 2");
+    var both = "import geo;\nimport top;\n\nmain(): int {\n    print($\"{geo.answer()} {top.scaled()} {geo.sum([top.Point(3, 4)])}\");\n    return 0;\n}\n";
+    var (together, linked) = _build_importer(root, both);
+    expect_exit(together, 0);
+    expect_equal(_run_program(linked), "42 84 7");
+    expect_exit(_build_importer(root, both, ["--no-cache", "-O"]).0, 0);
+    expect_equal(_run_program(linked), "42 84 7");
+    # A C library can import it too.
+    var source = root.join("c").join("c.pep");
+    write_file(source, "import top;\n\n[Export]\nexport c_scaled(): int {\n    return top.scaled();\n}\n");
+    expect_exit(
+        _pep_build(
+            source,
+            root.join("c").join(driver.library_file_name(driver.LibraryKind.Static, "c", link.Target())),
+            ["--lib", "static", "-L", root.join("lib").to_string()]
+        ),
+        0
+    );
+    # `geo` rebuilt with another interface, a generic's body changed.
+    _build_imported_geo(root, Optional<(String, String)>.Value(("return [value, value];", "return [value];")));
+    var (stale, _) = _build_importer(root, alone);
+    expect_exit(stale, 1);
+    expect_contains(
+        stale.stderr,
+        "main.pep:1:8: error: the Pepper library 'top' was built against another interface of the library 'geo' than "
+    );
+    _build_imported_top(root);
+    expect_exit(_build_importer(root, alone).0, 0);
+    expect_equal(_run_program(program), "42 6 1");
+}
+
+# Builds `testdata/imported_library/top.pep` as the Pepper library `top`
+# into `root/lib`, against the `geo` there; returns its archive.
+_build_imported_top(root: Path): Path {
+    var source = root.join("src").join("top.pep");
+    write_file(source, File.read_to_string(Path("compiler/testdata/imported_library/top.pep")).value());
+    var archive = _archive(root.join("lib"), "top");
+    expect_exit(_pep_build(source, archive, ["--lib", "pepper", "-L", root.join("lib").to_string()]), 0);
+    return archive;
 }
 
 # A program cannot import from source a module a library it imports

@@ -297,10 +297,12 @@ export compilation_units(program: link.Program, base: String, root_last: bool = 
     return out;
 }
 
-## Returns the two compilation units a Pepper library (`--lib pepper`) is
-## checked in: the runtime's, and one of every other file, the last, whose
-## record is the library's interface (`write_library_interface`), a delta
-## on the runtime's alone; none when the runtime cannot be checked alone.
+## Returns the compilation units a Pepper library (`--lib pepper`) is
+## checked in: the runtime's, those of the other Pepper libraries it
+## imports (their interfaces', checked already), and one of every other
+## file, the last, whose record is the library's interface
+## (`write_library_interface`), a delta on the runtime's and those
+## libraries'; none when the runtime cannot be checked alone.
 ##
 ## @param program the linked program
 ## @param base what every key starts from (`Keys`' base)
@@ -310,13 +312,28 @@ export library_units(program: link.Program, base: String): CompilationUnit[] {
     if (units.count < 2 or units[0].name != "runtime") {
         return Array<CompilationUnit>();
     }
-    var library = CompilationUnit(units[units.count - 1].name);
+    var out = [units[0]];
+    var library = CompilationUnit("");
     library.base = base;
     library.reads = [0 as ulong];
     var hasher = digest.Blake3();
     hasher.update("library compilation unit\n");
+    # An interface's compilation unit reads only the runtime's and other
+    # interfaces', which come before it: renumbered as they move up.
+    var moved = HashMap<ulong, ulong>();
+    moved[0] = 0;
     for (var k in 1..units.count) {
         var unit = units[k];
+        if (program.files[unit.files[0]].interface.is_value()) {
+            for (var r in 0..unit.reads.count) {
+                unit.reads[r] = moved[unit.reads[r]];
+            }
+            moved[k] = out.count;
+            library.reads.append(out.count);
+            out.append(unit);
+            continue;
+        }
+        library.name = unit.name;
         library.files.append_all(unit.files);
         hasher.update($"{unit.files_key}\n");
     }
@@ -324,7 +341,7 @@ export library_units(program: link.Program, base: String): CompilationUnit[] {
     library.files_key = hasher.finish_hex();
     # The last compilation unit's record is never stored under its key, so
     # it needs none of the names the key reads (`mentions`, `shown`).
-    var out = [units[0], library];
+    out.append(library);
     _share_shown_in(out);
     return out;
 }
