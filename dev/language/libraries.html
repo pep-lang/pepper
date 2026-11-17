@@ -242,12 +242,15 @@ together, in one folder; the program needs no source.</p>
 imports it by that name. The library is checked whole on every build, with
 or without the build cache.</p>
 <h2 id="importing-it"><a class="header" href="#importing-it">Importing it</a></h2>
-<p>The program <a href="../../examples/library/main.pep"><code>main.pep</code></a> imports <code>geo</code>,
+<p>The program <a href="../../examples/library/main.pep"><code>main.pep</code></a> imports <code>geo</code>
+(and <code>scene</code>, a library built on it, <a href="#a-library-that-imports-a-library">below</a>),
 gives a struct of its own the library's trait, and calls the library's
 generic at that struct:</p>
 <pre><code class="language-pepper"># Imports the library `geo` (`lib/geo.pep`), built with `--lib pepper`,
-# with no source for it: `pepper build main.pep -L lib -o main`.
+# and `scene` (`lib/scene.pep`), built on `geo`, with no source for
+# either: `pepper build main.pep -L lib -o main`.
 import geo;
+import scene;
 
 struct Circle {
     var radius: int;
@@ -273,6 +276,8 @@ main(): int {
     }
     # The library's generic, at the program's type.
     print($"{geo.pair(Circle(2)).count} circles");
+    # A library that imports `geo`, called with the program's shapes.
+    print($"total area {scene.total_area(shapes)}");
     return 0;
 }
 
@@ -280,6 +285,7 @@ main(): int {
 # a shape of area 9
 # a shape of area 3
 # 2 circles
+# total area 12
 </code></pre>
 <pre><code class="language-bash">pepper build main.pep -L lib -o main
 </code></pre>
@@ -303,6 +309,42 @@ Only when none answers does it look for a library's interface, <code>libgeo.pepi
 <p>The first interface found wins. Its archive must be beside it; an interface
 alone is an error at the import. A dotted import (<code>import geo.shapes;</code>)
 never finds a library.</p>
+<h2 id="a-library-that-imports-a-library"><a class="header" href="#a-library-that-imports-a-library">A library that imports a library</a></h2>
+<p>A library can import another, as a program does. The library
+<a href="../../examples/library/lib/scene.pep"><code>lib/scene.pep</code></a> imports <code>geo</code>:</p>
+<pre><code class="language-pepper"># A library built on the library `geo` (`geo.pep`), which it imports:
+# `pepper build --lib pepper scene.pep -L lib -o lib/libscene.a`.
+import geo;
+
+export total_area(shapes: geo.Shape[]): int {
+    var total = 0;
+    for (var shape in shapes) {
+        total += shape.area();
+    }
+    return total;
+}
+</code></pre>
+<p>Build it against <code>geo</code>'s interface, found as a program finds it:</p>
+<pre><code class="language-bash">pepper build --lib pepper scene.pep -L lib -o lib/libscene.a
+</code></pre>
+<p><code>libscene.a</code> holds only <code>scene</code>'s own code, and <code>libscene.pepi</code> names
+<code>geo</code> rather than copying it: the library's name and the hash of the
+interface <code>scene</code> was built against. So a program that imports <code>scene</code>
+needs both libraries on its library path (<code>-L lib</code> above), whether or not
+it imports <code>geo</code> itself. The import of <code>scene</code> finds <code>geo</code>'s interface
+there too, and the program links both archives, each once, and sets
+<code>geo</code>'s globals before <code>scene</code>'s. As with source modules, the program
+sees what <code>scene</code> exports, <code>geo</code>'s names it re-exports among them
+(<code>export [Square] from geo;</code>), and the rest of <code>geo</code> only by importing
+<code>geo</code> itself.</p>
+<p>A <code>--lib static</code> library for C can import a Pepper library the same way;
+its archive holds the runtime but not <code>geo</code>, so a C program links
+<code>libgeo.a</code> as well.</p>
+<p>The <code>geo</code> the program finds must be the one <code>scene</code> was built against.
+Another build of <code>geo</code> that changed its interface is refused at the
+import of <code>scene</code>, until <code>scene</code> is rebuilt against it:</p>
+<pre><code class="language-text">main.pep:3:8: error: the Pepper library 'scene' was built against another interface of the library 'geo' than lib/libgeo.pepi; rebuild 'scene' against it, or put the 'geo' it was built with on the library path
+</code></pre>
 <h2 id="generics"><a class="header" href="#generics">Generics</a></h2>
 <p>The interface holds the bodies of the library's generic functions, of its
 generic structs' methods and of its traits' default methods. The program
@@ -374,12 +416,10 @@ keeps the program's copy, which comes ahead of the library's archive.</p>
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
 <li>
-<p><strong>A library that imports a library.</strong> Only an executable or a shared
-library can import a Pepper library; a static library (<code>--lib pepper</code>
-or <code>--lib static</code>) can still call another one's <code>[Export]</code>ed functions
-through <code>extern</code>s:</p>
-<pre><code class="language-text">main.pep:1:8: error: only an executable or a shared library can import the Pepper library 'geo' yet
-</code></pre>
+<p><strong>Extending a library's type.</strong> A program or a library that extends a
+type of a library it imports (<code>extend geo.Square { ... }</code>) does not
+build: it reports <code>has no body</code> errors in the library's interface.
+Give the type the method in the library itself.</p>
 </li>
 <li>
 <p><strong>Shared libraries.</strong> <code>--lib pepper</code> writes a static library only:
