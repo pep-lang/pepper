@@ -4078,8 +4078,10 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    up when one of the struct's methods or constructors is missing
    afterwards, or its return type or link summary changed;
 5. drops the closure structs the old bodies and replaced structs lifted,
-   and numbers new ones
-   after every closure left in their files (`PassState.closure_counts`);
+   and numbers new ones after every closure left in their files
+   (`PassState.closure_counts`), and drops the parameter names
+   (`argument_names`) inside those bodies and structs, which the passes
+   find again (`_names_kept`);
 6. runs every step, which walk only the unchecked bodies and the
    specializations they newly ask for.
 
@@ -4134,9 +4136,18 @@ and the rest of `record_codec.pep`, generated from the model by
   lost and the entries they changed. A settled summary's blame is written
   from its function's start (`settled_text`), so an edit that shifts the
   function in its file leaves the entry, and the error it points at, right.
-- `conversions` and `argument_names` are rebuilt by passes over the whole
-  module, so each record keeps the compilation unit's own entries: conversions not
-  already in the base, and argument names merged by place.
+- `conversions` are rebuilt by passes over the whole module, so each record
+  keeps the compilation unit's own entries: those not already in the base.
+  `argument_names` keeps the base's and merges the compilation unit's in by
+  place (`record_argument_names`), so a record holds only its own.
+- The passes leave what the base holds of a checked declaration as it is:
+  `argument_names` keeps the checked bodies' names, and `name_overloads`
+  groups no checked struct's methods again (its sets came with its record,
+  and grouping again would add sets for the specializations its check made
+  after that pass). A compilation unit checked on records, or re-checked
+  from its own, so gives the record a whole check does, and a Pepper
+  library's interface, a delta on the runtime's record, does not depend on
+  which happened (#571).
 
 The delta writer finds the base's structs, functions and templates by
 identity (`DeltaBase.ref_structs` and the rest), not by encoding and hashing

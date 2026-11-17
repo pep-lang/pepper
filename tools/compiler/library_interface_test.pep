@@ -156,6 +156,39 @@ the_interface_does_not_depend_on_which_library_wrote_the_runtime_record() {
     );
 }
 
+# A build that misses the runtime's record (a race with another build
+# storing it, say) checks the runtime again from that record, as from an
+# earlier one an edit left: the interface on the record that check makes is
+# the one on the record a whole check made (#571).
+[Test]
+the_interface_does_not_depend_on_a_runtime_checked_again() {
+    var folder = TempFolder("library_interface_recheck");
+    var cache = folder.path.join(Path("cache"));
+    var whole = _build_named(folder.path.join(Path("whole")), "geo", [("geo", _GEO)], cache);
+    expect_true(_remove_own_interfaces(cache) > 0);
+    var again = _build_named(folder.path.join(Path("again")), "geo", [("geo", _GEO)], cache);
+    expect_equal(
+        link.interface_hash(File.read_bytes(incremental.interface_path(again)).value()),
+        link.interface_hash(File.read_bytes(incremental.interface_path(whole)).value())
+    );
+}
+
+# Removes the own interface (`<key>.rec.own`) of every record under `dir`,
+# so a build misses each record and checks its compilation unit again from
+# it; returns how many it removed.
+_remove_own_interfaces(dir: Path): ulong {
+    ulong removed = 0;
+    for (var entry in Directory.open(dir).value().entries().value()) {
+        if (entry.is_directory) {
+            removed += _remove_own_interfaces(entry.path);
+        } else if (entry.name.ends_with(".rec.own")) {
+            File.remove(entry.path);
+            removed += 1;
+        }
+    }
+    return removed;
+}
+
 # Imported by a program that has none of its files, the interface gives
 # back the library's declarations: its files as files of the program under
 # their own namespaces, the root's exports, the layouts and attributes of

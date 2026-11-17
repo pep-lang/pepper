@@ -6,6 +6,7 @@ import [Loc] from "loc";
 import [Expression, FunctionDef, Module, StructDef, TypeName] from "model";
 import [Callee] from "named_arguments";
 import [set_name] from "names";
+import [merge_by_place] from "record";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [Rewriter, rewrite_block] from "walk";
@@ -107,27 +108,10 @@ export record_argument_names(module: Module, state: PassState) {
             recorder.visit(m, current);
         }
     }
-    var found = recorder.found;
-    found.sort((a: (Loc, String), b: (Loc, String)) => {
-        var (x, _) = a;
-        var (y, _) = b;
-        if (x.file != y.file) {
-            return x.file < y.file ? -1 : 1;
-        }
-        return x.span.start < y.span.start ? -1 : (x.span.start > y.span.start ? 1 : 0);
-    });
-    # Drop consecutive repeats.
-    var kept = Array<(Loc, String)>();
-    for (var (at, name) in found) {
-        if (kept.count > 0) {
-            var (last_at, last_name) = kept[kept.count - 1];
-            if (last_at == at and last_name == name) {
-                continue;
-            }
-        }
-        kept.append((at, name));
-    }
-    module.argument_names = kept;
+    # The checked declarations' names stay: their bodies are stashed, so
+    # dropping them would make a unit checked on records (or re-checked from
+    # its own) differ from one checked whole (#571).
+    module.argument_names = merge_by_place(module.argument_names, recorder.found);
 }
 
 struct _ArgumentNames {

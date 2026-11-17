@@ -647,6 +647,7 @@ export recheck_compilation_unit(
         }
         dropped.append(span.value());
     }
+    after.argument_names = _names_kept(after.argument_names, base, dropped);
     # The closures the old bodies made went with them; the new ones are
     # numbered after every closure of their files.
     var counts = HashMap<long, ulong>();
@@ -951,6 +952,18 @@ _not_rechecked(why: String): (sema.Module, sema.PassState, sema.TypeAliasDef[])?
 
 # Whether `loc` is in a body `base` changed: where `LocShift` puts what was
 # in the old one.
+# The parameter names (`Module.argument_names`) a re-check keeps of its
+# record: those outside the bodies it checks again, which find theirs anew.
+_names_kept(names: Array<(sema.Loc, String)>, base: RecheckBase, dropped: sema.Loc[]): Array<(sema.Loc, String)> {
+    var kept = Array<(sema.Loc, String)>();
+    for (var (at, name) in names) {
+        if (!_in_changed(base, at) and !_in_any(dropped, at)) {
+            kept.append((at, name));
+        }
+    }
+    return kept;
+}
+
 _in_changed(base: RecheckBase, loc: sema.Loc): bool {
     for (var (file, _, body) in base.changed) {
         if (loc.file == file and loc.span.start >= body.start and loc.span.end <= body.end) {
