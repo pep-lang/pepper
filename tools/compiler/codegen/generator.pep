@@ -352,6 +352,12 @@ export struct Generator {
     var libraries: (String, String)[] = Array<(String, String)>();
     ## `Build.library_files`.
     var library_files: bool[] = Array<bool>();
+    ## `Build.shared_runtime`.
+    var shared_runtime: bool[] = Array<bool>();
+    ## The accessor of each runtime thread-local that code outside the
+    ## runtime shared library calls on Windows (`thread_local_accessor`), by
+    ## the variable's name.
+    var thread_local_accessors: HashMap<String, llvm.Value> = HashMap<String, llvm.Value>();
     ## How many such strings each function has used so far, by name.
     var location_counts: HashMap<String, ulong> = HashMap<String, ulong>();
 
@@ -1072,6 +1078,10 @@ export struct Build {
     ## interface: the library's init and release cover its globals, and
     ## its archive defines what it owns.
     var library_files: bool[] = Array<bool>();
+    ## Per file, whether the runtime shared library defines what it owns
+    ## (`--runtime=shared`), so the program only declares it; empty for a
+    ## build whose program holds the runtime.
+    var shared_runtime: bool[] = Array<bool>();
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -1127,6 +1137,7 @@ export generate(
     generator.runtime_files = build.runtime_files;
     generator.libraries = build.libraries;
     generator.library_files = build.library_files;
+    generator.shared_runtime = build.shared_runtime;
     var generated = generator.generate(module);
     if (generated.is_err()) {
         return Result<llvm.Module, Diagnostic>.err(generated.error());

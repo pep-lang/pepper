@@ -84,7 +84,7 @@ tools/compiler/codegen/generator.pep Generator.generate_items 59
 tools/compiler/codegen/generator.pep Generator.generate_module 32
 tools/compiler/codegen/globals.pep Generator.emit_exports 99
 tools/compiler/codegen/globals.pep Generator.emit_globals 93
-tools/compiler/codegen/globals.pep Generator.emit_thread_locals_release 30
+tools/compiler/codegen/globals.pep Generator.emit_thread_locals_release 29
 tools/compiler/codegen/globals.pep Generator.store_constant 27
 tools/compiler/codegen/globals.pep Generator.value_struct_constant 29
 tools/compiler/codegen/lazy.pep _killed_reads 32
@@ -108,7 +108,7 @@ tools/compiler/diagnostic/diagnostic.pep _snippet 36
 tools/compiler/doc/comment.pep check_documented 38
 tools/compiler/doc/comment.pep doc_comment_before 39
 tools/compiler/doc/comment.pep parse_doc_comment 26
-tools/compiler/driver/build.pep _build 347
+tools/compiler/driver/build.pep _build 343
 tools/compiler/driver/build.pep _link_attributes 32
 tools/compiler/driver/build.pep _resolve_links 27
 tools/compiler/driver/build.pep _syntax_links 47
@@ -175,7 +175,7 @@ tools/compiler/link/visibility.pep _Checker.visit_callee 47
 tools/compiler/link/visibility.pep _Checker.visit_member 26
 tools/compiler/link/visibility.pep check_visibility 243
 tools/compiler/link/walk.pep ScopeWalk.walk_declaration 63
-tools/compiler/main.pep _main 311
+tools/compiler/main.pep _main 308
 tools/compiler/parse/checks.pep _PointerCheck.declaration 35
 tools/compiler/parse/checks.pep _PointerCheck.expression 50
 tools/compiler/parse/parser.pep Parser._binary_operator 37

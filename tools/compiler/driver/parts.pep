@@ -20,7 +20,10 @@ import "build";
 ## print how long each part took, whether the parts are kept as bitcode
 ## for link-time optimization, the build cache's folder and the name the
 ## parts' objects go under there (empty when they are not cached), then one
-## `<part> <symbol>` line per symbol defined in exactly one part.
+## `<part> <symbol>` line per symbol defined in exactly one part, and with
+## `--runtime=shared` an `export <part>` line per part of the runtime shared
+## library and an `import <symbol>` line per symbol it defines
+## (`Partition.exporting`, `Partition.imported`).
 const _PLAN_FILE = "plan";
 const _BITCODE_FILE = "program.bc";
 
@@ -129,6 +132,7 @@ export compile_parts(
     for (var (symbol, part) in partition.part_of) {
         plan.append($"{part} {symbol}\n");
     }
+    plan.append(_shared_runtime_plan(partition));
     var saved = File.write_text(dir.join(Path(_PLAN_FILE)), plan.to_string());
     if (saved.is_err()) {
         return Result<void, String>.err($"cannot write the plan in {dir}: {saved.error().message}");
@@ -175,6 +179,45 @@ export compile_parts(
         return Result<void, String>.err(failure);
     }
     return Result<void, String>.ok();
+}
+
+# The plan's lines naming the parts of the runtime shared library and what
+# it defines (`Partition.exporting`, `Partition.imported`); none without
+# `--runtime=shared`.
+_shared_runtime_plan(partition: codegen.Partition): String {
+    var out = StringBuilder();
+    for (var part in partition.exporting) {
+        out.append($"export {part}\n");
+    }
+    for (var symbol in partition.imported) {
+        out.append($"import {symbol}\n");
+    }
+    return out.to_string();
+}
+
+# Adds what `line`, a line of the plan after its header, says to
+# `partition`: a symbol's part, a part of the runtime shared library, or
+# what that library defines.
+_read_plan_line(line: String, partition: codegen.Partition) {
+    var space = line.find(" ");
+    if (space < 0) {
+        return;
+    }
+    var head = line.substr_bytes(0, space as ulong);
+    var rest = line.substr_bytes(space as ulong + 1, line.size - space as ulong - 1);
+    if (head == "import") {
+        partition.imported.insert(rest);
+        return;
+    }
+    var part = uint.parse(head == "export" ? rest : head);
+    if (!part.is_value()) {
+        return;
+    }
+    if (head == "export") {
+        partition.exporting.insert(part.value());
+    } else {
+        partition.part_of[rest] = part.value();
+    }
 }
 
 ## Splits `jobs` into one share per logical CPU (no more than the jobs),
@@ -415,16 +458,9 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
         cached = Optional<PartCache>.Value(PartCache(Cache(Path(lines[6])), lines[7]));
     }
     var how = $"{lines[0]}\n{lines[1]}\n{lines[2]}\n{lines[3]}\n{lines[5]}";
+    var partition = codegen.Partition(part_of);
     for (var index in 8..lines.count) {
-        var line = lines[index];
-        var space = line.find(" ");
-        if (space < 0) {
-            continue;
-        }
-        var owner = uint.parse(line.substr_bytes(0, space as ulong));
-        if (owner.is_value()) {
-            part_of[line.substr_bytes(space as ulong + 1, line.size - space as ulong - 1)] = owner.value();
-        }
+        _read_plan_line(lines[index], partition);
     }
     var levels = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3];
     codegen.initialize_backends();
@@ -438,7 +474,6 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     if (ir.is_err()) {
         return Result<void, String>.err(ir.error().message);
     }
-    var partition = codegen.Partition(part_of);
     # Keeping all the parts first makes each copy below smaller.
     if (jobs.count > 1) {
         var parts = HashSet<uint>();

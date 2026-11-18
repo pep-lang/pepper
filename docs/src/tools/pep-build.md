@@ -46,6 +46,7 @@ short, and `pepper help build` runs it.
 | `--emit-steps` | Print the names of the sema steps, one per line, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `off` |
+| `--runtime=static`, `--runtime=shared` | Compile the runtime into the executable, or link it as a shared library beside it | `static` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` (`-m <option>`) | The CPU to generate code for | clang's default for the target |
 | `-g`, `--emit-debug` | Emit debug info | off |
 | `--debug-static=source`, `--debug-static=expanded` | With `-g`, step through `static` blocks as written or expanded | `source` |
@@ -582,6 +583,42 @@ whole program, and writes its objects, one per logical CPU in parallel,
 which link as usual. No linker
 plugin is involved, so it works on every target. It applies to a library
 too (`--lib`).
+
+### `--runtime=static`, `--runtime=shared`
+
+How the program links the runtime. With `static`, the default, the runtime's
+code is compiled into the executable, as every program's is. With `shared`,
+the build also links the runtime into a shared library beside the
+executable, and the executable links it instead:
+
+| Platform | The runtime library | Found at run time |
+|---|---|---|
+| Linux | `libpepper_runtime.so` | the executable's run path, `$ORIGIN` |
+| macOS | `libpepper_runtime.dylib` | `@rpath`, which is `@executable_path` |
+| Windows | `pepper_runtime.dll`, with its import library `pepper_runtime.lib` | the executable's folder |
+
+Ship the library with the executable. It holds the runtime modules this
+program loads, compiled with this build's options, so it serves this
+program: a build of another program writes its own. The program runs as it
+does with `static`: one heap, its globals set before `main` in the same
+order, and its thread-locals released when a thread ends. It is the first
+step to Pepper shared libraries ([#220](https://github.com/pep-lang/pepper/issues/220)).
+
+- The runtime's objects come from the build cache as usual, under keys of
+  their own: a program edit links the runtime library again without
+  compiling it.
+- On Windows, the program reaches the runtime's thread-locals through a
+  function the library exports, a call per access, since a DLL's
+  thread-locals cannot be imported.
+- A struct of the runtime whose chain of objects runs through the
+  program's structs (a runtime type holding a trait value the program
+  conforms to) is released with the runtime's bounded release
+  (`_pep_release_last`) rather than steering into the program's structs,
+  which the library cannot name (see [Memory](../language/memory.md)).
+
+It cannot be combined with `--lib` or `--lto=full`, nor with a program that
+imports a Pepper library (`--lib pepper`, which needs the runtime in the
+program), and it is not available for Android, iOS or WebAssembly.
 
 ### `-march=<cpu>`, `-mcpu=<cpu>`, `-mtune=<cpu>`, `-m<feature>`, `-mno-<feature>`
 

@@ -45,6 +45,7 @@ export verify_cache(program: link.Program, options: BuildOptions): Result<void, 
     again.sysroot = options.sysroot;
     again.cpu = options.cpu;
     again.lto = options.lto;
+    again.shared_runtime = options.shared_runtime;
     again.library = options.library;
     again.debug = options.debug;
     again.version = options.version;

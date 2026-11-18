@@ -2,7 +2,8 @@
 # `pep-build` builds both: the program supplies the one runtime, runs the
 # library's initializers before its own, releases the library's
 # thread-locals when a thread ends, and refuses a library whose stamp does
-# not fit it.
+# not fit it. And a program that links the runtime as a shared library
+# (`--runtime=shared`), the first step to Pepper shared libraries.
 
 import compiler.driver;
 import [Directory, File, Path] from io;
@@ -566,4 +567,49 @@ _find(bytes: u8[], part: u8[]): ulong {
         }
     }
     return bytes.count;
+}
+
+# A program that reaches the runtime's globals and thread-locals from its
+# own code and from instantiations of the runtime's generics (`copy`,
+# `ThreadLocal<T>`), sets a global by a runtime call, and holds a
+# thread-local whose release, when its thread ends, counts.
+const _SHARED_RUNTIME_MAIN = "import async;\nimport [Thread] from async;\n\nconst released = async.Atomic<int>(0);\nconst calls = async.ThreadLocal<int>();\nconst SEED: int = calls.get() + 41;\n\n[Shared]\nstruct Badge {\n    const number: int;\n\n    construct(number: int) {\n        this.number = number;\n    }\n\n    destruct {\n        released.fetch_add(1);\n    }\n}\n\n[ThreadLocal]\nvar badge: Badge;\n\nwork() {\n    badge = Badge(7);\n    calls.set(calls.get() + 5);\n}\n\nmain(): int {\n    var thread = Thread.spawn(work);\n    thread.join();\n    calls.set(calls.get() + 1);\n    var list = [\"x\", \"y\", \"z\"];\n    var copied = copy(list);\n    copied.append(\"w\");\n    print($\"hi {SEED} {released.load()} {calls.get()} {list.count} {copied.count}\");\n    return 0;\n}\n";
+
+# `--runtime=shared` links the runtime as a shared library beside the
+# program, which runs as the same program built with the runtime in it.
+[Test]
+a_program_links_the_runtime_as_a_shared_library() {
+    var folder = TempFolder("shared_runtime");
+    var root = folder.path;
+    var source = root.join("app").join("main.pep");
+    write_file(source, _SHARED_RUNTIME_MAIN);
+    var program = root.join("app").join("main" + toolchain.executable_suffix());
+    expect_exit(_pep_build(source, program, Array<String>()), 0);
+    expect_equal(_run_program(program), "hi 41 1 1 3 4");
+    var whole = program.metadata().value().size;
+    var runtime = driver.runtime_library_path(program, link.Target());
+    expect_false(runtime.is_file());
+    var library_name = driver.RUNTIME_LIBRARY.bytes();
+    var bytes = File.read_bytes(program).value();
+    expect_equal(_find(bytes, library_name), bytes.count);
+    for (var options in [["--runtime=shared"], ["--runtime=shared", "-O"], ["--runtime=shared", "--no-cache"]]) {
+        expect_exit(_pep_build(source, program, options), 0);
+        expect_true(runtime.is_file());
+        expect_equal(_run_program(program), "hi 41 1 1 3 4");
+        # The runtime's code is in the library, which the program loads.
+        expect_true(program.metadata().value().size < whole);
+        bytes = File.read_bytes(program).value();
+        expect_true(_find(bytes, library_name) < bytes.count);
+    }
+    # An edit to the program links the runtime's objects from the cache.
+    write_file(source, _SHARED_RUNTIME_MAIN.replace("hi ", "hello "));
+    expect_exit(_pep_build(source, program, ["--runtime=shared"]), 0);
+    expect_equal(_run_program(program), "hello 41 1 1 3 4");
+    # Nor is the program up to date without the library beside it.
+    File.remove(runtime);
+    expect_exit(_pep_build(source, program, ["--runtime=shared"]), 0);
+    expect_true(runtime.is_file());
+    var mixed = _pep_build(source, program, ["--runtime=shared", "-O", "--lto=full"]);
+    expect_exit(mixed, 1);
+    expect_contains(mixed.stderr, "'--runtime=shared' cannot be used with '--lto=full'");
 }

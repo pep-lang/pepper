@@ -117,6 +117,10 @@ export struct BuildOptions {
     ## Whether the program is optimized as one module before the link
     ## (`--lto=full`); only above `-O0`.
     var lto: bool = false;
+    ## Whether the program links the runtime as a shared library written
+    ## beside it (`--runtime=shared`, `runtime_library_name`), not compiled
+    ## into it.
+    var shared_runtime: bool = false;
     ## The library to build for C instead of an executable (`--lib`).
     var library: LibraryKind? = Optional<LibraryKind>.Empty;
     ## The bindings to write beside the library's header (`--bindings`).
@@ -877,7 +881,9 @@ _compilation_unit_jobs(options: BuildOptions): ulong {
 
 # Whether the build checks and compiles `units` in compilation unit workers
 # (`_check_in_workers`). Not a program that imports a Pepper library: the
-# library's objects are its archive, which no compilation unit's are.
+# library's objects are its archive, which no compilation unit's are. Nor
+# one that links the runtime shared library, whose objects are the
+# runtime's translation units'.
 # shortcut: such a program is checked in its own process; give workers the
 # interface's record and the archive's symbols if those programs grow.
 _in_workers(options: BuildOptions, program: link.Program, units: CompilationUnit[]): bool {
@@ -885,7 +891,8 @@ _in_workers(options: BuildOptions, program: link.Program, units: CompilationUnit
         and program.interfaces().is_empty
         and _compilation_unit_jobs(options) > 1
         and !options.in_process
-        and !options.worker_args.is_empty;
+        and !options.worker_args.is_empty
+        and !options.shared_runtime;
 }
 
 # Checks every compilation unit but the last, the program's own, in up to `jobs`
@@ -1112,6 +1119,21 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     if (imported.is_value()) {
         return Result<Built, String>.err(imported.value());
     }
+    # shortcut: a static Pepper library's objects name the runtime as the
+    # program's own; import them from the runtime library once Pepper
+    # libraries can be shared (#220).
+    if (options.shared_runtime and !program.interfaces().is_empty) {
+        var name = program.interfaces()[0].name;
+        return Result<Built, String>.err(
+            _at_link(
+                program,
+                name,
+                Diagnostic.error(
+                    $"the Pepper library '{name}' is a static library, which needs the program to hold the runtime; build without '--runtime=shared'"
+                )
+            )
+        );
+    }
     bool stamped = false;
     for (var found in options.linked.value()) {
         stamped = stamped or !found.stamps.is_empty;
@@ -1282,9 +1304,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         keys.value().exact_positions = options.debug;
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)
-            and (!header.is_value() or header.value().is_file())
-            and (!pepper or interface_path(options.output).is_file())
-            and _bindings_written(options, header)) {
+            and _beside_output_written(options, program.target, header, pepper)) {
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: {options.output} is up to date\n");
             }
@@ -1548,6 +1568,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     if (pepper or !linked_libraries.is_empty) {
         setup.runtime_files = in_runtime;
     }
+    setup.shared_runtime = _shared_runtime_files(options, in_runtime);
     # The files of the Pepper libraries imported: their archives define
     # what they own, and their inits run in the library's.
     var library_files = Array<bool>();
@@ -1576,6 +1597,9 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     }
     var extension = triple_extension;
     var objects = Array<Path>();
+    # With `--runtime=shared`, the objects of the runtime's units, which the
+    # runtime shared library is linked from.
+    var runtime_objects = Array<Path>();
     # The `[Link]` arguments the link takes (`_link_attributes`).
     var link_text = "";
     if (unit_objects) {
@@ -1754,11 +1778,13 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             parts += own.count as uint;
         }
         var entry_part = parts;
-        var partition = codegen.prepare(ir, owners, part_of_file, entry_part, entry_part + 1);
+        var partition = codegen.prepare(
+            ir, owners, part_of_file, entry_part, entry_part + 1, shared = setup.shared_runtime
+        );
         var jobs = Array<PartJob>();
         # The units compiled, with their keys and their parts' objects, to
         # store in the cache.
-        var stored = Array<(ulong, String, Path[])>();
+        var stored = Array<(ulong, String, Path[], Path[])>();
         # The parts compiled, with their places in their units and keys, to
         # store in the cache.
         var stored_parts = Array<(ulong, ulong, String)>();
@@ -1767,11 +1793,12 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
                 or _all_in(translation_units[u].files, library_files)) {
                 continue;
             }
+            var into = _objects_for(options, translation_units[u].files, in_runtime, runtime_objects, objects);
             if (reused.is_value() and reused.value().objects[u].count > 0) {
                 if (options.trace_cache) {
                     File.stderr().write_all($"cache: hit {translation_units[u].name}\n");
                 }
-                objects.append_all(reused.value().objects[u]);
+                into.append_all(reused.value().objects[u]);
                 report.hits.append(translation_units[u].name);
                 continue;
             }
@@ -1821,7 +1848,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
                     $"cache: miss {translation_units[u].name} ({own.count - hits} of {own.count} parts)\n"
                 );
             }
-            stored.append((u, key, parts));
+            stored.append((u, key, parts, into));
         }
         var entry_object = work.join(Path($"{stem}.{extension}"));
         jobs.append(PartJob(entry_part, entry_object));
@@ -1853,7 +1880,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
                     return Result<Built, String>.err(kept.error());
                 }
             }
-            for (var (u, key, parts) in stored) {
+            for (var (u, key, parts, into) in stored) {
                 var folder = work.join(Path($"{u}"));
                 for (var i in 0..parts.count) {
                     Directory.remove_all(folder.join(Path($"{i}")));
@@ -1873,12 +1900,12 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
                     Directory.remove_all(work);
                     return Result<Built, String>.err(kept.error());
                 }
-                objects.append_all(parts);
+                into.append_all(parts);
             }
         } else {
             for (var job in jobs) {
                 if (job.part != entry_part) {
-                    objects.append(job.object);
+                    _objects_for_part(partition, job.part, runtime_objects, objects).append(job.object);
                 }
             }
         }
@@ -1886,12 +1913,14 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         clock.lap("objects");
     }
     if (options.cache.is_value()) {
-        var pinned = options.cache.value().pin(objects, work.join(Path("pinned")));
+        var pinned = _pin(options.cache.value(), objects, runtime_objects, work);
         if (pinned.is_err()) {
             Directory.remove_all(work);
             return Result<Built, String>.err(pinned.error());
         }
-        objects = pinned.value();
+        var (program_pins, runtime_pins) = pinned.value();
+        objects = program_pins;
+        runtime_objects = runtime_pins;
     }
     if (lto) {
         var optimized = optimize_whole(
@@ -1996,17 +2025,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
             made = write_library_interface(options.output, interface.value());
         }
     } else {
-        made = link_objects(
-            objects,
-            options.output,
-            libraries,
-            dirs,
-            program.target,
-            options.sysroot,
-            options.library.is_value(),
-            options.debug,
-            natvis
-        );
+        made = _link(objects, runtime_objects, options, libraries, dirs, program.target, natvis);
     }
     Directory.remove_all(work);
     if (made.is_ok()
@@ -2033,6 +2052,117 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         options.cache.value().record(options.output, program_key, !warnings.is_empty, files);
     }
     return Result<Built, String>.ok(report);
+}
+
+# Whether what a build writes beside its output is there, which an
+# up-to-date output needs too: a library's header (`header`), a Pepper
+# library's interface, the bindings, and the runtime shared library.
+_beside_output_written(options: BuildOptions, target: link.Target, header: Path?, pepper: bool): bool {
+    return (!header.is_value() or header.value().is_file())
+        and (!options.shared_runtime or runtime_library_path(options.output, target).is_file())
+        and (!pepper or interface_path(options.output).is_file())
+        and _bindings_written(options, header);
+}
+
+# The files whose code is the runtime shared library's: with
+# `--runtime=shared` the runtime's (`in_runtime`), else none.
+_shared_runtime_files(options: BuildOptions, in_runtime: bool[]): bool[] {
+    return options.shared_runtime ? in_runtime : Array<bool>();
+}
+
+# Where the objects of the unit of `files` go: `runtime_objects` when
+# `--runtime=shared` links them into the runtime shared library (every
+# file is the runtime's, `in_runtime`), else `objects`.
+_objects_for(
+    options: BuildOptions, files: ulong[], in_runtime: bool[], runtime_objects: Path[], objects: Path[]
+): Path[] {
+    return options.shared_runtime and _all_in(files, in_runtime) ? runtime_objects : objects;
+}
+
+# Where the object of part `part` goes: `runtime_objects` for a part of the
+# runtime shared library (`Partition.exporting`), else `objects`.
+_objects_for_part(partition: codegen.Partition, part: uint, runtime_objects: Path[], objects: Path[]): Path[] {
+    return partition.exporting.contains(part) ? runtime_objects : objects;
+}
+
+# `objects` and `runtime_objects`, pinned (`Cache.pin`) in `work`.
+_pin(cache: Cache, objects: Path[], runtime_objects: Path[], work: Path): Result<(Path[], Path[]), String> {
+    var pinned = cache.pin(objects, work.join(Path("pinned")));
+    if (pinned.is_err()) {
+        return Result<(Path[], Path[]), String>.err(pinned.error());
+    }
+    var runtime = cache.pin(runtime_objects, work.join(Path("pinned-runtime")));
+    if (runtime.is_err()) {
+        return Result<(Path[], Path[]), String>.err(runtime.error());
+    }
+    return Result<(Path[], Path[]), String>.ok((pinned.value(), runtime.value()));
+}
+
+# Links `objects` into `options.output`, an executable or a shared library
+# (`--lib shared`). With `--runtime=shared`, first links `runtime_objects`
+# into the runtime shared library beside it (`runtime_library_path`), and
+# the program against that, finding it beside itself at run time.
+_link(
+    objects: Path[],
+    runtime_objects: Path[],
+    options: BuildOptions,
+    libraries: String[],
+    dirs: Path[],
+    target: link.Target,
+    natvis: Path[]
+): Result<void, String> {
+    if (!options.shared_runtime) {
+        return link_objects(
+            objects,
+            options.output,
+            libraries,
+            dirs,
+            target,
+            options.sysroot,
+            options.library.is_value(),
+            options.debug,
+            natvis
+        );
+    }
+    var runtime = runtime_library_path(options.output, target);
+    var made = link_objects(
+        runtime_objects, runtime, libraries, dirs, target, options.sysroot, true, options.debug, natvis
+    );
+    if (made.is_err()) {
+        return made;
+    }
+    var with_runtime = libraries.copy();
+    with_runtime.append(RUNTIME_LIBRARY);
+    var searched = Array<Path>();
+    searched.append(runtime.parent().value_or(Path(".")));
+    searched.append_all(dirs);
+    # Windows looks in the executable's folder anyway.
+    var run_path = Array<String>();
+    if (target.os != "windows") {
+        run_path.append(target.is_apple() ? "-Wl,-rpath,@executable_path" : "-Wl,-rpath,$ORIGIN");
+    }
+    return link_objects(
+        objects, options.output, with_runtime, searched, target, options.sysroot, false, options.debug, natvis, run_path
+    );
+}
+
+## The name the runtime shared library is linked by (`-l`), and the stem of
+## its file (`runtime_library_path`).
+export const RUNTIME_LIBRARY = "pepper_runtime";
+
+## Returns where a program built with `--runtime=shared` finds the runtime
+## shared library: beside it, as `libpepper_runtime.so`,
+## `libpepper_runtime.dylib` or `pepper_runtime.dll` (whose import library,
+## `pepper_runtime.lib`, the link writes beside it).
+##
+## @param output the program's executable
+## @param target the platform it is for
+## @returns the library's path
+export runtime_library_path(output: Path, target: link.Target): Path {
+    var name = target.os == "windows" ?
+        $"{RUNTIME_LIBRARY}.dll" :
+        $"lib{RUNTIME_LIBRARY}.{target.is_apple() ? "dylib" : "so"}";
+    return _beside(output, name);
 }
 
 ## The runtime's folder: the one beside the program's runtime files that
@@ -2074,6 +2204,10 @@ _codegen_options(options: BuildOptions, triple: String): String {
     }
     if (options.debug) {
         out = $"{out} -g";
+    }
+    # The runtime's symbols are exported, and the program's imported.
+    if (options.shared_runtime) {
+        out = $"{out} --runtime=shared";
     }
     var checks = options.runtime_checks;
     if (!(checks.overflow and checks.divide and checks.shift and checks.bounds and checks.null)) {
@@ -2277,6 +2411,9 @@ _link_text(options: BuildOptions): String {
                 "--lib static\n" :
                 (kind == LibraryKind.Pepper ? "--lib pepper\n" : "--lib shared\n")
         );
+    }
+    if (options.shared_runtime) {
+        text.append("--runtime=shared\n");
     }
     # The entry part calls each Pepper library linked (#220).
     if (options.linked.is_value()) {

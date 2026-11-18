@@ -129,6 +129,7 @@ extend Generator {
                     }
                 }
             }
+            _steer_within_runtime(st, out, nodes);
             edges.append(out);
         }
         var component = _components(edges);
@@ -197,6 +198,24 @@ extend Generator {
         for (var (_, cycle) in members) {
             cycles.append(cycle);
         }
+    }
+
+    # Keeps `out`, the edges of `st`, steering only into structs of the
+    # runtime shared library when `st` is one of them: its code cannot name
+    # the program's.
+    _steer_within_runtime(st: StructDef, out: _Edge[], nodes: StructDef[]) {
+        if (shared_runtime.is_empty or !_in_runtime_library(st)) {
+            return;
+        }
+        for (var edge in out) {
+            edge.direct = edge.direct and _in_runtime_library(nodes[edge.target]);
+        }
+    }
+
+    # Whether `st`'s code is the runtime shared library's: a runtime file
+    # declares it, and it is no instantiation, whose copies are each user's.
+    _in_runtime_library(st: StructDef): bool {
+        return !st.loc.is_none() and in_shared_runtime(st.loc.file as ulong) and !st.name.contains("<");
     }
 
     ## Adds to `out` the file of each struct and trait `ty` names, its
