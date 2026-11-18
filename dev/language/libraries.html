@@ -244,8 +244,10 @@ or without the build cache.</p>
 <h2 id="importing-it"><a class="header" href="#importing-it">Importing it</a></h2>
 <p>The program <a href="../../examples/library/main.pep"><code>main.pep</code></a> imports <code>geo</code>
 (and <code>scene</code>, a library built on it, <a href="#a-library-that-imports-a-library">below</a>),
-gives a struct of its own the library's trait, and calls the library's
-generic at that struct:</p>
+gives a struct of its own the library's trait, calls the library's
+generic at that struct, and extends the library's struct with a method of
+its own (<code>extend geo.Square</code>; a library can extend another's type the same
+way):</p>
 <pre><code class="language-pepper"># Imports the library `geo` (`lib/geo.pep`), built with `--lib pepper`,
 # and `scene` (`lib/scene.pep`), built on `geo`, with no source for
 # either: `pepper build main.pep -L lib -o main`.
@@ -267,6 +269,13 @@ extend Circle with geo.Shape {
     }
 }
 
+# A method of the program's own on the library's struct.
+extend geo.Square {
+    perimeter(): int {
+        return 4 * side;
+    }
+}
+
 main(): int {
     var shapes = Array&lt;geo.Shape&gt;();
     shapes.append(geo.Square(3));
@@ -278,6 +287,7 @@ main(): int {
     print($"{geo.pair(Circle(2)).count} circles");
     # A library that imports `geo`, called with the program's shapes.
     print($"total area {scene.total_area(shapes)}");
+    print($"perimeter {geo.Square(3).perimeter()}");
     return 0;
 }
 
@@ -286,6 +296,7 @@ main(): int {
 # a shape of area 3
 # 2 circles
 # total area 12
+# perimeter 12
 </code></pre>
 <pre><code class="language-bash">pepper build main.pep -L lib -o main
 </code></pre>
@@ -415,12 +426,6 @@ release of each library struct its chains run through, and the linker
 keeps the program's copy, which comes ahead of the library's archive.</p>
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
-<li>
-<p><strong>Extending a library's type.</strong> A program or a library that extends a
-type of a library it imports (<code>extend geo.Square { ... }</code>) does not
-build: it reports <code>has no body</code> errors in the library's interface.
-Give the type the method in the library itself.</p>
-</li>
 <li>
 <p><strong>Shared libraries.</strong> <code>--lib pepper</code> writes a static library only:
 a shared library must hold a runtime of its own (<code>--lib shared</code>), and
