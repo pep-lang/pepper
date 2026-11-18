@@ -155,10 +155,7 @@ export prepare(
     shared: bool[] = Array<bool>()
 ): Partition {
     bool coff = ir.target_triple().contains("windows");
-    # The runtime shared library's definitions, on ELF protected, so its own
-    # code binds to them (a reference from another of its parts may be
-    # direct); COFF and Mach-O have no such visibility, nor need it.
-    var exported = coff or ir.target_triple().contains("apple") ? llvm.Visibility.Default : llvm.Visibility.Protected;
+    var exported = _exported_visibility(ir.target_triple());
     var exporting = HashSet<uint>();
     var imported = HashSet<String>();
     var sizes = Array<ulong>();
@@ -319,6 +316,17 @@ _share(
     if (coff and part.is_value()) {
         value.set_dll_storage_class(_DLL_EXPORT);
     }
+}
+
+# The visibility of the runtime shared library's definitions for `triple`:
+# on ELF protected, so its own code binds to them (a reference from another
+# of its parts may be direct); COFF and Mach-O have no such visibility, nor
+# need it.
+_exported_visibility(triple: String): llvm.Visibility {
+    if (triple.contains("windows") or triple.contains("apple")) {
+        return llvm.Visibility.Default;
+    }
+    return llvm.Visibility.Protected;
 }
 
 # Whether `file`'s symbols are the runtime shared library's.
