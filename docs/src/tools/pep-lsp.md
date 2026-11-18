@@ -151,6 +151,7 @@ options above, and restarts the server when one changes:
 | `pepper.inlayHints.implicitConversions` | `true` | `inlayHints.implicitConversions` |
 | `pepper.inlayHints.parameterNames` | `true` | `inlayHints.parameterNames` |
 | `pepper.buildOptions` | `[]` | `buildOptions` |
+| `pepper.libraryPath` | `[]` | `libraryPath` |
 
 Inlay hints also need VS Code's own `editor.inlayHints.enabled`. The command
 **Pepper: Restart Language Server** (`pepper.restartServer`) restarts the
