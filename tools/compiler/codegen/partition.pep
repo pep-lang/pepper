@@ -155,6 +155,12 @@ export prepare(
     shared: bool[] = Array<bool>()
 ): Partition {
     bool coff = ir.target_triple().contains("windows");
+    # The runtime shared library's definitions, on ELF protected, so its own
+    # code binds to them (a reference from another of its parts may be
+    # direct); COFF and Mach-O have no such visibility, nor need it.
+    var exported = coff or ir.target_triple().contains("apple") ?
+        llvm.Visibility.Default :
+        llvm.Visibility.Protected;
     var exporting = HashSet<uint>();
     var imported = HashSet<String>();
     var sizes = Array<ulong>();
@@ -190,7 +196,7 @@ export prepare(
                 value.set_linkage(llvm.Linkage.External);
                 var spelled = _respell(value, name);
                 _share(
-                    value, spelled, Optional<uint>.Empty, _shared(shared, declared.value()), coff, exporting, imported
+                    value, spelled, Optional<uint>.Empty, _shared(shared, declared.value()), coff, exported, exporting, imported
                 );
             }
             continue;
@@ -236,7 +242,7 @@ export prepare(
             }
             part_of[spelled] = part;
             _share(
-                value, spelled, Optional<uint>.Value(part), _shared(shared, owner.value()), coff, exporting, imported
+                value, spelled, Optional<uint>.Value(part), _shared(shared, owner.value()), coff, exported, exporting, imported
             );
             sizes[part] += _size(value);
             continue;
@@ -275,14 +281,15 @@ export prepare(
 # library defines it: as imported, unless it is a Windows thread-local (a
 # DLL's cannot be imported: code outside it calls an accessor,
 # `define_thread_local_accessor`); with the `part` that defines it, that
-# part as the library's, and the definition visible outside it, and on
-# Windows exported.
+# part as the library's, and the definition `exported`, and on Windows
+# `dllexport`.
 _share(
     value: llvm.Value,
     spelled: String,
     part: uint?,
     shared: bool,
     coff: bool,
+    exported: llvm.Visibility,
     exporting: HashSet<uint>,
     imported: HashSet<String>
 ) {
@@ -291,7 +298,7 @@ _share(
     }
     if (part.is_value()) {
         exporting.insert(part.value());
-        value.set_visibility(llvm.Visibility.Default);
+        value.set_visibility(exported);
     }
     if (coff and LLVMIsThreadLocal(value.ref) != 0) {
         return;
