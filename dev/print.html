@@ -23545,6 +23545,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--emit-steps</code></td><td>Print the names of the sema steps, one per line, instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>off</code></td></tr>
+<tr><td><code>--runtime=static</code>, <code>--runtime=shared</code></td><td>Compile the runtime into the executable, or link it as a shared library beside it</td><td><code>static</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code> (<code>-m &lt;option&gt;</code>)</td><td>The CPU to generate code for</td><td>clang's default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
 <tr><td><code>--debug-static=source</code>, <code>--debug-static=expanded</code></td><td>With <code>-g</code>, step through <code>static</code> blocks as written or expanded</td><td><code>source</code></td></tr>
@@ -23999,6 +24000,39 @@ whole program, and writes its objects, one per logical CPU in parallel,
 which link as usual. No linker
 plugin is involved, so it works on every target. It applies to a library
 too (<code>--lib</code>).</p>
+<h3 id="--runtimestatic---runtimeshared"><a class="header" href="#--runtimestatic---runtimeshared"><code>--runtime=static</code>, <code>--runtime=shared</code></a></h3>
+<p>How the program links the runtime. With <code>static</code>, the default, the runtime's
+code is compiled into the executable, as every program's is. With <code>shared</code>,
+the build also links the runtime into a shared library beside the
+executable, and the executable links it instead:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>The runtime library</th><th>Found at run time</th></tr></thead><tbody>
+<tr><td>Linux</td><td><code>libpepper_runtime.so</code></td><td>the executable's run path, <code>$ORIGIN</code></td></tr>
+<tr><td>macOS</td><td><code>libpepper_runtime.dylib</code></td><td><code>@rpath</code>, which is <code>@executable_path</code></td></tr>
+<tr><td>Windows</td><td><code>pepper_runtime.dll</code>, with its import library <code>pepper_runtime.lib</code></td><td>the executable's folder</td></tr>
+</tbody></table>
+</div>
+<p>Ship the library with the executable. It holds the runtime modules this
+program loads, compiled with this build's options, so it serves this
+program: a build of another program writes its own. The program runs as it
+does with <code>static</code>: one heap, its globals set before <code>main</code> in the same
+order, and its thread-locals released when a thread ends. It is the first
+step to Pepper shared libraries (<a href="https://github.com/pep-lang/pepper/issues/220">#220</a>).</p>
+<ul>
+<li>The runtime's objects come from the build cache as usual, under keys of
+their own: a program edit links the runtime library again without
+compiling it.</li>
+<li>On Windows, the program reaches the runtime's thread-locals through a
+function the library exports, a call per access, since a DLL's
+thread-locals cannot be imported.</li>
+<li>A struct of the runtime whose chain of objects runs through the
+program's structs (a runtime type holding a trait value the program
+conforms to) is released with the runtime's bounded release
+(<code>_pep_release_last</code>) rather than steering into the program's structs,
+which the library cannot name (see <a href="tools/../language/memory.html">Memory</a>).</li>
+</ul>
+<p>It cannot be combined with <code>--lib</code> or <code>--lto=full</code>, nor with a program that
+imports a Pepper library (<code>--lib pepper</code>, which needs the runtime in the
+program), and it is not available for Android, iOS or WebAssembly.</p>
 <h3 id="-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><a class="header" href="#-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></a></h3>
 <p>The <code>-m</code> options choose the CPU the code is generated for, with clang's
 names and meanings (<code>-m &lt;option&gt;</code>, with a space, is the same as
