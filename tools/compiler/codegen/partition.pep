@@ -85,14 +85,13 @@ export struct Partition {
 ## The runtime shared library's `_pep_release_thread_locals` is not: it has
 ## an owner (`define_release_hook`).
 _is_entry(name: String, owners: HashMap<String, uint>): bool {
-    return (name == "main"
+    return name == "main"
         or name == "__pep_global_init"
-        or name == RELEASE_FUNCTION
+        or (name == RELEASE_FUNCTION and !owners.contains(name))
         or name == PROGRAM_RELEASE_FUNCTION
         or name.starts_with(LIBRARY_ENTRY_PREFIX)
         or name.starts_with(EXPORT_PREFIX)
-        or name.starts_with("llvm."))
-        and !owners.contains(name);
+        or name.starts_with("llvm.");
 }
 
 ## Returns how much code each file owns, to split the program into parts
