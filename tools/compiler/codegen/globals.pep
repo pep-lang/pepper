@@ -56,6 +56,22 @@ export library_release_name(library: String): String {
 ## start with.
 export const LIBRARY_ENTRY_PREFIX = "__pep_library_";
 
+## The function a program linking the runtime shared library
+## (`--runtime=shared`) defines in place of `_pep_release_thread_locals`,
+## which the library's `_pep_release_thread_locals` calls through
+## `RELEASE_HOOK`: a shared library cannot call into the executable.
+export const PROGRAM_RELEASE_FUNCTION = "__pep_program_release";
+
+## The runtime shared library's global holding `PROGRAM_RELEASE_FUNCTION`,
+## which the program's `__pep_global_init` stores first.
+const RELEASE_HOOK = "__pep_release_hook";
+
+## What the function returning the calling thread's address of a runtime
+## thread-local is named, before the variable's name: a Windows DLL's
+## thread-locals cannot be imported, so code outside the runtime shared
+## library calls this instead.
+const THREAD_LOCAL_ACCESSOR_PREFIX = "__pep_tls.";
+
 ## How many times `_pep_release_thread_locals` walks the thread-locals: a
 ## destructor run by one pass may store into a thread-local again, as
 ## POSIX's `PTHREAD_DESTRUCTOR_ITERATIONS` allows for keys.
@@ -280,7 +296,8 @@ extend Generator {
         # `llvm.global_ctors`, calls them in initialization order
         # (`module.globals` is sorted by it, so a file's globals are
         # consecutive).
-        if (non_const.count == 0 and library_name.is_empty and libraries.is_empty) {
+        var hook = ir.global(RELEASE_HOOK);
+        if (non_const.count == 0 and library_name.is_empty and libraries.is_empty and !hook.is_value()) {
             return Result<void>.ok();
         }
         var void_fn = llvm.Type.function(context.void_type(), Array<llvm.Type>(), false);
@@ -326,6 +343,7 @@ extend Generator {
         );
         var entry = context.append_block(init_fn, "entry");
         builder.position_at_end(entry);
+        _store_release_hook(hook);
         bool pepper_library = !library_name.is_empty;
         bool split = !pepper_library and !libraries.is_empty;
         for (var (file_init, runtime) in file_inits) {
@@ -609,6 +627,9 @@ extend Generator {
     declare_thread_local(variable: VariableDef, global: llvm.Value, llvm_ty: llvm.Type): Result<void> {
         var dynamic = library and machine.triple().contains("-android");
         global.set_thread_local_mode(dynamic ? GENERAL_DYNAMIC_TLS_MODEL : INITIAL_EXEC_TLS_MODEL);
+        if (in_shared_runtime(variable.loc.file as ulong) and machine.triple().contains("windows")) {
+            define_thread_local_accessor(variable, global);
+        }
         if (!variable.default.is_value()) {
             return Result<void>.ok();
         }
@@ -643,9 +664,53 @@ extend Generator {
     }
 
     ## The address of global `id` for the code being generated: its
-    ## `global_addrs` entry.
+    ## `global_addrs` entry, or for a runtime thread-local that code outside
+    ## the runtime shared library reads on Windows, its accessor's result.
     global_address(id: String): Result<Address?> {
-        return Result<Address?>.ok(global_addrs.try_get(id));
+        var found = global_addrs.try_get(id);
+        if (thread_local_accessors.is_empty or !found.is_value()) {
+            return Result<Address?>.ok(found);
+        }
+        var accessor = thread_local_accessors.try_get(id);
+        if (!accessor.is_value() or _in_runtime_code()) {
+            return Result<Address?>.ok(found);
+        }
+        var function = accessor.value();
+        var address = builder.call(function.global_type(), function, Array<llvm.Value>(), $"{id}.tls");
+        var global = found.value();
+        return Result<Address?>.ok(
+            Optional<Address>.Value(Address.typed(id, global.ty, global.llvm_ty.value(), address))
+        );
+    }
+
+    ## Whether file `file`'s code goes in the runtime shared library
+    ## (`--runtime=shared`).
+    in_shared_runtime(file: ulong): bool {
+        return file < shared_runtime.count and shared_runtime[file];
+    }
+
+    # Whether the function the builder is in goes in the runtime shared
+    # library: one a runtime file owns. An instantiation has no owner, so its
+    # copy in the program reaches the runtime's thread-locals as the program's
+    # own code does.
+    _in_runtime_code(): bool {
+        var owner = owners.try_get(builder.insert_block().parent().name());
+        return owner.is_value() and in_shared_runtime(owner.value() as ulong);
+    }
+
+    ## Defines the function returning the calling thread's address of
+    ## `variable`, a runtime thread-local whose `global` code outside the
+    ## runtime shared library cannot name on Windows; owned by its file, so
+    ## the library defines and exports it (`thread_local_accessors`).
+    define_thread_local_accessor(variable: VariableDef, global: llvm.Value) {
+        var pointer = context.pointer_type();
+        var name = $"{THREAD_LOCAL_ACCESSOR_PREFIX}{variable.name}";
+        var function = ir.add_function(name, llvm.Type.function(pointer, Array<llvm.Type>(), false));
+        own(name, variable.loc);
+        var entry = context.append_block(function, "entry");
+        builder.position_at_end(entry);
+        builder.return_value(global);
+        thread_local_accessors[variable.name] = function;
     }
 
     ## The function `name` taking and returning nothing: the module's, or
@@ -665,7 +730,12 @@ extend Generator {
     ## thread-locals of its own files.
     emit_thread_locals_release(module: Module): Result<void> {
         bool pepper_library = !library_name.is_empty;
-        var function = declared_void(pepper_library ? library_release_name(library_name) : RELEASE_FUNCTION);
+        var name = pepper_library ? library_release_name(library_name) : RELEASE_FUNCTION;
+        if (!shared_runtime.is_empty) {
+            define_release_hook(module);
+            name = PROGRAM_RELEASE_FUNCTION;
+        }
+        var function = declared_void(name);
         if (function.block_count() != 0) {
             return Result<void>.ok();
         }
@@ -717,15 +787,64 @@ extend Generator {
                 builder.call(called.global_type(), called, Array<llvm.Value>(), "");
             }
         }
-        # The runtime's `extern void` declared it first, returning Pepper's
-        # `void` type, which is not LLVM's.
+        _return_nothing(function);
+        return Result<void>.ok();
+    }
+
+    # Ends `function`, a `void` one the runtime may have declared `extern`
+    # first, returning Pepper's `void` type, which is not LLVM's.
+    _return_nothing(function: llvm.Value) {
         var return_type = function.global_type().return_type();
         if (return_type.kind() == llvm.TypeKind.Void) {
             builder.return_void();
         } else {
             builder.return_value(zero_of(return_type));
         }
-        return Result<void>.ok();
+    }
+
+    # Stores the program's `PROGRAM_RELEASE_FUNCTION` in `hook`, the runtime
+    # shared library's `RELEASE_HOOK`, if any: the library releases a
+    # thread's thread-locals through it, as it cannot name the program's.
+    _store_release_hook(hook: llvm.Value?) {
+        if (hook.is_value()) {
+            builder.store(declared_void(PROGRAM_RELEASE_FUNCTION), hook.value());
+        }
+    }
+
+    ## Defines, in the runtime shared library, `RELEASE_HOOK` and the
+    ## `_pep_release_thread_locals` that calls the function it holds (the
+    ## program's `PROGRAM_RELEASE_FUNCTION`, once the program's init stored
+    ## it), owned by the file of the runtime's `extern` that calls it; none
+    ## when the program never releases a thread's thread-locals.
+    define_release_hook(module: Module) {
+        var function = ir.function(RELEASE_FUNCTION);
+        if (!function.is_value() or function.value().block_count() != 0) {
+            return;
+        }
+        for (var ext in module.externs) {
+            if (ext.name != RELEASE_FUNCTION) {
+                continue;
+            }
+            var pointer = context.pointer_type();
+            var hook = ir.add_global(pointer, RELEASE_HOOK);
+            hook.set_initializer(pointer.zero());
+            own(RELEASE_HOOK, ext.loc);
+            own(RELEASE_FUNCTION, ext.loc);
+            var release = function.value();
+            var entry = context.append_block(release, "entry");
+            var call = context.append_block(release, "call");
+            var done = context.append_block(release, "done");
+            builder.position_at_end(entry);
+            var program = builder.load(pointer, hook, "program");
+            builder.conditional_branch(builder.is_not_null(program, "set"), call, done);
+            builder.position_at_end(call);
+            var void_fn = llvm.Type.function(context.void_type(), Array<llvm.Type>(), false);
+            builder.call(void_fn, program, Array<llvm.Value>(), "");
+            builder.branch(done);
+            builder.position_at_end(done);
+            _return_nothing(release);
+            return;
+        }
     }
 
     # Context intrinsics

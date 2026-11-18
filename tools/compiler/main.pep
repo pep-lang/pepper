@@ -135,6 +135,11 @@ _main(args: String[]): int {
         help = "Link-time optimization: `full` optimizes the whole program as one module after linking every file's code, so calls between files (into the runtime, for one) inline; `off` optimizes each file alone. The default is `off`: `full` reruns over the whole program on every build, so it suits a release build",
         value_name = "MODE"
     );
+    var runtime_link = parser.option<_RuntimeLink>(
+        "runtime",
+        help = "How the program links the runtime: `static` (the default) compiles it into the executable; `shared` links it as a shared library written beside the executable (`libpepper_runtime.so`, `libpepper_runtime.dylib`, `pepper_runtime.dll` with its import library `pepper_runtime.lib`), which the executable finds there at run time",
+        value_name = "MODE"
+    );
     var triple = parser.option(
         "target",
         help = "The platform to compile for, as an LLVM target triple (`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`). The default is the machine the compiler runs on. `[Target(...)]` selects code for it, and linking another platform's executable needs its system libraries (`--sysroot`)",
@@ -520,16 +525,12 @@ _main(args: String[]): int {
         _report(cpu.error());
         return 1;
     }
-    # Link-time optimization: only when asked for, as it optimizes the whole
-    # program again on every build, an edit's too.
-    bool whole = false;
-    if (lto.is_set) {
-        if (lto.value() == _Lto.Full and opt_level.value() == 0) {
-            _report("'--lto=full' needs optimization: add '-O'");
-            return 1;
-        }
-        whole = lto.value() == _Lto.Full;
+    var linking = _linking(lto, runtime_link, opt_level.value(), library.is_set, setup.target);
+    if (linking.is_err()) {
+        _report(linking.error());
+        return 1;
     }
+    var (whole, shared_runtime) = linking.value();
     # In a project, the build takes what its `pep.toml` gives: with no file,
     # the entry and output; and `[build]`'s libraries.
     var project = driver.apply_project(
@@ -925,6 +926,7 @@ _main(args: String[]): int {
         options.frame_pointers = frame_pointers.is_set;
         options.cpu = Optional<codegen.Cpu>.Value(cpu.value());
         options.lto = whole;
+        options.shared_runtime = shared_runtime;
         options.library = kind;
         if (bindings.is_set) {
             options.bindings = Optional<driver.BindingsKind>.Value(bindings.value());
@@ -1076,10 +1078,52 @@ _compile_part(parser: cli.Parser, dir: Path, parts: String[]): int {
     return 0;
 }
 
+# Whether the program is link-time optimized (`--lto=full`) and links the
+# runtime shared library (`--runtime=shared`), or why the options do not
+# fit together.
+_linking(
+    lto: cli.Argument<_Lto>,
+    runtime_link: cli.Argument<_RuntimeLink>,
+    opt_level: uint,
+    library: bool,
+    target: link.Target
+): Result<(bool, bool), String> {
+    # Link-time optimization: only when asked for, as it optimizes the whole
+    # program again on every build, an edit's too.
+    bool whole = lto.is_set and lto.value() == _Lto.Full;
+    if (whole and opt_level == 0) {
+        return Result<(bool, bool), String>.err("'--lto=full' needs optimization: add '-O'");
+    }
+    bool shared = runtime_link.is_set and runtime_link.value() == _RuntimeLink.Shared;
+    if (!shared) {
+        return Result<(bool, bool), String>.ok((whole, false));
+    }
+    if (library) {
+        return Result<(bool, bool), String>.err("'--runtime=shared' cannot be used with '--lib'");
+    }
+    # shortcut: the runtime library is not optimized with the program;
+    # link-time optimize the program's own objects if one asks for both.
+    if (whole) {
+        return Result<(bool, bool), String>.err("'--runtime=shared' cannot be used with '--lto=full'");
+    }
+    if (target.os == "android" or target.os == "wasi" or target.os == "ios") {
+        return Result<(bool, bool), String>.err(
+            $"'--runtime=shared' is not available for '{codegen.target_triple(target)}'"
+        );
+    }
+    return Result<(bool, bool), String>.ok((whole, true));
+}
+
 # `--lto`'s modes.
 enum _Lto {
     Full,
     Off,
+}
+
+# `--runtime`'s modes.
+enum _RuntimeLink {
+    Static,
+    Shared,
 }
 
 # `--emit-ast`'s formats.

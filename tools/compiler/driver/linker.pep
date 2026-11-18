@@ -724,6 +724,8 @@ export cross_link_note(target: link.Target, sysroot: Path?): String {
 ##   in `natvis`; on macOS `dsymutil` gathers it into `<output>.dSYM`
 ## @param natvis the visualizer files to link into the `.pdb`: the runtime's
 ##   `pepper.natvis` and the program's enums' (`enum_natvis`)
+## @param extra more arguments for the link driver, such as a run path
+##   (`-Wl,-rpath,$ORIGIN`)
 ## @returns nothing, or why the link failed
 export link_objects(
     objects: Path[],
@@ -734,7 +736,8 @@ export link_objects(
     sysroot: Path?,
     shared: bool = false,
     debug: bool = false,
-    natvis: Path[] = Array<Path>()
+    natvis: Path[] = Array<Path>(),
+    extra: String[] = Array<String>()
 ): Result<void, String> {
     var ndk = target.os == "android" ? AndroidNdk.locate(sysroot) : Optional<AndroidNdk>.Empty;
     var driver = ndk.is_value() ? Optional<Path>.Value(ndk.value().clang) : find_link_driver();
@@ -755,6 +758,7 @@ export link_objects(
             command.argument($"-Wl,-soname,{named}");
         }
     }
+    command.arguments(extra);
     # The NDK's clang runs the NDK's own lld, and clang's MSVC toolchain
     # finds lld-link itself.
     var lld = Optional<Path>.Empty;

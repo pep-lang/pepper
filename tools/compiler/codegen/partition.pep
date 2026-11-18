@@ -45,6 +45,17 @@ extern void LLVMSetComdat(void* global, void* comdat);
 extern void* LLVMGetComdat(void* global);
 extern void LLVMSetComdatSelectionKind(void* comdat, int kind);
 extern char* LLVMGetSection(void* global);
+extern int LLVMIsThreadLocal(void* global);
+extern void LLVMReplaceAllUsesWith(void* old, void* replacement);
+
+## LLVM's `LLVMDefaultStorageClass`, `LLVMDLLImportStorageClass` and
+## `LLVMDLLExportStorageClass`.
+const _DEFAULT_STORAGE: int = 0;
+const _DLL_IMPORT: int = 1;
+const _DLL_EXPORT: int = 2;
+
+## LLVM's `LLVMInitialExecTLSModel`.
+const _INITIAL_EXEC: int = 3;
 
 ## A program's symbols assigned to parts.
 export struct Partition {
@@ -57,6 +68,11 @@ export struct Partition {
     ## The Pepper name of each definition `prepare` gave another linker
     ## spelling, by that spelling.
     var names: HashMap<String, String> = HashMap<String, String>();
+    ## The parts the runtime shared library is made of (`--runtime=shared`).
+    var exporting: HashSet<uint> = HashSet<uint>();
+    ## What the runtime shared library defines and the other parts import,
+    ## by linker spelling: on Windows they declare it `dllimport`.
+    var imported: HashSet<String> = HashSet<String>();
 
     construct(part_of: HashMap<String, uint>, sizes: ulong[] = Array<ulong>()) {
         this.part_of = part_of;
@@ -66,10 +82,13 @@ export struct Partition {
 
 ## Whether `name` is one of the program's own entry points, defined once,
 ## in part 0, under its own name.
-_is_entry(name: String): bool {
+## The runtime shared library's `_pep_release_thread_locals` is not: it has
+## an owner (`define_release_hook`).
+_is_entry(name: String, owners: HashMap<String, uint>): bool {
     return name == "main"
         or name == "__pep_global_init"
-        or name == RELEASE_FUNCTION
+        or (name == RELEASE_FUNCTION and !owners.contains(name))
+        or name == PROGRAM_RELEASE_FUNCTION
         or name.starts_with(LIBRARY_ENTRY_PREFIX)
         or name.starts_with(EXPORT_PREFIX)
         or name.starts_with("llvm.");
@@ -92,7 +111,7 @@ export file_sizes(ir: llvm.Module, owners: HashMap<String, uint>, files: ulong):
     values.append_all(ir.functions());
     values.append_all(ir.globals());
     for (var value in values) {
-        if (value.is_declaration() or _is_entry(value.name())) {
+        if (value.is_declaration() or _is_entry(value.name(), owners)) {
             continue;
         }
         var owner = owners.try_get(value.name());
@@ -120,6 +139,10 @@ export file_sizes(ir: llvm.Module, owners: HashMap<String, uint>, files: ulong):
 ## @param locations_part the part of the location strings defined apart
 ##   from the code (`Build.separate_locations`), which a line shift
 ##   changes alone
+## @param shared per file, whether the runtime shared library defines what
+##   it owns (`--runtime=shared`): visible outside it, and on Windows
+##   `dllexport`, and imported by the other parts (`Partition.imported`);
+##   empty for none
 ## @returns the partition
 export prepare(
     ir: llvm.Module,
@@ -128,8 +151,13 @@ export prepare(
     entry_part: uint,
     parts: uint,
     spread: uint[] = Array<uint>(),
-    locations_part: uint? = Optional<uint>.Empty
+    locations_part: uint? = Optional<uint>.Empty,
+    shared: bool[] = Array<bool>()
 ): Partition {
+    bool coff = ir.target_triple().contains("windows");
+    var exported = _exported_visibility(ir.target_triple());
+    var exporting = HashSet<uint>();
+    var imported = HashSet<String>();
     var sizes = Array<ulong>();
     for (var _ in 0..parts) {
         sizes.append(0);
@@ -158,9 +186,20 @@ export prepare(
             # A function whose body sema skipped (its unit's object comes
             # from the build cache) is declared only, under the spelling
             # that object defines.
-            if (owners.contains(name)) {
+            var declared = owners.try_get(name);
+            if (declared.is_value()) {
                 value.set_linkage(llvm.Linkage.External);
-                _respell(value, name);
+                var spelled = _respell(value, name);
+                _share(
+                    value,
+                    spelled,
+                    Optional<uint>.Empty,
+                    _shared(shared, declared.value()),
+                    coff,
+                    exported,
+                    exporting,
+                    imported
+                );
             }
             continue;
         }
@@ -176,7 +215,7 @@ export prepare(
             sizes[locations_part.value()] += _size(value);
             continue;
         }
-        if (_is_entry(name)) {
+        if (_is_entry(name, owners)) {
             if (name.starts_with(EXPORT_PREFIX)) {
                 exports.append(value);
             } else {
@@ -204,6 +243,16 @@ export prepare(
                 part += (_fnv1a(spelled) % spread[file] as ulong) as uint;
             }
             part_of[spelled] = part;
+            _share(
+                value,
+                spelled,
+                Optional<uint>.Value(part),
+                _shared(shared, owner.value()),
+                coff,
+                exported,
+                exporting,
+                imported
+            );
             sizes[part] += _size(value);
             continue;
         }
@@ -232,7 +281,57 @@ export prepare(
     restore_extern_names(ir);
     var out = Partition(part_of, sizes);
     out.names = names;
+    out.exporting = exporting;
+    out.imported = imported;
     return out;
+}
+
+# Notes `value`, spelled `spelled`, when `shared` says the runtime shared
+# library defines it: as imported, unless it is a Windows thread-local (a
+# DLL's cannot be imported: code outside it calls an accessor,
+# `define_thread_local_accessor`); with the `part` that defines it, that
+# part as the library's, and the definition `exported`, and on Windows
+# `dllexport`.
+_share(
+    value: llvm.Value,
+    spelled: String,
+    part: uint?,
+    shared: bool,
+    coff: bool,
+    exported: llvm.Visibility,
+    exporting: HashSet<uint>,
+    imported: HashSet<String>
+) {
+    if (!shared) {
+        return;
+    }
+    if (part.is_value()) {
+        exporting.insert(part.value());
+        value.set_visibility(exported);
+    }
+    if (coff and LLVMIsThreadLocal(value.ref) != 0) {
+        return;
+    }
+    imported.insert(spelled);
+    if (coff and part.is_value()) {
+        value.set_dll_storage_class(_DLL_EXPORT);
+    }
+}
+
+# The visibility of the runtime shared library's definitions for `triple`:
+# on ELF protected, so its own code binds to them (a reference from another
+# of its parts may be direct); COFF and Mach-O have no such visibility, nor
+# need it.
+_exported_visibility(triple: String): llvm.Visibility {
+    if (triple.contains("windows") or triple.contains("apple")) {
+        return llvm.Visibility.Default;
+    }
+    return llvm.Visibility.Protected;
+}
+
+# Whether `file`'s symbols are the runtime shared library's.
+_shared(shared: bool[], file: uint): bool {
+    return (file as ulong) < shared.count and shared[file as ulong];
 }
 
 ## How much code `value` is, to balance parts: a function's blocks, plus
@@ -333,8 +432,56 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>, t
     if (removed.is_err()) {
         return Result<void>.err(removed.error());
     }
+    if (!partition.imported.is_empty) {
+        _import_from_runtime(ir, partition, parts);
+    }
     _trace(trace, "split: done");
     return Result<void>.ok();
+}
+
+# Makes each declaration in `ir`, parts `parts` kept, of what the runtime
+# shared library defines an import outside the library: not `dso_local`,
+# and on Windows `dllimport`; inside it, a plain declaration (one part, or
+# a run of parts, each keeps the other's code its own way; the last
+# `keep_part` before compiling decides).
+_import_from_runtime(ir: llvm.Module, partition: Partition, parts: HashSet<uint>) {
+    bool inside = true;
+    for (var part in parts) {
+        inside = inside and partition.exporting.contains(part);
+    }
+    bool coff = ir.target_triple().contains("windows");
+    var values = ir.functions();
+    values.append_all(ir.globals());
+    for (var value in values) {
+        if (!value.is_declaration() or !partition.imported.contains(value.name())) {
+            continue;
+        }
+        if (inside) {
+            value.set_dll_storage_class(_DEFAULT_STORAGE);
+            continue;
+        }
+        # LLVM keeps a symbol that was ever internal or hidden `dso_local`,
+        # which outweighs `dllimport`, and its C API cannot clear that: a
+        # fresh declaration takes its place.
+        var name = value.name();
+        value.set_name("");
+        var fresh = value.is_function() ?
+            ir.add_function(name, value.global_type()) :
+            ir.add_global(value.global_type(), name);
+        if (coff) {
+            fresh.set_dll_storage_class(_DLL_IMPORT);
+        }
+        # Another image's thread-local, which the executable loads at start.
+        if (LLVMIsThreadLocal(value.ref) != 0) {
+            fresh.set_thread_local_mode(_INITIAL_EXEC);
+        }
+        LLVMReplaceAllUsesWith(value.ref, fresh.ref);
+        if (value.is_function()) {
+            value.delete_function();
+        } else {
+            value.delete_global();
+        }
+    }
 }
 
 ## LLVM's `LLVMNoDeduplicateComdatSelectionKind`.

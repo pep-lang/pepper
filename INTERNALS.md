@@ -2073,6 +2073,34 @@ any change to the record's encoding or meaning; `record_schema_test.pep`
 fingerprints the record code and `library_interface_test.pep` compares a
 library read back with `testdata/library_interface.golden`.
 
+**The runtime as a shared library** (`--runtime=shared`, the first step
+of Pepper shared libraries, #220). `BuildOptions.shared_runtime` sets
+`Build.shared_runtime` to `program.in_runtime()`. Such a build is checked in
+its own process (`_in_workers` is false), so its code is generated whole,
+in translation units, and `_build` puts the objects of the units whose
+files are all the runtime's in `runtime_objects`, from the cache or not
+(their keys add `--runtime=shared`, `_codegen_options`), and
+`_link_with_shared_runtime` links those into `runtime_library_path`
+(`pepper_runtime.dll` + import library, `libpepper_runtime.so`,
+`libpepper_runtime.dylib`, beside the output) and the rest against it, with
+a run path of `$ORIGIN` or `@executable_path`. `partition.prepare(shared =
+...)` gives what a runtime file owns default visibility, and on COFF
+`dllexport` (not thread-locals), and lists it (`Partition.imported`, with
+the runtime's parts, `exporting`, both in the `--compile-part` plan); the
+last `keep_parts` before a part is compiled declares those `dllimport`
+outside the runtime's parts (`_import_from_runtime`). The library cannot
+call into the executable, so its `_pep_release_thread_locals`, which
+`define_release_hook` gives the owner of the runtime's `extern` for it,
+calls `__pep_release_hook`, which the program's `__pep_global_init` sets to
+its own release (`PROGRAM_RELEASE_FUNCTION`) first; the program still sets
+the runtime's globals, calling each runtime file's `__pep_init@<namespace>`,
+exported. A Windows DLL's thread-locals cannot be imported: each runtime
+thread-local gets an exported accessor, `__pep_tls.<name>`
+(`define_thread_local_accessor`), which `global_address` calls from code
+no runtime file owns (instantiations included). `find_chains` lets a
+runtime struct steer only into runtime structs, so the library's code never
+names the program's.
+
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes
 beside the output, naming for a static library the system libraries a
