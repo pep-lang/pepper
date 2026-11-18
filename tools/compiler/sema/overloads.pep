@@ -431,6 +431,14 @@ _check_constructors(module: Module, state: PassState): bool {
 ## error.
 _name_method_overloads(module: Module, state: PassState): bool {
     for (var st in module.structs) {
+        # A checked struct's sets came with its record. Grouping it again
+        # would add sets for the specializations its run made after this
+        # pass, so a unit checked on records (or re-checked from its own)
+        # would differ from one checked whole (#571). One a re-check adds
+        # or changes a method of is grouped again.
+        if (module.checked.structs.contains(st.name) and !module.extended_checked.contains(st.name)) {
+            continue;
+        }
         var sets = group_struct_methods(st, state);
         if (!sets.is_value()) {
             return false;

@@ -4078,8 +4078,10 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    up when one of the struct's methods or constructors is missing
    afterwards, or its return type or link summary changed;
 5. drops the closure structs the old bodies and replaced structs lifted,
-   and numbers new ones
-   after every closure left in their files (`PassState.closure_counts`);
+   and numbers new ones after every closure left in their files
+   (`PassState.closure_counts`), and keeps the record's parameter names
+   (`argument_names`) outside those bodies and structs, to merge with the
+   ones the passes find (`_names_kept`);
 6. runs every step, which walk only the unchecked bodies and the
    specializations they newly ask for.
 
@@ -4137,6 +4139,14 @@ and the rest of `record_codec.pep`, generated from the model by
 - `conversions` and `argument_names` are rebuilt by passes over the whole
   module, so each record keeps the compilation unit's own entries: conversions not
   already in the base, and argument names merged by place.
+- A re-check gives the record a check from the files gives, so a Pepper
+  library's interface, a delta on the runtime's record, does not depend on
+  which a build did (#571): it keeps the record's argument names outside
+  the bodies it checks again (`_names_kept`), which the passes would drop,
+  and `name_overloads` groups no checked struct's methods again unless the
+  compilation unit extends it (its sets came with its record, and grouping
+  again would add sets for the specializations its check made after that
+  pass).
 
 The delta writer finds the base's structs, functions and templates by
 identity (`DeltaBase.ref_structs` and the rest), not by encoding and hashing

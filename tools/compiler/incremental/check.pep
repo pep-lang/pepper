@@ -647,6 +647,8 @@ export recheck_compilation_unit(
         }
         dropped.append(span.value());
     }
+    var kept_names = _names_kept(after.argument_names, base, dropped);
+    after.argument_names = kept_names;
     # The closures the old bodies made went with them; the new ones are
     # numbered after every closure of their files.
     var counts = HashMap<long, ulong>();
@@ -715,6 +717,9 @@ export recheck_compilation_unit(
             return _not_rechecked($"the facts of {owner}.{name}: {facts} became {now}");
         }
     }
+    # The passes leave only the names they found: the record's others stay,
+    # as a check from the files would find them.
+    after.argument_names = sema.merge_by_place(kept_names, after.argument_names);
     if (report is Value(out)) {
         out.append_all(state.notes);
     }
@@ -951,6 +956,18 @@ _not_rechecked(why: String): (sema.Module, sema.PassState, sema.TypeAliasDef[])?
 
 # Whether `loc` is in a body `base` changed: where `LocShift` puts what was
 # in the old one.
+# The parameter names (`Module.argument_names`) a re-check keeps of its
+# record: those outside the bodies it checks again, which find theirs anew.
+_names_kept(names: Array<(sema.Loc, String)>, base: RecheckBase, dropped: sema.Loc[]): Array<(sema.Loc, String)> {
+    var kept = Array<(sema.Loc, String)>();
+    for (var (at, name) in names) {
+        if (!_in_changed(base, at) and !_in_any(dropped, at)) {
+            kept.append((at, name));
+        }
+    }
+    return kept;
+}
+
 _in_changed(base: RecheckBase, loc: sema.Loc): bool {
     for (var (file, _, body) in base.changed) {
         if (loc.file == file and loc.span.start >= body.start and loc.span.end <= body.end) {
