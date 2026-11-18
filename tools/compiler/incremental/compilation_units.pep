@@ -116,34 +116,9 @@ export compilation_units(program: link.Program, base: String, root_last: bool = 
         }
         runtime_cycle.append(all);
     }
-    # What each cycle reads: the cycles of the files its files import, and
-    # of the extensions they see.
     var reads = Array<HashSet<ulong>>();
     for (var cycle in cycles) {
-        var read = HashSet<ulong>();
-        for (var file in cycle) {
-            for (var target in program.files[file].imports) {
-                if (target.is_value()) {
-                    read.insert(cycle_of[target.value()]);
-                }
-            }
-            if (file < program.scopes.count) {
-                for (var extension in program.scopes[file].extensions) {
-                    read.insert(cycle_of[extension]);
-                }
-                # A type's extensions go with it: a compilation unit that
-                # reads the type's file reads them too, so a specialization
-                # means the same in every one (`Array<T>.find` uses the `==` an
-                # extension gives `T`). The runtime's types are checked on
-                # their own, before any file outside it.
-                if (!in_runtime[file]) {
-                    for (var extender in program.scopes[file].extended_by) {
-                        read.insert(cycle_of[extender]);
-                    }
-                }
-            }
-        }
-        reads.append(read);
+        reads.append(_cycle_reads(program, cycle, cycle_of, in_runtime));
     }
     # A cycle whose files only import and re-export declares nothing to
     # check: the linker resolved its names to the files they come from. It
@@ -577,6 +552,37 @@ export merged_onto(
     sema.settle_merged(out);
     sema.sort_globals(program, out);
     return Result<sema.Module, String>.ok(out);
+}
+
+# What `cycle` reads: the cycles (`cycle_of`) of the files its files
+# import, and of the extensions they see.
+_cycle_reads(program: link.Program, cycle: ulong[], cycle_of: ulong[], in_runtime: bool[]): HashSet<ulong> {
+    var read = HashSet<ulong>();
+    for (var file in cycle) {
+        for (var target in program.files[file].imports) {
+            if (target.is_value()) {
+                read.insert(cycle_of[target.value()]);
+            }
+        }
+        if (file < program.scopes.count) {
+            for (var extension in program.scopes[file].extensions) {
+                read.insert(cycle_of[extension]);
+            }
+            # A type's extensions go with it: a compilation unit that
+            # reads the type's file reads them too, so a specialization
+            # means the same in every one (`Array<T>.find` uses the `==` an
+            # extension gives `T`). The runtime's types are checked on
+            # their own, before any file outside it, and a Pepper
+            # library's were checked when it was built: its interface's
+            # compilation unit reads no extender, which imports it.
+            if (!in_runtime[file] and program.files[file].interface.is_empty()) {
+                for (var extender in program.scopes[file].extended_by) {
+                    read.insert(cycle_of[extender]);
+                }
+            }
+        }
+    }
+    return read;
 }
 
 # Moves the group of `order` holding cycle `root` last. Whether it could: no

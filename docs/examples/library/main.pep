@@ -19,6 +19,13 @@ extend Circle with geo.Shape {
     }
 }
 
+# A method of the program's own on the library's struct.
+extend geo.Square {
+    perimeter(): int {
+        return 4 * side;
+    }
+}
+
 main(): int {
     var shapes = Array<geo.Shape>();
     shapes.append(geo.Square(3));
@@ -30,6 +37,7 @@ main(): int {
     print($"{geo.pair(Circle(2)).count} circles");
     # A library that imports `geo`, called with the program's shapes.
     print($"total area {scene.total_area(shapes)}");
+    print($"perimeter {geo.Square(3).perimeter()}");
     return 0;
 }
 
@@ -38,3 +46,4 @@ main(): int {
 # a shape of area 3
 # 2 circles
 # total area 12
+# perimeter 12

@@ -3773,7 +3773,9 @@ its whole module. Then it groups the cycles by what they read: "reads"
 means imports and the extensions a file sees, plus coherence: a cycle
 reading a type's file also reads every file extending that type
 (`FileScope.extended_by`), since a specialization made with the type must
-see all of its extensions. A cycle whose files only import and re-export (a
+see all of its extensions. A runtime file and a Pepper library's
+interface file are exempt: they were checked without the program, so the
+files extending their types do not join their compilation unit. A cycle whose files only import and re-export (a
 module's `module.pep`, most often) declares nothing to check, since the
 linker resolved its names: it is no compilation unit, and a cycle reading it
 reads what it reads instead. The strongly connected components of the
