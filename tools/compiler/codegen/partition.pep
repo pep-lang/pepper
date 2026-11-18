@@ -158,9 +158,7 @@ export prepare(
     # The runtime shared library's definitions, on ELF protected, so its own
     # code binds to them (a reference from another of its parts may be
     # direct); COFF and Mach-O have no such visibility, nor need it.
-    var exported = coff or ir.target_triple().contains("apple") ?
-        llvm.Visibility.Default :
-        llvm.Visibility.Protected;
+    var exported = coff or ir.target_triple().contains("apple") ? llvm.Visibility.Default : llvm.Visibility.Protected;
     var exporting = HashSet<uint>();
     var imported = HashSet<String>();
     var sizes = Array<ulong>();
@@ -196,7 +194,14 @@ export prepare(
                 value.set_linkage(llvm.Linkage.External);
                 var spelled = _respell(value, name);
                 _share(
-                    value, spelled, Optional<uint>.Empty, _shared(shared, declared.value()), coff, exported, exporting, imported
+                    value,
+                    spelled,
+                    Optional<uint>.Empty,
+                    _shared(shared, declared.value()),
+                    coff,
+                    exported,
+                    exporting,
+                    imported
                 );
             }
             continue;
@@ -242,7 +247,14 @@ export prepare(
             }
             part_of[spelled] = part;
             _share(
-                value, spelled, Optional<uint>.Value(part), _shared(shared, owner.value()), coff, exported, exporting, imported
+                value,
+                spelled,
+                Optional<uint>.Value(part),
+                _shared(shared, owner.value()),
+                coff,
+                exported,
+                exporting,
+                imported
             );
             sizes[part] += _size(value);
             continue;
