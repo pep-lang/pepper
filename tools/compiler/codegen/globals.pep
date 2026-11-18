@@ -730,12 +730,10 @@ extend Generator {
     ## thread-locals of its own files.
     emit_thread_locals_release(module: Module): Result<void> {
         bool pepper_library = !library_name.is_empty;
-        var name = pepper_library ? library_release_name(library_name) : RELEASE_FUNCTION;
         if (!shared_runtime.is_empty) {
             define_release_hook(module);
-            name = PROGRAM_RELEASE_FUNCTION;
         }
-        var function = declared_void(name);
+        var function = declared_void(_release_function_name());
         if (function.block_count() != 0) {
             return Result<void>.ok();
         }
@@ -791,6 +789,16 @@ extend Generator {
         return Result<void>.ok();
     }
 
+    # The function `emit_thread_locals_release` defines: a Pepper library's
+    # own, the program's, or with the runtime shared library the program's
+    # under `PROGRAM_RELEASE_FUNCTION`.
+    _release_function_name(): String {
+        if (!library_name.is_empty) {
+            return library_release_name(library_name);
+        }
+        return shared_runtime.is_empty ? RELEASE_FUNCTION : PROGRAM_RELEASE_FUNCTION;
+    }
+
     # Ends `function`, a `void` one the runtime may have declared `extern`
     # first, returning Pepper's `void` type, which is not LLVM's.
     _return_nothing(function: llvm.Value) {
@@ -804,9 +812,10 @@ extend Generator {
 
     # Stores the program's `PROGRAM_RELEASE_FUNCTION` in `hook`, the runtime
     # shared library's `RELEASE_HOOK`, if any: the library releases a
-    # thread's thread-locals through it, as it cannot name the program's.
+    # thread's thread-locals through it, as it cannot name the program's. A
+    # Pepper library's init leaves it to the program's.
     _store_release_hook(hook: llvm.Value?) {
-        if (hook.is_value()) {
+        if (hook.is_value() and library_name.is_empty) {
             builder.store(declared_void(PROGRAM_RELEASE_FUNCTION), hook.value());
         }
     }

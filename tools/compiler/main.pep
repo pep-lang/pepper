@@ -109,7 +109,7 @@ _main(args: String[]): int {
     );
     var library = parser.option<driver.LibraryKind>(
         "lib",
-        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`); or for Android apps, `aar` (`name.aar`: a shared library for each Android ABI, with the header); each named for the output. No `main` is needed. `pepper` builds a static library for a Pepper program instead (named as `static` names it), without the runtime, `main` or startup code, which that program supplies",
+        help = "Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions; or for iOS apps, `xcframework` (`name.xcframework`: static libraries for devices and the simulator, with the header and a module map, so Swift can `import name`) or `swift-package` (a folder `name` holding that and a `Package.swift`); or for Android apps, `aar` (`name.aar`: a shared library for each Android ABI, with the header); each named for the output. No `main` is needed. `pepper` builds a static library for a Pepper program instead (named as `static` names it), without the runtime, `main` or startup code, which that program supplies; `pepper-shared` a shared library for Pepper programs (named as `shared` names it), linked against the runtime shared library (`--runtime=shared`) written beside it",
         value_name = "KIND"
     );
     var bindings = parser.option<driver.BindingsKind>(
@@ -370,8 +370,8 @@ _main(args: String[]): int {
     if (debug_static.is_set
         and debug_static.value() == _DebugStatic.Expanded
         and library.is_set
-        and library.value() == driver.LibraryKind.Pepper) {
-        return parser.usage_error("'--debug-static=expanded' cannot build '--lib pepper'");
+        and _for_pepper(library.value())) {
+        return parser.usage_error("'--debug-static=expanded' cannot build a Pepper library");
     }
     if (!path.is_value()
         and (emit_ast.is_set
@@ -430,7 +430,7 @@ _main(args: String[]): int {
             "'--lib pepper' cannot build a shared library: it leaves the runtime out; build a static library for a Pepper program"
         );
     }
-    if (bindings.is_set and (!library.is_set or for_apps or library.value() == driver.LibraryKind.Pepper)) {
+    if (bindings.is_set and (!library.is_set or for_apps or _for_pepper(library.value()))) {
         return parser.usage_error("'--bindings' needs '--lib static' or '--lib shared'");
     }
     if (bindings.is_set
@@ -525,7 +525,7 @@ _main(args: String[]): int {
         _report(cpu.error());
         return 1;
     }
-    var linking = _linking(lto, runtime_link, opt_level.value(), library.is_set, setup.target);
+    var linking = _linking(lto, runtime_link, opt_level.value(), library, setup.target);
     if (linking.is_err()) {
         _report(linking.error());
         return 1;
@@ -604,7 +604,7 @@ _main(args: String[]): int {
     if (kind.is_value()) {
         # The library's own names are namespaced with its name, its header's.
         setup.library = driver.header_path(out, setup.target).file_stem().value_or("");
-        setup.pepper_library = kind.value() == driver.LibraryKind.Pepper;
+        setup.pepper_library = _for_pepper(kind.value());
     }
     var build_folder = build_dir.is_set ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
     if (for_apps) {
@@ -1085,7 +1085,7 @@ _linking(
     lto: cli.Argument<_Lto>,
     runtime_link: cli.Argument<_RuntimeLink>,
     opt_level: uint,
-    library: bool,
+    library: cli.Argument<driver.LibraryKind>,
     target: link.Target
 ): Result<(bool, bool), String> {
     # Link-time optimization: only when asked for, as it optimizes the whole
@@ -1094,24 +1094,30 @@ _linking(
     if (whole and opt_level == 0) {
         return Result<(bool, bool), String>.err("'--lto=full' needs optimization: add '-O'");
     }
-    bool shared = runtime_link.is_set and runtime_link.value() == _RuntimeLink.Shared;
+    # A Pepper shared library links the runtime shared library too.
+    bool pepper_shared = library.is_set and library.value() == driver.LibraryKind.PepperShared;
+    bool shared = pepper_shared or (runtime_link.is_set and runtime_link.value() == _RuntimeLink.Shared);
     if (!shared) {
         return Result<(bool, bool), String>.ok((whole, false));
     }
-    if (library) {
+    if (library.is_set and !pepper_shared) {
         return Result<(bool, bool), String>.err("'--runtime=shared' cannot be used with '--lib'");
     }
+    var option = pepper_shared ? "'--lib pepper-shared'" : "'--runtime=shared'";
     # shortcut: the runtime library is not optimized with the program;
     # link-time optimize the program's own objects if one asks for both.
     if (whole) {
-        return Result<(bool, bool), String>.err("'--runtime=shared' cannot be used with '--lto=full'");
+        return Result<(bool, bool), String>.err($"{option} cannot be used with '--lto=full'");
     }
     if (target.os == "android" or target.os == "wasi" or target.os == "ios") {
-        return Result<(bool, bool), String>.err(
-            $"'--runtime=shared' is not available for '{codegen.target_triple(target)}'"
-        );
+        return Result<(bool, bool), String>.err($"{option} is not available for '{codegen.target_triple(target)}'");
     }
     return Result<(bool, bool), String>.ok((whole, true));
+}
+
+# Whether `kind` builds a library for Pepper programs.
+_for_pepper(kind: driver.LibraryKind): bool {
+    return kind == driver.LibraryKind.Pepper or kind == driver.LibraryKind.PepperShared;
 }
 
 # `--lto`'s modes.

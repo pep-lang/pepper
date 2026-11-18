@@ -73,6 +73,9 @@ export struct Partition {
     ## What the runtime shared library defines and the other parts import,
     ## by linker spelling: on Windows they declare it `dllimport`.
     var imported: HashSet<String> = HashSet<String>();
+    ## What a Pepper shared library exports of its own (`export_own`), by
+    ## linker spelling.
+    var exported: HashSet<String> = HashSet<String>();
 
     construct(part_of: HashMap<String, uint>, sizes: ulong[] = Array<ulong>()) {
         this.part_of = part_of;
@@ -318,6 +321,37 @@ _share(
     }
 }
 
+## Exports from a Pepper shared library (`--lib pepper-shared`) every
+## definition its own `files` own, and its init and release
+## (`LIBRARY_ENTRY_PREFIX`): what a program that imports it calls. They are
+## visible as the runtime library's are (`_exported_visibility`), and on
+## Windows `dllexport`, but for thread-locals, which a DLL cannot export
+## for use.
+##
+## @param ir the library's module, prepared (`prepare`)
+## @param partition its partition, which records them (`Partition.exported`)
+## @param owners each owned symbol's file, by name (`Generator.owners`)
+## @param files per file, whether it is the library's own
+export export_own(ir: llvm.Module, partition: Partition, owners: HashMap<String, uint>, files: bool[]) {
+    var triple = ir.target_triple();
+    var visibility = _exported_visibility(triple);
+    var values = ir.functions();
+    values.append_all(ir.globals());
+    for (var value in values) {
+        var name = value.name();
+        var owner = owners.try_get(partition.names.try_get(name).value_or(name));
+        bool own = owner.is_value() and _shared(files, owner.value());
+        if (value.is_declaration() or (!own and !name.starts_with(LIBRARY_ENTRY_PREFIX))) {
+            continue;
+        }
+        value.set_visibility(visibility);
+        partition.exported.insert(name);
+        if (triple.contains("windows") and LLVMIsThreadLocal(value.ref) == 0) {
+            value.set_dll_storage_class(_DLL_EXPORT);
+        }
+    }
+}
+
 # The visibility of the runtime shared library's definitions for `triple`:
 # on ELF protected, so its own code binds to them (a reference from another
 # of its parts may be direct); COFF and Mach-O have no such visibility, nor
@@ -432,7 +466,7 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>, t
     if (removed.is_err()) {
         return Result<void>.err(removed.error());
     }
-    if (!partition.imported.is_empty) {
+    if (!partition.imported.is_empty or !partition.exported.is_empty) {
         _import_from_runtime(ir, partition, parts);
     }
     _trace(trace, "split: done");
@@ -453,6 +487,11 @@ _import_from_runtime(ir: llvm.Module, partition: Partition, parts: HashSet<uint>
     var values = ir.functions();
     values.append_all(ir.globals());
     for (var value in values) {
+        if (value.is_declaration() and partition.exported.contains(value.name())) {
+            # Another part of the library defines and exports it.
+            value.set_dll_storage_class(_DEFAULT_STORAGE);
+            continue;
+        }
         if (!value.is_declaration() or !partition.imported.contains(value.name())) {
             continue;
         }

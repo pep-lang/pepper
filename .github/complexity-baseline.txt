@@ -84,7 +84,7 @@ tools/compiler/codegen/generator.pep Generator.generate_items 59
 tools/compiler/codegen/generator.pep Generator.generate_module 32
 tools/compiler/codegen/globals.pep Generator.emit_exports 99
 tools/compiler/codegen/globals.pep Generator.emit_globals 93
-tools/compiler/codegen/globals.pep Generator.emit_thread_locals_release 29
+tools/compiler/codegen/globals.pep Generator.emit_thread_locals_release 28
 tools/compiler/codegen/globals.pep Generator.store_constant 27
 tools/compiler/codegen/globals.pep Generator.value_struct_constant 29
 tools/compiler/codegen/lazy.pep _killed_reads 32

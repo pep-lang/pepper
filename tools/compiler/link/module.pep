@@ -35,6 +35,7 @@ export [
     COMPILER_LEVEL,
     KIND_C,
     KIND_PEPPER,
+    KIND_PEPPER_SHARED,
     make_stamp,
     parse_stamp,
     read_stamps,

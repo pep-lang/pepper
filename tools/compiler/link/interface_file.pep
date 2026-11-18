@@ -51,7 +51,7 @@ import os;
 import [Utf8] from text;
 import "names" as names;
 import [Target] from "platform";
-import [RECORD_VERSION] from "stamp";
+import [KIND_PEPPER_SHARED, read_stamps, RECORD_VERSION] from "stamp";
 
 ## The first line of a library interface, before its record version.
 export const INTERFACE_MAGIC = "pepper-library-interface ";
@@ -148,6 +148,24 @@ export interface_file_name(name: String, target: Target): String {
     return target.os == "windows" ? $"{name}.{INTERFACE_EXTENSION}" : $"lib{name}.{INTERFACE_EXTENSION}";
 }
 
+# Whether a Pepper shared library (`KIND_PEPPER_SHARED`) built with the
+# interface `path` is beside it: one an earlier build left there, before
+# the library was built static, is not.
+# shortcut: a program cannot import one yet (#220); load it as an archive's
+# interface once it can.
+_is_pepper_shared(path: Path, target: Target): bool {
+    var shared = path.with_extension(target.os == "windows" ? "dll" : (target.is_apple() ? "dylib" : "so"));
+    if (!shared.is_file()) {
+        return false;
+    }
+    var stamps = read_stamps(shared);
+    if (stamps.is_err() or stamps.value().is_empty or stamps.value()[0].kind != KIND_PEPPER_SHARED) {
+        return false;
+    }
+    var bytes = File.read_bytes(path);
+    return bytes.is_ok() and stamps.value()[0].interface == interface_hash(bytes.value());
+}
+
 ## Returns the folders of `$PEPPER_LIBRARY_PATH`, separated as in `PATH`.
 ##
 ## @returns the folders
@@ -189,6 +207,13 @@ export find_library_interface(name: String, dirs: Path[], target: Target): Resul
         var path = dir.join(Path(interface_file_name(name, target)));
         if (!path.is_file()) {
             continue;
+        }
+        if (_is_pepper_shared(path, target)) {
+            return Optional<Result<LibraryInterface, String>>.Value(
+                Result<LibraryInterface, String>.err(
+                    $"the Pepper library '{name}' is a shared library ('--lib pepper-shared'), which a program cannot import yet"
+                )
+            );
         }
         var archive = path.with_extension(target.os == "windows" ? "lib" : "a");
         if (!archive.is_file()) {

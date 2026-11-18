@@ -30,6 +30,11 @@ export const KIND_PEPPER = "pepper";
 ## runtime (`--lib static`, `--lib shared`, and any version 1 stamp).
 export const KIND_C = "c";
 
+## A stamp's `kind` for a shared library built for Pepper programs
+## (`--lib pepper-shared`): it links the runtime shared library rather than
+## holding a runtime.
+export const KIND_PEPPER_SHARED = "pepper-shared";
+
 ## The ABI the compiler writes code for. A compiler change that changes
 ## what the code of two builds relies on of each other (struct layouts,
 ## name mangling, the reference counting protocol, release hooks) bumps it.
@@ -70,7 +75,8 @@ export struct Stamp {
     var checks: String = "";
     ## Whether every function keeps its frame pointer.
     var frame_pointers: bool = false;
-    ## A library's kind (`KIND_PEPPER`, `KIND_C`); empty for a program.
+    ## A library's kind (`KIND_PEPPER`, `KIND_PEPPER_SHARED`, `KIND_C`);
+    ## empty for a program.
     var kind: String = "";
     ## A Pepper library's name; empty for any other build.
     var library: String = "";
@@ -114,7 +120,7 @@ export struct Stamp {
         if (!library.is_empty) {
             out.append($"library {library}\ninit {init}\nrelease {release}\n");
         }
-        if (kind == KIND_PEPPER) {
+        if (kind == KIND_PEPPER or kind == KIND_PEPPER_SHARED) {
             out.append($"record {record}\n");
         }
         if (!runtime_interface.is_empty) {

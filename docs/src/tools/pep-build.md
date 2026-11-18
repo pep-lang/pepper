@@ -27,6 +27,7 @@ short, and `pepper help build` runs it.
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--lib pepper` | Build a static library for a Pepper program, without the runtime, which the program supplies | an executable |
+| `--lib pepper-shared` | Build a shared library for Pepper programs, linked against the runtime shared library beside it (importing one is not supported yet) | an executable |
 | `--lib xcframework`, `--lib swift-package` | Build an iOS `.xcframework`, or a Swift package around one, for an app | an executable |
 | `--lib aar` | Build an Android library (`.aar`) holding a shared library for each ABI, for an app | an executable |
 | `--bindings swift`, `--bindings java` | With `--lib static` or `--lib shared` (`java`: `--lib shared`), also write Swift or Java bindings of the `[Export]`ed functions beside the header | none |
@@ -315,6 +316,28 @@ compilation unit on the runtime's, so `--lib pepper` checks the library
 whole on each build, with or without the build cache; it cannot be
 combined with `--debug-static=expanded`. See
 [Pepper libraries](../language/libraries.md).
+
+### `--lib pepper-shared`
+
+Builds a Pepper library as a shared library, named as `--lib shared` names
+it (`libname.so`, `libname.dylib`, `name.dll` with its import library
+`name.lib`), with the header and the interface (`.pepi`) beside it, as
+`--lib pepper` writes them. It holds the library's own code, as
+`--lib pepper`'s archive does, and links the runtime as a shared library,
+which it writes beside itself as `--runtime=shared` does and finds there
+at run time (`$ORIGIN`, `@loader_path`, or the library's folder on
+Windows). It exports its functions, globals and constants, under the names
+its interface links them by, and its init and release; its thread-locals
+it does not export. Its stamp's kind is `pepper-shared`.
+
+It is the second step to Pepper shared libraries
+([#220](https://github.com/pep-lang/pepper/issues/220)): a program cannot
+import one yet. `import geo;` that finds one stops with
+`the Pepper library 'geo' is a shared library ('--lib pepper-shared'),
+which a program cannot import yet`, and linking one with `-l` or `[Link]`
+is refused the same way. The limits of `--runtime=shared` apply: no
+`--lto=full`, no Android, iOS or WebAssembly, and it cannot import a
+`--lib pepper` library.
 
 ### `--bindings swift`, `--bindings java`
 

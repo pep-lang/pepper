@@ -10,6 +10,7 @@ import [Directory, File, Path] from io;
 import compiler.link;
 import process;
 import [TempFolder] from testing;
+import [Utf8] from text;
 import [expect_contains, expect_exit, run, tool, write_file] from tool_testing;
 import toolchain;
 
@@ -612,4 +613,74 @@ a_program_links_the_runtime_as_a_shared_library() {
     var mixed = _pep_build(source, program, ["--runtime=shared", "-O", "--lto=full"]);
     expect_exit(mixed, 1);
     expect_contains(mixed.stderr, "'--runtime=shared' cannot be used with '--lto=full'");
+}
+
+# A chain that runs through a runtime struct (`compress.DecompressReader`)
+# and the program's `Wrap` in turn is released without overflowing the
+# stack with `--runtime=shared` too, through `_pep_release_last`
+# (`testdata/shared_runtime_chain`); the static build, which steers through
+# the program's structs, as a check.
+[Test]
+a_chain_through_the_runtime_library_releases_without_overflow() {
+    var folder = TempFolder("shared_runtime_chain");
+    var source = folder.path.join("app").join("main.pep");
+    write_file(source, File.read_to_string(Path("compiler/testdata/shared_runtime_chain/main.pep")).value());
+    var program = folder.path.join("app").join("main" + toolchain.executable_suffix());
+    for (var options in [Array<String>(), ["--runtime=shared"]]) {
+        expect_exit(_pep_build(source, program, options), 0);
+        for (var depth in ["10", "100000"]) {
+            var ran = run(process.Command(program.to_string()).argument(depth));
+            expect_exit(ran, 0);
+            expect_equal(ran.stdout.trim(), "chain released true");
+        }
+    }
+}
+
+# `--lib pepper-shared` builds a Pepper library as a shared library: its
+# own code, exported, linked against the runtime shared library beside it,
+# with its interface beside it and a stamp of its kind. A program can
+# neither import nor link one yet.
+[Test]
+a_pepper_shared_library_links_the_runtime_library() {
+    var folder = TempFolder("pepper_shared_library");
+    var root = folder.path;
+    var host = link.Target();
+    var source = root.join("geo").join("geo.pep");
+    write_file(source, _GEO);
+    var library = root.join("geo").join(driver.library_file_name(driver.LibraryKind.PepperShared, "geo", host));
+    expect_exit(_pep_build(source, library, ["--lib", "pepper-shared"]), 0);
+    expect_true(driver.runtime_library_path(library, host).is_file());
+    var interface = File.read_bytes(library.with_extension(link.INTERFACE_EXTENSION)).value();
+    var stamps = link.read_stamps(library).value();
+    expect_equal(stamps[0].kind, link.KIND_PEPPER_SHARED);
+    expect_equal(stamps[0].init, "__pep_library_init.geo");
+    expect_equal(stamps[0].interface, link.interface_hash(interface));
+    # Its functions are exported under the names the interface links them
+    # by: on ELF and COFF the dynamic symbol table spells each whole (a
+    # Mach-O export trie shares their prefixes).
+    if (!host.is_apple()) {
+        var text = Utf8.decode_lossy(interface);
+        var declared = "declare function geo_badge@";
+        var start = text.find(declared) + 17;
+        var end = text.substr_bytes(start as ulong, text.size - start as ulong).find("\n");
+        var symbol = link.symbol_name(text.substr_bytes(start as ulong, end as ulong).split(" ")[0]);
+        var bytes = File.read_bytes(library).value();
+        expect_true(_find(bytes, symbol.bytes()) < bytes.count);
+    }
+    var main = root.join("app").join("main.pep");
+    var program = root.join("app").join("main" + toolchain.executable_suffix());
+    var linking = ["-L", root.join("geo").to_string()];
+    write_file(main, "import geo;\n\nmain(): int {\n    return geo.geo_seed();\n}\n");
+    var imported = _pep_build(main, program, linking);
+    expect_exit(imported, 1);
+    expect_contains(
+        imported.stderr,
+        "the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which a program cannot import yet"
+    );
+    write_file(main, _MAIN);
+    var linked = _pep_build(main, program, linking);
+    expect_exit(linked, 1);
+    expect_contains(
+        linked.stderr, "is a Pepper shared library ('--lib pepper-shared'), which a program cannot link yet"
+    );
 }
