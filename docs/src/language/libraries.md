@@ -47,8 +47,10 @@ or without the build cache.
 
 The program [`main.pep`](../../examples/library/main.pep) imports `geo`
 (and `scene`, a library built on it, [below](#a-library-that-imports-a-library)),
-gives a struct of its own the library's trait, and calls the library's
-generic at that struct:
+gives a struct of its own the library's trait, calls the library's
+generic at that struct, and extends the library's struct with a method of
+its own (`extend geo.Square`; a library can extend another's type the same
+way):
 
 ```pepper
 {{#include ../../examples/library/main.pep}}
@@ -204,10 +206,6 @@ keeps the program's copy, which comes ahead of the library's archive.
 
 ## Not supported yet
 
-- **Extending a library's type.** A program or a library that extends a
-  type of a library it imports (`extend geo.Square { ... }`) does not
-  build: it reports `has no body` errors in the library's interface.
-  Give the type the method in the library itself.
 - **Shared libraries.** `--lib pepper` writes a static library only:
   a shared library must hold a runtime of its own (`--lib shared`), and
   then only C types cross between it and the program.

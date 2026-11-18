@@ -137,7 +137,7 @@ tools/compiler/incremental/check.pep _differ 48
 tools/compiler/incremental/check.pep check_compilation_units 90
 tools/compiler/incremental/check.pep recheck_compilation_unit 84
 tools/compiler/incremental/compilation_units.pep _components 56
-tools/compiler/incremental/compilation_units.pep compilation_units 139
+tools/compiler/incremental/compilation_units.pep compilation_units 114
 tools/compiler/incremental/interface.pep file_names 49
 tools/compiler/incremental/interface.pep interface_hash 53
 tools/compiler/incremental/workers.pep check_in_workers 131

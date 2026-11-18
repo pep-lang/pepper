@@ -431,6 +431,30 @@ _build_imported_top(root: Path): Path {
     return archive;
 }
 
+# A Pepper library (`measure.pep`) and a program (`extends.pep`) each extend
+# a struct of the library `geo` they import: `geo`'s interface is checked
+# already, not again with the files that extend it.
+[Test]
+a_program_and_a_library_extend_a_library_type() {
+    var folder = TempFolder("pepper_library_extend");
+    var root = folder.path;
+    _build_imported_geo(root);
+    var source = root.join("src").join("measure.pep");
+    write_file(source, File.read_to_string(Path("compiler/testdata/imported_library/measure.pep")).value());
+    expect_exit(
+        _pep_build(
+            source, _archive(root.join("lib"), "measure"), ["--lib", "pepper", "-L", root.join("lib").to_string()]
+        ),
+        0
+    );
+    var main = File.read_to_string(Path("compiler/testdata/imported_library/extends.pep")).value();
+    for (var options in [Array<String>(), ["--no-cache"], ["-O", "--lto=full"]]) {
+        var (built, program) = _build_importer(root, main, options);
+        expect_exit(built, 0);
+        expect_equal(_run_program(program), "7 12 12");
+    }
+}
+
 # A program cannot import from source a module a library it imports
 # carries: the error is at the program's import of the module, with a note
 # at its import of the library.
