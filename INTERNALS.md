@@ -2113,9 +2113,9 @@ written beside it. `codegen.export_own` (from `_export_library`, after
 thread-locals), recording them in `Partition.exported` (the plan's
 `exported` lines), whose declarations in the library's other parts
 `_import_from_runtime` gives back the default storage class. Its stamp's
-kind is `KIND_PEPPER_SHARED`. A program cannot use one yet: `link.load`'s
-`find_library_interface` refuses one beside an interface
-(`_is_pepper_shared`), and `check_library_stamps` one linked by `-l`.
+kind is `KIND_PEPPER_SHARED`. A program cannot use one yet: `link.load`
+refuses one built with the interface an import finds (`_find_interface`,
+`program.pep`), and `check_library_stamps` one linked by `-l`.
 
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes

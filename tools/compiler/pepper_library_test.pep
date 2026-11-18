@@ -218,7 +218,7 @@ a_shared_pepper_library_is_refused() {
     var archive = folder.path.join(driver.library_file_name(driver.LibraryKind.Pepper, "geo", host));
     var expanded = _pep_build(source, archive, ["--lib", "pepper", "-g", "--debug-static=expanded"]);
     expect_exit(expanded, 2);
-    expect_contains(expanded.stderr, "'--debug-static=expanded' cannot build '--lib pepper'");
+    expect_contains(expanded.stderr, "'--debug-static=expanded' cannot build a Pepper library");
 }
 
 # Builds `testdata/imported_library/geo.pep` as the Pepper library `geo`
