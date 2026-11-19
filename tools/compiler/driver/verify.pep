@@ -51,6 +51,9 @@ export verify_cache(program: link.Program, options: BuildOptions): Result<void, 
     again.version = options.version;
     again.debug_static_expanded = options.debug_static_expanded;
     again.entry = options.entry;
+    # Keeps the runtime's units out of the shared cache (`_share_runtime`),
+    # so they are generated and compared too.
+    again.verify_cutoff = true;
     var built = build(program, again);
     if (built.is_err()) {
         Directory.remove_all(dir);

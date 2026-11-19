@@ -536,14 +536,20 @@ verify_cache_finds_a_cached_object_that_differs() {
     _succeeds(folder.path, arguments);
     _succeeds(folder.path, arguments);
     # An object the cache holds, changed (bytes past its end, which the
-    # linker ignores): the next check fails, naming it.
+    # linker ignores): the next check fails, naming it. With the shared
+    # cache on, a runtime unit's object (the first on Windows) is compared
+    # too (#583).
     var objects = Array<Path>();
     _objects(folder.path.join(Path("cache")), objects);
     expect_true(!objects.is_empty);
     var bytes = File.read_bytes(objects[0]).value();
     bytes.append(0);
     File.write_bytes(objects[0], bytes);
-    var ran = _pep_build(folder.path, arguments);
+    var checking = process.Command(_compiler().to_string());
+    checking.arguments(arguments).working_directory(folder.path);
+    checking.environment("PEPPER_SHARED_CACHE", folder.path.join(Path("shared")).to_string());
+    checking.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    var ran = checking.run().value();
     expect_equal(_code(ran), 1);
     expect_true(ran.stderr.contains("differ from the code generated for them again"));
     # Without `--verify-cache` the build trusts the cache.
