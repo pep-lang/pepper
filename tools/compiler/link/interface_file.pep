@@ -51,7 +51,7 @@ import os;
 import [Utf8] from text;
 import "names" as names;
 import [Target] from "platform";
-import [RECORD_VERSION] from "stamp";
+import [KIND_PEPPER, KIND_PEPPER_SHARED, read_stamps, RECORD_VERSION] from "stamp";
 
 ## The first line of a library interface, before its record version.
 export const INTERFACE_MAGIC = "pepper-library-interface ";
@@ -177,8 +177,9 @@ export interface_hash(bytes: u8[]): String {
 }
 
 ## Returns the interface of the library `name` in the first of `dirs` that
-## holds one (`interface_file_name`), with its archive beside it; none when
-## no folder does.
+## holds one (`interface_file_name`), with its archive beside it, or the
+## Pepper shared library built with it (`--lib pepper-shared`), which then
+## stands for the archive; none when no folder does.
 ##
 ## @param name the library's name
 ## @param dirs the library folders, in search order
@@ -190,7 +191,10 @@ export find_library_interface(name: String, dirs: Path[], target: Target): Resul
         if (!path.is_file()) {
             continue;
         }
-        var archive = path.with_extension(target.os == "windows" ? "lib" : "a");
+        # A Pepper shared library built with the interface stands for the archive.
+        var archive = _is_pepper_shared(path, target) ?
+            shared_library_path(path, target) :
+            path.with_extension(target.os == "windows" ? "lib" : "a");
         if (!archive.is_file()) {
             return Optional<Result<LibraryInterface, String>>.Value(
                 Result<LibraryInterface, String>.err(
@@ -214,6 +218,46 @@ export find_library_interface(name: String, dirs: Path[], target: Target): Resul
         return Optional<Result<LibraryInterface, String>>.Value(Result<LibraryInterface, String>.ok(out));
     }
     return Optional<Result<LibraryInterface, String>>.Empty;
+}
+
+# Returns the Pepper shared library (`--lib pepper-shared`) of the
+# interface `path` (`libgeo.pepi`): `libgeo.so`, `libgeo.dylib` or
+# `geo.dll` beside it.
+shared_library_path(path: Path, target: Target): Path {
+    return path.with_extension(target.os == "windows" ? "dll" : (target.is_apple() ? "dylib" : "so"));
+}
+
+# Whether the library of the interface `path` is a Pepper shared library
+# (`KIND_PEPPER_SHARED`) built with it, rather than an archive: the
+# interface is the same for both kinds, so a static library built after a
+# shared one in its folder is the archive beside it, stamped `KIND_PEPPER`
+# and newer than the shared library. A Windows import library has no stamp.
+_is_pepper_shared(path: Path, target: Target): bool {
+    var shared = shared_library_path(path, target);
+    if (!_stamped(shared, KIND_PEPPER_SHARED)) {
+        return false;
+    }
+    var bytes = File.read_bytes(path);
+    if (bytes.is_err() or read_stamps(shared).value()[0].interface != interface_hash(bytes.value())) {
+        return false;
+    }
+    var archive = path.with_extension(target.os == "windows" ? "lib" : "a");
+    return !_stamped(archive, KIND_PEPPER) or _modified(archive) < _modified(shared);
+}
+
+# Whether `file` exists and its first stamp is of kind `kind`.
+_stamped(file: Path, kind: String): bool {
+    if (!file.is_file()) {
+        return false;
+    }
+    var stamps = read_stamps(file);
+    return stamps.is_ok() and !stamps.value().is_empty and stamps.value()[0].kind == kind;
+}
+
+# When `file` was last written; 0 when that cannot be read.
+_modified(file: Path): long {
+    var metadata = file.metadata();
+    return metadata.is_ok() ? metadata.value().modified : 0;
 }
 
 ## Reads the interface file `bytes` into `out`: its files, its record and

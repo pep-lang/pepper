@@ -27,7 +27,7 @@ import [demangle_name] from "names";
 import [Target, undefined_build_option_comparisons] from "platform";
 import [load_manifest, Packages, ungenerated_module] from "project";
 import "project";
-import [COMPILER_LEVEL, KIND_PEPPER, KIND_PEPPER_SHARED, read_stamps, REQUIRED_LEVEL_NAME] from "stamp";
+import [COMPILER_LEVEL, REQUIRED_LEVEL_NAME] from "stamp";
 import [check_visibility] from "visibility";
 
 ## Where a program's files come from, beyond its root.
@@ -563,75 +563,6 @@ struct _Queued {
     }
 }
 
-# `find_library_interface`, or for a Pepper shared library's interface the
-# same with the shared library as its `archive` (`shared_library_path`),
-# which the build links and copies beside its output.
-_find_interface(name: String, dirs: Path[], target: Target): Result<LibraryInterface, String>? {
-    for (var dir in dirs) {
-        var path = dir.join(Path(interface_file_name(name, target)));
-        if (!path.is_file()) {
-            continue;
-        }
-        # The first interface found wins, as `find_library_interface` takes it.
-        if (!_is_pepper_shared(path, target)) {
-            break;
-        }
-        var out = LibraryInterface(name, path, shared_library_path(path, target));
-        var bytes = File.read_bytes(path);
-        var read = bytes.is_ok() ? read_interface_bytes(out, bytes.value()) : Optional<String>.Value("cannot read it");
-        if (read.is_value()) {
-            return Optional<Result<LibraryInterface, String>>.Value(
-                Result<LibraryInterface, String>.err($"{path}: {read.value()}")
-            );
-        }
-        return Optional<Result<LibraryInterface, String>>.Value(Result<LibraryInterface, String>.ok(out));
-    }
-    return find_library_interface(name, dirs, target);
-}
-
-## Returns the Pepper shared library (`--lib pepper-shared`) of the
-## interface `path`: `libgeo.so`, `libgeo.dylib` or `geo.dll` beside it.
-##
-## @param path the interface (`libgeo.pepi`, `geo.pepi`)
-## @param target the platform it is for
-## @returns the shared library's path
-export shared_library_path(path: Path, target: Target): Path {
-    return path.with_extension(target.os == "windows" ? "dll" : (target.is_apple() ? "dylib" : "so"));
-}
-
-# Whether the library of the interface `path` is a Pepper shared library
-# (`KIND_PEPPER_SHARED`) built with it, rather than an archive: the
-# interface is the same for both kinds, so a static library built after a
-# shared one in its folder is the archive beside it, stamped `KIND_PEPPER`
-# and newer than the shared library. A Windows import library has no stamp.
-_is_pepper_shared(path: Path, target: Target): bool {
-    var shared = shared_library_path(path, target);
-    if (!_stamped(shared, KIND_PEPPER_SHARED)) {
-        return false;
-    }
-    var bytes = File.read_bytes(path);
-    if (bytes.is_err() or read_stamps(shared).value()[0].interface != interface_hash(bytes.value())) {
-        return false;
-    }
-    var archive = path.with_extension(target.os == "windows" ? "lib" : "a");
-    return !_stamped(archive, KIND_PEPPER) or _modified(archive) < _modified(shared);
-}
-
-# Whether `file` exists and its first stamp is of kind `kind`.
-_stamped(file: Path, kind: String): bool {
-    if (!file.is_file()) {
-        return false;
-    }
-    var stamps = read_stamps(file);
-    return stamps.is_ok() and !stamps.value().is_empty and stamps.value()[0].kind == kind;
-}
-
-# When `file` was last written; 0 when that cannot be read.
-_modified(file: Path): long {
-    var metadata = file.metadata();
-    return metadata.is_ok() ? metadata.value().modified : 0;
-}
-
 # Where the file of namespace `namespace` of the library interface
 # `interface` loads from: a path inside the interface file, which names it
 # in diagnostics.
@@ -827,7 +758,7 @@ export load(
                         if (!found.is_value() and !imp.name.contains(".")) {
                             var known = interfaces.try_get(imp.name);
                             if (!known.is_value()) {
-                                var read = _find_interface(imp.name, library_dirs, target);
+                                var read = find_library_interface(imp.name, library_dirs, target);
                                 if (read.is_value() and read.value().is_err()) {
                                     program.errors.append(ModuleError(file, imp.name_span, read.value().error()));
                                     targets.append(Optional<String>.Empty);

@@ -359,7 +359,7 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
     }
     # A Pepper shared library links the runtime library, whether or not its
     # stamp says so (`runtime_link` came after `KIND_PEPPER_SHARED`).
-    bool shared = library.kind == KIND_PEPPER_SHARED;
+    bool shared = library.kind == KIND_PEPPER_SHARED or library.runtime_link == RUNTIME_LINK_SHARED;
     if (shared != (build.runtime_link == RUNTIME_LINK_SHARED)) {
         return Optional<String>.Value(
             !shared ?

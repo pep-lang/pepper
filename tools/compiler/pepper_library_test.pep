@@ -769,5 +769,23 @@ a_program_imports_two_pepper_shared_libraries() {
     expect_true(
         File.read_bytes(root.join("app").join(base.file_name().value())).value() == File.read_bytes(base).value()
     );
-    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true");
+    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true");  # Linked by name without the library it needs, `top` is refused: `base`
+    # would be neither initialized first nor found.
+    var lone = root.join("lone").join("main.pep");
+    write_file(lone, "main(): int {\n    return 0;\n}\n");
+    var unmet = _pep_build(
+        lone,
+        root.join("lone").join("main" + toolchain.executable_suffix()),
+        ["--runtime=shared", "-L", lib.to_string(), "-l", "top"]
+    );
+    expect_exit(unmet, 1);
+    expect_contains(unmet.stderr, "needs the Pepper library 'base', which this build does not link");
+    # Built into the libraries' folder, the program finds them there.
+    expect_exit(
+        _pep_build(main, lib.join("main" + toolchain.executable_suffix()), ["--runtime=shared", "-L", lib.to_string()]),
+        0
+    );
+    expect_equal(
+        _run_program(lib.join("main" + toolchain.executable_suffix())), "40 41 42 base,top,main 1 1 one heap true"
+    );
 }

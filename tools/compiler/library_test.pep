@@ -919,6 +919,14 @@ stamps_read_back_and_match() {
     expect_equal(parsed.text(), stamp.text());
     expect_false(link.parse_stamp(link.STAMP_MAGIC).is_value());
     expect_false(link.stamp_mismatch(parsed, stamp).is_value());
+    # A build that links the runtime library says so, and takes only a
+    # library that does too.
+    var shared = link.parse_stamp(stamp.text()).value();
+    shared.runtime_link = link.RUNTIME_LINK_SHARED;
+    expect_equal(link.parse_stamp(shared.text()).value().runtime_link, link.RUNTIME_LINK_SHARED);
+    expect_true(link.stamp_mismatch(stamp, shared).value().starts_with("it holds no runtime"));
+    expect_true(link.stamp_mismatch(shared, stamp).value().starts_with("it links the runtime shared library"));
+    expect_false(link.stamp_mismatch(shared, shared).is_value());
 
     var newer = link.make_stamp("0.2.0", "linux", "x86_64", ["prelude"], HashMap<String, String>());
     newer.cpu = "x86-64";

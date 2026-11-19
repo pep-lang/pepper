@@ -2091,11 +2091,7 @@ _beside_output_written(options: BuildOptions, program: link.Program, header: Pat
 # `_place_shared_libraries` copies it: a library rebuilt with the same
 # interface leaves the program's key as it was, but not its copy.
 _shared_libraries_placed(options: BuildOptions): bool {
-    for (var library in _shared_libraries(options)) {
-        var placed = _beside(options.output, library.file_name().value_or(""));
-        if (placed.to_string() == library.to_string()) {
-            continue;
-        }
+    for (var (library, placed) in _placements(options)) {
         var ours = File.read_bytes(placed);
         var theirs = File.read_bytes(library);
         if (ours.is_err() or theirs.is_err() or ours.value() != theirs.value()) {
@@ -2227,11 +2223,7 @@ _link(
 # run path, or in its folder on Windows. A library build leaves them where
 # they are.
 _place_shared_libraries(options: BuildOptions): Result<void, String> {
-    for (var library in _shared_libraries(options)) {
-        var placed = _beside(options.output, library.file_name().value_or(""));
-        if (placed.to_string() == library.to_string()) {
-            continue;
-        }
+    for (var (library, placed) in _placements(options)) {
         var copied = File.copy(library, placed);
         if (copied.is_err()) {
             return Result<void, String>.err($"cannot copy {library} to {placed}: {copied.error().message}");
@@ -2240,21 +2232,33 @@ _place_shared_libraries(options: BuildOptions): Result<void, String> {
     return Result<void, String>.ok();
 }
 
-# The Pepper shared libraries a program links (`options.linked`), which
-# `_place_shared_libraries` copies beside it; none for a library build.
-_shared_libraries(options: BuildOptions): Path[] {
-    var out = Array<Path>();
+# Each Pepper shared library a program links (`options.linked`) and where
+# `_place_shared_libraries` copies it, beside the program; none for a
+# library build, nor for one already there.
+_placements(options: BuildOptions): (Path, Path)[] {
+    var out = Array<(Path, Path)>();
     if (options.library.is_value() or !options.linked.is_value()) {
         return out;
     }
     var seen = HashSet<String>();
+    var folder = _canonical(options.output.parent().value_or(Path(".")));
     for (var found in options.linked.value()) {
         bool shared = !found.stamps.is_empty and found.stamps[0].kind == link.KIND_PEPPER_SHARED;
-        if (shared and seen.insert(found.file.to_string())) {
-            out.append(found.file);
+        var name = found.file.file_name().value_or("");
+        # `-L out -o ./out/main` names one folder two ways.
+        bool there = _canonical(found.file.parent().value_or(Path("."))) == folder;
+        if (shared and !there and seen.insert(name)) {
+            out.append((found.file, _beside(options.output, name)));
         }
     }
     return out;
+}
+
+# `dir`'s canonical path as text, or `dir` as given when it has none.
+_canonical(dir: Path): String {
+    var given = dir.to_string().is_empty ? Path(".") : dir;
+    var canonical = given.canonicalize();
+    return (canonical.is_ok() ? canonical.value() : given).to_string();
 }
 
 # Links `runtime_objects`, the whole runtime's, into the runtime shared

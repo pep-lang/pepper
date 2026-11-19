@@ -687,6 +687,10 @@ export read_library_stamps(libraries: String[], dirs: Path[], objects: Path[], t
 ##   name that found it (empty for a file linked by path) and the error
 export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(String, String)[], (String, String)> {
     var warnings = Array<(String, String)>();
+    var unmet = _unmet_need(files);
+    if (unmet.is_value()) {
+        return Result<(String, String)[], (String, String)>.err(unmet.value());
+    }
     for (var found in files) {
         for (var stamp in found.stamps) {
             var mismatch = link.stamp_mismatch(stamp, build);
@@ -704,6 +708,32 @@ export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(St
         }
     }
     return Result<(String, String)[], (String, String)>.ok(warnings);
+}
+
+# The first Pepper shared library of `files` that needs a Pepper library
+# `files` lack, with the name that found it and the error: the program
+# would load it without initializing that one first, or not load at all.
+# A static library's missing need fails the link instead.
+_unmet_need(files: StampedFile[]): (String, String)? {
+    var linked = HashSet<String>();
+    for (var stamp in pepper_libraries(files)) {
+        linked.insert(stamp.library);
+    }
+    for (var found in files) {
+        for (var stamp in found.stamps) {
+            for (var need in stamp.kind == link.KIND_PEPPER_SHARED ? stamp.needs : Array<String>()) {
+                if (!linked.contains(need)) {
+                    return Optional<(String, String)>.Value(
+                        (
+                            found.name,
+                            $"'{found.file}' needs the Pepper library '{need}', which this build does not link; link or import it too"
+                        )
+                    );
+                }
+            }
+        }
+    }
+    return Optional<(String, String)>.Empty;
 }
 
 ## Returns the stamps of the Pepper libraries (`--lib pepper`,

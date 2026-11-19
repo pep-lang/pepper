@@ -343,8 +343,8 @@ thread-locals, as it does a static one's. A library can import another this
 way. A build that holds the runtime cannot: `import geo;` there stops with
 `the Pepper library 'geo' is a shared library ('--lib pepper-shared'),
 which links the runtime shared library; build with '--runtime=shared' to
-import it`, and linking one with `-l` or `[Link]` is refused by its stamp's
-`runtime-link` line (with `--runtime=shared`, a program links one by name too,
+import it`, and linking one with `-l` or `[Link]` is refused by its stamp
+(its kind, and its `runtime-link` line) (with `--runtime=shared`, a program links one by name too,
 and copies it beside itself). A `--lib pepper` archive built later beside it, from
 the same interface, is imported as a static library. The limits of
 `--runtime=shared` apply: no `--lto=full`, no Android, iOS or
