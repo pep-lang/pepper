@@ -424,17 +424,25 @@ long it is, it does not run out of stack. The library was compiled
 without knowing the program's structs, so the program compiles its own
 release of each library struct its chains run through, and the linker
 keeps the program's copy, which comes ahead of the library's archive.</p>
+<h2 id="shared-libraries"><a class="header" href="#shared-libraries">Shared libraries</a></h2>
+<p><code>--lib pepper-shared</code> builds a Pepper library as a shared library
+(<code>libgeo.so</code>, <code>libgeo.dylib</code>, <code>geo.dll</code>) with the same interface beside it.
+It holds no runtime: it links the runtime shared library, which it writes
+beside itself. A program built with
+<a href="../tools/pep-build.html#--runtimestatic---runtimeshared"><code>--runtime=shared</code></a>
+imports it as it imports a static library, and links the same runtime
+library instead of holding the runtime, so the program and every library
+it imports share one heap, one set of runtime thread-locals and one order
+of initialization:</p>
+<pre><code class="language-bash">pepper build --lib pepper-shared geo.pep -o lib/libgeo.so
+pepper build --runtime=shared main.pep -L lib -o main
+</code></pre>
+<p>The program copies the libraries it imports beside itself, and finds them
+and the runtime library there at run time. A shared library can import
+another; a program that holds the runtime cannot import one (see
+<a href="../tools/pep-build.html#--lib-pepper-shared"><code>--lib pepper-shared</code></a>).</p>
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
-<li>
-<p><strong>Shared libraries.</strong> A program imports only a static library
-(<code>--lib pepper</code>). <code>--lib pepper-shared</code> builds a Pepper library as a
-shared library, linked against the runtime shared library
-(<a href="../tools/pep-build.html#--runtimestatic---runtimeshared"><code>--runtime=shared</code></a>),
-but a program cannot import or link one yet. A shared library for C
-(<code>--lib shared</code>) holds a runtime of its own, and then only C types cross
-between it and the program.</p>
-</li>
 <li>
 <p><strong>A module both use from source.</strong> A library carries the source modules
 it imports, other than the runtime's (an <code>-I</code> module, a package), in its

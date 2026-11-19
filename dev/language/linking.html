@@ -353,11 +353,13 @@ archive (see <a href="libraries.html#one-runtime">One runtime</a>).</p>
 <ul>
 <li>A <code>--lib static</code> archive is for C: it holds its own runtime and startup
 code, which clash with the program's at the link.</li>
-<li><code>--lib pepper</code> writes a static library only. A shared library must hold
-its runtime, which <code>--lib shared</code> gives it: a Pepper program links one too,
-but then it has a second runtime of its own, so free a string it returns
-with its own <code>pepper_string_free</code>, and pass no handle from one to the
-other.</li>
+<li><code>--lib pepper</code> writes a static library. A shared library for Pepper
+programs is <code>--lib pepper-shared</code>'s, which links the runtime shared
+library, as the program importing it must (<code>--runtime=shared</code>; see
+<a href="libraries.html#shared-libraries">Shared libraries</a>). A <code>--lib shared</code>
+library holds its own runtime: a Pepper program links one too, but then
+it has a second runtime of its own, so free a string it returns with its
+own <code>pepper_string_free</code>, and pass no handle from one to the other.</li>
 </ul>
 <h3 id="identity-stamps"><a class="header" href="#identity-stamps">Identity stamps</a></h3>
 <p>Every program and library Pepper writes carries an identity stamp, in a

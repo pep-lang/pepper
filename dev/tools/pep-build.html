@@ -202,7 +202,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project's <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
 <tr><td><code>--lib pepper</code></td><td>Build a static library for a Pepper program, without the runtime, which the program supplies</td><td>an executable</td></tr>
-<tr><td><code>--lib pepper-shared</code></td><td>Build a shared library for Pepper programs, linked against the runtime shared library beside it (importing one is not supported yet)</td><td>an executable</td></tr>
+<tr><td><code>--lib pepper-shared</code></td><td>Build a shared library for Pepper programs,, linked against the runtime shared library beside it, which a <code>--runtime=shared</code> program imports</td><td>an executable</td></tr>
 <tr><td><code>--lib xcframework</code>, <code>--lib swift-package</code></td><td>Build an iOS <code>.xcframework</code>, or a Swift package around one, for an app</td><td>an executable</td></tr>
 <tr><td><code>--lib aar</code></td><td>Build an Android library (<code>.aar</code>) holding a shared library for each ABI, for an app</td><td>an executable</td></tr>
 <tr><td><code>--bindings swift</code>, <code>--bindings java</code></td><td>With <code>--lib static</code> or <code>--lib shared</code> (<code>java</code>: <code>--lib shared</code>), also write Swift or Java bindings of the <code>[Export]</code>ed functions beside the header</td><td>none</td></tr>
@@ -460,18 +460,23 @@ at run time (<code>$ORIGIN</code>, <code>@loader_path</code>, or the library's f
 Windows); libraries built beside each other with the same options share
 it. It exports its functions, globals and constants, under the names
 its interface links them by, and its init and release; its thread-locals
-it does not export. Its stamp's kind is <code>pepper-shared</code>. With
+it does not export (on Windows, code outside the library reaches each
+through a function the library exports). Its stamp's kind is
+<code>pepper-shared</code>. With
 <code>--runtime=static</code>, or <code>-o</code> naming an archive (<code>.a</code>, <code>.lib</code>), it is a usage
 error.</p>
-<p>It is the second step to Pepper shared libraries
-(<a href="https://github.com/pep-lang/pepper/issues/220">#220</a>): a program cannot
-import one yet. <code>import geo;</code> that finds one stops with
-<code>the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which a program cannot import yet</code>, and linking one with <code>-l</code> or <code>[Link]</code>
-is refused the same way; a <code>--lib pepper</code> archive built later beside it,
-from the same interface, is imported as usual. The limits of
-<code>--runtime=shared</code> apply: no
-<code>--lto=full</code>, no Android, iOS or WebAssembly, and it cannot import a
-<code>--lib pepper</code> library.</p>
+<p>A program built with <code>--runtime=shared</code> imports it as it imports a
+<code>--lib pepper</code> library (<code>import geo;</code>, the interface found on the library
+path), links it, and copies it beside itself, where it finds it at run time
+with the runtime library; it initializes it, and releases its
+thread-locals, as it does a static one's. A library can import another this
+way. A build that holds the runtime cannot: <code>import geo;</code> there stops with
+<code>the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which links the runtime shared library; build with '--runtime=shared' to import it</code>, and linking one with <code>-l</code> or <code>[Link]</code> is refused by its stamp
+(its kind, and its <code>runtime-link</code> line) (with <code>--runtime=shared</code>, a program links one by name too,
+and copies it beside itself). A <code>--lib pepper</code> archive built later beside it, from
+the same interface, is imported as a static library. The limits of
+<code>--runtime=shared</code> apply: no <code>--lto=full</code>, no Android, iOS or
+WebAssembly, and it cannot import a <code>--lib pepper</code> library.</p>
 <h3 id="--bindings-swift---bindings-java"><a class="header" href="#--bindings-swift---bindings-java"><code>--bindings swift</code>, <code>--bindings java</code></a></h3>
 <p>With <code>--lib static</code> or <code>--lib shared</code>, also writes bindings beside the
 header <code>name.h</code>, so Swift, Kotlin or Java code calls the <code>[Export]</code>ed
@@ -717,8 +722,9 @@ build's options (target, CPU, <code>-O</code>, runtime checks, <code>-D</code>),
 and Pepper shared library (<code>--lib pepper-shared</code>) built with the same
 options can share one copy in their folder. The program runs as it
 does with <code>static</code>: one heap, its globals set before <code>main</code> in the same
-order, and its thread-locals released when a thread ends. It is the first
-step to Pepper shared libraries (<a href="https://github.com/pep-lang/pepper/issues/220">#220</a>).</p>
+order, and its thread-locals released when a thread ends. Such a program
+can import Pepper shared libraries (<code>--lib pepper-shared</code>, see
+<a href="../language/libraries.html#shared-libraries">Shared libraries</a>).</p>
 <ul>
 <li>The runtime's objects come from the build cache as usual, under keys of
 their own. The build cache records which runtime the library beside the
@@ -739,8 +745,9 @@ conforms to) is released with the runtime's bounded release
 (<code>_pep_release_last</code>) rather than steering into the program's structs,
 which the library cannot name (see <a href="../language/memory.html">Memory</a>).</li>
 </ul>
-<p>It cannot be combined with <code>--lib</code> or <code>--lto=full</code>, nor with a program that
-imports a Pepper library (<code>--lib pepper</code>, which needs the runtime in the
+<p>It cannot be combined with <code>--lto=full</code>, nor with <code>--lib</code> but
+<code>--lib pepper-shared</code> (which implies it), nor with a program that imports a
+static Pepper library (<code>--lib pepper</code>, which needs the runtime in the
 program), and it is not available for Android, iOS or WebAssembly.</p>
 <h3 id="-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><a class="header" href="#-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></a></h3>
 <p>The <code>-m</code> options choose the CPU the code is generated for, with clang's
