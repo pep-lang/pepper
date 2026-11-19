@@ -57,6 +57,14 @@ export allocations(): long {
     return _pep_live_allocs();
 }
 
+## Counts two calls on this thread: a generic, so the program compiles it,
+## and reaches `_calls` across the libraries (on Windows, through the
+## accessor `base` exports).
+export count_twice<T>(): int {
+    _calls += 2;
+    return _calls;
+}
+
 export count_call(): int {
     _calls += 1;
     return _calls;

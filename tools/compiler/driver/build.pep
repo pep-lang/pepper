@@ -1172,10 +1172,7 @@ _link_interfaces(program: link.Program, options: BuildOptions): String? {
         if (mismatch.is_value()) {
             return mismatch;
         }
-        var unfit = _runtime_link_mismatch(program, interface, found[0], options);
-        if (unfit.is_value()) {
-            return unfit;
-        }
+
         bool added = false;
         for (var object in options.objects) {
             added = added or object.to_string() == interface.archive.to_string();
@@ -1208,23 +1205,6 @@ _link_interfaces(program: link.Program, options: BuildOptions): String? {
 _link_input(found: StampedFile, target: link.Target): Path {
     bool imported = found.stamps[0].kind == link.KIND_PEPPER_SHARED and target.os == "windows";
     return imported ? found.file.with_extension("lib") : found.file;
-}
-
-# The error, rendered, when `interface`'s library (`stamp`) and this build
-# do not link the runtime alike: a Pepper shared library needs the runtime
-# shared library (`--runtime=shared`), and a static Pepper library a build
-# that holds the runtime.
-_runtime_link_mismatch(
-    program: link.Program, interface: link.LibraryInterface, stamp: link.Stamp, options: BuildOptions
-): String? {
-    bool shared = stamp.kind == link.KIND_PEPPER_SHARED;
-    if (shared == options.shared_runtime) {
-        return Optional<String>.Empty;
-    }
-    var message = shared ?
-        $"the Pepper library '{interface.name}' is a shared library ('--lib pepper-shared'), which links the runtime shared library; build with '--runtime=shared' to import it" :
-        $"the Pepper library '{interface.name}' is a static library, which needs the build to hold the runtime; a build that links the runtime shared library ('--runtime=shared', '--lib pepper-shared') cannot import it";
-    return Optional<String>.Value(_at_link(program, interface.name, Diagnostic.error(message)));
 }
 
 # The error, rendered, when `interface`'s library was built against

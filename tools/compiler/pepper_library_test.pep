@@ -692,7 +692,7 @@ a_pepper_shared_library_links_the_runtime_library() {
     expect_exit(imported, 1);
     expect_contains(
         imported.stderr,
-        "the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which links the runtime shared library; build with '--runtime=shared' to import it"
+        "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
     );
     write_file(main, _MAIN);
     var linked = _pep_build(main, program, linking);
@@ -716,7 +716,7 @@ a_pepper_shared_library_links_the_runtime_library() {
     # with the runtime library does not hold: refused, imported or linked.
     var static_imported = _pep_build(main, program, shared_linking);
     expect_exit(static_imported, 1);
-    expect_contains(static_imported.stderr, "the Pepper library 'geo' is a static library");
+    expect_contains(static_imported.stderr, "it holds no runtime, and this build links the runtime shared library");
     write_file(main, _MAIN);
     var static_linked = _pep_build(main, program, shared_linking);
     expect_exit(static_linked, 1);
@@ -758,7 +758,7 @@ a_program_imports_two_pepper_shared_libraries() {
     expect_false(built.stderr.contains("duplicate"));
     # Both libraries are copied beside it, where it finds them.
     expect_true(root.join("app").join(top.file_name().value()).is_file());
-    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true");
+    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true 3");
     # A library rebuilt with a body edit keeps its interface, and so the
     # program's key, but is copied beside the program again.
     var base_source = root.join("src").join("base.pep");
@@ -769,7 +769,9 @@ a_program_imports_two_pepper_shared_libraries() {
     expect_true(
         File.read_bytes(root.join("app").join(base.file_name().value())).value() == File.read_bytes(base).value()
     );
-    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true");  # Linked by name without the library it needs, `top` is refused: `base`
+    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true 3");
+
+    # Linked by name without the library it needs, `top` is refused: `base`
     # would be neither initialized first nor found.
     var lone = root.join("lone").join("main.pep");
     write_file(lone, "main(): int {\n    return 0;\n}\n");
@@ -786,6 +788,6 @@ a_program_imports_two_pepper_shared_libraries() {
         0
     );
     expect_equal(
-        _run_program(lib.join("main" + toolchain.executable_suffix())), "40 41 42 base,top,main 1 1 one heap true"
+        _run_program(lib.join("main" + toolchain.executable_suffix())), "40 41 42 base,top,main 1 1 one heap true 3"
     );
 }

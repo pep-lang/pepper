@@ -3,7 +3,9 @@
 # names a box `base` made, `top` filled and this program extended; how many
 # times this thread called `base` (its thread-local is the thread's own);
 # how many of `base`'s thread-locals the ended thread released; and
-# whether `base` counts the allocations the program does, as one heap.
+# whether `base` counts the allocations the program does, as one heap;
+# and this thread's count after a generic of `base`'s, compiled here,
+# adds two.
 
 import [Thread] from async;
 import base;
@@ -31,7 +33,7 @@ main(): int {
     var thread = Thread.spawn(work);
     thread.join();
     print(
-        $"{base.START} {top.NEXT} {AFTER} {listed} {base.count_call()} {base.released.load()} one heap {theirs == ours}"
+        $"{base.START} {top.NEXT} {AFTER} {listed} {base.count_call()} {base.released.load()} one heap {theirs == ours} {base.count_twice<int>()}"
     );
     return 0;
 }

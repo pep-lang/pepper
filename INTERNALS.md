@@ -2136,7 +2136,7 @@ its files with the runtime's as another image's (`_shared_runtime_files`,
 the accessor of each of their thread-locals on Windows, which the library
 defines and exports (`_reached_from_elsewhere`; the library's own code reads
 them directly). `_place_shared_libraries` copies each the program links,
-imported or by `-l` (`_shared_libraries`, from `options.linked`), beside
+imported or by `-l` (`_placements`, from `options.linked`), beside
 it, and the up-to-date check compares the copies
 (`_shared_libraries_placed`).
 

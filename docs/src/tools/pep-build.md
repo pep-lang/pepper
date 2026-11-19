@@ -27,7 +27,7 @@ short, and `pepper help build` runs it.
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--lib pepper` | Build a static library for a Pepper program, without the runtime, which the program supplies | an executable |
-| `--lib pepper-shared` | Build a shared library for Pepper programs, linked against the runtime shared library beside it (importing one is not supported yet) | an executable |
+| `--lib pepper-shared` | Build a shared library for Pepper programs,, linked against the runtime shared library beside it, which a `--runtime=shared` program imports | an executable |
 | `--lib xcframework`, `--lib swift-package` | Build an iOS `.xcframework`, or a Swift package around one, for an app | an executable |
 | `--lib aar` | Build an Android library (`.aar`) holding a shared library for each ABI, for an app | an executable |
 | `--bindings swift`, `--bindings java` | With `--lib static` or `--lib shared` (`java`: `--lib shared`), also write Swift or Java bindings of the `[Export]`ed functions beside the header | none |
@@ -637,8 +637,9 @@ build's options (target, CPU, `-O`, runtime checks, `-D`), so every program
 and Pepper shared library (`--lib pepper-shared`) built with the same
 options can share one copy in their folder. The program runs as it
 does with `static`: one heap, its globals set before `main` in the same
-order, and its thread-locals released when a thread ends. It is the first
-step to Pepper shared libraries ([#220](https://github.com/pep-lang/pepper/issues/220)).
+order, and its thread-locals released when a thread ends. Such a program
+can import Pepper shared libraries (`--lib pepper-shared`, see
+[Shared libraries](../language/libraries.md#shared-libraries)).
 
 - The runtime's objects come from the build cache as usual, under keys of
   their own. The build cache records which runtime the library beside the
@@ -659,8 +660,9 @@ step to Pepper shared libraries ([#220](https://github.com/pep-lang/pepper/issue
   (`_pep_release_last`) rather than steering into the program's structs,
   which the library cannot name (see [Memory](../language/memory.md)).
 
-It cannot be combined with `--lib` or `--lto=full`, nor with a program that
-imports a Pepper library (`--lib pepper`, which needs the runtime in the
+It cannot be combined with `--lto=full`, nor with `--lib` but
+`--lib pepper-shared` (which implies it), nor with a program that imports a
+static Pepper library (`--lib pepper`, which needs the runtime in the
 program), and it is not available for Android, iOS or WebAssembly.
 
 ### `-march=<cpu>`, `-mcpu=<cpu>`, `-mtune=<cpu>`, `-m<feature>`, `-mno-<feature>`
