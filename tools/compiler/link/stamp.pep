@@ -337,6 +337,32 @@ _starts_at(data: u8[], at: ulong, magic: u8[]): bool {
     return true;
 }
 
+## Why the Pepper library `library` stamps links the runtime otherwise
+## than the build `build` stamps: a Pepper shared library links the
+## runtime shared library (`KIND_PEPPER_SHARED`, `runtime-link shared`),
+## which only a `--runtime=shared` build does, and a static one leaves the
+## runtime to a build that holds it. Nothing when they agree, or the
+## library is self-contained.
+##
+## @param library the stamp read from the library
+## @param build this build's
+## @returns the reason, worded to follow the library's name
+export runtime_link_mismatch(library: Stamp, build: Stamp): String? {
+    if (!is_pepper_kind(library.kind)) {
+        return Optional<String>.Empty;
+    }
+    # `runtime_link` came after `KIND_PEPPER_SHARED`, which says it too.
+    bool shared = library.kind == KIND_PEPPER_SHARED or library.runtime_link == RUNTIME_LINK_SHARED;
+    if (shared == (build.runtime_link == RUNTIME_LINK_SHARED)) {
+        return Optional<String>.Empty;
+    }
+    return Optional<String>.Value(
+        shared ?
+            "links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'" :
+            "holds no runtime, and this build links the runtime shared library; build without '--runtime=shared', or build the library with '--lib pepper-shared'"
+    );
+}
+
 ## Why the code `library` stamps cannot be linked into the build `build`
 ## stamps; nothing when it can. A self-contained library (any kind but
 ## `KIND_PEPPER`) keeps its runtime to itself, so only its platform must
@@ -356,16 +382,6 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
             return Optional<String>.Value($"this build is for {build.target}");
         }
         return Optional<String>.Empty;
-    }
-    # A Pepper shared library links the runtime library, whether or not its
-    # stamp says so (`runtime_link` came after `KIND_PEPPER_SHARED`).
-    bool shared = library.kind == KIND_PEPPER_SHARED or library.runtime_link == RUNTIME_LINK_SHARED;
-    if (shared != (build.runtime_link == RUNTIME_LINK_SHARED)) {
-        return Optional<String>.Value(
-            !shared ?
-                "it holds no runtime, and this build links the runtime shared library; build without '--runtime=shared', or build it with '--lib pepper-shared'" :
-                "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
-        );
     }
     if (library.record != build.record) {
         return Optional<String>.Value(

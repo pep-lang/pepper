@@ -1,7 +1,8 @@
 # Pepper libraries
 
-A **Pepper library** is Pepper code built once, with `--lib pepper`, and
-shipped without its source. A Pepper program imports it as it imports a
+A **Pepper library** is Pepper code built once, with `--lib pepper` (or
+as a shared library, `--lib pepper-shared`, see
+[Shared libraries](#shared-libraries)), and shipped without its source. A Pepper program imports it as it imports a
 module, `import geo;`, and uses everything the library exports: functions,
 structs, value structs, enums, traits and their default methods,
 generics, and extensions.
@@ -206,26 +207,66 @@ keeps the program's copy, which comes ahead of the library's archive.
 
 ## Shared libraries
 
-`--lib pepper-shared` builds a Pepper library as a shared library
-(`libgeo.so`, `libgeo.dylib`, `geo.dll`) with the same interface beside it.
-It holds no runtime: it links the runtime shared library, which it writes
-beside itself. A program built with
-[`--runtime=shared`](../tools/pep-build.md#--runtimestatic---runtimeshared)
-imports it as it imports a static library, and links the same runtime
-library instead of holding the runtime, so the program and every library
-it imports share one heap, one set of runtime thread-locals and one order
-of initialization:
+`--lib pepper-shared` builds a Pepper library as a shared library instead
+of an archive. The library
+[`shared-lib/tally.pep`](../../examples/shared_library/shared-lib/tally.pep)
+keeps a global and makes a struct:
+
+```pepper
+{{#include ../../examples/shared_library/shared-lib/tally.pep}}
+```
 
 ```bash
-pepper build --lib pepper-shared geo.pep -o lib/libgeo.so
+pepper build --lib pepper-shared tally.pep -o lib/libtally.so
+```
+
+This writes `libtally.so` (`libtally.dylib` on macOS, `tally.dll` with its
+import library `tally.lib` on Windows), with its interface and header
+beside it as `--lib pepper` writes them. It holds no runtime: it links the
+runtime shared library, `libpepper_runtime.so` (`libpepper_runtime.dylib`,
+`pepper_runtime.dll`), which it writes beside itself.
+
+A program imports it as it imports a static library, built with
+[`--runtime=shared`](../tools/pep-build.md#--runtimestatic---runtimeshared)
+so that it links the same runtime library instead of holding the runtime.
+The program [`main.pep`](../../examples/shared_library/main.pep) extends
+and frees what the library made:
+
+```pepper
+{{#include ../../examples/shared_library/main.pep}}
+```
+
+```bash
 pepper build --runtime=shared main.pep -L lib -o main
 ```
 
-The program copies the libraries it imports beside itself, and finds them
-and the runtime library there at run time. A shared library can import
-another; a program that holds the runtime cannot import one (see
-[`--lib pepper-shared`](../tools/pep-build.md#--lib-pepper-shared)).
+The program, every shared library it loads and the runtime library share
+one heap, one set of runtime thread-locals and one order of initialization,
+as [One runtime](#one-runtime) describes for a static library: the
+program sets the runtime's globals, then each library's, then its own, and
+releases each library's thread-locals when a thread ends.
 
+- **Where it finds them.** The build copies each shared library the
+  program imports, or links by name (`-l`, `[Link]`), beside the program,
+  where it writes the runtime library too, and the program finds them
+  there at run time (its run path, `$ORIGIN` or `@executable_path`, or its
+  folder on Windows). Ship them together.
+- **The runtime library** holds the whole runtime, built with the build's
+  options (target, CPU, `-O`, runtime checks, `-D`): programs and
+  libraries built with the same options can share one copy.
+- **A library that imports a library** works as for static libraries: a
+  shared library can import another shared library, and a program that
+  imports it loads both.
+- **What must match** is what a static library must match, and the runtime
+  linking too: a program that holds the runtime refuses a shared library,
+  and a `--runtime=shared` program refuses a static one, at the import:
+
+  ```text
+  main.pep:5:8: error: 'lib/libtally.so' links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'
+  ```
+
+- **Thread-locals.** On Windows, code outside a shared library reaches its
+  thread-locals through a function the library exports, a call per access.
 ## Not supported yet
 
 - **A module both use from source.** A library carries the source modules
