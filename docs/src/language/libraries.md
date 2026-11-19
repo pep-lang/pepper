@@ -228,7 +228,6 @@ another; a program that holds the runtime cannot import one (see
 
 ## Not supported yet
 
-
 - **A module both use from source.** A library carries the source modules
   it imports, other than the runtime's (an `-I` module, a package), in its
   interface and archive. A program that imports the library and the same

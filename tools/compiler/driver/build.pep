@@ -2084,23 +2084,20 @@ _beside_output_written(options: BuildOptions, program: link.Program, header: Pat
             ))
         and (!pepper or interface_path(options.output).is_file())
         and _bindings_written(options, header)
-        and _shared_libraries_placed(program, options);
+        and _shared_libraries_placed(options);
 }
 
 # Whether each Pepper shared library a program imports is beside it as
 # `_place_shared_libraries` copies it: a library rebuilt with the same
 # interface leaves the program's key as it was, but not its copy.
-_shared_libraries_placed(program: link.Program, options: BuildOptions): bool {
-    if (options.library.is_value() or !options.shared_runtime) {
-        return true;
-    }
-    for (var interface in program.interfaces()) {
-        var placed = _beside(options.output, interface.archive.file_name().value_or(""));
-        if (placed.to_string() == interface.archive.to_string()) {
+_shared_libraries_placed(options: BuildOptions): bool {
+    for (var library in _shared_libraries(options)) {
+        var placed = _beside(options.output, library.file_name().value_or(""));
+        if (placed.to_string() == library.to_string()) {
             continue;
         }
         var ours = File.read_bytes(placed);
-        var theirs = File.read_bytes(interface.archive);
+        var theirs = File.read_bytes(library);
         if (ours.is_err() or theirs.is_err() or ours.value() != theirs.value()) {
             return false;
         }
@@ -2201,7 +2198,7 @@ _link(
     var runtime = runtime_library_path(options.output, target);
     var made = _link_runtime(runtime_objects, runtime, options, libraries, dirs, program, natvis);
     if (made.is_ok()) {
-        made = _place_shared_libraries(program, options);
+        made = _place_shared_libraries(options);
     }
     if (made.is_err()) {
         return made;
@@ -2225,26 +2222,39 @@ _link(
     );
 }
 
-# Copies each Pepper shared library a program imports beside it, where it
-# finds the runtime library too, at run time: on its run path, or in its
-# folder on Windows. A library build leaves them where they are.
-_place_shared_libraries(program: link.Program, options: BuildOptions): Result<void, String> {
-    if (options.library.is_value() or !options.shared_runtime) {
-        return Result<void, String>.ok();
-    }
-    for (var interface in program.interfaces()) {
-        var name = interface.archive.file_name();
-        var placed = _beside(options.output, name.value_or(""));
-        # A build that links the runtime library imports shared libraries only.
-        if (placed.to_string() == interface.archive.to_string()) {
+# Copies each Pepper shared library a program links, imported or by `-l`,
+# beside it, where it finds the runtime library too, at run time: on its
+# run path, or in its folder on Windows. A library build leaves them where
+# they are.
+_place_shared_libraries(options: BuildOptions): Result<void, String> {
+    for (var library in _shared_libraries(options)) {
+        var placed = _beside(options.output, library.file_name().value_or(""));
+        if (placed.to_string() == library.to_string()) {
             continue;
         }
-        var copied = File.copy(interface.archive, placed);
+        var copied = File.copy(library, placed);
         if (copied.is_err()) {
-            return Result<void, String>.err($"cannot copy {interface.archive} to {placed}: {copied.error().message}");
+            return Result<void, String>.err($"cannot copy {library} to {placed}: {copied.error().message}");
         }
     }
     return Result<void, String>.ok();
+}
+
+# The Pepper shared libraries a program links (`options.linked`), which
+# `_place_shared_libraries` copies beside it; none for a library build.
+_shared_libraries(options: BuildOptions): Path[] {
+    var out = Array<Path>();
+    if (options.library.is_value() or !options.linked.is_value()) {
+        return out;
+    }
+    var seen = HashSet<String>();
+    for (var found in options.linked.value()) {
+        bool shared = !found.stamps.is_empty and found.stamps[0].kind == link.KIND_PEPPER_SHARED;
+        if (shared and seen.insert(found.file.to_string())) {
+            out.append(found.file);
+        }
+    }
+    return out;
 }
 
 # Links `runtime_objects`, the whole runtime's, into the runtime shared

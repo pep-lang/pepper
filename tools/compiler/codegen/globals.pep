@@ -718,7 +718,10 @@ extend Generator {
         var entry = context.append_block(function, "entry");
         builder.position_at_end(entry);
         builder.return_value(global);
-        thread_local_accessors[variable.name] = function;
+        # This image's own code reaches its own thread-locals directly.
+        if (in_shared_runtime(variable.loc.file as ulong)) {
+            thread_local_accessors[variable.name] = function;
+        }
     }
 
     ## The function `name` taking and returning nothing: the module's, or

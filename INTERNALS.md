@@ -2134,9 +2134,11 @@ release are called as a static one's (`pepper_libraries`). Codegen counts
 its files with the runtime's as another image's (`_shared_runtime_files`,
 `Build.shared_runtime`), so the program imports what they own and calls
 the accessor of each of their thread-locals on Windows, which the library
-defines and exports (`_reached_from_elsewhere`). `_place_shared_libraries`
-copies each beside the program, and the up-to-date check compares the
-copies (`_shared_libraries_placed`).
+defines and exports (`_reached_from_elsewhere`; the library's own code reads
+them directly). `_place_shared_libraries` copies each the program links,
+imported or by `-l` (`_shared_libraries`, from `options.linked`), beside
+it, and the up-to-date check compares the copies
+(`_shared_libraries_placed`).
 
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes

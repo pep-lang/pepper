@@ -357,9 +357,12 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
         }
         return Optional<String>.Empty;
     }
-    if (library.runtime_link != build.runtime_link) {
+    # A Pepper shared library links the runtime library, whether or not its
+    # stamp says so (`runtime_link` came after `KIND_PEPPER_SHARED`).
+    bool shared = library.kind == KIND_PEPPER_SHARED;
+    if (shared != (build.runtime_link == RUNTIME_LINK_SHARED)) {
         return Optional<String>.Value(
-            library.runtime_link.is_empty ?
+            !shared ?
                 "it holds no runtime, and this build links the runtime shared library; build without '--runtime=shared', or build it with '--lib pepper-shared'" :
                 "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
         );

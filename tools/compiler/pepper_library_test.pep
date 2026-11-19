@@ -701,11 +701,26 @@ a_pepper_shared_library_links_the_runtime_library() {
         linked.stderr,
         "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
     );
+    # With the runtime library, linked by name, it runs: copied beside the
+    # program, initialized first, its thread-local released.
+    var shared_linking = linking.copy();
+    shared_linking.append("--runtime=shared");
+    expect_exit(_pep_build(main, program, shared_linking), 0);
+    expect_equal(_run_program(program), "42 1");
     # Built static after it, into its folder, the library imports again.
     expect_exit(_pep_build(source, _archive(root.join("geo"), "geo"), ["--lib", "pepper"]), 0);
     write_file(main, "import geo;\n\nmain(): int {\n    print($\"{geo.geo_seed()}\");\n    return 0;\n}\n");
     expect_exit(_pep_build(main, program, linking), 0);
     expect_equal(_run_program(program), "41");
+    # A static library leaves the runtime to the program, which a build
+    # with the runtime library does not hold: refused, imported or linked.
+    var static_imported = _pep_build(main, program, shared_linking);
+    expect_exit(static_imported, 1);
+    expect_contains(static_imported.stderr, "the Pepper library 'geo' is a static library");
+    write_file(main, _MAIN);
+    var static_linked = _pep_build(main, program, shared_linking);
+    expect_exit(static_linked, 1);
+    expect_contains(static_linked.stderr, "it holds no runtime, and this build links the runtime shared library");
     # It cannot take a static runtime, nor an archive's name.
     var static_runtime = _pep_build(source, library, ["--lib", "pepper-shared", "--runtime=static"]);
     expect_exit(static_runtime, 2);
