@@ -2083,7 +2083,14 @@ files are all the runtime's in `runtime_objects`, from the cache or not
 `_link_with_shared_runtime` links those into `runtime_library_path`
 (`pepper_runtime.dll` + import library, `libpepper_runtime.so`,
 `libpepper_runtime.dylib`, beside the output) and the rest against it, with
-a run path of `$ORIGIN` or `@executable_path`. `partition.prepare(shared =
+a run path of `$ORIGIN` or `@executable_path`. The library is the whole runtime: `main.pep`
+loads every runtime module (`link.runtime_module_names`, as
+`Setup.extra_modules`), so it is the same for every program and Pepper
+library built with the same options, and `_link_runtime` links it only
+when the cache's record of the file beside the output (`Cache.record`)
+is not `_runtime_key` (the compiler, `_build_text` and every runtime
+file's text), which the up-to-date check (`_beside_output_written`)
+compares too. `partition.prepare(shared =
 ...)` gives what a runtime file owns default visibility, and on COFF
 `dllexport` (not thread-locals), and lists it (`Partition.imported`, with
 the runtime's parts, `exporting`, both in the `--compile-part` plan); the

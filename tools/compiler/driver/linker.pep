@@ -280,6 +280,17 @@ export find_lld(system: String, driver: Path): Path? {
     } else if (system == "wasi") {
         name = "wasm-ld";
     }
+    return find_llvm_tool(name, driver);
+}
+
+## Returns LLVM's tool `name` (`ld.lld`, `llvm-nm`), plain or as
+## `<name>-<major>`: beside the link driver `driver`, in the LLVM prefix
+## (`llvm_prefix`), or on the PATH.
+##
+## @param name the tool's name, without `.exe`
+## @param driver the link driver (`find_link_driver`)
+## @returns the tool, or none
+export find_llvm_tool(name: String, driver: Path): Path? {
     var dirs = Array<Path>();
     var parent = driver.parent();
     if (parent.is_value() and !parent.value().to_string().is_empty) {

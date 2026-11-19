@@ -219,6 +219,37 @@ export find_project(root: Path): Path? {
     return Optional<Path>.Empty;
 }
 
+## Returns the name of every module of `runtime`: each folder beside its
+## top-level files that holds a `module.pep`, sorted. A build that links
+## the runtime shared library (`--runtime=shared`) loads them all, so the
+## library is the whole runtime, the same for every program and Pepper
+## library built with the same options.
+##
+## @param runtime the runtime (`Runtime.discover`)
+## @returns the modules' names; none without a runtime
+export runtime_module_names(runtime: Runtime): String[] {
+    var out = Array<String>();
+    if (runtime.sources.is_empty) {
+        return out;
+    }
+    var folder = dir_of(runtime.sources[0]);
+    var opened = Directory.open(folder);
+    if (opened.is_err()) {
+        return out;
+    }
+    var entries = opened.value().entries();
+    if (entries.is_err()) {
+        return out;
+    }
+    for (var entry in entries.value()) {
+        if (entry.is_directory and entry.path.join(Path("module.pep")).is_file()) {
+            out.append(entry.name);
+        }
+    }
+    out.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
+    return out;
+}
+
 ## The runtime a program is compiled with: its `.pep` sources, and every
 ## runtime directory found on the way, which module imports search.
 export struct Runtime {

@@ -17,7 +17,7 @@ export [
     TEST_ATTRIBUTE,
     TEST_BUILD_OPTION
 ] from "platform";
-export [absolute, path_key, Runtime] from "files";
+export [absolute, path_key, Runtime, runtime_module_names] from "files";
 export [
     find_library_interface,
     interface_file_name,

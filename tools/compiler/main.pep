@@ -420,15 +420,9 @@ _main(args: String[]): int {
         # The output is replaced whole, so it must be one.
         return parser.usage_error("the output of '--lib xcframework' must end in '.xcframework'");
     }
-    if (library.is_set
-        and library.value() == driver.LibraryKind.Pepper
-        and output.is_set
-        and (output.value().ends_with(".so")
-            or output.value().ends_with(".dylib")
-            or output.value().ends_with(".dll"))) {
-        return parser.usage_error(
-            "'--lib pepper' cannot build a shared library: it leaves the runtime out; build a static library for a Pepper program"
-        );
+    var misused = _pepper_library_misuse(library, runtime_link, output);
+    if (misused.is_value()) {
+        return parser.usage_error(misused.value());
     }
     if (bindings.is_set and (!library.is_set or for_apps or _for_pepper(library.value()))) {
         return parser.usage_error("'--bindings' needs '--lib static' or '--lib shared'");
@@ -770,6 +764,7 @@ _main(args: String[]): int {
     setup.library_dirs.append_all(library_dirs.values());
     setup.library_dirs.append_all(scripts.value().library_dirs);
     setup.library_dirs.append_all(link.library_path_dirs());
+    setup.extra_modules = _whole_runtime(shared_runtime, setup.runtime);
     var program = link.load_program(entry, setup);
     # What the build links, by name and by folder: `-l`, the project's,
     # the build scripts'.
@@ -1113,6 +1108,50 @@ _linking(
         return Result<(bool, bool), String>.err($"{option} is not available for '{codegen.target_triple(target)}'");
     }
     return Result<(bool, bool), String>.ok((whole, true));
+}
+
+# The runtime modules a build loads beside its own imports: with the
+# runtime shared library (`shared`), every one, so that library is the
+# whole runtime and serves every program and Pepper library built with the
+# same options; else none.
+_whole_runtime(shared: bool, runtime: bool): String[] {
+    if (!shared or !runtime) {
+        return Array<String>();
+    }
+    return link.runtime_module_names(link.Runtime.discover());
+}
+
+# Why a library for Pepper programs (`library`) does not fit the other
+# options: `--lib pepper` with a shared library's name for its output;
+# `--lib pepper-shared` with a static runtime asked for (`runtime_link`),
+# or an archive's name; nothing when it fits, or the build is another.
+_pepper_library_misuse(
+    library: cli.Argument<driver.LibraryKind>, runtime_link: cli.Argument<_RuntimeLink>, output: cli.Argument<String>
+): String? {
+    if (library.is_set
+        and library.value() == driver.LibraryKind.Pepper
+        and output.is_set
+        and (output.value().ends_with(".so")
+            or output.value().ends_with(".dylib")
+            or output.value().ends_with(".dll"))) {
+        return Optional<String>.Value(
+            "'--lib pepper' cannot build a shared library: it leaves the runtime out; build a static library for a Pepper program"
+        );
+    }
+    if (!library.is_set or library.value() != driver.LibraryKind.PepperShared) {
+        return Optional<String>.Empty;
+    }
+    if (runtime_link.is_set and runtime_link.value() == _RuntimeLink.Static) {
+        return Optional<String>.Value(
+            "'--lib pepper-shared' links the runtime shared library: it cannot be used with '--runtime=static'"
+        );
+    }
+    if (output.is_set and (output.value().ends_with(".a") or output.value().ends_with(".lib"))) {
+        return Optional<String>.Value(
+            "'--lib pepper-shared' builds a shared library: name it '.so', '.dylib' or '.dll', or build a static one with '--lib pepper'"
+        );
+    }
+    return Optional<String>.Empty;
 }
 
 # Whether `kind` builds a library for Pepper programs.

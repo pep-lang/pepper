@@ -10,6 +10,7 @@ import [
 import digest;
 import [
     Cache,
+    compiler_identity,
     check_compilation_unit,
     check_compilation_units,
     Clock,
@@ -1304,7 +1305,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         keys.value().exact_positions = options.debug;
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)
-            and _beside_output_written(options, program.target, header, pepper)) {
+            and _beside_output_written(options, program, header, pepper)) {
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: {options.output} is up to date\n");
             }
@@ -2024,7 +2025,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     if (archive) {
         made = write_archive(objects, options.output, program.target);
     } else {
-        made = _link(objects, runtime_objects, options, libraries, dirs, program.target, natvis);
+        made = _link(objects, runtime_objects, options, libraries, dirs, program, natvis);
     }
     if (made.is_ok() and interface.is_value()) {
         made = write_library_interface(options.output, interface.value());
@@ -2059,9 +2060,12 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
 # Whether what a build writes beside its output is there, which an
 # up-to-date output needs too: a library's header (`header`), a Pepper
 # library's interface, the bindings, and the runtime shared library.
-_beside_output_written(options: BuildOptions, target: link.Target, header: Path?, pepper: bool): bool {
+_beside_output_written(options: BuildOptions, program: link.Program, header: Path?, pepper: bool): bool {
     return (!header.is_value() or header.value().is_file())
-        and (!options.shared_runtime or runtime_library_path(options.output, target).is_file())
+        and (!options.shared_runtime
+            or options.cache.value().is_built(
+                runtime_library_path(options.output, program.target), _runtime_key(program, options)
+            ))
         and (!pepper or interface_path(options.output).is_file())
         and _bindings_written(options, header);
 }
@@ -2130,9 +2134,10 @@ _link(
     options: BuildOptions,
     libraries: String[],
     dirs: Path[],
-    target: link.Target,
+    program: link.Program,
     natvis: Path[]
 ): Result<void, String> {
+    var target = program.target;
     if (!options.shared_runtime) {
         return link_objects(
             objects,
@@ -2147,9 +2152,7 @@ _link(
         );
     }
     var runtime = runtime_library_path(options.output, target);
-    var made = link_objects(
-        runtime_objects, runtime, libraries, dirs, target, options.sysroot, true, options.debug, natvis
-    );
+    var made = _link_runtime(runtime_objects, runtime, options, libraries, dirs, program, natvis);
     if (made.is_err()) {
         return made;
     }
@@ -2170,6 +2173,51 @@ _link(
         natvis,
         _run_path(target, options.library.is_value())
     );
+}
+
+# Links `runtime_objects`, the whole runtime's, into the runtime shared
+# library `runtime`, unless the cache records that the file there is this
+# very runtime (`_runtime_key`): a program or Pepper library built beside
+# another with the same options shares it.
+_link_runtime(
+    runtime_objects: Path[],
+    runtime: Path,
+    options: BuildOptions,
+    libraries: String[],
+    dirs: Path[],
+    program: link.Program,
+    natvis: Path[]
+): Result<void, String> {
+    var key = _runtime_key(program, options);
+    # A Windows DLL is linked against through its import library, beside it.
+    bool linkable = program.target.os != "windows" or runtime.with_extension("lib").is_file();
+    if (options.cache.is_value() and options.cache.value().is_built(runtime, key) and linkable) {
+        return Result<void, String>.ok();
+    }
+    var made = link_objects(
+        runtime_objects, runtime, libraries, dirs, program.target, options.sysroot, true, options.debug, natvis
+    );
+    if (made.is_ok() and options.cache.is_value()) {
+        options.cache.value().record(runtime, key, false, Array<String>());
+    }
+    return made;
+}
+
+# What the runtime shared library is: this compiler, how the code is
+# generated (`_build_text`) and the text of every runtime file, which the
+# whole runtime (`--runtime=shared`) holds whatever the program.
+_runtime_key(program: link.Program, options: BuildOptions): String {
+    var hasher = digest.Blake3();
+    hasher.update($"pepper runtime library 1\n{compiler_identity()}\n");
+    hasher.update(_build_text(options, codegen.target_triple(program.target)));
+    var in_runtime = program.in_runtime();
+    for (var i in 0..program.files.count) {
+        if (in_runtime[i]) {
+            hasher.update($"\n{program.files[i].name}\n{program.files[i].source.size}\n");
+            hasher.update(program.files[i].source);
+        }
+    }
+    return hasher.finish_hex();
 }
 
 # The run path that finds the runtime shared library beside the program,

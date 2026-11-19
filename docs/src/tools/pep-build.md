@@ -326,16 +326,21 @@ it (`libname.so`, `libname.dylib`, `name.dll` with its import library
 `--lib pepper`'s archive does, and links the runtime as a shared library,
 which it writes beside itself as `--runtime=shared` does and finds there
 at run time (`$ORIGIN`, `@loader_path`, or the library's folder on
-Windows). It exports its functions, globals and constants, under the names
+Windows); libraries built beside each other with the same options share
+it. It exports its functions, globals and constants, under the names
 its interface links them by, and its init and release; its thread-locals
-it does not export. Its stamp's kind is `pepper-shared`.
+it does not export. Its stamp's kind is `pepper-shared`. With
+`--runtime=static`, or `-o` naming an archive (`.a`, `.lib`), it is a usage
+error.
 
 It is the second step to Pepper shared libraries
 ([#220](https://github.com/pep-lang/pepper/issues/220)): a program cannot
 import one yet. `import geo;` that finds one stops with
 `the Pepper library 'geo' is a shared library ('--lib pepper-shared'),
 which a program cannot import yet`, and linking one with `-l` or `[Link]`
-is refused the same way. The limits of `--runtime=shared` apply: no
+is refused the same way; a `--lib pepper` archive built later beside it,
+from the same interface, is imported as usual. The limits of
+`--runtime=shared` apply: no
 `--lto=full`, no Android, iOS or WebAssembly, and it cannot import a
 `--lib pepper` library.
 
@@ -620,16 +625,25 @@ executable, and the executable links it instead:
 | macOS | `libpepper_runtime.dylib` | `@rpath`, which is `@executable_path` |
 | Windows | `pepper_runtime.dll`, with its import library `pepper_runtime.lib` | the executable's folder |
 
-Ship the library with the executable. It holds the runtime modules this
-program loads, compiled with this build's options, so it serves this
-program: a build of another program writes its own. The program runs as it
+Ship the library with the executable. It holds the whole runtime, every
+runtime module whether the program imports it or not, compiled with this
+build's options (target, CPU, `-O`, runtime checks, `-D`), so every program
+and Pepper shared library (`--lib pepper-shared`) built with the same
+options can share one copy in their folder. The program runs as it
 does with `static`: one heap, its globals set before `main` in the same
 order, and its thread-locals released when a thread ends. It is the first
 step to Pepper shared libraries ([#220](https://github.com/pep-lang/pepper/issues/220)).
 
 - The runtime's objects come from the build cache as usual, under keys of
-  their own: a program edit links the runtime library again without
-  compiling it.
+  their own. The build cache records which runtime the library beside the
+  output is (the compiler, those options and the runtime's sources): a
+  build that finds that very runtime there does not link it again, and a
+  build that finds another one, from other options, links its own, and is
+  not up to date until it has. The first build checks and compiles every
+  runtime module once; the shared cache keeps them for later ones.
+- The runtime's C libraries are system ones (`ws2_32`, `bcrypt` and the
+  like on Windows); OpenSSL is opened only when a program first uses `tls`,
+  and zlib and libcrypto only with `-D USE_ZLIB` and `-D USE_LIBCRYPTO`.
 - On Windows, the program reaches the runtime's thread-locals through a
   function the library exports, a call per access, since a DLL's
   thread-locals cannot be imported.

@@ -25,7 +25,7 @@ import [demangle_name] from "names";
 import [Target, undefined_build_option_comparisons] from "platform";
 import [load_manifest, Packages, ungenerated_module] from "project";
 import "project";
-import [COMPILER_LEVEL, KIND_PEPPER_SHARED, read_stamps, REQUIRED_LEVEL_NAME] from "stamp";
+import [COMPILER_LEVEL, KIND_PEPPER, KIND_PEPPER_SHARED, read_stamps, REQUIRED_LEVEL_NAME] from "stamp";
 import [check_visibility] from "visibility";
 
 ## Where a program's files come from, beyond its root.
@@ -561,9 +561,6 @@ struct _Queued {
     }
 }
 
-# Where the file of namespace `namespace` of the library interface
-# `interface` loads from: a path inside the interface file, which names it
-# in diagnostics.
 # `find_library_interface`, refusing a Pepper shared library's interface.
 # shortcut: a program cannot import one yet (#220); load it as an archive's
 # interface once it can.
@@ -586,22 +583,42 @@ _find_interface(name: String, dirs: Path[], target: Target): Result<LibraryInter
     return find_library_interface(name, dirs, target);
 }
 
-# Whether a Pepper shared library (`KIND_PEPPER_SHARED`) built with the
-# interface `path` is beside it: one an earlier build left there, before
-# the library was built static, is not.
+# Whether the library of the interface `path` is a Pepper shared library
+# (`KIND_PEPPER_SHARED`) built with it, rather than an archive: the
+# interface is the same for both kinds, so a static library built after a
+# shared one in its folder is the archive beside it, stamped `KIND_PEPPER`
+# and newer than the shared library. A Windows import library has no stamp.
 _is_pepper_shared(path: Path, target: Target): bool {
     var shared = path.with_extension(target.os == "windows" ? "dll" : (target.is_apple() ? "dylib" : "so"));
-    if (!shared.is_file()) {
-        return false;
-    }
-    var stamps = read_stamps(shared);
-    if (stamps.is_err() or stamps.value().is_empty or stamps.value()[0].kind != KIND_PEPPER_SHARED) {
+    if (!_stamped(shared, KIND_PEPPER_SHARED)) {
         return false;
     }
     var bytes = File.read_bytes(path);
-    return bytes.is_ok() and stamps.value()[0].interface == interface_hash(bytes.value());
+    if (bytes.is_err() or read_stamps(shared).value()[0].interface != interface_hash(bytes.value())) {
+        return false;
+    }
+    var archive = path.with_extension(target.os == "windows" ? "lib" : "a");
+    return !_stamped(archive, KIND_PEPPER) or _modified(archive) < _modified(shared);
 }
 
+# Whether `file` exists and its first stamp is of kind `kind`.
+_stamped(file: Path, kind: String): bool {
+    if (!file.is_file()) {
+        return false;
+    }
+    var stamps = read_stamps(file);
+    return stamps.is_ok() and !stamps.value().is_empty and stamps.value()[0].kind == kind;
+}
+
+# When `file` was last written; 0 when that cannot be read.
+_modified(file: Path): long {
+    var metadata = file.metadata();
+    return metadata.is_ok() ? metadata.value().modified : 0;
+}
+
+# Where the file of namespace `namespace` of the library interface
+# `interface` loads from: a path inside the interface file, which names it
+# in diagnostics.
 _interface_path(interface: LibraryInterface, namespace: String): Path {
     return Path($"{interface.path}/{namespace}.pep");
 }

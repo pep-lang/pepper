@@ -175,7 +175,7 @@ tools/compiler/link/visibility.pep _Checker.visit_callee 47
 tools/compiler/link/visibility.pep _Checker.visit_member 26
 tools/compiler/link/visibility.pep check_visibility 243
 tools/compiler/link/walk.pep ScopeWalk.walk_declaration 63
-tools/compiler/main.pep _main 308
+tools/compiler/main.pep _main 306
 tools/compiler/parse/checks.pep _PointerCheck.declaration 35
 tools/compiler/parse/checks.pep _PointerCheck.expression 50
 tools/compiler/parse/parser.pep Parser._binary_operator 37
