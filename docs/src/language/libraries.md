@@ -204,15 +204,30 @@ without knowing the program's structs, so the program compiles its own
 release of each library struct its chains run through, and the linker
 keeps the program's copy, which comes ahead of the library's archive.
 
+## Shared libraries
+
+`--lib pepper-shared` builds a Pepper library as a shared library
+(`libgeo.so`, `libgeo.dylib`, `geo.dll`) with the same interface beside it.
+It holds no runtime: it links the runtime shared library, which it writes
+beside itself. A program built with
+[`--runtime=shared`](../tools/pep-build.md#--runtimestatic---runtimeshared)
+imports it as it imports a static library, and links the same runtime
+library instead of holding the runtime, so the program and every library
+it imports share one heap, one set of runtime thread-locals and one order
+of initialization:
+
+```bash
+pepper build --lib pepper-shared geo.pep -o lib/libgeo.so
+pepper build --runtime=shared main.pep -L lib -o main
+```
+
+The program copies the libraries it imports beside itself, and finds them
+and the runtime library there at run time. A shared library can import
+another; a program that holds the runtime cannot import one (see
+[`--lib pepper-shared`](../tools/pep-build.md#--lib-pepper-shared)).
+
 ## Not supported yet
 
-- **Shared libraries.** A program imports only a static library
-  (`--lib pepper`). `--lib pepper-shared` builds a Pepper library as a
-  shared library, linked against the runtime shared library
-  ([`--runtime=shared`](../tools/pep-build.md#--runtimestatic---runtimeshared)),
-  but a program cannot import or link one yet. A shared library for C
-  (`--lib shared`) holds a runtime of its own, and then only C types cross
-  between it and the program.
 - **A module both use from source.** A library carries the source modules
   it imports, other than the runtime's (an `-I` module, a package), in its
   interface and archive. A program that imports the library and the same

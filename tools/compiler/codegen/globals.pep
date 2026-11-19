@@ -627,7 +627,7 @@ extend Generator {
     declare_thread_local(variable: VariableDef, global: llvm.Value, llvm_ty: llvm.Type): Result<void> {
         var dynamic = library and machine.triple().contains("-android");
         global.set_thread_local_mode(dynamic ? GENERAL_DYNAMIC_TLS_MODEL : INITIAL_EXEC_TLS_MODEL);
-        if (in_shared_runtime(variable.loc.file as ulong) and machine.triple().contains("windows")) {
+        if (_reached_from_elsewhere(variable) and machine.triple().contains("windows")) {
             define_thread_local_accessor(variable, global);
         }
         if (!variable.default.is_value()) {
@@ -664,8 +664,9 @@ extend Generator {
     }
 
     ## The address of global `id` for the code being generated: its
-    ## `global_addrs` entry, or for a runtime thread-local that code outside
-    ## the runtime shared library reads on Windows, its accessor's result.
+    ## `global_addrs` entry, or on Windows, for a thread-local of another
+    ## image (the runtime shared library, an imported Pepper shared
+    ## library), its accessor's result.
     global_address(id: String): Result<Address?> {
         var found = global_addrs.try_get(id);
         if (thread_local_accessors.is_empty or !found.is_value()) {
@@ -683,8 +684,17 @@ extend Generator {
         );
     }
 
-    ## Whether file `file`'s code goes in the runtime shared library
-    ## (`--runtime=shared`).
+    # Whether code in another image reaches thread-local `variable`: one of
+    # the runtime shared library or an imported Pepper shared library, or of
+    # the Pepper shared library this build makes (its own are exported).
+    _reached_from_elsewhere(variable: VariableDef): bool {
+        bool shared_library = !library_name.is_empty and !shared_runtime.is_empty;
+        return shared_library or in_shared_runtime(variable.loc.file as ulong);
+    }
+
+    ## Whether file `file`'s code is another image's: the runtime shared
+    ## library's (`--runtime=shared`) or an imported Pepper shared
+    ## library's.
     in_shared_runtime(file: ulong): bool {
         return file < shared_runtime.count and shared_runtime[file];
     }
@@ -699,9 +709,10 @@ extend Generator {
     }
 
     ## Defines the function returning the calling thread's address of
-    ## `variable`, a runtime thread-local whose `global` code outside the
-    ## runtime shared library cannot name on Windows; owned by its file, so
-    ## the library defines and exports it (`thread_local_accessors`).
+    ## `variable`, a thread-local of a shared library (the runtime's, a
+    ## Pepper one) whose `global` code outside that library cannot name on
+    ## Windows; owned by its file, so the library defines and exports it,
+    ## and code of another image calls it (`thread_local_accessors`).
     define_thread_local_accessor(variable: VariableDef, global: llvm.Value) {
         var pointer = context.pointer_type();
         var name = $"{THREAD_LOCAL_ACCESSOR_PREFIX}{variable.name}";
@@ -710,7 +721,10 @@ extend Generator {
         var entry = context.append_block(function, "entry");
         builder.position_at_end(entry);
         builder.return_value(global);
-        thread_local_accessors[variable.name] = function;
+        # This image's own code reaches its own thread-locals directly.
+        if (in_shared_runtime(variable.loc.file as ulong)) {
+            thread_local_accessors[variable.name] = function;
+        }
     }
 
     ## The function `name` taking and returning nothing: the module's, or

@@ -194,11 +194,13 @@ archive (see [One runtime](libraries.md#one-runtime)).
 
 - A `--lib static` archive is for C: it holds its own runtime and startup
   code, which clash with the program's at the link.
-- `--lib pepper` writes a static library only. A shared library must hold
-  its runtime, which `--lib shared` gives it: a Pepper program links one too,
-  but then it has a second runtime of its own, so free a string it returns
-  with its own `pepper_string_free`, and pass no handle from one to the
-  other.
+- `--lib pepper` writes a static library. A shared library for Pepper
+  programs is `--lib pepper-shared`'s, which links the runtime shared
+  library, as the program importing it must (`--runtime=shared`; see
+  [Shared libraries](libraries.md#shared-libraries)). A `--lib shared`
+  library holds its own runtime: a Pepper program links one too, but then
+  it has a second runtime of its own, so free a string it returns with its
+  own `pepper_string_free`, and pass no handle from one to the other.
 
 ### Identity stamps
 

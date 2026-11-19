@@ -2120,9 +2120,25 @@ written beside it. `codegen.export_own` (from `_export_library`, after
 thread-locals), recording them in `Partition.exported` (the plan's
 `exported` lines), whose declarations in the library's other parts
 `_import_from_runtime` gives back the default storage class. Its stamp's
-kind is `KIND_PEPPER_SHARED`. A program cannot use one yet: `link.load`
-refuses one built with the interface an import finds (`_find_interface`,
-`program.pep`), and `check_library_stamps` one linked by `-l`.
+kind is `KIND_PEPPER_SHARED`, and a build that links the runtime library
+stamps `runtime-link shared` (`stamp_mismatch` refuses a library that links
+the runtime otherwise than the build, by its kind or that line). **Importing one** (third step):
+`link.load`'s `find_library_interface` takes the interface of a
+shared library built with it (`_is_pepper_shared`: its stamp, and no newer
+`KIND_PEPPER` archive beside it) with the shared library as its `archive`
+(`shared_library_path`). `_link_interfaces` accepts its stamp, refuses it
+in a build that holds the runtime and a static one in a build that does
+not (`_runtime_link_mismatch`), and links it (`_link_input`: the import
+library on Windows), a library build that makes another too; its init and
+release are called as a static one's (`pepper_libraries`). Codegen counts
+its files with the runtime's as another image's (`_shared_runtime_files`,
+`Build.shared_runtime`), so the program imports what they own and calls
+the accessor of each of their thread-locals on Windows, which the library
+defines and exports (`_reached_from_elsewhere`; the library's own code reads
+them directly). `_place_shared_libraries` copies each the program links,
+imported or by `-l` (`_placements`, from `options.linked`), beside
+it, and the up-to-date check compares the copies
+(`_shared_libraries_placed`).
 
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes

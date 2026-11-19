@@ -687,18 +687,12 @@ export read_library_stamps(libraries: String[], dirs: Path[], objects: Path[], t
 ##   name that found it (empty for a file linked by path) and the error
 export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(String, String)[], (String, String)> {
     var warnings = Array<(String, String)>();
+    var unmet = _unmet_need(files);
+    if (unmet.is_value()) {
+        return Result<(String, String)[], (String, String)>.err(unmet.value());
+    }
     for (var found in files) {
         for (var stamp in found.stamps) {
-            # shortcut: a program cannot link one yet; it imports one once
-            # Pepper shared libraries can be imported (#220).
-            if (stamp.kind == link.KIND_PEPPER_SHARED) {
-                return Result<(String, String)[], (String, String)>.err(
-                    (
-                        found.name,
-                        $"'{found.file}' is a Pepper shared library ('--lib pepper-shared'), which a program cannot link yet"
-                    )
-                );
-            }
             var mismatch = link.stamp_mismatch(stamp, build);
             if (mismatch.is_value()) {
                 return Result<(String, String)[], (String, String)>.err(
@@ -716,8 +710,34 @@ export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(St
     return Result<(String, String)[], (String, String)>.ok(warnings);
 }
 
-## Returns the stamps of the Pepper libraries (`--lib pepper`) of
-## `files`, each once, in the order they initialize: each after the ones
+# The first Pepper shared library of `files` that needs a Pepper library
+# `files` lack, with the name that found it and the error: the program
+# would load it without initializing that one first, or not load at all.
+# A static library's missing need fails the link instead.
+_unmet_need(files: StampedFile[]): (String, String)? {
+    var linked = HashSet<String>();
+    for (var stamp in pepper_libraries(files)) {
+        linked.insert(stamp.library);
+    }
+    for (var found in files) {
+        for (var stamp in found.stamps) {
+            for (var need in stamp.kind == link.KIND_PEPPER_SHARED ? stamp.needs : Array<String>()) {
+                if (!linked.contains(need)) {
+                    return Optional<(String, String)>.Value(
+                        (
+                            found.name,
+                            $"'{found.file}' needs the Pepper library '{need}', which this build does not link; link or import it too"
+                        )
+                    );
+                }
+            }
+        }
+    }
+    return Optional<(String, String)>.Empty;
+}
+
+## Returns the stamps of the Pepper libraries (`--lib pepper`,
+## `--lib pepper-shared`) of `files`, each once, in the order they initialize: each after the ones
 ## it needs (`link.Stamp.needs`), otherwise in link order.
 ##
 ## @param files what the build links (`read_library_stamps`)
@@ -727,7 +747,7 @@ export pepper_libraries(files: StampedFile[]): link.Stamp[] {
     var names = HashSet<String>();
     for (var found in files) {
         for (var stamp in found.stamps) {
-            if (stamp.kind == link.KIND_PEPPER and names.insert(stamp.library)) {
+            if (link.is_pepper_kind(stamp.kind) and names.insert(stamp.library)) {
                 linked.append(stamp);
             }
         }
