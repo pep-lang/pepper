@@ -38,6 +38,7 @@ export [
     KIND_PEPPER_SHARED,
     is_pepper_kind,
     RUNTIME_LINK_SHARED,
+    runtime_link_mismatch,
     make_stamp,
     parse_stamp,
     read_stamps,

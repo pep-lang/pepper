@@ -91,7 +91,8 @@ the order this book covers them:
 - **Compile time, platforms and C:** calling C (including C callbacks), and
   being called from C (`[Export]`ed functions in a static or shared
   library, with a generated header), importing a [Pepper library](language/libraries.md) another
-  build made, with no source for it (`--lib pepper`), and [SIMD vectors](language/simd.md)
+  build made, with no source for it (`--lib pepper`, or as a shared library,
+  `--lib pepper-shared`), and [SIMD vectors](language/simd.md)
   (`simd.Vector<T, N>`).
 - **Standard library:** strings (with a `StringBuilder`, `StringConstant`
   for literals' constant bytes, `to_string` and a `ToString` trait,

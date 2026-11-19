@@ -3,7 +3,9 @@
 # `name.pep`, or a folder `name/` whose entry point is `main.pep` (for
 # examples of several files, such as modules), whose `lib/<name>.pep`
 # files, if any, are Pepper libraries (`--lib pepper`) built first for
-# `main.pep` to import. The book includes the files verbatim, so what a
+# `main.pep` to import; its `shared-lib/<name>.pep` files instead are
+# Pepper shared libraries (`--lib pepper-shared`), and `main.pep` is built
+# with `--runtime=shared`. The book includes the files verbatim, so what a
 # reader sees is what was tested here.
 #
 # An example that ends with an `# Output:` comment block must also print
@@ -452,6 +454,19 @@ all_examples(): Array<Example> {
 # keeps for every part, and the other tools' tests' builds do not use.
 const RUNTIME_CACHE = ".pep/docs-examples-runtime";
 
+# The file a folder example's library `name` is built into: an archive, or
+# with `shared` a Pepper shared library, as this system names them.
+_library_file(name: String, shared: bool): String {
+    var system = os.system_os();
+    if (system == os.OperatingSystem.Windows) {
+        return shared ? $"{name}.dll" : $"{name}.lib";
+    }
+    if (!shared) {
+        return $"lib{name}.a";
+    }
+    return system == os.OperatingSystem.Mac ? $"lib{name}.dylib" : $"lib{name}.so";
+}
+
 # Builds `example` with `options`, runs it in a folder of its own, and adds
 # what went wrong to `failures`.
 check(example: Example, options: Array<String>, failures: Array<String>) {
@@ -465,9 +480,16 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
     var program = folder.path.join(example.name);
     # A folder example's `lib/<name>.pep` files are Pepper libraries
     # (`--lib pepper`) its `main.pep` imports, built first into `lib/` in
-    # name order, each able to import those before it.
+    # name order, each able to import those before it; its
+    # `shared-lib/<name>.pep` files are Pepper shared libraries, built so
+    # into `lib/`, for a `main.pep` built with `--runtime=shared`.
     var libraries = folder.path.join("lib");
     var sources = example.entry.parent().value_or(Path(".")).join("lib");
+    var shared_sources = example.entry.parent().value_or(Path(".")).join("shared-lib");
+    bool shared = shared_sources.is_directory();
+    if (shared) {
+        sources = shared_sources;
+    }
     var linking = Array<String>();
     if (sources.is_directory()) {
         linking = ["-L", libraries.to_string()];
@@ -478,14 +500,17 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
             }
         }
         names.sort((a, b) => a.compare(b));
+        if (shared) {
+            linking.append("--runtime=shared");
+        }
         for (var file in names) {
             var name = file.substr_bytes(0, file.size - 4);
-            var archive = libraries.join(os.system_os() == os.OperatingSystem.Windows ? $"{name}.lib" : $"lib{name}.a");
+            var archive = libraries.join(_library_file(name, shared));
             var library = process
                 .Command(compiler.value().to_string())
                 .argument(sources.join(file).to_string())
                 .argument("--lib")
-                .argument("pepper")
+                .argument(shared ? "pepper-shared" : "pepper")
                 .arguments(linking)
                 .argument("-o")
                 .argument(archive.to_string())

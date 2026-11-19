@@ -692,14 +692,14 @@ a_pepper_shared_library_links_the_runtime_library() {
     expect_exit(imported, 1);
     expect_contains(
         imported.stderr,
-        "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
+        "links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
     );
     write_file(main, _MAIN);
     var linked = _pep_build(main, program, linking);
     expect_exit(linked, 1);
     expect_contains(
         linked.stderr,
-        "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
+        "links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
     );
     # With the runtime library, linked by name, it runs: copied beside the
     # program, initialized first, its thread-local released.
@@ -716,11 +716,11 @@ a_pepper_shared_library_links_the_runtime_library() {
     # with the runtime library does not hold: refused, imported or linked.
     var static_imported = _pep_build(main, program, shared_linking);
     expect_exit(static_imported, 1);
-    expect_contains(static_imported.stderr, "it holds no runtime, and this build links the runtime shared library");
+    expect_contains(static_imported.stderr, "holds no runtime, and this build links the runtime shared library");
     write_file(main, _MAIN);
     var static_linked = _pep_build(main, program, shared_linking);
     expect_exit(static_linked, 1);
-    expect_contains(static_linked.stderr, "it holds no runtime, and this build links the runtime shared library");
+    expect_contains(static_linked.stderr, "holds no runtime, and this build links the runtime shared library");
     # It cannot take a static runtime, nor an archive's name.
     var static_runtime = _pep_build(source, library, ["--lib", "pepper-shared", "--runtime=static"]);
     expect_exit(static_runtime, 2);

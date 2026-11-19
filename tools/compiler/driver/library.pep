@@ -693,6 +693,12 @@ export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(St
     }
     for (var found in files) {
         for (var stamp in found.stamps) {
+            var linking = link.runtime_link_mismatch(stamp, build);
+            if (linking.is_value()) {
+                return Result<(String, String)[], (String, String)>.err(
+                    (found.name, $"'{found.file}' {linking.value()}")
+                );
+            }
             var mismatch = link.stamp_mismatch(stamp, build);
             if (mismatch.is_value()) {
                 return Result<(String, String)[], (String, String)>.err(
