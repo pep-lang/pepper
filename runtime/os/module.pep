@@ -16,6 +16,7 @@
 ##   `page_size()`
 ## - [User](os-user.md): `user_name()`, `home_directory()`,
 ##   `temp_directory()`, `is_elevated()`
+## - [App folders](os-app.md): `app_directories()`, an iOS or Android app's folders
 ##
 ## @example
 ##     import os;
@@ -30,6 +31,7 @@
 
 # This file only gathers the module's public API from its other files.
 
+import "app";
 import "environment";
 import "machine";
 import "sys_posix";
@@ -61,6 +63,8 @@ export user_name;
 export home_directory;
 export is_elevated;
 export temp_directory;
+export AppDirectories;
+export app_directories;
 
 # For the process module only: the environment a child inherits.
 export _os_environment_entries;

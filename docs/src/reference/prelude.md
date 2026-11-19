@@ -29,3 +29,4 @@ The prelude is the part of the standard library every program gets without an im
 - [Copying](copy.md): Deep copies: `copy(value)` makes a copy that shares no object that is not thread-safe with the original, so it can be handed to another thread; `Copyable<T>` lets a type say how it is copied.
 - [URI](uri.md): URI references (RFC 3986): parse any URI, such as `https://example.com/a?b#c`, `mailto:someone@example.com` or `/items?page=2`, into its parts.
 - [Test checks](expect.md): Checks for tests: `expect_equal`, `expect_not_equal`, `expect_true` and `expect_false`, which every program can call without an import.
+- [iOS and Android](mobile.md): What the runtime does only on iOS and Android: sending an app's standard output and error to the platform's log, and, on Android, taking the app's folders from the app (see [iOS and Android](../language/mobile.md)).

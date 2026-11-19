@@ -56,6 +56,8 @@ cat "$out/stdout.txt"
 grep -q "fibonacci(50) = 12586269025" "$out/stdout.txt"
 grep -q "words: 4" "$out/stdout.txt"
 grep -q "even: true, half: 1.25, tally: 7" "$out/stdout.txt"
+grep -q "note: kept in tmp" "$out/stdout.txt"
+grep -q "saved a note in /.*/tmp/note.txt" "$out/stdout.txt"
 xcrun simctl io "$device" screenshot "$out/screenshot.png" || true
 xcrun simctl terminate "$device" dev.pepper.demo || true
 xcrun simctl uninstall "$device" dev.pepper.demo
