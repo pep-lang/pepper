@@ -10,6 +10,7 @@ import [Directory, File, Path] from io;
 import compiler.link;
 import process;
 import [TempFolder] from testing;
+import [Utf8] from text;
 import [expect_contains, expect_exit, run, tool, write_file] from tool_testing;
 import toolchain;
 
@@ -217,7 +218,7 @@ a_shared_pepper_library_is_refused() {
     var archive = folder.path.join(driver.library_file_name(driver.LibraryKind.Pepper, "geo", host));
     var expanded = _pep_build(source, archive, ["--lib", "pepper", "-g", "--debug-static=expanded"]);
     expect_exit(expanded, 2);
-    expect_contains(expanded.stderr, "'--debug-static=expanded' cannot build '--lib pepper'");
+    expect_contains(expanded.stderr, "'--debug-static=expanded' cannot build a Pepper library");
 }
 
 # Builds `testdata/imported_library/geo.pep` as the Pepper library `geo`
@@ -612,4 +613,103 @@ a_program_links_the_runtime_as_a_shared_library() {
     var mixed = _pep_build(source, program, ["--runtime=shared", "-O", "--lto=full"]);
     expect_exit(mixed, 1);
     expect_contains(mixed.stderr, "'--runtime=shared' cannot be used with '--lto=full'");
+}
+
+# A chain that runs through a runtime struct (`compress.DecompressReader`)
+# and the program's `Wrap` in turn is released without overflowing the
+# stack with `--runtime=shared` too, through `_pep_release_last`
+# (`testdata/shared_runtime_chain`); the static build, which steers through
+# the program's structs, as a check.
+[Test]
+a_chain_through_the_runtime_library_releases_without_overflow() {
+    var folder = TempFolder("shared_runtime_chain");
+    var source = folder.path.join("app").join("main.pep");
+    write_file(source, File.read_to_string(Path("compiler/testdata/shared_runtime_chain/main.pep")).value());
+    var program = folder.path.join("app").join("main" + toolchain.executable_suffix());
+    for (var options in [Array<String>(), ["--runtime=shared"]]) {
+        expect_exit(_pep_build(source, program, options), 0);
+        for (var depth in ["10", "100000"]) {
+            var ran = run(process.Command(program.to_string()).argument(depth));
+            expect_exit(ran, 0);
+            expect_equal(ran.stdout.trim(), "chain released true");
+        }
+    }
+}
+
+# `--lib pepper-shared` builds a Pepper library as a shared library: its
+# own code, exported, linked against the runtime shared library beside it,
+# with its interface beside it and a stamp of its kind. A program can
+# neither import nor link one yet.
+[Test]
+a_pepper_shared_library_links_the_runtime_library() {
+    var folder = TempFolder("pepper_shared_library");
+    var root = folder.path;
+    var host = link.Target();
+    var source = root.join("geo").join("geo.pep");
+    write_file(source, _GEO);
+    var library = root.join("geo").join(driver.library_file_name(driver.LibraryKind.PepperShared, "geo", host));
+    expect_exit(_pep_build(source, library, ["--lib", "pepper-shared"]), 0);
+    expect_true(driver.runtime_library_path(library, host).is_file());
+    var interface = File.read_bytes(library.with_extension(link.INTERFACE_EXTENSION)).value();
+    var stamps = link.read_stamps(library).value();
+    expect_equal(stamps[0].kind, link.KIND_PEPPER_SHARED);
+    expect_equal(stamps[0].init, "__pep_library_init.geo");
+    expect_equal(stamps[0].interface, link.interface_hash(interface));
+    # Its functions are exported under the names the interface links them
+    # by: a DLL names only its exports; elsewhere `llvm-nm` lists the
+    # dynamic ones, when it is there.
+    var text = Utf8.decode_lossy(interface);
+    var start = text.find("declare function geo_badge@") + 17;
+    var end = text.substr_bytes(start as ulong, text.size - start as ulong).find("\n");
+    var symbol = link.symbol_name(text.substr_bytes(start as ulong, end as ulong).split(" ")[0]);
+    if (host.os == "windows") {
+        var bytes = File.read_bytes(library).value();
+        expect_true(_find(bytes, symbol.bytes()) < bytes.count);
+    } else {
+        var nm = driver.find_llvm_tool("llvm-nm", driver.find_link_driver().value());
+        if (nm.is_value()) {
+            var only = host.is_apple() ? ["--extern-only", "--defined-only"] : ["-D", "--defined-only"];
+            only.append(library.to_string());
+            var listed = run(process.Command(nm.value().to_string()).arguments(only));
+            expect_exit(listed, 0);
+            expect_contains(listed.stdout, symbol);
+        }
+    }
+    # Another library built beside it with the same options shares its
+    # runtime library, the whole runtime, which is not linked again.
+    var runtime = driver.runtime_library_path(library, host);
+    var before = File.read_bytes(runtime).value();
+    var top = root.join("geo").join("top.pep");
+    write_file(top, "[Export]\nexport top_value(): int {\n    return 1;\n}\n");
+    var top_library = root.join("geo").join(driver.library_file_name(driver.LibraryKind.PepperShared, "top", host));
+    expect_exit(_pep_build(top, top_library, ["--lib", "pepper-shared"]), 0);
+    expect_true(File.read_bytes(runtime).value() == before);
+    var main = root.join("app").join("main.pep");
+    var program = root.join("app").join("main" + toolchain.executable_suffix());
+    var linking = ["-L", root.join("geo").to_string()];
+    write_file(main, "import geo;\n\nmain(): int {\n    return geo.geo_seed();\n}\n");
+    var imported = _pep_build(main, program, linking);
+    expect_exit(imported, 1);
+    expect_contains(
+        imported.stderr,
+        "the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which a program cannot import yet"
+    );
+    write_file(main, _MAIN);
+    var linked = _pep_build(main, program, linking);
+    expect_exit(linked, 1);
+    expect_contains(
+        linked.stderr, "is a Pepper shared library ('--lib pepper-shared'), which a program cannot link yet"
+    );
+    # Built static after it, into its folder, the library imports again.
+    expect_exit(_pep_build(source, _archive(root.join("geo"), "geo"), ["--lib", "pepper"]), 0);
+    write_file(main, "import geo;\n\nmain(): int {\n    print($\"{geo.geo_seed()}\");\n    return 0;\n}\n");
+    expect_exit(_pep_build(main, program, linking), 0);
+    expect_equal(_run_program(program), "41");
+    # It cannot take a static runtime, nor an archive's name.
+    var static_runtime = _pep_build(source, library, ["--lib", "pepper-shared", "--runtime=static"]);
+    expect_exit(static_runtime, 2);
+    expect_contains(static_runtime.stderr, "'--lib pepper-shared' links the runtime shared library");
+    var archive_name = _pep_build(source, _archive(root.join("geo"), "geo"), ["--lib", "pepper-shared"]);
+    expect_exit(archive_name, 2);
+    expect_contains(archive_name.stderr, "'--lib pepper-shared' builds a shared library");
 }

@@ -10,6 +10,7 @@ import [
 import digest;
 import [
     Cache,
+    compiler_identity,
     check_compilation_unit,
     check_compilation_units,
     Clock,
@@ -1129,7 +1130,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 program,
                 name,
                 Diagnostic.error(
-                    $"the Pepper library '{name}' is a static library, which needs the program to hold the runtime; build without '--runtime=shared'"
+                    $"the Pepper library '{name}' is a static library, which needs the build to hold the runtime; a build that links the runtime shared library ('--runtime=shared', '--lib pepper-shared') cannot import it"
                 )
             )
         );
@@ -1304,7 +1305,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         keys.value().exact_positions = options.debug;
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)
-            and _beside_output_written(options, program.target, header, pepper)) {
+            and _beside_output_written(options, program, header, pepper)) {
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: {options.output} is up to date\n");
             }
@@ -1781,6 +1782,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         var partition = codegen.prepare(
             ir, owners, part_of_file, entry_part, entry_part + 1, shared = setup.shared_runtime
         );
+        _export_library(options, ir, partition, owners, in_runtime);
         var jobs = Array<PartJob>();
         # The units compiled, with their keys and their parts' objects, to
         # store in the cache.
@@ -1789,7 +1791,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         # store in the cache.
         var stored_parts = Array<(ulong, ulong, String)>();
         for (var u in 0..translation_units.count) {
-            if ((pepper and _all_in(translation_units[u].files, in_runtime))
+            if ((pepper and !options.shared_runtime and _all_in(translation_units[u].files, in_runtime))
                 or _all_in(translation_units[u].files, library_files)) {
                 continue;
             }
@@ -2018,14 +2020,15 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     }
     objects.append_all(options.objects);
     var made = Result<void, String>.ok();
-    bool archive = pepper or (options.library.is_value() and options.library.value() == LibraryKind.Static);
+    bool archive = (pepper and !options.shared_runtime)
+        or (options.library.is_value() and options.library.value() == LibraryKind.Static);
     if (archive) {
         made = write_archive(objects, options.output, program.target);
-        if (made.is_ok() and interface.is_value()) {
-            made = write_library_interface(options.output, interface.value());
-        }
     } else {
-        made = _link(objects, runtime_objects, options, libraries, dirs, program.target, natvis);
+        made = _link(objects, runtime_objects, options, libraries, dirs, program, natvis);
+    }
+    if (made.is_ok() and interface.is_value()) {
+        made = write_library_interface(options.output, interface.value());
     }
     Directory.remove_all(work);
     if (made.is_ok()
@@ -2057,11 +2060,34 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
 # Whether what a build writes beside its output is there, which an
 # up-to-date output needs too: a library's header (`header`), a Pepper
 # library's interface, the bindings, and the runtime shared library.
-_beside_output_written(options: BuildOptions, target: link.Target, header: Path?, pepper: bool): bool {
+_beside_output_written(options: BuildOptions, program: link.Program, header: Path?, pepper: bool): bool {
     return (!header.is_value() or header.value().is_file())
-        and (!options.shared_runtime or runtime_library_path(options.output, target).is_file())
+        and (!options.shared_runtime
+            or options.cache.value().is_built(
+                runtime_library_path(options.output, program.target), _runtime_key(program, options)
+            ))
         and (!pepper or interface_path(options.output).is_file())
         and _bindings_written(options, header);
+}
+
+# With `--lib pepper-shared`, exports what the library's own files define,
+# and its init and release, from the shared library (`codegen.export_own`):
+# what a program that imports it calls.
+_export_library(
+    options: BuildOptions,
+    ir: llvm.Module,
+    partition: codegen.Partition,
+    owners: HashMap<String, uint>,
+    in_runtime: bool[]
+) {
+    if (!_is_pepper_library(options) or !options.shared_runtime) {
+        return;
+    }
+    var own = Array<bool>();
+    for (var runtime in in_runtime) {
+        own.append(!runtime);
+    }
+    codegen.export_own(ir, partition, owners, own);
 }
 
 # The files whose code is the runtime shared library's: with
@@ -2108,9 +2134,10 @@ _link(
     options: BuildOptions,
     libraries: String[],
     dirs: Path[],
-    target: link.Target,
+    program: link.Program,
     natvis: Path[]
 ): Result<void, String> {
+    var target = program.target;
     if (!options.shared_runtime) {
         return link_objects(
             objects,
@@ -2125,9 +2152,7 @@ _link(
         );
     }
     var runtime = runtime_library_path(options.output, target);
-    var made = link_objects(
-        runtime_objects, runtime, libraries, dirs, target, options.sysroot, true, options.debug, natvis
-    );
+    var made = _link_runtime(runtime_objects, runtime, options, libraries, dirs, program, natvis);
     if (made.is_err()) {
         return made;
     }
@@ -2136,14 +2161,76 @@ _link(
     var searched = Array<Path>();
     searched.append(runtime.parent().value_or(Path(".")));
     searched.append_all(dirs);
-    # Windows looks in the executable's folder anyway.
-    var run_path = Array<String>();
-    if (target.os != "windows") {
-        run_path.append(target.is_apple() ? "-Wl,-rpath,@executable_path" : "-Wl,-rpath,$ORIGIN");
-    }
     return link_objects(
-        objects, options.output, with_runtime, searched, target, options.sysroot, false, options.debug, natvis, run_path
+        objects,
+        options.output,
+        with_runtime,
+        searched,
+        target,
+        options.sysroot,
+        options.library.is_value(),
+        options.debug,
+        natvis,
+        _run_path(target, options.library.is_value())
     );
+}
+
+# Links `runtime_objects`, the whole runtime's, into the runtime shared
+# library `runtime`, unless the cache records that the file there is this
+# very runtime (`_runtime_key`): a program or Pepper library built beside
+# another with the same options shares it.
+_link_runtime(
+    runtime_objects: Path[],
+    runtime: Path,
+    options: BuildOptions,
+    libraries: String[],
+    dirs: Path[],
+    program: link.Program,
+    natvis: Path[]
+): Result<void, String> {
+    var key = _runtime_key(program, options);
+    # A Windows DLL is linked against through its import library, beside it.
+    bool linkable = program.target.os != "windows" or runtime.with_extension("lib").is_file();
+    if (options.cache.is_value() and options.cache.value().is_built(runtime, key) and linkable) {
+        return Result<void, String>.ok();
+    }
+    var made = link_objects(
+        runtime_objects, runtime, libraries, dirs, program.target, options.sysroot, true, options.debug, natvis
+    );
+    if (made.is_ok() and options.cache.is_value()) {
+        options.cache.value().record(runtime, key, false, Array<String>());
+    }
+    return made;
+}
+
+# What the runtime shared library is: this compiler, how the code is
+# generated (`_build_text`) and the text of every runtime file, which the
+# whole runtime (`--runtime=shared`) holds whatever the program.
+_runtime_key(program: link.Program, options: BuildOptions): String {
+    var hasher = digest.Blake3();
+    hasher.update($"pepper runtime library 1\n{compiler_identity()}\n");
+    hasher.update(_build_text(options, codegen.target_triple(program.target)));
+    var in_runtime = program.in_runtime();
+    for (var i in 0..program.files.count) {
+        if (in_runtime[i]) {
+            hasher.update($"\n{program.files[i].name}\n{program.files[i].source.size}\n");
+            hasher.update(program.files[i].source);
+        }
+    }
+    return hasher.finish_hex();
+}
+
+# The run path that finds the runtime shared library beside the program,
+# or beside the library (`library`): its folder's, which Windows searches
+# anyway.
+_run_path(target: link.Target, library: bool): String[] {
+    var out = Array<String>();
+    if (target.is_apple()) {
+        out.append(library ? "-Wl,-rpath,@loader_path" : "-Wl,-rpath,@executable_path");
+    } else if (target.os != "windows") {
+        out.append("-Wl,-rpath,$ORIGIN");
+    }
+    return out;
 }
 
 ## The name the runtime shared library is linked by (`-l`), and the stem of
@@ -2500,7 +2587,7 @@ export full_stamp(program: link.Program, options: BuildOptions): link.Stamp {
     var linked = options.linked.is_value() ? pepper_libraries(options.linked.value()) : Array<link.Stamp>();
     bool pepper = _is_pepper_library(options);
     if (options.library.is_value()) {
-        stamp.kind = pepper ? link.KIND_PEPPER : link.KIND_C;
+        stamp.kind = pepper ? (options.shared_runtime ? link.KIND_PEPPER_SHARED : link.KIND_PEPPER) : link.KIND_C;
     }
     if (pepper) {
         stamp.library = header_path(options.output, program.target).file_stem().value_or("");
@@ -2527,7 +2614,9 @@ export add_interfaces(stamp: link.Stamp, program: link.Program, module: sema.Mod
     stamp.modules = runtime_modules(program, facts);
 }
 
-# Whether `options` build a Pepper library (`--lib pepper`).
+# Whether `options` build a Pepper library (`--lib pepper`, `--lib
+# pepper-shared`).
 _is_pepper_library(options: BuildOptions): bool {
-    return options.library.is_value() and options.library.value() == LibraryKind.Pepper;
+    return options.library.is_value()
+        and (options.library.value() == LibraryKind.Pepper or options.library.value() == LibraryKind.PepperShared);
 }

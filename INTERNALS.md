@@ -2083,7 +2083,14 @@ files are all the runtime's in `runtime_objects`, from the cache or not
 `_link_with_shared_runtime` links those into `runtime_library_path`
 (`pepper_runtime.dll` + import library, `libpepper_runtime.so`,
 `libpepper_runtime.dylib`, beside the output) and the rest against it, with
-a run path of `$ORIGIN` or `@executable_path`. `partition.prepare(shared =
+a run path of `$ORIGIN` or `@executable_path`. The library is the whole runtime: `main.pep`
+loads every runtime module (`link.runtime_module_names`, as
+`Setup.extra_modules`), so it is the same for every program and Pepper
+library built with the same options, and `_link_runtime` links it only
+when the cache's record of the file beside the output (`Cache.record`)
+is not `_runtime_key` (the compiler, `_build_text` and every runtime
+file's text), which the up-to-date check (`_beside_output_written`)
+compares too. `partition.prepare(shared =
 ...)` gives what a runtime file owns default visibility, and on COFF
 `dllexport` (not thread-locals), and lists it (`Partition.imported`, with
 the runtime's parts, `exporting`, both in the `--compile-part` plan); the
@@ -2100,6 +2107,22 @@ thread-local gets an exported accessor, `__pep_tls.<name>`
 no runtime file owns (instantiations included). `find_chains` lets a
 runtime struct steer only into runtime structs, so the library's code never
 names the program's.
+
+**Pepper shared libraries** (`--lib pepper-shared`, `LibraryKind.PepperShared`,
+the second step of #220) build as `--lib pepper` does (`_is_pepper_library`:
+`library_units`, the interface, the mangled `main`) with `shared_runtime`
+set (`main.pep` `_linking`): the runtime's units go to `runtime_objects` and
+the runtime library, the library's own parts are linked `-shared` against
+it (`_link`, run path `$ORIGIN` or `@loader_path`), and the interface is
+written beside it. `codegen.export_own` (from `_export_library`, after
+`prepare`) exports what the library's own files own and its
+`__pep_library_*` entry points (protected on ELF, `dllexport` on COFF, not
+thread-locals), recording them in `Partition.exported` (the plan's
+`exported` lines), whose declarations in the library's other parts
+`_import_from_runtime` gives back the default storage class. Its stamp's
+kind is `KIND_PEPPER_SHARED`. A program cannot use one yet: `link.load`
+refuses one built with the interface an import finds (`_find_interface`,
+`program.pep`), and `check_library_stamps` one linked by `-l`.
 
 **Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
 header of `state.exports` (`sema.header_declarations`, `sema.header`) goes

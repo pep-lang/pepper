@@ -84,7 +84,7 @@ tools/compiler/codegen/generator.pep Generator.generate_items 59
 tools/compiler/codegen/generator.pep Generator.generate_module 32
 tools/compiler/codegen/globals.pep Generator.emit_exports 99
 tools/compiler/codegen/globals.pep Generator.emit_globals 93
-tools/compiler/codegen/globals.pep Generator.emit_thread_locals_release 29
+tools/compiler/codegen/globals.pep Generator.emit_thread_locals_release 28
 tools/compiler/codegen/globals.pep Generator.store_constant 27
 tools/compiler/codegen/globals.pep Generator.value_struct_constant 29
 tools/compiler/codegen/lazy.pep _killed_reads 32
@@ -175,7 +175,7 @@ tools/compiler/link/visibility.pep _Checker.visit_callee 47
 tools/compiler/link/visibility.pep _Checker.visit_member 26
 tools/compiler/link/visibility.pep check_visibility 243
 tools/compiler/link/walk.pep ScopeWalk.walk_declaration 63
-tools/compiler/main.pep _main 308
+tools/compiler/main.pep _main 306
 tools/compiler/parse/checks.pep _PointerCheck.declaration 35
 tools/compiler/parse/checks.pep _PointerCheck.expression 50
 tools/compiler/parse/parser.pep Parser._binary_operator 37

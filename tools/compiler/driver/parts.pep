@@ -22,8 +22,9 @@ import "build";
 ## parts' objects go under there (empty when they are not cached), then one
 ## `<part> <symbol>` line per symbol defined in exactly one part, and with
 ## `--runtime=shared` an `export <part>` line per part of the runtime shared
-## library and an `import <symbol>` line per symbol it defines
-## (`Partition.exporting`, `Partition.imported`).
+## library, an `import <symbol>` line per symbol it defines, and an
+## `exported <symbol>` line per symbol a Pepper shared library exports
+## (`Partition.exporting`, `Partition.imported`, `Partition.exported`).
 const _PLAN_FILE = "plan";
 const _BITCODE_FILE = "program.bc";
 
@@ -181,8 +182,9 @@ export compile_parts(
     return Result<void, String>.ok();
 }
 
-# The plan's lines naming the parts of the runtime shared library and what
-# it defines (`Partition.exporting`, `Partition.imported`); none without
+# The plan's lines naming the parts of the runtime shared library, what it
+# defines, and what a Pepper shared library exports (`Partition.exporting`,
+# `Partition.imported`, `Partition.exported`); none without
 # `--runtime=shared`.
 _shared_runtime_plan(partition: codegen.Partition): String {
     var out = StringBuilder();
@@ -191,6 +193,9 @@ _shared_runtime_plan(partition: codegen.Partition): String {
     }
     for (var symbol in partition.imported) {
         out.append($"import {symbol}\n");
+    }
+    for (var symbol in partition.exported) {
+        out.append($"exported {symbol}\n");
     }
     return out.to_string();
 }
@@ -207,6 +212,10 @@ _read_plan_line(line: String, partition: codegen.Partition) {
     var rest = line.substr_bytes(space as ulong + 1, line.size - space as ulong - 1);
     if (head == "import") {
         partition.imported.insert(rest);
+        return;
+    }
+    if (head == "exported") {
+        partition.exported.insert(rest);
         return;
     }
     var part = uint.parse(head == "export" ? rest : head);

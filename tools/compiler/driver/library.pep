@@ -33,11 +33,15 @@ export enum LibraryKind {
     ## An archive for a Pepper program to link (`--lib pepper`), without
     ## the runtime, which the program supplies (#220).
     Pepper,
+    ## A shared library for Pepper programs (`--lib pepper-shared`): the
+    ## library's code, linked against the runtime shared library
+    ## (`--runtime=shared`) written beside it (#220).
+    PepperShared,
 }
 
 ## The library's file name for `name` on `target`: `libname.a` (static or
-## for Pepper), `libname.so` or `libname.dylib`; `name.lib` or `name.dll`
-## on Windows;
+## for Pepper), `libname.so` or `libname.dylib` (shared, for C or for
+## Pepper); `name.lib` or `name.dll` on Windows;
 ## `name.xcframework`, or the folder `name` for a Swift package;
 ## `name.aar`.
 ##
@@ -140,7 +144,7 @@ export write_header(
     target: link.Target
 ): Result<void, String> {
     var declarations = sema.header_declarations(exports, representations);
-    if (declarations.is_empty and kind != LibraryKind.Pepper) {
+    if (declarations.is_empty and kind != LibraryKind.Pepper and kind != LibraryKind.PepperShared) {
         File.stderr().write_all(
             "warning: the library exports no functions; mark the functions C calls with '[Export]'\n"
         );
@@ -685,6 +689,16 @@ export check_library_stamps(build: link.Stamp, files: StampedFile[]): Result<(St
     var warnings = Array<(String, String)>();
     for (var found in files) {
         for (var stamp in found.stamps) {
+            # shortcut: a program cannot link one yet; it imports one once
+            # Pepper shared libraries can be imported (#220).
+            if (stamp.kind == link.KIND_PEPPER_SHARED) {
+                return Result<(String, String)[], (String, String)>.err(
+                    (
+                        found.name,
+                        $"'{found.file}' is a Pepper shared library ('--lib pepper-shared'), which a program cannot link yet"
+                    )
+                );
+            }
             var mismatch = link.stamp_mismatch(stamp, build);
             if (mismatch.is_value()) {
                 return Result<(String, String)[], (String, String)>.err(

@@ -436,10 +436,7 @@ const _NO_RUNTIME_LIBRARY = "[Export]\nadd(a: int, b: int): int {\n    return a 
 # The archive's index, as `llvm-nm --print-armap` reads it: each symbol
 # and the member defining it; empty without llvm-nm.
 _archive_map(archive: Path): String {
-    var nm = process.find_executable("llvm-nm");
-    if (!nm.is_value()) {
-        nm = process.find_executable($"llvm-nm-{driver.LLVM_MAJOR}");
-    }
+    var nm = driver.find_llvm_tool("llvm-nm", driver.find_link_driver().value());
     if (!nm.is_value()) {
         return "";
     }

@@ -206,9 +206,13 @@ keeps the program's copy, which comes ahead of the library's archive.
 
 ## Not supported yet
 
-- **Shared libraries.** `--lib pepper` writes a static library only:
-  a shared library must hold a runtime of its own (`--lib shared`), and
-  then only C types cross between it and the program.
+- **Shared libraries.** A program imports only a static library
+  (`--lib pepper`). `--lib pepper-shared` builds a Pepper library as a
+  shared library, linked against the runtime shared library
+  ([`--runtime=shared`](../tools/pep-build.md#--runtimestatic---runtimeshared)),
+  but a program cannot import or link one yet. A shared library for C
+  (`--lib shared`) holds a runtime of its own, and then only C types cross
+  between it and the program.
 - **A module both use from source.** A library carries the source modules
   it imports, other than the runtime's (an `-I` module, a package), in its
   interface and archive. A program that imports the library and the same
