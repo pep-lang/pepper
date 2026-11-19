@@ -1120,21 +1120,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     if (imported.is_value()) {
         return Result<Built, String>.err(imported.value());
     }
-    # shortcut: a static Pepper library's objects name the runtime as the
-    # program's own; import them from the runtime library once Pepper
-    # libraries can be shared (#220).
-    if (options.shared_runtime and !program.interfaces().is_empty) {
-        var name = program.interfaces()[0].name;
-        return Result<Built, String>.err(
-            _at_link(
-                program,
-                name,
-                Diagnostic.error(
-                    $"the Pepper library '{name}' is a static library, which needs the build to hold the runtime; a build that links the runtime shared library ('--runtime=shared', '--lib pepper-shared') cannot import it"
-                )
-            )
-        );
-    }
+
     bool stamped = false;
     for (var found in options.linked.value()) {
         stamped = stamped or !found.stamps.is_empty;
@@ -1171,7 +1157,7 @@ _link_interfaces(program: link.Program, options: BuildOptions): String? {
     for (var interface in program.interfaces()) {
         var stamps = link.read_stamps(interface.archive);
         var found = stamps.is_ok() ? stamps.value() : Array<link.Stamp>();
-        if (found.is_empty or found[0].kind != link.KIND_PEPPER or found[0].interface != interface.hash) {
+        if (found.is_empty or !link.is_pepper_kind(found[0].kind) or found[0].interface != interface.hash) {
             return Optional<String>.Value(
                 _at_link(
                     program,
@@ -1186,6 +1172,10 @@ _link_interfaces(program: link.Program, options: BuildOptions): String? {
         if (mismatch.is_value()) {
             return mismatch;
         }
+        var unfit = _runtime_link_mismatch(program, interface, found[0], options);
+        if (unfit.is_value()) {
+            return unfit;
+        }
         bool added = false;
         for (var object in options.objects) {
             added = added or object.to_string() == interface.archive.to_string();
@@ -1198,10 +1188,12 @@ _link_interfaces(program: link.Program, options: BuildOptions): String? {
     # A static library's archive holds its own objects, not another's: the
     # program links each library's archive itself. GNU ld reads archives
     # left to right, so each comes before the ones it needs.
-    if (!options.library.is_value() or options.library.value() == LibraryKind.Shared) {
+    # A Pepper shared library is linked by its import library on Windows,
+    # which a build that makes another links against too.
+    if (!options.library.is_value() or options.library.value() == LibraryKind.Shared or options.shared_runtime) {
         var by_library = HashMap<String, Path>();
         for (var archive in archives) {
-            by_library[archive.stamps[0].library] = archive.file;
+            by_library[archive.stamps[0].library] = _link_input(archive, program.target);
         }
         var ordered = pepper_libraries(archives);
         for (var i in 0..ordered.count) {
@@ -1209,6 +1201,30 @@ _link_interfaces(program: link.Program, options: BuildOptions): String? {
         }
     }
     return Optional<String>.Empty;
+}
+
+# The file that links the library `found`: a Pepper shared library's import
+# library on Windows, else the library itself.
+_link_input(found: StampedFile, target: link.Target): Path {
+    bool imported = found.stamps[0].kind == link.KIND_PEPPER_SHARED and target.os == "windows";
+    return imported ? found.file.with_extension("lib") : found.file;
+}
+
+# The error, rendered, when `interface`'s library (`stamp`) and this build
+# do not link the runtime alike: a Pepper shared library needs the runtime
+# shared library (`--runtime=shared`), and a static Pepper library a build
+# that holds the runtime.
+_runtime_link_mismatch(
+    program: link.Program, interface: link.LibraryInterface, stamp: link.Stamp, options: BuildOptions
+): String? {
+    bool shared = stamp.kind == link.KIND_PEPPER_SHARED;
+    if (shared == options.shared_runtime) {
+        return Optional<String>.Empty;
+    }
+    var message = shared ?
+        $"the Pepper library '{interface.name}' is a shared library ('--lib pepper-shared'), which links the runtime shared library; build with '--runtime=shared' to import it" :
+        $"the Pepper library '{interface.name}' is a static library, which needs the build to hold the runtime; a build that links the runtime shared library ('--runtime=shared', '--lib pepper-shared') cannot import it";
+    return Optional<String>.Value(_at_link(program, interface.name, Diagnostic.error(message)));
 }
 
 # The error, rendered, when `interface`'s library was built against
@@ -1569,13 +1585,13 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
     if (pepper or !linked_libraries.is_empty) {
         setup.runtime_files = in_runtime;
     }
-    setup.shared_runtime = _shared_runtime_files(options, in_runtime);
     # The files of the Pepper libraries imported: their archives define
     # what they own, and their inits run in the library's.
     var library_files = Array<bool>();
     for (var f in program.files) {
         library_files.append(f.interface.is_value());
     }
+    setup.shared_runtime = _shared_runtime_files(options, in_runtime, library_files);
     if (!interfaces.is_empty) {
         setup.library_files = library_files;
     }
@@ -1782,7 +1798,7 @@ _build(program: link.Program, options: BuildOptions, excluded: HashSet<ulong>): 
         var partition = codegen.prepare(
             ir, owners, part_of_file, entry_part, entry_part + 1, shared = setup.shared_runtime
         );
-        _export_library(options, ir, partition, owners, in_runtime);
+        _export_library(options, ir, partition, owners, setup.shared_runtime);
         var jobs = Array<PartJob>();
         # The units compiled, with their keys and their parts' objects, to
         # store in the cache.
@@ -2067,33 +2083,64 @@ _beside_output_written(options: BuildOptions, program: link.Program, header: Pat
                 runtime_library_path(options.output, program.target), _runtime_key(program, options)
             ))
         and (!pepper or interface_path(options.output).is_file())
-        and _bindings_written(options, header);
+        and _bindings_written(options, header)
+        and _shared_libraries_placed(program, options);
+}
+
+# Whether each Pepper shared library a program imports is beside it as
+# `_place_shared_libraries` copies it: a library rebuilt with the same
+# interface leaves the program's key as it was, but not its copy.
+_shared_libraries_placed(program: link.Program, options: BuildOptions): bool {
+    if (options.library.is_value() or !options.shared_runtime) {
+        return true;
+    }
+    for (var interface in program.interfaces()) {
+        var placed = _beside(options.output, interface.archive.file_name().value_or(""));
+        if (placed.to_string() == interface.archive.to_string()) {
+            continue;
+        }
+        var ours = File.read_bytes(placed);
+        var theirs = File.read_bytes(interface.archive);
+        if (ours.is_err() or theirs.is_err() or ours.value() != theirs.value()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 # With `--lib pepper-shared`, exports what the library's own files define,
-# and its init and release, from the shared library (`codegen.export_own`):
-# what a program that imports it calls.
+# those no other image holds (`elsewhere`: the runtime's and imported
+# libraries'), and its init and release, from the shared library
+# (`codegen.export_own`): what a program that imports it calls.
 _export_library(
     options: BuildOptions,
     ir: llvm.Module,
     partition: codegen.Partition,
     owners: HashMap<String, uint>,
-    in_runtime: bool[]
+    elsewhere: bool[]
 ) {
     if (!_is_pepper_library(options) or !options.shared_runtime) {
         return;
     }
     var own = Array<bool>();
-    for (var runtime in in_runtime) {
-        own.append(!runtime);
+    for (var other in elsewhere) {
+        own.append(!other);
     }
     codegen.export_own(ir, partition, owners, own);
 }
 
-# The files whose code is the runtime shared library's: with
-# `--runtime=shared` the runtime's (`in_runtime`), else none.
-_shared_runtime_files(options: BuildOptions, in_runtime: bool[]): bool[] {
-    return options.shared_runtime ? in_runtime : Array<bool>();
+# The files whose code another image holds: with `--runtime=shared` the
+# runtime's (`in_runtime`) and the imported Pepper libraries'
+# (`library_files`, shared libraries then), else none.
+_shared_runtime_files(options: BuildOptions, in_runtime: bool[], library_files: bool[]): bool[] {
+    var out = Array<bool>();
+    if (!options.shared_runtime) {
+        return out;
+    }
+    for (var i in 0..in_runtime.count) {
+        out.append(in_runtime[i] or library_files[i]);
+    }
+    return out;
 }
 
 # Where the objects of the unit of `files` go: `runtime_objects` when
@@ -2153,6 +2200,9 @@ _link(
     }
     var runtime = runtime_library_path(options.output, target);
     var made = _link_runtime(runtime_objects, runtime, options, libraries, dirs, program, natvis);
+    if (made.is_ok()) {
+        made = _place_shared_libraries(program, options);
+    }
     if (made.is_err()) {
         return made;
     }
@@ -2173,6 +2223,28 @@ _link(
         natvis,
         _run_path(target, options.library.is_value())
     );
+}
+
+# Copies each Pepper shared library a program imports beside it, where it
+# finds the runtime library too, at run time: on its run path, or in its
+# folder on Windows. A library build leaves them where they are.
+_place_shared_libraries(program: link.Program, options: BuildOptions): Result<void, String> {
+    if (options.library.is_value() or !options.shared_runtime) {
+        return Result<void, String>.ok();
+    }
+    for (var interface in program.interfaces()) {
+        var name = interface.archive.file_name();
+        var placed = _beside(options.output, name.value_or(""));
+        # A build that links the runtime library imports shared libraries only.
+        if (placed.to_string() == interface.archive.to_string()) {
+            continue;
+        }
+        var copied = File.copy(interface.archive, placed);
+        if (copied.is_err()) {
+            return Result<void, String>.err($"cannot copy {interface.archive} to {placed}: {copied.error().message}");
+        }
+    }
+    return Result<void, String>.ok();
 }
 
 # Links `runtime_objects`, the whole runtime's, into the runtime shared
@@ -2589,6 +2661,7 @@ export full_stamp(program: link.Program, options: BuildOptions): link.Stamp {
     if (options.library.is_value()) {
         stamp.kind = pepper ? (options.shared_runtime ? link.KIND_PEPPER_SHARED : link.KIND_PEPPER) : link.KIND_C;
     }
+    stamp.runtime_link = options.shared_runtime ? link.RUNTIME_LINK_SHARED : "";
     if (pepper) {
         stamp.library = header_path(options.output, program.target).file_stem().value_or("");
         stamp.init = codegen.library_init_name(stamp.library);

@@ -627,7 +627,7 @@ extend Generator {
     declare_thread_local(variable: VariableDef, global: llvm.Value, llvm_ty: llvm.Type): Result<void> {
         var dynamic = library and machine.triple().contains("-android");
         global.set_thread_local_mode(dynamic ? GENERAL_DYNAMIC_TLS_MODEL : INITIAL_EXEC_TLS_MODEL);
-        if (in_shared_runtime(variable.loc.file as ulong) and machine.triple().contains("windows")) {
+        if (_reached_from_elsewhere(variable) and machine.triple().contains("windows")) {
             define_thread_local_accessor(variable, global);
         }
         if (!variable.default.is_value()) {
@@ -681,6 +681,14 @@ extend Generator {
         return Result<Address?>.ok(
             Optional<Address>.Value(Address.typed(id, global.ty, global.llvm_ty.value(), address))
         );
+    }
+
+    # Whether code in another image reaches thread-local `variable`: one of
+    # the runtime shared library or an imported Pepper shared library, or of
+    # the Pepper shared library this build makes (its own are exported).
+    _reached_from_elsewhere(variable: VariableDef): bool {
+        bool shared_library = !library_name.is_empty and !shared_runtime.is_empty;
+        return shared_library or in_shared_runtime(variable.loc.file as ulong);
     }
 
     ## Whether file `file`'s code goes in the runtime shared library

@@ -169,7 +169,6 @@ tools/compiler/link/project.pep _Reader.dependency 99
 tools/compiler/link/project.pep _load_members 30
 tools/compiler/link/project.pep parse_manifest 103
 tools/compiler/link/project.pep read_lock 42
-tools/compiler/link/stamp.pep parse_stamp 31
 tools/compiler/link/visibility.pep _Checker._check_reference 52
 tools/compiler/link/visibility.pep _Checker.visit_callee 47
 tools/compiler/link/visibility.pep _Checker.visit_member 26

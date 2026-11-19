@@ -638,8 +638,8 @@ a_chain_through_the_runtime_library_releases_without_overflow() {
 
 # `--lib pepper-shared` builds a Pepper library as a shared library: its
 # own code, exported, linked against the runtime shared library beside it,
-# with its interface beside it and a stamp of its kind. A program can
-# neither import nor link one yet.
+# with its interface beside it and a stamp of its kind. A program that
+# holds the runtime can neither import nor link one.
 [Test]
 a_pepper_shared_library_links_the_runtime_library() {
     var folder = TempFolder("pepper_shared_library");
@@ -692,13 +692,14 @@ a_pepper_shared_library_links_the_runtime_library() {
     expect_exit(imported, 1);
     expect_contains(
         imported.stderr,
-        "the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which a program cannot import yet"
+        "the Pepper library 'geo' is a shared library ('--lib pepper-shared'), which links the runtime shared library; build with '--runtime=shared' to import it"
     );
     write_file(main, _MAIN);
     var linked = _pep_build(main, program, linking);
     expect_exit(linked, 1);
     expect_contains(
-        linked.stderr, "is a Pepper shared library ('--lib pepper-shared'), which a program cannot link yet"
+        linked.stderr,
+        "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
     );
     # Built static after it, into its folder, the library imports again.
     expect_exit(_pep_build(source, _archive(root.join("geo"), "geo"), ["--lib", "pepper"]), 0);
@@ -712,4 +713,46 @@ a_pepper_shared_library_links_the_runtime_library() {
     var archive_name = _pep_build(source, _archive(root.join("geo"), "geo"), ["--lib", "pepper-shared"]);
     expect_exit(archive_name, 2);
     expect_contains(archive_name.stderr, "'--lib pepper-shared' builds a shared library");
+}
+
+# Two Pepper shared libraries, `top` importing `base`, and a program that
+# imports both, on the one runtime library: `base`'s globals are set
+# before `top`'s, which reads them, and `top`'s before the program's; an
+# object `base` makes, `top` fills and the program extends is freed with
+# nothing leaked, so the three share one heap; and `base`'s thread-local
+# is released when the program's thread ends (`testdata/shared_libraries`).
+[Test]
+a_program_imports_two_pepper_shared_libraries() {
+    var folder = TempFolder("pepper_shared_libraries");
+    var root = folder.path;
+    var host = link.Target();
+    var lib = root.join("lib");
+    for (var name in ["base", "top"]) {
+        var source = root.join("src").join($"{name}.pep");
+        write_file(source, File.read_to_string(Path($"compiler/testdata/shared_libraries/{name}.pep")).value());
+        var library = lib.join(driver.library_file_name(driver.LibraryKind.PepperShared, name, host));
+        expect_exit(_pep_build(source, library, ["--lib", "pepper-shared", "-L", lib.to_string()]), 0);
+    }
+    var top = lib.join(driver.library_file_name(driver.LibraryKind.PepperShared, "top", host));
+    expect_equal(",".join(link.read_stamps(top).value()[0].needs), "base");
+    var main = root.join("app").join("main.pep");
+    write_file(main, File.read_to_string(Path("compiler/testdata/shared_libraries/main.pep")).value());
+    var program = root.join("app").join("main" + toolchain.executable_suffix());
+    var built = _pep_build(main, program, ["--runtime=shared", "-L", lib.to_string()]);
+    expect_exit(built, 0);
+    expect_false(built.stderr.contains("duplicate"));
+    # Both libraries are copied beside it, where it finds them.
+    expect_true(root.join("app").join(top.file_name().value()).is_file());
+    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true");
+    # A library rebuilt with a body edit keeps its interface, and so the
+    # program's key, but is copied beside the program again.
+    var base_source = root.join("src").join("base.pep");
+    write_file(base_source, File.read_to_string(base_source).value().replace("_calls += 1;", "_calls = _calls + 1;"));
+    var base = lib.join(driver.library_file_name(driver.LibraryKind.PepperShared, "base", host));
+    expect_exit(_pep_build(base_source, base, ["--lib", "pepper-shared", "-L", lib.to_string()]), 0);
+    expect_exit(_pep_build(main, program, ["--runtime=shared", "-L", lib.to_string()]), 0);
+    expect_true(
+        File.read_bytes(root.join("app").join(base.file_name().value())).value() == File.read_bytes(base).value()
+    );
+    expect_equal(_run_program(program), "40 41 42 base,top,main 1 1 one heap true");
 }

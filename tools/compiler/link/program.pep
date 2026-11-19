@@ -18,7 +18,9 @@ import process;
 import [check_uses] from "deprecation";
 import "files" as files;
 import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
-import [find_library_interface, interface_file_name, interface_hash, LibraryInterface] from "interface_file";
+import [
+    find_library_interface, interface_file_name, interface_hash, LibraryInterface, read_interface_bytes
+] from "interface_file";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
 import [demangle_name] from "names";
@@ -561,9 +563,9 @@ struct _Queued {
     }
 }
 
-# `find_library_interface`, refusing a Pepper shared library's interface.
-# shortcut: a program cannot import one yet (#220); load it as an archive's
-# interface once it can.
+# `find_library_interface`, or for a Pepper shared library's interface the
+# same with the shared library as its `archive` (`shared_library_path`),
+# which the build links and copies beside its output.
 _find_interface(name: String, dirs: Path[], target: Target): Result<LibraryInterface, String>? {
     for (var dir in dirs) {
         var path = dir.join(Path(interface_file_name(name, target)));
@@ -571,16 +573,30 @@ _find_interface(name: String, dirs: Path[], target: Target): Result<LibraryInter
             continue;
         }
         # The first interface found wins, as `find_library_interface` takes it.
-        if (_is_pepper_shared(path, target)) {
+        if (!_is_pepper_shared(path, target)) {
+            break;
+        }
+        var out = LibraryInterface(name, path, shared_library_path(path, target));
+        var bytes = File.read_bytes(path);
+        var read = bytes.is_ok() ? read_interface_bytes(out, bytes.value()) : Optional<String>.Value("cannot read it");
+        if (read.is_value()) {
             return Optional<Result<LibraryInterface, String>>.Value(
-                Result<LibraryInterface, String>.err(
-                    $"the Pepper library '{name}' is a shared library ('--lib pepper-shared'), which a program cannot import yet"
-                )
+                Result<LibraryInterface, String>.err($"{path}: {read.value()}")
             );
         }
-        break;
+        return Optional<Result<LibraryInterface, String>>.Value(Result<LibraryInterface, String>.ok(out));
     }
     return find_library_interface(name, dirs, target);
+}
+
+## Returns the Pepper shared library (`--lib pepper-shared`) of the
+## interface `path`: `libgeo.so`, `libgeo.dylib` or `geo.dll` beside it.
+##
+## @param path the interface (`libgeo.pepi`, `geo.pepi`)
+## @param target the platform it is for
+## @returns the shared library's path
+export shared_library_path(path: Path, target: Target): Path {
+    return path.with_extension(target.os == "windows" ? "dll" : (target.is_apple() ? "dylib" : "so"));
 }
 
 # Whether the library of the interface `path` is a Pepper shared library
@@ -589,7 +605,7 @@ _find_interface(name: String, dirs: Path[], target: Target): Result<LibraryInter
 # shared one in its folder is the archive beside it, stamped `KIND_PEPPER`
 # and newer than the shared library. A Windows import library has no stamp.
 _is_pepper_shared(path: Path, target: Target): bool {
-    var shared = path.with_extension(target.os == "windows" ? "dll" : (target.is_apple() ? "dylib" : "so"));
+    var shared = shared_library_path(path, target);
     if (!_stamped(shared, KIND_PEPPER_SHARED)) {
         return false;
     }

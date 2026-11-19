@@ -35,6 +35,10 @@ export const KIND_C = "c";
 ## holding a runtime.
 export const KIND_PEPPER_SHARED = "pepper-shared";
 
+## A stamp's `runtime-link` for a build that links the runtime shared
+## library rather than holding the runtime.
+export const RUNTIME_LINK_SHARED = "shared";
+
 ## The ABI the compiler writes code for. A compiler change that changes
 ## what the code of two builds relies on of each other (struct layouts,
 ## name mangling, the reference counting protocol, release hooks) bumps it.
@@ -102,6 +106,10 @@ export struct Stamp {
     var runtime_interface: String = "";
     ## The hash of a Pepper library's interface file (`.pepi`).
     var interface: String = "";
+    ## `RUNTIME_LINK_SHARED` for a build that links the runtime shared
+    ## library (`--runtime=shared`, `--lib pepper-shared`); empty for one
+    ## that holds the runtime.
+    var runtime_link: String = "";
 
     ## The stamp as text, as codegen writes it (without the NUL).
     text(): String {
@@ -116,6 +124,9 @@ export struct Stamp {
         }
         if (!kind.is_empty) {
             out.append($"kind {kind}\n");
+        }
+        if (!runtime_link.is_empty) {
+            out.append($"runtime-link {runtime_link}\n");
         }
         if (!library.is_empty) {
             out.append($"library {library}\ninit {init}\nrelease {release}\n");
@@ -193,34 +204,19 @@ export parse_stamp(text: String): Stamp? {
         var at = space as ulong;
         var key = line.substr_bytes(0, at);
         var value = line.substr_bytes(at + 1, line.size - at - 1);
-        if (key == "version") {
-            stamp.version = value;
-        } else if (key == "abi") {
+        if (_set_text(stamp, key, value)) {
+            continue;
+        }
+        if (key == "abi") {
             var abi = uint.parse(value);
             if (!abi.is_value()) {
                 return Optional<Stamp>.Empty;
             }
             stamp.abi = abi.value();
-        } else if (key == "target") {
-            stamp.target = value;
-        } else if (key == "runtime") {
-            stamp.runtime = value;
         } else if (key == "option") {
             stamp.options.append(value);
-        } else if (key == "cpu") {
-            stamp.cpu = value;
-        } else if (key == "checks") {
-            stamp.checks = value;
         } else if (key == "frame-pointers") {
             stamp.frame_pointers = value == "true";
-        } else if (key == "kind") {
-            stamp.kind = value;
-        } else if (key == "library") {
-            stamp.library = value;
-        } else if (key == "init") {
-            stamp.init = value;
-        } else if (key == "release") {
-            stamp.release = value;
         } else if (key == "needs") {
             stamp.needs.append(value);
         } else if (key == "module") {
@@ -231,10 +227,6 @@ export parse_stamp(text: String): Stamp? {
                 return Optional<Stamp>.Empty;
             }
             stamp.record = record.value();
-        } else if (key == "runtime-interface") {
-            stamp.runtime_interface = value;
-        } else if (key == "interface") {
-            stamp.interface = value;
         }
     }
     # The magic alone, as a program holding this file's constant has it, is
@@ -243,6 +235,48 @@ export parse_stamp(text: String): Stamp? {
         return Optional<Stamp>.Empty;
     }
     return Optional<Stamp>.Value(stamp);
+}
+
+# Sets the text field of `stamp` that `key` names to `value`; returns
+# whether `key` names one.
+_set_text(stamp: Stamp, key: String, value: String): bool {
+    if (key == "version") {
+        stamp.version = value;
+    } else if (key == "target") {
+        stamp.target = value;
+    } else if (key == "runtime") {
+        stamp.runtime = value;
+    } else if (key == "cpu") {
+        stamp.cpu = value;
+    } else if (key == "checks") {
+        stamp.checks = value;
+    } else if (key == "kind") {
+        stamp.kind = value;
+    } else if (key == "library") {
+        stamp.library = value;
+    } else if (key == "init") {
+        stamp.init = value;
+    } else if (key == "release") {
+        stamp.release = value;
+    } else if (key == "runtime-interface") {
+        stamp.runtime_interface = value;
+    } else if (key == "interface") {
+        stamp.interface = value;
+    } else if (key == "runtime-link") {
+        stamp.runtime_link = value;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+## Whether `kind` is a Pepper library's (`KIND_PEPPER`,
+## `KIND_PEPPER_SHARED`): one that leaves the runtime to the program.
+##
+## @param kind a stamp's `kind`
+## @returns whether it is
+export is_pepper_kind(kind: String): bool {
+    return kind == KIND_PEPPER or kind == KIND_PEPPER_SHARED;
 }
 
 ## The largest file `read_stamps` reads. A Pepper library, its runtime
@@ -317,11 +351,18 @@ _starts_at(data: u8[], at: ulong, magic: u8[]): bool {
 ## @param build this build's
 ## @returns the reason, worded to follow "'libgeo.a' was built by ...;"
 export stamp_mismatch(library: Stamp, build: Stamp): String? {
-    if (library.kind != KIND_PEPPER) {
+    if (!is_pepper_kind(library.kind)) {
         if (library.target != build.target) {
             return Optional<String>.Value($"this build is for {build.target}");
         }
         return Optional<String>.Empty;
+    }
+    if (library.runtime_link != build.runtime_link) {
+        return Optional<String>.Value(
+            library.runtime_link.is_empty ?
+                "it holds no runtime, and this build links the runtime shared library; build without '--runtime=shared', or build it with '--lib pepper-shared'" :
+                "it links the runtime shared library, and this build holds the runtime; build with '--runtime=shared'"
+        );
     }
     if (library.record != build.record) {
         return Optional<String>.Value(
@@ -382,7 +423,7 @@ export stamp_mismatch(library: Stamp, build: Stamp): String? {
 ## @returns each difference, worded to follow "'libgeo.a' was built "
 export stamp_warnings(library: Stamp, build: Stamp): String[] {
     var out = Array<String>();
-    if (library.kind != KIND_PEPPER) {
+    if (!is_pepper_kind(library.kind)) {
         return out;
     }
     if (library.checks != build.checks) {

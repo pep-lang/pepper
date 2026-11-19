@@ -36,6 +36,8 @@ export [
     KIND_C,
     KIND_PEPPER,
     KIND_PEPPER_SHARED,
+    is_pepper_kind,
+    RUNTIME_LINK_SHARED,
     make_stamp,
     parse_stamp,
     read_stamps,
