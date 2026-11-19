@@ -427,9 +427,13 @@ keeps the program's copy, which comes ahead of the library's archive.</p>
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
 <li>
-<p><strong>Shared libraries.</strong> <code>--lib pepper</code> writes a static library only:
-a shared library must hold a runtime of its own (<code>--lib shared</code>), and
-then only C types cross between it and the program.</p>
+<p><strong>Shared libraries.</strong> A program imports only a static library
+(<code>--lib pepper</code>). <code>--lib pepper-shared</code> builds a Pepper library as a
+shared library, linked against the runtime shared library
+(<a href="../tools/pep-build.html#--runtimestatic---runtimeshared"><code>--runtime=shared</code></a>),
+but a program cannot import or link one yet. A shared library for C
+(<code>--lib shared</code>) holds a runtime of its own, and then only C types cross
+between it and the program.</p>
 </li>
 <li>
 <p><strong>A module both use from source.</strong> A library carries the source modules
